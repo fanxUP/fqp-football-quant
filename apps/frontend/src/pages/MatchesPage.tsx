@@ -139,13 +139,14 @@ export default function MatchesPage() {
       xAxis: {
         type: 'value' as const,
         name: '比赛数',
-        axisLabel: { fontSize: 10 },
+        nameTextStyle: { fontSize: 12 },
+        axisLabel: { fontSize: 11 },
         splitLine: { lineStyle: { color: 'rgba(255,255,255,0.04)' } },
       },
       yAxis: {
         type: 'category' as const,
         data: names,
-        axisLabel: { fontSize: 11 },
+        axisLabel: { fontSize: 12 },
         inverse: true,
       },
       series: [
@@ -162,7 +163,7 @@ export default function MatchesPage() {
           label: {
             show: true,
             position: 'right' as const,
-            fontSize: 11,
+            fontSize: 12,
           },
         },
       ],
@@ -194,19 +195,20 @@ export default function MatchesPage() {
       grid: {
         left: '3%',
         right: '4%',
-        bottom: '3%',
-        top: '8px',
+        bottom: '12%',
+        top: '20px',
         containLabel: true,
       },
       xAxis: {
         type: 'category' as const,
         data: labels,
-        axisLabel: { rotate: 45, fontSize: 10 },
+        axisLabel: { rotate: 45, fontSize: 11 },
       },
       yAxis: {
         type: 'value' as const,
         name: '比赛数',
-        axisLabel: { fontSize: 10 },
+        nameTextStyle: { fontSize: 12 },
+        axisLabel: { fontSize: 11 },
         splitLine: { lineStyle: { color: 'rgba(255,255,255,0.04)' } },
       },
       series: [

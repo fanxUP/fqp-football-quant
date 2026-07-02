@@ -142,7 +142,7 @@ export default function DashboardPage() {
           type: 'pie',
           radius: ['55%', '78%'],
           center: ['50%', '50%'],
-          avoidLabelOverlap: false,
+          avoidLabelOverlap: true,
           itemStyle: {
             borderRadius: 4,
             borderColor: 'transparent',
@@ -152,6 +152,12 @@ export default function DashboardPage() {
             show: true,
             position: 'outside' as const,
             formatter: '{b}\n{d}%',
+            fontSize: 12,
+          },
+          labelLine: {
+            length: 16,
+            length2: 24,
+            lineStyle: { color: 'rgba(255,255,255,0.2)' },
           },
           data: [
             { value: low, name: '<50%', itemStyle: { color: '#ef4444' } },
@@ -188,8 +194,8 @@ export default function DashboardPage() {
       grid: {
         left: '3%',
         right: '4%',
-        bottom: '3%',
-        top: '30px',
+        bottom: '12%',
+        top: '40px',
         containLabel: true,
       },
       xAxis: {
@@ -197,20 +203,22 @@ export default function DashboardPage() {
         data: dates,
         axisLabel: {
           rotate: 45,
-          fontSize: 10,
+          fontSize: 11,
         },
       },
       yAxis: [
         {
           type: 'value' as const,
           name: '日盈亏 (¥)',
-          axisLabel: { fontSize: 10 },
+          nameTextStyle: { fontSize: 11 },
+          axisLabel: { fontSize: 11 },
           splitLine: { lineStyle: { color: 'rgba(255,255,255,0.04)' } },
         },
         {
           type: 'value' as const,
           name: '累计 (¥)',
-          axisLabel: { fontSize: 10 },
+          nameTextStyle: { fontSize: 11 },
+          axisLabel: { fontSize: 11 },
           splitLine: { show: false },
         },
       ],

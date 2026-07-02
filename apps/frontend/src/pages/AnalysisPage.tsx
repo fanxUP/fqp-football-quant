@@ -193,13 +193,13 @@ function buildRadarOption(models: ModelCompareItem[], dimensions: RadarDimension
     legend: {
       bottom: 0,
       data: models.map((m) => m.name),
-      textStyle: { color: '#A1A1AA' },
+      textStyle: { color: '#C4C4CC', fontSize: 12 },
     },
     radar: {
       center: ['50%', '48%'],
       radius: '65%',
       indicator,
-      axisName: { color: '#A1A1AA', fontSize: 11 },
+      axisName: { color: '#C4C4CC', fontSize: 12 },
       shape: 'polygon',
       splitArea: {
         areaStyle: { color: ['rgba(255,255,255,0.02)', 'rgba(255,255,255,0.04)'] },
@@ -272,17 +272,17 @@ function FeatureImportanceTab() {
         return `${p.name}<br/>重要性: ${p.value.toFixed(4)}`;
       },
     },
-    grid: { left: 140, right: 40, top: 10, bottom: 30 },
+    grid: { left: 150, right: 50, top: 10, bottom: 30 },
     xAxis: {
       type: 'value',
       name: '重要性',
-      nameTextStyle: { color: '#A1A1AA' },
-      axisLabel: { color: '#A1A1AA', fontSize: 11 },
+      nameTextStyle: { color: '#C4C4CC', fontSize: 12 },
+      axisLabel: { color: '#C4C4CC', fontSize: 11 },
     },
     yAxis: {
       type: 'category',
       data: rankings.map((r) => r.label).reverse(),
-      axisLabel: { color: '#A1A1AA', fontSize: 11, width: 130, overflow: 'truncate' },
+      axisLabel: { color: '#C4C4CC', fontSize: 12, width: 135, overflow: 'truncate' },
       axisLine: { lineStyle: { color: 'rgba(255,255,255,0.1)' } },
     },
     series: [
@@ -302,8 +302,8 @@ function FeatureImportanceTab() {
           show: true,
           position: 'right',
           formatter: (p: { value: number }) => p.value.toFixed(3),
-          color: '#A1A1AA',
-          fontSize: 10,
+          color: '#C4C4CC',
+          fontSize: 11,
         },
       },
     ],
@@ -440,17 +440,17 @@ function ShapExplainTab() {
             return `${p.name}<br/>SHAP: ${p.value >= 0 ? '+' : ''}${p.value.toFixed(4)}`;
           },
         },
-        grid: { left: 150, right: 40, top: 10, bottom: 30 },
+        grid: { left: 160, right: 50, top: 10, bottom: 30 },
         xAxis: {
           type: 'value',
           name: 'SHAP 值（主胜方向）',
-          nameTextStyle: { color: '#A1A1AA' },
-          axisLabel: { color: '#A1A1AA', fontSize: 11 },
+          nameTextStyle: { color: '#C4C4CC', fontSize: 12 },
+          axisLabel: { color: '#C4C4CC', fontSize: 11 },
         },
         yAxis: {
           type: 'category',
           data: shapEntries.map((e) => e.label),
-          axisLabel: { color: '#A1A1AA', fontSize: 11, width: 140, overflow: 'truncate' },
+          axisLabel: { color: '#C4C4CC', fontSize: 12, width: 145, overflow: 'truncate' },
           axisLine: { lineStyle: { color: 'rgba(255,255,255,0.1)' } },
         },
         series: [
@@ -468,8 +468,8 @@ function ShapExplainTab() {
               show: true,
               position: 'right',
               formatter: (p: { value: number }) => `${p.value >= 0 ? '+' : ''}${p.value.toFixed(3)}`,
-              color: '#A1A1AA',
-              fontSize: 10,
+              color: '#C4C4CC',
+              fontSize: 11,
             },
           },
         ],

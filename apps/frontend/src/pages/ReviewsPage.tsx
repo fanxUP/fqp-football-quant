@@ -102,26 +102,28 @@ function DailyReviewsTab() {
       grid: {
         left: '3%',
         right: '4%',
-        bottom: '3%',
-        top: '30px',
+        bottom: '12%',
+        top: '40px',
         containLabel: true,
       },
       xAxis: {
         type: 'category' as const,
         data: dates,
-        axisLabel: { rotate: 45, fontSize: 10 },
+        axisLabel: { rotate: 45, fontSize: 11 },
       },
       yAxis: [
         {
           type: 'value' as const,
           name: '日盈亏 (¥)',
-          axisLabel: { fontSize: 10 },
+          nameTextStyle: { fontSize: 11 },
+          axisLabel: { fontSize: 11 },
           splitLine: { lineStyle: { color: 'rgba(255,255,255,0.04)' } },
         },
         {
           type: 'value' as const,
           name: '累计 (¥)',
-          axisLabel: { fontSize: 10 },
+          nameTextStyle: { fontSize: 11 },
+          axisLabel: { fontSize: 11 },
           splitLine: { show: false },
         },
       ],
@@ -167,9 +169,16 @@ function DailyReviewsTab() {
           type: 'pie',
           radius: ['50%', '75%'],
           center: ['50%', '50%'],
+          avoidLabelOverlap: true,
           label: {
             show: true,
             formatter: '{b}\n{d}%',
+            fontSize: 12,
+          },
+          labelLine: {
+            length: 16,
+            length2: 24,
+            lineStyle: { color: 'rgba(255,255,255,0.2)' },
           },
           data: [
             { value: winDays, name: '盈利日', itemStyle: { color: '#22c55e' } },

@@ -119,14 +119,14 @@ describe('ChartCard', () => {
 
       const passedOption = setOptCalls[0][0] as Record<string, unknown>;
       expect(passedOption.backgroundColor).toBe('transparent');
-      expect(passedOption.textStyle).toEqual({ color: '#A1A1AA' });
+      expect(passedOption.textStyle).toEqual({ color: '#C4C4CC', fontSize: 12 });
     });
 
     it('uses light textColor when theme is light', () => {
       mockTheme = 'light';
       render(<ChartCard title="Light Chart" option={baseOption} />);
       const passedOption = mockInstance.setOption.mock.calls[0][0] as Record<string, unknown>;
-      expect(passedOption.textStyle).toEqual({ color: '#6B7280' });
+      expect(passedOption.textStyle).toEqual({ color: '#4B5563', fontSize: 12 });
     });
   });
 

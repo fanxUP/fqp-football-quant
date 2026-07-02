@@ -18,12 +18,12 @@ export default function ChartCard({ title, option, height = 300, loading = false
   useEffect(() => {
     if (!chartRef.current) return;
 
-    const textColor = theme === 'dark' ? '#A1A1AA' : '#6B7280';
+    const textColor = theme === 'dark' ? '#C4C4CC' : '#4B5563';
 
     const themedOption = {
       backgroundColor: 'transparent',
-      textStyle: { color: textColor },
-      legend: { textStyle: { color: textColor } },
+      textStyle: { color: textColor, fontSize: 12 },
+      legend: { textStyle: { color: textColor, fontSize: 12 } },
       ...option,
     };
 

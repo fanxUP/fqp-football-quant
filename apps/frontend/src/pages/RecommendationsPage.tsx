@@ -181,26 +181,28 @@ export default function RecommendationsPage() {
       grid: {
         left: '3%',
         right: '4%',
-        bottom: '3%',
-        top: '30px',
+        bottom: '10%',
+        top: '40px',
         containLabel: true,
       },
       xAxis: {
         type: 'category' as const,
         data: names,
-        axisLabel: { rotate: 30, fontSize: 11 },
+        axisLabel: { rotate: 30, fontSize: 12 },
       },
       yAxis: [
         {
           type: 'value' as const,
           name: '数量',
-          axisLabel: { fontSize: 10 },
+          nameTextStyle: { fontSize: 11 },
+          axisLabel: { fontSize: 11 },
           splitLine: { lineStyle: { color: 'rgba(255,255,255,0.04)' } },
         },
         {
           type: 'value' as const,
           name: 'EV',
-          axisLabel: { fontSize: 10 },
+          nameTextStyle: { fontSize: 11 },
+          axisLabel: { fontSize: 11 },
           splitLine: { show: false },
         },
       ],
