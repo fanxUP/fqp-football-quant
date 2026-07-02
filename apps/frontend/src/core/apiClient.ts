@@ -193,6 +193,38 @@ export const api = {
       ),
   },
 
+  // Analysis (Batch 5)
+  analysis: {
+    evaluationSummary: () =>
+      request<import('./types').EvaluationSummary>('/api/analysis/evaluation/summary'),
+
+    calibration: (params?: { model_name?: string; n_bins?: number }) =>
+      request<import('./types').CalibrationData>(
+        `/api/analysis/evaluation/calibration${qs({ model_name: params?.model_name, n_bins: params?.n_bins })}`,
+      ),
+
+    conditionPerformance: (dimension: 'league' | 'odds_range' | 'confidence' = 'league') =>
+      request<import('./types').ConditionPerformanceData>(
+        `/api/analysis/evaluation/by-condition${qs({ dimension })}`,
+      ),
+
+    modelCompare: () =>
+      request<import('./types').ModelCompareData>('/api/analysis/models/compare'),
+
+    featureImportance: (params?: { method?: 'permutation' | 'gain' | 'both'; top_n?: number }) =>
+      request<import('./types').FeatureImportanceData>(
+        `/api/analysis/features/importance${qs({ method: params?.method, top_n: params?.top_n })}`,
+      ),
+
+    featureModelInfo: () =>
+      request<import('./types').FeatureModelInfo>('/api/analysis/features/model-info'),
+
+    shapExplanation: (matchId: number, topN?: number) =>
+      request<import('./types').ShapExplanation>(
+        `/api/analysis/explain/${matchId}${qs({ top_n: topN })}`,
+      ),
+  },
+
   // Pool lottery (Phase 10)
   pool: {
     analyze: (params?: { budget?: number; strategy?: string }) =>

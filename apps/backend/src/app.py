@@ -6,6 +6,7 @@ from fastapi import FastAPI
 
 from apps.backend.src.routers import (
     agents,
+    analysis,
     backtests,
     enrichment,
     health,
@@ -33,5 +34,6 @@ def create_app() -> FastAPI:
     app.include_router(ops.router)
     app.include_router(backtests.router)
     app.include_router(pool.router)
+    app.include_router(analysis.router)
 
     return app

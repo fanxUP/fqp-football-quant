@@ -320,6 +320,134 @@ export interface PoolAnalysis {
   generated_at: string;
 }
 
+// ---- Batch 5: Analysis ----
+
+export interface EvalModelSummary {
+  model_name: string;
+  n: number;
+  avg_brier: number;
+  avg_logloss: number;
+  avg_rps: number;
+  avg_clv: number;
+}
+
+export interface EvaluationSummary {
+  status: string;
+  models: EvalModelSummary[];
+  overall: {
+    total_evaluated: number;
+    overall_brier: number;
+    overall_logloss: number;
+  };
+}
+
+export interface CalibrationBin {
+  bin_center: number;
+  pred_mean: number;
+  actual_freq: number;
+  count: number;
+}
+
+export interface CalibrationData {
+  status: string;
+  model_name: string;
+  bins: CalibrationBin[];
+  ece: number;
+  mce: number;
+  n_predictions: number;
+}
+
+export interface FeatureRanking {
+  feature: string;
+  label: string;
+  importance: number;
+  std?: number;
+}
+
+export interface FeatureImportanceData {
+  status: string;
+  method: string;
+  rankings: FeatureRanking[];
+  model_accuracy: number;
+  n_features: number;
+}
+
+export interface FeatureModelInfo {
+  status: string;
+  n_samples?: number;
+  n_features?: number;
+  train_accuracy?: number;
+  class_distribution?: Record<string, number>;
+}
+
+export interface ModelCompareItem {
+  name: string;
+  n_predictions: number;
+  brier: number;
+  log_loss: number;
+  rps: number;
+  clv: number;
+  flb_score: number;
+  hit_rate?: number;
+  roi?: number;
+  sharpe?: number;
+  max_drawdown_pct?: number;
+  profit_factor?: number;
+  total_profit?: number;
+}
+
+export interface RadarDimension {
+  key: string;
+  label: string;
+  invert?: boolean;
+}
+
+export interface ModelCompareData {
+  status: string;
+  models: ModelCompareItem[];
+  total_models: number;
+  radar_dimensions: RadarDimension[];
+}
+
+export interface ShapEntry {
+  feature: string;
+  label: string;
+  shap_value: number;
+  shap_abs: number;
+  feature_value: number;
+}
+
+export interface ShapExplanation {
+  status: string;
+  match_id: number;
+  home_team: string;
+  away_team: string;
+  predicted_probs: {
+    home: number;
+    draw: number;
+    away: number;
+  };
+  base_values: number[];
+  shap_values: ShapEntry[];
+  n_features_used: number;
+}
+
+export interface ConditionSegment {
+  league_name?: string;
+  odds_range?: string;
+  confidence_range?: string;
+  model_name: string;
+  n: number;
+  avg_brier: number;
+  avg_logloss?: number;
+}
+
+export interface ConditionPerformanceData {
+  status: string;
+  dimension: string;
+  segments: ConditionSegment[];
+}
+
 // ---- Settings (localStorage) ----
 
 export interface FqpSettings {

@@ -18,6 +18,10 @@ redis
 alembic
 loguru
 
+# Analysis (Batch 5 — feature importance + SHAP explainability)
+xgboost
+shap
+
 # OCR (optional — uncomment to enable ticket image recognition)
 # Requires: brew install tesseract tesseract-lang (macOS) or apt install tesseract-ocr tesseract-ocr-chi-sim (Linux)
 # pytesseract

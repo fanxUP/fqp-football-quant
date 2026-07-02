@@ -19,6 +19,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Agent', icon: '🤖', path: '/agents' },
   { label: '回测', icon: '⏪', path: '/backtest' },
   { label: '足彩', icon: '🎱', path: '/pool' },
+  { label: '分析', icon: '📊', path: '/analysis' },
 ];
 
 export default function Sidebar() {
