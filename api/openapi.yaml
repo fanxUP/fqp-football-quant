@@ -1,0 +1,265 @@
+openapi: 3.0.3
+info:
+  title: FQP From Scratch API
+  version: 1.0.0
+  description: 官方足彩/竞彩足球量化研究与长期运行系统 API 草案。系统只提供数据分析、模拟与复盘接口，不提供购彩、代购、出票、收款接口。
+servers:
+  - url: http://localhost:8000
+paths:
+  /api/v1/official/matches:
+    get:
+      summary: 查询官方赛程
+      parameters:
+        - name: date
+          in: query
+          required: true
+          schema: { type: string, format: date }
+      responses:
+        '200':
+          description: 官方赛程列表
+  /api/v1/official/matches/{match_id}:
+    get:
+      summary: 查询比赛详情
+      parameters:
+        - name: match_id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '200': { description: 比赛详情 }
+  /api/v1/official/matches/{match_id}/odds-snapshots:
+    get:
+      summary: 查询赔率快照
+      parameters:
+        - name: match_id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '200': { description: 赔率快照列表 }
+  /api/v1/models/predict/date/{date}:
+    post:
+      summary: 生成指定日期模型预测
+      parameters:
+        - name: date
+          in: path
+          required: true
+          schema: { type: string, format: date }
+      responses:
+        '202': { description: 预测任务已提交 }
+  /api/v1/recommendations/generate:
+    post:
+      summary: 生成每日推荐模拟票单
+      parameters:
+        - name: date
+          in: query
+          required: true
+          schema: { type: string, format: date }
+      responses:
+        '200': { description: 推荐结果或熔断原因 }
+  /api/v1/recommendations/daily:
+    get:
+      summary: 查询每日推荐
+      parameters:
+        - name: date
+          in: query
+          required: true
+          schema: { type: string, format: date }
+      responses:
+        '200': { description: 每日推荐票单 }
+  /api/v1/real-tickets/upload:
+    post:
+      summary: 上传线下自购彩票照片并创建实票记录
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                image:
+                  type: string
+                  format: binary
+                purchase_time:
+                  type: string
+                total_amount:
+                  type: number
+      responses:
+        '200': { description: 实票上传结果 }
+  /api/v1/real-tickets/{id}/confirm:
+    post:
+      summary: 用户确认/校对票据信息
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '200': { description: 已确认 }
+  /api/v1/reviews/daily:
+    get:
+      summary: 查询日报
+      parameters:
+        - name: date
+          in: query
+          required: true
+          schema: { type: string, format: date }
+      responses:
+        '200': { description: 日复盘 }
+  /api/v1/backtests:
+    post:
+      summary: 创建回测任务
+      responses:
+        '202': { description: 回测任务已提交 }
+  /api/v1/pool/issues/{id}/generate-combinations:
+    post:
+      summary: 生成传统足彩组合覆盖方案
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '200': { description: 组合方案 }
+
+  /api/multidim/seasons:
+    get:
+      summary: 查询赛季列表
+      tags: [Season Team Database]
+      responses:
+        '200': { description: OK }
+
+  /api/multidim/competition-seasons/{id}/standings/snapshots:
+    get:
+      summary: 查询赛事赛季积分榜快照
+      tags: [Season Team Database]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '200': { description: OK }
+
+  /api/multidim/teams/{team_id}/season-profile:
+    get:
+      summary: 查询球队赛季画像
+      tags: [Season Team Database]
+      parameters:
+        - name: team_id
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: competition_season_id
+          in: query
+          required: true
+          schema: { type: integer }
+      responses:
+        '200': { description: OK }
+
+  /api/multidim/players/{player_id}/season-profile:
+    get:
+      summary: 查询球员赛季画像
+      tags: [Lineup Injury Features]
+      parameters:
+        - name: player_id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '200': { description: OK }
+
+  /api/multidim/matches/{match_id}/lineups:
+    get:
+      summary: 查询比赛预测首发、官方首发与实际首发快照
+      tags: [Lineup Injury Features]
+      parameters:
+        - name: match_id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '200': { description: OK }
+
+  /api/multidim/matches/{match_id}/availability:
+    get:
+      summary: 查询比赛双方伤停可用性快照
+      tags: [Lineup Injury Features]
+      parameters:
+        - name: match_id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '200': { description: OK }
+
+  /api/multidim/matches/{match_id}/weather:
+    get:
+      summary: 查询比赛球场天气快照
+      tags: [Travel Weather Features]
+      parameters:
+        - name: match_id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '200': { description: OK }
+
+  /api/multidim/matches/{match_id}/travel:
+    get:
+      summary: 查询比赛旅行疲劳特征
+      tags: [Travel Weather Features]
+      parameters:
+        - name: match_id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '200': { description: OK }
+
+  /api/multidim/matches/{match_id}/motivation:
+    get:
+      summary: 查询比赛双方战意评分
+      tags: [Tournament Incentive]
+      parameters:
+        - name: match_id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '200': { description: OK }
+
+  /api/multidim/matches/{match_id}/tournament-incentive:
+    get:
+      summary: 查询小组赛/杯赛晋级、避强队、路径难度与赛制博弈风险
+      tags: [Tournament Incentive]
+      parameters:
+        - name: match_id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '200': { description: OK }
+
+  /api/multidim/matches/{match_id}/feature-snapshots:
+    get:
+      summary: 查询比赛多维特征快照
+      tags: [Feature Snapshot]
+      parameters:
+        - name: match_id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '200': { description: OK }
+    post:
+      summary: 生成比赛多维特征快照
+      tags: [Feature Snapshot]
+      parameters:
+        - name: match_id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '201': { description: Created }
+

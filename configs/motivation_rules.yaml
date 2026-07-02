@@ -1,0 +1,20 @@
+motivation_weights:
+  objective_necessity: 0.40
+  ranking_or_prize_value: 0.15
+  home_derby_revenge: 0.15
+  future_schedule_pressure_inverse: 0.20
+  lineup_commitment_signal: 0.10
+score_interpretation:
+  weak: [0, 25]
+  normal: [26, 50]
+  strong: [51, 75]
+  very_strong: [76, 100]
+league_pressure_rules:
+  relegation_zone_gap_points_high_pressure: 3
+  title_race_gap_points_high_pressure: 5
+  continental_slot_gap_points_high_pressure: 4
+cup_group_rules:
+  draw_enough_reduce_attacking_intent: true
+  must_win_increase_attacking_intent: true
+  already_qualified_increase_rotation_risk: true
+  already_eliminated_increase_uncertainty: true

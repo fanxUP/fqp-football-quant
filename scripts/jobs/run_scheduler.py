@@ -1,0 +1,476 @@
+"""Local scheduler entrypoint.
+
+Runs long-lived scheduled jobs in the Scheduler container.
+Codex is used to develop, repair, test, and review this scheduler and its job modules.
+
+Stage 7: all jobs are wrapped with agent audit logging (ai_job_runs table).
+"""
+
+from __future__ import annotations
+
+import os
+import time
+from collections.abc import Callable
+from datetime import datetime
+from typing import Any
+
+
+def _official_source_enabled() -> bool:
+    return os.getenv("OFFICIAL_SOURCE_ENABLED", "true").lower() == "true"
+
+
+def _audited_job(
+    job_code: str, job_name: str, owner_agent: str, fn: Callable[[], Any]
+) -> Callable[[], None]:
+    """Wrap a job function with agent audit logging (start/finish in ai_job_runs)."""
+
+    def wrapper() -> None:
+        run_id = None
+        try:
+            from apps.backend.src.db import get_db
+            from scripts.agent_storage import finish_job_run, start_job_run
+
+            with get_db() as conn:
+                run_id = start_job_run(
+                    conn,
+                    {
+                        "job_code": job_code,
+                        "job_name": job_name,
+                        "owner_agent": owner_agent,
+                        "schedule_type": "cron",
+                        "environment": "prod",
+                    },
+                )
+            result = fn()
+            if run_id:
+                with get_db() as conn:
+                    finish_job_run(
+                        conn, run_id, "success", output_refs={"result": str(result)[:500]}
+                    )
+        except Exception as e:
+            if run_id:
+                try:
+                    from apps.backend.src.db import get_db
+                    from scripts.agent_storage import finish_job_run
+
+                    with get_db() as conn:
+                        finish_job_run(conn, run_id, "failed", error=str(e)[:1000])
+                except Exception:
+                    pass
+            print(f"[scheduler] {job_code} error: {e}")
+
+    return wrapper
+
+
+def main() -> None:
+    print("FQP local scheduler started.")
+
+    try:
+        from apscheduler.schedulers.background import BackgroundScheduler
+
+        scheduler = BackgroundScheduler()
+
+        # ----- health heartbeat (always on) -----
+        def test_heartbeat() -> None:
+            print(f"scheduler heartbeat: {datetime.now().isoformat(timespec='seconds')}")
+
+        scheduler.add_job(test_heartbeat, "interval", hours=1, id="test_heartbeat")
+
+        # ----- Stage 7: seed agent registry at startup -----
+        def job_seed_agents() -> None:
+            try:
+                from scripts.jobs.seed_agent_registry import run
+
+                result = run()
+                print(f"[scheduler] seed_agent_registry: {result}")
+            except Exception as e:
+                print(f"[scheduler] seed_agent_registry error: {e}")
+
+        # Run once at startup (no cron trigger — fires immediately)
+        scheduler.add_job(
+            job_seed_agents,
+            "date",
+            run_date=datetime.now(),
+            id="seed_agent_registry",
+        )
+
+        # ----- Stage 2: official data jobs -----
+        if _official_source_enabled():
+            # Daily: crawl official schedule at 00:10
+            scheduler.add_job(
+                _audited_job(
+                    "crawl_official_schedule",
+                    "官方赛程采集",
+                    "crawler_agent",
+                    lambda: __import__(
+                        "scripts.jobs.crawl_official_schedule", fromlist=["run"]
+                    ).run(),
+                ),
+                "cron",
+                hour=0,
+                minute=10,
+                id="crawl_official_schedule",
+            )
+
+            # Every 30 min between 06:00-23:59: snapshot odds
+            scheduler.add_job(
+                _audited_job(
+                    "crawl_official_odds",
+                    "赔率快照采集",
+                    "crawler_agent",
+                    lambda: __import__(
+                        "scripts.jobs.run_official_odds_snapshot", fromlist=["run"]
+                    ).run(),
+                ),
+                "cron",
+                minute="*/30",
+                hour="6-23",
+                id="crawl_official_odds",
+            )
+
+            # Every 30 min: settle finished matches
+            scheduler.add_job(
+                _audited_job(
+                    "settle_finished_matches",
+                    "赛果结算",
+                    "crawler_agent",
+                    lambda: __import__(
+                        "scripts.jobs.settle_finished_matches", fromlist=["run"]
+                    ).run(),
+                ),
+                "cron",
+                minute="*/30",
+                id="settle_finished_matches",
+            )
+
+            # ----- Stage 3: feature jobs -----
+            # Daily at 02:00: populate teams/leagues
+            scheduler.add_job(
+                _audited_job(
+                    "populate_teams_leagues",
+                    "球队联赛映射",
+                    "backend_agent",
+                    lambda: __import__(
+                        "scripts.features.populate_teams_leagues", fromlist=["populate_all"]
+                    ).populate_all(),
+                ),
+                "cron",
+                hour=2,
+                minute=0,
+                id="populate_teams_leagues",
+            )
+
+            # Every 6 hours: build feature snapshots
+            scheduler.add_job(
+                _audited_job(
+                    "build_feature_snapshots",
+                    "特征快照构建",
+                    "feature_agent",
+                    lambda: __import__(
+                        "scripts.jobs.run_feature_snapshot_build", fromlist=["run"]
+                    ).run(),
+                ),
+                "cron",
+                hour="*/6",
+                id="build_feature_snapshots",
+            )
+
+            # ----- Stage 3b: enrichment data collection jobs -----
+            # Daily at 03:00: collect league standings
+            scheduler.add_job(
+                _audited_job(
+                    "collect_standings",
+                    "联赛积分榜采集",
+                    "crawler_agent",
+                    lambda: __import__("scripts.jobs.collect_standings", fromlist=["run"]).run(),
+                ),
+                "cron",
+                hour=3,
+                minute=7,
+                id="collect_standings",
+            )
+
+            # Daily at 08:00: collect injury data from API-Football
+            scheduler.add_job(
+                _audited_job(
+                    "collect_injury_data",
+                    "伤停数据采集",
+                    "crawler_agent",
+                    lambda: __import__("scripts.jobs.collect_injury_data", fromlist=["run"]).run(),
+                ),
+                "cron",
+                hour=8,
+                minute=7,
+                id="collect_injury_data",
+            )
+
+            # Daily at 10:00 and 14:00: collect lineup data for upcoming matches
+            scheduler.add_job(
+                _audited_job(
+                    "collect_lineup_data",
+                    "首发阵容采集",
+                    "crawler_agent",
+                    lambda: __import__("scripts.jobs.collect_lineup_data", fromlist=["run"]).run(),
+                ),
+                "cron",
+                hour="10,14",
+                minute=7,
+                id="collect_lineup_data",
+            )
+
+            # Daily at 09:00 and 15:00: collect weather forecasts
+            scheduler.add_job(
+                _audited_job(
+                    "collect_weather",
+                    "天气数据采集",
+                    "crawler_agent",
+                    lambda: __import__("scripts.jobs.collect_weather", fromlist=["run"]).run(),
+                ),
+                "cron",
+                hour="9,15",
+                minute=7,
+                id="collect_weather",
+            )
+
+            # ----- Stage 4: model & recommendation jobs -----
+            # Weekly on Monday at 02:00: MLE train model parameters from historical data
+            scheduler.add_job(
+                _audited_job(
+                    "mle_train_models",
+                    "MLE模型训练",
+                    "model_agent",
+                    lambda: __import__("scripts.mle_trainer", fromlist=["run"]).run(),
+                ),
+                "cron",
+                day_of_week="mon",
+                hour=2,
+                minute=0,
+                id="mle_train_models",
+            )
+
+            # Daily at 01:00: update Elo ratings from settled matches
+            scheduler.add_job(
+                _audited_job(
+                    "update_elo_ratings",
+                    "Elo评分更新",
+                    "model_agent",
+                    lambda: __import__("scripts.jobs.update_elo_ratings", fromlist=["run"]).run(),
+                ),
+                "cron",
+                hour=1,
+                minute=0,
+                id="update_elo_ratings",
+            )
+
+            # Every 6 hours: run model predictions (offset from features)
+            scheduler.add_job(
+                _audited_job(
+                    "run_model_prediction",
+                    "模型预测执行",
+                    "model_agent",
+                    lambda: __import__("scripts.jobs.run_model_prediction", fromlist=["run"]).run(),
+                ),
+                "cron",
+                hour="1,7,13,19",
+                id="run_model_prediction",
+            )
+
+            # Daily at 16:00: generate recommendation candidates
+            scheduler.add_job(
+                _audited_job(
+                    "run_recommendation_candidate",
+                    "推荐候选生成",
+                    "recommendation_agent",
+                    lambda: __import__(
+                        "scripts.jobs.run_recommendation_candidate", fromlist=["run"]
+                    ).run(),
+                ),
+                "cron",
+                hour=16,
+                minute=0,
+                id="run_recommendation_candidate",
+            )
+
+            # ----- Stage 5: settlement and review jobs -----
+            # Hourly at :15: settle tickets
+            scheduler.add_job(
+                _audited_job(
+                    "settle_tickets",
+                    "票单结算",
+                    "review_agent",
+                    lambda: __import__("scripts.jobs.settle_tickets", fromlist=["run"]).run(),
+                ),
+                "cron",
+                minute=15,
+                id="settle_tickets",
+            )
+
+            # Daily at 23:30: generate daily review
+            scheduler.add_job(
+                _audited_job(
+                    "generate_daily_review",
+                    "日报生成",
+                    "review_agent",
+                    lambda: __import__(
+                        "scripts.jobs.generate_daily_review", fromlist=["run"]
+                    ).run(),
+                ),
+                "cron",
+                hour=23,
+                minute=30,
+                id="generate_daily_review",
+            )
+
+            # Daily at 23:45: analyze prediction errors
+            scheduler.add_job(
+                _audited_job(
+                    "analyze_prediction_errors",
+                    "错因分析",
+                    "review_agent",
+                    lambda: __import__(
+                        "scripts.jobs.analyze_prediction_errors", fromlist=["run"]
+                    ).run(),
+                ),
+                "cron",
+                hour=23,
+                minute=45,
+                id="analyze_prediction_errors",
+            )
+
+            # Daily at 23:40: compute model evaluation metrics (Brier/LogLoss/CLV)
+            scheduler.add_job(
+                _audited_job(
+                    "compute_evaluation_metrics",
+                    "模型评估指标计算",
+                    "review_agent",
+                    lambda: __import__("scripts.evaluation_metrics", fromlist=["run"]).run(),
+                ),
+                "cron",
+                hour=23,
+                minute=40,
+                id="compute_evaluation_metrics",
+            )
+
+            # Weekly on Sunday at 04:00: run full backtest
+            scheduler.add_job(
+                _audited_job(
+                    "run_backtest",
+                    "全量回测执行",
+                    "backtest_agent",
+                    lambda: __import__("scripts.jobs.run_backtest", fromlist=["run"]).run(),
+                ),
+                "cron",
+                day_of_week="sun",
+                hour=4,
+                minute=7,
+                id="run_backtest",
+            )
+
+            # ----- Stage 8: operational health & monitoring jobs -----
+            # Daily at 23:00: verify latest database backup
+            scheduler.add_job(
+                _audited_job(
+                    "verify_backup",
+                    "备份验证",
+                    "ops_agent",
+                    lambda: __import__("scripts.jobs.verify_backup", fromlist=["run"]).run(),
+                ),
+                "cron",
+                hour=23,
+                minute=0,
+                id="verify_backup",
+            )
+
+            # Daily at 23:30: validate evidence chains
+            scheduler.add_job(
+                _audited_job(
+                    "validate_evidence_chain",
+                    "证据链校验",
+                    "ops_agent",
+                    lambda: __import__(
+                        "scripts.jobs.validate_evidence_chain", fromlist=["run"]
+                    ).run(),
+                ),
+                "cron",
+                hour=23,
+                minute=30,
+                id="validate_evidence_chain",
+            )
+
+            # Daily at 23:45: audit data contamination
+            scheduler.add_job(
+                _audited_job(
+                    "audit_data_contamination",
+                    "数据污染审计",
+                    "ops_agent",
+                    lambda: __import__(
+                        "scripts.jobs.audit_data_contamination", fromlist=["run"]
+                    ).run(),
+                ),
+                "cron",
+                hour=23,
+                minute=45,
+                id="audit_data_contamination",
+            )
+
+            # Daily at 23:55: collect health metrics (runs last to aggregate all daily results)
+            scheduler.add_job(
+                _audited_job(
+                    "collect_health_metrics",
+                    "健康指标采集",
+                    "ops_agent",
+                    lambda: __import__(
+                        "scripts.jobs.collect_health_metrics", fromlist=["run"]
+                    ).run(),
+                ),
+                "cron",
+                hour=23,
+                minute=55,
+                id="collect_health_metrics",
+            )
+
+            # Weekly on Sunday at 00:00: snapshot runtime environment
+            scheduler.add_job(
+                _audited_job(
+                    "snapshot_runtime",
+                    "运行时环境快照",
+                    "ops_agent",
+                    lambda: __import__("scripts.local.snapshot_runtime", fromlist=["run"]).run(),
+                ),
+                "cron",
+                day_of_week="sun",
+                hour=0,
+                minute=0,
+                id="snapshot_runtime",
+            )
+
+            print(
+                "APScheduler started with 25 jobs: "
+                "test_heartbeat, seed_agent_registry, crawl_official_schedule, crawl_official_odds, "
+                "settle_finished_matches, populate_teams_leagues, build_feature_snapshots, "
+                "collect_standings, collect_injury_data, collect_lineup_data, collect_weather, "
+                "mle_train_models, update_elo_ratings, run_model_prediction, run_recommendation_candidate, "
+                "settle_tickets, generate_daily_review, analyze_prediction_errors, compute_evaluation_metrics, "
+                "verify_backup, validate_evidence_chain, audit_data_contamination, "
+                "collect_health_metrics, snapshot_runtime, run_backtest"
+            )
+        else:
+            print(
+                "APScheduler started with 2 jobs: test_heartbeat, seed_agent_registry. "
+                "Official data jobs disabled (OFFICIAL_SOURCE_ENABLED != true)."
+            )
+
+        scheduler.start()
+
+        while True:
+            time.sleep(3600)
+
+    except ImportError:
+        print("APScheduler not available; falling back to basic sleep loop.")
+        while True:
+            print(f"scheduler heartbeat: {datetime.now().isoformat(timespec='seconds')}")
+            time.sleep(3600)
+
+
+if __name__ == "__main__":
+    main()

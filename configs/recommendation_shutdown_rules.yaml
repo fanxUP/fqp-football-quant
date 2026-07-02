@@ -1,0 +1,15 @@
+global_shutdown:
+  official_source_unavailable: true
+  odds_snapshot_missing_rate_gt: 0.02
+  database_write_failure: true
+  result_settlement_error: true
+match_shutdown:
+  data_quality_below: 80
+  odds_volatility_level: severe
+  model_committee_disagreement_above: 0.45
+  missing_stop_sale_time: true
+ticket_shutdown:
+  max_ticket_stake: 100
+  max_match_exposure: 150
+  adjusted_ev_below: 0.03
+  too_many_high_risk_items: true

@@ -1,0 +1,43 @@
+modules:
+  - module_id: official_data_core
+    name: 官方数据核心
+    category: core
+    required: true
+    safe_disable: false
+    panels: [today_dashboard, match_center, data_health]
+  - module_id: recommendation_core
+    name: 推荐与资金核心
+    category: core
+    required: true
+    safe_disable: false
+    panels: [recommendation_center, bankroll_panel]
+  - module_id: real_ticket_module
+    name: 实票上传与复盘
+    category: core
+    required: true
+    safe_disable: false
+    panels: [ticket_upload, review_center]
+  - module_id: multidim_feature_module
+    name: 多维赛前情报
+    category: prediction_enhancement
+    required: false
+    safe_disable: true
+    panels: [match_intelligence]
+  - module_id: pool_lottery_module
+    name: 传统足彩胜负彩任选九
+    category: optional
+    required: false
+    safe_disable: true
+    panels: [pool_lottery]
+  - module_id: codex_agent_module
+    name: Codex多Agent开发维护
+    category: maintenance
+    required: false
+    safe_disable: true
+    panels: [codex_console]
+  - module_id: advanced_backtest_module
+    name: 高级回测实验
+    category: research
+    required: false
+    safe_disable: true
+    panels: [backtest_lab]

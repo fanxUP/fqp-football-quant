@@ -1,0 +1,25 @@
+permission_levels:
+  P0: read_only
+  P1: edit_docs_and_noncritical_code
+  P2: run_dev_tasks_and_tests
+  P3_controlled: controlled_production_task_trigger
+  P4_forbidden_auto: forbidden_without_human_review
+
+forbidden_auto_actions:
+  - delete_production_database
+  - truncate_core_tables
+  - overwrite_odds_snapshots
+  - modify_real_ticket_without_audit
+  - publish_final_recommendation_without_risk_gate
+  - change_daily_budget_limit_without_review
+  - disable_compliance_notice
+  - export_user_sensitive_data
+
+human_review_required:
+  - production_database_migration
+  - recommendation_publish
+  - bankroll_rule_change
+  - shutdown_rule_change
+  - real_ticket_edit
+  - model_activation
+  - prod_deployment

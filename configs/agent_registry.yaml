@@ -1,0 +1,45 @@
+agents:
+  - name: orchestrator_agent
+    type: orchestrator
+    permission_level: P2
+    description: 拆分任务、分配 Agent、汇总状态，不直接修改生产数据。
+  - name: data_agent
+    type: data
+    permission_level: P3_controlled
+    description: 维护官方赛程、赔率、赛果及第三方数据采集脚本。
+  - name: feature_agent
+    type: feature
+    permission_level: P3_controlled
+    description: 构建赛季、球队、球员、伤停、天气、战意、赛制博弈特征。
+  - name: model_agent
+    type: model
+    permission_level: P3_controlled
+    description: 维护 Poisson、Dixon-Coles、赔率转换、模型委员会、AI 计算任务。
+  - name: backtest_agent
+    type: backtest
+    permission_level: P2
+    description: 维护 walk-forward 回测、防未来函数检测、模型评估报告。
+  - name: recommendation_agent
+    type: recommendation
+    permission_level: P3_controlled
+    description: 生成候选推荐、模拟票单、预算方案；不得绕过 Risk Agent。
+  - name: risk_agent
+    type: risk
+    permission_level: P3_controlled
+    description: 风控熔断、合规检查、资金约束、推荐发布闸门。
+  - name: review_agent
+    type: review
+    permission_level: P2
+    description: 赛后复盘、日报、周报、月报、错因归因。
+  - name: qa_agent
+    type: qa
+    permission_level: P2
+    description: 测试、Lint、类型检查、数据质量、回归验证。
+  - name: devops_agent
+    type: devops
+    permission_level: P3_controlled
+    description: Docker、部署、备份、恢复、监控、告警。
+  - name: doc_agent
+    type: docs
+    permission_level: P1
+    description: 同步文档、API、数据字典、Changelog。

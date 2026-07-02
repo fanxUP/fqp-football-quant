@@ -1,0 +1,9 @@
+module,case_id,case_name,steps,expected_result,priority
+official_data,OD-001,官方赛程采集,"输入业务日期并执行采集",official_matches 写入数据,P0
+official_data,OD-002,赔率快照不可覆盖,"同一场多次采集SP",official_odds_snapshots 多条记录,P0
+recommendation,RE-001,每日预算限制,"生成推荐",建议总投入<=500,P0
+recommendation,RE-002,官方源异常熔断,"设置official_source_ok=false",不生成正式推荐,P0
+ticket,TK-001,实票上传,"上传图片并手动录入",real_tickets 创建记录,P0
+review,RV-001,日报生成,"赛果结算后生成日报",daily_reviews 创建记录,P0
+model,MD-001,Poisson矩阵,"输入lambda",比分矩阵概率和约等于1,P1
+pool,PL-001,任九筛选,"输入14场概率",输出9场组合,P2

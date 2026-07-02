@@ -1,0 +1,44 @@
+# 数据与运行时
+data/
+*.log
+
+# 环境配置（本地敏感信息）
+.env.local
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Node / 前端
+node_modules/
+dist/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+docker-compose.override.yml
+
+# Coverage
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+
+# Linters & type checkers
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+
+# Pre-commit (tracked — do NOT ignore)

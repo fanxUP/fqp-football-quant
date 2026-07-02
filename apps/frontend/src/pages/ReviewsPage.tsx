@@ -1,0 +1,351 @@
+import { useEffect, useState } from 'react';
+import { api } from '../core/apiClient';
+import type { DailyReview, WeeklyReview, MonthlyReview, Settlement, ErrorAnalysis, ErrorSummary } from '../core/types';
+import { ApiError } from '../core/types';
+import PageHeader from '../shared/components/PageHeader';
+import Card from '../shared/components/Card';
+import DataTable, { type Column } from '../shared/components/DataTable';
+import LoadingSpinner from '../shared/components/LoadingSpinner';
+import EmptyState from '../shared/components/EmptyState';
+import ErrorState from '../shared/components/ErrorState';
+import StatusBadge from '../shared/components/StatusBadge';
+
+type TabKey = 'daily' | 'weekly' | 'monthly' | 'settlements' | 'errors';
+
+export default function ReviewsPage() {
+  const [activeTab, setActiveTab] = useState<TabKey>('daily');
+
+  return (
+    <div>
+      <PageHeader title="复盘中心" />
+      <div className="fqp-tabs">
+        {([
+          ['daily', '日报'],
+          ['weekly', '周报'],
+          ['monthly', '月报'],
+          ['settlements', '结算记录'],
+          ['errors', '错因分析'],
+        ] as [TabKey, string][]).map(([key, label]) => (
+          <button
+            key={key}
+            className={`fqp-tab${activeTab === key ? ' active' : ''}`}
+            onClick={() => setActiveTab(key)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === 'daily' && <DailyReviewsTab />}
+      {activeTab === 'weekly' && <WeeklyReviewsTab />}
+      {activeTab === 'monthly' && <MonthlyReviewsTab />}
+      {activeTab === 'settlements' && <SettlementsTab />}
+      {activeTab === 'errors' && <ErrorAnalysisTab />}
+    </div>
+  );
+}
+
+// ---- Daily Reviews Tab ----
+function DailyReviewsTab() {
+  const [reviews, setReviews] = useState<DailyReview[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [expandedDate, setExpandedDate] = useState<string | null>(null);
+
+  useEffect(() => {
+    api.reviews.daily(30)
+      .then((r) => { setReviews(r.reviews); setLoading(false); })
+      .catch((e) => { setError(e instanceof ApiError ? e.message : '加载失败'); setLoading(false); });
+  }, []);
+
+  const columns: Column<DailyReview>[] = [
+    { key: 'review_date', title: '日期' },
+    { key: 'official_match_count', title: '官方场次', render: (v) => <span className="fqp-mono">{String(v)}</span> },
+    { key: 'analyzable_match_count', title: '可分析', render: (v) => <span className="fqp-mono">{String(v)}</span> },
+    { key: 'simulation_ticket_count', title: '模拟票', render: (v) => <span className="fqp-mono">{String(v)}</span> },
+    { key: 'real_ticket_count', title: '实票', render: (v) => <span className="fqp-mono">{String(v)}</span> },
+    {
+      key: 'real_profit_loss',
+      title: '实盘盈亏',
+      render: (v) => {
+        const val = Number(v);
+        const color = val > 0 ? 'var(--fqp-success)' : val < 0 ? 'var(--fqp-red-neon)' : 'var(--fqp-text-muted)';
+        return <span className="fqp-mono" style={{ color }}>{val >= 0 ? '+' : ''}{val.toFixed(2)}</span>;
+      },
+    },
+  ];
+
+  if (error) return <ErrorState message={error} onRetry={() => window.location.reload()} />;
+
+  return (
+    <div>
+      <DataTable
+        columns={columns}
+        rows={reviews}
+        loading={loading}
+        emptyText="暂无日报数据，每日 23:30 自动生成"
+        onRowClick={(row) => setExpandedDate(expandedDate === row.review_date ? null : row.review_date)}
+        rowKey={(r) => r.review_date}
+      />
+      {expandedDate && (
+        <Card title={`📅 ${expandedDate} 日报详情`} style={{ marginTop: '16px' }}>
+          {(() => {
+            const review = reviews.find((r) => r.review_date === expandedDate);
+            if (!review) return null;
+            return (
+              <div style={{ fontSize: '14px', lineHeight: '2', whiteSpace: 'pre-wrap' }}>
+                {review.summary_text || '暂无摘要文本'}
+                <div style={{ marginTop: '16px', display: 'flex', gap: '24px', flexWrap: 'wrap', fontSize: '13px', color: 'var(--fqp-text-muted)' }}>
+                  <div>建议投入: ¥{review.suggested_stake.toFixed(0)}</div>
+                  <div>实际投入: ¥{review.actual_stake.toFixed(0)}</div>
+                  <div>预算使用率: {(review.budget_usage_rate * 100).toFixed(0)}%</div>
+                  <div>最大单票亏损: ¥{review.max_single_ticket_loss.toFixed(2)}</div>
+                </div>
+              </div>
+            );
+          })()}
+        </Card>
+      )}
+    </div>
+  );
+}
+
+// ---- Weekly Reviews Tab ----
+function WeeklyReviewsTab() {
+  const [reviews, setReviews] = useState<WeeklyReview[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    api.reviews.weekly(12)
+      .then((r) => { setReviews(r.reviews); setLoading(false); })
+      .catch((e) => { setError(e instanceof ApiError ? e.message : '加载失败'); setLoading(false); });
+  }, []);
+
+  const columns: Column<WeeklyReview>[] = [
+    { key: 'week_start', title: '周开始' },
+    { key: 'week_end', title: '周结束' },
+    {
+      key: 'summary_text',
+      title: '摘要',
+      render: (v) => {
+        const s = String(v || '');
+        return s.length > 80 ? s.slice(0, 80) + '...' : s;
+      },
+    },
+    { key: 'created_at', title: '生成时间', render: (v) => String(v).replace('T', ' ').slice(0, 19) },
+  ];
+
+  if (error) return <ErrorState message={error} onRetry={() => window.location.reload()} />;
+  return (
+    <DataTable
+      columns={columns}
+      rows={reviews}
+      loading={loading}
+      emptyText="暂无周报数据"
+      rowKey={(r) => String(r.id)}
+    />
+  );
+}
+
+// ---- Monthly Reviews Tab ----
+function MonthlyReviewsTab() {
+  const [reviews, setReviews] = useState<MonthlyReview[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    api.reviews.monthly(12)
+      .then((r) => { setReviews(r.reviews); setLoading(false); })
+      .catch((e) => { setError(e instanceof ApiError ? e.message : '加载失败'); setLoading(false); });
+  }, []);
+
+  const columns: Column<MonthlyReview>[] = [
+    { key: 'review_month', title: '月份' },
+    {
+      key: 'summary_text',
+      title: '摘要',
+      render: (v) => {
+        const s = String(v || '');
+        return s.length > 100 ? s.slice(0, 100) + '...' : s;
+      },
+    },
+    { key: 'created_at', title: '生成时间', render: (v) => String(v).replace('T', ' ').slice(0, 19) },
+  ];
+
+  if (error) return <ErrorState message={error} onRetry={() => window.location.reload()} />;
+  return (
+    <DataTable
+      columns={columns}
+      rows={reviews}
+      loading={loading}
+      emptyText="暂无月报数据"
+      rowKey={(r) => String(r.id)}
+    />
+  );
+}
+
+// ---- Settlements Tab ----
+function SettlementsTab() {
+  const [settlements, setSettlements] = useState<Settlement[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+
+  useEffect(() => {
+    setLoading(true);
+    api.settlements.list({ date, limit: 100 })
+      .then((r) => { setSettlements(r.settlements); setLoading(false); })
+      .catch((e) => { setError(e instanceof ApiError ? e.message : '加载失败'); setLoading(false); });
+  }, [date]);
+
+  const totalStake = settlements.reduce((s, x) => s + x.stake_amount, 0);
+  const totalPL = settlements.reduce((s, x) => s + x.profit_loss, 0);
+
+  const columns: Column<Settlement>[] = [
+    { key: 'ticket_source', title: '来源' },
+    { key: 'ticket_id', title: '票单ID', render: (v) => <span className="fqp-mono">#{String(v)}</span> },
+    {
+      key: 'is_won',
+      title: '结果',
+      render: (v) => <StatusBadge status={v ? 'ok' : 'error'} label={v ? '中奖' : '未中'} />,
+    },
+    { key: 'stake_amount', title: '投注', render: (v) => <span className="fqp-mono">¥{Number(v).toFixed(2)}</span> },
+    { key: 'prize_amount', title: '奖金', render: (v) => <span className="fqp-mono">¥{Number(v).toFixed(2)}</span> },
+    {
+      key: 'profit_loss',
+      title: '盈亏',
+      render: (v) => {
+        const val = Number(v);
+        const color = val > 0 ? 'var(--fqp-success)' : val < 0 ? 'var(--fqp-red-neon)' : 'var(--fqp-text-muted)';
+        return <span className="fqp-mono" style={{ color }}>{val >= 0 ? '+' : ''}{val.toFixed(2)}</span>;
+      },
+    },
+    { key: 'settle_time', title: '结算时间', render: (v) => String(v).replace('T', ' ').slice(0, 19) },
+  ];
+
+  if (error) return <ErrorState message={error} onRetry={() => window.location.reload()} />;
+
+  return (
+    <div>
+      <div className="fqp-filter-bar" style={{ marginBottom: '16px' }}>
+        <input
+          className="fqp-input"
+          type="date"
+          value={date}
+          onChange={(e) => setDate(e.target.value)}
+          style={{ minWidth: '180px' }}
+        />
+      </div>
+      {settlements.length > 0 && (
+        <Card style={{ marginBottom: '16px', display: 'flex', gap: '32px' }}>
+          <div>
+            <div className="fqp-label">总投注</div>
+            <div className="fqp-mono" style={{ fontSize: '18px', fontWeight: 700 }}>¥{totalStake.toFixed(2)}</div>
+          </div>
+          <div>
+            <div className="fqp-label">净盈亏</div>
+            <div
+              className="fqp-mono"
+              style={{
+                fontSize: '18px',
+                fontWeight: 700,
+                color: totalPL > 0 ? 'var(--fqp-success)' : totalPL < 0 ? 'var(--fqp-red-neon)' : 'var(--fqp-text-muted)',
+              }}
+            >
+              {totalPL >= 0 ? '+' : ''}{totalPL.toFixed(2)}
+            </div>
+          </div>
+          <div>
+            <div className="fqp-label">结算笔数</div>
+            <div className="fqp-mono" style={{ fontSize: '18px', fontWeight: 700 }}>{settlements.length}</div>
+          </div>
+        </Card>
+      )}
+      <Card style={{ padding: 0, overflow: 'hidden' }}>
+        <DataTable
+          columns={columns}
+          rows={settlements}
+          loading={loading}
+          emptyText={`${date} 暂无结算记录`}
+          rowKey={(r) => String(r.id)}
+        />
+      </Card>
+    </div>
+  );
+}
+
+// ---- Error Analysis Tab ----
+function ErrorAnalysisTab() {
+  const [errors, setErrors] = useState<ErrorAnalysis[]>([]);
+  const [summary, setSummary] = useState<ErrorSummary | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    setLoading(true);
+    Promise.all([
+      api.errorAnalysis.list({ limit: 100 }),
+      api.errorAnalysis.summary(7),
+    ])
+      .then(([e, s]) => {
+        setErrors(e.errors);
+        setSummary(s);
+        setLoading(false);
+      })
+      .catch((e) => { setErr(e instanceof ApiError ? e.message : '加载失败'); setLoading(false); });
+  }, []);
+
+  const columns: Column<ErrorAnalysis>[] = [
+    { key: 'match_id', title: '比赛', render: (v) => <span className="fqp-mono">#{String(v)}</span> },
+    {
+      key: 'error_type',
+      title: '错因类型',
+      render: (v) => <StatusBadge status="warning" label={String(v)} />,
+    },
+    { key: 'error_level', title: '严重度', render: (v) => <StatusBadge status={v === 'high' ? 'error' : v === 'medium' ? 'warning' : 'info'} label={String(v)} /> },
+    { key: 'root_cause', title: '根因', render: (v) => <span style={{ maxWidth: '300px', display: 'inline-block', overflow: 'hidden', textOverflow: 'ellipsis' }}>{String(v)}</span> },
+    { key: 'actual_result', title: '实际赛果', width: '80px', render: (v) => <span className="fqp-mono">{String(v)}</span> },
+    { key: 'created_at', title: '时间', render: (v) => String(v).replace('T', ' ').slice(0, 19) },
+  ];
+
+  if (err) return <ErrorState message={err} onRetry={() => window.location.reload()} />;
+
+  return (
+    <div>
+      {/* Summary */}
+      {summary?.errors && summary.errors.length > 0 && (
+        <Card title="近7天错因分布" style={{ marginBottom: '16px' }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px' }}>
+            {summary.errors.map((e) => (
+              <div
+                key={e.error_type}
+                style={{
+                  padding: '8px 16px',
+                  background: 'var(--fqp-panel)',
+                  borderRadius: 'var(--fqp-radius-sm)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                }}
+              >
+                <StatusBadge status="warning" label={e.error_type} />
+                <span className="fqp-mono" style={{ fontSize: '16px', fontWeight: 700 }}>×{e.count}</span>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      <Card style={{ padding: 0, overflow: 'hidden' }}>
+        <DataTable
+          columns={columns}
+          rows={errors}
+          loading={loading}
+          emptyText="暂无错因分析数据，每日 23:45 自动生成"
+          rowKey={(r) => String(r.id)}
+        />
+      </Card>
+    </div>
+  );
+}

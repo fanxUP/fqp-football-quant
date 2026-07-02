@@ -1,0 +1,64 @@
+[project]
+name = "fqp-from-scratch"
+version = "1.0.0"
+description = "Football quantitative analysis and long-running system"
+requires-python = ">=3.11"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes
+    "W",   # pycodestyle warnings
+    "I",   # isort
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+]
+ignore = [
+    "E501",  # line too long (handled by formatter)
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["apps", "scripts"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+
+[tool.mypy]
+python_version = "3.11"
+strict = false
+disallow_untyped_defs = false
+ignore_missing_imports = true
+warn_return_any = true
+warn_unused_ignores = true
+exclude = [
+    "apps/frontend/",
+    "dist/",
+    ".venv/",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-v --tb=short --strict-markers"
+markers = [
+    "unit: Unit tests (no database, no network)",
+    "integration: Integration tests (requires database)",
+    "slow: Slow tests",
+]
+
+[tool.coverage.run]
+source = ["apps", "scripts"]
+omit = ["tests/*"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
+    "raise NotImplementedError",
+]

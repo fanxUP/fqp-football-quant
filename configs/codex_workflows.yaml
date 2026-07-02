@@ -1,0 +1,41 @@
+workflows:
+  implement_feature:
+    steps:
+      - read_docs
+      - inspect_related_code
+      - create_task_branch_or_worktree
+      - implement_code
+      - add_or_update_tests
+      - run_tests
+      - update_docs
+      - produce_change_summary
+      - request_review_if_needed
+  fix_failed_job:
+    steps:
+      - read_job_error
+      - inspect_logs
+      - reproduce_failure
+      - patch_code
+      - run_targeted_test
+      - run_regression_test
+      - write_audit_log
+  model_experiment:
+    steps:
+      - freeze_input_snapshot
+      - implement_model
+      - run_walk_forward_backtest
+      - compare_baseline
+      - produce_metrics_report
+      - mark_model_candidate
+      - require_human_review_for_activation
+  production_deploy:
+    steps:
+      - verify_ci_passed
+      - backup_database
+      - apply_migrations_staging
+      - smoke_test_staging
+      - human_approval
+      - deploy_prod
+      - smoke_test_prod
+      - monitor_30_minutes
+      - record_deployment_report

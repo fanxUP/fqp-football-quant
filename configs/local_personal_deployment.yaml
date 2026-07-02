@@ -1,0 +1,42 @@
+project:
+  name: FQP 本地个人部署版
+  mode: local_personal
+  timezone: Asia/Shanghai
+  default_budget_daily: 500
+
+auth:
+  mode: none              # none | local_pin
+  local_operator: owner
+  pin_required: false
+  session_ttl_hours: 24
+
+network:
+  bind_host: 127.0.0.1
+  frontend_port: 3000
+  backend_port: 8000
+  expose_lan: false
+
+storage:
+  database_dir: ./data/postgres
+  upload_dir: ./data/uploads/tickets
+  backup_dir: ./data/backups
+  report_export_dir: ./exports/reports
+
+runtime:
+  scheduler_enabled: true
+  worker_enabled: true
+  codex_agent_enabled: true
+  codex_can_execute_oneoff_jobs: false
+  require_manual_approval_for:
+    - database_migration
+    - module_delete
+    - model_switch
+    - risk_config_change
+    - recommendation_publish
+    - backup_restore
+
+compliance:
+  allow_online_lottery_purchase: false
+  allow_ticket_proxy_purchase: false
+  allow_payment_collection: false
+  allow_auto_order: false

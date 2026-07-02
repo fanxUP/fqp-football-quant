@@ -1,0 +1,25 @@
+required_fields:
+  - plugin_id
+  - name
+  - type
+  - module
+  - version
+  - status
+  - entrypoint
+fields:
+  plugin_id: string
+  name: string
+  type: enum[data_source, model, panel, report, strategy, agent_workflow]
+  module: string
+  version: semver
+  status: enum[draft, registered, experimental, staging, active, deprecated, removed]
+  entrypoint: string
+  permissions: list[string]
+  dependencies: list[string]
+  config: object
+  rollback: object
+validation_rules:
+  - plugin_id must be globally unique
+  - active plugin must have tests
+  - production plugin must have rollback.disable_flag
+  - model plugin must have backtest_report_id before active

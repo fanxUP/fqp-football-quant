@@ -1,0 +1,31 @@
+dependencies:
+  feature_store:
+    required:
+      - season_team
+      - player_lineup
+      - injury_availability
+      - stadium_weather
+      - motivation_tournament
+    optional:
+      - pool_lottery
+  recommendation:
+    required:
+      - core_official
+      - feature_store
+      - model_committee
+    optional:
+      - ticket_review
+  backtest:
+    required:
+      - core_official
+      - feature_store
+      - model_research
+    optional:
+      - recommendation
+  frontend_panels:
+    required:
+      - ops_admin
+    optional:
+      - recommendation
+      - backtest
+      - agent_codex

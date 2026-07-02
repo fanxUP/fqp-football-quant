@@ -1,0 +1,28 @@
+absence_impact_weights:
+  recent_minutes_share: 0.30
+  team_market_value_share: 0.25
+  position_importance_score: 0.20
+  key_player_score: 0.15
+  replacement_difficulty: 0.10
+position_importance_defaults:
+  GK: 0.95
+  CB: 0.85
+  DM: 0.82
+  ST: 0.82
+  AM: 0.76
+  CM: 0.70
+  FB: 0.62
+  W: 0.58
+  SUB: 0.30
+availability_status:
+  available: 0
+  injured: 1
+  suspended: 1
+  doubtful: 0.5
+  rested: 0.8
+  unknown: 0.3
+risk_rules:
+  key_absence_count_high: 2
+  absence_impact_score_high: 65
+  if_two_center_backs_absent_add_uncertainty: 15
+  if_goalkeeper_absent_add_uncertainty: 12

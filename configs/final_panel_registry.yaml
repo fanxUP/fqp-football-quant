@@ -1,0 +1,78 @@
+panels:
+  - panel_id: today_dashboard
+    name: 今日驾驶舱
+    route: /dashboard/today
+    module_id: official_data_core
+    order: 10
+    visible: true
+    icon: activity
+  - panel_id: match_center
+    name: 比赛中心
+    route: /matches
+    module_id: official_data_core
+    order: 20
+    visible: true
+    icon: football
+  - panel_id: recommendation_center
+    name: 推荐票单
+    route: /recommendations
+    module_id: recommendation_core
+    order: 30
+    visible: true
+    icon: target
+  - panel_id: ticket_upload
+    name: 实票上传
+    route: /tickets
+    module_id: real_ticket_module
+    order: 40
+    visible: true
+    icon: upload
+  - panel_id: review_center
+    name: 复盘中心
+    route: /reviews
+    module_id: real_ticket_module
+    order: 50
+    visible: true
+    icon: chart
+  - panel_id: match_intelligence
+    name: 多维情报
+    route: /intelligence
+    module_id: multidim_feature_module
+    order: 60
+    visible: true
+    icon: radar
+  - panel_id: model_lab
+    name: 模型实验室
+    route: /models
+    module_id: advanced_backtest_module
+    order: 70
+    visible: true
+    icon: brain
+  - panel_id: backtest_lab
+    name: 回测实验室
+    route: /backtest
+    module_id: advanced_backtest_module
+    order: 75
+    visible: true
+    icon: trending-up
+  - panel_id: data_health
+    name: 数据源监控
+    route: /data-health
+    module_id: official_data_core
+    order: 80
+    visible: true
+    icon: database
+  - panel_id: module_admin
+    name: 模块管理
+    route: /modules
+    module_id: module_runtime_core
+    order: 90
+    visible: true
+    icon: puzzle
+  - panel_id: settings
+    name: 本地设置
+    route: /settings
+    module_id: local_settings_core
+    order: 100
+    visible: true
+    icon: settings

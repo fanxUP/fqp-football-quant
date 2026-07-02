@@ -1,0 +1,31 @@
+policy_name: local_latest_no_pinning
+scope: local_personal_deployment
+priority: final_execution_policy
+principles:
+  - 项目使用 Codex 进行开发、维护、测试、修复和代码审查。
+  - 运行部署使用 Docker Desktop，统一通过 Docker Compose 管理本地服务。
+  - Python、Node、PostgreSQL、Redis 等组件不在项目中锁死版本。
+  - 主机已安装组件时，优先使用本地计算机当前版本。
+  - 主机缺失组件时，按官方安装渠道安装当前最新版。
+  - Docker 镜像不使用固定版本 tag，默认拉取当前 latest 线。
+  - Python requirements 不使用 == 固定版本；必要时仅使用包名或最低兼容范围。
+  - 每次启动时生成 runtime_version_snapshot.json，用于问题排查，不作为版本锁。
+non_pinned_files:
+  - requirements.txt
+  - requirements-dev.txt
+  - ops/Dockerfile.api
+  - ops/docker-compose.yml
+  - ops/local/docker-compose.local.yml
+version_snapshot:
+  enabled: true
+  output: data/runtime_version_snapshot.json
+installation_mode:
+  docker_desktop: latest_if_missing
+  codex_cli: latest_if_missing
+  python_packages: latest_resolved_by_pip
+  node_packages: latest_resolved_by_npm
+  docker_images: latest_resolved_by_docker_desktop
+risk_controls:
+  - 每月备份 runtime_version_snapshot.json，记录当月实际运行版本。
+  - 每次依赖自动更新后必须运行 tests/local_smoke_acceptance.md。
+  - 如果最新版依赖导致故障，使用 Docker Desktop 镜像回退、Python 虚拟环境重建或 Codex 修复分支处理。

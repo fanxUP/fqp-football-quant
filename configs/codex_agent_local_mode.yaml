@@ -1,0 +1,35 @@
+codex:
+  mode: local_development_assistant
+  production_daemon: false
+  allowed_actions:
+    - generate_code
+    - modify_code
+    - write_tests
+    - run_tests
+    - draft_migrations
+    - update_docs
+    - inspect_logs
+  requires_manual_approval:
+    - apply_migration
+    - delete_module
+    - switch_model_version
+    - publish_recommendations
+    - restore_backup
+  forbidden_actions:
+    - direct_online_lottery_purchase
+    - payment_collection
+    - delete_historical_snapshots_without_backup
+    - override_official_results
+agents:
+  planner_agent:
+    paths: ['docs/', 'configs/']
+  frontend_agent:
+    paths: ['apps/frontend/']
+  backend_agent:
+    paths: ['apps/backend/', 'api/']
+  model_agent:
+    paths: ['scripts/models/', 'notebooks/']
+  crawler_agent:
+    paths: ['scripts/jobs/', 'configs/data_sources*']
+  qa_agent:
+    paths: ['tests/']
