@@ -1,4 +1,5 @@
 """Tests for Elo rating model."""
+
 from __future__ import annotations
 
 from scripts.elo_model import (
@@ -72,8 +73,12 @@ class TestUpdateElo:
 
     def test_higher_k_increases_delta(self):
         """Higher K-factor should produce larger Elo change."""
-        delta_k32 = update_elo(1500, 1500, result=1.0, goal_diff=0, k_factor=32, is_home=True) - 1500
-        delta_k16 = update_elo(1500, 1500, result=1.0, goal_diff=0, k_factor=16, is_home=True) - 1500
+        delta_k32 = (
+            update_elo(1500, 1500, result=1.0, goal_diff=0, k_factor=32, is_home=True) - 1500
+        )
+        delta_k16 = (
+            update_elo(1500, 1500, result=1.0, goal_diff=0, k_factor=16, is_home=True) - 1500
+        )
         assert delta_k32 > delta_k16
 
     def test_loss_decreases_elo(self):

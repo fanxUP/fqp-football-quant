@@ -1,4 +1,5 @@
 """Tests for evaluation metrics: Brier, LogLoss, CLV, RPS."""
+
 from __future__ import annotations
 
 import pytest

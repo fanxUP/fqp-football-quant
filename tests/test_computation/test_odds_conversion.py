@@ -1,4 +1,5 @@
 """Tests for odds conversion and debiasing functions."""
+
 from __future__ import annotations
 
 import pytest

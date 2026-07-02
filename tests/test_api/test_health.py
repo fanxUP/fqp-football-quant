@@ -1,4 +1,5 @@
 """Tests for health check and root endpoints."""
+
 from __future__ import annotations
 
 
