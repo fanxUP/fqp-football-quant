@@ -82,6 +82,12 @@ export const api = {
       `/api/predictions${qs({ match_id: params?.match_id, limit: params?.limit ?? 50 })}`,
     ),
 
+  // Live recommendations
+  liveRecommendations: (params?: { limit?: number; min_ev?: number; min_confidence?: number }) =>
+    request<{ status: string; recommendations: import('./types').LiveRecommendation[]; total: number }>(
+      `/api/recommendations/live${qs({ limit: params?.limit, min_ev: params?.min_ev, min_confidence: params?.min_confidence })}`,
+    ),
+
   // Simulation tickets
   tickets: (params?: { status?: string; limit?: number }) =>
     request<{ tickets: SimulationTicket[]; total: number }>(

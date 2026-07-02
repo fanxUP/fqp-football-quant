@@ -456,6 +456,28 @@ export interface ConditionPerformanceData {
   segments: ConditionSegment[];
 }
 
+export interface LiveRecommendation {
+  prediction_id: number;
+  match_id: number;
+  play_type: string;
+  play_type_name: string;
+  option_code: string;
+  option_name: string;
+  model_probability: number;
+  market_probability: number;
+  fair_odds: number;
+  ev: number;
+  edge: number;
+  confidence: number;
+  predict_time: string;
+  model_name: string;
+  home_team: string;
+  away_team: string;
+  league: string;
+  kickoff_time: string | null;
+  match_status: string;
+}
+
 export interface ModelPlayTypeRecommendation {
   rank: number;
   model_name: string;

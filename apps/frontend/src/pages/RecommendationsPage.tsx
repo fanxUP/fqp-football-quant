@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../core/apiClient';
 import { navigate } from '../core/router';
-import type { SimulationTicket } from '../core/types';
+import type { SimulationTicket, LiveRecommendation } from '../core/types';
 import { ApiError } from '../core/types';
 import PageHeader from '../shared/components/PageHeader';
 import FilterBar from '../shared/components/FilterBar';
@@ -14,6 +14,7 @@ import DisclaimerBanner, { PAGE_DEFAULTS } from '../shared/components/Disclaimer
 
 export default function RecommendationsPage() {
   const [tickets, setTickets] = useState<SimulationTicket[]>([]);
+  const [liveRecs, setLiveRecs] = useState<LiveRecommendation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState('');
@@ -23,11 +24,14 @@ export default function RecommendationsPage() {
     setLoading(true);
     setError(null);
 
-    api
-      .tickets({ limit: 100 })
-      .then((res) => {
+    Promise.all([
+      api.tickets({ limit: 100 }),
+      api.liveRecommendations({ limit: 20, min_ev: 0.01 }),
+    ])
+      .then(([ticketRes, recRes]) => {
         if (!cancelled) {
-          setTickets(res.tickets);
+          setTickets(ticketRes.tickets);
+          setLiveRecs(recRes.recommendations || []);
           setLoading(false);
         }
       })
@@ -244,6 +248,135 @@ export default function RecommendationsPage() {
         title="推荐票单"
         lastUpdated={new Date().toLocaleString('zh-CN', { hour12: false })}
       />
+
+      <DisclaimerBanner text={PAGE_DEFAULTS.recommendations} type="page" />
+
+      {/* Live recommendations panel */}
+      {!loading && liveRecs.length > 0 && (
+        <Card style={{ marginBottom: 20, borderColor: 'rgba(34,197,94,0.30)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+            <span style={{ fontSize: 18 }}>🎯</span>
+            <span style={{ fontWeight: 700, fontSize: 15, color: 'var(--fqp-text)' }}>
+              实时推荐（基于最新模型预测）
+            </span>
+            <span style={{ fontSize: 11, color: 'var(--fqp-text-muted)', marginLeft: 4 }}>
+              EV &gt; 0.01 · 共 {liveRecs.length} 条
+            </span>
+          </div>
+          <div className="fqp-table-wrapper">
+            <table className="fqp-table" style={{ fontSize: 13 }}>
+              <thead>
+                <tr>
+                  <th>比赛</th>
+                  <th>联赛</th>
+                  <th>玩法</th>
+                  <th>推荐</th>
+                  <th>模型概率</th>
+                  <th>市场概率</th>
+                  <th>Edge</th>
+                  <th>EV</th>
+                  <th>置信度</th>
+                  <th>模型</th>
+                </tr>
+              </thead>
+              <tbody>
+                {liveRecs.map((rec) => (
+                  <tr key={rec.prediction_id} className="clickable">
+                    <td style={{ fontWeight: 600 }}>
+                      {rec.home_team} vs {rec.away_team}
+                    </td>
+                    <td style={{ fontSize: 12, color: 'var(--fqp-text-muted)' }}>{rec.league}</td>
+                    <td>
+                      <span
+                        style={{
+                          padding: '2px 8px',
+                          borderRadius: 4,
+                          fontSize: 11,
+                          fontWeight: 600,
+                          background: 'rgba(59,130,246,0.12)',
+                          color: 'var(--fqp-info)',
+                        }}
+                      >
+                        {rec.play_type_name}
+                      </span>
+                    </td>
+                    <td>
+                      <span
+                        style={{
+                          fontWeight: 700,
+                          fontSize: 14,
+                          color: rec.option_code === '3' ? 'var(--fqp-success)'
+                            : rec.option_code === '0' ? 'var(--fqp-red-neon)'
+                            : 'var(--fqp-warning)',
+                        }}
+                      >
+                        {rec.option_name}
+                      </span>
+                      <span style={{ fontSize: 11, color: 'var(--fqp-text-muted)', marginLeft: 4 }}>
+                        @{rec.fair_odds}
+                      </span>
+                    </td>
+                    <td className="fqp-mono" style={{ color: 'var(--fqp-success)' }}>
+                      {(rec.model_probability * 100).toFixed(1)}%
+                    </td>
+                    <td className="fqp-mono" style={{ color: 'var(--fqp-text-muted)' }}>
+                      {(rec.market_probability * 100).toFixed(1)}%
+                    </td>
+                    <td className="fqp-mono">
+                      <span style={{ color: rec.edge > 0 ? 'var(--fqp-success)' : 'var(--fqp-red-neon)' }}>
+                        {rec.edge >= 0 ? '+' : ''}{(rec.edge * 100).toFixed(1)}%
+                      </span>
+                    </td>
+                    <td className="fqp-mono">
+                      <span
+                        style={{
+                          fontWeight: 700,
+                          color: rec.ev > 0.05 ? 'var(--fqp-success)'
+                            : rec.ev > 0.02 ? 'var(--fqp-warning)'
+                            : 'var(--fqp-text-muted)',
+                        }}
+                      >
+                        +{rec.ev.toFixed(3)}
+                      </span>
+                    </td>
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <div
+                          style={{
+                            width: 40,
+                            height: 4,
+                            borderRadius: 2,
+                            background: 'var(--fqp-panel)',
+                            overflow: 'hidden',
+                          }}
+                        >
+                          <div
+                            style={{
+                              height: '100%',
+                              width: `${Math.round(rec.confidence * 100)}%`,
+                              background:
+                                rec.confidence > 0.6 ? 'var(--fqp-success)'
+                                : rec.confidence > 0.4 ? 'var(--fqp-warning)'
+                                : 'var(--fqp-red-neon)',
+                              borderRadius: 2,
+                            }}
+                          />
+                        </div>
+                        <span style={{ fontSize: 11, color: 'var(--fqp-text-muted)' }}>
+                          {(rec.confidence * 100).toFixed(0)}%
+                        </span>
+                      </div>
+                    </td>
+                    <td style={{ fontSize: 11, color: 'var(--fqp-text-muted)', maxWidth: 100, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {rec.model_name}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
 
       {/* Charts */}
       {!loading && tickets.length > 0 && (

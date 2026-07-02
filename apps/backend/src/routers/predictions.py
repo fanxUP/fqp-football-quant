@@ -8,6 +8,105 @@ from apps.backend.src.db import get_db
 
 router = APIRouter(tags=["predictions"])
 
+# Play type display names
+PLAY_TYPE_NAMES: dict[str, str] = {
+    "spf": "胜平负",
+    "rqspf": "让球胜平负",
+    "total_goals": "总进球",
+    "score": "比分",
+    "half_full": "半全场",
+}
+
+OPTION_NAMES: dict[str, str] = {
+    "3": "主胜",
+    "1": "平局",
+    "0": "客胜",
+}
+
+
+@router.get("/api/recommendations/live")
+def get_live_recommendations(
+    limit: int = Query(20),
+    min_ev: float = Query(0.02, description="最小EV阈值"),
+    min_confidence: float = Query(0.3, description="最小置信度"),
+):
+    """Generate live betting recommendations from latest model predictions.
+
+    Returns the best match+option combos with positive EV, sorted by EV descending.
+    Each recommendation includes match info, odds, probabilities, edge, and suggested action.
+    """
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                WITH latest AS (
+                    SELECT DISTINCT ON (mp.match_id, mp.play_type, mp.option_code)
+                        mp.id,
+                        mp.match_id,
+                        mp.play_type,
+                        mp.option_code,
+                        mp.model_probability,
+                        mp.market_probability,
+                        mp.fair_odds,
+                        mp.ev,
+                        mp.confidence_score,
+                        mp.predict_time,
+                        mv.model_name,
+                        m.home_team_name,
+                        m.away_team_name,
+                        m.league_name,
+                        m.kickoff_time,
+                        m.match_status
+                    FROM model_predictions mp
+                    JOIN model_versions mv ON mv.id = mp.model_version_id
+                    JOIN official_matches m ON m.id = mp.match_id
+                    WHERE mp.ev > %(min_ev)s
+                      AND mp.confidence_score >= %(min_confidence)s
+                      AND m.match_status NOT IN ('Settled', 'Cancelled')
+                    ORDER BY mp.match_id, mp.play_type, mp.option_code, mp.predict_time DESC
+                )
+                SELECT *
+                FROM latest
+                ORDER BY ev DESC, confidence_score DESC
+                LIMIT %(limit)s
+                """,
+                {"min_ev": min_ev, "min_confidence": min_confidence, "limit": limit},
+            )
+            rows = cur.fetchall()
+
+    recommendations = []
+    for r in rows:
+        model_prob = float(r[4]) if r[4] else 0
+        market_prob = float(r[5]) if r[5] else 0
+        fair_odds = float(r[6]) if r[6] else 0
+        ev = float(r[7]) if r[7] else 0
+        confidence = float(r[8]) if r[8] else 0
+        edge = model_prob - market_prob if market_prob > 0 else 0
+
+        recommendations.append({
+            "prediction_id": r[0],
+            "match_id": r[1],
+            "play_type": r[2],
+            "play_type_name": PLAY_TYPE_NAMES.get(r[2], r[2]),
+            "option_code": r[3],
+            "option_name": OPTION_NAMES.get(r[3], r[3]),
+            "model_probability": round(model_prob, 4),
+            "market_probability": round(market_prob, 4),
+            "fair_odds": round(fair_odds, 2),
+            "ev": round(ev, 4),
+            "edge": round(edge, 4),
+            "confidence": round(confidence, 4),
+            "predict_time": r[9].isoformat() if hasattr(r[9], "isoformat") else str(r[9]),
+            "model_name": r[10],
+            "home_team": r[11],
+            "away_team": r[12],
+            "league": r[13],
+            "kickoff_time": r[14].isoformat() if hasattr(r[14], "isoformat") else str(r[14]) if r[14] else None,
+            "match_status": r[15],
+        })
+
+    return {"status": "ok", "recommendations": recommendations, "total": len(recommendations)}
+
 
 @router.get("/api/predictions")
 def list_predictions(
