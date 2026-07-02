@@ -17,6 +17,8 @@ const NAV_ITEMS: NavItem[] = [
   { label: '模块', icon: '🧩', path: '/modules' },
   { label: '设置', icon: '⚙️', path: '/settings' },
   { label: 'Agent', icon: '🤖', path: '/agents' },
+  { label: '回测', icon: '⏪', path: '/backtest' },
+  { label: '足彩', icon: '🎱', path: '/pool' },
 ];
 
 export default function Sidebar() {

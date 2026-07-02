@@ -2,11 +2,17 @@
 
 from __future__ import annotations
 
+import os
+import tempfile
 from datetime import datetime as _dt
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, File, HTTPException, Query, UploadFile
 
 from apps.backend.src.db import get_db
+from scripts.ocr_ticket_parser import (
+    process_ticket_image,
+    result_to_dict,
+)
 from scripts.real_ticket_storage import (
     create_real_ticket as _create_ticket,
 )
@@ -173,3 +179,48 @@ def error_analysis_summary(days: int = Query(7)):
     with get_db() as conn:
         summary = get_error_summary(conn, days=days)
     return summary
+
+
+# ---------------------------------------------------------------------------
+# OCR ticket upload (Phase 8)
+# ---------------------------------------------------------------------------
+
+
+@router.post("/api/tickets/ocr")
+def ocr_ticket_image(file: UploadFile = File(...)):  # noqa: B008
+    """上传实票照片，OCR 识别并返回结构化数据。
+
+    支持格式：PNG、JPG、JPEG、WEBP（最大10MB）。
+    返回识别结果供用户确认后正式录入。
+    """
+    # 校验文件类型
+    allowed_types = {"image/png", "image/jpeg", "image/jpg", "image/webp"}
+    if file.content_type and file.content_type not in allowed_types:
+        raise HTTPException(400, f"不支持的文件类型: {file.content_type}。支持: PNG, JPG, WEBP")
+
+    # 校验文件大小
+    contents = file.file.read()
+    max_size = 10 * 1024 * 1024  # 10MB
+    if len(contents) > max_size:
+        raise HTTPException(400, f"文件过大 ({len(contents) / 1024 / 1024:.1f}MB)，最大 10MB")
+
+    # 保存临时文件
+    suffix = os.path.splitext(file.filename or "ticket.jpg")[1] or ".jpg"
+    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+        tmp.write(contents)
+        tmp_path = tmp.name
+
+    try:
+        result = process_ticket_image(tmp_path, engine="auto")
+        response = result_to_dict(result)
+        response["filename"] = file.filename
+        response["size_bytes"] = len(contents)
+        return response
+    except RuntimeError as e:
+        raise HTTPException(500, f"OCR 处理失败: {e}") from e
+    finally:
+        # 清理临时文件
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass

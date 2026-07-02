@@ -267,6 +267,61 @@ export interface StatusResponse {
 
 // ---- Settings (localStorage) ----
 
+// ---- Phase 10: Pool Lottery ----
+
+export interface PoolMatchInfo {
+  index: number;
+  match_id: number | null;
+  home_team: string;
+  away_team: string;
+  league: string;
+  match_date: string;
+  prob_home: number;
+  prob_draw: number;
+  prob_away: number;
+  max_prob_option: string;
+  max_prob: number;
+  cold_gate_index: number;
+  uncertainty: number;
+  data_quality: number;
+  classification: 'dan' | 'tuo' | 'defense' | 'normal';
+  entropy: number;
+}
+
+export interface PoolAnalysis {
+  period_id: string;
+  matches: PoolMatchInfo[];
+  classification: {
+    dan: string[];
+    tuo: string[];
+    defense: string[];
+  };
+  full_combinations: {
+    count: number;
+    total_cost: number;
+    combinations: {
+      selections: string[];
+      estimated_hit_prob: number;
+      cold_gate_coverage: number;
+    }[];
+  };
+  rx9: {
+    selected_matches: string[];
+    combinations_count: number;
+    total_cost: number;
+  };
+  monte_carlo: {
+    hit14_prob: number;
+    hit13_prob: number;
+    rx9_prob: number;
+    simulations: number;
+  };
+  warnings: string[];
+  generated_at: string;
+}
+
+// ---- Settings (localStorage) ----
+
 export interface FqpSettings {
   dailyBudget: number;
   riskMode: 'conservative' | 'balanced' | 'aggressive';

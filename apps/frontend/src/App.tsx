@@ -21,6 +21,7 @@ const ModulesPage = lazy(() => import('./pages/ModulesPage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 const AgentPanel = lazy(() => import('./pages/AgentPanel'));
 const BacktestPage = lazy(() => import('./pages/BacktestPage'));
+const PoolPage = lazy(() => import('./pages/PoolPage'));
 
 // ---- Route table ----
 const routes = [
@@ -39,6 +40,7 @@ const routes = [
   { path: '/settings', render: () => <SettingsPage /> },
   { path: '/agents', render: () => <AgentPanel /> },
   { path: '/backtest', render: () => <BacktestPage /> },
+  { path: '/pool', render: () => <PoolPage /> },
 ];
 
 createRouter(routes);

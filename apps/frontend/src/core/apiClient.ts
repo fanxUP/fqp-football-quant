@@ -192,4 +192,15 @@ export const api = {
         { method: 'POST', body: JSON.stringify(body) },
       ),
   },
+
+  // Pool lottery (Phase 10)
+  pool: {
+    analyze: (params?: { budget?: number; strategy?: string }) =>
+      request<Record<string, unknown>>(
+        `/api/pool/analyze${qs({ budget: params?.budget, strategy: params?.strategy })}`,
+      ),
+
+    sample: () =>
+      request<Record<string, unknown>>('/api/pool/sample'),
+  },
 };

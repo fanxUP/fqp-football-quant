@@ -9,6 +9,7 @@ import DataTable, { type Column } from '../shared/components/DataTable';
 import ErrorState from '../shared/components/ErrorState';
 import Card from '../shared/components/Card';
 import StatusBadge from '../shared/components/StatusBadge';
+import DisclaimerBanner, { PAGE_DEFAULTS } from '../shared/components/DisclaimerBanner';
 
 export default function RecommendationsPage() {
   const [tickets, setTickets] = useState<SimulationTicket[]>([]);
@@ -121,6 +122,7 @@ export default function RecommendationsPage() {
     return (
       <div>
         <PageHeader title="推荐票单" />
+      <DisclaimerBanner text={PAGE_DEFAULTS.recommendations} type="page" />
         <ErrorState message={error} onRetry={() => window.location.reload()} />
       </div>
     );

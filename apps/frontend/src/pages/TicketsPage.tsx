@@ -9,6 +9,7 @@ import DataTable, { type Column } from '../shared/components/DataTable';
 import ErrorState from '../shared/components/ErrorState';
 import Card from '../shared/components/Card';
 import StatusBadge from '../shared/components/StatusBadge';
+import DisclaimerBanner, { PAGE_DEFAULTS } from '../shared/components/DisclaimerBanner';
 
 export default function TicketsPage() {
   const [tickets, setTickets] = useState<RealTicket[]>([]);
@@ -105,6 +106,7 @@ export default function TicketsPage() {
           </button>
         }
       />
+      <DisclaimerBanner text={PAGE_DEFAULTS.tickets} type="page" />
       <FilterBar>
         <select
           className="fqp-select"

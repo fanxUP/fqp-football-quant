@@ -4,6 +4,7 @@ import type { DailyReview, WeeklyReview, MonthlyReview, Settlement, ErrorAnalysi
 import { ApiError } from '../core/types';
 import PageHeader from '../shared/components/PageHeader';
 import Card from '../shared/components/Card';
+import DisclaimerBanner, { PAGE_DEFAULTS } from '../shared/components/DisclaimerBanner';
 import DataTable, { type Column } from '../shared/components/DataTable';
 import LoadingSpinner from '../shared/components/LoadingSpinner';
 import EmptyState from '../shared/components/EmptyState';
@@ -18,6 +19,7 @@ export default function ReviewsPage() {
   return (
     <div>
       <PageHeader title="复盘中心" />
+      <DisclaimerBanner text={PAGE_DEFAULTS.reports} type="page" />
       <div className="fqp-tabs">
         {([
           ['daily', '日报'],

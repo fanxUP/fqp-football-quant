@@ -1,9 +1,11 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { api } from '../core/apiClient';
 import { navigate } from '../core/router';
 import { ApiError } from '../core/types';
 import PageHeader from '../shared/components/PageHeader';
+import DisclaimerBanner, { PAGE_DEFAULTS } from '../shared/components/DisclaimerBanner';
 import Card from '../shared/components/Card';
+import StatusBadge from '../shared/components/StatusBadge';
 import { toast } from '../shared/components/Toast';
 
 interface ItemForm {
@@ -14,11 +16,43 @@ interface ItemForm {
   sp_value: string;
 }
 
+interface OcrResult {
+  success: boolean;
+  ticket_no: string;
+  pass_type: string;
+  multiple: number;
+  total_amount: number;
+  items: {
+    match_code: string;
+    home_team: string;
+    away_team: string;
+    play_type: string;
+    option_code: string;
+    option_name: string;
+    sp_value: number;
+    handicap: string;
+  }[];
+  raw_text: string;
+  ocr_engine: string;
+  confidence: number;
+  warnings: string[];
+  filename: string;
+  size_bytes: number;
+}
+
 const PLAY_TYPES = ['spf', 'rqspf', 'zjq', 'bf', 'bqc'];
 
 export default function TicketNewPage() {
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  // OCR state
+  const [ocrLoading, setOcrLoading] = useState(false);
+  const [ocrResult, setOcrResult] = useState<OcrResult | null>(null);
+  const [ocrError, setOcrError] = useState<string | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [ticket, setTicket] = useState({
     total_amount: '',
@@ -55,6 +89,101 @@ export default function TicketNewPage() {
     setItems((prev) => prev.filter((_, i) => i !== idx));
   };
 
+  // ---- File handling ----
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate
+    const allowed = ['image/png', 'image/jpeg', 'image/webp'];
+    if (!allowed.includes(file.type)) {
+      setOcrError('不支持的文件格式，请选择 PNG、JPG 或 WEBP 图片');
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setOcrError('文件过大，最大支持 10MB');
+      return;
+    }
+
+    setSelectedFile(file);
+    setOcrError(null);
+    setOcrResult(null);
+
+    // Generate preview
+    const url = URL.createObjectURL(file);
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    setPreviewUrl(url);
+  };
+
+  // ---- OCR trigger ----
+
+  const handleOcr = async () => {
+    if (!selectedFile) return;
+
+    setOcrLoading(true);
+    setOcrError(null);
+    setOcrResult(null);
+
+    try {
+      const formData = new FormData();
+      formData.append('file', selectedFile);
+
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 30000);
+
+      const res = await fetch('/api/tickets/ocr', {
+        method: 'POST',
+        body: formData,
+        signal: controller.signal,
+      });
+      clearTimeout(timer);
+
+      if (!res.ok) {
+        const body = await res.text().catch(() => '');
+        throw new Error(body || `HTTP ${res.status}`);
+      }
+
+      const data: OcrResult = await res.json();
+      setOcrResult(data);
+
+      if (data.success && data.items.length > 0) {
+        // Auto-fill form from OCR results
+        setTicket((prev) => ({
+          ...prev,
+          total_amount: String(data.total_amount || prev.total_amount || ''),
+          pass_type: data.pass_type || prev.pass_type,
+          multiple: String(data.multiple || prev.multiple || '1'),
+          notes: data.ticket_no ? `票号: ${data.ticket_no}` : prev.notes,
+        }));
+
+        setItems(
+          data.items.map((it) => ({
+            match_id: it.match_code || '',
+            play_type: it.play_type || 'spf',
+            option_code: it.option_code || '',
+            option_name: it.option_name || `${it.home_team} vs ${it.away_team}`.trim() || '',
+            sp_value: String(it.sp_value || ''),
+          })),
+        );
+
+        toast.success(`OCR 识别成功：${data.items.length} 场比赛`);
+      } else {
+        toast.warning('OCR 未能识别到完整比赛信息，请手动录入');
+      }
+    } catch (e) {
+      const msg = (e as Error).name === 'AbortError'
+        ? 'OCR 处理超时（30秒），请检查网络'
+        : (e as Error).message || 'OCR 处理失败';
+      setOcrError(msg);
+      toast.error(msg);
+    } finally {
+      setOcrLoading(false);
+    }
+  };
+
+  // ---- Validation ----
+
   const validate = (): boolean => {
     const errs: Record<string, string> = {};
     if (!ticket.total_amount || Number(ticket.total_amount) <= 0) {
@@ -68,6 +197,8 @@ export default function TicketNewPage() {
     setErrors(errs);
     return Object.keys(errs).length === 0;
   };
+
+  // ---- Submit ----
 
   const handleSubmit = async () => {
     if (!validate()) return;
@@ -110,6 +241,140 @@ export default function TicketNewPage() {
   return (
     <div style={{ maxWidth: '800px' }}>
       <PageHeader title="录入实票" />
+      <DisclaimerBanner text={PAGE_DEFAULTS.tickets} type="page" />
+
+      {/* ---- OCR Upload Section ---- */}
+      <Card title="📷 拍照/截图识别（可选）" style={{ marginBottom: '20px' }}>
+        <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+          {/* Upload area */}
+          <div style={{ flex: '1', minWidth: '200px' }}>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              onChange={handleFileSelect}
+              style={{ display: 'none' }}
+            />
+            <div
+              onClick={() => fileInputRef.current?.click()}
+              style={{
+                border: '2px dashed var(--fqp-border)',
+                borderRadius: '8px',
+                padding: '24px',
+                textAlign: 'center',
+                cursor: 'pointer',
+                minHeight: '120px',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'border-color 0.2s',
+                background: selectedFile ? 'rgba(99,102,241,0.05)' : 'transparent',
+              }}
+            >
+              {previewUrl ? (
+                <img
+                  src={previewUrl}
+                  alt="票据预览"
+                  style={{ maxWidth: '100%', maxHeight: '180px', borderRadius: '4px', objectFit: 'contain' }}
+                />
+              ) : (
+                <>
+                  <div style={{ fontSize: '28px', marginBottom: '8px' }}>📸</div>
+                  <div style={{ fontSize: '13px', color: 'var(--fqp-text)', marginBottom: '4px' }}>
+                    点击上传票据照片
+                  </div>
+                  <div style={{ fontSize: '11px', color: 'var(--fqp-text-muted)' }}>
+                    支持 PNG / JPG / WEBP，最大 10MB
+                  </div>
+                </>
+              )}
+            </div>
+            {selectedFile && (
+              <div style={{ marginTop: '8px', fontSize: '12px', color: 'var(--fqp-text-muted)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span>{selectedFile.name} ({(selectedFile.size / 1024).toFixed(1)} KB)</span>
+                <button
+                  className="fqp-btn fqp-btn-sm"
+                  onClick={() => {
+                    setSelectedFile(null);
+                    setPreviewUrl(null);
+                    setOcrResult(null);
+                    if (fileInputRef.current) fileInputRef.current.value = '';
+                  }}
+                  style={{ fontSize: '11px' }}
+                >
+                  清除
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* OCR trigger */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', minWidth: '120px' }}>
+            <button
+              className="fqp-btn fqp-btn-primary"
+              onClick={handleOcr}
+              disabled={!selectedFile || ocrLoading}
+              style={{ width: '100%' }}
+            >
+              {ocrLoading ? '⏳ 识别中...' : '🔍 开始识别'}
+            </button>
+            <div style={{ fontSize: '11px', color: 'var(--fqp-text-muted)', textAlign: 'center' }}>
+              识别后请仔细核对
+            </div>
+          </div>
+        </div>
+
+        {/* OCR error */}
+        {ocrError && (
+          <div style={{
+            marginTop: '12px',
+            padding: '8px 12px',
+            background: 'rgba(248,113,113,0.1)',
+            border: '1px solid rgba(248,113,113,0.3)',
+            borderRadius: '4px',
+            fontSize: '12px',
+            color: 'var(--fqp-red-neon)',
+          }}>
+            ❌ {ocrError}
+          </div>
+        )}
+
+        {/* OCR result summary */}
+        {ocrResult && (
+          <div style={{
+            marginTop: '12px',
+            padding: '12px',
+            background: ocrResult.success ? 'rgba(52,211,153,0.08)' : 'rgba(252,186,3,0.08)',
+            border: `1px solid ${ocrResult.success ? 'rgba(52,211,153,0.3)' : 'rgba(252,186,3,0.3)'}`,
+            borderRadius: '6px',
+            fontSize: '12px',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+              <StatusBadge
+                status={ocrResult.success ? 'ok' : 'warning'}
+                label={ocrResult.success ? `识别成功 (${ocrResult.items.length} 场比赛)` : '部分识别'}
+                dot
+              />
+              <span style={{ color: 'var(--fqp-text-muted)', fontSize: '11px' }}>
+                引擎: {ocrResult.ocr_engine} | 置信度: {(ocrResult.confidence * 100).toFixed(0)}%
+              </span>
+            </div>
+            {ocrResult.warnings.length > 0 && (
+              <div style={{ fontSize: '11px', color: 'var(--fqp-warning)' }}>
+                {ocrResult.warnings.map((w, i) => (
+                  <div key={i}>⚠ {w}</div>
+                ))}
+              </div>
+            )}
+            {ocrResult.success && (
+              <div style={{ fontSize: '11px', color: 'var(--fqp-success)', marginTop: '4px' }}>
+                ✅ 表单已自动填充，请核对后提交
+              </div>
+            )}
+          </div>
+        )}
+      </Card>
 
       {/* Ticket fields */}
       <Card title="票单信息" style={{ marginBottom: '20px' }}>

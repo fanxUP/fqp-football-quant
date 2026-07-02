@@ -6,6 +6,7 @@ import StatusBadge from '../shared/components/StatusBadge';
 import LoadingSpinner from '../shared/components/LoadingSpinner';
 import ErrorState from '../shared/components/ErrorState';
 import PageHeader from '../shared/components/PageHeader';
+import DisclaimerBanner, { PAGE_DEFAULTS } from '../shared/components/DisclaimerBanner';
 
 interface HealthInfo {
   status: string;
@@ -114,6 +115,7 @@ export default function DashboardPage() {
   return (
     <div>
       <PageHeader title="今日驾驶舱" lastUpdated={fmtTime()} />
+      <DisclaimerBanner text={PAGE_DEFAULTS.dashboard} type="page" />
 
       {/* System status bar */}
       <Card style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '16px' }}>
