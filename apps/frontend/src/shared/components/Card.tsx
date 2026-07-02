@@ -26,7 +26,7 @@ export default function Card({ title, children, className = '', action, onClick,
           }}
         >
           {title && (
-            <h3 style={{ color: 'var(--fqp-text-muted)', fontSize: '13px', margin: 0, fontWeight: 600 }}>
+            <h3 style={{ color: 'var(--fqp-text)', fontSize: '14px', margin: 0, fontWeight: 600 }}>
               {title}
             </h3>
           )}
