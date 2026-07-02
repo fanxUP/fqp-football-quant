@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../core/apiClient';
-import type { DailyReview, WeeklyReview, MonthlyReview, Settlement, ErrorAnalysis, ErrorSummary } from '../core/types';
+import type { DailyReview, WeeklyReview, MonthlyReview, Settlement, ErrorAnalysis, ErrorSummary, PlayTypeWinRate } from '../core/types';
 import { ApiError } from '../core/types';
 import PageHeader from '../shared/components/PageHeader';
 import Card from '../shared/components/Card';
@@ -51,13 +51,21 @@ export default function ReviewsPage() {
 // ---- Daily Reviews Tab ----
 function DailyReviewsTab() {
   const [reviews, setReviews] = useState<DailyReview[]>([]);
+  const [playTypeData, setPlayTypeData] = useState<PlayTypeWinRate[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expandedDate, setExpandedDate] = useState<string | null>(null);
 
   useEffect(() => {
-    api.reviews.daily(30)
-      .then((r) => { setReviews(r.reviews); setLoading(false); })
+    Promise.all([
+      api.reviews.daily(30),
+      api.reviews.playTypeWinRate(30),
+    ])
+      .then(([r, pt]) => {
+        setReviews(r.reviews);
+        setPlayTypeData(pt.data || []);
+        setLoading(false);
+      })
       .catch((e) => { setError(e instanceof ApiError ? e.message : '加载失败'); setLoading(false); });
   }, []);
 
@@ -190,6 +198,76 @@ function DailyReviewsTab() {
     };
   })();
 
+  // ---- Play-type win-rate line chart ----
+  const playTypeWinRateOption = (() => {
+    if (playTypeData.length === 0) return null;
+
+    // Unique play types and dates
+    const playTypes = [...new Set(playTypeData.map((r) => r.play_type))].sort();
+    const dates = [...new Set(playTypeData.map((r) => r.settle_date))].sort();
+
+    // Color palette for play types
+    const colors = ['#22c55e', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316'];
+
+    // Build series: one line per play type
+    const series = playTypes.map((pt, i) => {
+      const data = dates.map((d) => {
+        const row = playTypeData.find((r) => r.settle_date === d && r.play_type === pt);
+        return row ? +(row.win_rate * 100).toFixed(1) : null;
+      });
+      return {
+        name: pt,
+        type: 'line' as const,
+        data,
+        smooth: true,
+        symbol: 'circle',
+        symbolSize: 5,
+        lineStyle: { width: 2, color: colors[i % colors.length] },
+        itemStyle: { color: colors[i % colors.length] },
+        connectNulls: true,
+      };
+    });
+
+    return {
+      tooltip: {
+        trigger: 'axis' as const,
+        formatter: (params: { seriesName: string; value: number | null; marker: string }[]) => {
+          const lines = params
+            .filter((p) => p.value !== null)
+            .map((p) => `${p.marker} ${p.seriesName}: ${p.value}%`);
+          return lines.length ? lines.join('<br/>') : '';
+        },
+      },
+      legend: {
+        data: playTypes,
+        bottom: 0,
+        textStyle: { fontSize: 11 },
+      },
+      grid: {
+        left: '3%',
+        right: '4%',
+        bottom: '14%',
+        top: '10px',
+        containLabel: true,
+      },
+      xAxis: {
+        type: 'category' as const,
+        data: dates.map((d) => d.slice(5)),
+        axisLabel: { rotate: 45, fontSize: 11 },
+      },
+      yAxis: {
+        type: 'value' as const,
+        name: '胜率 (%)',
+        nameTextStyle: { fontSize: 11 },
+        axisLabel: { fontSize: 11, formatter: '{value}%' },
+        min: 0,
+        max: 100,
+        splitLine: { lineStyle: { color: 'rgba(255,255,255,0.04)' } },
+      },
+      series,
+    };
+  })();
+
   if (error) return <ErrorState message={error} onRetry={() => window.location.reload()} />;
 
   return (
@@ -212,6 +290,15 @@ function DailyReviewsTab() {
             </Card>
           )}
         </div>
+      )}
+
+      {/* Play-type win-rate line chart */}
+      {!loading && playTypeWinRateOption && (
+        <ChartCard
+          title="各玩法胜率走势"
+          option={playTypeWinRateOption}
+          height={320}
+        />
       )}
 
       <DataTable

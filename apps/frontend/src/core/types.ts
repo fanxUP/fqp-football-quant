@@ -172,6 +172,14 @@ export interface WeeklyReview {
   [key: string]: unknown;
 }
 
+export interface PlayTypeWinRate {
+  settle_date: string;
+  play_type: string;
+  total: number;
+  wins: number;
+  win_rate: number;
+}
+
 export interface MonthlyReview {
   id: number;
   review_month: string;

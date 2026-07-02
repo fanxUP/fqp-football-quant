@@ -976,3 +976,44 @@ def create_bankroll_transaction(conn: Any, txn: dict) -> int | None:
             cur.execute(sql_update, {"balance": balance_after, "id": account_id})
     conn.commit()
     return row[0] if row else None
+
+
+def get_play_type_win_rate(conn: Any, days: int = 30) -> list[dict[str, Any]]:
+    """Return daily win-rate per play_type from settled tickets.
+
+    Each row: {settle_date, play_type, total, wins, win_rate}
+    Ordered by settle_date ASC, play_type.
+    """
+    sql = """
+        SELECT
+            DATE(ts.settle_time)::text AS settle_date,
+            rti.play_type,
+            COUNT(*) AS total,
+            SUM(CASE WHEN ts.is_won THEN 1 ELSE 0 END) AS wins,
+            ROUND(
+                SUM(CASE WHEN ts.is_won THEN 1 ELSE 0 END)::numeric
+                / NULLIF(COUNT(*), 0)::numeric, 4
+            ) AS win_rate
+        FROM ticket_settlements ts
+        JOIN real_ticket_items rti
+            ON ts.ticket_id = rti.real_ticket_id
+            AND ts.ticket_source = 'real'
+        WHERE ts.is_won IS NOT NULL
+          AND ts.settle_time >= CURRENT_DATE - %(days)s::int
+        GROUP BY DATE(ts.settle_time), rti.play_type
+        ORDER BY settle_date ASC, play_type
+    """
+    with conn.cursor() as cur:
+        cur.execute(sql, {"days": days})
+        rows = cur.fetchall()
+
+    return [
+        {
+            "settle_date": r[0],
+            "play_type": r[1],
+            "total": r[2],
+            "wins": r[3],
+            "win_rate": float(r[4]) if r[4] is not None else 0.0,
+        }
+        for r in rows
+    ]

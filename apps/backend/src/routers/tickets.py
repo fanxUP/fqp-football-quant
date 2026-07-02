@@ -30,6 +30,9 @@ from scripts.real_ticket_storage import (
     get_daily_review as _get_daily_review,
 )
 from scripts.real_ticket_storage import (
+    get_play_type_win_rate as _get_play_type_win_rate,
+)
+from scripts.real_ticket_storage import (
     get_real_ticket as _get_ticket,
 )
 from scripts.real_ticket_storage import (
@@ -143,6 +146,18 @@ def get_daily_review(date: str):
     if not review:
         return {"status": "not_found"}
     return review
+
+
+@router.get("/api/reviews/play-type-winrate")
+def get_play_type_winrate(days: int = Query(30)):
+    """Get daily win-rate per play_type from settled real tickets.
+
+    Returns a list of {settle_date, play_type, total, wins, win_rate}
+    ordered by date ASC, suitable for a line chart.
+    """
+    with get_db() as conn:
+        rows = _get_play_type_win_rate(conn, days=days)
+    return {"status": "ok", "data": rows}
 
 
 @router.get("/api/reviews/weekly")

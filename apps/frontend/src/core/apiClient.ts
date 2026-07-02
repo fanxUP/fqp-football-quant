@@ -15,6 +15,7 @@ import type {
   MonthlyReview,
   ErrorAnalysis,
   ErrorSummary,
+  PlayTypeWinRate,
   BacktestRun,
   BacktestWindow,
   BacktestResult,
@@ -133,6 +134,11 @@ export const api = {
 
     dailyByDate: (date: string) =>
       request<DailyReview>(`/api/reviews/daily/${encodeURIComponent(date)}`),
+
+    playTypeWinRate: (days?: number) =>
+      request<{ status: string; data: PlayTypeWinRate[] }>(
+        `/api/reviews/play-type-winrate${qs({ days })}`,
+      ),
 
     weekly: (limit?: number) =>
       request<{ reviews: WeeklyReview[]; total: number }>(
