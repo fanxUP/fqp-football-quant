@@ -486,9 +486,9 @@ def get_settlement_summary(conn: Any, date_str: str) -> dict:
         cur.execute(sql, {"date": date_str})
         rows = cur.fetchall()
 
-    summary = {"date": date_str, "sources": {}, "total_settled": 0}
+    summary: dict[str, Any] = {"date": date_str, "sources": {}, "total_settled": 0}
     for r in rows:
-        summary["sources"][r[0]] = {
+        summary["sources"][str(r[0])] = {
             "count": r[1],
             "total_stake": float(r[2]) if r[2] else 0,
             "total_prize": float(r[3]) if r[3] else 0,

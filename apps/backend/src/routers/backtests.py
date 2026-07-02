@@ -29,7 +29,7 @@ def list_backtests(
                 (limit, offset),
             )
             columns = [desc[0] for desc in cur.description]
-            runs = [dict(zip(columns, row, strict=False)) for row in cur.fetchall()]
+            runs = [dict(zip(columns, row)) for row in cur.fetchall()]
 
             # Get total count
             cur.execute("SELECT COUNT(*) FROM backtest_runs")
@@ -61,7 +61,7 @@ def get_backtest_detail(run_id: int):
             if not row:
                 return {"error": "not found", "run_id": run_id}
 
-            run = dict(zip(columns, row, strict=False))
+            run = dict(zip(columns, row))
             for k in ("started_at", "finished_at", "created_at"):
                 if run.get(k):
                     run[k] = str(run[k])
@@ -79,7 +79,7 @@ def get_backtest_detail(run_id: int):
             wcols = [desc[0] for desc in cur.description]
             windows = []
             for wrow in cur.fetchall():
-                w = dict(zip(wcols, wrow, strict=False))
+                w = dict(zip(wcols, wrow))
                 for k in w:
                     if hasattr(w[k], "isoformat"):
                         w[k] = str(w[k])
@@ -100,7 +100,7 @@ def get_backtest_detail(run_id: int):
             rcols = [desc[0] for desc in cur.description]
             results = []
             for rrow in cur.fetchall():
-                r = dict(zip(rcols, rrow, strict=False))
+                r = dict(zip(rcols, rrow))
                 for k in r:
                     if hasattr(r[k], "isoformat"):
                         r[k] = str(r[k])

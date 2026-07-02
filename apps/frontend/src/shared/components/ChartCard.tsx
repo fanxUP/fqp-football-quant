@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import * as echarts from 'echarts';
 import Card from './Card';
+import { useTheme } from '../../app/ThemeContext';
 
 interface ChartCardProps {
   title: string;
@@ -12,19 +13,22 @@ interface ChartCardProps {
 export default function ChartCard({ title, option, height = 300, loading = false }: ChartCardProps) {
   const chartRef = useRef<HTMLDivElement>(null);
   const instanceRef = useRef<echarts.ECharts | null>(null);
+  const { theme } = useTheme();
 
   useEffect(() => {
     if (!chartRef.current) return;
 
-    const darkOption = {
+    const textColor = theme === 'dark' ? '#A1A1AA' : '#6B7280';
+
+    const themedOption = {
       backgroundColor: 'transparent',
-      textStyle: { color: '#A1A1AA' },
-      legend: { textStyle: { color: '#A1A1AA' } },
+      textStyle: { color: textColor },
+      legend: { textStyle: { color: textColor } },
       ...option,
     };
 
     const inst = echarts.init(chartRef.current, undefined, { renderer: 'canvas' });
-    inst.setOption(darkOption);
+    inst.setOption(themedOption);
     instanceRef.current = inst;
 
     const handleResize = () => inst.resize();
@@ -34,7 +38,7 @@ export default function ChartCard({ title, option, height = 300, loading = false
       window.removeEventListener('resize', handleResize);
       inst.dispose();
     };
-  }, [option]);
+  }, [option, theme]);
 
   return (
     <Card title={title}>

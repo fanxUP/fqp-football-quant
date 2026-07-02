@@ -8,6 +8,7 @@ import FilterBar from '../shared/components/FilterBar';
 import DataTable, { type Column } from '../shared/components/DataTable';
 import ErrorState from '../shared/components/ErrorState';
 import Card from '../shared/components/Card';
+import ChartCard from '../shared/components/ChartCard';
 import StatusBadge from '../shared/components/StatusBadge';
 import DisclaimerBanner, { PAGE_DEFAULTS } from '../shared/components/DisclaimerBanner';
 
@@ -118,6 +119,113 @@ export default function RecommendationsPage() {
     },
   ];
 
+  // ---- Charts ----
+
+  const riskDonutOption = (() => {
+    if (tickets.length === 0) return null;
+    const riskCount: Record<string, number> = {};
+    for (const t of tickets) {
+      riskCount[t.risk_level] = (riskCount[t.risk_level] || 0) + 1;
+    }
+    const colorMap: Record<string, string> = { low: '#22c55e', medium: '#f59e0b', high: '#ef4444' };
+    const labelMap: Record<string, string> = { low: '低风险', medium: '中风险', high: '高风险' };
+
+    return {
+      tooltip: {
+        trigger: 'item' as const,
+        formatter: '{b}: {c} 张 ({d}%)',
+      },
+      series: [
+        {
+          type: 'pie',
+          radius: ['50%', '75%'],
+          center: ['50%', '50%'],
+          label: {
+            show: true,
+            formatter: '{b}\n{c} 张',
+          },
+          data: Object.entries(riskCount).map(([level, count]) => ({
+            value: count,
+            name: labelMap[level] || level,
+            itemStyle: { color: colorMap[level] || '#6b7280' },
+          })),
+        },
+      ],
+    };
+  })();
+
+  const strategyBarOption = (() => {
+    if (tickets.length === 0) return null;
+    // Aggregate by strategy_pool
+    const pools: Record<string, { count: number; totalEv: number }> = {};
+    for (const t of tickets) {
+      const p = t.strategy_pool || '未分类';
+      if (!pools[p]) pools[p] = { count: 0, totalEv: 0 };
+      pools[p].count++;
+      pools[p].totalEv += (t.expected_value ?? 0);
+    }
+    const entries = Object.entries(pools).sort((a, b) => b[1].count - a[1].count);
+    const names = entries.map(([k]) => k);
+    const counts = entries.map(([, v]) => v.count);
+    const avgEvs = entries.map(([, v]) => v.count > 0 ? +(v.totalEv / v.count).toFixed(4) : 0);
+
+    return {
+      tooltip: {
+        trigger: 'axis' as const,
+        axisPointer: { type: 'shadow' as const },
+      },
+      legend: {
+        data: ['票单数', '平均EV'],
+        top: 0,
+      },
+      grid: {
+        left: '3%',
+        right: '4%',
+        bottom: '3%',
+        top: '30px',
+        containLabel: true,
+      },
+      xAxis: {
+        type: 'category' as const,
+        data: names,
+        axisLabel: { rotate: 30, fontSize: 11 },
+      },
+      yAxis: [
+        {
+          type: 'value' as const,
+          name: '数量',
+          axisLabel: { fontSize: 10 },
+          splitLine: { lineStyle: { color: 'rgba(255,255,255,0.04)' } },
+        },
+        {
+          type: 'value' as const,
+          name: 'EV',
+          axisLabel: { fontSize: 10 },
+          splitLine: { show: false },
+        },
+      ],
+      series: [
+        {
+          name: '票单数',
+          type: 'bar',
+          data: counts,
+          itemStyle: { color: '#3b82f6', borderRadius: [4, 4, 0, 0] },
+          barWidth: '50%',
+        },
+        {
+          name: '平均EV',
+          type: 'line',
+          yAxisIndex: 1,
+          data: avgEvs,
+          lineStyle: { color: '#f59e0b', width: 2 },
+          itemStyle: { color: '#f59e0b' },
+          symbol: 'circle',
+          symbolSize: 8,
+        },
+      ],
+    };
+  })();
+
   if (error) {
     return (
       <div>
@@ -134,6 +242,27 @@ export default function RecommendationsPage() {
         title="推荐票单"
         lastUpdated={new Date().toLocaleString('zh-CN', { hour12: false })}
       />
+
+      {/* Charts */}
+      {!loading && tickets.length > 0 && (
+        <div className="fqp-grid-2" style={{ marginBottom: '16px' }}>
+          {riskDonutOption ? (
+            <ChartCard title="风险等级分布" option={riskDonutOption} height={280} />
+          ) : (
+            <Card title="风险等级分布">
+              <div style={{ padding: '40px 0', textAlign: 'center', color: 'var(--fqp-text-muted)' }}>暂无数据</div>
+            </Card>
+          )}
+          {strategyBarOption ? (
+            <ChartCard title="策略池对比" option={strategyBarOption} height={300} />
+          ) : (
+            <Card title="策略池对比">
+              <div style={{ padding: '40px 0', textAlign: 'center', color: 'var(--fqp-text-muted)' }}>暂无数据</div>
+            </Card>
+          )}
+        </div>
+      )}
+
       <FilterBar>
         <select
           className="fqp-select"

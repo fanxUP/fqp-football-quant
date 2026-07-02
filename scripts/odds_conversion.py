@@ -80,7 +80,7 @@ def shin_method(odds: dict[str, float]) -> dict[str, float]:
 
     # overround 极小 → 退化为比例法
     if abs(S - 1.0) < 1e-6:
-        result = {k: v / S for k, v in zip(keys, b_vec, strict=False)}
+        result = {k: v / S for k, v in zip(keys, b_vec)}
         return result
 
     # —— 用二分法找 z 使得 sum(p_i(z)) = S ——
@@ -113,7 +113,7 @@ def shin_method(odds: dict[str, float]) -> dict[str, float]:
     if p_sum > 0:
         probs = [p / p_sum for p in probs]
 
-    result = dict(zip(keys, probs, strict=False))
+    result = dict(zip(keys, probs))
     return result
 
 
@@ -246,14 +246,14 @@ def correct_favourite_longshot_bias(
     p_b = [v / s_odds for v in odds_inv_pow]
 
     # 两种策略取平均
-    p_final = [(pa + pb) / 2.0 for pa, pb in zip(p_a, p_b, strict=False)]
+    p_final = [(pa + pb) / 2.0 for pa, pb in zip(p_a, p_b)]
 
     # 归一化
     sf = sum(p_final)
     if sf > 0:
         p_final = [p / sf for p in p_final]
 
-    return dict(zip(keys, p_final, strict=False))
+    return dict(zip(keys, p_final))
 
 
 def calibrate_flb_exponent(

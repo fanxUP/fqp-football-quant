@@ -81,7 +81,7 @@ def run() -> dict[str, Any]:
         "npm": ["npm", "--version"],
     }
 
-    snapshot = {
+    snapshot: dict[str, Any] = {
         "generated_at": _now(),
         "project": "fqp",
         "system": _get_system_info(),

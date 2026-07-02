@@ -24,6 +24,29 @@
   --fqp-font-mono: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
 }
 
+/* ---- Light theme overrides ---- */
+[data-theme='light'] {
+  --fqp-bg: #F8F9FA;
+  --fqp-panel: #FFFFFF;
+  --fqp-panel-2: #F0F1F3;
+  --fqp-red: #D4000F;
+  --fqp-red-neon: #E50914;
+  --fqp-red-dark: #B8000C;
+  --fqp-border: #E5E7EB;
+  --fqp-text: #1A1A2E;
+  --fqp-text-muted: #6B7280;
+  --fqp-success: #0D9488;
+  --fqp-warning: #D97706;
+  --fqp-info: #2563EB;
+  --fqp-shadow-red: 0 0 24px rgba(212, 0, 15, 0.06);
+  --fqp-glow-red: 0 0 12px rgba(229, 9, 20, 0.25);
+}
+
+[data-theme='light'] body {
+  background: radial-gradient(circle at top left, rgba(212, 0, 15, 0.04), transparent 30%),
+    var(--fqp-bg);
+}
+
 /* ---- Reset ---- */
 *,
 *::before,
@@ -480,6 +503,25 @@ body {
   flex-shrink: 0;
 }
 
+/* ---- Theme toggle ---- */
+.fqp-theme-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 20px;
+  font-size: 14px;
+  color: var(--fqp-text-muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  border-left: 3px solid transparent;
+  border-top: 1px solid var(--fqp-border);
+  margin-top: auto;
+}
+.fqp-theme-toggle:hover {
+  color: var(--fqp-text);
+  background: rgba(255, 42, 61, 0.04);
+}
+
 /* ---- Page layout ---- */
 .fqp-layout {
   display: flex;
@@ -569,18 +611,203 @@ body {
   grid-template-columns: repeat(4, 1fr);
   gap: 16px;
 }
+
+/* ---- Hamburger button (mobile only) ---- */
+.fqp-hamburger {
+  display: none;
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  z-index: 1100;
+  width: 40px;
+  height: 40px;
+  padding: 8px;
+  background: var(--fqp-panel);
+  border: 1px solid var(--fqp-border);
+  border-radius: var(--fqp-radius-sm);
+  cursor: pointer;
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+}
+.fqp-hamburger span {
+  display: block;
+  width: 100%;
+  height: 2px;
+  background: var(--fqp-text);
+  border-radius: 1px;
+  transition: all 0.2s ease;
+}
+
+/* ---- Sidebar overlay (mobile only) ---- */
+.fqp-sidebar-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(5, 5, 7, 0.7);
+  z-index: 1050;
+  backdrop-filter: blur(2px);
+}
+
+/* ---- Table scroll wrapper ---- */
+.fqp-table-wrapper {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* ===================================================================
+   Responsive — Tablet (≤1200px)
+   =================================================================== */
 @media (max-width: 1200px) {
   .fqp-grid-4 {
     grid-template-columns: repeat(2, 1fr);
   }
 }
+
+/* ===================================================================
+   Responsive — Mobile (≤768px)
+   =================================================================== */
 @media (max-width: 768px) {
+  /* -- Grid collapse -- */
   .fqp-grid-3,
   .fqp-grid-4 {
     grid-template-columns: 1fr;
   }
   .fqp-grid-2 {
     grid-template-columns: 1fr;
+  }
+
+  /* -- Sidebar → drawer -- */
+  .fqp-sidebar {
+    position: fixed;
+    top: 0;
+    left: -280px;
+    width: 280px;
+    min-width: 280px;
+    height: 100vh;
+    height: 100dvh;
+    z-index: 1060;
+    transition: left 0.25s ease;
+    box-shadow: none;
+  }
+  .fqp-sidebar.drawer-open {
+    left: 0;
+    box-shadow: 4px 0 32px rgba(0, 0, 0, 0.5);
+  }
+
+  /* -- Hamburger visible -- */
+  .fqp-hamburger {
+    display: flex;
+  }
+
+  /* -- Overlay visible when drawer open -- */
+  .fqp-sidebar-overlay {
+    display: block;
+  }
+
+  /* -- Main content -- */
+  .fqp-main {
+    padding: 16px 12px;
+    padding-top: 56px; /* room for hamburger */
+  }
+
+  /* -- Page header -- */
+  .fqp-page-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .fqp-page-title {
+    font-size: 18px;
+  }
+
+  /* -- Stat card -- */
+  .fqp-stat-card {
+    padding: 14px 16px;
+  }
+  .fqp-stat-value {
+    font-size: 24px;
+  }
+
+  /* -- Modal -- */
+  .fqp-modal {
+    min-width: auto;
+    width: 95vw;
+    max-height: 90vh;
+    border-radius: var(--fqp-radius-sm);
+  }
+  .fqp-modal-header {
+    padding: 14px 16px 12px;
+    font-size: 15px;
+  }
+  .fqp-modal-body {
+    padding: 14px 16px;
+  }
+  .fqp-modal-footer {
+    padding: 12px 16px 14px;
+    flex-wrap: wrap;
+  }
+
+  /* -- Toast -- */
+  .fqp-toast-container {
+    top: 8px;
+    right: 8px;
+    left: 8px;
+  }
+  .fqp-toast {
+    max-width: 100%;
+    font-size: 12px;
+    padding: 10px 14px;
+  }
+
+  /* -- Form row collapse -- */
+  .fqp-form-row {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  /* -- Tabs horizontal scroll -- */
+  .fqp-tabs {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    gap: 0;
+  }
+  .fqp-tab {
+    padding: 8px 14px;
+    font-size: 12px;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  /* -- Filter bar -- */
+  .fqp-filter-bar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .fqp-filter-bar .fqp-input,
+  .fqp-filter-bar .fqp-select {
+    width: 100%;
+    min-width: auto;
+  }
+
+  /* -- FAB reposition -- */
+  .fqp-fab {
+    bottom: 20px;
+    right: 16px;
+    width: 48px;
+    height: 48px;
+    font-size: 24px;
+  }
+
+  /* -- Buttons -- */
+  .fqp-btn {
+    padding: 6px 14px;
+    font-size: 12px;
+  }
+
+  /* -- Cards -- */
+  .fqp-card {
+    border-radius: var(--fqp-radius-sm);
   }
 }
 

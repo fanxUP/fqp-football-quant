@@ -11,17 +11,17 @@ import yaml
 class PanelRegistry:
     def __init__(self, panel_registry_path: str):
         self.path = Path(panel_registry_path)
-        self.panels = []
+        self.panels: list[dict[str, object]] = []
 
-    def load(self):
+    def load(self) -> list[dict[str, object]]:
         self.panels = yaml.safe_load(self.path.read_text(encoding="utf-8")).get("panels", [])
         return self.panels
 
     def visible_panels(self, user_permissions: set[str], enabled_flags: set[str]):
         result = []
         for panel in self.panels:
-            required = set(panel.get("permissions", []))
-            flags = set(panel.get("feature_flags", []))
+            required = set(panel.get("permissions", []))  # type: ignore[call-overload]
+            flags = set(panel.get("feature_flags", []))  # type: ignore[call-overload]
             if required and not required.issubset(user_permissions):
                 continue
             if flags and not flags.issubset(enabled_flags):

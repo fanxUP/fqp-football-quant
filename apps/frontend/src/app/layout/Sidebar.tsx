@@ -1,4 +1,5 @@
 import { useRouter } from '../../core/router';
+import { useTheme } from '../ThemeContext';
 
 interface NavItem {
   label: string;
@@ -22,11 +23,22 @@ const NAV_ITEMS: NavItem[] = [
   { label: '分析', icon: '📊', path: '/analysis' },
 ];
 
-export default function Sidebar() {
+interface SidebarProps {
+  isOpen?: boolean;
+  onClose?: () => void;
+}
+
+export default function Sidebar({ isOpen = false, onClose }: SidebarProps) {
   const { currentPath, navigate } = useRouter();
+  const { theme, toggleTheme } = useTheme();
+
+  const handleNav = (path: string) => {
+    navigate(path);
+    onClose?.();
+  };
 
   return (
-    <aside className="fqp-sidebar">
+    <aside className={`fqp-sidebar${isOpen ? ' drawer-open' : ''}`}>
       <div className="fqp-sidebar-logo">FQP</div>
       <nav className="fqp-sidebar-nav">
         {NAV_ITEMS.map((item) => {
@@ -38,7 +50,7 @@ export default function Sidebar() {
             <div
               key={item.path}
               className={`fqp-nav-item${isActive ? ' active' : ''}`}
-              onClick={() => navigate(item.path)}
+              onClick={() => handleNav(item.path)}
             >
               <span className="fqp-nav-icon">{item.icon}</span>
               <span>{item.label}</span>
@@ -46,6 +58,12 @@ export default function Sidebar() {
           );
         })}
       </nav>
+
+      {/* Theme toggle */}
+      <div className="fqp-theme-toggle" onClick={toggleTheme}>
+        <span className="fqp-nav-icon">{theme === 'dark' ? '☀️' : '🌙'}</span>
+        <span>{theme === 'dark' ? '亮色模式' : '暗色模式'}</span>
+      </div>
     </aside>
   );
 }

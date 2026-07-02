@@ -7,6 +7,7 @@ import PageHeader from '../shared/components/PageHeader';
 import FilterBar from '../shared/components/FilterBar';
 import DataTable, { type Column } from '../shared/components/DataTable';
 import ErrorState from '../shared/components/ErrorState';
+import ChartCard from '../shared/components/ChartCard';
 
 interface MatchRow {
   match_id: number;
@@ -110,6 +111,118 @@ export default function MatchesPage() {
     },
   ];
 
+  // ---- League distribution chart ----
+  const leagueChartOption = (() => {
+    if (matches.length === 0) return null;
+    const leagueCount: Record<string, number> = {};
+    for (const m of matches) {
+      leagueCount[m.league] = (leagueCount[m.league] || 0) + 1;
+    }
+    const sorted = Object.entries(leagueCount).sort((a, b) => b[1] - a[1]);
+    const names = sorted.map(([k]) => k);
+    const counts = sorted.map(([, v]) => v);
+
+    // Color palette
+    const colors = ['#ef4444', '#f59e0b', '#22c55e', '#3b82f6', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316', '#84cc16', '#14b8a6'];
+
+    return {
+      tooltip: {
+        trigger: 'axis' as const,
+        axisPointer: { type: 'shadow' as const },
+      },
+      grid: {
+        left: '3%',
+        right: '8%',
+        bottom: '3%',
+        containLabel: true,
+      },
+      xAxis: {
+        type: 'value' as const,
+        name: '比赛数',
+        axisLabel: { fontSize: 10 },
+        splitLine: { lineStyle: { color: 'rgba(255,255,255,0.04)' } },
+      },
+      yAxis: {
+        type: 'category' as const,
+        data: names,
+        axisLabel: { fontSize: 11 },
+        inverse: true,
+      },
+      series: [
+        {
+          type: 'bar',
+          data: counts.map((v, i) => ({
+            value: v,
+            itemStyle: {
+              color: colors[i % colors.length],
+              borderRadius: [0, 4, 4, 0],
+            },
+          })),
+          barWidth: '60%',
+          label: {
+            show: true,
+            position: 'right' as const,
+            fontSize: 11,
+          },
+        },
+      ],
+    };
+  })();
+
+  // ---- Completeness histogram ----
+  const completenessHistOption = (() => {
+    if (matches.length === 0) return null;
+    const scores = matches
+      .map((m) => m.completeness)
+      .filter((s): s is number => s !== null)
+      .map((s) => Math.round(s * 100));
+    if (scores.length === 0) return null;
+
+    // Bucket into 10 groups
+    const buckets: number[] = Array(10).fill(0);
+    for (const s of scores) {
+      const idx = Math.min(Math.floor(s / 10), 9);
+      buckets[idx]++;
+    }
+    const labels = buckets.map((_, i) => `${i * 10}-${i * 10 + 9}%`);
+
+    return {
+      tooltip: {
+        trigger: 'axis' as const,
+        axisPointer: { type: 'shadow' as const },
+      },
+      grid: {
+        left: '3%',
+        right: '4%',
+        bottom: '3%',
+        top: '8px',
+        containLabel: true,
+      },
+      xAxis: {
+        type: 'category' as const,
+        data: labels,
+        axisLabel: { rotate: 45, fontSize: 10 },
+      },
+      yAxis: {
+        type: 'value' as const,
+        name: '比赛数',
+        axisLabel: { fontSize: 10 },
+        splitLine: { lineStyle: { color: 'rgba(255,255,255,0.04)' } },
+      },
+      series: [
+        {
+          type: 'bar',
+          data: buckets,
+          itemStyle: {
+            borderRadius: [4, 4, 0, 0],
+            color: '#3b82f6',
+          },
+          barWidth: '80%',
+        },
+      ],
+    };
+  })();
+
   if (error) {
     return (
       <div>
@@ -122,6 +235,27 @@ export default function MatchesPage() {
   return (
     <div>
       <PageHeader title="比赛中心" lastUpdated={new Date().toLocaleString('zh-CN', { hour12: false })} />
+
+      {/* Charts */}
+      {!loading && matches.length > 0 && (
+        <div className="fqp-grid-2" style={{ marginBottom: '16px' }}>
+          {leagueChartOption ? (
+            <ChartCard title="联赛分布" option={leagueChartOption} height={Math.max(300, leagues.length * 24)} />
+          ) : (
+            <div className="fqp-card" style={{ padding: '40px', textAlign: 'center', color: 'var(--fqp-text-muted)' }}>
+              暂无联赛数据
+            </div>
+          )}
+          {completenessHistOption ? (
+            <ChartCard title="数据完整度分布" option={completenessHistOption} height={300} />
+          ) : (
+            <div className="fqp-card" style={{ padding: '40px', textAlign: 'center', color: 'var(--fqp-text-muted)' }}>
+              暂无完整度数据
+            </div>
+          )}
+        </div>
+      )}
+
       <FilterBar>
         <select
           className="fqp-select"

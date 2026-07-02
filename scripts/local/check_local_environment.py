@@ -12,6 +12,7 @@ import shutil
 import subprocess
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / "data" / "runtime_version_snapshot.json"
@@ -43,7 +44,7 @@ def run(cmd: list[str]) -> dict:
 
 
 def main() -> None:
-    snapshot = {"generated_at": datetime.now().isoformat(timespec="seconds"), "components": {}}
+    snapshot: dict[str, Any] = {"generated_at": datetime.now().isoformat(timespec="seconds"), "components": {}}
     for name, cmd in COMMANDS.items():
         snapshot["components"][name] = run(cmd)
     OUT.parent.mkdir(parents=True, exist_ok=True)

@@ -161,7 +161,7 @@ def run_parameter_sweep(
     best_result = None
 
     for combo in combinations:
-        param_dict = dict(zip(keys, combo, strict=False))
+        param_dict = dict(zip(keys, combo))
         cfg_dict = base_config.to_dict()
         cfg_dict.update(param_dict)
         cfg_dict["name"] = f"sweep-{'-'.join(f'{k}={v}' for k, v in param_dict.items())}"
@@ -226,7 +226,7 @@ def run(
         if sweep:
             # 参数扫描模式
             base = _default_config("参数扫描")
-            grid = {
+            grid: dict[str, list[Any]] = {
                 "min_model_prob": [0.30, 0.35, 0.40],
                 "odds_min": [1.5, 2.0],
                 "signal_strength": ["strong", "all"],

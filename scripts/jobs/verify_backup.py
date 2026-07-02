@@ -39,12 +39,12 @@ def _find_latest_backup(backup_dir: str) -> str | None:
     return str(sql_files[0]) if sql_files else None
 
 
-def _verify_backup_integrity(filepath: str) -> dict:
+def _verify_backup_integrity(filepath: str) -> dict[str, str | int | bool | None]:
     """Verify backup file integrity.
 
     Returns dict with check results.
     """
-    result = {
+    result: dict[str, str | int | bool | None] = {
         "exists": False,
         "size_bytes": 0,
         "size_ok": False,

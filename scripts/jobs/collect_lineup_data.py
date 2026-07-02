@@ -92,7 +92,7 @@ def _process_lineup(
     substitutes = team_data.get("substitutes", [])
 
     # Compute aggregate stats
-    starting_values = []
+    starting_values: list[float] = []
     key_count = 0
     player_records = []
 

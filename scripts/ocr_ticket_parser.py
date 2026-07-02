@@ -65,12 +65,12 @@ def ocr_with_pytesseract(image_path: str, lang: str = "chi_sim") -> tuple[str, f
     需要系统安装 tesseract-ocr 和中文语言包。
     """
     try:
-        import pytesseract  # type: ignore
+        import pytesseract
         from PIL import Image
 
         img = Image.open(image_path)
         # 预处理：转灰度、增强对比度
-        img = img.convert("L")
+        img = img.convert("L")  # type: ignore[assignment]  # Image.open→ImageFile, convert→Image
         text = pytesseract.image_to_string(img, lang=lang)
         # Tesseract 不直接返回每张图片的置信度，估计值
         confidence = 0.7 if len(text.strip()) > 20 else 0.3
@@ -88,7 +88,7 @@ def ocr_with_easyocr(image_path: str, languages: list[str] | None = None) -> tup
     首次运行会下载模型（~100MB）。
     """
     try:
-        import easyocr  # type: ignore
+        import easyocr
 
         langs = languages or ["ch_sim", "en"]
         reader = easyocr.Reader(langs, gpu=False)

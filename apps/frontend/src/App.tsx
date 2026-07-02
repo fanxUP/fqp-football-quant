@@ -1,4 +1,5 @@
 import { createRouter, useRouter } from './core/router';
+import { ThemeProvider } from './app/ThemeContext';
 import { ToastProvider } from './shared/components/Toast';
 import Layout from './app/layout/Layout';
 import LoadingSpinner from './shared/components/LoadingSpinner';
@@ -85,10 +86,12 @@ function PageOutlet() {
 // ---- App root ----
 export default function App() {
   return (
-    <ToastProvider>
-      <Layout>
-        <PageOutlet />
-      </Layout>
-    </ToastProvider>
+    <ThemeProvider>
+      <ToastProvider>
+        <Layout>
+          <PageOutlet />
+        </Layout>
+      </ToastProvider>
+    </ThemeProvider>
   );
 }

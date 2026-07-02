@@ -42,7 +42,7 @@ def _get_recent_ticket_items(conn: Any, days: int = 7) -> list[dict]:
             (days,),
         )
         cols = ["ticket_id", "item_id", "odds_snapshot_id", "model_prediction_id", "batch_id"]
-        return [dict(zip(cols, row, strict=False)) for row in cur.fetchall()]
+        return [dict(zip(cols, row)) for row in cur.fetchall()]
 
 
 def _get_prediction_chain(conn: Any, prediction_id: int) -> dict | None:
@@ -74,7 +74,7 @@ def _get_prediction_chain(conn: Any, prediction_id: int) -> dict | None:
         "model_name",
         "version_number",
     ]
-    return dict(zip(cols, row, strict=False))
+    return dict(zip(cols, row))
 
 
 def _get_feature_snapshot_for_match(conn: Any, match_id: int, before_time: str) -> dict | None:
@@ -95,7 +95,7 @@ def _get_feature_snapshot_for_match(conn: Any, match_id: int, before_time: str) 
     if not row:
         return None
     cols = ["feature_snapshot_id", "feature_version", "snapshot_time", "completeness_score"]
-    return dict(zip(cols, row, strict=False))
+    return dict(zip(cols, row))
 
 
 def _get_match_id_from_odds_snapshot(conn: Any, odds_snapshot_id: int) -> int | None:

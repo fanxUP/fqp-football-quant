@@ -358,10 +358,10 @@ def run(match_id: int | None = None, dry_run: bool = False) -> dict[str, Any]:
                     "home_team_market_value": probs.get("home_win_prob"),
                     "away_team_market_value": probs.get("away_win_prob"),
                     "team_market_value_ratio": (
-                        round(probs["home_win_prob"] / probs["away_win_prob"], 4)
-                        if probs.get("home_win_prob")
-                        and probs.get("away_win_prob")
-                        and probs["away_win_prob"] > 0
+                        round(home_prob / away_prob, 4)
+                        if (home_prob := probs.get("home_win_prob"))
+                        and (away_prob := probs.get("away_win_prob"))
+                        and away_prob > 0
                         else None
                     ),
                     "home_attack_strength_score": probs.get("home_win_prob"),

@@ -122,6 +122,8 @@ def build_weather_for_match(
         client = OpenMeteoClient()
 
     try:
+        if client is None:
+            raise RuntimeError("OpenMeteoClient is not available")
         weather_data = client.get_forecast(lat, lon, kickoff_str)
     except Exception as e:
         print(f"[weather] OpenMeteo failed for match {match_id}: {e}")

@@ -145,7 +145,7 @@ def run(dry_run: bool = False) -> dict[str, Any]:
                 }
             )
 
-            error_types[error_type] = error_types.get(error_type, 0) + 1  # type: ignore[index]
+            error_types[error_type] = error_types.get(error_type, 0) + 1
 
         # 3. Batch insert errors
         inserted = 0

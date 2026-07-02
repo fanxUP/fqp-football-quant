@@ -97,6 +97,7 @@ def parse_matches_from_response(
             # Combine matchDate + matchTime → kickoff_time
             match_date = sub.get("matchDate", "")
             match_time = sub.get("matchTime", "")
+            kickoff: str | None
             if match_date and match_time:
                 kickoff = f"{match_date}T{match_time}"
             else:

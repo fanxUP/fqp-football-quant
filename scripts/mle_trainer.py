@@ -172,7 +172,7 @@ def _load_match_data(
     cur = conn.cursor()
 
     where = "m.match_status = 'Settled'"
-    params = ()
+    params: tuple = ()
     if league_id:
         where += " AND m.competition_id = %s"
         params = (league_id,)
@@ -262,7 +262,7 @@ def fit_maher_poisson(
 
     # scipy minimize (L-BFGS-B)
     try:
-        from scipy.optimize import minimize  # type: ignore
+        from scipy.optimize import minimize
 
         result = minimize(
             _nll_maher,

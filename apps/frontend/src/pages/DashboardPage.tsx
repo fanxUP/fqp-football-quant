@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import { api } from '../core/apiClient';
 import { ApiError } from '../core/types';
+import type { DailyReview } from '../core/types';
 import Card from '../shared/components/Card';
+import ChartCard from '../shared/components/ChartCard';
 import StatusBadge from '../shared/components/StatusBadge';
 import LoadingSpinner from '../shared/components/LoadingSpinner';
 import ErrorState from '../shared/components/ErrorState';
@@ -44,13 +46,21 @@ export default function DashboardPage() {
     errors: {},
   });
 
+  // Completeness buckets from features
+  const [completenessBuckets, setCompletenessBuckets] = useState<{ low: number; mid: number; high: number }>({ low: 0, mid: 0, high: 0 });
+
+  // Daily reviews for trend chart
+  const [dailyReviews, setDailyReviews] = useState<DailyReview[]>([]);
+
   useEffect(() => {
     let cancelled = false;
 
     async function load() {
       const results: Partial<DashboardData> = { errors: {} };
 
-      // Fire all requests in parallel
+      // Collect snapshots for completeness chart
+      let snapshots: { data_completeness_score: number | null }[] = [];
+
       const settle = <T,>(
         key: string,
         promise: Promise<T>,
@@ -75,18 +85,31 @@ export default function DashboardPage() {
         settle('features', api.features({ limit: 200 }), (f) => {
           const ids = new Set(f.snapshots.map((s) => s.match_id));
           results.matchCount = ids.size;
+          snapshots = f.snapshots;
         }),
         settle('predictions', api.predictions({ limit: 200 }), (p) => (results.predictionCount = p.total)),
         settle('tickets', api.tickets({ status: 'generated', limit: 50 }), (t) => (results.activeTicketCount = t.total)),
         settle('realTickets', api.realTickets.list({ limit: 50 }), (t) => (results.realTicketCount = t.total)),
-        settle('reviews', api.reviews.daily(1), (r) => {
+        settle('reviews', api.reviews.daily(30), (r) => {
           if (r.reviews.length > 0) {
             results.latestReview = r.reviews[0].review_date;
           }
+          if (!cancelled) setDailyReviews(r.reviews);
         }),
       ]);
 
+      // Compute completeness buckets
       if (!cancelled) {
+        let low = 0, mid = 0, high = 0;
+        for (const s of snapshots) {
+          const score = s.data_completeness_score;
+          if (score === null) continue;
+          if (score < 0.5) low++;
+          else if (score < 0.8) mid++;
+          else high++;
+        }
+        setCompletenessBuckets({ low, mid, high });
+
         setData((prev) => ({
           ...prev,
           ...results,
@@ -101,6 +124,119 @@ export default function DashboardPage() {
       cancelled = true;
     };
   }, []);
+
+  // ---- Chart options ----
+
+  const completenessDonutOption = (() => {
+    const { low, mid, high } = completenessBuckets;
+    const total = low + mid + high;
+    if (total === 0) return null;
+
+    return {
+      tooltip: {
+        trigger: 'item' as const,
+        formatter: '{b}: {c} 场 ({d}%)',
+      },
+      series: [
+        {
+          type: 'pie',
+          radius: ['55%', '78%'],
+          center: ['50%', '50%'],
+          avoidLabelOverlap: false,
+          itemStyle: {
+            borderRadius: 4,
+            borderColor: 'transparent',
+            borderWidth: 3,
+          },
+          label: {
+            show: true,
+            position: 'outside' as const,
+            formatter: '{b}\n{d}%',
+          },
+          data: [
+            { value: low, name: '<50%', itemStyle: { color: '#ef4444' } },
+            { value: mid, name: '50-80%', itemStyle: { color: '#f59e0b' } },
+            { value: high, name: '≥80%', itemStyle: { color: '#22c55e' } },
+          ],
+        },
+      ],
+    };
+  })();
+
+  const dailyTrendOption = (() => {
+    if (dailyReviews.length === 0) return null;
+    // Sort by date ascending
+    const sorted = [...dailyReviews].sort((a, b) => a.review_date.localeCompare(b.review_date));
+    const dates = sorted.map((r) => r.review_date.slice(5)); // MM-DD
+    const profits = sorted.map((r) => r.real_profit_loss);
+    // Cumulative profit
+    let cum = 0;
+    const cumulative = sorted.map((r) => {
+      cum += r.real_profit_loss;
+      return cum;
+    });
+
+    return {
+      tooltip: {
+        trigger: 'axis' as const,
+        axisPointer: { type: 'shadow' as const },
+      },
+      legend: {
+        data: ['日盈亏', '累计盈亏'],
+        top: 0,
+      },
+      grid: {
+        left: '3%',
+        right: '4%',
+        bottom: '3%',
+        top: '30px',
+        containLabel: true,
+      },
+      xAxis: {
+        type: 'category' as const,
+        data: dates,
+        axisLabel: {
+          rotate: 45,
+          fontSize: 10,
+        },
+      },
+      yAxis: [
+        {
+          type: 'value' as const,
+          name: '日盈亏 (¥)',
+          axisLabel: { fontSize: 10 },
+          splitLine: { lineStyle: { color: 'rgba(255,255,255,0.04)' } },
+        },
+        {
+          type: 'value' as const,
+          name: '累计 (¥)',
+          axisLabel: { fontSize: 10 },
+          splitLine: { show: false },
+        },
+      ],
+      series: [
+        {
+          name: '日盈亏',
+          type: 'bar',
+          data: profits,
+          itemStyle: {
+            color: (params: { value: number }) =>
+              (params.value >= 0 ? '#22c55e' : '#ef4444'),
+          },
+        },
+        {
+          name: '累计盈亏',
+          type: 'line',
+          yAxisIndex: 1,
+          data: cumulative,
+          lineStyle: { color: '#3b82f6', width: 2 },
+          itemStyle: { color: '#3b82f6' },
+          symbol: 'none',
+          smooth: true,
+        },
+      ],
+    };
+  })();
 
   // ---- Render helpers ----
 
@@ -130,7 +266,6 @@ export default function DashboardPage() {
 
       {/* Stat cards */}
       <div className="fqp-grid-4" style={{ marginBottom: '24px' }}>
-        {/* Today's matches */}
         <Card title="可分析比赛">
           <div className="fqp-stat-card" style={{ padding: 0 }}>
             <div className="fqp-stat-value">{data.matchCount}</div>
@@ -140,7 +275,6 @@ export default function DashboardPage() {
           </div>
         </Card>
 
-        {/* Predictions */}
         <Card title="模型预测">
           <div className="fqp-stat-card" style={{ padding: 0 }}>
             <div className="fqp-stat-value">{data.predictionCount}</div>
@@ -150,7 +284,6 @@ export default function DashboardPage() {
           </div>
         </Card>
 
-        {/* Active recommendations */}
         <Card title="活跃推荐">
           <div className="fqp-stat-card" style={{ padding: 0 }}>
             <div className="fqp-stat-value">{data.activeTicketCount}</div>
@@ -160,7 +293,6 @@ export default function DashboardPage() {
           </div>
         </Card>
 
-        {/* Real tickets */}
         <Card title="实票记录">
           <div className="fqp-stat-card" style={{ padding: 0 }}>
             <div className="fqp-stat-value">{data.realTicketCount}</div>
@@ -169,6 +301,28 @@ export default function DashboardPage() {
             </div>
           </div>
         </Card>
+      </div>
+
+      {/* Charts row */}
+      <div className="fqp-grid-2" style={{ marginBottom: '24px' }}>
+        {completenessDonutOption ? (
+          <ChartCard title="数据完整度分布" option={completenessDonutOption} height={280} />
+        ) : (
+          <Card title="数据完整度分布">
+            <div style={{ padding: '40px 0', textAlign: 'center', color: 'var(--fqp-text-muted)', fontSize: '13px' }}>
+              等待特征快照数据...
+            </div>
+          </Card>
+        )}
+        {dailyTrendOption ? (
+          <ChartCard title="近期实盘盈亏趋势" option={dailyTrendOption} height={300} />
+        ) : (
+          <Card title="近期实盘盈亏趋势">
+            <div style={{ padding: '40px 0', textAlign: 'center', color: 'var(--fqp-text-muted)', fontSize: '13px' }}>
+              等待复盘数据...
+            </div>
+          </Card>
+        )}
       </div>
 
       {/* Risk & Review row */}

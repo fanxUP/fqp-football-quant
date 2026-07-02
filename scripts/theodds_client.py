@@ -154,12 +154,12 @@ class TheOddsClient:
                     # Usually means no odds available for the requested parameters
                     data = resp.json()
                     print(f"[theodds] 422: {data}")
-                    return []  # type: ignore[return-value]
+                    return []
 
                 resp.raise_for_status()
                 data = resp.json()
                 print(f"[theodds] GET {path} → {resp.status_code}")
-                return data  # type: ignore[return-value]
+                return data
             except (httpx.HTTPError, httpx.TimeoutException, ValueError) as e:
                 last_error = e
                 print(f"[theodds] GET {path} error (attempt {attempt}): {e}")

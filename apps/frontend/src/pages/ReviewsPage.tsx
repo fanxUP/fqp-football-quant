@@ -4,6 +4,7 @@ import type { DailyReview, WeeklyReview, MonthlyReview, Settlement, ErrorAnalysi
 import { ApiError } from '../core/types';
 import PageHeader from '../shared/components/PageHeader';
 import Card from '../shared/components/Card';
+import ChartCard from '../shared/components/ChartCard';
 import DisclaimerBanner, { PAGE_DEFAULTS } from '../shared/components/DisclaimerBanner';
 import DataTable, { type Column } from '../shared/components/DataTable';
 import LoadingSpinner from '../shared/components/LoadingSpinner';
@@ -77,10 +78,133 @@ function DailyReviewsTab() {
     },
   ];
 
+  // ---- P&L bar chart ----
+  const plChartOption = (() => {
+    if (reviews.length === 0) return null;
+    const sorted = [...reviews].sort((a, b) => a.review_date.localeCompare(b.review_date));
+    const dates = sorted.map((r) => r.review_date.slice(5));
+    const profits = sorted.map((r) => r.real_profit_loss);
+    let cum = 0;
+    const cumulative = sorted.map((r) => {
+      cum += r.real_profit_loss;
+      return cum;
+    });
+
+    return {
+      tooltip: {
+        trigger: 'axis' as const,
+        axisPointer: { type: 'shadow' as const },
+      },
+      legend: {
+        data: ['日盈亏', '累计盈亏'],
+        top: 0,
+      },
+      grid: {
+        left: '3%',
+        right: '4%',
+        bottom: '3%',
+        top: '30px',
+        containLabel: true,
+      },
+      xAxis: {
+        type: 'category' as const,
+        data: dates,
+        axisLabel: { rotate: 45, fontSize: 10 },
+      },
+      yAxis: [
+        {
+          type: 'value' as const,
+          name: '日盈亏 (¥)',
+          axisLabel: { fontSize: 10 },
+          splitLine: { lineStyle: { color: 'rgba(255,255,255,0.04)' } },
+        },
+        {
+          type: 'value' as const,
+          name: '累计 (¥)',
+          axisLabel: { fontSize: 10 },
+          splitLine: { show: false },
+        },
+      ],
+      series: [
+        {
+          name: '日盈亏',
+          type: 'bar',
+          data: profits,
+          itemStyle: {
+            color: (params: { value: number }) =>
+              (params.value >= 0 ? '#22c55e' : '#ef4444'),
+          },
+        },
+        {
+          name: '累计盈亏',
+          type: 'line',
+          yAxisIndex: 1,
+          data: cumulative,
+          lineStyle: { color: '#3b82f6', width: 2 },
+          itemStyle: { color: '#3b82f6' },
+          symbol: 'none',
+          smooth: true,
+        },
+      ],
+    };
+  })();
+
+  // ---- Error distribution treemap ----
+  const errorDistOption = (() => {
+    // Count matches with losses (negative profit) vs wins
+    const lossDays = reviews.filter((r) => r.real_profit_loss < 0).length;
+    const winDays = reviews.filter((r) => r.real_profit_loss > 0).length;
+    const flatDays = reviews.filter((r) => r.real_profit_loss === 0).length;
+    if (lossDays + winDays + flatDays === 0) return null;
+
+    return {
+      tooltip: {
+        trigger: 'item' as const,
+        formatter: '{b}: {c} 天 ({d}%)',
+      },
+      series: [
+        {
+          type: 'pie',
+          radius: ['50%', '75%'],
+          center: ['50%', '50%'],
+          label: {
+            show: true,
+            formatter: '{b}\n{d}%',
+          },
+          data: [
+            { value: winDays, name: '盈利日', itemStyle: { color: '#22c55e' } },
+            { value: flatDays, name: '持平', itemStyle: { color: '#6b7280' } },
+            { value: lossDays, name: '亏损日', itemStyle: { color: '#ef4444' } },
+          ],
+        },
+      ],
+    };
+  })();
+
   if (error) return <ErrorState message={error} onRetry={() => window.location.reload()} />;
 
   return (
     <div>
+      {/* Charts */}
+      {!loading && (
+        <div className="fqp-grid-2" style={{ marginBottom: '16px' }}>
+          {plChartOption ? (
+            <ChartCard title="实盘盈亏走势" option={plChartOption} height={300} />
+          ) : (
+            <Card title="实盘盈亏走势">
+              <div style={{ padding: '40px 0', textAlign: 'center', color: 'var(--fqp-text-muted)' }}>暂无数据</div>
+            </Card>
+          )}
+          {errorDistOption ? (
+            <ChartCard title="盈亏天数分布" option={errorDistOption} height={300} />
+          ) : (
+            <Card title="盈亏天数分布">
+              <div style={{ padding: '40px 0', textAlign: 'center', color: 'var(--fqp-text-muted)' }}>暂无数据</div>
+            </Card>
+          )}
+        </div>
+      )}
+
       <DataTable
         columns={columns}
         rows={reviews}

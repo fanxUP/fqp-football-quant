@@ -243,7 +243,7 @@ def train_if_needed(conn: Any, force: bool = False) -> dict[str, Any]:
         }
 
     try:
-        import xgboost as xgb  # type: ignore
+        import xgboost as xgb
     except ImportError:
         return {"status": "error", "error": "xgboost 未安装。运行: pip install xgboost"}
 
@@ -300,7 +300,7 @@ def train_if_needed(conn: Any, force: bool = False) -> dict[str, Any]:
 def _build_shap_explainer(model: Any, X: np.ndarray) -> Any:
     """Build a SHAP TreeExplainer on a background sample."""
     try:
-        import shap  # type: ignore
+        import shap
 
         # Use a subset as background (max 100 samples for speed)
         bg = X[np.random.RandomState(42).choice(len(X), min(100, len(X)), replace=False)]
@@ -319,7 +319,7 @@ def _compute_permutation_importance(
 ) -> dict[str, Any]:
     """Compute permutation feature importance."""
     try:
-        from sklearn.inspection import permutation_importance  # type: ignore
+        from sklearn.inspection import permutation_importance
 
         r = permutation_importance(
             model, X, y, n_repeats=n_repeats, random_state=42, n_jobs=-1
@@ -335,7 +335,7 @@ def _compute_permutation_importance(
                     "std": round(float(r.importances_std[i]), 6),
                 }
             )
-        rankings.sort(key=lambda x: -x["importance"])
+        rankings.sort(key=lambda x: -x["importance"])  # type: ignore[operator]
 
         # XGBoost native gain-based importance
         gain_importance = model.feature_importances_
@@ -348,7 +348,7 @@ def _compute_permutation_importance(
                     "importance": round(float(gain_importance[i]), 6),
                 }
             )
-        gain_rankings.sort(key=lambda x: -x["importance"])
+        gain_rankings.sort(key=lambda x: -x["importance"])  # type: ignore[operator]
 
         return {
             "permutation": rankings,
@@ -546,7 +546,7 @@ def get_model_comparison_data(conn: Any) -> dict[str, Any]:
         """)
         columns = [desc[0] for desc in cur.description]
         for row in cur.fetchall():
-            d = dict(zip(columns, row, strict=False))
+            d = dict(zip(columns, row))
             name = d["model_name"]
             models_data[name] = {
                 "name": name,
@@ -577,7 +577,7 @@ def get_model_comparison_data(conn: Any) -> dict[str, Any]:
         """)
         columns = [desc[0] for desc in cur.description]
         for row in cur.fetchall():
-            d = dict(zip(columns, row, strict=False))
+            d = dict(zip(columns, row))
             name = d["model_name"]
             if name in models_data:
                 models_data[name].update(
@@ -634,7 +634,7 @@ def get_evaluation_summary(conn: Any) -> dict[str, Any]:
         columns = [desc[0] for desc in cur.description]
         models = []
         for row in cur.fetchall():
-            d = dict(zip(columns, row, strict=False))
+            d = dict(zip(columns, row))
             models.append(
                 {
                     "model_name": d["model_name"],
@@ -779,7 +779,7 @@ def get_condition_performance(
                 ORDER BY m.league_name, avg_brier ASC
             """)
             columns = [desc[0] for desc in cur.description]
-            segments = [dict(zip(columns, row, strict=False)) for row in cur.fetchall()]
+            segments = [dict(zip(columns, row)) for row in cur.fetchall()]
 
     elif dimension == "odds_range":
         with conn.cursor() as cur:
@@ -807,7 +807,7 @@ def get_condition_performance(
                 ORDER BY odds_range, avg_brier ASC
             """)
             columns = [desc[0] for desc in cur.description]
-            segments = [dict(zip(columns, row, strict=False)) for row in cur.fetchall()]
+            segments = [dict(zip(columns, row)) for row in cur.fetchall()]
 
     elif dimension == "confidence":
         with conn.cursor() as cur:
@@ -834,7 +834,7 @@ def get_condition_performance(
                 ORDER BY confidence_range, avg_brier ASC
             """)
             columns = [desc[0] for desc in cur.description]
-            segments = [dict(zip(columns, row, strict=False)) for row in cur.fetchall()]
+            segments = [dict(zip(columns, row)) for row in cur.fetchall()]
     else:
         return {"status": "error", "error": f"未知维度: {dimension}"}
 
