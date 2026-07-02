@@ -539,7 +539,8 @@ def get_model_comparison_data(conn: Any) -> dict[str, Any]:
                 AVG(mem.clv_score) AS avg_clv,
                 AVG(mem.favourite_longshot_score) AS avg_flb_score
             FROM market_efficiency_metrics mem
-            JOIN model_versions mv ON mv.id = mem.model_version_id
+            JOIN model_predictions mp ON mp.match_id = mem.match_id AND mp.play_type = mem.play_type AND mp.option_code = mem.option_code
+            JOIN model_versions mv ON mv.id = mp.model_version_id
             WHERE mem.brier_score IS NOT NULL
             GROUP BY mv.model_name
             ORDER BY mv.model_name
@@ -626,7 +627,8 @@ def get_evaluation_summary(conn: Any) -> dict[str, Any]:
                 ROUND(AVG(mem.rps)::numeric, 4) AS avg_rps,
                 ROUND(AVG(mem.clv_score)::numeric, 4) AS avg_clv
             FROM market_efficiency_metrics mem
-            JOIN model_versions mv ON mv.id = mem.model_version_id
+            JOIN model_predictions mp ON mp.match_id = mem.match_id AND mp.play_type = mem.play_type AND mp.option_code = mem.option_code
+            JOIN model_versions mv ON mv.id = mp.model_version_id
             WHERE mem.brier_score IS NOT NULL
             GROUP BY mv.model_name
             ORDER BY avg_brier ASC
@@ -770,7 +772,8 @@ def get_condition_performance(
                     ROUND(AVG(mem.brier_score)::numeric, 4) AS avg_brier,
                     ROUND(AVG(mem.log_loss)::numeric, 4) AS avg_logloss
                 FROM market_efficiency_metrics mem
-                JOIN model_versions mv ON mv.id = mem.model_version_id
+                JOIN model_predictions mp ON mp.match_id = mem.match_id AND mp.play_type = mem.play_type AND mp.option_code = mem.option_code
+            JOIN model_versions mv ON mv.id = mp.model_version_id
                 JOIN official_matches m ON m.id = mem.match_id
                 WHERE mem.brier_score IS NOT NULL
                   AND m.league_name IS NOT NULL
@@ -786,21 +789,23 @@ def get_condition_performance(
             cur.execute("""
                 SELECT
                     CASE
-                        WHEN mp.market_probability < 0.30 THEN '低概率 (<30%)'
-                        WHEN mp.market_probability < 0.45 THEN '中低概率 (30-45%)'
-                        WHEN mp.market_probability < 0.55 THEN '中概率 (45-55%)'
-                        WHEN mp.market_probability < 0.70 THEN '中高概率 (55-70%)'
+                        WHEN mp_home.market_probability < 0.30 THEN '低概率 (<30%)'
+                        WHEN mp_home.market_probability < 0.45 THEN '中低概率 (30-45%)'
+                        WHEN mp_home.market_probability < 0.55 THEN '中概率 (45-55%)'
+                        WHEN mp_home.market_probability < 0.70 THEN '中高概率 (55-70%)'
                         ELSE '高概率 (>70%)'
                     END AS odds_range,
                     mv.model_name,
                     COUNT(*) AS n,
                     ROUND(AVG(mem.brier_score)::numeric, 4) AS avg_brier
                 FROM market_efficiency_metrics mem
-                JOIN model_versions mv ON mv.id = mem.model_version_id
-                JOIN model_predictions mp
-                    ON mp.match_id = mem.match_id
-                    AND mp.model_version_id = mem.model_version_id
-                    AND mp.option_code = '3'
+                JOIN model_predictions mp ON mp.match_id = mem.match_id
+                    AND mp.play_type = mem.play_type
+                    AND mp.option_code = mem.option_code
+                JOIN model_versions mv ON mv.id = mp.model_version_id
+                JOIN model_predictions mp_home ON mp_home.match_id = mem.match_id
+                    AND mp_home.play_type = mem.play_type
+                    AND mp_home.option_code = '3'
                 WHERE mem.brier_score IS NOT NULL
                 GROUP BY odds_range, mv.model_name
                 HAVING COUNT(*) >= 3
@@ -814,20 +819,22 @@ def get_condition_performance(
             cur.execute("""
                 SELECT
                     CASE
-                        WHEN mp.confidence_score < 0.3 THEN '低信心 (<30%)'
-                        WHEN mp.confidence_score < 0.5 THEN '中低信心 (30-50%)'
-                        WHEN mp.confidence_score < 0.7 THEN '中高信心 (50-70%)'
+                        WHEN mp_home.confidence_score < 0.3 THEN '低信心 (<30%)'
+                        WHEN mp_home.confidence_score < 0.5 THEN '中低信心 (30-50%)'
+                        WHEN mp_home.confidence_score < 0.7 THEN '中高信心 (50-70%)'
                         ELSE '高信心 (>70%)'
                     END AS confidence_range,
                     mv.model_name,
                     COUNT(*) AS n,
                     ROUND(AVG(mem.brier_score)::numeric, 4) AS avg_brier
                 FROM market_efficiency_metrics mem
-                JOIN model_versions mv ON mv.id = mem.model_version_id
-                JOIN model_predictions mp
-                    ON mp.match_id = mem.match_id
-                    AND mp.model_version_id = mem.model_version_id
-                    AND mp.option_code = '3'
+                JOIN model_predictions mp ON mp.match_id = mem.match_id
+                    AND mp.play_type = mem.play_type
+                    AND mp.option_code = mem.option_code
+                JOIN model_versions mv ON mv.id = mp.model_version_id
+                JOIN model_predictions mp_home ON mp_home.match_id = mem.match_id
+                    AND mp_home.play_type = mem.play_type
+                    AND mp_home.option_code = '3'
                 WHERE mem.brier_score IS NOT NULL
                 GROUP BY confidence_range, mv.model_name
                 HAVING COUNT(*) >= 3

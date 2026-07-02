@@ -98,6 +98,7 @@ CREATE TABLE IF NOT EXISTS model_committee_votes (
 CREATE TABLE IF NOT EXISTS market_efficiency_metrics (
     id BIGSERIAL PRIMARY KEY,
     match_id BIGINT NOT NULL REFERENCES official_matches(id),
+    model_version_id BIGINT REFERENCES model_versions(id),
     play_type VARCHAR(32) NOT NULL,
     option_code VARCHAR(64) NOT NULL,
     snapshot_time TIMESTAMP NOT NULL,
@@ -109,6 +110,9 @@ CREATE TABLE IF NOT EXISTS market_efficiency_metrics (
     ev NUMERIC(10,6),
     clv_score NUMERIC(10,6),
     favourite_longshot_score NUMERIC(10,6),
+    brier_score NUMERIC(10,6),
+    log_loss NUMERIC(10,6),
+    rps NUMERIC(10,6),
     market_signal_level VARCHAR(32),
     created_at TIMESTAMP DEFAULT now()
 );
