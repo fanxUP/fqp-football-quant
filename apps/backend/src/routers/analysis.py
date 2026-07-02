@@ -17,6 +17,7 @@ from scripts.feature_importance import (
     get_evaluation_summary,
     get_feature_importance,
     get_model_comparison_data,
+    recommend_best_combos,
     train_if_needed,
 )
 
@@ -66,6 +67,21 @@ def condition_performance(
 
     with get_db() as conn:
         return get_condition_performance(conn, dimension=dimension)
+
+
+@router.get("/api/analysis/recommendations")
+def get_recommendations(
+    min_samples: int = Query(5, description="最低结算样本数"),
+    top_n: int = Query(15, description="返回 Top N 组合"),
+):
+    """推荐最佳 模型×玩法 组合，按命中率降序排列。
+
+    从已结算比赛的实际结果中统计每个 (model_name, play_type)
+    的正确率，返回 TOP N 推荐。
+    """
+    with get_db() as conn:
+        combos = recommend_best_combos(conn, min_samples=min_samples, top_n=top_n)
+    return {"status": "ok", "recommendations": combos}
 
 
 # ---------------------------------------------------------------------------

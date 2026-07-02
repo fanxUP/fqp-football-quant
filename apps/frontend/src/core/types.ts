@@ -456,6 +456,15 @@ export interface ConditionPerformanceData {
   segments: ConditionSegment[];
 }
 
+export interface ModelPlayTypeRecommendation {
+  rank: number;
+  model_name: string;
+  play_type: string;
+  total: number;
+  wins: number;
+  hit_rate: number;
+}
+
 // ---- Settings (localStorage) ----
 
 export interface FqpSettings {

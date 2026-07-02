@@ -229,6 +229,11 @@ export const api = {
       request<import('./types').ShapExplanation>(
         `/api/analysis/explain/${matchId}${qs({ top_n: topN })}`,
       ),
+
+    recommendations: (params?: { min_samples?: number; top_n?: number }) =>
+      request<{ status: string; recommendations: import('./types').ModelPlayTypeRecommendation[] }>(
+        `/api/analysis/recommendations${qs({ min_samples: params?.min_samples, top_n: params?.top_n })}`,
+      ),
   },
 
   // Pool lottery (Phase 10)

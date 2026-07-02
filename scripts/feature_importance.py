@@ -846,3 +846,64 @@ def get_condition_performance(
         )
 
     return {"status": "ok", "dimension": dimension, "segments": result_segments}
+
+
+def recommend_best_combos(conn: Any, min_samples: int = 5, top_n: int = 15) -> list[dict[str, Any]]:
+    """Rank model+play_type combos by hit rate from settled predictions.
+
+    Joins model_predictions → model_versions (model_name) + official_results (actual).
+    Handles per-play-type result column mapping (spf/rqspf/total_goals/score/half_full).
+    Only includes combos with ≥ min_samples settled predictions.
+    """
+    sql = """
+        SELECT
+            mv.model_name,
+            mp.play_type,
+            COUNT(*) AS total,
+            SUM(
+                CASE
+                    WHEN mp.play_type = 'spf' AND mp.option_code = r.spf_result THEN 1
+                    WHEN mp.play_type = 'rqspf' AND mp.option_code = r.rqspf_result THEN 1
+                    WHEN mp.play_type = 'total_goals' AND mp.option_code = r.total_goals_result THEN 1
+                    WHEN mp.play_type = 'score' AND mp.option_code = r.score_result THEN 1
+                    WHEN mp.play_type = 'half_full' AND mp.option_code = r.half_full_result THEN 1
+                    ELSE 0
+                END
+            ) AS wins,
+            ROUND(
+                SUM(
+                    CASE
+                        WHEN mp.play_type = 'spf' AND mp.option_code = r.spf_result THEN 1
+                        WHEN mp.play_type = 'rqspf' AND mp.option_code = r.rqspf_result THEN 1
+                        WHEN mp.play_type = 'total_goals' AND mp.option_code = r.total_goals_result THEN 1
+                        WHEN mp.play_type = 'score' AND mp.option_code = r.score_result THEN 1
+                        WHEN mp.play_type = 'half_full' AND mp.option_code = r.half_full_result THEN 1
+                        ELSE 0
+                    END
+                )::numeric / NULLIF(COUNT(*), 0)::numeric, 4
+            ) AS hit_rate
+        FROM model_predictions mp
+        JOIN model_versions mv ON mv.id = mp.model_version_id
+        JOIN official_results r ON r.match_id = mp.match_id
+        WHERE r.result_status = 'final'
+          AND mp.play_type IN ('spf', 'rqspf', 'total_goals', 'score', 'half_full')
+        GROUP BY mv.model_name, mp.play_type
+        HAVING COUNT(*) >= %(min_samples)s
+        ORDER BY hit_rate DESC, total DESC
+        LIMIT %(top_n)s
+    """
+    with conn.cursor() as cur:
+        cur.execute(sql, {"min_samples": min_samples, "top_n": top_n})
+        rows = cur.fetchall()
+
+    return [
+        {
+            "rank": i + 1,
+            "model_name": r[0],
+            "play_type": r[1],
+            "total": r[2],
+            "wins": r[3],
+            "hit_rate": float(r[4]) if r[4] is not None else 0.0,
+        }
+        for i, r in enumerate(rows)
+    ]

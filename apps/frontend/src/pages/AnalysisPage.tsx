@@ -3,6 +3,7 @@ import { api } from '../core/apiClient';
 import { ApiError } from '../core/types';
 import type {
   ModelCompareItem,
+  ModelPlayTypeRecommendation,
   RadarDimension,
   FeatureRanking,
   ShapEntry,
@@ -53,16 +54,21 @@ function normalizeForRadar(
 function ModelCompareTab() {
   const [models, setModels] = useState<ModelCompareItem[]>([]);
   const [dimensions, setDimensions] = useState<RadarDimension[]>([]);
+  const [recommendations, setRecommendations] = useState<ModelPlayTypeRecommendation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    api.analysis.modelCompare()
-      .then((res) => {
+    Promise.all([
+      api.analysis.modelCompare(),
+      api.analysis.recommendations({ top_n: 6 }),
+    ])
+      .then(([res, recRes]) => {
         if (res.status === 'ok') {
           setModels(res.models);
           setDimensions(res.radar_dimensions);
         }
+        setRecommendations(recRes.recommendations || []);
         setLoading(false);
       })
       .catch((e) => {
@@ -88,8 +94,82 @@ function ModelCompareTab() {
     );
   }
 
+  // Play type display names
+  const PLAY_TYPE_NAMES: Record<string, string> = {
+    spf: '胜平负',
+    rqspf: '让球胜平负',
+    total_goals: '总进球',
+    score: '比分',
+    half_full: '半全场',
+  };
+  // Recommendation rank badges
+  const RANK_BADGES = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣', '6️⃣'];
+
   return (
     <div>
+      {/* Top recommendations */}
+      {recommendations.length > 0 && (
+        <Card style={{ marginBottom: 20, borderColor: 'rgba(34,197,94,0.35)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+            <span style={{ fontSize: 18 }}>🏆</span>
+            <span style={{ fontWeight: 700, fontSize: 15, color: 'var(--fqp-text)' }}>
+              最佳 模型×玩法 组合推荐
+            </span>
+            <span style={{ fontSize: 11, color: 'var(--fqp-text-muted)', marginLeft: 4 }}>
+              （按已结算比赛命中率排序）
+            </span>
+          </div>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
+              gap: 12,
+            }}
+          >
+            {recommendations.map((rec, i) => (
+              <div
+                key={`${rec.model_name}-${rec.play_type}`}
+                style={{
+                  padding: '14px 16px',
+                  borderRadius: 'var(--fqp-radius-sm)',
+                  background: i === 0 ? 'rgba(34,197,94,0.08)' : 'var(--fqp-panel)',
+                  border: `1px solid ${i === 0 ? 'rgba(34,197,94,0.3)' : 'var(--fqp-border)'}`,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 12,
+                }}
+              >
+                <span style={{ fontSize: 22, flexShrink: 0 }}>{RANK_BADGES[i]}</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--fqp-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {rec.model_name}
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--fqp-text-muted)' }}>
+                    {PLAY_TYPE_NAMES[rec.play_type] || rec.play_type}
+                    <span style={{ marginLeft: 8 }}>
+                      {rec.wins}/{rec.total} 场
+                    </span>
+                  </div>
+                </div>
+                <div
+                  style={{
+                    fontSize: 20,
+                    fontWeight: 800,
+                    fontFamily: 'var(--fqp-font-mono)',
+                    flexShrink: 0,
+                    color: rec.hit_rate >= 0.55 ? 'var(--fqp-success)'
+                      : rec.hit_rate >= 0.45 ? 'var(--fqp-warning)'
+                      : 'var(--fqp-red-neon)',
+                  }}
+                >
+                  {(rec.hit_rate * 100).toFixed(0)}%
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
       {/* Radar chart */}
       <ChartCard title="模型综合对比（雷达图）" option={radarOption} height={420} />
 
