@@ -9,7 +9,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { api } from '../core/apiClient';
 import type { BacktestRun, BacktestResult } from '../core/types';
-import { PageHeader, Card, DataTable, ErrorState, LoadingSpinner } from '../components';
+import { PageHeader, Card, DataTable, ErrorState, LoadingSpinner } from '../shared/components';
 
 // —— 类型 ——
 
