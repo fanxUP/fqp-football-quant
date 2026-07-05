@@ -228,46 +228,21 @@ def run(dry_run: bool = False) -> dict[str, Any]:
                 )
 
                 if settlement_id:
-                    # Bankroll: debit the stake (spend)
-                    create_bankroll_transaction(
-                        conn,
-                        {
-                            "account_type": "simulation",
-                            "transaction_type": "stake_settled",
-                            "amount": -stake,
-                            "related_ticket_id": tid,
-                            "remark": f"Settlement: ticket {tid} stake {stake:.2f}",
-                        },
-                    )
-
                     # Bankroll: credit the prize (if won)
+                    # Note: simulation_tickets had no stake deducted at creation
+                    # (they are recommendations). Only record actual prize movement.
                     if ticket_all_won and net_prize > 0:
                         create_bankroll_transaction(
                             conn,
                             {
                                 "account_type": "simulation",
-                                "transaction_type": "prize_credit",
+                                "transaction_type": "prize",
                                 "amount": net_prize,
                                 "related_ticket_id": tid,
-                                "remark": f"Settlement: ticket {tid} prize {prize:.2f}, net {net_prize:.2f}",
+                                "remark": f"AI推荐 #{tid} 中奖 {prize:.2f}, 税后 {net_prize:.2f}",
                             },
                         )
-
-                    # Bankroll: record explicit profit/loss
-                    create_bankroll_transaction(
-                        conn,
-                        {
-                            "account_type": "simulation",
-                            "transaction_type": "profit_loss",
-                            "amount": profit_loss,
-                            "related_ticket_id": tid,
-                            "remark": (
-                                f"Ticket #{tid} 盈利 +{profit_loss:.2f}"
-                                if profit_loss >= 0
-                                else f"Ticket #{tid} 亏损 {profit_loss:.2f}"
-                            ),
-                        },
-                    )
+                    # Lost: no transaction (AI budget consumed, no real money lost)
 
                     # Update ticket status
                     with conn.cursor() as cur:
@@ -446,28 +421,19 @@ def run(dry_run: bool = False) -> dict[str, Any]:
                 })
 
                 if settlement_id:
-                    # Credit prize if won
-                    if net_prize > 0:
-                        create_bankroll_transaction(conn, {
-                            "account_type": "simulator",
-                            "transaction_type": "prize",
-                            "amount": net_prize,
-                            "related_ticket_id": tid,
-                            "remark": f"Simulator ticket #{tid} prize {prize:.2f}, net {net_prize:.2f}",
-                        })
-
-                    # Record explicit profit/loss
-                    create_bankroll_transaction(conn, {
-                        "account_type": "simulator",
-                        "transaction_type": "profit_loss",
-                        "amount": profit_loss,
-                        "related_ticket_id": tid,
-                        "remark": (
-                            f"Simulator #{tid} 盈利 +{profit_loss:.2f}"
-                            if profit_loss >= 0
-                            else f"Simulator #{tid} 亏损 {profit_loss:.2f}"
-                        ),
-                    })
+                    # Bankroll: credit the prize (if won) — stake already deducted at purchase
+                    if ticket_all_won and net_prize > 0:
+                        create_bankroll_transaction(
+                            conn,
+                            {
+                                "account_type": "simulator",
+                                "transaction_type": "prize",
+                                "amount": net_prize,
+                                "related_ticket_id": tid,
+                                "remark": f"Simulator #{tid} 中奖 {prize:.2f}, 税后 {net_prize:.2f}",
+                            },
+                        )
+                    # Lost: no action — stake already deducted at ticket creation
 
                     # Update ticket status
                     update_sim_ticket_status(conn, tid, "settled")
@@ -606,21 +572,19 @@ def run(dry_run: bool = False) -> dict[str, Any]:
                 )
 
                 if settlement_id:
-                    # Record explicit profit/loss for real tickets
-                    create_bankroll_transaction(
-                        conn,
-                        {
-                            "account_type": "real",
-                            "transaction_type": "profit_loss",
-                            "amount": profit_loss,
-                            "related_ticket_id": rtid,
-                            "remark": (
-                                f"Real ticket #{rtid} 盈利 +{profit_loss:.2f}"
-                                if profit_loss >= 0
-                                else f"Real ticket #{rtid} 亏损 {profit_loss:.2f}"
-                            ),
-                        },
-                    )
+                    # Bankroll: credit prize for winning real tickets
+                    if all_won and net_prize > 0:
+                        create_bankroll_transaction(
+                            conn,
+                            {
+                                "account_type": "real",
+                                "transaction_type": "prize",
+                                "amount": net_prize,
+                                "related_ticket_id": rtid,
+                                "remark": f"实票 #{rtid} 中奖 {prize:.2f}, 税后 {net_prize:.2f}",
+                            },
+                        )
+                    # Lost: no transaction (stake paid at store, no digital movement)
 
                     # Update real ticket settlement status
                     with conn.cursor() as cur:
