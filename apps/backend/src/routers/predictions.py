@@ -12,7 +12,11 @@ router = APIRouter(tags=["predictions"])
 PLAY_TYPE_NAMES: dict[str, str] = {
     "spf": "胜平负",
     "rqspf": "让球胜平负",
-    "total_goals": "总进球",
+    "zjq": "总进球数",
+    "bf": "比分",
+    "bqc": "半全场",
+    # Legacy aliases
+    "total_goals": "总进球数",
     "score": "比分",
     "half_full": "半全场",
 }
@@ -29,14 +33,25 @@ RQSPF_OPTION_NAMES: dict[str, str] = {
     "0": "让负",
 }
 
+# BQC semi-full mapping
+BQC_HT = {"3": "胜", "1": "平", "0": "负"}
+BQC_FT = {"3": "胜", "1": "平", "0": "负"}
+
 
 def _option_name(play_type: str, option_code: str, handicap: float | None = None) -> str:
     """Get option display name, respecting play type and handicap."""
-    name = RQSPF_OPTION_NAMES.get(option_code, option_code) if play_type == "rqspf" else OPTION_NAMES.get(option_code, option_code)
+    if play_type == "rqspf":
+        name = RQSPF_OPTION_NAMES.get(option_code, option_code)
+    elif play_type == "bqc" and len(option_code) == 2:
+        name = f"{BQC_HT.get(option_code[0], option_code[0])}{BQC_FT.get(option_code[1], option_code[1])}"
+    elif play_type == "bf":
+        name = option_code  # e.g. "1:0", "2:1"
+    elif play_type == "zjq":
+        name = f"{option_code}球" if option_code != "7" else "7+球"
+    else:
+        name = OPTION_NAMES.get(option_code, option_code)
     if handicap is not None:
-        # Show handicap in parentheses, e.g. "让负(+1)", "让胜(-1)"
-        h_str = f"{handicap:+g}"
-        name = f"{name}({h_str})"
+        name = f"{name}({handicap:+g})"
     return name
 
 
