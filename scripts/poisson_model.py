@@ -33,6 +33,43 @@ def derive_1x2(matrix: dict[str, float]) -> dict[str, float]:
     return {"3": home, "1": draw, "0": away}
 
 
+def derive_handicap(matrix: dict[str, float], handicap: float) -> dict[str, float]:
+    """Derive handicap-adjusted (RQSPF) probabilities from a score matrix.
+
+    For a handicap of -1 (home team -1):
+      让胜 (3) = P(home wins by 2+)     = sum(cells where h - a > 1)
+      让平 (1) = P(home wins by exactly 1) = sum(cells where h - a = 1)
+      让负 (0) = P(home draws or loses)    = sum(cells where h - a < 1) = 1 - 3 - 1
+
+    For handicap +1 (home team +1, away favorite):
+      让胜 (3) = P(home wins or draws)   = sum(cells where h - a > -1)
+      让平 (1) = P(away wins by 1)       = sum(cells where h - a = -1)
+      让负 (0) = P(away wins by 2+)      = sum(cells where h - a < -1)
+
+    Args:
+        matrix: Score probability matrix { "h:a": prob }
+        handicap: Handicap value (e.g., -1.0, 0.5, 1.0, -1.5).
+
+    Returns:
+        {"3": home_prob, "1": draw_prob, "0": away_prob} for RQSPF.
+    """
+    home = draw = away = 0.0
+    gd_threshold = -handicap  # goal difference needed for home to "cover"
+
+    for score, p in matrix.items():
+        h, a = map(int, score.split(":"))
+        gd = h - a  # actual goal difference
+
+        if gd > gd_threshold:
+            home += p
+        elif gd == gd_threshold:
+            draw += p
+        else:
+            away += p
+
+    return {"3": home, "1": draw, "0": away}
+
+
 def derive_total_goals(matrix: dict[str, float]) -> dict[str, float]:
     out = {str(i): 0.0 for i in range(7)}
     out["7+"] = 0.0

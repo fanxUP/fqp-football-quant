@@ -27,6 +27,7 @@ from scripts.odds_conversion import (
 )
 from scripts.poisson_model import (
     derive_1x2,
+    derive_handicap,
     estimate_lambdas_from_odds,
     score_matrix,
 )
@@ -189,23 +190,43 @@ def _predict_match_play_type(
     shin_flb_probs = shin_flb_result["flb_corrected"]
     overround(odds_dict)
 
-    # 3. Poisson model
+    # 3. Get handicap for RQSPF
+    handicap: float | None = None
+    if play_type == "rqspf":
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT handicap FROM official_odds_snapshots "
+                "WHERE match_id = %s AND play_type = 'rqspf' AND handicap IS NOT NULL "
+                "ORDER BY snapshot_time DESC LIMIT 1",
+                (mid,),
+            )
+            row = cur.fetchone()
+            if row and row[0]:
+                handicap = float(row[0])
+
+    # 4. Poisson model
     try:
         lam_h, lam_a = estimate_lambdas_from_odds(
             shin_flb_probs["3"], shin_flb_probs["1"], shin_flb_probs["0"]
         )
         poisson_matrix = score_matrix(lam_h, lam_a)
-        poisson_1x2 = derive_1x2(poisson_matrix)
+        if play_type == "rqspf" and handicap is not None:
+            poisson_probs = derive_handicap(poisson_matrix, handicap)
+        else:
+            poisson_probs = derive_1x2(poisson_matrix)
     except Exception:
         lam_h, lam_a = 1.3, 1.1
-        poisson_1x2 = dict(market_probs)
+        poisson_probs = dict(market_probs)
 
-    # 4. Dixon-Coles model
+    # 5. Dixon-Coles model
     try:
         dc_matrix = dixon_coles_matrix(lam_h, lam_a, rho)
-        dc_1x2 = derive_1x2(dc_matrix)
+        if play_type == "rqspf" and handicap is not None:
+            dc_probs = derive_handicap(dc_matrix, handicap)
+        else:
+            dc_probs = derive_1x2(dc_matrix)
     except Exception:
-        dc_1x2 = dict(poisson_1x2)
+        dc_probs = dict(poisson_probs)
 
     # 5. Elo model
     try:
@@ -228,8 +249,8 @@ def _predict_match_play_type(
     # 6. Write predictions per model
     model_results = {
         "market_baseline": market_probs,
-        "maher_poisson": poisson_1x2,
-        "dixon_coles": dc_1x2,
+        "maher_poisson": poisson_probs,
+        "dixon_coles": dc_probs,
         "elo_rating": elo_1x2,
     }
 
@@ -252,8 +273,8 @@ def _predict_match_play_type(
             uncertainty = _model_std(
                 [
                     market_probs.get(opt_code, 0),
-                    poisson_1x2.get(opt_code, 0),
-                    dc_1x2.get(opt_code, 0),
+                    poisson_probs.get(opt_code, 0),
+                    dc_probs.get(opt_code, 0),
                     elo_1x2.get(opt_code, 0),
                 ]
             )
