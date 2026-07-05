@@ -35,7 +35,9 @@ settlement_stats AS (
     SELECT
         COUNT(*) FILTER (WHERE ts.ticket_source = 'simulation' AND ts.is_won = true) AS sim_won,
         COUNT(*) FILTER (WHERE ts.ticket_source = 'real' AND ts.is_won = true) AS real_won,
-        COUNT(*) FILTER (WHERE ts.is_won IS NULL) AS pending_settlements
+        COUNT(*) FILTER (WHERE ts.is_won IS NULL) AS pending_settlements,
+        COALESCE(SUM(ts.profit_loss) FILTER (WHERE ts.ticket_source = 'simulation'), 0) AS ai_today_profit_loss,
+        COALESCE(SUM(ts.profit_loss) FILTER (WHERE ts.ticket_source = 'real'), 0) AS real_today_profit_loss
     FROM ticket_settlements ts
     WHERE DATE(ts.settle_time) = (SELECT business_date FROM today)
 ),
@@ -52,6 +54,8 @@ SELECT
     (SELECT sim_stake FROM simulator_stats) AS ai_stake_today,
     (SELECT sim_ticket_count FROM simulator_stats) AS ai_ticket_count,
     (SELECT pending_settlements FROM settlement_stats) AS pending_settlement_count,
+    (SELECT ai_today_profit_loss FROM settlement_stats) AS ai_today_profit_loss,
+    (SELECT real_today_profit_loss FROM settlement_stats) AS real_today_profit_loss,
     (SELECT round_label FROM current_round) AS current_round_label,
     (SELECT id FROM current_round) AS current_round_id;
 

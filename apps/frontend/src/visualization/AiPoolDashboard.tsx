@@ -173,6 +173,55 @@ export default function AiPoolDashboard({
         })}
       </div>
 
+      {/* ========== Profit / Loss panel ========== */}
+      {(() => {
+        const profitLoss = kpiVal('ai_today_profit_loss');
+        const stake = kpiVal('ai_stake_today');
+        const profitRate = stake > 0 ? (profitLoss / stake) : 0;
+        const isProfit = profitLoss > 0;
+        const isLoss = profitLoss < 0;
+        const color = isProfit ? 'var(--fqp-success)' : isLoss ? 'var(--fqp-red-neon)' : 'var(--fqp-text-muted)';
+        const icon = isProfit ? '📈' : isLoss ? '📉' : '➖';
+
+        return (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '10px 14px',
+              background: isProfit ? 'rgba(34,197,94,0.06)' : isLoss ? 'rgba(239,68,68,0.06)' : 'rgba(255,255,255,0.02)',
+              borderRadius: 8,
+              border: `1px solid ${
+                isProfit ? 'rgba(34,197,94,0.15)' : isLoss ? 'rgba(239,68,68,0.15)' : 'rgba(255,255,255,0.05)'
+              }`,
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 16 }}>{icon}</span>
+              <div>
+                <div style={{ fontSize: 11, color: 'var(--fqp-text-muted)' }}>AI 当日盈亏</div>
+                <div style={{ fontSize: 18, fontWeight: 700, color }} className="fqp-mono">
+                  {profitLoss >= 0 ? '+' : ''}<CountUp value={Math.abs(profitLoss)} />
+                </div>
+              </div>
+            </div>
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ fontSize: 11, color: 'var(--fqp-text-muted)' }}>盈亏率</div>
+              <div style={{ fontSize: 18, fontWeight: 700, color }} className="fqp-mono">
+                {profitRate >= 0 ? '+' : ''}{(profitRate * 100).toFixed(2)}%
+              </div>
+            </div>
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ fontSize: 11, color: 'var(--fqp-text-muted)' }}>总投入</div>
+              <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--fqp-text)' }} className="fqp-mono">
+                ¥<CountUp value={stake} />
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* ========== Distribution bar (only if total > 0) ========== */}
       {barTotal > 0 && (
         <div>

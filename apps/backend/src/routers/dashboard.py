@@ -84,6 +84,18 @@ def get_today_summary():
                     "label": "待开奖",
                     "value": data.get("pending_settlement_count", 0),
                 },
+                {
+                    "key": "ai_today_profit_loss",
+                    "label": "AI 当日盈亏",
+                    "value": float(data.get("ai_today_profit_loss", 0)),
+                    "prefix": "¥",
+                },
+                {
+                    "key": "real_today_profit_loss",
+                    "label": "实盘当日盈亏",
+                    "value": float(data.get("real_today_profit_loss", 0)),
+                    "prefix": "¥",
+                },
             ],
             "meta": _meta("v_dashboard_today_summary"),
             "extras": {
