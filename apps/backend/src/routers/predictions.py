@@ -23,6 +23,19 @@ OPTION_NAMES: dict[str, str] = {
     "0": "客胜",
 }
 
+RQSPF_OPTION_NAMES: dict[str, str] = {
+    "3": "让胜",
+    "1": "让平",
+    "0": "让负",
+}
+
+
+def _option_name(play_type: str, option_code: str) -> str:
+    """Get option display name, respecting play type."""
+    if play_type == "rqspf":
+        return RQSPF_OPTION_NAMES.get(option_code, option_code)
+    return OPTION_NAMES.get(option_code, option_code)
+
 
 @router.get("/api/recommendations/live")
 def get_live_recommendations(
@@ -89,7 +102,7 @@ def get_live_recommendations(
             "play_type": r[2],
             "play_type_name": PLAY_TYPE_NAMES.get(r[2], r[2]),
             "option_code": r[3],
-            "option_name": OPTION_NAMES.get(r[3], r[3]),
+            "option_name": _option_name(r[2], r[3]),
             "model_probability": round(model_prob, 4),
             "market_probability": round(market_prob, 4),
             "fair_odds": round(fair_odds, 2),
