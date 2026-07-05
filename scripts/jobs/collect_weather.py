@@ -80,7 +80,7 @@ def run(dry_run: bool = False) -> dict[str, Any]:
                         JOIN team_stadium_history tsh ON tsh.stadium_id = s.id
                         JOIN team_aliases ta ON ta.team_id = tsh.team_id
                         WHERE ta.alias_name = %(name)s
-                        ORDER BY tsh.valid_from DESC LIMIT 1
+                        ORDER BY tsh.start_date DESC LIMIT 1
                         """,
                         {"name": match["home"]},
                     )

@@ -1,298 +1,180 @@
 import { useEffect, useState } from 'react';
 import { api } from '../core/apiClient';
 import { navigate } from '../core/router';
-import type { FeatureSnapshot } from '../core/types';
+import type { SimulatorMatch } from '../core/types';
 import { ApiError } from '../core/types';
 import PageHeader from '../shared/components/PageHeader';
 import FilterBar from '../shared/components/FilterBar';
-import DataTable, { type Column } from '../shared/components/DataTable';
 import ErrorState from '../shared/components/ErrorState';
-import ChartCard from '../shared/components/ChartCard';
+import Card from '../shared/components/Card';
+import LoadingSpinner from '../shared/components/LoadingSpinner';
+import Skeleton from '../shared/components/Skeleton';
+import { PLAY_TYPE_LABELS } from '../shared/constants';
 
-interface MatchRow {
-  match_id: number;
-  home_team: string;
-  away_team: string;
-  league: string;
-  completeness: number | null;
-  snapshot_count: number;
-}
+type PlayTab = 'spf' | 'rqspf' | 'zjq' | 'bf' | 'bqc';
 
 export default function MatchesPage() {
-  const [matches, setMatches] = useState<MatchRow[]>([]);
+  const [matches, setMatches] = useState<SimulatorMatch[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [leagueFilter, setLeagueFilter] = useState('');
-  const [searchText, setSearchText] = useState('');
+  const [activeTab, setActiveTab] = useState<PlayTab>('spf');
 
-  useEffect(() => {
-    let cancelled = false;
+  const fetchMatches = (league?: string) => {
     setLoading(true);
     setError(null);
-
-    api
-      .features({ limit: 500 })
+    api.simulator.matches({ league_name: league || undefined, limit: 100 })
       .then((res) => {
-        if (cancelled) return;
-        // Deduplicate by match_id, keep latest snapshot
-        const map = new Map<number, MatchRow>();
-        for (const s of res.snapshots) {
-          if (!map.has(s.match_id)) {
-            map.set(s.match_id, {
-              match_id: s.match_id,
-              home_team: s.home_team_name,
-              away_team: s.away_team_name,
-              league: s.league_name,
-              completeness: s.data_completeness_score,
-              snapshot_count: 1,
-            });
-          } else {
-            const existing = map.get(s.match_id)!;
-            existing.snapshot_count++;
-            if (s.data_completeness_score && (existing.completeness === null || s.data_completeness_score > existing.completeness)) {
-              existing.completeness = s.data_completeness_score;
-            }
-          }
-        }
-        setMatches(Array.from(map.values()));
+        setMatches(res.matches);
         setLoading(false);
       })
       .catch((e) => {
-        if (!cancelled) {
-          setError(e instanceof ApiError ? e.message : '加载失败');
-          setLoading(false);
-        }
+        setError(e instanceof ApiError ? e.message : '加载失败');
+        setLoading(false);
       });
+  };
 
-    return () => { cancelled = true; };
-  }, []);
+  useEffect(() => { fetchMatches(); }, []);
 
-  // Unique leagues for filter
-  const leagues = [...new Set(matches.map((m) => m.league))].sort();
+  const handleLeagueChange = (val: string) => {
+    setLeagueFilter(val);
+    fetchMatches(val);
+  };
 
-  // Filtered rows
-  const filtered = matches.filter((m) => {
-    if (leagueFilter && m.league !== leagueFilter) return false;
-    if (searchText) {
-      const q = searchText.toLowerCase();
-      if (!m.home_team.toLowerCase().includes(q) && !m.away_team.toLowerCase().includes(q)) {
-        return false;
-      }
-    }
-    return true;
-  });
+  const leagues = [...new Set(matches.map((m) => m.league_name))].sort();
+  const playTabs: PlayTab[] = ['spf', 'rqspf', 'zjq', 'bf', 'bqc'];
 
-  const columns: Column<MatchRow>[] = [
-    {
-      key: 'match_id',
-      title: '编号',
-      width: '80px',
-      render: (v) => <span className="fqp-mono">{String(v)}</span>,
-    },
-    { key: 'home_team', title: '主队' },
-    { key: 'away_team', title: '客队' },
-    { key: 'league', title: '联赛' },
-    {
-      key: 'completeness',
-      title: '数据完整度',
-      render: (v) => {
-        const val = v as number | null;
-        if (val === null) return <span style={{ color: 'var(--fqp-text-muted)' }}>—</span>;
-        const pct = Math.round(val * 100);
-        const color = pct >= 80 ? 'var(--fqp-success)' : pct >= 50 ? 'var(--fqp-warning)' : 'var(--fqp-red-neon)';
-        return <span style={{ color }}>{pct}%</span>;
-      },
-    },
-    {
-      key: 'snapshot_count',
-      title: '快照数',
-      width: '80px',
-      render: (v) => <span className="fqp-mono">{String(v)}</span>,
-    },
-  ];
-
-  // ---- League distribution chart ----
-  const leagueChartOption = (() => {
-    if (matches.length === 0) return null;
-    const leagueCount: Record<string, number> = {};
-    for (const m of matches) {
-      leagueCount[m.league] = (leagueCount[m.league] || 0) + 1;
-    }
-    const sorted = Object.entries(leagueCount).sort((a, b) => b[1] - a[1]);
-    const names = sorted.map(([k]) => k);
-    const counts = sorted.map(([, v]) => v);
-
-    // Color palette
-    const colors = ['#ef4444', '#f59e0b', '#22c55e', '#3b82f6', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316', '#84cc16', '#14b8a6'];
-
-    return {
-      tooltip: {
-        trigger: 'axis' as const,
-        axisPointer: { type: 'shadow' as const },
-      },
-      grid: {
-        left: '3%',
-        right: '8%',
-        bottom: '3%',
-        containLabel: true,
-      },
-      xAxis: {
-        type: 'value' as const,
-        name: '比赛数',
-        nameTextStyle: { fontSize: 12 },
-        axisLabel: { fontSize: 11 },
-        splitLine: { lineStyle: { color: 'rgba(255,255,255,0.04)' } },
-      },
-      yAxis: {
-        type: 'category' as const,
-        data: names,
-        axisLabel: { fontSize: 12 },
-        inverse: true,
-      },
-      series: [
-        {
-          type: 'bar',
-          data: counts.map((v, i) => ({
-            value: v,
-            itemStyle: {
-              color: colors[i % colors.length],
-              borderRadius: [0, 4, 4, 0],
-            },
-          })),
-          barWidth: '60%',
-          label: {
-            show: true,
-            position: 'right' as const,
-            fontSize: 12,
-          },
-        },
-      ],
-    };
-  })();
-
-  // ---- Completeness histogram ----
-  const completenessHistOption = (() => {
-    if (matches.length === 0) return null;
-    const scores = matches
-      .map((m) => m.completeness)
-      .filter((s): s is number => s !== null)
-      .map((s) => Math.round(s * 100));
-    if (scores.length === 0) return null;
-
-    // Bucket into 10 groups
-    const buckets: number[] = Array(10).fill(0);
-    for (const s of scores) {
-      const idx = Math.min(Math.floor(s / 10), 9);
-      buckets[idx]++;
-    }
-    const labels = buckets.map((_, i) => `${i * 10}-${i * 10 + 9}%`);
-
-    return {
-      tooltip: {
-        trigger: 'axis' as const,
-        axisPointer: { type: 'shadow' as const },
-      },
-      grid: {
-        left: '3%',
-        right: '4%',
-        bottom: '12%',
-        top: '20px',
-        containLabel: true,
-      },
-      xAxis: {
-        type: 'category' as const,
-        data: labels,
-        axisLabel: { rotate: 45, fontSize: 11 },
-      },
-      yAxis: {
-        type: 'value' as const,
-        name: '比赛数',
-        nameTextStyle: { fontSize: 12 },
-        axisLabel: { fontSize: 11 },
-        splitLine: { lineStyle: { color: 'rgba(255,255,255,0.04)' } },
-      },
-      series: [
-        {
-          type: 'bar',
-          data: buckets,
-          itemStyle: {
-            borderRadius: [4, 4, 0, 0],
-            color: '#3b82f6',
-          },
-          barWidth: '80%',
-        },
-      ],
-    };
-  })();
-
-  if (error) {
-    return (
-      <div>
-        <PageHeader title="比赛中心" />
-        <ErrorState message={error} onRetry={() => window.location.reload()} />
-      </div>
-    );
-  }
+  if (error) return (
+    <div>
+      <PageHeader title="开赛盘口" />
+      <ErrorState message={error} onRetry={() => fetchMatches(leagueFilter)} />
+    </div>
+  );
 
   return (
     <div>
-      <PageHeader title="比赛中心" lastUpdated={new Date().toLocaleString('zh-CN', { hour12: false })} />
-
-      {/* Charts */}
-      {!loading && matches.length > 0 && (
-        <div className="fqp-grid-2" style={{ marginBottom: '16px' }}>
-          {leagueChartOption ? (
-            <ChartCard title="联赛分布" option={leagueChartOption} height={Math.max(300, leagues.length * 24)} />
-          ) : (
-            <div className="fqp-card" style={{ padding: '40px', textAlign: 'center', color: 'var(--fqp-text-muted)' }}>
-              暂无联赛数据
-            </div>
-          )}
-          {completenessHistOption ? (
-            <ChartCard title="数据完整度分布" option={completenessHistOption} height={300} />
-          ) : (
-            <div className="fqp-card" style={{ padding: '40px', textAlign: 'center', color: 'var(--fqp-text-muted)' }}>
-              暂无完整度数据
-            </div>
-          )}
-        </div>
-      )}
+      <PageHeader
+        title="开赛盘口"
+        subtitle="体彩官方实时可购买比赛"
+        lastUpdated={new Date().toLocaleString('zh-CN', { hour12: false })}
+      />
 
       <FilterBar>
         <select
           className="fqp-select"
           value={leagueFilter}
-          onChange={(e) => setLeagueFilter(e.target.value)}
-          style={{ minWidth: '180px' }}
+          onChange={(e) => handleLeagueChange(e.target.value)}
+          style={{ minWidth: '160px' }}
         >
           <option value="">全部联赛</option>
           {leagues.map((l) => (
             <option key={l} value={l}>{l}</option>
           ))}
         </select>
-        <input
-          className="fqp-input"
-          placeholder="搜索球队..."
-          value={searchText}
-          onChange={(e) => setSearchText(e.target.value)}
-          style={{ minWidth: '200px' }}
-        />
+        {/* Play type tabs */}
+        <div style={{ display: 'flex', gap: '4px', marginLeft: 'auto' }}>
+          {playTabs.map((pt) => (
+            <button
+              key={pt}
+              className={`fqp-btn${activeTab === pt ? ' fqp-btn-primary' : ''}`}
+              style={{ padding: '4px 12px', fontSize: '12px' }}
+              onClick={() => setActiveTab(pt)}
+            >
+              {PLAY_TYPE_LABELS[pt]}
+            </button>
+          ))}
+        </div>
       </FilterBar>
-      <Card>
-        <DataTable
-          columns={columns}
-          rows={filtered}
-          loading={loading}
-          emptyText="暂无比赛数据，等待官方赛程采集与特征快照生成"
-          onRowClick={(row) => navigate(`/matches/${row.match_id}`)}
-          rowKey={(row) => String(row.match_id)}
-        />
-      </Card>
+
+      {loading ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <Skeleton variant="card" height={62} count={8} />
+        </div>
+      ) : matches.length === 0 ? (
+        <Card>
+          <div style={{ textAlign: 'center', padding: '40px', color: 'var(--fqp-text-muted)' }}>
+            暂无在售比赛
+          </div>
+        </Card>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          {matches.map((m, idx) => {
+            const oddsGroup = m.odds?.[activeTab];
+            const options = oddsGroup?.options || [];
+            const handicap = activeTab === 'rqspf' ? oddsGroup?.handicap : undefined;
+            return (
+              <Card
+                key={`${m.match_id}-${activeTab}`}
+                style={{ cursor: 'pointer', padding: '10px 16px', animation: `fqpCardEnter 0.4s ease both`, animationDelay: `${idx * 40}ms` }}
+                onClick={() => navigate(`/matches/${m.match_id}`)}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                  {/* Match identity */}
+                  <span className="fqp-mono" style={{ fontSize: '11px', color: 'var(--fqp-accent)', fontWeight: 600, minWidth: '60px' }}>
+                    {m.match_num_str || `#${m.match_id}`}
+                  </span>
+                  <span style={{ fontSize: '11px', color: 'var(--fqp-text-muted)', minWidth: '65px' }}>
+                    {String(m.kickoff_time).replace('T', ' ').slice(5, 16)}
+                  </span>
+                  <span style={{ fontSize: '12px', color: 'var(--fqp-text-muted)', minWidth: '70px' }}>
+                    {m.league_name}
+                  </span>
+                  <span style={{ fontWeight: 600, fontSize: '13px' }}>
+                    {m.home_team_name}
+                  </span>
+                  <span style={{ color: 'var(--fqp-text-muted)', fontWeight: 700 }}>VS</span>
+                  <span style={{ fontWeight: 600, fontSize: '13px' }}>
+                    {m.away_team_name}
+                  </span>
+
+                  {/* Handicap badge for RQSPF */}
+                  {handicap != null && (
+                    <span style={{
+                      fontSize: '11px', color: 'var(--fqp-warning)',
+                      background: 'rgba(255,193,7,0.1)', padding: '2px 6px', borderRadius: '4px',
+                    }}>
+                      {handicap > 0 ? `+${handicap}` : handicap}
+                    </span>
+                  )}
+
+                  {/* Odds buttons */}
+                  <div style={{ display: 'flex', gap: '6px', marginLeft: 'auto', flexWrap: 'wrap' }}>
+                    {options.length === 0 ? (
+                      <span style={{ fontSize: '11px', color: 'var(--fqp-text-muted)' }}>暂无赔率</span>
+                    ) : (
+                      options.map((opt) => (
+                        <span
+                          key={opt.option_code}
+                          style={{
+                            display: 'inline-flex', flexDirection: 'column', alignItems: 'center',
+                            padding: '4px 10px', borderRadius: '6px',
+                            background: 'rgba(24,24,27,0.7)', border: '1px solid rgba(39,39,42,0.5)',
+                            minWidth: '52px',
+                          }}
+                        >
+                          <span style={{ fontSize: '10px', color: 'var(--fqp-text-muted)' }}>
+                            {opt.option_name}
+                          </span>
+                          <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--fqp-accent)' }}>
+                            {opt.sp_value.toFixed(2)}
+                          </span>
+                        </span>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </Card>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Summary footer */}
+      {!loading && matches.length > 0 && (
+        <div style={{ marginTop: '12px', fontSize: '12px', color: 'var(--fqp-text-muted)', textAlign: 'center' }}>
+          共 {matches.length} 场在售比赛 · {leagues.length} 个联赛 · 玩法切换查看不同赔率
+        </div>
+      )}
     </div>
   );
-}
-
-// Inline Card wrapper for this page
-function Card({ children }: { children: React.ReactNode }) {
-  return <div className="fqp-card" style={{ padding: 0, overflow: 'hidden' }}>{children}</div>;
 }

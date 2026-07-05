@@ -19,6 +19,40 @@ from scripts.ops_storage import (
 router = APIRouter(tags=["ops"])
 
 
+@router.get("/api/ops/pipeline")
+def get_pipeline_status():
+    """Get data source health + latest job run statuses for the Data Health dashboard."""
+    with get_db() as conn:
+        cur = conn.cursor()
+
+        # Data source health
+        cur.execute(
+            "SELECT source_name, status, last_success_time, last_failure_time, "
+            "failure_count, latency_ms FROM data_source_health ORDER BY source_name"
+        )
+        src_cols = ["name", "status", "last_success", "last_failure", "failures", "latency_ms"]
+        sources = []
+        for row in cur.fetchall():
+            d = dict(zip(src_cols, row))
+            d["last_success"] = str(d["last_success"]) if d["last_success"] else None
+            d["last_failure"] = str(d["last_failure"]) if d["last_failure"] else None
+            sources.append(d)
+
+        # Latest job runs
+        cur.execute(
+            "SELECT DISTINCT ON (job_name) job_name, status, finished_at "
+            "FROM ai_job_runs ORDER BY job_name, id DESC"
+        )
+        job_cols = ["name", "status", "finished_at"]
+        jobs = []
+        for row in cur.fetchall():
+            d = dict(zip(job_cols, row))
+            d["finished_at"] = str(d["finished_at"]) if d["finished_at"] else None
+            jobs.append(d)
+
+    return {"sources": sources, "jobs": jobs}
+
+
 @router.get("/api/ops/health")
 def get_operational_health():
     """Get current operational health status (Stage 8 KPIs)."""

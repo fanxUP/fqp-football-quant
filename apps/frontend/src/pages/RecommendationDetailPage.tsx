@@ -8,6 +8,7 @@ import LoadingSpinner from '../shared/components/LoadingSpinner';
 import ErrorState from '../shared/components/ErrorState';
 import StatusBadge from '../shared/components/StatusBadge';
 import EmptyState from '../shared/components/EmptyState';
+import { passTypeLabel, statusLabel, riskLabel } from '../shared/constants';
 
 interface RecommendationDetailPageProps {
   ticketId: number;
@@ -61,7 +62,7 @@ export default function RecommendationDetailPage({ ticketId }: RecommendationDet
       <PageHeader title={`推荐票单 #${ticketId}`} />
 
       <div className="fqp-grid-2" style={{ marginBottom: '20px' }}>
-        <Card>
+        <Card entranceDelay={0}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             <div>
               <div className="fqp-label">策略池</div>
@@ -69,7 +70,7 @@ export default function RecommendationDetailPage({ ticketId }: RecommendationDet
             </div>
             <div>
               <div className="fqp-label">过关方式</div>
-              <div>{ticket.pass_type}</div>
+              <div>{passTypeLabel(ticket.pass_type)}</div>
             </div>
             <div>
               <div className="fqp-label">包含场次</div>
@@ -77,12 +78,12 @@ export default function RecommendationDetailPage({ ticketId }: RecommendationDet
             </div>
             <div>
               <div className="fqp-label">状态</div>
-              <StatusBadge status={statusColor(ticket.status)} label={ticket.status} />
+              <StatusBadge status={statusColor(ticket.status)} label={statusLabel(ticket.status)} />
             </div>
           </div>
         </Card>
 
-        <Card>
+        <Card entranceDelay={100}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             <div>
               <div className="fqp-label">建议金额</div>
@@ -114,14 +115,14 @@ export default function RecommendationDetailPage({ ticketId }: RecommendationDet
               <div className="fqp-label">风险等级</div>
               <StatusBadge
                 status={ticket.risk_level === 'high' ? 'error' : ticket.risk_level === 'medium' ? 'warning' : 'ok'}
-                label={ticket.risk_level.toUpperCase()}
+                label={riskLabel(ticket.risk_level)}
               />
             </div>
           </div>
         </Card>
       </div>
 
-      <Card>
+      <Card entranceDelay={200}>
         <div style={{ fontSize: '13px', color: 'var(--fqp-text-muted)' }}>
           <div className="fqp-label">创建时间</div>
           <div>{ticket.created_at.replace('T', ' ').slice(0, 19)}</div>

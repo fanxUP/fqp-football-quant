@@ -94,6 +94,7 @@ export default function DisclaimerBanner({
   // type === 'page'
   return (
     <div
+      className="fqp-anim-slideLeft"
       style={{
         padding: '10px 16px',
         marginBottom: '16px',

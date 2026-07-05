@@ -104,28 +104,27 @@ def _compute_odds_missing_rate(conn: Any) -> dict:
 def _compute_review_generation_rate(conn: Any) -> dict:
     """Compute daily review generation success rate."""
     with conn.cursor() as cur:
-        # Expected reviews: one per day since scheduler started (check last 30 days)
-        cur.execute(
-            """
-            SELECT COUNT(*) FROM daily_reviews
-            WHERE created_at >= CURRENT_DATE - INTERVAL '30 days'
-            """
-        )
-        cur.fetchone()[0] or 0
-
         # Successful: reviews with content (not empty/error)
         cur.execute(
             """
             SELECT COUNT(*) FROM daily_reviews
             WHERE created_at >= CURRENT_DATE - INTERVAL '30 days'
-              AND review_content IS NOT NULL
-              AND review_content != ''
+              AND summary_text IS NOT NULL
+              AND summary_text != ''
             """
         )
         success = cur.fetchone()[0] or 0
 
-    # We expect 1 review per day, so expected = days since first review or 30
-    expected = 30
+        # Find the earliest review date to calculate expected days
+        cur.execute("SELECT MIN(review_date) FROM daily_reviews")
+        earliest = cur.fetchone()[0]
+        if earliest:
+            from datetime import date
+            days_running = (date.today() - earliest).days + 1
+        else:
+            days_running = 1
+    # Expected = days since first review, capped at 30 and minimum 1
+    expected = max(1, min(30, days_running))
     rate = round(success / expected, 4) if expected > 0 else 0.0
     return {
         "total_reviews_expected": expected,

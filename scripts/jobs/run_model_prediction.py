@@ -78,7 +78,7 @@ def run(match_id: int | None = None, dry_run: bool = False) -> dict[str, Any]:
             cur.execute(
                 "SELECT parameters_json FROM model_versions "
                 "WHERE model_name = 'dixon_coles' AND parameters_json IS NOT NULL "
-                "ORDER BY updated_at DESC LIMIT 1"
+                "ORDER BY created_at DESC LIMIT 1"
             )
             row = cur.fetchone()
             if row and row[0]:
@@ -88,11 +88,11 @@ def run(match_id: int | None = None, dry_run: bool = False) -> dict[str, Any]:
 
         rho = mle_rho if mle_rho is not None else DEFAULT_RHO
 
-        # 2. Get matches to predict (with team IDs for Elo)
+        # 2. Get matches to predict (team names → look up IDs for Elo)
         if match_id:
             with conn.cursor() as cur:
                 cur.execute(
-                    """SELECT id, home_team_id, away_team_id
+                    """SELECT id, home_team_name, away_team_name
                        FROM official_matches WHERE id = %s""",
                     (match_id,),
                 )
@@ -100,7 +100,7 @@ def run(match_id: int | None = None, dry_run: bool = False) -> dict[str, Any]:
         else:
             with conn.cursor() as cur:
                 cur.execute(
-                    """SELECT id, home_team_id, away_team_id
+                    """SELECT id, home_team_name, away_team_name
                        FROM official_matches WHERE match_status = 'Selling'"""
                 )
                 match_rows = cur.fetchall()
@@ -112,7 +112,7 @@ def run(match_id: int | None = None, dry_run: bool = False) -> dict[str, Any]:
         total_votes = 0
 
         for match_row in match_rows:
-            mid, home_team_id, away_team_id = (
+            mid, home_team_name, away_team_name = (
                 match_row[0],
                 match_row[1],
                 match_row[2],
@@ -176,9 +176,20 @@ def run(match_id: int | None = None, dry_run: bool = False) -> dict[str, Any]:
 
             # 7. Elo rating model: pure historical strength, no odds dependency
             try:
-                home_elo, _ = get_or_create_elo(conn, home_team_id)
-                away_elo, _ = get_or_create_elo(conn, away_team_id)
-                elo_1x2 = run_elo_1x2_prediction(home_elo, away_elo)
+                # Look up team IDs from teams table by name
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "SELECT id FROM teams WHERE team_name_cn IN (%s, %s) ORDER BY id",
+                        (home_team_name, away_team_name),
+                    )
+                    team_rows = cur.fetchall()
+                team_ids = [r[0] for r in team_rows]
+                if len(team_ids) >= 2:
+                    home_elo, _ = get_or_create_elo(conn, team_ids[0])
+                    away_elo, _ = get_or_create_elo(conn, team_ids[1])
+                    elo_1x2 = run_elo_1x2_prediction(home_elo, away_elo)
+                else:
+                    elo_1x2 = dict(market_probs)
             except Exception:
                 # Fallback: use market baseline if Elo unavailable
                 elo_1x2 = dict(market_probs)

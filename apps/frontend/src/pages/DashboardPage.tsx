@@ -1,14 +1,33 @@
 import { useEffect, useState } from 'react';
 import { api } from '../core/apiClient';
 import { ApiError } from '../core/types';
-import type { DailyReview } from '../core/types';
+import type { DailyReview, DashboardRoiDailyItem, DashboardTodayKpi, DashboardModelPerfItem } from '../core/types';
 import Card from '../shared/components/Card';
 import ChartCard from '../shared/components/ChartCard';
 import StatusBadge from '../shared/components/StatusBadge';
-import LoadingSpinner from '../shared/components/LoadingSpinner';
-import ErrorState from '../shared/components/ErrorState';
+import Skeleton from '../shared/components/Skeleton';
 import PageHeader from '../shared/components/PageHeader';
 import DisclaimerBanner, { PAGE_DEFAULTS } from '../shared/components/DisclaimerBanner';
+import { RoiLineChart, EmptyChartState, AiPoolDashboard } from '../visualization';
+
+// ---- CountUp: animates a number from 0 to target ----
+function CountUp({ value, duration = 600 }: { value: number; duration?: number }) {
+  const [display, setDisplay] = useState(0);
+  useEffect(() => {
+    if (value <= 0) { setDisplay(0); return; }
+    const start = performance.now();
+    let raf: number;
+    const animate = (now: number) => {
+      const p = Math.min((now - start) / duration, 1);
+      const eased = 1 - Math.pow(1 - p, 3); // easeOutCubic
+      setDisplay(Math.round(value * eased));
+      if (p < 1) raf = requestAnimationFrame(animate);
+    };
+    raf = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(raf);
+  }, [value, duration]);
+  return <span>{display.toLocaleString()}</span>;
+}
 
 interface HealthInfo {
   status: string;
@@ -19,7 +38,6 @@ interface DashboardData {
   health: HealthInfo | null;
   healthError: string | null;
   teamCount: number;
-  matchCount: number;
   predictionCount: number;
   activeTicketCount: number;
   realTicketCount: number;
@@ -37,7 +55,6 @@ export default function DashboardPage() {
     health: null,
     healthError: null,
     teamCount: 0,
-    matchCount: 0,
     predictionCount: 0,
     activeTicketCount: 0,
     realTicketCount: 0,
@@ -46,20 +63,25 @@ export default function DashboardPage() {
     errors: {},
   });
 
-  // Completeness buckets from features
-  const [completenessBuckets, setCompletenessBuckets] = useState<{ low: number; mid: number; high: number }>({ low: 0, mid: 0, high: 0 });
-
   // Daily reviews for trend chart
   const [dailyReviews, setDailyReviews] = useState<DailyReview[]>([]);
+
+  // Dashboard API data
+  const [todayKpis, setTodayKpis] = useState<DashboardTodayKpi[]>([]);
+  const [roiDaily, setRoiDaily] = useState<DashboardRoiDailyItem[]>([]);
+  const [dashLoading, setDashLoading] = useState(false);
+  const [dashError, setDashError] = useState<string | null>(null);
+  const [modelPerf, setModelPerf] = useState<DashboardModelPerfItem[]>([]);
+  const [todayExtras, setTodayExtras] = useState<{ current_round_label: string | null; business_date: string }>({
+    current_round_label: null,
+    business_date: '',
+  });
 
   useEffect(() => {
     let cancelled = false;
 
     async function load() {
       const results: Partial<DashboardData> = { errors: {} };
-
-      // Collect snapshots for completeness chart
-      let snapshots: { data_completeness_score: number | null }[] = [];
 
       const settle = <T,>(
         key: string,
@@ -82,11 +104,6 @@ export default function DashboardPage() {
       await Promise.all([
         settle('health', api.health(), (h) => (results.health = h)),
         settle('teams', api.teams(), (t) => (results.teamCount = t.total)),
-        settle('features', api.features({ limit: 200 }), (f) => {
-          const ids = new Set(f.snapshots.map((s) => s.match_id));
-          results.matchCount = ids.size;
-          snapshots = f.snapshots;
-        }),
         settle('predictions', api.predictions({ limit: 200 }), (p) => (results.predictionCount = p.total)),
         settle('tickets', api.tickets({ status: 'generated', limit: 50 }), (t) => (results.activeTicketCount = t.total)),
         settle('realTickets', api.realTickets.list({ limit: 50 }), (t) => (results.realTicketCount = t.total)),
@@ -98,18 +115,32 @@ export default function DashboardPage() {
         }),
       ]);
 
-      // Compute completeness buckets
+      // Dashboard API — independent from existing loads
       if (!cancelled) {
-        let low = 0, mid = 0, high = 0;
-        for (const s of snapshots) {
-          const score = s.data_completeness_score;
-          if (score === null) continue;
-          if (score < 0.5) low++;
-          else if (score < 0.8) mid++;
-          else high++;
+        setDashLoading(true);
+        try {
+          const [todayRes, roiRes, modelRes] = await Promise.all([
+            api.dashboard.today().catch(() => null),
+            api.dashboard.roiDaily({ days: 30 }).catch(() => null),
+            api.dashboard.modelPerformance().catch(() => null),
+          ]);
+          if (!cancelled) {
+            if (todayRes?.data?.kpis) setTodayKpis(todayRes.data.kpis);
+            if (todayRes?.data?.extras) setTodayExtras({
+              current_round_label: todayRes.data.extras.current_round_label,
+              business_date: todayRes.data.extras.business_date,
+            });
+            if (roiRes?.data?.series) setRoiDaily(roiRes.data.series as DashboardRoiDailyItem[]);
+            if (modelRes?.data?.series) setModelPerf(modelRes.data.series as DashboardModelPerfItem[]);
+          }
+        } catch {
+          if (!cancelled) setDashError('Dashboard API 异常');
+        } finally {
+          if (!cancelled) setDashLoading(false);
         }
-        setCompletenessBuckets({ low, mid, high });
+      }
 
+      if (!cancelled) {
         setData((prev) => ({
           ...prev,
           ...results,
@@ -126,48 +157,6 @@ export default function DashboardPage() {
   }, []);
 
   // ---- Chart options ----
-
-  const completenessDonutOption = (() => {
-    const { low, mid, high } = completenessBuckets;
-    const total = low + mid + high;
-    if (total === 0) return null;
-
-    return {
-      tooltip: {
-        trigger: 'item' as const,
-        formatter: '{b}: {c} 场 ({d}%)',
-      },
-      series: [
-        {
-          type: 'pie',
-          radius: ['55%', '78%'],
-          center: ['50%', '50%'],
-          avoidLabelOverlap: true,
-          itemStyle: {
-            borderRadius: 4,
-            borderColor: 'transparent',
-            borderWidth: 3,
-          },
-          label: {
-            show: true,
-            position: 'outside' as const,
-            formatter: '{b}\n{d}%',
-            fontSize: 12,
-          },
-          labelLine: {
-            length: 16,
-            length2: 24,
-            lineStyle: { color: 'rgba(255,255,255,0.2)' },
-          },
-          data: [
-            { value: low, name: '<50%', itemStyle: { color: '#ef4444' } },
-            { value: mid, name: '50-80%', itemStyle: { color: '#f59e0b' } },
-            { value: high, name: '≥80%', itemStyle: { color: '#22c55e' } },
-          ],
-        },
-      ],
-    };
-  })();
 
   const dailyTrendOption = (() => {
     if (dailyReviews.length === 0) return null;
@@ -264,6 +253,9 @@ export default function DashboardPage() {
       {/* System status bar */}
       <Card style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '16px' }}>
         <StatusBadge status={healthStatus} label={healthLabel} dot />
+        {healthOk && (
+          <span className="fqp-notification-dot" style={{ background: 'var(--fqp-success)' }} />
+        )}
         {data.healthError && (
           <span style={{ color: 'var(--fqp-red-neon)', fontSize: '12px' }}>{data.healthError}</span>
         )}
@@ -272,38 +264,40 @@ export default function DashboardPage() {
         </span>
       </Card>
 
-      {/* Stat cards */}
+      {/* Stat cards — staggered entrance */}
       <div className="fqp-grid-4" style={{ marginBottom: '24px' }}>
-        <Card title="可分析比赛">
+        <Card title="可分析比赛" entranceDelay={0}>
           <div className="fqp-stat-card" style={{ padding: 0 }}>
-            <div className="fqp-stat-value">{data.matchCount}</div>
+            <div className="fqp-stat-value">
+              <CountUp value={todayKpis.find(k => k.key === 'predicted_match_count')?.value ?? 0} />
+            </div>
             <div className="fqp-stat-sub">
-              {data.matchCount > 0 ? '场已生成特征快照' : '暂无比赛数据'}
+              {todayKpis.length > 0 ? '场体彩在售 · 模型已预测' : '加载中...'}
             </div>
           </div>
         </Card>
 
-        <Card title="模型预测">
+        <Card title="模型预测" entranceDelay={80}>
           <div className="fqp-stat-card" style={{ padding: 0 }}>
-            <div className="fqp-stat-value">{data.predictionCount}</div>
+            <div className="fqp-stat-value"><CountUp value={data.predictionCount} /></div>
             <div className="fqp-stat-sub">
               {data.predictionCount > 0 ? '条预测结果' : '等待模型计算'}
             </div>
           </div>
         </Card>
 
-        <Card title="活跃推荐">
+        <Card title="活跃推荐" entranceDelay={160}>
           <div className="fqp-stat-card" style={{ padding: 0 }}>
-            <div className="fqp-stat-value">{data.activeTicketCount}</div>
+            <div className="fqp-stat-value"><CountUp value={data.activeTicketCount} /></div>
             <div className="fqp-stat-sub">
               {data.activeTicketCount > 0 ? '张推荐票单待确认' : '暂无活跃推荐'}
             </div>
           </div>
         </Card>
 
-        <Card title="实票记录">
+        <Card title="实票记录" entranceDelay={240}>
           <div className="fqp-stat-card" style={{ padding: 0 }}>
-            <div className="fqp-stat-value">{data.realTicketCount}</div>
+            <div className="fqp-stat-value"><CountUp value={data.realTicketCount} /></div>
             <div className="fqp-stat-sub">
               {data.realTicketCount > 0 ? '张实票已录入' : '暂无实票记录'}
             </div>
@@ -311,17 +305,60 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      {/* Charts row */}
+      {/* AI资金池 + 盈亏趋势 */}
       <div className="fqp-grid-2" style={{ marginBottom: '24px' }}>
-        {completenessDonutOption ? (
-          <ChartCard title="数据完整度分布" option={completenessDonutOption} height={280} />
-        ) : (
-          <Card title="数据完整度分布">
-            <div style={{ padding: '40px 0', textAlign: 'center', color: 'var(--fqp-text-muted)', fontSize: '13px' }}>
-              等待特征快照数据...
+        {/* AI 虚拟资金池仪表盘 — 取代数据完整度环状图 */}
+        <Card title="AI 虚拟资金池">
+          <div style={{ padding: '8px 0' }}>
+            {/* 大数字：已用 / 总额 */}
+            <div style={{ textAlign: 'center', marginBottom: '16px' }}>
+              <div style={{ fontSize: '36px', fontWeight: 700, color: 'var(--fqp-text)', fontFamily: "'JetBrains Mono', monospace" }}>
+                <CountUp value={data.activeTicketCount * 2} /> / 500
+              </div>
+              <div style={{ fontSize: '13px', color: 'var(--fqp-text-muted)', marginTop: '4px' }}>
+                已使用 ¥{data.activeTicketCount * 2} / ¥500 （每日预算）
+              </div>
             </div>
-          </Card>
-        )}
+
+            {/* 进度条 */}
+            <div style={{
+              width: '100%', height: '10px',
+              background: 'rgba(255,255,255,0.06)', borderRadius: '6px',
+              overflow: 'hidden', marginBottom: '16px',
+            }}>
+              <div style={{
+                width: `${Math.min((data.activeTicketCount * 2 / 500) * 100, 100)}%`,
+                height: '100%',
+                background: 'linear-gradient(90deg, #3B82F6, #FF2A3D)',
+                borderRadius: '6px',
+                transition: 'width 0.8s cubic-bezier(0.34,1.56,0.64,1)',
+              }} />
+            </div>
+
+            {/* 关键指标三列 */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
+              <div style={{ textAlign: 'center', padding: '8px', background: 'rgba(255,255,255,0.03)', borderRadius: '6px' }}>
+                <div className="fqp-mono" style={{ fontSize: '18px', fontWeight: 700, color: '#3B82F6' }}>
+                  {data.activeTicketCount}
+                </div>
+                <div style={{ fontSize: '11px', color: 'var(--fqp-text-muted)' }}>票单数</div>
+              </div>
+              <div style={{ textAlign: 'center', padding: '8px', background: 'rgba(255,255,255,0.03)', borderRadius: '6px' }}>
+                <div className="fqp-mono" style={{ fontSize: '18px', fontWeight: 700, color: '#F5A524' }}>
+                  <CountUp value={data.predictionCount} />
+                </div>
+                <div style={{ fontSize: '11px', color: 'var(--fqp-text-muted)' }}>待开奖</div>
+              </div>
+              <div style={{ textAlign: 'center', padding: '8px', background: 'rgba(255,255,255,0.03)', borderRadius: '6px' }}>
+                <div className="fqp-mono" style={{ fontSize: '18px', fontWeight: 700, color: '#22C55E' }}>
+                  <CountUp value={todayKpis.find(k => k.key === 'predicted_match_count')?.value ?? 0} />
+                </div>
+                <div style={{ fontSize: '11px', color: 'var(--fqp-text-muted)' }}>可分析比赛</div>
+              </div>
+            </div>
+          </div>
+        </Card>
+
         {dailyTrendOption ? (
           <ChartCard title="近期实盘盈亏趋势" option={dailyTrendOption} height={300} />
         ) : (
@@ -390,10 +427,54 @@ export default function DashboardPage() {
         </Card>
       </div>
 
+      {/* Dashboard API Charts — AI vs ROI comparison + pool usage */}
+      <div className="fqp-grid-2" style={{ marginBottom: '24px' }}>
+        {roiDaily.length > 0 ? (
+          <RoiLineChart
+            data={roiDaily.map((d) => ({
+              date: d.snapshot_date.slice(5),
+              agentRoi: d.agent_cumulative_roi,
+              userRoi: d.user_cumulative_roi,
+            }))}
+            title="累计 ROI 对比"
+            height={280}
+          />
+        ) : (
+          <Card title="累计 ROI 对比">
+            <EmptyChartState
+              icon="📈"
+              title={dashLoading ? '加载中...' : '暂无数据'}
+              description={dashLoading ? '正在获取 Dashboard 数据' : (dashError || '等待 ROI 数据')}
+              height={260}
+            />
+          </Card>
+        )}
+
+        {/* AI 虚拟池综合看板 — 多维度数据 */}
+        <Card title="AI 虚拟池概览" subtitle="当日模拟统计">
+          <AiPoolDashboard
+            kpis={todayKpis}
+            models={modelPerf}
+            extras={todayExtras}
+            pageStats={{
+              matchCount: todayKpis.find(k => k.key === 'predicted_match_count')?.value ?? data.matchCount,
+              predictionCount: data.predictionCount,
+              activeTicketCount: data.activeTicketCount,
+              realTicketCount: data.realTicketCount,
+            }}
+            loading={dashLoading}
+            error={dashError}
+          />
+        </Card>
+      </div>
+
       {/* System status summary */}
       <Card title="系统状态总览">
         {data.loading ? (
-          <LoadingSpinner text="正在检测各模块状态..." />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <Skeleton variant="card" height={80} count={4} />
+              <Skeleton variant="card" height={200} count={2} />
+            </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             {[
@@ -408,9 +489,11 @@ export default function DashboardPage() {
                 detail: data.teamCount > 0 ? `${data.teamCount} 支` : '等待数据采集',
               },
               {
-                label: '特征快照',
-                ok: data.matchCount > 0,
-                detail: data.matchCount > 0 ? `${data.matchCount} 场` : '等待比赛数据',
+                label: '体彩在售',
+                ok: (todayKpis.find(k => k.key === 'predicted_match_count')?.value ?? 0) > 0,
+                detail: todayKpis.length > 0
+                  ? `${todayKpis.find(k => k.key === 'predicted_match_count')?.value ?? 0} 场 · 模型已预测`
+                  : '等待体彩数据',
               },
               {
                 label: '模型预测',
@@ -427,15 +510,17 @@ export default function DashboardPage() {
                 ok: true,
                 detail: data.latestReview ? `最近: ${data.latestReview}` : '就绪，等待首份日报',
               },
-            ].map((item) => (
+            ].map((item, i) => (
               <div
                 key={item.label}
+                className="fqp-anim-listItemEnter"
                 style={{
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
                   padding: '8px 0',
                   borderBottom: '1px solid rgba(39,39,42,0.3)',
+                  animationDelay: `${i * 50}ms`,
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>

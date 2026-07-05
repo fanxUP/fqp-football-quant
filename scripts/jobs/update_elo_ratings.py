@@ -29,26 +29,25 @@ def run(dry_run: bool = False) -> dict[str, Any]:
         cur.execute("""
             SELECT
                 m.id AS match_id,
-                m.home_team_id,
-                m.away_team_id,
-                m.match_date::text,
-                r.home_goals,
-                r.away_goals,
-                COALESCE(t1.name, '') AS home_name,
-                COALESCE(t2.name, '') AS away_name,
-                c.season,
-                c.league_tier
+                COALESCE(t1.id, 0) AS home_team_id,
+                COALESCE(t2.id, 0) AS away_team_id,
+                DATE(m.kickoff_time)::text AS match_date,
+                r.full_home_goals AS home_goals,
+                r.full_away_goals AS away_goals,
+                COALESCE(t1.team_name_cn, m.home_team_name) AS home_name,
+                COALESCE(t2.team_name_cn, m.away_team_name) AS away_name,
+                m.league_name AS season,
+                NULL AS league_tier
             FROM official_matches m
             JOIN official_results r ON r.match_id = m.id
-            LEFT JOIN teams t1 ON t1.id = m.home_team_id
-            LEFT JOIN teams t2 ON t2.id = m.away_team_id
-            LEFT JOIN competitions c ON c.id = m.competition_id
+            LEFT JOIN teams t1 ON t1.team_name_cn = m.home_team_name
+            LEFT JOIN teams t2 ON t2.team_name_cn = m.away_team_name
             LEFT JOIN elo_update_logs el ON el.match_id = m.id
-            WHERE r.home_goals IS NOT NULL
-              AND r.away_goals IS NOT NULL
+            WHERE r.full_home_goals IS NOT NULL
+              AND r.full_away_goals IS NOT NULL
               AND m.match_status = 'Settled'
               AND el.id IS NULL
-            ORDER BY m.match_date ASC, m.id ASC
+            ORDER BY m.kickoff_time ASC, m.id ASC
         """)
         matches = cur.fetchall()
 

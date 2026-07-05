@@ -8,8 +8,9 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import { api } from '../core/apiClient';
-import type { BacktestRun, BacktestResult } from '../core/types';
+import type { BacktestRun, BacktestResult, DashboardBacktestEquityItem } from '../core/types';
 import { PageHeader, Card, DataTable, ErrorState, LoadingSpinner } from '../shared/components';
+import { RoiLineChart, DrawdownChart } from '../visualization';
 
 // —— 类型 ——
 
@@ -53,6 +54,9 @@ export default function BacktestPage() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [results, setResults] = useState<BacktestResult[]>([]);
   const [form, setForm] = useState<BacktestFormState>(DEFAULT_FORM);
+  const [equityData, setEquityData] = useState<DashboardBacktestEquityItem[]>([]);
+  const [equityLoading, setEquityLoading] = useState(false);
+  const [showChart, setShowChart] = useState(false);
 
   // —— 加载回测列表 ——
   const loadRuns = useCallback(async () => {
@@ -76,10 +80,21 @@ export default function BacktestPage() {
   const loadDetail = useCallback(async (runId: number) => {
     setSelectedRun(runId);
     setDetailLoading(true);
+    setShowChart(false);
     try {
       const data = await api.backtests.get(runId);
       // 只显示聚合结果（window_index IS NULL）
       setResults(data.results.filter((r) => r.window_index === null));
+
+      // Also load equity curve data for charts
+      setEquityLoading(true);
+      api.dashboard.backtestEquity({ run_id: runId })
+        .then((res) => {
+          const series = res.data?.series || [];
+          setEquityData(series as DashboardBacktestEquityItem[]);
+        })
+        .catch(() => { /* equity data optional */ })
+        .finally(() => setEquityLoading(false));
     } catch (e) {
       setError((e as Error).message || '加载回测详情失败');
     } finally {
@@ -155,15 +170,15 @@ export default function BacktestPage() {
 
       {error && <ErrorState message={error} onRetry={loadRuns} />}
 
-      {/* 统计卡片 */}
+      {/* 统计卡片 — staggered entrance */}
       <div className="fqp-grid-4">
-        <Card>
+        <Card entranceDelay={0}>
           <div className="fqp-stat-card">
             <div className="fqp-stat-value">{runs.length}</div>
             <div className="fqp-stat-sub">回测总数</div>
           </div>
         </Card>
-        <Card>
+        <Card entranceDelay={80}>
           <div className="fqp-stat-card">
             <div className="fqp-stat-value">
               {runs.filter((r) => r.status === 'completed').length}
@@ -171,7 +186,7 @@ export default function BacktestPage() {
             <div className="fqp-stat-sub">已完成</div>
           </div>
         </Card>
-        <Card>
+        <Card entranceDelay={160}>
           <div className="fqp-stat-card">
             <div className="fqp-stat-value">
               {runs.filter((r) => r.status === 'running').length}
@@ -179,7 +194,7 @@ export default function BacktestPage() {
             <div className="fqp-stat-sub">运行中</div>
           </div>
         </Card>
-        <Card>
+        <Card entranceDelay={240}>
           <div className="fqp-stat-card">
             <div className="fqp-stat-value">
               {results.length}
@@ -189,8 +204,8 @@ export default function BacktestPage() {
         </Card>
       </div>
 
-      {/* 新建回测表单 */}
-      <Card title="新建回测">
+      {/* 新建回测表单 — staggered sections */}
+      <Card title="新建回测" entranceDelay={300}>
         <form onSubmit={handleSubmit} className="fqp-form">
           <div className="fqp-form-row">
             <div className="fqp-form-group">
@@ -294,9 +309,9 @@ export default function BacktestPage() {
         </form>
       </Card>
 
-      {/* 回测详情 */}
+      {/* 回测详情 — slide up reveal */}
       {selectedRun && (
-        <Card title={`回测详情 #${selectedRun}`}>
+        <Card title={`回测详情 #${selectedRun}`} style={{ animation: 'fqpSlideUpBounce 0.5s ease both' }}>
           {detailLoading ? (
             <LoadingSpinner />
           ) : results.length === 0 ? (
@@ -353,8 +368,8 @@ export default function BacktestPage() {
                 emptyText="暂无回测结果"
               />
 
-              {/* 模型上线门槛检查 */}
-              {results.map((r) => {
+              {/* 模型上线门槛检查 — staggered reveal */}
+              {results.map((r, ri) => {
                 const checks = {
                   '样本量 ≥ 1000': r.n_bets >= 1000,
                   'ROI > 0': (r.roi ?? -1) > 0,
@@ -363,15 +378,34 @@ export default function BacktestPage() {
                 };
                 const allPass = Object.values(checks).every(Boolean);
                 return (
-                  <div key={r.model_name} style={{ marginTop: 16, padding: 12, background: allPass ? '#ecfdf5' : '#fef3c7', borderRadius: 8 }}>
+                  <div
+                    key={r.model_name}
+                    style={{
+                      marginTop: 16,
+                      padding: 12,
+                      background: allPass ? 'rgba(0,255,136,0.06)' : 'rgba(255,193,7,0.06)',
+                      borderRadius: 8,
+                      border: `1px solid ${allPass ? 'rgba(0,255,136,0.2)' : 'rgba(255,193,7,0.2)'}`,
+                      animation: `fqpSlideUpBounce 0.4s ease both`,
+                      animationDelay: `${ri * 100}ms`,
+                    }}
+                  >
                     <strong>{r.model_name}</strong>
                     {' — '}
-                    <span style={{ color: allPass ? '#059669' : '#d97706' }}>
+                    <span style={{ color: allPass ? 'var(--fqp-success)' : 'var(--fqp-warning)' }}>
                       {allPass ? '✅ 满足上线门槛' : '⚠️ 未完全满足上线门槛'}
                     </span>
                     <div style={{ marginTop: 8, display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-                      {Object.entries(checks).map(([label, pass]) => (
-                        <span key={label} style={{ fontSize: 13, color: pass ? '#059669' : '#dc2626' }}>
+                      {Object.entries(checks).map(([label, pass], ci) => (
+                        <span
+                          key={label}
+                          style={{
+                            fontSize: 13,
+                            color: pass ? 'var(--fqp-success)' : 'var(--fqp-red-neon)',
+                            animation: `fqpBadgePop 0.3s ease both`,
+                            animationDelay: `${ri * 100 + ci * 60}ms`,
+                          }}
+                        >
                           {pass ? '✅' : '❌'} {label}
                         </span>
                       ))}
@@ -379,6 +413,44 @@ export default function BacktestPage() {
                   </div>
                 );
               })}
+
+              {/* Equity curve chart toggle */}
+              {equityData.length > 0 && (
+                <div style={{ marginTop: 20 }}>
+                  <button
+                    className="fqp-btn"
+                    style={{ fontSize: 12, padding: '4px 14px' }}
+                    onClick={() => setShowChart(!showChart)}
+                  >
+                    {showChart ? '隐藏图表' : '📈 查看资金曲线'}
+                  </button>
+                  {showChart && (
+                    <div style={{ marginTop: 12 }}>
+                      <RoiLineChart
+                        data={equityData.map((d) => ({
+                          date: `W${d.window_index}`,
+                          agentRoi: d.roi,
+                          userRoi: null,
+                        }))}
+                        title="窗口 ROI 曲线"
+                        agentLabel={equityData[0]?.model_name || '模型'}
+                        userLabel=""
+                        height={260}
+                      />
+                      <DrawdownChart
+                        data={equityData
+                          .filter((d) => d.max_drawdown_pct != null)
+                          .map((d) => ({
+                            date: `W${d.window_index}`,
+                            drawdownPct: -(d.max_drawdown_pct ?? 0),
+                          }))}
+                        title="窗口最大回撤"
+                        height={220}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </Card>

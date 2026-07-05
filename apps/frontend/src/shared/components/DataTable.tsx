@@ -1,3 +1,4 @@
+import { useCallback, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import LoadingSpinner from './LoadingSpinner';
 import EmptyState from './EmptyState';
@@ -19,6 +20,7 @@ interface DataTableProps<T = any> {
   emptyText?: string;
   loading?: boolean;
   rowKey?: (row: T) => string | number;
+  selectedRowKey?: string | number | null;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -29,7 +31,19 @@ export default function DataTable<T = any>({
   emptyText = '暂无数据',
   loading = false,
   rowKey,
+  selectedRowKey,
 }: DataTableProps<T>) {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    requestAnimationFrame(() => setMounted(true));
+  }, []);
+
+  // Reset stagger when rows change
+  useEffect(() => {
+    setMounted(false);
+    requestAnimationFrame(() => setMounted(true));
+  }, [rows.length]);
+
   if (loading) {
     return <LoadingSpinner text="加载数据中..." />;
   }
@@ -51,22 +65,33 @@ export default function DataTable<T = any>({
           </tr>
         </thead>
         <tbody>
-          {rows.map((row, i) => (
-            <tr
-              key={rowKey ? rowKey(row) : i}
-              className={onRowClick ? 'clickable' : undefined}
-              onClick={() => onRowClick?.(row)}
-            >
-              {columns.map((col) => {
-                const value = (row as Record<string, unknown>)[col.key];
-                return (
-                  <td key={col.key} style={{ textAlign: col.align || 'left' }}>
-                    {col.render ? col.render(value, row) : String(value ?? '')}
-                  </td>
-                );
-              })}
-            </tr>
-          ))}
+          {rows.map((row, i) => {
+            const key = rowKey ? rowKey(row) : i;
+            const isSelected = selectedRowKey != null && String(key) === String(selectedRowKey);
+            return (
+              <tr
+                key={key}
+                className={onRowClick ? 'clickable' : undefined}
+                data-selected={isSelected ? 'true' : undefined}
+                onClick={() => onRowClick?.(row)}
+                style={{
+                  animation: isSelected ? 'none' : undefined,
+                  opacity: mounted ? 1 : 0,
+                  transform: mounted ? 'translateX(0)' : 'translateX(-12px)',
+                  transition: `opacity 0.25s ease ${i * 30}ms, transform 0.25s ease ${i * 30}ms`,
+                }}
+              >
+                {columns.map((col) => {
+                  const value = (row as Record<string, unknown>)[col.key];
+                  return (
+                    <td key={col.key} style={{ textAlign: col.align || 'left' }}>
+                      {col.render ? col.render(value, row) : String(value ?? '')}
+                    </td>
+                  );
+                })}
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>

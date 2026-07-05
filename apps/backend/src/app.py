@@ -8,11 +8,14 @@ from apps.backend.src.routers import (
     agents,
     analysis,
     backtests,
+    competition,
+    dashboard,
     enrichment,
     health,
     ops,
     pool,
     predictions,
+    simulator,
     teams,
     tickets,
 )
@@ -35,5 +38,8 @@ def create_app() -> FastAPI:
     app.include_router(backtests.router)
     app.include_router(pool.router)
     app.include_router(analysis.router)
+    app.include_router(simulator.router)
+    app.include_router(competition.router)
+    app.include_router(dashboard.router)
 
     return app

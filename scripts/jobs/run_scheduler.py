@@ -128,6 +128,22 @@ def main() -> None:
                 id="crawl_official_odds",
             )
 
+            # Every 2 hours: traditional lottery (14场/任九) crawl
+            scheduler.add_job(
+                _audited_job(
+                    "crawl_traditional_lottery",
+                    "传统足彩采集",
+                    "crawler_agent",
+                    lambda: __import__(
+                        "scripts.jobs.crawl_traditional_lottery", fromlist=["run"]
+                    ).run(),
+                ),
+                "cron",
+                minute=7,
+                hour="6-23",
+                id="crawl_traditional_lottery",
+            )
+
             # Every 30 min: settle finished matches
             scheduler.add_job(
                 _audited_job(
@@ -413,6 +429,38 @@ def main() -> None:
                 id="audit_data_contamination",
             )
 
+            # Daily at 23:48: tag simulation ticket errors (框架 §13)
+            scheduler.add_job(
+                _audited_job(
+                    "tag_errors",
+                    "错因标签",
+                    "review_agent",
+                    lambda: __import__(
+                        "scripts.jobs.tag_errors", fromlist=["run"]
+                    ).run(),
+                ),
+                "cron",
+                hour=23,
+                minute=48,
+                id="tag_errors",
+            )
+
+            # Daily at 23:50: snapshot competition data
+            scheduler.add_job(
+                _audited_job(
+                    "snapshot_competition",
+                    "竞赛快照",
+                    "review_agent",
+                    lambda: __import__(
+                        "scripts.jobs.snapshot_competition", fromlist=["run"]
+                    ).run(),
+                ),
+                "cron",
+                hour=23,
+                minute=50,
+                id="snapshot_competition",
+            )
+
             # Daily at 23:55: collect health metrics (runs last to aggregate all daily results)
             scheduler.add_job(
                 _audited_job(
@@ -427,6 +475,22 @@ def main() -> None:
                 hour=23,
                 minute=55,
                 id="collect_health_metrics",
+            )
+
+            # Daily at 23:59: reset agent competition budget
+            scheduler.add_job(
+                _audited_job(
+                    "reset_agent_budget",
+                    "竞赛代理资金重置",
+                    "review_agent",
+                    lambda: __import__(
+                        "scripts.jobs.reset_agent_budget", fromlist=["run"]
+                    ).run(),
+                ),
+                "cron",
+                hour=23,
+                minute=59,
+                id="reset_agent_budget",
             )
 
             # Weekly on Sunday at 00:00: snapshot runtime environment
@@ -450,7 +514,7 @@ def main() -> None:
                 "settle_finished_matches, populate_teams_leagues, build_feature_snapshots, "
                 "collect_standings, collect_injury_data, collect_lineup_data, collect_weather, "
                 "mle_train_models, update_elo_ratings, run_model_prediction, run_recommendation_candidate, "
-                "settle_tickets, generate_daily_review, analyze_prediction_errors, compute_evaluation_metrics, "
+                "settle_tickets, generate_daily_review, analyze_prediction_errors, tag_errors, compute_evaluation_metrics, "
                 "verify_backup, validate_evidence_chain, audit_data_contamination, "
                 "collect_health_metrics, snapshot_runtime, run_backtest"
             )

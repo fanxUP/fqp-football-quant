@@ -259,7 +259,7 @@ def store_evaluation_metrics(
             try:
                 cur.execute(
                     """INSERT INTO market_efficiency_metrics
-                       (match_id, model_version_id, predict_time,
+                       (match_id, model_version_id, snapshot_time,
                         probability_gap, clv_score, favourite_longshot_score,
                         market_signal_level,
                         brier_score, log_loss, rps,
@@ -268,7 +268,7 @@ def store_evaluation_metrics(
                     (
                         m.get("match_id"),
                         m.get("model_version_id"),
-                        m.get("predict_time"),
+                        m.get("predict_time"),  # stored as snapshot_time
                         m.get("probability_gap"),
                         m.get("clv_score"),
                         m.get("favourite_longshot_score"),
@@ -316,8 +316,8 @@ def run(dry_run: bool = False) -> dict[str, Any]:
                 mp.option_code,
                 mv.model_name,
                 CASE
-                    WHEN r.home_goals > r.away_goals THEN '3'
-                    WHEN r.home_goals = r.away_goals THEN '1'
+                    WHEN r.full_home_goals > r.full_away_goals THEN '3'
+                    WHEN r.full_home_goals = r.full_away_goals THEN '1'
                     ELSE '0'
                 END AS actual_result
             FROM model_predictions mp
@@ -325,12 +325,12 @@ def run(dry_run: bool = False) -> dict[str, Any]:
             JOIN official_results r ON r.match_id = mp.match_id
             JOIN official_matches m ON m.id = mp.match_id
             WHERE m.match_status = 'Settled'
-              AND r.home_goals IS NOT NULL
+              AND r.full_home_goals IS NOT NULL
               AND NOT EXISTS (
                   SELECT 1 FROM market_efficiency_metrics mem
                   WHERE mem.match_id = mp.match_id
                     AND mem.model_version_id = mp.model_version_id
-                    AND mem.predict_time = mp.predict_time
+                    AND mem.snapshot_time = mp.predict_time
               )
             ORDER BY mp.match_id, mp.model_version_id, mp.option_code
         """)

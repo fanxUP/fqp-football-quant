@@ -70,6 +70,26 @@ export const api = {
   // Teams
   teams: () => request<{ teams: Team[]; total: number }>('/api/teams'),
 
+  // Matches
+  matches: {
+    today: () =>
+      request<{ matches: import('./types').TodayMatch[]; total: number }>('/api/matches/today'),
+    detail: (matchId: number) =>
+      request<import('./types').MatchDetail>(`/api/matches/${matchId}/detail`),
+  },
+
+  // Events (tournament center)
+  events: {
+    list: () =>
+      request<{ events: import('./types').EventSummary[]; total: number }>('/api/events'),
+    matches: (leagueName: string) =>
+      request<{ league_name: string; matches: import('./types').EventMatch[]; total: number }>(
+        `/api/events/${encodeURIComponent(leagueName)}`,
+      ),
+    allMatches: () =>
+      request<{ matches: import('./types').EventMatch[]; total: number }>('/api/events/all/matches'),
+  },
+
   // Feature snapshots
   features: (params?: { match_id?: number; limit?: number }) =>
     request<{ snapshots: FeatureSnapshot[]; total: number }>(
@@ -160,6 +180,7 @@ export const api = {
   // Ops health (Stage 8)
   ops: {
     health: () => request<Record<string, unknown>>('/api/ops/health'),
+    pipeline: () => request<Record<string, unknown>>('/api/ops/pipeline'),
     metrics: (days?: number) =>
       request<Record<string, unknown>>(`/api/ops/metrics${qs({ days })}`),
     evidenceChain: (days?: number) =>
@@ -242,6 +263,57 @@ export const api = {
       ),
   },
 
+  // Simulator (体彩模拟投注)
+  simulator: {
+    matches: (params?: { date?: string; league_name?: string; limit?: number }) =>
+      request<{ matches: import('./types').SimulatorMatch[]; total: number }>(
+        `/api/simulator/matches${qs({ date: params?.date, league_name: params?.league_name, limit: params?.limit ?? 50 })}`,
+      ),
+
+    calculate: (body: { items: import('./types').CalculateItem[]; pass_type: string; multiple: number }) =>
+      request<import('./types').CalculationResult>('/api/simulator/calculate', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
+
+    tickets: {
+      list: (params?: { status?: string; limit?: number; offset?: number }) =>
+        request<{ tickets: import('./types').SimulatorTicket[]; total: number }>(
+          `/api/simulator/tickets${qs({ status: params?.status, limit: params?.limit ?? 20, offset: params?.offset ?? 0 })}`,
+        ),
+
+      get: (id: number) =>
+        request<{ ticket: import('./types').SimulatorTicketDetail }>(`/api/simulator/tickets/${id}`),
+
+      create: (body: { play_type: string; pass_type: string; multiple: number; items: import('./types').CalculateItem[]; notes?: string }) =>
+        request<{ status: string; ticket: import('./types').SimulatorTicketDetail }>(
+          '/api/simulator/tickets',
+          { method: 'POST', body: JSON.stringify(body) },
+        ),
+
+      delete: (id: number) =>
+        request<{ status: string; refunded?: number }>(`/api/simulator/tickets/${id}`, {
+          method: 'DELETE',
+        }),
+    },
+
+    bankroll: {
+      summary: () =>
+        request<import('./types').BankrollSummary>('/api/simulator/bankroll'),
+
+      transactions: (limit?: number) =>
+        request<{ transactions: import('./types').BankrollTransaction[]; total: number }>(
+          `/api/simulator/bankroll/transactions${qs({ limit })}`,
+        ),
+
+      reset: () =>
+        request<{ status: string; balance: number }>('/api/simulator/bankroll/reset', {
+          method: 'POST',
+          body: JSON.stringify({ confirm: true }),
+        }),
+    },
+  },
+
   // Pool lottery (Phase 10)
   pool: {
     analyze: (params?: { budget?: number; strategy?: string }) =>
@@ -251,5 +323,82 @@ export const api = {
 
     sample: () =>
       request<Record<string, unknown>>('/api/pool/sample'),
+  },
+
+  // Competition (Agent vs User)
+  competition: {
+    currentRound: () =>
+      request<import('./types').CompetitionRound>('/api/competition/rounds/current'),
+
+    rounds: (params?: { limit?: number; status?: string }) =>
+      request<{ rounds: import('./types').CompetitionRound[]; total: number }>(
+        `/api/competition/rounds${qs({ limit: params?.limit, status: params?.status })}`,
+      ),
+
+    round: (id: number) =>
+      request<import('./types').CompetitionRound>(`/api/competition/rounds/${id}`),
+
+    trend: (roundId?: number) =>
+      request<{ round_id: number; trend: import('./types').CompetitionTrendPoint[] }>(
+        `/api/competition/trend${qs({ round_id: roundId })}`,
+      ),
+
+    summary: () =>
+      request<import('./types').CompetitionSummary>('/api/competition/summary'),
+
+    currentTickets: () =>
+      request<{
+        round_id: number;
+        round_label: string;
+        tickets: import('./types').CompetitionTicket[];
+        total: number;
+        total_stake: number;
+      }>('/api/competition/rounds/current/tickets'),
+  },
+
+  // Dashboard (data visualization)
+  dashboard: {
+    today: () =>
+      request<import('./types').DashboardResponse<never>>('/api/dashboard/today'),
+
+    roiDaily: (params?: { days?: number }) =>
+      request<import('./types').DashboardResponse<import('./types').DashboardRoiDailyItem>>(
+        `/api/dashboard/roi/daily${qs({ days: params?.days })}`,
+      ),
+
+    roiPeriod: (params?: { limit?: number }) =>
+      request<import('./types').DashboardResponse<import('./types').DashboardRoiPeriodItem>>(
+        `/api/dashboard/roi/period${qs({ limit: params?.limit })}`,
+      ),
+
+    recommendations: (params?: { match_id?: number; limit?: number; min_ev?: number }) =>
+      request<import('./types').DashboardResponse<import('./types').DashboardRecommendationItem>>(
+        `/api/dashboard/recommendations${qs({ match_id: params?.match_id, limit: params?.limit, min_ev: params?.min_ev })}`,
+      ),
+
+    oddsMovement: (params: { match_id: number; play_type?: string; option_code?: string }) =>
+      request<import('./types').DashboardResponse<import('./types').DashboardOddsPoint>>(
+        `/api/dashboard/odds/movement${qs({ match_id: params.match_id, play_type: params?.play_type, option_code: params?.option_code })}`,
+      ),
+
+    modelPerformance: (params?: { model_name?: string }) =>
+      request<import('./types').DashboardResponse<import('./types').DashboardModelPerfItem>>(
+        `/api/dashboard/model-performance${qs({ model_name: params?.model_name })}`,
+      ),
+
+    backtestEquity: (params: { run_id: number; model_name?: string }) =>
+      request<import('./types').DashboardResponse<import('./types').DashboardBacktestEquityItem>>(
+        `/api/dashboard/backtest/equity${qs({ run_id: params.run_id, model_name: params?.model_name })}`,
+      ),
+
+    ticketReview: (params?: { days?: number }) =>
+      request<import('./types').DashboardResponse<import('./types').DashboardTicketReviewItem>>(
+        `/api/dashboard/ticket-review${qs({ days: params?.days })}`,
+      ),
+
+    panels: () =>
+      request<import('./types').DashboardResponse<import('./types').DashboardPanelConfig>>(
+        '/api/dashboard/panels',
+      ),
   },
 };

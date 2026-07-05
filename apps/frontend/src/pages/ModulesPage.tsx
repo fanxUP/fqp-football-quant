@@ -30,13 +30,13 @@ export default function ModulesPage() {
       <PageHeader title="模块管理" />
 
       <div className="fqp-grid-2" style={{ marginBottom: '24px' }}>
-        {MODULE_REGISTRY.map((mod) => (
+        {MODULE_REGISTRY.map((mod, i) => (
           <Card
             key={mod.moduleCode}
             title={mod.moduleName}
             action={statusBadge(mod)}
             onClick={() => setSelected(mod)}
-            style={{ cursor: 'pointer' }}
+            style={{ cursor: 'pointer', animation: `fqpCardEnter 0.4s ease both`, animationDelay: `${i * 60}ms` }}
           >
             <div style={{ fontSize: '13px', color: 'var(--fqp-text-muted)', marginBottom: '12px' }}>
               {mod.description}

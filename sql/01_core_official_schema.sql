@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS official_matches (
 CREATE TABLE IF NOT EXISTS official_markets (
     id BIGSERIAL PRIMARY KEY,
     match_id BIGINT NOT NULL REFERENCES official_matches(id),
-    play_type VARCHAR(32) NOT NULL, -- spf/rqspf/score/total_goals/half_full/mixed
+    play_type VARCHAR(32) NOT NULL, -- spf/rqspf/bf/zjq/bqc/mixed (canonical codes)
     handicap NUMERIC(5,2),
     is_open BOOLEAN DEFAULT true,
     is_single_allowed BOOLEAN DEFAULT false,

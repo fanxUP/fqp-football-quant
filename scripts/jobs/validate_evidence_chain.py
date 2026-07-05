@@ -32,7 +32,7 @@ def _get_recent_ticket_items(conn: Any, days: int = 7) -> list[dict]:
                 sti.id AS item_id,
                 sti.odds_snapshot_id,
                 sti.model_prediction_id,
-                st.batch_id
+                st.budget_plan_id
             FROM simulation_ticket_items sti
             JOIN simulation_tickets st ON st.id = sti.ticket_id
             WHERE st.created_at >= CURRENT_DATE - INTERVAL '%s days'
@@ -41,7 +41,7 @@ def _get_recent_ticket_items(conn: Any, days: int = 7) -> list[dict]:
             """,
             (days,),
         )
-        cols = ["ticket_id", "item_id", "odds_snapshot_id", "model_prediction_id", "batch_id"]
+        cols = ["ticket_id", "item_id", "odds_snapshot_id", "model_prediction_id", "budget_plan_id"]
         return [dict(zip(cols, row)) for row in cur.fetchall()]
 
 
@@ -143,7 +143,7 @@ def run(dry_run: bool = False) -> dict[str, Any]:
             chain_details = {
                 "ticket_id": item["ticket_id"],
                 "item_id": item["item_id"],
-                "batch_id": item["batch_id"],
+                "batch_id": item["budget_plan_id"],
             }
             broken_link = None
             chain_ok = True

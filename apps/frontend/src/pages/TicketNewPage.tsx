@@ -7,6 +7,7 @@ import DisclaimerBanner, { PAGE_DEFAULTS } from '../shared/components/Disclaimer
 import Card from '../shared/components/Card';
 import StatusBadge from '../shared/components/StatusBadge';
 import { toast } from '../shared/components/Toast';
+import { PLAY_TYPE_LABELS, PASS_TYPE_LABELS } from '../shared/constants';
 
 interface ItemForm {
   match_id: string;
@@ -182,21 +183,40 @@ export default function TicketNewPage() {
     }
   };
 
+  // Track which fields are shaking
+  const [shakingFields, setShakingFields] = useState<Set<string>>(new Set());
+
   // ---- Validation ----
 
   const validate = (): boolean => {
     const errs: Record<string, string> = {};
+    const shake = new Set<string>();
     if (!ticket.total_amount || Number(ticket.total_amount) <= 0) {
       errs.total_amount = '请输入有效的投注金额';
+      shake.add('total_amount');
     }
     items.forEach((it, i) => {
       if (!it.sp_value || Number(it.sp_value) <= 0) {
         errs[`item_${i}_sp`] = '请输入有效赔率';
+        shake.add(`item_${i}_sp`);
       }
     });
     setErrors(errs);
+    if (shake.size > 0) {
+      setShakingFields(shake);
+      setTimeout(() => setShakingFields(new Set()), 500);
+    }
     return Object.keys(errs).length === 0;
   };
+
+  // OCR result reveal state
+  const [ocrRevealed, setOcrRevealed] = useState(false);
+  useEffect(() => {
+    if (ocrResult) {
+      setOcrRevealed(false);
+      requestAnimationFrame(() => setOcrRevealed(true));
+    }
+  }, [ocrResult?.success]);
 
   // ---- Submit ----
 
@@ -244,7 +264,7 @@ export default function TicketNewPage() {
       <DisclaimerBanner text={PAGE_DEFAULTS.tickets} type="page" />
 
       {/* ---- OCR Upload Section ---- */}
-      <Card title="📷 拍照/截图识别（可选）" style={{ marginBottom: '20px' }}>
+      <Card title="📷 拍照/截图识别（可选）" style={{ marginBottom: '20px' }} entranceDelay={0}>
         <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
           {/* Upload area */}
           <div style={{ flex: '1', minWidth: '200px' }}>
@@ -340,7 +360,7 @@ export default function TicketNewPage() {
           </div>
         )}
 
-        {/* OCR result summary */}
+        {/* OCR result summary — expand reveal */}
         {ocrResult && (
           <div style={{
             marginTop: '12px',
@@ -349,6 +369,8 @@ export default function TicketNewPage() {
             border: `1px solid ${ocrResult.success ? 'rgba(52,211,153,0.3)' : 'rgba(252,186,3,0.3)'}`,
             borderRadius: '6px',
             fontSize: '12px',
+            animation: `fqpSlideUpBounce 0.5s ease both`,
+            overflow: 'hidden',
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
               <StatusBadge
@@ -377,7 +399,7 @@ export default function TicketNewPage() {
       </Card>
 
       {/* Ticket fields */}
-      <Card title="票单信息" style={{ marginBottom: '20px' }}>
+      <Card title="票单信息" style={{ marginBottom: '20px' }} entranceDelay={100}>
         <div className="fqp-form-row">
           <div className="fqp-form-group">
             <label className="fqp-label">投注金额 (¥)</label>
@@ -389,6 +411,9 @@ export default function TicketNewPage() {
               value={ticket.total_amount}
               onChange={(e) => updateTicket('total_amount', e.target.value)}
               placeholder="如: 10"
+              style={{
+                animation: shakingFields.has('total_amount') ? 'fqpShake 0.5s ease' : undefined,
+              }}
             />
             {errors.total_amount && <div className="fqp-form-error">{errors.total_amount}</div>}
           </div>
@@ -450,6 +475,7 @@ export default function TicketNewPage() {
           </button>
         }
         style={{ marginBottom: '20px' }}
+        entranceDelay={200}
       >
         {items.map((it, idx) => (
           <div
@@ -483,7 +509,7 @@ export default function TicketNewPage() {
                 onChange={(e) => updateItem(idx, 'play_type', e.target.value)}
               >
                 {PLAY_TYPES.map((pt) => (
-                  <option key={pt} value={pt}>{pt.toUpperCase()}</option>
+                  <option key={pt} value={pt}>{PLAY_TYPE_LABELS[pt] || pt}</option>
                 ))}
               </select>
             </div>
@@ -517,6 +543,9 @@ export default function TicketNewPage() {
                 placeholder="如 2.50"
                 value={it.sp_value}
                 onChange={(e) => updateItem(idx, 'sp_value', e.target.value)}
+                style={{
+                  animation: shakingFields.has(`item_${idx}_sp`) ? 'fqpShake 0.5s ease' : undefined,
+                }}
               />
               {errors[`item_${idx}_sp`] && (
                 <div className="fqp-form-error">{errors[`item_${idx}_sp`]}</div>

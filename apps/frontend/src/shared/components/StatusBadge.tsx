@@ -1,3 +1,5 @@
+import { useEffect, useState } from 'react';
+
 type StatusType = 'ok' | 'warning' | 'error' | 'info' | 'disabled';
 
 interface StatusBadgeProps {
@@ -7,9 +9,30 @@ interface StatusBadgeProps {
 }
 
 export default function StatusBadge({ status, label, dot = false }: StatusBadgeProps) {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    requestAnimationFrame(() => setMounted(true));
+  }, []);
+
+  const isAlert = dot && (status === 'warning' || status === 'error');
+
   return (
-    <span className={`fqp-badge fqp-badge-${status}`}>
-      {dot && <span className={`fqp-status-dot fqp-status-dot-${status}`} />}
+    <span
+      className={`fqp-badge fqp-badge-${status}`}
+      style={{
+        animation: mounted ? 'fqpBadgePop 0.3s ease both' : undefined,
+      }}
+    >
+      {dot && (
+        <span
+          className={`fqp-status-dot fqp-status-dot-${status}`}
+          style={
+            isAlert
+              ? { animation: 'fqpNotificationDot 2s infinite' }
+              : undefined
+          }
+        />
+      )}
       {label}
     </span>
   );

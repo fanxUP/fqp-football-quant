@@ -168,8 +168,8 @@ def _load_training_data(
                 fs.league_name,
                 {col_refs},
                 CASE
-                    WHEN r.home_goals > r.away_goals THEN 2
-                    WHEN r.home_goals = r.away_goals THEN 1
+                    WHEN r.full_home_goals > r.full_away_goals THEN 2
+                    WHEN r.full_home_goals = r.full_away_goals THEN 1
                     ELSE 0
                 END AS label
             FROM match_feature_snapshots fs
@@ -690,9 +690,9 @@ def get_calibration_data(
                 SELECT
                     mp.model_probability,
                     CASE
-                        WHEN r.home_goals > r.away_goals AND mp.option_code = '3' THEN 1
-                        WHEN r.home_goals = r.away_goals AND mp.option_code = '1' THEN 1
-                        WHEN r.home_goals < r.away_goals AND mp.option_code = '0' THEN 1
+                        WHEN r.full_home_goals > r.full_away_goals AND mp.option_code = '3' THEN 1
+                        WHEN r.full_home_goals = r.full_away_goals AND mp.option_code = '1' THEN 1
+                        WHEN r.full_home_goals < r.full_away_goals AND mp.option_code = '0' THEN 1
                         ELSE 0
                     END AS is_correct
                 FROM model_predictions mp
@@ -709,9 +709,9 @@ def get_calibration_data(
                 SELECT
                     mp.model_probability,
                     CASE
-                        WHEN r.home_goals > r.away_goals AND mp.option_code = '3' THEN 1
-                        WHEN r.home_goals = r.away_goals AND mp.option_code = '1' THEN 1
-                        WHEN r.home_goals < r.away_goals AND mp.option_code = '0' THEN 1
+                        WHEN r.full_home_goals > r.full_away_goals AND mp.option_code = '3' THEN 1
+                        WHEN r.full_home_goals = r.full_away_goals AND mp.option_code = '1' THEN 1
+                        WHEN r.full_home_goals < r.full_away_goals AND mp.option_code = '0' THEN 1
                         ELSE 0
                     END AS is_correct
                 FROM model_predictions mp
@@ -871,9 +871,9 @@ def recommend_best_combos(conn: Any, min_samples: int = 5, top_n: int = 15) -> l
                 CASE
                     WHEN mp.play_type = 'spf' AND mp.option_code = r.spf_result THEN 1
                     WHEN mp.play_type = 'rqspf' AND mp.option_code = r.rqspf_result THEN 1
-                    WHEN mp.play_type = 'total_goals' AND mp.option_code = r.total_goals_result THEN 1
-                    WHEN mp.play_type = 'score' AND mp.option_code = r.score_result THEN 1
-                    WHEN mp.play_type = 'half_full' AND mp.option_code = r.half_full_result THEN 1
+                    WHEN mp.play_type IN ('zjq', 'total_goals') AND mp.option_code = r.total_goals_result THEN 1
+                    WHEN mp.play_type IN ('bf', 'score') AND mp.option_code = r.score_result THEN 1
+                    WHEN mp.play_type IN ('bqc', 'half_full') AND mp.option_code = r.half_full_result THEN 1
                     ELSE 0
                 END
             ) AS wins,
@@ -882,9 +882,9 @@ def recommend_best_combos(conn: Any, min_samples: int = 5, top_n: int = 15) -> l
                     CASE
                         WHEN mp.play_type = 'spf' AND mp.option_code = r.spf_result THEN 1
                         WHEN mp.play_type = 'rqspf' AND mp.option_code = r.rqspf_result THEN 1
-                        WHEN mp.play_type = 'total_goals' AND mp.option_code = r.total_goals_result THEN 1
-                        WHEN mp.play_type = 'score' AND mp.option_code = r.score_result THEN 1
-                        WHEN mp.play_type = 'half_full' AND mp.option_code = r.half_full_result THEN 1
+                        WHEN mp.play_type IN ('zjq', 'total_goals') AND mp.option_code = r.total_goals_result THEN 1
+                        WHEN mp.play_type IN ('bf', 'score') AND mp.option_code = r.score_result THEN 1
+                        WHEN mp.play_type IN ('bqc', 'half_full') AND mp.option_code = r.half_full_result THEN 1
                         ELSE 0
                     END
                 )::numeric / NULLIF(COUNT(*), 0)::numeric, 4
@@ -893,7 +893,7 @@ def recommend_best_combos(conn: Any, min_samples: int = 5, top_n: int = 15) -> l
         JOIN model_versions mv ON mv.id = mp.model_version_id
         JOIN official_results r ON r.match_id = mp.match_id
         WHERE r.result_status = 'final'
-          AND mp.play_type IN ('spf', 'rqspf', 'total_goals', 'score', 'half_full')
+          AND mp.play_type IN ('spf', 'rqspf', 'bf', 'zjq', 'bqc')
         GROUP BY mv.model_name, mp.play_type
         HAVING COUNT(*) >= %(min_samples)s
         ORDER BY hit_rate DESC, total DESC

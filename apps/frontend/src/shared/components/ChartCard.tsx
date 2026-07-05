@@ -5,12 +5,27 @@ import { useTheme } from '../../app/ThemeContext';
 
 interface ChartCardProps {
   title: string;
+  subtitle?: string;
   option: Record<string, unknown>;
   height?: number;
   loading?: boolean;
+  empty?: boolean;
+  emptyReason?: string;
+  error?: string | null;
+  updatedAt?: string;
 }
 
-export default function ChartCard({ title, option, height = 300, loading = false }: ChartCardProps) {
+export default function ChartCard({
+  title,
+  subtitle,
+  option,
+  height = 300,
+  loading = false,
+  empty = false,
+  emptyReason,
+  error,
+  updatedAt,
+}: ChartCardProps) {
   const chartRef = useRef<HTMLDivElement>(null);
   const instanceRef = useRef<echarts.ECharts | null>(null);
   const { theme } = useTheme();
@@ -22,8 +37,8 @@ export default function ChartCard({ title, option, height = 300, loading = false
 
     const themedOption = {
       backgroundColor: 'transparent',
-      textStyle: { color: textColor, fontSize: 12 },
-      legend: { textStyle: { color: textColor, fontSize: 12 } },
+      textStyle: { color: textColor, fontSize: 14 },
+      legend: { textStyle: { color: textColor, fontSize: 14 } },
       ...option,
     };
 
@@ -40,9 +55,10 @@ export default function ChartCard({ title, option, height = 300, loading = false
     };
   }, [option, theme]);
 
-  return (
-    <Card title={title}>
-      {loading ? (
+  // Determine what to render inside the card
+  const renderBody = () => {
+    if (loading) {
+      return (
         <div
           style={{
             height,
@@ -52,11 +68,91 @@ export default function ChartCard({ title, option, height = 300, loading = false
             color: 'var(--fqp-text-muted)',
           }}
         >
-          加载图表...
+          <div
+            className="fqp-skeleton"
+            style={{ width: '90%', height: '70%', borderRadius: 'var(--fqp-radius-sm)' }}
+          />
         </div>
-      ) : (
-        <div ref={chartRef} style={{ width: '100%', height }} />
+      );
+    }
+    if (error) {
+      return (
+        <div
+          style={{
+            height,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: 'var(--fqp-red-neon)',
+            gap: 8,
+          }}
+        >
+          <span style={{ fontSize: 28 }}>⚠️</span>
+          <span style={{ fontSize: 13 }}>{error}</span>
+        </div>
+      );
+    }
+    if (empty) {
+      return (
+        <div
+          style={{
+            height,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: 'var(--fqp-text-muted)',
+            gap: 8,
+          }}
+        >
+          <span style={{ fontSize: 28, opacity: 0.5 }}>📊</span>
+          <span style={{ fontSize: 13 }}>{emptyReason || '暂无数据'}</span>
+        </div>
+      );
+    }
+    return (
+      <div
+        ref={chartRef}
+        className="fqp-anim-chartReveal"
+        style={{ width: '100%', height }}
+      />
+    );
+  };
+
+  return (
+    <Card>
+      {/* Header: title + subtitle + updatedAt */}
+      {(title || subtitle || updatedAt) && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'baseline',
+            justifyContent: 'space-between',
+            marginBottom: '12px',
+            gap: 8,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+            {title && (
+              <h3 style={{ color: 'var(--fqp-text)', fontSize: '16px', margin: 0, fontWeight: 600 }}>
+                {title}
+              </h3>
+            )}
+            {subtitle && (
+              <span style={{ fontSize: '12px', color: 'var(--fqp-text-muted)' }}>
+                {subtitle}
+              </span>
+            )}
+          </div>
+          {updatedAt && (
+            <span style={{ fontSize: '11px', color: 'var(--fqp-text-muted)', whiteSpace: 'nowrap' }}>
+              更新: {updatedAt}
+            </span>
+          )}
+        </div>
       )}
+      {renderBody()}
     </Card>
   );
 }

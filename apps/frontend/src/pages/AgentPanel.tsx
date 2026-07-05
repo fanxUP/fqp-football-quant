@@ -6,6 +6,7 @@ import Card from '../shared/components/Card';
 import DataTable, { type Column } from '../shared/components/DataTable';
 import StatusBadge from '../shared/components/StatusBadge';
 import ErrorState from '../shared/components/ErrorState';
+import { statusLabel, riskLabel, actionLabel } from '../shared/constants';
 
 type TabKey = 'tasks' | 'jobs' | 'audit';
 
@@ -67,9 +68,11 @@ export default function AgentPanel() {
         ))}
       </div>
 
-      {activeTab === 'tasks' && <TasksTab />}
-      {activeTab === 'jobs' && <JobsTab />}
-      {activeTab === 'audit' && <AuditTab />}
+      <div key={activeTab} className="fqp-anim-fadeIn">
+        {activeTab === 'tasks' && <TasksTab />}
+        {activeTab === 'jobs' && <JobsTab />}
+        {activeTab === 'audit' && <AuditTab />}
+      </div>
     </div>
   );
 }
@@ -111,12 +114,12 @@ function TasksTab() {
       key: 'risk_level',
       title: '风险',
       width: '60px',
-      render: (v) => <StatusBadge status={v === 'L4' || v === 'L5' ? 'error' : v === 'L3' ? 'warning' : 'info'} label={String(v)} />,
+      render: (v) => <StatusBadge status={v === 'L4' || v === 'L5' ? 'error' : v === 'L3' ? 'warning' : 'info'} label={riskLabel(String(v))} />,
     },
     {
       key: 'status',
       title: '状态',
-      render: (v) => <StatusBadge status={statusBadge(String(v))} label={String(v)} />,
+      render: (v) => <StatusBadge status={statusBadge(String(v))} label={statusLabel(String(v))} />,
     },
     {
       key: 'human_review_required',
@@ -191,7 +194,7 @@ function JobsTab() {
     {
       key: 'status',
       title: '状态',
-      render: (v) => <StatusBadge status={statusBadge(String(v))} label={String(v)} />,
+      render: (v) => <StatusBadge status={statusBadge(String(v))} label={statusLabel(String(v))} />,
     },
     {
       key: 'started_at',
@@ -254,7 +257,7 @@ function AuditTab() {
     {
       key: 'result_status',
       title: '结果',
-      render: (v) => <StatusBadge status={v === 'completed' ? 'ok' : v === 'failed' ? 'error' : 'info'} label={String(v)} />,
+      render: (v) => <StatusBadge status={v === 'completed' ? 'ok' : v === 'failed' ? 'error' : 'info'} label={statusLabel(String(v))} />,
     },
     {
       key: 'result_summary',

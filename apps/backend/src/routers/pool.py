@@ -48,21 +48,21 @@ def run_pool_analysis(
                     m.home_team_name AS home_team,
                     m.away_team_name AS away_team,
                     m.league_name AS league,
-                    m.match_date::text AS match_date,
+                    m.kickoff_time::text AS match_date,
                     mv.model_name
                 FROM model_predictions mp
                 JOIN official_matches m ON m.id = mp.match_id
                 JOIN model_versions mv ON mv.id = mp.model_version_id
+                WHERE m.match_status = 'Selling'
                 ORDER BY mp.match_id, mp.predict_time DESC
-                LIMIT 14
                 """
             )
             matches = cur.fetchall()
 
-            if len(matches) < 14:
+            if len(matches) < 2:
                 raise HTTPException(
                     400,
-                    f"当前只有 {len(matches)} 场比赛有模型预测，需要至少14场才能进行传统足彩分析",
+                    f"当前只有 {len(matches)} 场比赛有模型预测，需要至少2场",
                 )
 
             # 对每场比赛获取完整的3/1/0概率

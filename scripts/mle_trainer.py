@@ -173,17 +173,17 @@ def _load_match_data(
 
     where = "m.match_status = 'Settled'"
     params: tuple = ()
-    if league_id:
-        where += " AND m.competition_id = %s"
-        params = (league_id,)
+    # league_id filter not available (no competition_id on official_matches)
 
     cur.execute(
         f"""
-        SELECT m.home_team_id, m.away_team_id, r.home_goals, r.away_goals
+        SELECT COALESCE(t1.id, 0), COALESCE(t2.id, 0), r.full_home_goals, r.full_away_goals
         FROM official_matches m
         JOIN official_results r ON r.match_id = m.id
-        WHERE {where} AND r.home_goals IS NOT NULL AND r.away_goals IS NOT NULL
-        ORDER BY m.match_date ASC
+        LEFT JOIN teams t1 ON t1.team_name_cn = m.home_team_name
+        LEFT JOIN teams t2 ON t2.team_name_cn = m.away_team_name
+        WHERE {where} AND r.full_home_goals IS NOT NULL AND r.full_away_goals IS NOT NULL
+        ORDER BY m.kickoff_time ASC
     """,
         params,
     )

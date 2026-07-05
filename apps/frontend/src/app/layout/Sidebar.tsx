@@ -8,19 +8,23 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { label: '今日', icon: '📊', path: '/' },
-  { label: '比赛', icon: '⚽', path: '/matches' },
-  { label: '推荐', icon: '🎯', path: '/recommendations' },
-  { label: '实票', icon: '🧾', path: '/tickets' },
-  { label: '复盘', icon: '📈', path: '/reviews' },
-  { label: '模型', icon: '🧠', path: '/models' },
-  { label: '数据', icon: '🗄️', path: '/data-health' },
-  { label: '模块', icon: '🧩', path: '/modules' },
-  { label: '设置', icon: '⚙️', path: '/settings' },
-  { label: 'Agent', icon: '🤖', path: '/agents' },
-  { label: '回测', icon: '⏪', path: '/backtest' },
-  { label: '足彩', icon: '🎱', path: '/pool' },
-  { label: '分析', icon: '📊', path: '/analysis' },
+  { label: '数据概览', icon: '📊', path: '/' },
+  { label: '开赛盘口', icon: '⚽', path: '/matches' },
+  { label: '赛事中心', icon: '🏆', path: '/events' },
+  { label: '智能推荐', icon: '🎯', path: '/recommendations' },
+  { label: '赔率走势', icon: '📉', path: '/odds' },
+  { label: '实票管理', icon: '🧾', path: '/tickets' },
+  { label: '复盘分析', icon: '📈', path: '/reviews' },
+  { label: '模型中心', icon: '🧠', path: '/models' },
+  { label: '系统监控', icon: '🗄️', path: '/data-health' },
+  { label: '功能模块', icon: '🧩', path: '/modules' },
+  { label: '系统设置', icon: '⚙️', path: '/settings' },
+  { label: '智能代理', icon: '🤖', path: '/agents' },
+  { label: '策略回测', icon: '⏪', path: '/backtest' },
+  { label: '足彩彩池', icon: '🎱', path: '/pool' },
+  { label: '深度分析', icon: '🔬', path: '/analysis' },
+  { label: '模拟投注', icon: '🎮', path: '/simulator' },
+  { label: '对抗竞赛', icon: '⚔️', path: '/competition' },
 ];
 
 interface SidebarProps {

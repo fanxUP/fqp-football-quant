@@ -39,11 +39,13 @@ export default function ReviewsPage() {
         ))}
       </div>
 
-      {activeTab === 'daily' && <DailyReviewsTab />}
-      {activeTab === 'weekly' && <WeeklyReviewsTab />}
-      {activeTab === 'monthly' && <MonthlyReviewsTab />}
-      {activeTab === 'settlements' && <SettlementsTab />}
-      {activeTab === 'errors' && <ErrorAnalysisTab />}
+      <div key={activeTab} className="fqp-anim-fadeIn">
+        {activeTab === 'daily' && <DailyReviewsTab />}
+        {activeTab === 'weekly' && <WeeklyReviewsTab />}
+        {activeTab === 'monthly' && <MonthlyReviewsTab />}
+        {activeTab === 'settlements' && <SettlementsTab />}
+        {activeTab === 'errors' && <ErrorAnalysisTab />}
+      </div>
     </div>
   );
 }
@@ -180,13 +182,17 @@ function DailyReviewsTab() {
           avoidLabelOverlap: true,
           label: {
             show: true,
+            position: 'outside',
             formatter: '{b}\n{d}%',
             fontSize: 12,
+            lineHeight: 17,
+            color: '#F4F5F7',
+            fontWeight: 600,
           },
           labelLine: {
-            length: 16,
-            length2: 24,
-            lineStyle: { color: 'rgba(255,255,255,0.2)' },
+            length: 22,
+            length2: 36,
+            lineStyle: { color: 'rgba(255,255,255,0.12)' },
           },
           data: [
             { value: winDays, name: '盈利日', itemStyle: { color: '#22c55e' } },
@@ -310,7 +316,7 @@ function DailyReviewsTab() {
         rowKey={(r) => r.review_date}
       />
       {expandedDate && (
-        <Card title={`📅 ${expandedDate} 日报详情`} style={{ marginTop: '16px' }}>
+        <Card title={`📅 ${expandedDate} 日报详情`} style={{ marginTop: '16px', animation: 'fqpSlideUpBounce 0.4s ease both' }}>
           {(() => {
             const review = reviews.find((r) => r.review_date === expandedDate);
             if (!review) return null;
@@ -539,7 +545,7 @@ function ErrorAnalysisTab() {
       {summary?.errors && summary.errors.length > 0 && (
         <Card title="近7天错因分布" style={{ marginBottom: '16px' }}>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px' }}>
-            {summary.errors.map((e) => (
+            {summary.errors.map((e, i) => (
               <div
                 key={e.error_type}
                 style={{
@@ -549,6 +555,8 @@ function ErrorAnalysisTab() {
                   display: 'flex',
                   alignItems: 'center',
                   gap: '8px',
+                  animation: `fqpBadgePop 0.3s ease both`,
+                  animationDelay: `${i * 80}ms`,
                 }}
               >
                 <StatusBadge status="warning" label={e.error_type} />

@@ -21,7 +21,7 @@ export default function SettingsPage() {
       <PageHeader title="本地设置" />
 
       {/* Budget */}
-      <Card title="资金管理" style={{ marginBottom: '20px' }}>
+      <Card title="资金管理" style={{ marginBottom: '20px' }} entranceDelay={0}>
         <div className="fqp-form-row">
           <div className="fqp-form-group">
             <label className="fqp-label">每日预算 (¥)</label>
@@ -55,7 +55,7 @@ export default function SettingsPage() {
       </Card>
 
       {/* Security */}
-      <Card title="安全" style={{ marginBottom: '20px' }}>
+      <Card title="安全" style={{ marginBottom: '20px' }} entranceDelay={100}>
         <div className="fqp-form-row">
           <div className="fqp-form-group">
             <label className="fqp-label">本地PIN保护</label>
@@ -69,7 +69,7 @@ export default function SettingsPage() {
             </select>
           </div>
           {settings.pinEnabled && (
-            <div className="fqp-form-group">
+            <div className="fqp-form-group" style={{ animation: 'fqpSlideInRight 0.3s ease both' }}>
               <label className="fqp-label">PIN码 (4-6位数字)</label>
               <input
                 className="fqp-input"
@@ -85,7 +85,7 @@ export default function SettingsPage() {
       </Card>
 
       {/* UI */}
-      <Card title="界面" style={{ marginBottom: '20px' }}>
+      <Card title="界面" style={{ marginBottom: '20px' }} entranceDelay={200}>
         <div className="fqp-form-row">
           <div className="fqp-form-group">
             <label className="fqp-label">动画效果</label>
@@ -113,7 +113,7 @@ export default function SettingsPage() {
       </Card>
 
       {/* Backup */}
-      <Card title="备份" style={{ marginBottom: '20px' }}>
+      <Card title="备份" style={{ marginBottom: '20px' }} entranceDelay={300}>
         <div className="fqp-form-group">
           <label className="fqp-label">备份路径</label>
           <input

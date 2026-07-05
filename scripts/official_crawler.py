@@ -17,32 +17,25 @@ from datetime import datetime
 from typing import Any
 
 from apps.backend.src.db import get_db
+from scripts.five100_client import get_match_results as get_results_via_500
 from scripts.official_storage import (
     log_crawl,
     store_markets,
     store_matches,
     store_odds_snapshots,
+    store_pool_issue,
+    store_pool_issue_matches,
     store_results,
     update_health,
 )
 from scripts.sporttery_client import SportteryClient
 
-# ---------------------------------------------------------------------------
-# Play-type mapping: sporttery poolCode → internal play_type
-# ---------------------------------------------------------------------------
-POOL_CODE_MAP: dict[str, str] = {
-    "HAD": "spf",  # 胜平负
-    "HHAD": "rqspf",  # 让球胜平负
-    "CRS": "score",  # 比分
-    "TTG": "total_goals",  # 总进球
-    "HAFU": "half_full",  # 半全场
-}
-
-# Option labels for each play type
-OPTION_LABELS: dict[str, dict[str, str]] = {
-    "spf": {"h": "主胜", "d": "平", "a": "客胜"},
-    "rqspf": {"h": "让球主胜", "d": "让球平", "a": "让球客胜"},
-}
+from scripts.play_type_registry import (
+    SPORTTERY_POOL_MAP as POOL_CODE_MAP,
+    OPTION_LABELS,
+    TRADITIONAL_GAME_TYPES,
+    TRADITIONAL_GAME_LABELS,
+)
 
 
 def _now() -> str:
@@ -511,9 +504,15 @@ def crawl_official_odds_snapshot(business_date: str) -> dict[str, Any]:
 
 
 def crawl_official_results(begin_date: str, end_date: str) -> dict[str, Any]:
-    """Fetch and store match results for a date range."""
+    """Fetch and store match results for a date range.
+
+    Tries Sporttery API first. Falls back to 500.com if Sporttery is blocked
+    (403 Forbidden / 567 Restricted Access).
+    """
     started = _now()
     client = SportteryClient()
+
+    # ── Attempt 1: Sporttery API ──────────────────────────────────────
     try:
         t0 = time.monotonic()
         raw = client.get_match_results(begin_date, end_date)
@@ -582,14 +581,324 @@ def crawl_official_results(begin_date: str, end_date: str) -> dict[str, Any]:
 
     except Exception as e:
         client.close()
+        error_msg = str(e)
+
+        # ── Attempt 2: 500.com fallback ────────────────────────────────
+        if "403" in error_msg or "567" in error_msg or "blocked" in error_msg.lower():
+            print(
+                f"[official_crawler] Sporttery blocked ({error_msg[:80]}), "
+                f"falling back to 500.com…"
+            )
+            try:
+                return _crawl_results_via_500(begin_date, end_date, started)
+            except Exception as fb_e:
+                print(f"[official_crawler] 500.com fallback also failed: {fb_e}")
+                error_msg = f"Sporttery: {error_msg}; 500.com: {fb_e}"
+
         with get_db() as conn:
             log_crawl(
                 conn,
                 source_name="sporttery",
                 crawl_type="results",
                 status="error",
-                error_message=str(e),
+                error_message=error_msg,
                 started_at=started,
             )
-            update_health(conn, "sporttery", "official", "error", 0, str(e))
+            update_health(conn, "sporttery", "official", "error", 0, error_msg)
+        return {"status": "error", "error": error_msg}
+
+
+def _crawl_results_via_500(
+    begin_date: str, end_date: str, started: str
+) -> dict[str, Any]:
+    """Crawl results from 500.com as a fallback when Sporttery is blocked.
+
+    Matches results to official_matches by team name + kickoff date.
+    """
+    t0 = time.monotonic()
+
+    with get_db() as conn:
+        results = get_results_via_500(begin_date, end_date, db_conn=conn)
+
+        if not results:
+            latency_ms = int((time.monotonic() - t0) * 1000)
+            log_crawl(
+                conn,
+                source_name="500.com",
+                crawl_type="results",
+                status="ok",
+                records_found=0,
+                started_at=started,
+            )
+            update_health(conn, "500.com", "official", "ok", latency_ms)
+            return {
+                "status": "ok",
+                "source": "500.com",
+                "results_found": 0,
+                "results_stored": 0,
+                "note": "no finished matches found on 500.com",
+            }
+
+        store_result = store_results(conn, results)
+
+        latency_ms = int((time.monotonic() - t0) * 1000)
+        log_crawl(
+            conn,
+            source_name="500.com",
+            crawl_type="results",
+            status="ok",
+            records_found=len(results),
+            records_inserted=store_result["inserted"],
+            records_updated=store_result["updated"],
+            started_at=started,
+        )
+        update_health(conn, "500.com", "official", "ok", latency_ms)
+
+    return {
+        "status": "ok",
+        "source": "500.com",
+        "results_found": len(results),
+        "results_inserted": store_result["inserted"],
+        "results_updated": store_result["updated"],
+        "latency_ms": latency_ms,
+    }
+
+
+# ---------------------------------------------------------------------------
+# V2: Uniform API (no WAF) — match schedule + odds
+# ---------------------------------------------------------------------------
+
+
+def crawl_official_schedule_v2(business_date: str | None = None) -> dict[str, Any]:
+    """Fetch match schedule + odds using uniform API (WAF-free).
+
+    Uses getMatchListV1.qry (all matches) and getFixedBonusV1.qry (per-match
+    odds history). Falls back to original crawl_official_schedule if uniform API
+    fails.
+    """
+    started = _now()
+    client = SportteryClient()
+
+    try:
+        # 1. Fetch match list from uniform API
+        t0 = time.monotonic()
+        raw = client.get_uniform_match_list()
+        latency_ms = int((time.monotonic() - t0) * 1000)
+
+        # 2. Parse using existing parsers (same JSON structure)
+        match_bdate = business_date or datetime.now().strftime("%Y-%m-%d")
+        matches = parse_matches_from_response(raw, match_bdate)
+        if not matches:
+            client.close()
+            with get_db() as conn:
+                log_crawl(
+                    conn, source_name="sporttery_v2", crawl_type="schedule",
+                    status="ok", records_found=0, started_at=started,
+                )
+                update_health(conn, "sporttery_v2", "official", "ok", latency_ms)
+            return {"status": "ok", "matches_found": 0, "note": "no matches in response"}
+
+        # 3. Store matches
+        total_inserted, total_updated = 0, 0
+        snapshots_inserted = 0
+        with get_db() as conn:
+            match_result = store_matches(conn, matches)
+            total_inserted = match_result.get("inserted", 0)
+            total_updated = match_result.get("updated", 0)
+
+            # 4. Store markets + odds snapshots for each match
+            for m in matches:
+                code = m["official_match_code"]
+                bdate = m["business_date"]
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "SELECT id FROM official_matches "
+                        "WHERE official_match_code = %s AND business_date = %s",
+                        (code, bdate),
+                    )
+                    row = cur.fetchone()
+                if row is None:
+                    continue
+                match_id = row[0]
+
+                # Store markets
+                store_markets(conn, match_id, m.get("_markets", []))
+
+                # Store odds snapshots (from raw_json oddsList)
+                snap_time = _now()
+                snapshots = parse_odds_snapshots_from_match(
+                    m.get("raw_json", {}), snapshot_time=snap_time
+                )
+                if snapshots:
+                    snap_result = store_odds_snapshots(
+                        conn, match_id=match_id, market_id=None, snapshots=snapshots
+                    )
+                    snapshots_inserted += snap_result.get("inserted", 0)
+
+            # 5. Log
+            log_crawl(
+                conn, source_name="sporttery_v2", crawl_type="schedule",
+                status="ok", records_found=len(matches),
+                records_inserted=total_inserted, records_updated=total_updated,
+                started_at=started,
+            )
+            update_health(conn, "sporttery_v2", "official", "ok", latency_ms)
+
+        client.close()
+        return {
+            "status": "ok",
+            "matches_found": len(matches),
+            "matches_inserted": total_inserted,
+            "matches_updated": total_updated,
+            "snapshots_inserted": snapshots_inserted,
+            "latency_ms": latency_ms,
+        }
+
+    except Exception as e:
+        client.close()
+        print(f"[crawl_official_schedule_v2] error: {e}, falling back to V1…")
+        # Fallback to original crawler
+        return crawl_official_schedule(business_date or datetime.now().strftime("%Y-%m-%d"))
+
+
+# ---------------------------------------------------------------------------
+# Traditional lottery (传统足彩 14场/任九)
+# ---------------------------------------------------------------------------
+
+
+def parse_traditional_lottery_response(raw: dict[str, Any]) -> list[dict[str, Any]]:
+    """Parse traditional lottery draw response into normalized pool/issue dicts.
+
+    The response from getFootBallDrawInfoV2.qry has separate sections for
+    each game type (90=t14c, 91=r9, 98=bqc6, 99=jq4).
+
+    Returns a list of dicts with keys:
+      game_type, issue_no, sale_start, sale_stop, total_matches,
+      official_status, matches (list of match dicts)
+    """
+    value = raw.get("value", {})
+    # Map game codes to sections in the response
+    game_sections = {
+        "sfcDetail": 90,   # 胜负彩 → t14c
+        "rjDetail": 91,    # 任九
+        "bqcDetail": 98,   # 半全场
+        "jqcDetail": 99,   # 进球彩
+    }
+
+    results = []
+    for section_key, game_code in game_sections.items():
+        game_type = TRADITIONAL_GAME_TYPES.get(game_code)
+        if not game_type:
+            continue
+
+        section = value.get(section_key, {})
+        if not section or not section.get("matchList"):
+            continue
+
+        issue_no = section.get("lotteryDrawNum", "")
+        if not issue_no:
+            continue
+
+        match_list = section.get("matchList", [])
+        matches = []
+        for i, m in enumerate(match_list):
+            matches.append({
+                "match_order": i + 1,
+                "match_id": m.get("infohubMatchId") or m.get("matchId"),
+                "league_name": m.get("matchName", ""),
+                "home_team_name": m.get("masterTeamAllName") or m.get("masterTeamName") or m.get("homeTeam", ""),
+                "away_team_name": m.get("guestTeamAllName") or m.get("guestTeamName") or m.get("awayTeam", ""),
+                "kickoff_time": m.get("startTime", ""),
+                "home_win_prob": m.get("homeWinProb"),
+                "draw_prob": m.get("drawProb"),
+                "away_win_prob": m.get("awayWinProb"),
+                "upset_score": m.get("upsetScore"),
+                "public_heat_home": m.get("homeRate"),
+                "public_heat_draw": m.get("drawRate"),
+                "public_heat_away": m.get("awayRate"),
+            })
+
+        results.append({
+            "game_type": game_type,
+            "issue_no": issue_no,
+            "sale_start": section.get("saleStartTime"),
+            "sale_stop": section.get("saleEndTime") or section.get("estimateDrawTime"),
+            "total_matches": len(match_list),
+            "official_status": "selling" if section.get("onSale") == 1 else "closed",
+            "matches": matches,
+            "raw_json": section,
+        })
+
+    return results
+
+
+def crawl_traditional_lottery() -> dict[str, Any]:
+    """Crawl traditional football lottery (14场/任九) data via Playwright.
+
+    Fetches current issue + match pool and stores in
+    football_pool_issues + football_pool_issue_matches.
+    """
+    started = _now()
+    client = SportteryClient()
+
+    try:
+        t0 = time.monotonic()
+        raw = client.get_traditional_lottery_draw()
+        latency_ms = int((time.monotonic() - t0) * 1000)
+
+        pools = parse_traditional_lottery_response(raw)
+        if not pools:
+            client.close()
+            with get_db() as conn:
+                log_crawl(
+                    conn, source_name="sporttery", crawl_type="traditional_lottery",
+                    status="ok", records_found=0, started_at=started,
+                )
+            return {"status": "ok", "pools_found": 0, "note": "no traditional lottery data"}
+
+        total_issues = 0
+        total_matches = 0
+        with get_db() as conn:
+            for pool in pools:
+                issue_id = store_pool_issue(
+                    conn,
+                    issue_no=pool["issue_no"],
+                    game_type=pool["game_type"],
+                    sale_start=pool["sale_start"],
+                    sale_stop=pool["sale_stop"],
+                    total_matches=pool["total_matches"],
+                    official_status=pool["official_status"],
+                    raw_json=pool.get("raw_json"),
+                )
+                if issue_id:
+                    total_issues += 1
+                    if pool.get("matches"):
+                        n = store_pool_issue_matches(conn, issue_id, pool["matches"])
+                        total_matches += n
+
+            log_crawl(
+                conn, source_name="sporttery", crawl_type="traditional_lottery",
+                status="ok", records_found=len(pools),
+                records_inserted=total_issues, started_at=started,
+            )
+            update_health(conn, "sporttery", "traditional_lottery", "ok", latency_ms)
+
+        client.close()
+        return {
+            "status": "ok",
+            "pools_found": len(pools),
+            "issues_stored": total_issues,
+            "matches_stored": total_matches,
+            "latency_ms": latency_ms,
+        }
+
+    except Exception as e:
+        client.close()
+        latency_ms = 0
+        with get_db() as conn:
+            log_crawl(
+                conn, source_name="sporttery", crawl_type="traditional_lottery",
+                status="error", error_message=str(e), started_at=started,
+            )
+            update_health(conn, "sporttery", "traditional_lottery", "error", 0, str(e))
         return {"status": "error", "error": str(e)}

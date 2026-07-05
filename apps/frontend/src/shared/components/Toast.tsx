@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, createContext, useContext, type ReactNode } from 'react';
+import { useState, useEffect, useCallback, createContext, useContext, useRef, type ReactNode } from 'react';
 
 type ToastType = 'success' | 'error' | 'warning';
 
@@ -28,19 +28,42 @@ export const toast = {
 
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
+  const [exitingIds, setExitingIds] = useState<Set<number>>(new Set());
+  const timersRef = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
+
+  const removeToast = useCallback((id: number) => {
+    // Start exit animation
+    setExitingIds((prev) => new Set(prev).add(id));
+    // Remove after animation completes
+    const timer = setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+      setExitingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+      timersRef.current.delete(id);
+    }, 300);
+    timersRef.current.set(id, timer);
+  }, []);
 
   const addToast = useCallback((type: ToastType, message: string) => {
     const id = _nextId++;
     setToasts((prev) => [...prev, { id, type, message }]);
-    setTimeout(() => {
-      setToasts((prev) => prev.filter((t) => t.id !== id));
+    // Auto-dismiss after 4s
+    const timer = setTimeout(() => {
+      removeToast(id);
     }, 4000);
-  }, []);
+    timersRef.current.set(id, timer);
+  }, [removeToast]);
 
   useEffect(() => {
     _addToast = addToast;
     return () => {
       _addToast = null;
+      // Cleanup all timers
+      timersRef.current.forEach((t) => clearTimeout(t));
+      timersRef.current.clear();
     };
   }, [addToast]);
 
@@ -55,7 +78,10 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       {children}
       <div className="fqp-toast-container">
         {toasts.map((t) => (
-          <div key={t.id} className={`fqp-toast fqp-toast-${t.type}`}>
+          <div
+            key={t.id}
+            className={`fqp-toast fqp-toast-${t.type}${exitingIds.has(t.id) ? ' exiting' : ''}`}
+          >
             {t.message}
           </div>
         ))}

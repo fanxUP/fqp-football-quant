@@ -8,5 +8,7 @@ export { default as ChartCard } from './ChartCard';
 export { default as PageHeader } from './PageHeader';
 export { default as FilterBar } from './FilterBar';
 export { default as Modal } from './Modal';
+export { default as MatchDetailDrawer } from './MatchDetailDrawer';
+export { default as Skeleton } from './Skeleton';
 export { ToastProvider, useToast } from './Toast';
 export type { Column } from './DataTable';

@@ -237,67 +237,139 @@ def run(dry_run: bool = False) -> dict[str, Any]:
 
             snap_time = _now()
 
-            for match in matches:
+            # ── Build alias lookup: English API name → (team_id, Chinese name) ──
+            # This lets us match API-Football's English names to our internal teams.
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT ta.alias_name, ta.team_id, t.team_name_cn
+                    FROM team_aliases ta
+                    JOIN teams t ON t.id = ta.team_id
+                    WHERE ta.source_name = 'apifootball'
+                    """
+                )
+                en_to_team: dict[str, tuple[int, str]] = {}
+                for r in cur.fetchall():
+                    en_name = r[0]
+                    tid = r[1]
+                    cn_name = r[2] or ""
+                    # Only store the first mapping per English name
+                    if en_name not in en_to_team:
+                        en_to_team[en_name] = (tid, cn_name)
+
+            # Group matches by date to minimize API calls for fixture list
+            match_dates: dict[str, list[dict]] = {}
+            for m in matches:
+                match_date = (
+                    m["kickoff_time"].strftime("%Y-%m-%d")
+                    if isinstance(m["kickoff_time"], datetime)
+                    else str(m["kickoff_time"])[:10]
+                )
+                match_dates.setdefault(match_date, []).append(m)
+
+            for match_date, day_matches in match_dates.items():
+                # Fetch fixture list for this date (no lineups in list endpoint)
                 try:
-                    home_id = _resolve_team_id(conn, match["home_team_name"])
-                    away_id = _resolve_team_id(conn, match["away_team_name"])
-
-                    if not home_id or not away_id:
-                        print(
-                            f"[collect_lineup] cannot resolve teams for match {match['id']}: "
-                            f"{match['home_team_name']} vs {match['away_team_name']}"
-                        )
-                        continue
-
-                    # Try to get lineups from API
-                    # Use date-based search since we may not have API-Football fixture IDs
-                    match_date = (
-                        match["kickoff_time"].strftime("%Y-%m-%d")
-                        if isinstance(match["kickoff_time"], datetime)
-                        else str(match["kickoff_time"])[:10]
-                    )
-
                     fixtures = client.get_fixtures(date=match_date)
-
-                    if not fixtures:
-                        matches_processed += 1
-                        continue
-
-                    # Find the fixture matching our teams by name
-                    for fix in fixtures:
-                        fix_home = fix.get("teams", {}).get("home", {}).get("name", "")
-                        fix_away = fix.get("teams", {}).get("away", {}).get("name", "")
-
-                        if (
-                            fix_home == match["home_team_name"]
-                            and fix_away == match["away_team_name"]
-                        ):
-                            if not dry_run:
-                                # Extract lineups from fixture
-                                lineups = fix.get("lineups", [])
-                                for team_lineup in lineups:
-                                    team_name = team_lineup.get("team", {}).get("name", "")
-                                    team_id = (
-                                        home_id
-                                        if team_name == match["home_team_name"]
-                                        else away_id
-                                        if team_name == match["away_team_name"]
-                                        else None
-                                    )
-                                    if team_id:
-                                        lid = _process_lineup(
-                                            conn, match["id"], team_lineup, team_id, snap_time
-                                        )
-                                        if lid:
-                                            lineups_collected += 1
-                            break  # found our match
-
-                    matches_processed += 1
-
                 except Exception as e:
-                    print(f"[collect_lineup] error for match {match['id']}: {e}")
+                    print(f"[collect_lineup] error fetching fixtures for {match_date}: {e}")
                     errors += 1
                     continue
+
+                if not fixtures:
+                    matches_processed += len(day_matches)
+                    continue
+
+                # Build lookup: API team name → (team_id, cn_name)
+                # for fixtures on this date
+                date_team_lookup: dict[str, tuple[int, str]] = {}
+                for fix in fixtures:
+                    for side in ("home", "away"):
+                        api_name = fix.get("teams", {}).get(side, {}).get("name", "")
+                        if api_name and api_name in en_to_team:
+                            date_team_lookup[api_name] = en_to_team[api_name]
+
+                # Map: (home_cn, away_cn) → fixture_id
+                fixture_lookup: dict[tuple[str, str], int] = {}
+                for fix in fixtures:
+                    fix_id = fix.get("fixture", {}).get("id")
+                    if not fix_id:
+                        continue
+                    api_home = fix.get("teams", {}).get("home", {}).get("name", "")
+                    api_away = fix.get("teams", {}).get("away", {}).get("name", "")
+                    cn_home = en_to_team.get(api_home, (0, api_home))[1]
+                    cn_away = en_to_team.get(api_away, (0, api_away))[1]
+                    fixture_lookup[(cn_home, cn_away)] = fix_id
+
+                for match in day_matches:
+                    try:
+                        home_name = match["home_team_name"]
+                        away_name = match["away_team_name"]
+
+                        # Try direct Chinese name match first, then fallback
+                        api_fix_id = fixture_lookup.get((home_name, away_name))
+                        if not api_fix_id:
+                            matches_processed += 1
+                            continue
+
+                        # Resolve team IDs
+                        home_id = _resolve_team_id(conn, home_name)
+                        away_id = _resolve_team_id(conn, away_name)
+
+                        if not home_id or not away_id:
+                            print(
+                                f"[collect_lineup] cannot resolve teams for match {match['id']}: "
+                                f"{home_name} vs {away_name}"
+                            )
+                            matches_processed += 1
+                            continue
+
+                        # Query individual fixture to get lineups
+                        try:
+                            detail = client.get_fixtures(fixture_id=api_fix_id)
+                        except Exception:
+                            matches_processed += 1
+                            continue
+
+                        if not detail:
+                            matches_processed += 1
+                            continue
+
+                        fix_detail = detail[0]
+                        lineups = fix_detail.get("lineups", [])
+
+                        if not lineups:
+                            matches_processed += 1
+                            continue
+
+                        if not dry_run:
+                            for team_lineup in lineups:
+                                api_team_name = team_lineup.get("team", {}).get("name", "")
+                                # Map API team name to our internal team ID
+                                mapped = en_to_team.get(api_team_name)
+                                cn_team_name = mapped[1] if mapped else api_team_name
+
+                                team_id = (
+                                    home_id
+                                    if cn_team_name == home_name
+                                    else away_id
+                                    if cn_team_name == away_name
+                                    else None
+                                )
+                                if team_id:
+                                    lid = _process_lineup(
+                                        conn, match["id"], team_lineup, team_id, snap_time
+                                    )
+                                    if lid:
+                                        lineups_collected += 1
+
+                        matches_processed += 1
+
+                    except Exception as e:
+                        print(f"[collect_lineup] error for match {match['id']}: {e}")
+                        errors += 1
+                        matches_processed += 1
+                        continue
 
     finally:
         client.close()

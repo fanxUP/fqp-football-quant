@@ -20,6 +20,13 @@ panels:
     order: 30
     visible: true
     icon: target
+  - panel_id: odds_movement
+    name: 赔率走势
+    route: /odds
+    module_id: recommendation_core
+    order: 35
+    visible: true
+    icon: trending-down
   - panel_id: ticket_upload
     name: 实票上传
     route: /tickets

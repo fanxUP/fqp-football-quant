@@ -17,6 +17,7 @@ from scripts.real_ticket_storage import (
     create_bankroll_transaction,
     create_settlement,
 )
+from scripts.simulator_storage import update_ticket_status as update_sim_ticket_status
 
 
 def _now() -> str:
@@ -40,7 +41,9 @@ def run(dry_run: bool = False) -> dict[str, Any]:
         with conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT r.match_id, r.spf_result, r.full_home_goals, r.full_away_goals,
+                SELECT r.match_id, r.spf_result, r.rqspf_result,
+                       r.total_goals_result, r.score_result, r.half_full_result,
+                       r.full_home_goals, r.full_away_goals,
                        r.result_status, m.home_team_name, m.away_team_name
                 FROM official_results r
                 JOIN official_matches m ON m.id = r.match_id
@@ -54,20 +57,29 @@ def run(dry_run: bool = False) -> dict[str, Any]:
         if not results:
             return {"status": "ok", "settled": 0, "note": "no confirmed results"}
 
-        # Build result lookup: match_id -> spf_result
+        # Build result lookup: match_id -> full results
         result_map: dict[int, str] = {}
+        full_result_map: dict[int, dict] = {}
         match_info: dict[int, dict] = {}
         for r in results:
             result_map[r[0]] = r[1]  # match_id -> spf_result
+            full_result_map[r[0]] = {
+                "spf_result": r[1],
+                "rqspf_result": r[2],
+                "total_goals_result": r[3],
+                "score_result": r[4],
+                "half_full_result": r[5],
+            }
             match_info[r[0]] = {
-                "full_home_goals": r[2],
-                "full_away_goals": r[3],
-                "home_team": r[5],
-                "away_team": r[6],
+                "full_home_goals": r[6],
+                "full_away_goals": r[7],
+                "home_team": r[9],
+                "away_team": r[10],
             }
 
         total_settled = 0
         sim_settled = 0
+        simulator_settled = 0
         real_settled = 0
         total_prize = 0.0
 
@@ -129,11 +141,6 @@ def run(dry_run: bool = False) -> dict[str, Any]:
 
                 # Determine win/loss
                 stake = ticket["suggested_stake"] * ticket["multiple"]
-                all(
-                    item["option_code"] == result_map[match_id]
-                    for item in ticket["items"]
-                    if match_id in result_map
-                )
 
                 # For multi-match passes, we need all matches to have results
                 # This simplified version checks the current match only.
@@ -246,6 +253,22 @@ def run(dry_run: bool = False) -> dict[str, Any]:
                             },
                         )
 
+                    # Bankroll: record explicit profit/loss
+                    create_bankroll_transaction(
+                        conn,
+                        {
+                            "account_type": "simulation",
+                            "transaction_type": "profit_loss",
+                            "amount": profit_loss,
+                            "related_ticket_id": tid,
+                            "remark": (
+                                f"Ticket #{tid} 盈利 +{profit_loss:.2f}"
+                                if profit_loss >= 0
+                                else f"Ticket #{tid} 亏损 {profit_loss:.2f}"
+                            ),
+                        },
+                    )
+
                     # Update ticket status
                     with conn.cursor() as cur:
                         cur.execute(
@@ -258,7 +281,203 @@ def run(dry_run: bool = False) -> dict[str, Any]:
                     sim_settled += 1
                     total_prize += prize
 
-        # 3. Settle real tickets
+        # 3. Settle simulator tickets (virtual betting)
+        for match_id, _spf_result in result_map.items():
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT sti.id AS item_id, sti.ticket_id, sti.option_code,
+                           sti.sp_value, sti.play_type, sti.match_id,
+                           st.pass_type, st.multiple, st.total_cost,
+                           st.bet_count, st.max_prize, st.status
+                    FROM simulator_ticket_items sti
+                    JOIN simulator_tickets st ON st.id = sti.ticket_id
+                    WHERE sti.match_id = %s
+                      AND st.status = 'pending'
+                    ORDER BY sti.ticket_id
+                    """,
+                    (match_id,),
+                )
+                sitems = cur.fetchall()
+
+            if not sitems:
+                continue
+
+            # Group by ticket_id
+            simulator_tickets: dict[int, dict] = {}
+            for si in sitems:
+                tid = si[1]
+                if tid not in simulator_tickets:
+                    simulator_tickets[tid] = {
+                        "ticket_id": tid,
+                        "pass_type": si[6],
+                        "multiple": si[7] or 1,
+                        "total_cost": float(si[8] or 0),
+                        "bet_count": si[9],
+                        "max_prize": float(si[10] or 0),
+                        "items": [],
+                    }
+                simulator_tickets[tid]["items"].append({
+                    "item_id": si[0],
+                    "option_code": si[2],
+                    "sp_value": float(si[3] or 0),
+                    "play_type": si[4],
+                    "match_id": si[5],
+                })
+
+            for tid, ticket in simulator_tickets.items():
+                # Idempotency check
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "SELECT id FROM ticket_settlements WHERE ticket_source = 'simulator' AND ticket_id = %s",
+                        (tid,),
+                    )
+                    if cur.fetchone():
+                        continue
+
+                # Get ALL items for this ticket
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """SELECT match_id, option_code, sp_value, play_type, is_dan
+                           FROM simulator_ticket_items WHERE ticket_id = %s""",
+                        (tid,),
+                    )
+                    all_sitems = cur.fetchall()
+
+                unsettled = False
+                all_won = True
+                product_sp = 1.0
+                detail = []
+
+                for ai in all_sitems:
+                    ai_match_id = ai[0]
+                    ai_option = ai[1]
+                    ai_sp = float(ai[2] or 0)
+                    ai_play_type = ai[3]
+
+                    if ai_match_id not in full_result_map:
+                        unsettled = True
+                        break
+
+                    fm = full_result_map[ai_match_id]
+
+                    # Determine win/loss based on play_type (canonical + legacy aliases)
+                    from scripts.play_type_registry import normalize, result_column
+                    col = result_column(ai_play_type)
+                    actual = fm.get(col, fm.get("spf_result"))
+
+                    item_won = ai_option == actual if actual else False
+                    if not item_won:
+                        all_won = False
+
+                    product_sp *= ai_sp
+                    detail.append({
+                        "match_id": ai_match_id,
+                        "play_type": ai_play_type,
+                        "option_code": ai_option,
+                        "sp_value": ai_sp,
+                        "actual_result": actual,
+                        "is_won": item_won,
+                    })
+
+                if unsettled:
+                    continue
+
+                # Calculate prize
+                pass_type = ticket["pass_type"]
+                multiple = ticket["multiple"]
+                stake = ticket["total_cost"]
+
+                if all_won:
+                    if pass_type == "single":
+                        # Each match independent: sum of (sp × 2 × multiple) across all items
+                        prize = sum(
+                            item["sp_value"] * 2 * multiple
+                            for item in detail
+                        )
+                    elif pass_type.endswith("x1"):
+                        # M串1: one combination, product of all sp × 2 × multiple
+                        m = int(pass_type.split("x")[0])
+                        if len(detail) == m:
+                            prize = product_sp * 2 * multiple
+                        else:
+                            prize = 0.0
+                    else:
+                        # M串N: simplified — all items must win for max prize
+                        # Full M串N partial-win calculation deferred to v2
+                        prize = ticket["max_prize"]
+                else:
+                    # Not all won: prize = 0 for M串1
+                    # For M串N with partial wins, prize could be > 0 (deferred to v2)
+                    if pass_type != "single":
+                        prize = 0.0
+                    else:
+                        # Single: only count winning items
+                        prize = sum(
+                            item["sp_value"] * 2 * multiple
+                            for item in detail
+                            if item["is_won"]
+                        )
+
+                tax = _calculate_tax(prize)
+                net_prize = prize - tax
+                profit_loss = net_prize - stake
+                roi = profit_loss / stake if stake > 0 else 0.0
+
+                # Insert settlement
+                settlement_id = create_settlement(conn, {
+                    "ticket_source": "simulator",
+                    "ticket_id": tid,
+                    "settle_time": _now(),
+                    "is_won": all_won,
+                    "stake_amount": stake,
+                    "prize_amount": prize,
+                    "tax_amount": tax,
+                    "net_prize": net_prize,
+                    "profit_loss": profit_loss,
+                    "roi": roi,
+                    "settlement_detail_json": {
+                        "source": "simulator",
+                        "items": detail,
+                        "pass_type": pass_type,
+                        "multiple": multiple,
+                        "all_won": all_won,
+                    },
+                })
+
+                if settlement_id:
+                    # Credit prize if won
+                    if net_prize > 0:
+                        create_bankroll_transaction(conn, {
+                            "account_type": "simulator",
+                            "transaction_type": "prize",
+                            "amount": net_prize,
+                            "related_ticket_id": tid,
+                            "remark": f"Simulator ticket #{tid} prize {prize:.2f}, net {net_prize:.2f}",
+                        })
+
+                    # Record explicit profit/loss
+                    create_bankroll_transaction(conn, {
+                        "account_type": "simulator",
+                        "transaction_type": "profit_loss",
+                        "amount": profit_loss,
+                        "related_ticket_id": tid,
+                        "remark": (
+                            f"Simulator #{tid} 盈利 +{profit_loss:.2f}"
+                            if profit_loss >= 0
+                            else f"Simulator #{tid} 亏损 {profit_loss:.2f}"
+                        ),
+                    })
+
+                    # Update ticket status
+                    update_sim_ticket_status(conn, tid, "settled")
+                    conn.commit()
+
+                    total_settled += 1
+                    simulator_settled += 1
+                    total_prize += prize
+
+        # 4. Settle real tickets
         for match_id, _spf_result in result_map.items():
             with conn.cursor() as cur:
                 cur.execute(
@@ -387,6 +606,22 @@ def run(dry_run: bool = False) -> dict[str, Any]:
                 )
 
                 if settlement_id:
+                    # Record explicit profit/loss for real tickets
+                    create_bankroll_transaction(
+                        conn,
+                        {
+                            "account_type": "real",
+                            "transaction_type": "profit_loss",
+                            "amount": profit_loss,
+                            "related_ticket_id": rtid,
+                            "remark": (
+                                f"Real ticket #{rtid} 盈利 +{profit_loss:.2f}"
+                                if profit_loss >= 0
+                                else f"Real ticket #{rtid} 亏损 {profit_loss:.2f}"
+                            ),
+                        },
+                    )
+
                     # Update real ticket settlement status
                     with conn.cursor() as cur:
                         cur.execute(
@@ -403,6 +638,7 @@ def run(dry_run: bool = False) -> dict[str, Any]:
             "status": "ok",
             "settled": total_settled,
             "simulation_settled": sim_settled,
+            "simulator_settled": simulator_settled,
             "real_settled": real_settled,
             "total_prize": round(total_prize, 2),
         }

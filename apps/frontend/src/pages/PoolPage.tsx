@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { api } from '../core/apiClient';
 import { ApiError } from '../core/types';
 import Card from '../shared/components/Card';
@@ -7,6 +7,26 @@ import LoadingSpinner from '../shared/components/LoadingSpinner';
 import ErrorState from '../shared/components/ErrorState';
 import PageHeader from '../shared/components/PageHeader';
 import DisclaimerBanner from '../shared/components/DisclaimerBanner';
+
+// Count-up animation hook
+function useCountUp(target: number, duration = 800) {
+  const [val, setVal] = useState(0);
+  const prevTarget = useRef(target);
+  useEffect(() => {
+    prevTarget.current = target;
+    let rafId: number;
+    const start = performance.now();
+    const animate = (now: number) => {
+      const t = Math.min((now - start) / duration, 1);
+      const eased = 1 - Math.pow(1 - t, 3);
+      setVal(target * eased);
+      if (t < 1) rafId = requestAnimationFrame(animate);
+    };
+    rafId = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(rafId);
+  }, [target, duration]);
+  return val;
+}
 
 interface PoolMatch {
   index: number;
@@ -105,6 +125,13 @@ export default function PoolPage() {
   const formatPct = (v: number) => (v * 100).toFixed(2) + '%';
   const formatProb = (v: number) => (v * 100).toFixed(1) + '%';
 
+  // Count-up animated values
+  const hit14Count = useCountUp(analysis ? analysis.monte_carlo.hit14_prob * 100 : 0, 1000);
+  const hit13Count = useCountUp(analysis ? analysis.monte_carlo.hit13_prob * 100 : 0, 900);
+  const rx9Count = useCountUp(analysis ? analysis.monte_carlo.rx9_prob * 100 : 0, 900);
+  const comboCost = useCountUp(analysis ? analysis.full_combinations.total_cost : 0, 800);
+  const simCount = useCountUp(analysis ? analysis.monte_carlo.simulations : 0, 600);
+
   return (
     <div>
       <PageHeader
@@ -186,38 +213,38 @@ export default function PoolPage() {
 
       {analysis && !loading && (
         <>
-          {/* Monte Carlo summary cards */}
+          {/* Monte Carlo summary cards — staggered entrance */}
           <div className="fqp-grid-4" style={{ marginBottom: '20px' }}>
-            <Card title="命中14场概率">
+            <Card title="命中14场概率" entranceDelay={0}>
               <div className="fqp-stat-card" style={{ padding: 0 }}>
                 <div className="fqp-stat-value" style={{ color: 'var(--fqp-success)' }}>
-                  {formatPct(analysis.monte_carlo.hit14_prob)}
+                  {hit14Count.toFixed(2)}%
                 </div>
                 <div className="fqp-stat-sub">
-                  {analysis.monte_carlo.simulations.toLocaleString()} 次模拟
+                  {simCount.toLocaleString(undefined, { maximumFractionDigits: 0 })} 次模拟
                 </div>
               </div>
             </Card>
-            <Card title="命中13场概率">
+            <Card title="命中13场概率" entranceDelay={80}>
               <div className="fqp-stat-card" style={{ padding: 0 }}>
                 <div className="fqp-stat-value" style={{ color: 'var(--fqp-accent)' }}>
-                  {formatPct(analysis.monte_carlo.hit13_prob)}
+                  {hit13Count.toFixed(2)}%
                 </div>
                 <div className="fqp-stat-sub">至少命中13场</div>
               </div>
             </Card>
-            <Card title="任九命中概率">
+            <Card title="任九命中概率" entranceDelay={160}>
               <div className="fqp-stat-card" style={{ padding: 0 }}>
                 <div className="fqp-stat-value" style={{ color: 'var(--fqp-accent)' }}>
-                  {formatPct(analysis.monte_carlo.rx9_prob)}
+                  {rx9Count.toFixed(2)}%
                 </div>
                 <div className="fqp-stat-sub">9场单选命中</div>
               </div>
             </Card>
-            <Card title="组合成本">
+            <Card title="组合成本" entranceDelay={240}>
               <div className="fqp-stat-card" style={{ padding: 0 }}>
                 <div className="fqp-stat-value">
-                  ¥{analysis.full_combinations.total_cost}
+                  ¥{comboCost.toFixed(0)}
                 </div>
                 <div className="fqp-stat-sub">
                   {analysis.full_combinations.count} 注 × ¥2
@@ -226,7 +253,7 @@ export default function PoolPage() {
             </Card>
           </div>
 
-          {/* Warnings */}
+          {/* Warnings — slide in from top */}
           {analysis.warnings.length > 0 && (
             <div style={{ marginBottom: '20px' }}>
               {analysis.warnings.map((w, i) => (
@@ -240,6 +267,8 @@ export default function PoolPage() {
                     fontSize: '13px',
                     color: 'var(--fqp-warning)',
                     marginBottom: '4px',
+                    animation: `fqpSlideUpBounce 0.4s ease both`,
+                    animationDelay: `${i * 80}ms`,
                   }}
                 >
                   ⚠ {w}
@@ -272,6 +301,8 @@ export default function PoolPage() {
           </div>
 
           <Card style={{ borderTopLeftRadius: activeTab === '14场' ? '0' : undefined }}>
+            {/* Tab content with transition */}
+            <div key={activeTab} className="fqp-anim-fadeIn">
             {/* 14场 tab */}
             {activeTab === '14场' && (
               <>
@@ -311,9 +342,11 @@ export default function PoolPage() {
                       {analysis.matches.map((m, i) => (
                         <tr
                           key={i}
+                          className="fqp-anim-listItemEnter"
                           style={{
                             borderBottom: '1px solid rgba(39,39,42,0.3)',
                             background: i % 2 === 0 ? 'transparent' : 'rgba(39,39,42,0.2)',
+                            animationDelay: `${i * 40}ms`,
                           }}
                         >
                           <td style={{ padding: '10px 8px', color: 'var(--fqp-text-muted)', fontSize: '12px' }}>
@@ -459,6 +492,8 @@ export default function PoolPage() {
                         borderRadius: '4px',
                         fontSize: '13px',
                         color: 'var(--fqp-accent)',
+                        animation: `fqpPopIn 0.3s cubic-bezier(0.34,1.56,0.64,1) both`,
+                        animationDelay: `${i * 60}ms`,
                       }}
                     >
                       {i + 1}. {m}
@@ -508,12 +543,13 @@ export default function PoolPage() {
                           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', marginBottom: '4px' }}>
                             <span style={{ color: 'var(--fqp-success)' }}>胆 ({analysis.classification.dan.length})</span>
                           </div>
-                          <div style={{ height: '6px', background: 'var(--fqp-panel)', borderRadius: '3px' }}>
+                          <div style={{ height: '6px', background: 'var(--fqp-panel)', borderRadius: '3px', overflow: 'hidden' }}>
                             <div style={{
                               height: '100%',
                               width: `${(analysis.classification.dan.length / 14) * 100}%`,
                               background: 'var(--fqp-success)',
                               borderRadius: '3px',
+                              transition: 'width 0.8s cubic-bezier(0.34,1.56,0.64,1)',
                             }} />
                           </div>
                         </div>
@@ -523,12 +559,13 @@ export default function PoolPage() {
                           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', marginBottom: '4px' }}>
                             <span style={{ color: 'var(--fqp-text-muted)' }}>拖 ({analysis.classification.tuo.length})</span>
                           </div>
-                          <div style={{ height: '6px', background: 'var(--fqp-panel)', borderRadius: '3px' }}>
+                          <div style={{ height: '6px', background: 'var(--fqp-panel)', borderRadius: '3px', overflow: 'hidden' }}>
                             <div style={{
                               height: '100%',
                               width: `${(analysis.classification.tuo.length / 14) * 100}%`,
                               background: 'var(--fqp-border)',
                               borderRadius: '3px',
+                              transition: 'width 0.8s cubic-bezier(0.34,1.56,0.64,1)',
                             }} />
                           </div>
                         </div>
@@ -612,6 +649,7 @@ export default function PoolPage() {
                 </Card>
               </>
             )}
+            </div>
           </Card>
         </>
       )}

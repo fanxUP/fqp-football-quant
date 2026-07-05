@@ -93,11 +93,13 @@ def _resolve_team_id(conn: Any, team_name: str) -> int | None:
     return row[0] if row else None
 
 
-def run(dry_run: bool = False) -> dict[str, Any]:
+def run(dry_run: bool = False, season: int | None = None) -> dict[str, Any]:
     """Collect injury data from API-Football for all active competitions.
 
     Args:
         dry_run: If True, fetch but don't store.
+        season: Season year to query. Defaults to 2024 (latest available on
+                free tier; 2025/2026 require paid plan).
 
     Returns:
         Summary dict.
@@ -108,6 +110,10 @@ def run(dry_run: bool = False) -> dict[str, Any]:
     if not api_key:
         return {"status": "error", "message": "API_FOOTBALL_KEY not set"}
 
+    # Free tier only allows 2022-2024 seasons for injury data.
+    if season is None:
+        season = 2024
+
     client = ApiFootballClient(api_key=api_key)
     injuries_collected = 0
     players_created = 0
@@ -116,35 +122,44 @@ def run(dry_run: bool = False) -> dict[str, Any]:
 
     try:
         with get_db() as conn:
-            # Get active competition seasons
+            # Get competitions with API-Football league IDs
             with conn.cursor() as cur:
                 cur.execute(
                     """
-                    SELECT cs.id, cs.season_code, c.id as comp_id, c.competition_name
+                    SELECT cs.id, s.season_code, c.id as comp_id,
+                           c.competition_name_cn, c.competition_code
                     FROM competition_seasons cs
                     JOIN competitions c ON c.id = cs.competition_id
-                    WHERE cs.is_active = true
+                    JOIN seasons s ON s.id = cs.season_id
                     LIMIT 10
                     """
                 )
-                competitions = [(r[0], r[1], r[2], r[3]) for r in cur.fetchall()]
+                competitions = [(r[0], r[1], r[2], r[3], r[4]) for r in cur.fetchall()]
 
             if not competitions:
-                return {"status": "ok", "note": "no active competitions found"}
+                return {"status": "ok", "note": "no competitions found"}
+            print(f"[collect_injury] using season={season}, {len(competitions)} competitions")
 
-            for cs_id, season_code, comp_id, comp_name in competitions:
+            for cs_id, season_code, comp_id, comp_name, comp_code in competitions:
                 try:
-                    # API-Football uses its own league IDs. We need to map.
-                    # For now, use the competition_season_id and hope the API
-                    # can find it. The API client handles errors gracefully.
-                    season_year = (
-                        int(season_code.split("-")[0])
-                        if "-" in season_code
-                        else int(season_code[:4])
-                    )
+                    # Extract API-Football league ID from competition_code
+                    # Format: "apifootball:113" → league_id = 113
+                    api_league_id: int | None = None
+                    if comp_code and comp_code.startswith("apifootball:"):
+                        try:
+                            api_league_id = int(comp_code.split(":")[1])
+                        except (ValueError, IndexError):
+                            pass
+
+                    if api_league_id is None:
+                        print(
+                            f"[collect_injury] cannot resolve API league ID "
+                            f"for {comp_name} (code={comp_code}), skipping"
+                        )
+                        continue
 
                     # Try to get injuries for this league+season
-                    injuries = client.get_injuries(league=comp_id, season=season_year)
+                    injuries = client.get_injuries(league=api_league_id, season=season)
 
                     if not injuries:
                         continue
@@ -240,5 +255,9 @@ if __name__ == "__main__":
     import sys
 
     dry = "--dry-run" in sys.argv
-    result = run(dry_run=dry)
+    season = None
+    for arg in sys.argv:
+        if arg.startswith("--season="):
+            season = int(arg.split("=")[1])
+    result = run(dry_run=dry, season=season)
     print(result)

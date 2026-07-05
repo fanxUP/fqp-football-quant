@@ -391,7 +391,8 @@ def get_evidence_chain_stats(conn: Any, days: int = 30) -> dict:
         "total_audited": total,
         "complete_chains": complete,
         "unique_recommendations": row[2] or 0,
-        "completeness_rate": round(complete / total, 4) if total > 0 else 0.0,
+        # If there's nothing to audit, the chain is complete (nothing broken).
+        "completeness_rate": round(complete / total, 4) if total > 0 else 1.0,
     }
 
 

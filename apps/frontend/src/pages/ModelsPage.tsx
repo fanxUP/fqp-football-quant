@@ -7,6 +7,7 @@ import Card from '../shared/components/Card';
 import DataTable, { type Column } from '../shared/components/DataTable';
 import ErrorState from '../shared/components/ErrorState';
 import DisclaimerBanner from '../shared/components/DisclaimerBanner';
+import { playTypeLabel } from '../shared/constants';
 
 export default function ModelsPage() {
   const [predictions, setPredictions] = useState<Prediction[]>([]);
@@ -70,7 +71,7 @@ export default function ModelsPage() {
       title: '客队',
       width: '120px',
     },
-    { key: 'play_type', title: '玩法', width: '80px' },
+    { key: 'play_type', title: '玩法', width: '80px', render: (v) => playTypeLabel(String(v)) },
     {
       key: 'option_code',
       title: '选项',
@@ -126,21 +127,21 @@ export default function ModelsPage() {
         type="page"
       />
 
-      {/* Stat cards */}
+      {/* Stat cards — staggered entrance */}
       <div className="fqp-grid-4" style={{ marginBottom: '24px' }}>
-        <Card title="预测总数">
+        <Card title="预测总数" entranceDelay={0}>
           <div className="fqp-stat-card" style={{ padding: 0 }}>
             <div className="fqp-stat-value">{totalCount}</div>
             <div className="fqp-stat-sub">条预测记录</div>
           </div>
         </Card>
-        <Card title="模型版本">
+        <Card title="模型版本" entranceDelay={80}>
           <div className="fqp-stat-card" style={{ padding: 0 }}>
             <div className="fqp-stat-value">{modelNames.length}</div>
             <div className="fqp-stat-sub">{modelNames.join(', ') || '无'}</div>
           </div>
         </Card>
-        <Card title="正EV预测">
+        <Card title="正EV预测" entranceDelay={160}>
           <div className="fqp-stat-card" style={{ padding: 0 }}>
             <div className="fqp-stat-value">{positiveEvCount}</div>
             <div className="fqp-stat-sub">
@@ -148,7 +149,7 @@ export default function ModelsPage() {
             </div>
           </div>
         </Card>
-        <Card title="平均置信度">
+        <Card title="平均置信度" entranceDelay={240}>
           <div className="fqp-stat-card" style={{ padding: 0 }}>
             <div className="fqp-stat-value">{Math.round(avgConfidence * 100)}%</div>
             <div className="fqp-stat-sub">

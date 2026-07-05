@@ -137,7 +137,7 @@ def build_travel_features(
                 """
                 SELECT stadium_id FROM team_stadium_history
                 WHERE team_id = %s
-                ORDER BY valid_from DESC LIMIT 1
+                ORDER BY start_date DESC LIMIT 1
                 """,
                 (home_team_id,),
             )
@@ -150,7 +150,7 @@ def build_travel_features(
                 """
                 SELECT stadium_id FROM team_stadium_history
                 WHERE team_id = %s
-                ORDER BY valid_from DESC LIMIT 1
+                ORDER BY start_date DESC LIMIT 1
                 """,
                 (away_team_id,),
             )

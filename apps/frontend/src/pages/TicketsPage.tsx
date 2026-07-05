@@ -10,6 +10,7 @@ import ErrorState from '../shared/components/ErrorState';
 import Card from '../shared/components/Card';
 import StatusBadge from '../shared/components/StatusBadge';
 import DisclaimerBanner, { PAGE_DEFAULTS } from '../shared/components/DisclaimerBanner';
+import { passTypeLabel, statusLabel } from '../shared/constants';
 
 export default function TicketsPage() {
   const [tickets, setTickets] = useState<RealTicket[]>([]);
@@ -59,6 +60,7 @@ export default function TicketsPage() {
       key: 'pass_type',
       title: '过关方式',
       width: '80px',
+      render: (v) => passTypeLabel(String(v)),
     },
     {
       key: 'total_amount',
@@ -76,12 +78,12 @@ export default function TicketsPage() {
     {
       key: 'confirm_status',
       title: '确认状态',
-      render: (v) => <StatusBadge status={settleBadge(String(v))} label={String(v)} />,
+      render: (v) => <StatusBadge status={settleBadge(String(v))} label={statusLabel(String(v))} />,
     },
     {
       key: 'settlement_status',
       title: '结算状态',
-      render: (v) => <StatusBadge status={settleBadge(String(v))} label={String(v)} />,
+      render: (v) => <StatusBadge status={settleBadge(String(v))} label={statusLabel(String(v))} />,
     },
     {
       key: 'linked_simulation_id',
@@ -107,6 +109,41 @@ export default function TicketsPage() {
         }
       />
       <DisclaimerBanner text={PAGE_DEFAULTS.tickets} type="page" />
+
+      {/* Summary cards — staggered entrance */}
+      <div className="fqp-grid-4" style={{ marginBottom: '16px' }}>
+        <Card entranceDelay={0}>
+          <div className="fqp-stat-card">
+            <div className="fqp-stat-value">{tickets.length}</div>
+            <div className="fqp-stat-sub">实票总数</div>
+          </div>
+        </Card>
+        <Card entranceDelay={80}>
+          <div className="fqp-stat-card">
+            <div className="fqp-stat-value" style={{ color: 'var(--fqp-success)' }}>
+              ¥{tickets.reduce((s, t) => s + t.total_amount, 0).toFixed(0)}
+            </div>
+            <div className="fqp-stat-sub">总投注金额</div>
+          </div>
+        </Card>
+        <Card entranceDelay={160}>
+          <div className="fqp-stat-card">
+            <div className="fqp-stat-value">
+              {tickets.filter((t) => t.settlement_status === 'settled').length}
+            </div>
+            <div className="fqp-stat-sub">已结算</div>
+          </div>
+        </Card>
+        <Card entranceDelay={240}>
+          <div className="fqp-stat-card">
+            <div className="fqp-stat-value">
+              {tickets.filter((t) => t.settlement_status === 'pending').length}
+            </div>
+            <div className="fqp-stat-sub">待结算</div>
+          </div>
+        </Card>
+      </div>
+
       <FilterBar>
         <select
           className="fqp-select"

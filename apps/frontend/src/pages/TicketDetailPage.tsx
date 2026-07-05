@@ -12,6 +12,7 @@ import StatusBadge from '../shared/components/StatusBadge';
 import DataTable, { type Column } from '../shared/components/DataTable';
 import Modal from '../shared/components/Modal';
 import { toast } from '../shared/components/Toast';
+import { playTypeLabel, passTypeLabel, sourceTypeLabel, statusLabel } from '../shared/constants';
 
 interface TicketDetailPageProps {
   ticketId: number;
@@ -84,7 +85,7 @@ export default function TicketDetailPage({ ticketId }: TicketDetailPageProps) {
       width: '90px',
       render: (v) => (v ? <span className="fqp-mono">#{String(v)}</span> : <span style={{ color: 'var(--fqp-text-muted)' }}>—</span>),
     },
-    { key: 'play_type', title: '玩法', width: '80px' },
+    { key: 'play_type', title: '玩法', width: '80px', render: (v) => playTypeLabel(String(v)) },
     {
       key: 'option_code',
       title: '选项',
@@ -120,11 +121,11 @@ export default function TicketDetailPage({ ticketId }: TicketDetailPageProps) {
       />
 
       <div className="fqp-grid-2" style={{ marginBottom: '20px' }}>
-        <Card>
+        <Card entranceDelay={0}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             <div>
               <div className="fqp-label">过关方式</div>
-              <div>{ticket.pass_type}</div>
+              <div>{passTypeLabel(ticket.pass_type)}</div>
             </div>
             <div>
               <div className="fqp-label">倍数</div>
@@ -132,20 +133,20 @@ export default function TicketDetailPage({ ticketId }: TicketDetailPageProps) {
             </div>
             <div>
               <div className="fqp-label">来源</div>
-              <div>{ticket.source_type}</div>
+              <div>{sourceTypeLabel(ticket.source_type)}</div>
             </div>
             <div>
               <div className="fqp-label">确认状态</div>
-              <StatusBadge status={settleBadge(ticket.confirm_status)} label={ticket.confirm_status} />
+              <StatusBadge status={settleBadge(ticket.confirm_status)} label={statusLabel(ticket.confirm_status)} />
             </div>
             <div>
               <div className="fqp-label">结算状态</div>
-              <StatusBadge status={settleBadge(ticket.settlement_status)} label={ticket.settlement_status} />
+              <StatusBadge status={settleBadge(ticket.settlement_status)} label={statusLabel(ticket.settlement_status)} />
             </div>
           </div>
         </Card>
 
-        <Card>
+        <Card entranceDelay={100}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             <div>
               <div className="fqp-label">投注金额</div>
@@ -176,13 +177,13 @@ export default function TicketDetailPage({ ticketId }: TicketDetailPageProps) {
       </div>
 
       {ticket.notes && (
-        <Card title="备注" style={{ marginBottom: '20px' }}>
+        <Card title="备注" style={{ marginBottom: '20px' }} entranceDelay={200}>
           <div style={{ fontSize: '13px', color: 'var(--fqp-text-muted)' }}>{ticket.notes}</div>
         </Card>
       )}
 
       {/* Items */}
-      <Card title={`投注项 (${items.length})`} style={{ overflow: 'hidden' }}>
+      <Card title={`投注项 (${items.length})`} style={{ overflow: 'hidden' }} entranceDelay={300}>
         <DataTable
           columns={itemColumns}
           rows={items}

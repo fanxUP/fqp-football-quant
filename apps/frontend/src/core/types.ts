@@ -41,6 +41,205 @@ export interface FeatureSnapshot {
   home_team_name: string;
   away_team_name: string;
   league_name: string;
+  official_match_code: string | null;
+  kickoff_time: string | null;
+  match_num_str: string | null;
+}
+
+// ---- Matches & Events ----
+
+export interface TodayMatch {
+  match_id: number;
+  league_name: string;
+  home_team_name: string;
+  away_team_name: string;
+  kickoff_time: string;
+  match_status: string;
+  match_num_str: string;
+  completeness: number | null;
+  odds_count: number;
+}
+
+export interface EventSummary {
+  league_name: string;
+  match_count: number;
+  first_match: string;
+  last_match: string;
+}
+
+export interface EventMatch {
+  match_id: number;
+  home_team_name: string;
+  away_team_name: string;
+  kickoff_time: string;
+  match_status: string;
+  match_num_str: string;
+  league_name?: string;
+  ft_home_goals?: number | null;
+  ft_away_goals?: number | null;
+}
+
+// ---- Match Detail (Events Center drawer) ----
+
+export interface MatchDetailTeam {
+  id: number | null;
+  name_cn: string;
+  name_en: string | null;
+  short_name: string | null;
+  country: string | null;
+  logo_url: string;
+}
+
+export interface MatchDetailScores {
+  ht_home: number | null;
+  ht_away: number | null;
+  ft_home: number | null;
+  ft_away: number | null;
+  spf_result: string | null;
+  result_status: string | null;
+}
+
+export interface MatchDetailPrediction {
+  model_name: string;
+  play_type: string;
+  option_code: string;
+  model_probability: number | null;
+  market_probability: number | null;
+  fair_odds: number | null;
+  ev: number | null;
+  confidence: number | null;
+  predict_time: string;
+}
+
+export interface MatchDetailLineupPlayer {
+  player_id: number;
+  is_starting: boolean;
+  is_substitute: boolean;
+  position: string | null;
+  tactical_role: string | null;
+  name_cn: string | null;
+  name_en: string | null;
+  primary_position: string | null;
+}
+
+export interface MatchDetailLineup {
+  formation: string | null;
+  strength_score: number | null;
+  starting_11_value: number | null;
+  key_player_count: number | null;
+  lineup_type: string | null;
+  players: MatchDetailLineupPlayer[];
+}
+
+export interface MatchDetailFeatureSnapshot {
+  completeness_score: number | null;
+  uncertainty_score: number | null;
+  home_rest_days: number | null;
+  away_rest_days: number | null;
+  rest_days_diff: number | null;
+  home_lineup_strength: number | null;
+  away_lineup_strength: number | null;
+  lineup_strength_diff: number | null;
+  home_absence_impact: number | null;
+  away_absence_impact: number | null;
+  absence_impact_diff: number | null;
+  home_motivation: number | null;
+  away_motivation: number | null;
+  motivation_diff: number | null;
+  temperature: number | null;
+  precipitation: number | null;
+  wind_speed: number | null;
+  weather_impact: number | null;
+  travel_distance_km: number | null;
+  travel_fatigue: number | null;
+  stadium_id: number | null;
+}
+
+export interface MatchDetailH2HMatch {
+  date: string;
+  home: string;
+  away: string;
+  home_goals: number | null;
+  away_goals: number | null;
+  league: string;
+}
+
+export interface MatchDetailH2H {
+  total_matches: number;
+  home_wins: number;
+  draws: number;
+  away_wins: number;
+  recent_matches: MatchDetailH2HMatch[];
+}
+
+export interface MatchDetailFormEntry {
+  date: string;
+  opponent: string;
+  is_home: boolean;
+  goals_for: number | null;
+  goals_against: number | null;
+  status: string | null;
+  league: string;
+}
+
+export interface MatchDetailStandingEntry {
+  rank: number;
+  team_name: string;
+  played: number;
+  won: number;
+  drawn: number;
+  lost: number;
+  goals_for: number;
+  goals_against: number;
+  goal_diff: number;
+  points: number;
+  round: number;
+}
+
+export interface MatchDetailInjury {
+  team_id: number;
+  status: string;
+  injury_type: string | null;
+  body_part: string | null;
+  expected_return: string | null;
+  impact_score: number | null;
+  player_name_cn: string | null;
+  player_name_en: string | null;
+  position: string | null;
+}
+
+export interface MatchDetail {
+  match: {
+    id: number;
+    league_name: string;
+    home_team_name: string;
+    away_team_name: string;
+    kickoff_time: string;
+    match_status: string;
+    sale_status: string;
+  };
+  scores: MatchDetailScores | null;
+  teams: {
+    home: MatchDetailTeam;
+    away: MatchDetailTeam;
+  };
+  predictions: {
+    models: MatchDetailPrediction[];
+    best_ev_model: string | null;
+    best_ev_option: string | null;
+  } | null;
+  lineups: {
+    home: MatchDetailLineup | null;
+    away: MatchDetailLineup | null;
+  };
+  feature_snapshot: MatchDetailFeatureSnapshot | null;
+  h2h: MatchDetailH2H;
+  form: {
+    home: MatchDetailFormEntry[];
+    away: MatchDetailFormEntry[];
+  };
+  standings: MatchDetailStandingEntry[];
+  injuries: MatchDetailInjury[];
 }
 
 // ---- Stage 4: Model Predictions ----
@@ -489,6 +688,240 @@ export interface ModelPlayTypeRecommendation {
 
 // ---- Settings (localStorage) ----
 
+// ---- Simulator (体彩模拟投注) ----
+
+export interface SimulatorOddsOption {
+  option_code: string;
+  option_name: string;
+  sp_value: number;
+}
+
+export interface SimulatorOddsGroup {
+  handicap?: number | null;
+  is_single_allowed?: boolean;
+  options: SimulatorOddsOption[];
+}
+
+export interface SimulatorMatchOdds {
+  spf: SimulatorOddsGroup;
+  rqspf: SimulatorOddsGroup;
+  zjq: SimulatorOddsGroup;
+  bf: SimulatorOddsGroup;
+  bqc: SimulatorOddsGroup;
+}
+
+export interface SimulatorMatch {
+  match_id: number;
+  business_date: string;
+  league_name: string;
+  home_team_name: string;
+  away_team_name: string;
+  kickoff_time: string;
+  match_status: string;
+  match_num_str?: string;
+  odds: SimulatorMatchOdds;
+}
+
+export interface BetSlipItem {
+  match_id: number;
+  home_team: string;
+  away_team: string;
+  league_name: string;
+  kickoff_time: string;
+  play_type: string;
+  play_type_label: string;
+  option_code: string;
+  option_name: string;
+  sp_value: number;
+  handicap?: number | null;
+  is_dan: boolean;
+}
+
+export interface BetComboDetail {
+  items: { match_id: number; option_code: string; sp_value: number }[];
+  combo_sp: number;
+  max_prize: number;
+}
+
+/** Subset of BetSlipItem sent to the /api/simulator/calculate and /api/simulator/tickets endpoints. */
+export interface CalculateItem {
+  match_id: number;
+  play_type: string;
+  option_code: string;
+  option_name: string;
+  sp_value: number;
+  handicap?: number | null;
+  is_dan: boolean;
+}
+
+export interface CalculationResult {
+  pass_type: string;
+  multiple: number;
+  bet_count: number;
+  total_cost: number;
+  max_prize: number;
+  match_count: number;
+  combinations: BetComboDetail[];
+  available_pass_types: string[];
+}
+
+export interface SimulatorTicket {
+  id: number;
+  play_type: string;
+  pass_type: string;
+  multiple: number;
+  total_cost: number;
+  bet_count: number;
+  max_prize: number;
+  match_count: number;
+  status: string;
+  notes: string;
+  created_at: string;
+  updated_at: string;
+  item_count: number;
+}
+
+export interface SimulatorTicketItem {
+  id: number;
+  match_id: number;
+  play_type: string;
+  option_code: string;
+  option_name: string;
+  sp_value: number;
+  handicap?: number | null;
+  is_dan: boolean;
+  home_team_name: string;
+  away_team_name: string;
+  league_name: string;
+  kickoff_time: string;
+}
+
+export interface SimulatorTicketDetail extends SimulatorTicket {
+  items: SimulatorTicketItem[];
+  settlement?: Settlement;
+}
+
+export interface BankrollSummary {
+  account_id: number;
+  initial_balance: number;
+  current_balance: number;
+  total_staked: number;
+  total_won: number;
+  profit_loss: number;
+  roi: number;
+}
+
+export interface BankrollTransaction {
+  id: number;
+  transaction_type: string;
+  amount: number;
+  balance_after: number;
+  transaction_time: string;
+  remark: string;
+}
+
+// ---- Competition (Agent vs User) ----
+
+export interface CompetitionSnapshot {
+  id: number;
+  round_id: number;
+  snapshot_date: string;
+  agent_daily_stake: number;
+  agent_daily_prize: number;
+  agent_daily_profit_loss: number;
+  agent_daily_roi: number;
+  agent_cumulative_stake: number;
+  agent_cumulative_prize: number;
+  agent_cumulative_roi: number;
+  agent_budget_usage_rate: number;
+  agent_ticket_count: number;
+  user_daily_stake: number;
+  user_daily_prize: number;
+  user_daily_profit_loss: number;
+  user_daily_roi: number;
+  user_cumulative_stake: number;
+  user_cumulative_prize: number;
+  user_cumulative_roi: number;
+  user_ticket_count: number;
+  created_at: string;
+}
+
+export interface CompetitionRound {
+  id: number;
+  round_label: string;
+  round_start: string;
+  round_end: string;
+  agent_total_stake: number;
+  agent_total_prize: number;
+  agent_profit_loss: number;
+  agent_roi: number;
+  user_total_stake: number;
+  user_total_prize: number;
+  user_profit_loss: number;
+  user_roi: number;
+  winner: string | null;
+  status: string;
+  created_at: string;
+  updated_at: string;
+  snapshots?: CompetitionSnapshot[];
+  trend?: CompetitionTrendPoint[];
+  days_remaining?: number;
+  total_days?: number;
+}
+
+export interface CompetitionTrendPoint {
+  snapshot_date: string;
+  agent_cumulative_roi: number;
+  user_cumulative_roi: number;
+  agent_cumulative_stake: number;
+  agent_cumulative_prize: number;
+  user_cumulative_stake: number;
+  user_cumulative_prize: number;
+}
+
+export interface CompetitionSummary {
+  total_rounds: number;
+  completed_rounds: number;
+  agent_wins: number;
+  user_wins: number;
+  draws: number;
+  active_rounds: number;
+  current_round: {
+    id: number | null;
+    round_label: string | null;
+    status: string | null;
+  };
+}
+
+export interface CompetitionTicketItem {
+  item_id: number;
+  play_type: string;
+  option_code: string;
+  option_name: string;
+  sp_value: number;
+  model_probability: number;
+  home_team: string;
+  away_team: string;
+  league: string;
+  kickoff_time: string | null;
+  match_code: string;
+}
+
+export interface CompetitionTicket {
+  id: number;
+  stake: number;
+  ev: number;
+  strategy_pool: string;
+  risk_level: string;
+  status: string;
+  created_at: string;
+  pass_type: string;
+  ticket_type: string;
+  items: CompetitionTicketItem[];
+}
+
+// ---- Settings (localStorage) ----
+
 export interface FqpSettings {
   dailyBudget: number;
   riskMode: 'conservative' | 'balanced' | 'aggressive';
@@ -510,3 +943,185 @@ export const DEFAULT_SETTINGS: FqpSettings = {
   backupPath: '~/fqp-backups',
   disabledModules: [],
 };
+
+// ---- Dashboard (data visualization) ----
+
+export interface DashboardTodayKpi {
+  key: string;
+  label: string;
+  value: number;
+  prefix?: string;
+}
+
+export interface DashboardTodayResponse {
+  chart_type: string;
+  title: string;
+  empty: boolean;
+  kpis: DashboardTodayKpi[];
+  meta: { updated_at: string; source: string };
+  extras: {
+    current_round_label: string | null;
+    current_round_id: number | null;
+    business_date: string;
+  };
+}
+
+export interface DashboardRoiDailyItem {
+  snapshot_date: string;
+  round_label: string;
+  round_id: number;
+  agent_daily_stake: number;
+  agent_daily_prize: number;
+  agent_daily_profit_loss: number;
+  agent_daily_roi: number | null;
+  agent_cumulative_roi: number;
+  agent_ticket_count: number;
+  user_daily_stake: number;
+  user_daily_prize: number;
+  user_daily_profit_loss: number;
+  user_daily_roi: number | null;
+  user_cumulative_roi: number;
+  user_ticket_count: number;
+  daily_winner: string;
+}
+
+export interface DashboardRoiPeriodItem {
+  round_id: number;
+  round_label: string;
+  round_start: string;
+  round_end: string;
+  status: string;
+  agent_total_stake: number;
+  agent_total_prize: number;
+  agent_profit_loss: number;
+  agent_roi: number | null;
+  user_total_stake: number;
+  user_total_prize: number;
+  user_profit_loss: number;
+  user_roi: number | null;
+  winner: string | null;
+}
+
+export interface DashboardRecommendationItem {
+  prediction_id: number;
+  business_date: string;
+  match_id: number;
+  official_match_code: string;
+  league_name: string;
+  home_team_name: string;
+  away_team_name: string;
+  kickoff_time: string;
+  play_type: string;
+  option_code: string;
+  option_name: string;
+  market_probability: number;
+  model_probability: number;
+  probability_edge: number | null;
+  ev: number | null;
+  fair_odds: number | null;
+  confidence_score: number | null;
+  risk_score: number | null;
+  model_name: string;
+  model_version: string;
+}
+
+export interface DashboardOddsPoint {
+  snapshot_id: number;
+  match_id: number;
+  official_match_code: string;
+  home_team_name: string;
+  away_team_name: string;
+  league_name: string;
+  snapshot_time: string;
+  play_type: string;
+  option_code: string;
+  option_name: string;
+  sp_value: number;
+  handicap: number | null;
+  implied_probability: number | null;
+  minutes_before_stop: number | null;
+  is_open: boolean;
+  prev_sp_value: number | null;
+}
+
+export interface DashboardOddsAnomaly {
+  time: string;
+  option_name: string;
+  sp_value: number;
+  prev_sp_value: number;
+  ratio: number;
+  type: 'jump' | 'drop';
+}
+
+export interface DashboardModelPerfItem {
+  model_version_id: number;
+  model_name: string;
+  version: string;
+  model_type: string;
+  sample_count: number;
+  good_calibration_count: number;
+  avg_brier_score: number | null;
+  avg_log_loss: number | null;
+  avg_ev: number | null;
+  n_bets: number | null;
+  n_wins: number | null;
+  hit_rate: number | null;
+  roi: number | null;
+  total_profit: number | null;
+  sharpe_ratio: number | null;
+  max_drawdown_pct: number | null;
+  profit_factor: number | null;
+}
+
+export interface DashboardBacktestEquityItem {
+  run_id: number;
+  run_name: string;
+  run_status: string;
+  window_index: number;
+  test_start_date: string;
+  test_end_date: string;
+  window_bets: number;
+  model_name: string;
+  n_bets: number;
+  n_wins: number;
+  hit_rate: number | null;
+  roi: number | null;
+  total_profit: number | null;
+  max_drawdown: number | null;
+  max_drawdown_pct: number | null;
+  sharpe_ratio: number | null;
+  profit_factor: number | null;
+}
+
+export interface DashboardTicketReviewItem {
+  settle_date: string;
+  ticket_source: string;
+  ticket_count: number;
+  won_count: number;
+  total_stake: number;
+  total_prize: number;
+  total_profit_loss: number;
+  roi: number | null;
+}
+
+export interface DashboardPanelConfig {
+  id: string;
+  name: string;
+  route: string;
+  order: number;
+}
+
+export interface DashboardResponse<T> {
+  code: number;
+  data: {
+    chart_type: string;
+    title: string;
+    empty: boolean;
+    series?: T[];
+    kpis?: DashboardTodayKpi[];
+    anomalies?: DashboardOddsAnomaly[];
+    panels?: DashboardPanelConfig[];
+    meta: { updated_at: string; source: string };
+    extras?: Record<string, unknown>;
+  };
+}

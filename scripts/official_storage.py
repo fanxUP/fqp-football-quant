@@ -290,8 +290,31 @@ def store_results(conn: Any, results: list[dict]) -> dict[str, Any]:
                     updated += 1
             except Exception as e:
                 errors.append({"match_id": r.get("match_id"), "error": str(e)})
+    # ── Update match_status for matches with confirmed results ────────
+    settled_ids = [
+        r["match_id"]
+        for r in results
+        if r.get("result_status") == "confirmed"
+        and r.get("full_home_goals") is not None
+        and r.get("full_away_goals") is not None
+    ]
+    if settled_ids:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE official_matches
+                SET match_status = 'Settled', updated_at = now()
+                WHERE id = ANY(%s) AND match_status != 'Settled'
+                """,
+                (settled_ids,),
+            )
     conn.commit()
-    return {"inserted": inserted, "updated": updated, "errors": errors}
+    return {
+        "inserted": inserted,
+        "updated": updated,
+        "errors": errors,
+        "settled": len(settled_ids),
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -422,3 +445,111 @@ def update_health(
                 },
             )
     conn.commit()
+
+
+# ---------------------------------------------------------------------------
+# football_pool_issues + football_pool_issue_matches
+# ---------------------------------------------------------------------------
+
+
+def store_pool_issue(
+    conn: Any,
+    issue_no: str,
+    game_type: str,
+    sale_start: str | None,
+    sale_stop: str | None,
+    total_matches: int | None,
+    official_status: str | None,
+    raw_json: dict | None = None,
+) -> int | None:
+    """Insert or update a football pool issue (期号). Returns the issue ID."""
+    now_ts = _now()
+    raw_hash = _hash_raw(raw_json or {})
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO football_pool_issues
+                (issue_no, game_type, sale_start_time, sale_stop_time,
+                 total_matches, official_status, raw_hash, raw_json,
+                 created_at, updated_at)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s::jsonb, %s,%s)
+            ON CONFLICT (issue_no) DO UPDATE SET
+                sale_start_time = EXCLUDED.sale_start_time,
+                sale_stop_time = EXCLUDED.sale_stop_time,
+                total_matches = EXCLUDED.total_matches,
+                official_status = EXCLUDED.official_status,
+                raw_hash = EXCLUDED.raw_hash,
+                raw_json = EXCLUDED.raw_json,
+                updated_at = EXCLUDED.updated_at
+            RETURNING id
+            """,
+            (
+                issue_no, game_type, sale_start, sale_stop,
+                total_matches, official_status, raw_hash,
+                json.dumps(raw_json, ensure_ascii=False) if raw_json else '{}',
+                now_ts, now_ts,
+            ),
+        )
+        row = cur.fetchone()
+    return row[0] if row else None
+
+
+def store_pool_issue_matches(
+    conn: Any,
+    issue_id: int,
+    matches: list[dict],
+) -> int:
+    """Insert matches for a pool issue. Returns count inserted.
+
+    Each match dict:
+      match_order, match_id, league_name, home_team_name, away_team_name,
+      kickoff_time, home_win_prob, draw_prob, away_win_prob,
+      upset_score, public_heat_home, public_heat_draw, public_heat_away
+    """
+    inserted = 0
+    for m in matches:
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO football_pool_issue_matches
+                        (issue_id, match_order, match_id, league_name,
+                         home_team_name, away_team_name, kickoff_time,
+                         home_win_prob, draw_prob, away_win_prob,
+                         upset_score, public_heat_home, public_heat_draw,
+                         public_heat_away, created_at)
+                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,now())
+                    ON CONFLICT (issue_id, match_order) DO UPDATE SET
+                        match_id = EXCLUDED.match_id,
+                        league_name = EXCLUDED.league_name,
+                        home_team_name = EXCLUDED.home_team_name,
+                        away_team_name = EXCLUDED.away_team_name,
+                        kickoff_time = EXCLUDED.kickoff_time,
+                        home_win_prob = EXCLUDED.home_win_prob,
+                        draw_prob = EXCLUDED.draw_prob,
+                        away_win_prob = EXCLUDED.away_win_prob,
+                        upset_score = EXCLUDED.upset_score
+                    """,
+                    (
+                        issue_id,
+                        m.get("match_order"),
+                        m.get("match_id"),
+                        m.get("league_name"),
+                        m.get("home_team_name"),
+                        m.get("away_team_name"),
+                        m.get("kickoff_time"),
+                        m.get("home_win_prob"),
+                        m.get("draw_prob"),
+                        m.get("away_win_prob"),
+                        m.get("upset_score"),
+                        m.get("public_heat_home"),
+                        m.get("public_heat_draw"),
+                        m.get("public_heat_away"),
+                    ),
+                )
+                inserted += 1
+        except Exception as e:
+            print(f"[store_pool_issue_matches] error match_order={m.get('match_order')}: {e}")
+            continue
+    conn.commit()
+    return inserted

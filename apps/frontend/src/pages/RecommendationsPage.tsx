@@ -11,6 +11,7 @@ import Card from '../shared/components/Card';
 import ChartCard from '../shared/components/ChartCard';
 import StatusBadge from '../shared/components/StatusBadge';
 import DisclaimerBanner, { PAGE_DEFAULTS } from '../shared/components/DisclaimerBanner';
+import { statusLabel, riskLabel } from '../shared/constants';
 
 export default function RecommendationsPage() {
   const [tickets, setTickets] = useState<SimulationTicket[]>([]);
@@ -55,7 +56,7 @@ export default function RecommendationsPage() {
       medium: 'warning',
       high: 'error',
     };
-    return <StatusBadge status={map[level] || 'info'} label={level.toUpperCase()} />;
+    return <StatusBadge status={map[level] || 'info'} label={riskLabel(level)} />;
   };
 
   const statusBadge = (s: string): 'ok' | 'warning' | 'error' | 'info' | 'disabled' => {
@@ -108,7 +109,7 @@ export default function RecommendationsPage() {
     {
       key: 'status',
       title: '状态',
-      render: (v) => <StatusBadge status={statusBadge(String(v))} label={String(v)} />,
+      render: (v) => <StatusBadge status={statusBadge(String(v))} label={statusLabel(String(v))} />,
     },
     {
       key: 'created_at',
@@ -144,9 +145,20 @@ export default function RecommendationsPage() {
           type: 'pie',
           radius: ['50%', '75%'],
           center: ['50%', '50%'],
+          avoidLabelOverlap: true,
           label: {
             show: true,
+            position: 'outside',
             formatter: '{b}\n{c} 张',
+            fontSize: 12,
+            lineHeight: 17,
+            color: '#F4F5F7',
+            fontWeight: 600,
+          },
+          labelLine: {
+            length: 20,
+            length2: 32,
+            lineStyle: { color: 'rgba(255,255,255,0.12)' },
           },
           data: Object.entries(riskCount).map(([level, count]) => ({
             value: count,
@@ -253,9 +265,9 @@ export default function RecommendationsPage() {
 
       {/* Live recommendations panel */}
       {!loading && liveRecs.length > 0 && (
-        <Card style={{ marginBottom: 20, borderColor: 'rgba(34,197,94,0.30)' }}>
+        <Card style={{ marginBottom: 20, borderColor: 'rgba(34,197,94,0.30)', animation: 'fqpSlideUpBounce 0.4s ease both' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-            <span style={{ fontSize: 18 }}>🎯</span>
+            <span style={{ fontSize: 18, animation: 'fqpNotificationDot 2s infinite', display: 'inline-block' }}>🎯</span>
             <span style={{ fontWeight: 700, fontSize: 15, color: 'var(--fqp-text)' }}>
               实时推荐（基于最新模型预测）
             </span>

@@ -98,7 +98,11 @@ function ModelCompareTab() {
   const PLAY_TYPE_NAMES: Record<string, string> = {
     spf: '胜平负',
     rqspf: '让球胜平负',
-    total_goals: '总进球',
+    zjq: '总进球数',
+    bf: '比分',
+    bqc: '半全场',
+    // legacy aliases (backward compat)
+    total_goals: '总进球数',
     score: '比分',
     half_full: '半全场',
   };
@@ -194,7 +198,7 @@ function ModelCompareTab() {
             </thead>
             <tbody>
               {models.map((m, i) => (
-                <tr key={m.name} style={{ borderBottom: '1px solid var(--fqp-border-light)', backgroundColor: i === 0 ? 'rgba(34,197,94,0.05)' : undefined }}>
+                <tr key={m.name} style={{ borderBottom: '1px solid var(--fqp-border-light)', backgroundColor: i === 0 ? 'rgba(34,197,94,0.05)' : undefined, animation: `fqpListItemEnter 0.25s ease both`, animationDelay: `${i * 40}ms` }}>
                   <td style={tdS}>
                     {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i + 1}
                   </td>
@@ -606,7 +610,7 @@ function ShapExplainTab() {
 
       {/* Results */}
       {matchId && probs && (
-        <>
+        <div style={{ animation: 'fqpSlideUpBounce 0.4s ease both' }}>
           {/* Prediction card */}
           <Card title={`${homeTeam} vs ${awayTeam}`} style={{ marginBottom: 20 }}>
             <div style={{ display: 'flex', gap: 32, flexWrap: 'wrap' }}>
@@ -688,7 +692,7 @@ function ShapExplainTab() {
               </table>
             </Card>
           )}
-        </>
+        </div>
       )}
 
       {!matchId && !error && !loading && (
@@ -906,10 +910,12 @@ export default function AnalysisPage() {
       </div>
 
       {/* Tab content */}
-      {activeTab === 'compare' && <ModelCompareTab />}
-      {activeTab === 'importance' && <FeatureImportanceTab />}
-      {activeTab === 'shap' && <ShapExplainTab />}
-      {activeTab === 'condition' && <ConditionTab />}
+      <div key={activeTab} className="fqp-anim-fadeIn">
+        {activeTab === 'compare' && <ModelCompareTab />}
+        {activeTab === 'importance' && <FeatureImportanceTab />}
+        {activeTab === 'shap' && <ShapExplainTab />}
+        {activeTab === 'condition' && <ConditionTab />}
+      </div>
     </div>
   );
 }

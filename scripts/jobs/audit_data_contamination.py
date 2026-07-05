@@ -137,13 +137,13 @@ def _check_result_leak(conn: Any) -> list[dict]:
                 m.home_team_name,
                 m.away_team_name,
                 m.kickoff_time,
-                mr.result_time,
+                mr.official_publish_time AS result_time,
                 mfs.snapshot_time AS feature_snapshot_time
             FROM official_results mr
             JOIN official_matches m ON m.id = mr.match_id
             LEFT JOIN match_feature_snapshots mfs ON mfs.match_id = m.id
-            WHERE mr.result_time IS NOT NULL
-              AND mfs.snapshot_time > mr.result_time
+            WHERE mr.official_publish_time IS NOT NULL
+              AND mfs.snapshot_time > mr.official_publish_time
             LIMIT 100
             """
         )

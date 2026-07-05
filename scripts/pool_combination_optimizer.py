@@ -302,8 +302,8 @@ def dan_tuo_optimize(
 
     返回：(组合列表, 统计信息)
     """
-    if len(matches) not in (9, 14):
-        raise ValueError(f"需要 9 场（任九）或 14 场（14场），当前 {len(matches)} 场")
+    if len(matches) < 2:
+        raise ValueError(f"至少需要2场比赛，当前 {len(matches)} 场")
 
     classified = classify_matches(matches)
     dan_indices = [i for i, m in enumerate(classified) if m.classification == "dan"]
@@ -365,8 +365,8 @@ def choose_rx9(
       - confidence: 选模型置信度最高的9场
       - mixed: 排除最不确定的2场和最可能爆冷的3场
     """
-    if len(matches) < 9:
-        raise ValueError(f"至少需要9场比赛，当前 {len(matches)} 场")
+    if len(matches) < 2:
+        raise ValueError(f"至少需要2场比赛，当前 {len(matches)} 场")
 
     if selection_method == "clarity":
         ranked = sorted(
@@ -524,8 +524,8 @@ def analyze_pool(
     """
     from datetime import datetime
 
-    if len(matches) != 14:
-        raise ValueError(f"14场足彩需要14场比赛，当前{len(matches)}场")
+    if len(matches) < 2:
+        raise ValueError(f"至少需要2场比赛，当前{len(matches)}场")
 
     # 1. 计算冷门指数
     for m in matches:
