@@ -30,11 +30,14 @@ RQSPF_OPTION_NAMES: dict[str, str] = {
 }
 
 
-def _option_name(play_type: str, option_code: str) -> str:
-    """Get option display name, respecting play type."""
-    if play_type == "rqspf":
-        return RQSPF_OPTION_NAMES.get(option_code, option_code)
-    return OPTION_NAMES.get(option_code, option_code)
+def _option_name(play_type: str, option_code: str, handicap: float | None = None) -> str:
+    """Get option display name, respecting play type and handicap."""
+    name = RQSPF_OPTION_NAMES.get(option_code, option_code) if play_type == "rqspf" else OPTION_NAMES.get(option_code, option_code)
+    if handicap is not None:
+        # Show handicap in parentheses, e.g. "让负(+1)", "让胜(-1)"
+        h_str = f"{handicap:+g}"
+        name = f"{name}({h_str})"
+    return name
 
 
 @router.get("/api/recommendations/live")
@@ -69,10 +72,17 @@ def get_live_recommendations(
                         m.away_team_name,
                         m.league_name,
                         m.kickoff_time,
-                        m.match_status
+                        m.match_status,
+                        om.handicap
                     FROM model_predictions mp
                     JOIN model_versions mv ON mv.id = mp.model_version_id
                     JOIN official_matches m ON m.id = mp.match_id
+                    LEFT JOIN LATERAL (
+                        SELECT handicap FROM official_odds_snapshots
+                        WHERE match_id = mp.match_id AND play_type = mp.play_type
+                          AND handicap IS NOT NULL
+                        ORDER BY snapshot_time DESC LIMIT 1
+                    ) om ON true
                     WHERE mp.ev > %(min_ev)s
                       AND mp.confidence_score >= %(min_confidence)s
                       AND m.match_status NOT IN ('Settled', 'Cancelled')
@@ -95,6 +105,7 @@ def get_live_recommendations(
         ev = float(r[7]) if r[7] else 0
         confidence = float(r[8]) if r[8] else 0
         edge = model_prob - market_prob if market_prob > 0 else 0
+        handicap = float(r[16]) if len(r) > 16 and r[16] is not None else None
 
         recommendations.append({
             "prediction_id": r[0],
@@ -102,7 +113,7 @@ def get_live_recommendations(
             "play_type": r[2],
             "play_type_name": PLAY_TYPE_NAMES.get(r[2], r[2]),
             "option_code": r[3],
-            "option_name": _option_name(r[2], r[3]),
+            "option_name": _option_name(r[2], r[3], handicap),
             "model_probability": round(model_prob, 4),
             "market_probability": round(market_prob, 4),
             "fair_odds": round(fair_odds, 2),
