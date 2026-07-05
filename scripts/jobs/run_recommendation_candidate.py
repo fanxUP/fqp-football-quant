@@ -19,7 +19,12 @@ from typing import Any
 
 from apps.backend.src.db import get_db
 from scripts.competition_storage import AGENT_DAILY_BUDGET
-from scripts.model_storage import store_simulation_ticket
+from scripts.simulator_storage import (
+    create_simulator_ticket,
+    create_simulator_items_batch,
+    ensure_simulator_bankroll,
+)
+from scripts.real_ticket_storage import create_bankroll_transaction
 
 
 def _now() -> str:
@@ -573,7 +578,8 @@ def run(dry_run: bool = False) -> dict[str, Any]:
 
                 items = [_make_item(c)]
 
-                tid = store_simulation_ticket(conn, ticket, items)
+                # 实际购买：创建 simulator_ticket + 扣款
+                tid = _buy_ticket(conn, ticket, items, c)
                 if tid:
                     tickets_created += 1
                     pool_stake += stake
@@ -638,7 +644,7 @@ def run(dry_run: bool = False) -> dict[str, Any]:
                     }
 
                     items = [_make_item(c) for c in combo["candidates"]]
-                    tid = store_simulation_ticket(conn, ticket, items)
+                    tid = _buy_ticket(conn, ticket, items, combo["candidates"][0])
                     if tid:
                         tickets_created += 1
                         parlay_tickets += 1
@@ -682,7 +688,7 @@ def run(dry_run: bool = False) -> dict[str, Any]:
                         }
 
                         items = [_make_item(c) for c in combo["candidates"]]
-                        tid = store_simulation_ticket(conn, ticket, items)
+                        tid = _buy_ticket(conn, ticket, items, combo["candidates"][0])
                         if tid:
                             tickets_created += 1
                             parlay_tickets += 1
@@ -816,6 +822,78 @@ def _build_parlays(
 
     result.sort(key=lambda x: x["combined_ev"], reverse=True)
     return result
+
+
+def _buy_ticket(conn: Any, ticket: dict, items: list[dict], candidate: dict) -> int | None:
+    """Create a real simulator ticket with bankroll deduction.
+
+    Instead of just creating a "recommendation" (simulation_tickets),
+    this creates an actual purchased ticket (simulator_tickets) and
+    deducts the stake from the bankroll.
+
+    Args:
+        conn: DB connection
+        ticket: Ticket dict with suggested_stake, pass_type, multiple, etc.
+        items: List of item dicts (match selections)
+        candidate: First candidate (for field mapping)
+
+    Returns:
+        New ticket ID, or None on failure.
+    """
+    stake = ticket.get("suggested_stake", 0)
+    if stake <= 0:
+        return None
+
+    try:
+        # 1. Ensure bankroll account exists
+        ensure_simulator_bankroll(conn)
+
+        # 2. Map fields for simulator_tickets table
+        sim_ticket = {
+            "play_type": candidate.get("play_type", "spf"),
+            "pass_type": ticket.get("pass_type", "single"),
+            "multiple": ticket.get("multiple", 1),
+            "total_cost": stake,
+            "bet_count": 1,
+            "max_prize": ticket.get("estimated_return", 0),
+            "match_count": len(items),
+            "status": "active",
+        }
+
+        # 3. Create ticket
+        ticket_id = create_simulator_ticket(conn, sim_ticket)
+        if not ticket_id:
+            return None
+
+        # 4. Create items
+        item_records = []
+        for it in items:
+            item_records.append({
+                "match_id": it.get("match_id"),
+                "play_type": it.get("play_type", candidate.get("play_type", "spf")),
+                "option_code": it.get("option_code"),
+                "option_name": it.get("option_name", ""),
+                "sp_value": it.get("sp_value", 0),
+                "handicap": it.get("handicap"),
+                "is_dan": it.get("is_dan", False),
+            })
+        create_simulator_items_batch(conn, ticket_id, item_records)
+
+        # 5. Deduct from bankroll
+        pool_label = ticket.get("strategy_pool", "agent")
+        create_bankroll_transaction(conn, {
+            "account_type": "simulator",
+            "transaction_type": "stake",
+            "amount": -stake,
+            "related_ticket_id": ticket_id,
+            "remark": f"AI推荐购买 #{ticket_id} ({pool_label} ¥{stake:.0f})",
+        })
+
+        return ticket_id
+
+    except Exception as e:
+        print(f"[_buy_ticket] error creating ticket: {e}")
+        return None
 
 
 if __name__ == "__main__":
