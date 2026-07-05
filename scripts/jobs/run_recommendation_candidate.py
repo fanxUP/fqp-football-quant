@@ -220,7 +220,7 @@ def run(dry_run: bool = False) -> dict[str, Any]:
                     LIMIT 1
                 ) latest_os ON true
                 WHERE mp.predict_time = %s
-                  AND mp.play_type = 'spf'
+                  AND mp.play_type IN ('spf', 'rqspf')
                   AND mv.model_name = ANY(%s)
                   AND m.kickoff_time > NOW()
                 ORDER BY mp.ev DESC
@@ -231,6 +231,25 @@ def run(dry_run: bool = False) -> dict[str, Any]:
 
         if not predictions:
             return {"status": "ok", "tickets": 0, "note": "no predictions from models"}
+
+        # ── 2c. Filter by available markets (official_markets) ──
+        # Only consider predictions for play types that are actually open for betting
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT match_id, play_type FROM official_markets
+                WHERE match_id = ANY(%s) AND is_open = true
+                """,
+                (list({p[1] for p in predictions}),),
+            )
+            open_markets = {(row[0], row[1]) for row in cur.fetchall()}
+
+        predictions = [
+            p for p in predictions
+            if (p[1], p[3]) in open_markets
+        ]
+        if not predictions:
+            return {"status": "ok", "tickets": 0, "note": "no predictions with open markets"}
 
         # ── 2b. SP 数据质量校验 ──
         # 检测每个 match 的 sp_value 异常:

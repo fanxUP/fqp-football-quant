@@ -111,169 +111,21 @@ def run(match_id: int | None = None, dry_run: bool = False) -> dict[str, Any]:
         total_predictions = 0
         total_votes = 0
 
+        PREDICT_PLAY_TYPES = ["spf", "rqspf"]
+
         for match_row in match_rows:
             mid, home_team_name, away_team_name = (
                 match_row[0],
                 match_row[1],
                 match_row[2],
             )
-            # 3. Load latest SPF odds for this match
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    SELECT id, option_code, sp_value
-                    FROM official_odds_snapshots
-                    WHERE match_id = %s AND play_type = 'spf'
-                    ORDER BY snapshot_time DESC
-                    """,
-                    (mid,),
+            for play_type in PREDICT_PLAY_TYPES:
+                p, v = _predict_match_play_type(
+                    conn, mid, home_team_name, away_team_name,
+                    play_type, active_models, rho, mle_rho, predict_time,
                 )
-                odds_rows = cur.fetchall()
-
-            if not odds_rows:
-                continue
-
-            odds_dict: dict[str, float] = {}
-            latest_snapshot_id: int | None = None
-            for row in odds_rows:
-                snap_id, opt, sp = row
-                code = OPTION_MAP.get(opt, opt)
-                if code not in odds_dict:
-                    odds_dict[code] = float(sp)
-                if latest_snapshot_id is None:
-                    latest_snapshot_id = snap_id
-
-            if len(odds_dict) < 3:
-                continue
-
-            # 4. Odds processing: two pipelines
-            #    a) Market baseline — simple proportional normalization
-            #    b) Shin+FLB — sophisticated margin removal + bias correction
-            market_probs = normalize_probabilities(odds_dict)
-
-            # Shin + FLB debias pipeline for Poisson/DC model inputs
-            shin_flb_result = full_debias_pipeline(odds_dict)
-            shin_flb_probs = shin_flb_result["flb_corrected"]
-            overround(odds_dict)  # rough proxy; actual z solved inside shin_method
-
-            # 5. Poisson: Shin/FLB probs → lambdas → score matrix → 1x2
-            try:
-                lam_h, lam_a = estimate_lambdas_from_odds(
-                    shin_flb_probs["3"], shin_flb_probs["1"], shin_flb_probs["0"]
-                )
-                poisson_matrix = score_matrix(lam_h, lam_a)
-                poisson_1x2 = derive_1x2(poisson_matrix)
-            except Exception:
-                lam_h, lam_a = 1.3, 1.1
-                poisson_1x2 = dict(market_probs)
-
-            # 6. Dixon-Coles: Shin/FLB probs + Poisson lambdas → DC matrix → 1x2
-            try:
-                dc_matrix = dixon_coles_matrix(lam_h, lam_a, rho)
-                dc_1x2 = derive_1x2(dc_matrix)
-            except Exception:
-                dc_1x2 = dict(poisson_1x2)
-
-            # 7. Elo rating model: pure historical strength, no odds dependency
-            try:
-                # Look up team IDs from teams table by name
-                with conn.cursor() as cur:
-                    cur.execute(
-                        "SELECT id FROM teams WHERE team_name_cn IN (%s, %s) ORDER BY id",
-                        (home_team_name, away_team_name),
-                    )
-                    team_rows = cur.fetchall()
-                team_ids = [r[0] for r in team_rows]
-                if len(team_ids) >= 2:
-                    home_elo, _ = get_or_create_elo(conn, team_ids[0])
-                    away_elo, _ = get_or_create_elo(conn, team_ids[1])
-                    elo_1x2 = run_elo_1x2_prediction(home_elo, away_elo)
-                else:
-                    elo_1x2 = dict(market_probs)
-            except Exception:
-                # Fallback: use market baseline if Elo unavailable
-                elo_1x2 = dict(market_probs)
-
-            # 8. Write predictions
-            model_results = {
-                "market_baseline": market_probs,
-                "maher_poisson": poisson_1x2,
-                "dixon_coles": dc_1x2,
-                "elo_rating": elo_1x2,
-            }
-
-            for model_name, probs in model_results.items():
-                mv_id = active_models.get(model_name)
-                if mv_id is None:
-                    continue
-
-                for opt_code in ("3", "1", "0"):
-                    model_p = probs.get(opt_code, 0.0)
-                    market_p = market_probs.get(opt_code, 0.0)
-                    sp_val = odds_dict.get(opt_code, 0.0)
-
-                    fair_odds = (1.0 / model_p) if model_p and model_p > 0 else None
-                    ev = expected_value(model_p, sp_val) if sp_val > 0 else 0.0
-
-                    uncertainty = _model_std(
-                        [
-                            market_probs.get(opt_code, 0),
-                            poisson_1x2.get(opt_code, 0),
-                            dc_1x2.get(opt_code, 0),
-                            elo_1x2.get(opt_code, 0),
-                        ]
-                    )
-
-                    pred = {
-                        "match_id": mid,
-                        "model_version_id": mv_id,
-                        "odds_snapshot_id": latest_snapshot_id,
-                        "predict_time": predict_time,
-                        "play_type": "spf",
-                        "option_code": opt_code,
-                        "model_probability": round(model_p, 6),
-                        "market_probability": round(market_p, 6),
-                        "probability_lower_bound": round(max(0, model_p - uncertainty * 2), 6),
-                        "probability_upper_bound": round(min(1, model_p + uncertainty * 2), 6),
-                        "uncertainty_score": round(uncertainty, 6),
-                        "adjusted_probability": round(model_p, 6),
-                        "fair_odds": round(fair_odds, 4) if fair_odds else None,
-                        "ev": round(ev, 6),
-                        "confidence_score": round(max(0, 1.0 - uncertainty * 3), 4),
-                        "risk_score": round(uncertainty * 3, 4),
-                        "uncertainty_reason": {
-                            "model_std": round(uncertainty, 6),
-                            "rho": rho if model_name == "dixon_coles" else None,
-                            "rho_source": "mle"
-                            if (model_name == "dixon_coles" and mle_rho is not None)
-                            else "default",
-                            "margin_removal": "shin_flb"
-                            if model_name in ("maher_poisson", "dixon_coles")
-                            else "proportional",
-                            "elo_based": model_name == "elo_rating",
-                        },
-                    }
-                    store_model_prediction(conn, pred)
-                    total_predictions += 1
-
-                # 8. Committee votes
-                for opt_code in ("3", "1", "0"):
-                    p = probs.get(opt_code, 0)
-                    direction = "strong" if p > 0.40 else ("weak" if p > 0.30 else "against")
-                    direction_full = f"{direction}_{OPTION_REVERSE.get(opt_code, opt_code)}"
-                    vote = {
-                        "match_id": mid,
-                        "play_type": "spf",
-                        "option_code": opt_code,
-                        "prediction_time": predict_time,
-                        "model_version_id": mv_id,
-                        "model_name": model_name,
-                        "model_probability": round(p, 6),
-                        "vote_direction": direction_full,
-                        "vote_weight": 1.0,
-                    }
-                    store_committee_vote(conn, vote)
-                    total_votes += 1
+                total_predictions += p
+                total_votes += v
 
     return {
         "status": "ok",
@@ -281,6 +133,179 @@ def run(match_id: int | None = None, dry_run: bool = False) -> dict[str, Any]:
         "votes": total_votes,
         "matches_processed": len(match_rows),
     }
+
+
+def _predict_match_play_type(
+    conn: Any,
+    mid: int,
+    home_team_name: str,
+    away_team_name: str,
+    play_type: str,
+    active_models: dict[str, int],
+    rho: float,
+    mle_rho: float | None,
+    predict_time: str,
+) -> tuple[int, int]:
+    """Run prediction pipeline for a single match + play type.
+
+    Loads odds, runs market_baseline / Poisson / Dixon-Coles / Elo,
+    stores predictions and committee votes.
+
+    Returns:
+        (predictions_count, votes_count)
+    """
+    # 1. Load latest odds for this play type
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT id, option_code, sp_value
+            FROM official_odds_snapshots
+            WHERE match_id = %s AND play_type = %s
+            ORDER BY snapshot_time DESC
+            """,
+            (mid, play_type),
+        )
+        odds_rows = cur.fetchall()
+
+    if not odds_rows:
+        return 0, 0
+
+    odds_dict: dict[str, float] = {}
+    latest_snapshot_id: int | None = None
+    for row in odds_rows:
+        snap_id, opt, sp = row
+        code = OPTION_MAP.get(opt, opt)
+        if code not in odds_dict:
+            odds_dict[code] = float(sp)
+        if latest_snapshot_id is None:
+            latest_snapshot_id = snap_id
+
+    if len(odds_dict) < 3:
+        return 0, 0
+
+    # 2. Odds processing
+    market_probs = normalize_probabilities(odds_dict)
+    shin_flb_result = full_debias_pipeline(odds_dict)
+    shin_flb_probs = shin_flb_result["flb_corrected"]
+    overround(odds_dict)
+
+    # 3. Poisson model
+    try:
+        lam_h, lam_a = estimate_lambdas_from_odds(
+            shin_flb_probs["3"], shin_flb_probs["1"], shin_flb_probs["0"]
+        )
+        poisson_matrix = score_matrix(lam_h, lam_a)
+        poisson_1x2 = derive_1x2(poisson_matrix)
+    except Exception:
+        lam_h, lam_a = 1.3, 1.1
+        poisson_1x2 = dict(market_probs)
+
+    # 4. Dixon-Coles model
+    try:
+        dc_matrix = dixon_coles_matrix(lam_h, lam_a, rho)
+        dc_1x2 = derive_1x2(dc_matrix)
+    except Exception:
+        dc_1x2 = dict(poisson_1x2)
+
+    # 5. Elo model
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT id FROM teams WHERE team_name_cn IN (%s, %s) ORDER BY id",
+                (home_team_name, away_team_name),
+            )
+            team_rows = cur.fetchall()
+        team_ids = [r[0] for r in team_rows]
+        if len(team_ids) >= 2:
+            home_elo, _ = get_or_create_elo(conn, team_ids[0])
+            away_elo, _ = get_or_create_elo(conn, team_ids[1])
+            elo_1x2 = run_elo_1x2_prediction(home_elo, away_elo)
+        else:
+            elo_1x2 = dict(market_probs)
+    except Exception:
+        elo_1x2 = dict(market_probs)
+
+    # 6. Write predictions per model
+    model_results = {
+        "market_baseline": market_probs,
+        "maher_poisson": poisson_1x2,
+        "dixon_coles": dc_1x2,
+        "elo_rating": elo_1x2,
+    }
+
+    total_p = 0
+    total_v = 0
+
+    for model_name, probs in model_results.items():
+        mv_id = active_models.get(model_name)
+        if mv_id is None:
+            continue
+
+        for opt_code in ("3", "1", "0"):
+            model_p = probs.get(opt_code, 0.0)
+            market_p = market_probs.get(opt_code, 0.0)
+            sp_val = odds_dict.get(opt_code, 0.0)
+
+            fair_odds = (1.0 / model_p) if model_p and model_p > 0 else None
+            ev = expected_value(model_p, sp_val) if sp_val > 0 else 0.0
+
+            uncertainty = _model_std(
+                [
+                    market_probs.get(opt_code, 0),
+                    poisson_1x2.get(opt_code, 0),
+                    dc_1x2.get(opt_code, 0),
+                    elo_1x2.get(opt_code, 0),
+                ]
+            )
+
+            pred = {
+                "match_id": mid,
+                "model_version_id": mv_id,
+                "odds_snapshot_id": latest_snapshot_id,
+                "predict_time": predict_time,
+                "play_type": play_type,
+                "option_code": opt_code,
+                "model_probability": round(model_p, 6),
+                "market_probability": round(market_p, 6),
+                "probability_lower_bound": round(max(0, model_p - uncertainty * 2), 6),
+                "probability_upper_bound": round(min(1, model_p + uncertainty * 2), 6),
+                "uncertainty_score": round(uncertainty, 6),
+                "adjusted_probability": round(model_p, 6),
+                "fair_odds": round(fair_odds, 4) if fair_odds else None,
+                "ev": round(ev, 6),
+                "confidence_score": round(max(0, 1.0 - uncertainty * 3), 4),
+                "risk_score": round(uncertainty * 3, 4),
+                "uncertainty_reason": {
+                    "model_std": round(uncertainty, 6),
+                    "rho": rho if model_name == "dixon_coles" else None,
+                    "rho_source": "mle" if (model_name == "dixon_coles" and mle_rho is not None) else "default",
+                    "margin_removal": "shin_flb" if model_name in ("maher_poisson", "dixon_coles") else "proportional",
+                    "elo_based": model_name == "elo_rating",
+                },
+            }
+            store_model_prediction(conn, pred)
+            total_p += 1
+
+        # Committee votes
+        for opt_code in ("3", "1", "0"):
+            p = probs.get(opt_code, 0)
+            direction = "strong" if p > 0.40 else ("weak" if p > 0.30 else "against")
+            direction_full = f"{direction}_{OPTION_REVERSE.get(opt_code, opt_code)}"
+            vote = {
+                "match_id": mid,
+                "play_type": play_type,
+                "option_code": opt_code,
+                "prediction_time": predict_time,
+                "model_version_id": mv_id,
+                "model_name": model_name,
+                "model_probability": round(p, 6),
+                "vote_direction": direction_full,
+                "vote_weight": 1.0,
+            }
+            store_committee_vote(conn, vote)
+            total_v += 1
+
+    return total_p, total_v
 
 
 def _model_std(values: list[float]) -> float:
