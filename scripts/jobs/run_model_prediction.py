@@ -112,7 +112,32 @@ def run(match_id: int | None = None, dry_run: bool = False) -> dict[str, Any]:
         total_predictions = 0
         total_votes = 0
 
-        PREDICT_PLAY_TYPES = ["spf", "rqspf"]
+        # 3. Load available markets: only predict for play types that are open
+        match_ids = [r[0] for r in match_rows]
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT match_id, play_type FROM official_markets
+                WHERE match_id = ANY(%s) AND is_open = true
+                  AND play_type IN ('spf', 'rqspf')
+                """,
+                (match_ids,),
+            )
+            market_rows = cur.fetchall()
+
+        # Build {match_id: [play_types]} map
+        available_markets: dict[int, list[str]] = {}
+        for mr in market_rows:
+            mid = mr[0]
+            pt = mr[1]
+            if mid not in available_markets:
+                available_markets[mid] = []
+            available_markets[mid].append(pt)
+
+        # If no markets open, fall back to SPF (legacy behavior)
+        if not available_markets:
+            for mid in match_ids:
+                available_markets[mid] = ["spf"]
 
         for match_row in match_rows:
             mid, home_team_name, away_team_name = (
@@ -120,7 +145,8 @@ def run(match_id: int | None = None, dry_run: bool = False) -> dict[str, Any]:
                 match_row[1],
                 match_row[2],
             )
-            for play_type in PREDICT_PLAY_TYPES:
+            play_types = available_markets.get(mid, ["spf"])
+            for play_type in play_types:
                 p, v = _predict_match_play_type(
                     conn, mid, home_team_name, away_team_name,
                     play_type, active_models, rho, mle_rho, predict_time,
