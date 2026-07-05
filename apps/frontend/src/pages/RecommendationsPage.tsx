@@ -19,6 +19,7 @@ export default function RecommendationsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState('');
+  const [activePlayTypeTab, setActivePlayTypeTab] = useState('all');
 
   useEffect(() => {
     let cancelled = false;
@@ -49,6 +50,21 @@ export default function RecommendationsPage() {
   const filtered = statusFilter
     ? tickets.filter((t) => t.status === statusFilter)
     : tickets;
+
+  // ---- Play type tabs for live recommendations ----
+  const PLAY_TYPE_TABS = [
+    { key: 'all',       label: '全部',              playTypes: ['spf', 'rqspf', 'bf', 'zjq', 'bqc'] },
+    { key: 'spf_rqspf', label: '胜平负/让球',        playTypes: ['spf', 'rqspf'] },
+    { key: 'bf',        label: '比分',               playTypes: ['bf'] },
+    { key: 'zjq',       label: '总进球数',            playTypes: ['zjq'] },
+    { key: 'bqc',       label: '半全场',              playTypes: ['bqc'] },
+  ];
+  const filteredLiveRecs = activePlayTypeTab === 'all'
+    ? liveRecs
+    : liveRecs.filter((r) => {
+        const tab = PLAY_TYPE_TABS.find((t) => t.key === activePlayTypeTab);
+        return tab ? tab.playTypes.includes(r.play_type) : true;
+      });
 
   const riskBadge = (level: string) => {
     const map: Record<string, 'ok' | 'warning' | 'error'> = {
@@ -275,6 +291,26 @@ export default function RecommendationsPage() {
               EV &gt; 0.01 · 共 {liveRecs.length} 条
             </span>
           </div>
+
+          {/* 玩法导航标签 */}
+          <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
+            {PLAY_TYPE_TABS.map((tab) => {
+              const count = tab.key === 'all'
+                ? liveRecs.length
+                : liveRecs.filter((r) => tab.playTypes.includes(r.play_type)).length;
+              return (
+                <button
+                  key={tab.key}
+                  className={activePlayTypeTab === tab.key ? 'fqp-btn fqp-btn-sm fqp-btn-primary' : 'fqp-btn fqp-btn-sm'}
+                  style={{ padding: '4px 14px', fontSize: 12 }}
+                  onClick={() => setActivePlayTypeTab(tab.key)}
+                >
+                  {tab.label}（{count}）
+                </button>
+              );
+            })}
+          </div>
+
           <div className="fqp-table-wrapper">
             <table className="fqp-table" style={{ fontSize: 13 }}>
               <thead>
@@ -292,7 +328,7 @@ export default function RecommendationsPage() {
                 </tr>
               </thead>
               <tbody>
-                {liveRecs.map((rec) => (
+                {filteredLiveRecs.map((rec) => (
                   <tr key={rec.prediction_id} className="clickable">
                     <td style={{ fontWeight: 600 }}>
                       {rec.home_team} vs {rec.away_team}
