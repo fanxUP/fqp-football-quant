@@ -45,7 +45,13 @@ case "${1:-deploy}" in
         # Docker Desktop 4.79 can fail before a build starts when Compose Bake
         # opens its gRPC session through a local proxy. Disable Bake while
         # retaining BuildKit for normal image builds.
-        COMPOSE_BAKE=false COMPOSE_PARALLEL_LIMIT=1 docker compose -f "$COMPOSE_FILE" build
+        # Build each service in its own Compose invocation. Docker Desktop 4.79
+        # can still open a shared gRPC session when `build` receives several
+        # services, even with Bake disabled and the parallel limit set to one.
+        for service in backend frontend worker scheduler; do
+            log "Building $service..."
+            COMPOSE_BAKE=false COMPOSE_PARALLEL_LIMIT=1 docker compose -f "$COMPOSE_FILE" build "$service"
+        done
         COMPOSE_BAKE=false COMPOSE_PARALLEL_LIMIT=1 docker compose -f "$COMPOSE_FILE" up --detach --no-build --wait --remove-orphans
         curl --fail --silent --show-error http://127.0.0.1:8000/health >/dev/null || fail "Backend health check failed after Docker deployment."
         curl --fail --silent --show-error http://127.0.0.1:3000/ >/dev/null || fail "Frontend health check failed after Docker deployment."
