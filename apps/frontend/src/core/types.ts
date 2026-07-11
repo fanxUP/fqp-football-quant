@@ -79,22 +79,6 @@ export interface EventMatch {
   ft_away_goals?: number | null;
 }
 
-export interface EventCatalogMatch {
-  source: 'official' | 'supplemental';
-  source_row_id: number;
-  source_match_code: string | null;
-  competition_season_id: number | null;
-  home_team_id: number | null;
-  away_team_id: number | null;
-  league_name: string;
-  home_team_name: string;
-  away_team_name: string;
-  kickoff_time: string;
-  match_status: string;
-  ft_home_goals: number | null;
-  ft_away_goals: number | null;
-}
-
 // ---- Official collection history ----
 
 export interface OfficialCollectionStatus {

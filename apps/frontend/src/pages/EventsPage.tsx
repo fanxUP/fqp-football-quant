@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../core/apiClient';
-import type { EventCatalogMatch, EventSummary } from '../core/types';
+import type { EventSummary, EventMatch } from '../core/types';
 import { ApiError } from '../core/types';
 import PageHeader from '../shared/components/PageHeader';
 import DataTable, { type Column } from '../shared/components/DataTable';
@@ -16,20 +16,24 @@ import { statusLabel } from '../shared/constants';
 const LEAGUE_COLORS = ['#ef4444', '#f59e0b', '#22c55e', '#3b82f6', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316', '#84cc16', '#14b8a6'];
 
 export default function EventsPage() {
-  const [matches, setMatches] = useState<EventCatalogMatch[]>([]);
+  const [events, setEvents] = useState<EventSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedLeague, setSelectedLeague] = useState<string>('__all__');
+  const [leagueMatches, setLeagueMatches] = useState<EventMatch[]>([]);
+  const [leagueLoading, setLeagueLoading] = useState(false);
   const [selectedMatchId, setSelectedMatchId] = useState<number | null>(null);
 
   useEffect(() => {
     setLoading(true);
     setError(null);
-    api.events.catalog({ source: 'all', limit: 5000 })
+    api.events.list()
       .then((res) => {
-        setMatches(res.matches);
+        setEvents(res.events);
         setLoading(false);
+        // Auto-select "全部赛事"
         setSelectedLeague('__all__');
+        loadMatches(null);
       })
       .catch((e) => {
         setError(e instanceof ApiError ? e.message : '加载失败');
@@ -37,22 +41,26 @@ export default function EventsPage() {
       });
   }, []);
 
+  const loadMatches = (leagueName: string | null) => {
+    setLeagueLoading(true);
+    const req = leagueName
+      ? api.events.matches(leagueName)
+      : api.events.allMatches();
+    req
+      .then((res) => {
+        setLeagueMatches(res.matches);
+        setLeagueLoading(false);
+      })
+      .catch(() => setLeagueLoading(false));
+  };
+
   const selectLeague = (leagueName: string | null) => {
     const key = leagueName || '__all__';
     if (key === selectedLeague) return;
     setSelectedLeague(key);
+    setLeagueMatches([]);
+    loadMatches(leagueName);
   };
-
-  const isAll = selectedLeague === '__all__';
-  const grouped = new Map<string, EventCatalogMatch[]>();
-  matches.forEach((match) => grouped.set(match.league_name, [...(grouped.get(match.league_name) || []), match]));
-  const events: EventSummary[] = Array.from(grouped, ([league_name, rows]) => ({
-    league_name,
-    match_count: rows.length,
-    first_match: rows.reduce((first, row) => row.kickoff_time < first ? row.kickoff_time : first, rows[0].kickoff_time),
-    last_match: rows.reduce((last, row) => row.kickoff_time > last ? row.kickoff_time : last, rows[0].kickoff_time),
-  })).sort((a, b) => b.last_match.localeCompare(a.last_match));
-  const leagueMatches = isAll ? matches : matches.filter((match) => match.league_name === selectedLeague);
 
   if (loading) return (
     <div>
@@ -74,9 +82,11 @@ export default function EventsPage() {
     </div>
   );
 
-  const matchColumns: Column<EventCatalogMatch>[] = [
+  const isAll = selectedLeague === '__all__';
+
+  const matchColumns: Column<EventMatch>[] = [
     {
-      key: 'source_match_code',
+      key: 'match_num_str',
       title: '编号',
       width: '90px',
       render: (v) => <span className="fqp-mono" style={{ color: 'var(--fqp-accent)', fontWeight: 600 }}>{String(v)}</span>,
@@ -89,7 +99,7 @@ export default function EventsPage() {
     },
     { key: 'home_team_name', title: '主队', render: (v) => <TeamName name={String(v)} /> },
     {
-      key: 'ft_home_goals',
+      key: 'ft_home_goals' as keyof EventMatch,
       title: '比分',
       width: '70px',
       render: (_v, row) => {
@@ -100,13 +110,7 @@ export default function EventsPage() {
       },
     },
     { key: 'away_team_name', title: '客队', render: (v) => <TeamName name={String(v)} /> },
-    ...(isAll ? [{ key: 'league_name', title: '联赛', width: '120px' as const }] : []),
-    {
-      key: 'source',
-      title: '数据来源',
-      width: '100px',
-      render: (v) => <StatusBadge status={v === 'official' ? 'ok' : 'info'} label={v === 'official' ? '体彩官方' : '补充赛程'} />,
-    },
+    ...(isAll ? [{ key: 'league_name' as keyof EventMatch, title: '联赛', width: '120px' as const }] : []),
     {
       key: 'match_status',
       title: '状态',
@@ -127,7 +131,7 @@ export default function EventsPage() {
 
   return (
     <div>
-      <PageHeader title="赛事中心" subtitle={`${events.length} 个联赛 · ${totalMatches} 场比赛 · 完整赛季档案`} />
+      <PageHeader title="赛事中心" subtitle={`${events.length} 个联赛 · ${totalMatches} 场比赛`} />
 
       <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-start' }}>
         {/* ── Left: league nav ── */}
@@ -223,7 +227,7 @@ export default function EventsPage() {
               {isAll ? '全部赛事' : selectedLeague}
             </span>
             <span style={{ color: 'var(--fqp-text-muted)', fontSize: '13px' }}>
-              {leagueMatches.length} 场比赛 · 完整赛季档案
+              {leagueMatches.length} 场比赛
             </span>
             {selectedEvent && (
               <span style={{ color: 'var(--fqp-text-muted)', fontSize: '12px' }}>
@@ -232,7 +236,9 @@ export default function EventsPage() {
             )}
           </div>
 
-          {leagueMatches.length > 0 ? (
+          {leagueLoading ? (
+            <Skeleton variant="table-row" count={8} />
+          ) : leagueMatches.length > 0 ? (
             <div style={{
               background: 'var(--fqp-panel)', borderRadius: '8px',
               padding: 0, overflow: 'hidden',
@@ -241,8 +247,8 @@ export default function EventsPage() {
                 columns={matchColumns}
                 rows={leagueMatches}
                 emptyText="该赛事暂无比赛"
-                onRowClick={(row) => row.source === 'official' && setSelectedMatchId(row.source_row_id)}
-                rowKey={(row) => `${row.source}-${row.source_row_id}`}
+                onRowClick={(row) => setSelectedMatchId(row.match_id)}
+                rowKey={(row) => String(row.match_id)}
                 selectedRowKey={selectedMatchId}
               />
             </div>
