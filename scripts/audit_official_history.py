@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from pathlib import Path
 from typing import Any
 
 from apps.backend.src.db import get_db
@@ -70,7 +71,53 @@ def summarize_official_history_rows(
     }
 
 
-def audit_official_history(start_date: str, end_date: str) -> dict[str, Any]:
+def load_uniform_artifact_match_ids(artifact_dir: Path) -> tuple[int, set[str]]:
+    """Read Sporttery Uniform result artifacts produced by the backfill command."""
+    match_ids: set[str] = set()
+    pages = 0
+    for artifact_path in sorted(artifact_dir.glob("*.json")):
+        if artifact_path.name == "run_summary.json":
+            continue
+        document = json.loads(artifact_path.read_text(encoding="utf-8"))
+        rows = ((document.get("response") or {}).get("value") or {}).get("matchResult")
+        if not isinstance(rows, list):
+            continue
+        pages += 1
+        match_ids.update(str(row["matchId"]) for row in rows if row.get("matchId") is not None)
+    return pages, match_ids
+
+
+def summarize_official_artifact_coverage(
+    *,
+    official_match_ids: set[str],
+    database_match_ids: set[str],
+    artifact_pages: int,
+) -> dict[str, Any]:
+    """Summarize whether retained official response identities reached the DB."""
+    missing = official_match_ids - database_match_ids
+    if not official_match_ids:
+        status = "unverified_against_official_source"
+    elif missing:
+        status = "incomplete_against_official_artifacts"
+    else:
+        status = "verified_against_official_artifacts"
+    return {
+        "official_artifact_pages": artifact_pages,
+        "official_distinct_match_ids": len(official_match_ids),
+        "database_match_ids_present": len(database_match_ids),
+        "missing_database_match_ids": len(missing),
+        "source_completeness": status,
+    }
+
+
+def audit_official_history(
+    start_date: str,
+    end_date: str,
+    artifact_dir: Path | None = None,
+) -> dict[str, Any]:
+    artifact_pages, artifact_match_ids = (
+        load_uniform_artifact_match_ids(artifact_dir) if artifact_dir else (0, set())
+    )
     with get_db() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -99,17 +146,40 @@ def audit_official_history(start_date: str, end_date: str) -> dict[str, Any]:
                 }
                 for row in cur.fetchall()
             ]
-    return summarize_official_history_rows(rows, start_date, end_date)
+            database_match_ids: set[str] = set()
+            if artifact_match_ids:
+                cur.execute(
+                    "SELECT source_match_id FROM official_matches WHERE source_match_id = ANY(%s)",
+                    (list(artifact_match_ids),),
+                )
+                database_match_ids = {str(row[0]) for row in cur.fetchall()}
+
+    summary = summarize_official_history_rows(rows, start_date, end_date)
+    if artifact_dir:
+        summary.update(
+            summarize_official_artifact_coverage(
+                official_match_ids=artifact_match_ids,
+                database_match_ids=database_match_ids,
+                artifact_pages=artifact_pages,
+            )
+        )
+        summary["official_artifact_dir"] = str(artifact_dir)
+    return summary
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--start-date", required=True)
     parser.add_argument("--end-date", required=True)
+    parser.add_argument(
+        "--artifact-dir",
+        type=Path,
+        help="Directory created by backfill_uniform_official_history for source coverage verification",
+    )
     args = parser.parse_args()
     print(
         json.dumps(
-            audit_official_history(args.start_date, args.end_date),
+            audit_official_history(args.start_date, args.end_date, args.artifact_dir),
             ensure_ascii=False,
             indent=2,
         )

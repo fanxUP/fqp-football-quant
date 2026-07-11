@@ -1,4 +1,7 @@
-from scripts.audit_official_history import summarize_official_history_rows
+from scripts.audit_official_history import (
+    summarize_official_artifact_coverage,
+    summarize_official_history_rows,
+)
 
 
 def test_audit_separates_identity_integrity_from_source_completeness():
@@ -52,3 +55,30 @@ def test_audit_marks_identity_integrity_ok_without_claiming_complete_coverage():
 
     assert audit["identity_integrity"] == "ok"
     assert audit["source_completeness"] == "unverified_against_official_source"
+
+
+def test_artifact_coverage_is_verified_only_when_every_official_id_is_in_database():
+    coverage = summarize_official_artifact_coverage(
+        official_match_ids={"2040455", "2040456"},
+        database_match_ids={"2040455", "2040456"},
+        artifact_pages=2,
+    )
+
+    assert coverage == {
+        "official_artifact_pages": 2,
+        "official_distinct_match_ids": 2,
+        "database_match_ids_present": 2,
+        "missing_database_match_ids": 0,
+        "source_completeness": "verified_against_official_artifacts",
+    }
+
+
+def test_artifact_coverage_reports_missing_official_ids():
+    coverage = summarize_official_artifact_coverage(
+        official_match_ids={"2040455", "2040456"},
+        database_match_ids={"2040455"},
+        artifact_pages=2,
+    )
+
+    assert coverage["missing_database_match_ids"] == 1
+    assert coverage["source_completeness"] == "incomplete_against_official_artifacts"
