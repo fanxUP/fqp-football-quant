@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api } from '../core/apiClient';
 import { ApiError } from '../core/types';
 import type { DailyReview, DashboardRoiDailyItem, DashboardTodayKpi, DashboardModelPerfItem } from '../core/types';
@@ -51,6 +51,8 @@ function fmtTime(): string {
 }
 
 export default function DashboardPage() {
+  const hasLoadedInitialData = useRef(false);
+  const isMounted = useRef(false);
   const [data, setData] = useState<DashboardData>({
     health: null,
     healthError: null,
@@ -79,7 +81,11 @@ export default function DashboardPage() {
   });
 
   useEffect(() => {
-    let cancelled = false;
+    isMounted.current = true;
+    if (hasLoadedInitialData.current) {
+      return () => { isMounted.current = false; };
+    }
+    hasLoadedInitialData.current = true;
 
     async function load() {
       const results: Partial<DashboardData> = { errors: {} };
@@ -91,10 +97,10 @@ export default function DashboardPage() {
       ) =>
         promise
           .then((val) => {
-            if (!cancelled) onOk(val);
+            if (isMounted.current) onOk(val);
           })
           .catch((e) => {
-            if (!cancelled) {
+            if (isMounted.current) {
               results.errors = {
                 ...results.errors,
                 [key]: e instanceof ApiError ? e.message : '请求失败',
@@ -112,12 +118,12 @@ export default function DashboardPage() {
           if (r.reviews.length > 0) {
             results.latestReview = r.reviews[0].review_date;
           }
-          if (!cancelled) setDailyReviews(r.reviews);
+          if (isMounted.current) setDailyReviews(r.reviews);
         }),
       ]);
 
       // Dashboard API — independent from existing loads
-      if (!cancelled) {
+      if (isMounted.current) {
         setDashLoading(true);
         try {
           const [todayRes, roiRes, modelRes] = await Promise.all([
@@ -125,7 +131,7 @@ export default function DashboardPage() {
             api.dashboard.roiDaily({ days: 30 }).catch(() => null),
             api.dashboard.modelPerformance().catch(() => null),
           ]);
-          if (!cancelled) {
+          if (isMounted.current) {
             if (todayRes?.data?.kpis) setTodayKpis(todayRes.data.kpis);
             if (todayRes?.data?.extras) {
               const extras = todayRes.data.extras;
@@ -138,13 +144,13 @@ export default function DashboardPage() {
             if (modelRes?.data?.series) setModelPerf(modelRes.data.series as DashboardModelPerfItem[]);
           }
         } catch {
-          if (!cancelled) setDashError('Dashboard API 异常');
+          if (isMounted.current) setDashError('Dashboard API 异常');
         } finally {
-          if (!cancelled) setDashLoading(false);
+          if (isMounted.current) setDashLoading(false);
         }
       }
 
-      if (!cancelled) {
+      if (isMounted.current) {
         setData((prev) => ({
           ...prev,
           ...results,
@@ -156,7 +162,7 @@ export default function DashboardPage() {
 
     load();
     return () => {
-      cancelled = true;
+      isMounted.current = false;
     };
   }, []);
 
