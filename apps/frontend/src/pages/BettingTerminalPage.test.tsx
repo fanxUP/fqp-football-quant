@@ -206,6 +206,7 @@ describe('BettingTerminalPage', () => {
       expect(within(slipPanel).getByText('模型 62.0%')).toBeInTheDocument();
     });
 
+    expect(within(terminalPanel).getByRole('button', { name: '设胆' })).toBeDisabled();
     expect(within(terminalPanel).getByText('过关方式')).toBeInTheDocument();
     expect(within(terminalPanel).getByRole('checkbox', { name: '单关' })).toHaveAttribute('aria-pressed', 'true');
     expect(within(terminalPanel).getByLabelText('投注倍数')).toHaveValue(1);
@@ -262,8 +263,8 @@ describe('BettingTerminalPage', () => {
       expect(within(terminalPanel).getByRole('checkbox', { name: '3×1' })).toBeInTheDocument();
     });
 
-    expect(within(terminalPanel).queryByRole('checkbox', { name: '3×3' })).not.toBeInTheDocument();
-    expect(within(terminalPanel).queryByRole('checkbox', { name: '3×4' })).not.toBeInTheDocument();
+    expect(within(terminalPanel).getByRole('checkbox', { name: '3×3' })).toBeInTheDocument();
+    expect(within(terminalPanel).getByRole('checkbox', { name: '3×4' })).toBeInTheDocument();
     await waitFor(() => {
       expect(within(slipPanel).getByText('3×1')).toBeInTheDocument();
     });

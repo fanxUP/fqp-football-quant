@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import type { BetSlipItem } from './types';
 import {
   getPassTypeGroupCount,
+  getPassTypeBetCount,
   getPassTypesGroupCount,
+  getAvailablePassTypes,
   getSlipWarnings,
   getTicketPlayType,
   normalizePassType,
@@ -67,6 +69,25 @@ describe('bettingRules', () => {
     expect(getPassTypesGroupCount(3, ['3x1', '2x1'])).toBe(4);
     expect(getPassTypeGroupCount(4, '2x1')).toBe(6);
     expect(getPassTypeGroupCount(1, 'single')).toBe(1);
+  });
+
+  it('exposes official compound pass types for an exact match count', () => {
+    expect(getAvailablePassTypes([slipItem({ match_id: 1 }), slipItem({ match_id: 2 }), slipItem({ match_id: 3 })])).toEqual([
+      'single', '2x1', '3x1', '3x3', '3x4',
+    ]);
+    expect(getAvailablePassTypes(Array.from({ length: 4 }, (_, index) => slipItem({ match_id: index + 1 })))).toContain('4x11');
+  });
+
+  it('counts compound passes and adjusts combinations for dan selections', () => {
+    const items = [
+      slipItem({ match_id: 1, is_dan: true }),
+      slipItem({ match_id: 2 }),
+      slipItem({ match_id: 3 }),
+    ];
+
+    expect(getPassTypeBetCount(items, '3x3')).toBe(2);
+    expect(getPassTypeBetCount(items, '3x4')).toBe(3);
+    expect(getPassTypeBetCount(items, '2x1')).toBe(2);
   });
 
   it('warns when slip violates play limits or pass type lacks enough matches', () => {

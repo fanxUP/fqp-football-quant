@@ -15,6 +15,21 @@ export interface PlayRule {
 
 export const STAKE_UNIT = 2;
 
+/**
+ * 体彩竞彩足球过关拆分规则。每个元组表示：从 n 场中任选 k 场生成一注。
+ * 例如 4×11 = 6 个 2 串1 + 4 个 3 串1 + 1 个 4 串1。
+ */
+const PASS_TYPE_SPECS: Record<string, Array<[number, number]>> = {
+  single: [[1, 1]],
+  '2x1': [[2, 2]],
+  '3x1': [[3, 3]], '3x3': [[3, 2]], '3x4': [[3, 2], [3, 3]],
+  '4x1': [[4, 4]], '4x4': [[4, 3]], '4x5': [[4, 3], [4, 4]], '4x6': [[4, 2]], '4x11': [[4, 2], [4, 3], [4, 4]],
+  '5x1': [[5, 5]], '5x5': [[5, 4]], '5x6': [[5, 4], [5, 5]], '5x10': [[5, 2]], '5x16': [[5, 3], [5, 4], [5, 5]], '5x20': [[5, 2], [5, 3]], '5x26': [[5, 2], [5, 3], [5, 4], [5, 5]],
+  '6x1': [[6, 6]], '6x6': [[6, 5]], '6x7': [[6, 5], [6, 6]], '6x15': [[6, 2]], '6x20': [[6, 3]], '6x22': [[6, 4], [6, 5], [6, 6]], '6x35': [[6, 2], [6, 3]], '6x42': [[6, 3], [6, 4], [6, 5], [6, 6]], '6x50': [[6, 2], [6, 3], [6, 4]], '6x57': [[6, 2], [6, 3], [6, 4], [6, 5], [6, 6]],
+  '7x1': [[7, 7]], '7x7': [[7, 6]], '7x8': [[7, 6], [7, 7]], '7x21': [[7, 5]], '7x35': [[7, 4]], '7x120': [[7, 2], [7, 3], [7, 4], [7, 5], [7, 6], [7, 7]],
+  '8x1': [[8, 8]], '8x8': [[8, 7]], '8x9': [[8, 7], [8, 8]], '8x28': [[8, 6]], '8x56': [[8, 5]], '8x70': [[8, 4]], '8x247': [[8, 2], [8, 3], [8, 4], [8, 5], [8, 6], [8, 7], [8, 8]],
+};
+
 export const SPORTTERY_PLAY_RULES: Record<SportteryPlayType, PlayRule> = {
   spf: {
     code: 'spf',
@@ -115,6 +130,49 @@ export function getPassTypeGroupCount(matchCount: number, passType: string): num
   return passType === 'single' ? matchCount : combination(matchCount, requiredMatchCount);
 }
 
+/** Returns every officially supported pass type for the current selections. */
+export function getAvailablePassTypes(items: BetSlipItem[]): string[] {
+  const matchCount = items.length;
+  if (matchCount === 0) return [];
+
+  return Object.entries(PASS_TYPE_SPECS)
+    .filter(([passType, specs]) => {
+      if (passType === 'single') return canUseSinglePass(items);
+      if (passType.endsWith('x1')) return matchCount >= specs[0][0];
+      return specs.some(([requiredMatchCount]) => requiredMatchCount === matchCount);
+    })
+    .map(([passType]) => passType)
+    .sort((left, right) => {
+      const leftMatches = left === 'single' ? 1 : Number(left.split('x')[0]);
+      const rightMatches = right === 'single' ? 1 : Number(right.split('x')[0]);
+      return leftMatches - rightMatches || Number(left.split('x')[1] || 1) - Number(right.split('x')[1] || 1);
+    });
+}
+
+/**
+ * Count actual ticket bets after applying banker (胆码) selections.
+ * This mirrors the server calculator so the amount shown before submission
+ * is the same amount that will be archived on the ticket.
+ */
+export function getPassTypeBetCount(items: BetSlipItem[], passType: string): number {
+  if (passType === 'single') return canUseSinglePass(items) ? items.length : 0;
+  const specs = PASS_TYPE_SPECS[passType];
+  if (!specs || items.length === 0) return 0;
+  const danCount = items.filter((item) => item.is_dan).length;
+  const normalCount = items.length - danCount;
+
+  return specs.reduce((total, [requiredMatchCount, selectionCount]) => {
+    if (passType.endsWith('x1') ? items.length < requiredMatchCount : items.length !== requiredMatchCount) return total;
+    const normalSelections = selectionCount - danCount;
+    if (normalSelections < 0 || normalSelections > normalCount) return total;
+    return total + combination(normalCount, normalSelections);
+  }, 0);
+}
+
+export function getPassTypesBetCount(items: BetSlipItem[], passTypes: string[]): number {
+  return passTypes.reduce((sum, passType) => sum + getPassTypeBetCount(items, passType), 0);
+}
+
 export function getPassTypesGroupCount(matchCount: number, passTypes: string[]): number {
   return passTypes.reduce((sum, passType) => sum + getPassTypeGroupCount(matchCount, passType), 0);
 }
@@ -150,6 +208,10 @@ export function getSlipWarnings(items: BetSlipItem[], passType: string): string[
   const requiredMatchCount = getPassTypeRequiredMatchCount(passType);
   if (requiredMatchCount != null && items.length < requiredMatchCount) {
     warnings.push(`${passType.replace('x', '串')}至少需要${requiredMatchCount}场，当前${items.length}场。`);
+  }
+
+  if (items.length >= (requiredMatchCount ?? 0) && getPassTypeBetCount(items, passType) === 0) {
+    warnings.push(`${passType.replace('x', '串')}的胆码数量不符合该过关方式。`);
   }
 
   return warnings;

@@ -2,10 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } f
 import { api } from '../core/apiClient';
 import { mapOcrTicketToSlip, type OcrUnmatchedItem } from '../core/ocrTicketMapping';
 import {
-  canUseSinglePass,
-  getPassTypeRequiredMatchCount,
-  getPassTypeGroupCount,
-  getPassTypesGroupCount,
+  getAvailablePassTypes,
+  getPassTypeBetCount,
+  getPassTypesBetCount,
   getPlayRule,
   getSelectionKey,
   getSlipWarnings,
@@ -118,44 +117,14 @@ function formatPassTypes(passTypes: string[]): string {
   return passTypes.map(formatPassType).join(' + ');
 }
 
-function isStraightPassType(passType: string): boolean {
-  return passType === 'single' || /^\d+x1$/.test(passType);
-}
-
-function buildPassTypeOptions(items: BetSlipItem[], calculated: string[] = []): string[] {
-  const matchCount = items.length;
-  if (matchCount <= 0) return [];
-  const options = new Set<string>();
-  if (canUseSinglePass(items)) {
-    options.add('single');
-  }
-  for (let count = 2; count <= matchCount; count += 1) {
-    options.add(`${count}x1`);
-  }
-  calculated.forEach((type) => {
-    if (!isStraightPassType(type)) return;
-    if (type === 'single') {
-      options.add(type);
-      return;
-    }
-    const requiredMatchCount = Number(type.split('x')[0]);
-    if (Number.isFinite(requiredMatchCount) && requiredMatchCount <= matchCount) {
-      options.add(type);
-    }
-  });
-  return Array.from(options).sort((left, right) => {
-    if (left === 'single') return -1;
-    if (right === 'single') return 1;
-    return Number(left.split('x')[0]) - Number(right.split('x')[0]);
-  });
-}
-
 function getAutoPassTypes(items: BetSlipItem[], availablePassTypes: string[]): string[] {
   if (items.length === 0) return [];
-  const straightPasses = availablePassTypes
-    .filter((type) => type !== 'single')
-    .sort((left, right) => (getPassTypeRequiredMatchCount(right) ?? 0) - (getPassTypeRequiredMatchCount(left) ?? 0));
-  if (straightPasses.length > 0) return [straightPasses[0]];
+  const parlayPasses = availablePassTypes.filter((type) => type !== 'single');
+  const straightPasses = parlayPasses.filter((type) => type.endsWith('x1'));
+  if (straightPasses.length > 0) {
+    return [straightPasses.reduce((largest, type) => Number(type.split('x')[0]) > Number(largest.split('x')[0]) ? type : largest)];
+  }
+  if (parlayPasses.length > 0) return [parlayPasses[0]];
   return availablePassTypes.includes('single') ? ['single'] : [];
 }
 
@@ -252,17 +221,19 @@ export default function BettingTerminalPage() {
 
   const serializedPassType = useMemo(() => serializePassTypes(normalizedPassTypes), [normalizedPassTypes]);
 
-  const availablePassTypes = useMemo(() => buildPassTypeOptions(betSlip), [betSlip]);
+  const availablePassTypes = useMemo(() => getAvailablePassTypes(betSlip), [betSlip]);
 
   const localGroupCount = useMemo(
-    () => getPassTypesGroupCount(betSlip.length, normalizedPassTypes),
-    [betSlip.length, normalizedPassTypes],
+    () => getPassTypesBetCount(betSlip, normalizedPassTypes),
+    [betSlip, normalizedPassTypes],
   );
 
   const localTotalCost = useMemo(
     () => localGroupCount * STAKE_UNIT * multiple,
     [localGroupCount, multiple],
   );
+
+  const isDanAvailable = normalizedPassTypes.some((passType) => passType !== 'single');
 
   useEffect(() => {
     setSelectedPassTypes((current) => {
@@ -466,6 +437,7 @@ export default function BettingTerminalPage() {
   };
 
   const toggleDan = (index: number) => {
+    if (!isDanAvailable) return;
     const updated = [...betSlip];
     updated[index] = { ...updated[index], is_dan: !updated[index].is_dan };
     setBetSlip(updated);
@@ -535,7 +507,7 @@ export default function BettingTerminalPage() {
         });
       }
       if (result.pass_type) {
-        const nextPassTypes = parsePassTypes(result.pass_type).filter(isStraightPassType);
+        const nextPassTypes = parsePassTypes(result.pass_type).filter((type) => getAvailablePassTypes(mapping.mapped).includes(type));
         setSelectedPassTypes(nextPassTypes);
         setPassSelectionMode(nextPassTypes.length > 0 ? 'manual' : 'auto');
       }
@@ -813,7 +785,13 @@ export default function BettingTerminalPage() {
                     </div>
                     <div className="betting-builder-pick-value">
                       <span>{item.option_name} @{item.sp_value.toFixed(2)}</span>
-                      <button type="button" onClick={() => toggleDan(index)} aria-pressed={item.is_dan}>
+                      <button
+                        type="button"
+                        onClick={() => toggleDan(index)}
+                        aria-pressed={item.is_dan}
+                        disabled={!isDanAvailable}
+                        title={isDanAvailable ? '胆码会出现在每一组过关组合中' : '单关不支持设胆'}
+                      >
                         {item.is_dan ? '胆' : '设胆'}
                       </button>
                       <button type="button" onClick={() => removeFromSlip(index)}>
@@ -842,7 +820,7 @@ export default function BettingTerminalPage() {
                       disabled={betSlip.length === 0}
                     >
                       <span>{formatPassType(type)}</span>
-                      <small>{getPassTypeGroupCount(betSlip.length, type)}组</small>
+                      <small>{getPassTypeBetCount(betSlip, type)}组</small>
                     </button>
                   ))}
                   {availablePassTypes.length === 0 && (
@@ -1052,6 +1030,10 @@ export default function BettingTerminalPage() {
             <div>
               <span>组合数</span>
               <strong>{localGroupCount} 组</strong>
+            </div>
+            <div>
+              <span>胆码</span>
+              <strong>{betSlip.filter((item) => item.is_dan).length} 场</strong>
             </div>
             <div>
               <span>倍数</span>
