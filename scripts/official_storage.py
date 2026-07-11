@@ -47,15 +47,16 @@ def store_matches(conn: Any, matches: list[dict]) -> dict[str, Any]:
     inserted, updated, errors = 0, 0, []
     sql = """
         INSERT INTO official_matches (
-            sport_type, business_date, official_match_code, league_name,
+            sport_type, business_date, official_match_code, source_match_id, league_name,
             home_team_name, away_team_name, kickoff_time, sale_stop_time,
             sale_status, match_status, source_url, raw_hash, raw_json, updated_at
         ) VALUES (
-            %(sport_type)s, %(business_date)s, %(official_match_code)s, %(league_name)s,
+            %(sport_type)s, %(business_date)s, %(official_match_code)s, %(source_match_id)s, %(league_name)s,
             %(home_team_name)s, %(away_team_name)s, %(kickoff_time)s, %(sale_stop_time)s,
             %(sale_status)s, %(match_status)s, %(source_url)s, %(raw_hash)s, %(raw_json)s, now()
         )
         ON CONFLICT (business_date, official_match_code) DO UPDATE SET
+            source_match_id = COALESCE(EXCLUDED.source_match_id, official_matches.source_match_id),
             league_name = EXCLUDED.league_name,
             home_team_name = EXCLUDED.home_team_name,
             away_team_name = EXCLUDED.away_team_name,
@@ -79,6 +80,9 @@ def store_matches(conn: Any, matches: list[dict]) -> dict[str, Any]:
                         "sport_type": m.get("sport_type", "football"),
                         "business_date": m["business_date"],
                         "official_match_code": m["official_match_code"],
+                        "source_match_id": m.get("source_match_id")
+                        or str(raw.get("matchId") or "").strip()
+                        or None,
                         "league_name": m["league_name"],
                         "home_team_name": m["home_team_name"],
                         "away_team_name": m["away_team_name"],

@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS official_matches (
     sport_type VARCHAR(32) NOT NULL DEFAULT 'football',
     business_date DATE NOT NULL,
     official_match_code VARCHAR(32) NOT NULL,
+    source_match_id VARCHAR(64),
     league_name VARCHAR(128) NOT NULL,
     home_team_name VARCHAR(128) NOT NULL,
     away_team_name VARCHAR(128) NOT NULL,
@@ -17,8 +18,14 @@ CREATE TABLE IF NOT EXISTS official_matches (
     raw_json JSONB,
     created_at TIMESTAMP DEFAULT now(),
     updated_at TIMESTAMP DEFAULT now(),
-    UNIQUE (business_date, official_match_code)
+    UNIQUE (business_date, official_match_code),
+    CONSTRAINT official_matches_display_code_format
+        CHECK (official_match_code ~ '^周[一二三四五六日][0-9]{3}$')
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_official_matches_source_match_id
+    ON official_matches (source_match_id)
+    WHERE source_match_id IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS official_markets (
     id BIGSERIAL PRIMARY KEY,

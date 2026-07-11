@@ -263,7 +263,12 @@ def parse_results_from_response(
         result_list = raw.get("matchInfoList", [])
 
     for item in result_list:
-        match_code = item.get("matchNum") or item.get("matchCode", "")
+        # ``matchNumStr`` is the ticket-visible identifier (for example
+        # 周五098). ``matchNum`` may be a numeric Sporttery internal value in
+        # some responses and must not replace the display code.
+        match_code = (
+            item.get("matchNumStr") or item.get("matchCode") or item.get("matchNum", "")
+        )
         if not match_code:
             continue
 

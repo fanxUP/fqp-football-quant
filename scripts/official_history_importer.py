@@ -12,14 +12,21 @@ import argparse
 import hashlib
 import json
 import re
+from datetime import date
 from pathlib import Path
 from typing import Any
 
 from apps.backend.src.db import get_db
 from scripts.official_crawler import parse_results_from_response
-from scripts.official_storage import record_official_collection_status, store_results
+from scripts.official_storage import (
+    record_official_collection_status,
+    store_matches,
+    store_results,
+)
 
 SPORTTERY_RESULT_URL = "https://www.sporttery.cn/jc/zqsgkj/"
+OFFICIAL_MATCH_CODE_RE = re.compile(r"^周([一二三四五六日天])(\d{3})$")
+WEEKDAY_LABELS = "一二三四五六日"
 
 
 def _artifact_hash(text: str) -> str:
@@ -130,6 +137,170 @@ def parse_local_official_results_text(
     return parsed_results
 
 
+def _result_rows(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    value = payload.get("value")
+    containers = [value] if isinstance(value, dict) else []
+    containers.append(payload)
+    for container in containers:
+        rows = container.get("matchResultList") or container.get("matchInfoList")
+        if isinstance(rows, list):
+            return [row for row in rows if isinstance(row, dict)]
+    return []
+
+
+def _first_text(row: dict[str, Any], *keys: str) -> str:
+    for key in keys:
+        value = row.get(key)
+        if value is not None and str(value).strip():
+            return str(value).strip()
+    return ""
+
+
+def _normalize_display_code(value: str) -> str:
+    value = value.strip().replace("周天", "周日")
+    return value if OFFICIAL_MATCH_CODE_RE.fullmatch(value) else ""
+
+
+def _identity_error(business_date: str, match_code: str) -> str | None:
+    if not business_date:
+        return "missing official business_date"
+    if not match_code:
+        return "missing or invalid official display match code"
+    try:
+        parsed_date = date.fromisoformat(business_date)
+    except ValueError:
+        return "invalid official business_date"
+    match = OFFICIAL_MATCH_CODE_RE.fullmatch(match_code)
+    if match is None or match.group(1) != WEEKDAY_LABELS[parsed_date.weekday()]:
+        return "match code weekday does not match business_date"
+    return None
+
+
+def parse_local_official_history_text(
+    text: str,
+    source_path: str,
+    source_url: str = SPORTTERY_RESULT_URL,
+    default_business_date: str | None = None,
+) -> dict[str, list[dict[str, Any]]]:
+    """Parse identity-safe historical matches and results from an official artifact.
+
+    A row is accepted only when it has Sporttery's display code (``周五098``)
+    and an official business date whose weekday agrees with that code. This is
+    deliberately stricter than the legacy result-only parser because display
+    codes repeat every week and must never be resolved by code alone.
+    """
+    artifact_hash = _artifact_hash(text)
+    matches: list[dict[str, Any]] = []
+    results: list[dict[str, Any]] = []
+    rejected: list[dict[str, Any]] = []
+    seen_identities: set[tuple[str, str]] = set()
+
+    for payload in extract_official_result_payloads(text):
+        normalized_results = parse_results_from_response(payload)
+        for row, result in zip(_result_rows(payload), normalized_results):
+            business_date = _first_text(
+                row, "businessDate", "matchBusinessDate", "betDate"
+            ) or (default_business_date or "")
+            match_code = _normalize_display_code(
+                _first_text(row, "matchNumStr", "matchCode", "matchNum")
+            )
+            error = _identity_error(business_date, match_code)
+            if error:
+                rejected.append(
+                    {
+                        "business_date": business_date,
+                        "official_match_code": _first_text(
+                            row, "matchNumStr", "matchCode", "matchNum"
+                        ),
+                        "reason": error,
+                    }
+                )
+                continue
+
+            identity = (business_date, match_code)
+            if identity in seen_identities:
+                continue
+            seen_identities.add(identity)
+
+            source_match_id = _first_text(row, "matchId")
+            raw = dict(result.get("raw_json") or row)
+            raw["_source_artifact"] = {
+                "path": source_path,
+                "hash": artifact_hash,
+                "source_url": source_url,
+            }
+            result["raw_json"] = raw
+            result["_business_date"] = business_date
+            result["_match_code"] = match_code
+            result["_source_match_id"] = source_match_id
+            results.append(result)
+
+            league_name = _first_text(
+                row, "leagueAllName", "leagueName", "leagueAbbName"
+            )
+            home_team_name = _first_text(
+                row, "homeTeamAllName", "homeTeamName", "homeTeam"
+            )
+            away_team_name = _first_text(
+                row, "awayTeamAllName", "awayTeamName", "awayTeam"
+            )
+            match_date = _first_text(row, "matchDate")
+            match_time = _first_text(row, "matchTime")
+            kickoff_time = (
+                f"{match_date}T{match_time}"
+                if match_date and match_time and "T" not in match_time
+                else match_time or match_date
+            )
+            if league_name and home_team_name and away_team_name and kickoff_time:
+                matches.append(
+                    {
+                        "sport_type": "football",
+                        "business_date": business_date,
+                        "official_match_code": match_code,
+                        "source_match_id": source_match_id or None,
+                        "league_name": league_name,
+                        "home_team_name": home_team_name,
+                        "away_team_name": away_team_name,
+                        "kickoff_time": kickoff_time,
+                        "sale_stop_time": None,
+                        "sale_status": "finished",
+                        "match_status": "Settled",
+                        "source_url": source_url,
+                        "raw_json": raw,
+                    }
+                )
+
+    return {"matches": matches, "results": results, "rejected": rejected}
+
+
+def resolve_official_match_id(
+    cursor: Any,
+    *,
+    source_match_id: str,
+    business_date: str,
+    match_code: str,
+) -> int | None:
+    """Resolve a historical result without ever matching a weekly code alone."""
+    if source_match_id:
+        cursor.execute(
+            "SELECT id FROM official_matches WHERE source_match_id = %s",
+            (source_match_id,),
+        )
+        row = cursor.fetchone()
+        if row:
+            return int(row[0])
+
+    cursor.execute(
+        """
+        SELECT id FROM official_matches
+        WHERE business_date = %s AND official_match_code = %s
+        """,
+        (business_date, match_code),
+    )
+    row = cursor.fetchone()
+    return int(row[0]) if row else None
+
+
 def import_local_official_results_file(
     path: str,
     business_date: str,
@@ -139,37 +310,48 @@ def import_local_official_results_file(
     artifact = Path(path)
     text = artifact.read_text(encoding="utf-8")
     artifact_hash = _artifact_hash(text)
-    results = parse_local_official_results_text(text, source_path=str(artifact))
+    history = parse_local_official_history_text(
+        text,
+        source_path=str(artifact),
+        default_business_date=business_date,
+    )
+    matches = history["matches"]
+    results = history["results"]
+    rejected = history["rejected"]
 
     if dry_run:
         return {
-            "status": "ok",
+            "status": "ok" if not rejected else "partial",
             "dry_run": True,
+            "matches_found": len(matches),
             "results_found": len(results),
+            "rejected": rejected,
             "source_artifact_hash": artifact_hash,
         }
 
     with get_db() as conn:
+        stored_matches = store_matches(conn, matches) if matches else {
+            "inserted": 0,
+            "updated": 0,
+            "errors": [],
+        }
         matched: list[dict[str, Any]] = []
         unresolved: list[str] = []
         with conn.cursor() as cur:
             for result in results:
-                code = result.pop("_match_code", "")
-                cur.execute(
-                    """
-                    SELECT id FROM official_matches
-                    WHERE official_match_code = %s
-                    ORDER BY business_date DESC
-                    LIMIT 1
-                    """,
-                    (code,),
+                code = result.get("_match_code", "")
+                result_business_date = result.get("_business_date", "")
+                match_id = resolve_official_match_id(
+                    cur,
+                    source_match_id=result.get("_source_match_id", ""),
+                    business_date=result_business_date,
+                    match_code=code,
                 )
-                row = cur.fetchone()
-                if row:
-                    result["match_id"] = row[0]
+                if match_id is not None:
+                    result["match_id"] = match_id
                     matched.append(result)
                 else:
-                    unresolved.append(code)
+                    unresolved.append(f"{result_business_date}/{code}")
 
         stored = store_results(conn, matched) if matched else {
             "inserted": 0,
@@ -181,26 +363,35 @@ def import_local_official_results_file(
             business_date=business_date,
             crawl_type="results_import",
             source_name="sporttery",
-            status="ok" if not unresolved else "partial",
+            status="ok" if not unresolved and not rejected else "partial",
             source_url=SPORTTERY_RESULT_URL,
             source_artifact_path=str(artifact),
             source_artifact_hash=artifact_hash,
-            records_found=len(results),
-            records_inserted=stored.get("inserted", 0),
-            records_updated=stored.get("updated", 0),
-            error_message=f"unresolved match codes: {', '.join(unresolved)}"
-            if unresolved
-            else None,
-            raw_json={"unresolved_match_codes": unresolved},
+            records_found=len(results) + len(rejected),
+            records_inserted=stored_matches.get("inserted", 0)
+            + stored.get("inserted", 0),
+            records_updated=stored_matches.get("updated", 0)
+            + stored.get("updated", 0),
+            error_message=(
+                f"unresolved identities: {', '.join(unresolved)}; "
+                f"rejected rows: {len(rejected)}"
+                if unresolved or rejected
+                else None
+            ),
+            raw_json={"unresolved_match_identities": unresolved, "rejected": rejected},
         )
 
     return {
-        "status": "ok" if not unresolved else "partial",
+        "status": "ok" if not unresolved and not rejected else "partial",
+        "matches_found": len(matches),
+        "matches_inserted": stored_matches.get("inserted", 0),
+        "matches_updated": stored_matches.get("updated", 0),
         "results_found": len(results),
         "results_matched": len(matched),
         "results_inserted": stored.get("inserted", 0),
         "results_updated": stored.get("updated", 0),
-        "unresolved_match_codes": unresolved,
+        "unresolved_match_identities": unresolved,
+        "rejected": rejected,
         "source_artifact_hash": artifact_hash,
     }
 
