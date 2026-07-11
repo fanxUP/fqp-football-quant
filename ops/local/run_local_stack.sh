@@ -45,7 +45,8 @@ case "${1:-deploy}" in
         # Docker Desktop 4.79 can fail before a build starts when Compose Bake
         # opens its gRPC session through a local proxy. Disable Bake while
         # retaining BuildKit for normal image builds.
-        COMPOSE_BAKE=false docker compose -f "$COMPOSE_FILE" up --detach --build --wait --remove-orphans
+        COMPOSE_BAKE=false COMPOSE_PARALLEL_LIMIT=1 docker compose -f "$COMPOSE_FILE" build
+        COMPOSE_BAKE=false COMPOSE_PARALLEL_LIMIT=1 docker compose -f "$COMPOSE_FILE" up --detach --no-build --wait --remove-orphans
         curl --fail --silent --show-error http://127.0.0.1:8000/health >/dev/null || fail "Backend health check failed after Docker deployment."
         curl --fail --silent --show-error http://127.0.0.1:3000/ >/dev/null || fail "Frontend health check failed after Docker deployment."
         log "Deployment complete: GitHub and Docker Desktop are on ${REVISION:0:12}."
