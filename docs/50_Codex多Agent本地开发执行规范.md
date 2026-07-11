@@ -91,4 +91,4 @@ Codex 可受控触发一次性任务，但不作为常驻生产进程。
 ---
 
 ## 最终补充：Codex + 本机进程 + 非锁版依赖策略
-本项目最终执行时以 `docs/54_本机运行与DockerDesktop弃用说明.md` 为准：项目使用 Codex 开发，macOS 宿主机本地运行；依赖不指定固定版本，优先使用本机已安装版本，缺失时通过官方渠道安装当前版本。所有长期任务由本地 Scheduler/Worker 运行，Codex 负责代码开发、维护、修复和受控触发。
+本项目以 `54_本机运行与DockerDesktop弃用说明.md` 为准：Codex 在 macOS 工作目录开发，日常热开发使用本机进程；发布运行通过经 GitHub SHA 校验的 Docker Desktop 服务栈完成。长期任务由当前模式中的 Scheduler/Worker 执行，Codex 负责代码开发、维护、修复和受控触发。

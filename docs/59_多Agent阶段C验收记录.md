@@ -1,8 +1,10 @@
 # 多 Agent 阶段 C 验收记录
 
+> 历史验收事实：本记录验证时使用本机 PostgreSQL，未启动 Docker Desktop、Redis 或 Celery。当前运行方式以 `54_本机运行与DockerDesktop弃用说明.md` 为准。
+
 ## 目标
 
-在本机 PostgreSQL 上把数据、特征、模型、推荐、回测、复盘和 QA 任务统一纳入 `ai_job_runs`，形成可追溯的本地任务执行链。项目不使用 Docker Desktop、Redis 或 Celery。
+在本机 PostgreSQL 上把数据、特征、模型、推荐、回测、复盘和 QA 任务统一纳入 `ai_job_runs`，形成可追溯的本地任务执行链。
 
 ## 已接入任务
 

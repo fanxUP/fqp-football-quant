@@ -1,6 +1,6 @@
 # 本机 Scheduler
 
-项目定时任务使用本机 Python 和 PostgreSQL，不使用 Docker Desktop、Redis 或 Celery。
+本手册只适用于**本机热开发模式**：定时任务使用本机 Python 和 PostgreSQL，不使用 Docker Desktop、Redis 或 Celery。Docker 发布运行时，Compose 内的 `scheduler`/`worker` 接管任务；两种模式不得并行，详见 `../../docs/54_本机运行与DockerDesktop弃用说明.md`。
 
 启动：
 

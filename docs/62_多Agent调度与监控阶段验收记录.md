@@ -1,5 +1,7 @@
 # 多 Agent 调度与监控阶段验收记录
 
+> 历史验收事实：本记录验证的是本机 Scheduler 链路；Docker 发布模式由 Compose Scheduler/Worker 执行任务。当前操作以 `54_本机运行与DockerDesktop弃用说明.md` 为准。
+
 ## 本阶段交付
 
 - 本机 Scheduler 启动入口：`ops/local/run_local_scheduler.sh`
