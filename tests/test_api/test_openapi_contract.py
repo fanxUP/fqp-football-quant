@@ -36,14 +36,12 @@ def test_documented_api_v1_paths_exist_in_openapi_contract() -> None:
 
 def test_documented_api_v1_paths_resolve_to_runtime_routes() -> None:
     app = create_app()
-    runtime_routes: set[tuple[str, str]] = set()
-    for route in app.routes:
-        path = getattr(route, "path", None)
-        methods: set[str] = set(getattr(route, "methods", set()))
-        if not path:
-            continue
-        for method in methods:
-            runtime_routes.add((method, _normalize_path_params(path)))
+    runtime_routes = {
+        (method.upper(), _normalize_path_params(path))
+        for path, operations in app.openapi()["paths"].items()
+        for method in operations
+        if method.upper() in {"GET", "POST", "PUT", "PATCH", "DELETE"}
+    }
 
     missing = []
     for method, path in _documented_api_v1_routes():
