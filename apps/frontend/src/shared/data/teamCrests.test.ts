@@ -15,8 +15,8 @@ describe('team crest registry', () => {
   });
 
   it('contains a non-circular crest asset for every current database team', () => {
-    expect(TEAM_CREST_REGISTRY).toHaveLength(119);
+    expect(TEAM_CREST_REGISTRY.length).toBeGreaterThanOrEqual(119);
     expect(TEAM_CREST_REGISTRY.every((entry) => entry.logoUrl.startsWith('/team-crests/'))).toBe(true);
-    expect(TEAM_CREST_REGISTRY.every((entry) => /\.(png|webp)$/.test(entry.logoUrl))).toBe(true);
+    expect(TEAM_CREST_REGISTRY.every((entry) => /\.(jpg|png|webp)$/.test(entry.logoUrl))).toBe(true);
   });
 });

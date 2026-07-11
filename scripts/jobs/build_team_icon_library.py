@@ -33,6 +33,9 @@ LEAGUE_IDS = (19476, 19554, 19501, 19506, 19507)
 
 # Provider and internal naming order differ for this club.
 MANUAL_PROVIDER_NAMES = {"奥斯陆KFUM": "KFUM奥斯陆"}
+# Official Sporttery uses this spelling while the existing 500.com team row
+# uses the reverse order.  Keep one crest entry and retain both names.
+MANUAL_TEAM_NAME_ALIASES = {"KFUM奥斯陆": "奥斯陆KFUM"}
 
 
 def normalize_team_name(value: str) -> str:
@@ -53,6 +56,28 @@ def fetch_provider_teams() -> dict[str, dict[str, str]]:
 def load_database_teams() -> list[dict[str, Any]]:
     with get_db() as conn:
         with conn.cursor() as cur:
+            # Official Sporttery rows carry the stable 500.com-compatible
+            # team ids in raw_json.  Prefer these ids over name scraping so
+            # every team in the official match history can receive a crest,
+            # including teams outside the five currently tracked leagues.
+            cur.execute(
+                """
+                SELECT team_name, provider_id
+                FROM (
+                    SELECT home_team_name AS team_name,
+                           raw_json->>'homeTeamId' AS provider_id
+                    FROM official_matches
+                    WHERE home_team_name IS NOT NULL
+                    UNION
+                    SELECT away_team_name AS team_name,
+                           raw_json->>'awayTeamId' AS provider_id
+                    FROM official_matches
+                    WHERE away_team_name IS NOT NULL
+                ) official
+                ORDER BY team_name
+                """
+            )
+            official_rows = cur.fetchall()
             cur.execute(
                 """
                 SELECT t.id, t.team_name_cn, t.team_name_en, t.short_name,
@@ -63,7 +88,7 @@ def load_database_teams() -> list[dict[str, Any]]:
                 ORDER BY t.id
                 """
             )
-            return [
+            database_teams = [
                 {
                     "id": row[0],
                     "name_cn": row[1] or "",
@@ -73,6 +98,32 @@ def load_database_teams() -> list[dict[str, Any]]:
                 }
                 for row in cur.fetchall()
             ]
+            by_name = {team["name_cn"]: team for team in database_teams if team["name_cn"]}
+            for alias_name, canonical_name in MANUAL_TEAM_NAME_ALIASES.items():
+                if alias_name in by_name and canonical_name in by_name:
+                    alias_team = by_name.pop(alias_name)
+                    canonical_team = by_name[canonical_name]
+                    canonical_team["aliases"] = list(dict.fromkeys([
+                        *canonical_team["aliases"], alias_name,
+                        alias_team["name_cn"], alias_team["name_en"], alias_team["short_name"],
+                    ]))
+            for team_name, provider_id in official_rows:
+                canonical_name = MANUAL_TEAM_NAME_ALIASES.get(team_name, team_name)
+                if canonical_name != team_name and canonical_name in by_name:
+                    if team_name not in by_name[canonical_name]["aliases"]:
+                        by_name[canonical_name]["aliases"].append(team_name)
+                    continue
+                if team_name in by_name:
+                    continue
+                by_name[team_name] = {
+                    "id": None,
+                    "name_cn": team_name,
+                    "name_en": "",
+                    "short_name": "",
+                    "aliases": [],
+                    "provider_id": provider_id,
+                }
+            return list(by_name.values())
 
 
 def resolve_team_icons(
@@ -82,6 +133,18 @@ def resolve_team_icons(
     resolved: list[dict[str, Any]] = []
     missing: list[str] = []
     for team in database_teams:
+        if team.get("provider_id"):
+            resolved.append(
+                {
+                    "names": list(dict.fromkeys(name for name in [
+                        team["name_cn"], team["name_en"], team["short_name"], *team["aliases"]
+                    ] if name)),
+                    "logoUrl": f"/team-crests/500-{team['provider_id']}.png",
+                    "source": "500com",
+                    "sourceUrl": ICON_URL.format(team_id=team["provider_id"]),
+                }
+            )
+            continue
         names = [team["name_cn"], team["name_en"], team["short_name"], *team["aliases"]]
         manual = MANUAL_PROVIDER_NAMES.get(team["name_cn"])
         if manual:
@@ -110,6 +173,8 @@ def asset_extension(body: bytes) -> str:
         return ".png"
     if body.startswith(b"RIFF") and body[8:12] == b"WEBP":
         return ".webp"
+    if body.startswith(b"\xff\xd8\xff"):
+        return ".jpg"
     raise ValueError("provider response is not a supported image")
 
 
@@ -117,11 +182,18 @@ def download_assets(entries: list[dict[str, Any]]) -> int:
     ASSET_DIR.mkdir(parents=True, exist_ok=True)
     downloaded = 0
     for entry in {entry["sourceUrl"]: entry for entry in entries}.values():
+        provider_id = entry["sourceUrl"].removesuffix(".png").rsplit("_", 1)[-1]
+        existing = next(iter(ASSET_DIR.glob(f"500-{provider_id}.*")), None)
+        if existing:
+            logo_url = f"/team-crests/{existing.name}"
+            for matching_entry in entries:
+                if matching_entry["sourceUrl"] == entry["sourceUrl"]:
+                    matching_entry["logoUrl"] = logo_url
+            continue
         request = urllib.request.Request(entry["sourceUrl"], headers={"User-Agent": "Mozilla/5.0"})
         with urllib.request.urlopen(request, timeout=20) as response:
             body = response.read()
         suffix = asset_extension(body)
-        provider_id = entry["sourceUrl"].removesuffix(".png").rsplit("_", 1)[-1]
         target = ASSET_DIR / f"500-{provider_id}{suffix}"
         if not target.exists() or target.read_bytes() != body:
             target.write_bytes(body)

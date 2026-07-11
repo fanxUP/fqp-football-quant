@@ -14,3 +14,20 @@ def test_resolves_team_icon_through_manual_provider_name_variant():
 
 def test_normalizes_name_spacing_and_punctuation_for_provider_matching():
     assert normalize_team_name("AIK·索尔纳") == normalize_team_name("AIK 索尔纳")
+
+
+def test_resolves_official_match_team_id_without_provider_name_listing():
+    entries, missing = resolve_team_icons(
+        [{
+            "id": None,
+            "name_cn": "皇家盐湖城",
+            "name_en": "",
+            "short_name": "",
+            "aliases": [],
+            "provider_id": "1663",
+        }],
+        {},
+    )
+
+    assert missing == []
+    assert entries[0]["logoUrl"] == "/team-crests/500-1663.png"
