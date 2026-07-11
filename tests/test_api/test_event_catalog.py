@@ -17,3 +17,23 @@ def test_event_catalog_preserves_source_label(client):
     assert payload["source"] == "supplemental"
     assert payload["matches"][0]["source"] == "supplemental"
     assert payload["matches"][0]["competition_season_id"] == 2
+
+
+def test_event_catalog_defaults_to_official_and_supports_explicit_season_dates(client):
+    with patch("apps.backend.src.routers.teams.get_db") as get_db:
+        connection = get_db.return_value.__enter__.return_value
+        cursor = connection.cursor.return_value.__enter__.return_value
+        cursor.fetchall.return_value = []
+
+        response = client.get(
+            "/api/events/catalog?start_date=2026-01-01&end_date=2026-07-11&limit=5000"
+        )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["source"] == "official"
+    sql, params = cursor.execute.call_args.args
+    assert "source = %s" in sql
+    assert "kickoff_time::date >= %s" in sql
+    assert "kickoff_time::date <= %s" in sql
+    assert params == ("official", "2026-01-01", "2026-07-11", 5000)

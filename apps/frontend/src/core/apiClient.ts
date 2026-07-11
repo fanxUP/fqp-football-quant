@@ -147,9 +147,9 @@ export const api = {
 
   // Events (tournament center)
   events: {
-    catalog: (params?: { source?: 'official' | 'supplemental' | 'all'; league_name?: string; limit?: number }) =>
+    catalog: (params?: { source?: 'official' | 'supplemental' | 'all'; league_name?: string; start_date?: string; end_date?: string; limit?: number }) =>
       request<{ source: string; matches: import('./types').EventCatalogMatch[]; total: number }>(
-        `/api/events/catalog${qs({ source: params?.source ?? 'all', league_name: params?.league_name, limit: params?.limit ?? 5000 })}`,
+        `/api/events/catalog${qs({ source: params?.source ?? 'official', league_name: params?.league_name, start_date: params?.start_date, end_date: params?.end_date, limit: params?.limit ?? 5000 })}`,
       ),
     list: () =>
       request<{ events: import('./types').EventSummary[]; total: number }>('/api/events'),

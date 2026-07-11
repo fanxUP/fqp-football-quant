@@ -275,8 +275,10 @@ def list_events():
 
 @router.get("/api/events/catalog")
 def list_event_catalog(
-    source: str = Query("all", pattern="^(official|supplemental|all)$"),
+    source: str = Query("official", pattern="^(official|supplemental|all)$"),
     league_name: str | None = Query(None),
+    start_date: str | None = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
+    end_date: str | None = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
     limit: int = Query(500, ge=1, le=5000),
 ):
     """Browse the source-labelled official/supplemental match catalog."""
@@ -288,6 +290,12 @@ def list_event_catalog(
     if league_name:
         conditions.append("league_name = %s")
         params.append(league_name)
+    if start_date:
+        conditions.append("kickoff_time::date >= %s")
+        params.append(start_date)
+    if end_date:
+        conditions.append("kickoff_time::date <= %s")
+        params.append(end_date)
     where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
     with get_db() as conn:
         with conn.cursor() as cur:

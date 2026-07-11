@@ -25,7 +25,7 @@ export default function EventsPage() {
   useEffect(() => {
     setLoading(true);
     setError(null);
-    api.events.catalog({ source: 'all', limit: 5000 })
+    api.events.catalog({ source: 'official', limit: 5000 })
       .then((res) => {
         setMatches(res.matches);
         setLoading(false);
@@ -127,7 +127,7 @@ export default function EventsPage() {
 
   return (
     <div>
-      <PageHeader title="赛事中心" subtitle={`${events.length} 个联赛 · ${totalMatches} 场比赛 · 完整赛季档案`} />
+      <PageHeader title="赛事中心" subtitle={`${events.length} 个联赛 · ${totalMatches} 场比赛 · 体彩官方已收录`} />
 
       <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-start' }}>
         {/* ── Left: league nav ── */}
@@ -223,7 +223,7 @@ export default function EventsPage() {
               {isAll ? '全部赛事' : selectedLeague}
             </span>
             <span style={{ color: 'var(--fqp-text-muted)', fontSize: '13px' }}>
-              {leagueMatches.length} 场比赛 · 完整赛季档案
+              {leagueMatches.length} 场比赛 · 体彩官方已收录
             </span>
             {selectedEvent && (
               <span style={{ color: 'var(--fqp-text-muted)', fontSize: '12px' }}>
