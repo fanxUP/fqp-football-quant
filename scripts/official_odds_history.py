@@ -226,6 +226,8 @@ def backfill_fixed_bonus_history(
 
     client = SportteryClient()
     processed = inserted = skipped_existing = failed = 0
+    consecutive_forbidden = 0
+    source_blocked = False
     try:
         for match_id, source_match_id in matches:
             processed += 1
@@ -237,18 +239,28 @@ def backfill_fixed_bonus_history(
                     skipped_existing += result["already_present"]
                     if result["errors"]:
                         failed += 1
+                consecutive_forbidden = 0
             except Exception as exc:  # Continue so a single retired fixture cannot stop a season backfill.
                 failed += 1
                 print(f"[official_odds_history] match_id={match_id} failed: {exc}")
+                if "403" in str(exc):
+                    consecutive_forbidden += 1
+                    if consecutive_forbidden >= 3:
+                        source_blocked = True
+                        print("[official_odds_history] stopping after 3 consecutive Sporttery 403 responses")
+                        break
+                else:
+                    consecutive_forbidden = 0
     finally:
         client.close()
 
     return {
-        "status": "ok" if failed == 0 else "partial",
+        "status": "blocked" if source_blocked else ("ok" if failed == 0 else "partial"),
         "matches_processed": processed,
         "snapshots_inserted": inserted,
         "snapshots_already_present": skipped_existing,
         "matches_failed": failed,
+        "source_blocked": source_blocked,
     }
 
 

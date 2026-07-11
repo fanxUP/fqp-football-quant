@@ -1,4 +1,4 @@
-from scripts.official_odds_history import parse_fixed_bonus_history
+from scripts.official_odds_history import backfill_fixed_bonus_history, parse_fixed_bonus_history
 import subprocess
 import sys
 
@@ -67,3 +67,26 @@ def test_direct_script_entrypoint_is_usable_for_local_schedulers():
 
     assert result.returncode == 0
     assert "Backfill official Sporttery" in result.stdout
+
+
+def test_backfill_stops_after_consecutive_official_403_responses():
+    from unittest.mock import MagicMock, patch
+
+    connection = MagicMock()
+    cursor = connection.cursor.return_value.__enter__.return_value
+    cursor.fetchall.return_value = [(1, "2035672"), (2, "2035671"), (3, "2035670"), (4, "2035669")]
+    client = MagicMock()
+    client.get_uniform_fixed_bonus.side_effect = RuntimeError("returned 403 Forbidden")
+
+    with patch("scripts.official_odds_history.get_db") as get_db, \
+         patch("scripts.official_odds_history.SportteryClient", return_value=client):
+        get_db.return_value.__enter__.return_value = connection
+
+        result = backfill_fixed_bonus_history("2025-07-01", "2025-07-01")
+
+    assert result["status"] == "blocked"
+    assert result["matches_processed"] == 3
+    assert result["matches_failed"] == 3
+    client.get_uniform_fixed_bonus.assert_called_with(2035670)
+    assert client.get_uniform_fixed_bonus.call_count == 3
+    client.close.assert_called_once()
