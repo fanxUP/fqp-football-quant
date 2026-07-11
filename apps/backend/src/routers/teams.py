@@ -131,6 +131,47 @@ def list_today_matches():
     }
 
 
+@router.get("/api/matches/active")
+def list_active_matches(limit: int = Query(500, ge=1, le=5000)):
+    """List the official event-catalog matches that have not finished yet.
+
+    This is deliberately broader than the betting terminal: a match remains in
+    the match center after Sporttery stops selling it, until the official match
+    status is final.
+    """
+    completed_statuses = ("finished", "settled", "completed", "cancelled", "canceled", "stopped")
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT m.id, m.league_name, m.home_team_name, m.away_team_name,
+                       m.kickoff_time, m.match_status,
+                       COALESCE(m.raw_json->>'matchNumStr', m.official_match_code::text) AS match_num_str
+                FROM official_matches m
+                WHERE LOWER(COALESCE(m.match_status, 'scheduled')) NOT IN %s
+                ORDER BY m.kickoff_time ASC
+                LIMIT %s
+                """,
+                (completed_statuses, limit),
+            )
+            rows = cur.fetchall()
+    return {
+        "matches": [
+            {
+                "match_id": row[0],
+                "league_name": row[1],
+                "home_team_name": row[2],
+                "away_team_name": row[3],
+                "kickoff_time": row[4].isoformat() if hasattr(row[4], "isoformat") else str(row[4]),
+                "match_status": row[5],
+                "match_num_str": row[6],
+            }
+            for row in rows
+        ],
+        "total": len(rows),
+    }
+
+
 @router.get("/api/features/snapshots")
 def list_feature_snapshots(
     match_id: int | None = Query(None),

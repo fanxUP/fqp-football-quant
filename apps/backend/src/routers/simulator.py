@@ -73,6 +73,7 @@ def list_matches(
                 "m.sale_status = 'selling'",
                 "LOWER(COALESCE(m.match_status, '')) IN ('scheduled', 'selling', 'not_started')",
                 "m.kickoff_time > CURRENT_TIMESTAMP",
+                "(m.sale_stop_time IS NULL OR m.sale_stop_time > CURRENT_TIMESTAMP)",
             ]
             params: dict = {"limit": limit}
 

@@ -137,6 +137,10 @@ export const api = {
   matches: {
     today: () =>
       request<{ matches: import('./types').TodayMatch[]; total: number }>('/api/matches/today'),
+    active: (params?: { limit?: number }) =>
+      request<{ matches: import('./types').TodayMatch[]; total: number }>(
+        `/api/matches/active${qs({ limit: params?.limit ?? 500 })}`,
+      ),
     detail: (matchId: number) =>
       request<import('./types').MatchDetail>(`/api/matches/${matchId}/detail`),
   },

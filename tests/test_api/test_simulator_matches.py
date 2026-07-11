@@ -18,3 +18,4 @@ def test_simulator_matches_filters_to_future_sellable_statuses(client):
     assert "sale_status = 'selling'" in sql
     assert "LOWER(COALESCE(m.match_status, '')) IN ('scheduled', 'selling', 'not_started')" in sql
     assert "m.kickoff_time > CURRENT_TIMESTAMP" in sql
+    assert "m.sale_stop_time IS NULL OR m.sale_stop_time > CURRENT_TIMESTAMP" in sql
