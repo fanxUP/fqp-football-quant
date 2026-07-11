@@ -163,6 +163,10 @@ export const api = {
 
   // Official Sporttery source tracking. Third-party sources are not returned here.
   official: {
+    oddsHistoryMatches: (params?: { search?: string; limit?: number }) =>
+      request<{ matches: import('./types').OfficialOddsHistoryMatch[]; total: number }>(
+        `/api/official/odds-history/matches${qs({ search: params?.search, limit: params?.limit ?? 200 })}`,
+      ),
     collectionStatus: (params?: { business_date?: string; status?: string; limit?: number }) =>
       request<{ items: import('./types').OfficialCollectionStatus[]; total: number }>(
         `/api/official/collection-status${qs({

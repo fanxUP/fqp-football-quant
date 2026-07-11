@@ -1,6 +1,7 @@
 from unittest.mock import ANY, MagicMock, patch
 
 from scripts.official_crawler import (
+    crawl_official_odds_snapshot,
     crawl_official_results,
     parse_matches_from_response,
     parse_results_from_response,
@@ -90,3 +91,27 @@ def test_parse_official_result_preserves_numeric_zero_scores():
     assert result["full_away_goals"] == 1
     assert result["score_result"] == "0:1"
     assert result["spf_result"] == "0"
+
+
+def test_odds_snapshot_uses_fixed_bonus_history_when_sporttery_match_id_exists():
+    client = MagicMock()
+    client.get_daily_matches.return_value = {}
+    client.get_uniform_fixed_bonus.return_value = {"value": {"oddsHistory": {}}}
+    connection = MagicMock()
+    cursor = connection.cursor.return_value.__enter__.return_value
+    cursor.fetchone.return_value = (12, "2040374")
+    matches = [{"official_match_code": "周五098", "business_date": "2026-07-10"}]
+
+    with patch("scripts.official_crawler.SportteryClient", return_value=client), \
+         patch("scripts.official_crawler.parse_matches_from_response", return_value=matches), \
+         patch("scripts.official_crawler.get_db") as get_db, \
+         patch("scripts.official_crawler.store_fixed_bonus_history", return_value={"inserted": 9}), \
+         patch("scripts.official_crawler.log_crawl"), \
+         patch("scripts.official_crawler.update_health"):
+        get_db.return_value.__enter__.return_value = connection
+
+        result = crawl_official_odds_snapshot("2026-07-10")
+
+    assert result["status"] == "ok"
+    assert result["snapshots_inserted"] == 9
+    client.get_uniform_fixed_bonus.assert_called_once_with(2040374)

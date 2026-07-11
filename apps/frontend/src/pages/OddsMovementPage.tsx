@@ -1,9 +1,9 @@
 /** Odds Movement Page — SP trend tracking and anomaly alerts. */
 
-import { useEffect, useState, useMemo } from 'react';
+import { useCallback, useEffect, useState, useMemo } from 'react';
 import type { EChartsOption } from 'echarts';
 import { api } from '../core/apiClient';
-import type { DashboardOddsPoint, DashboardOddsAnomaly, BettingMatch } from '../core/types';
+import type { DashboardOddsPoint, DashboardOddsAnomaly, OfficialOddsHistoryMatch } from '../core/types';
 import { ApiError } from '../core/types';
 import PageHeader from '../shared/components/PageHeader';
 import Card from '../shared/components/Card';
@@ -24,10 +24,11 @@ const PLAY_LABELS: Record<string, string> = {
 
 
 export default function OddsMovementPage() {
-  const [matches, setMatches] = useState<BettingMatch[]>([]);
+  const [matches, setMatches] = useState<OfficialOddsHistoryMatch[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedMatchId, setSelectedMatchId] = useState<number | null>(null);
+  const [searchText, setSearchText] = useState('');
   const [activePlay, setActivePlay] = useState<PlayTab>('spf');
   const [selectedOptionCode, setSelectedOptionCode] = useState<string>('');
 
@@ -37,14 +38,15 @@ export default function OddsMovementPage() {
   const [oddsLoading, setOddsLoading] = useState(false);
   const [oddsError, setOddsError] = useState<string | null>(null);
 
-  // Load match list with odds data and match_num_str.
-  useEffect(() => {
-    api.bettingTerminal.matches({ limit: 100 })
+  // The selector is driven by persisted historical snapshots, not only the
+  // current sellable card, so completed official matches remain reviewable.
+  const loadMatches = useCallback((search?: string) => {
+    setLoading(true);
+    setError(null);
+    api.official.oddsHistoryMatches({ search, limit: 200 })
       .then((res) => {
-        if (res.matches.length > 0) {
-          setMatches(res.matches);
-          setSelectedMatchId(res.matches[0].match_id);
-        }
+        setMatches(res.matches);
+        setSelectedMatchId(res.matches[0]?.id ?? null);
         setLoading(false);
       })
       .catch((e) => {
@@ -52,6 +54,10 @@ export default function OddsMovementPage() {
         setLoading(false);
       });
   }, []);
+
+  useEffect(() => {
+    loadMatches();
+  }, [loadMatches]);
 
   // Load odds data when match or play type changes
   useEffect(() => {
@@ -73,16 +79,17 @@ export default function OddsMovementPage() {
       });
   }, [selectedMatchId, activePlay]);
 
-  const selectedMatch = matches.find((m) => m.match_id === selectedMatchId);
+  const selectedMatch = matches.find((m) => m.id === selectedMatchId);
 
-  // Extract available option codes from the selected match + play type
+  // Extract choices from historical data. This also supports old matches
+  // whose market is no longer returned by the live betting-terminal endpoint.
   const availableOptions = useMemo(() => {
-    if (!selectedMatch?.odds?.[activePlay]?.options) return [];
-    return selectedMatch.odds[activePlay].options.map((opt) => ({
-      code: opt.option_code,
-      name: opt.option_name,
-    }));
-  }, [selectedMatch, activePlay]);
+    const deduplicated = new Map<string, string>();
+    oddsData.forEach((point) => {
+      if (point.option_code && point.option_name) deduplicated.set(point.option_code, point.option_name);
+    });
+    return Array.from(deduplicated, ([code, name]) => ({ code, name }));
+  }, [oddsData]);
 
   // Auto-select first option when match/play type changes and options are available
   useEffect(() => {
@@ -106,9 +113,8 @@ export default function OddsMovementPage() {
 
   // Get handicap info for display
   const handicapInfo = useMemo(() => {
-    if (!selectedMatch?.odds?.[activePlay]?.handicap) return null;
-    return selectedMatch.odds[activePlay].handicap;
-  }, [selectedMatch, activePlay]);
+    return filteredOddsData.find((point) => point.handicap != null)?.handicap ?? null;
+  }, [filteredOddsData]);
 
   // Build implied probability chart (dual Y-axis)
   const impliedProbOption = (() => {
@@ -170,6 +176,23 @@ export default function OddsMovementPage() {
       {/* Match selector + play type tabs */}
       <Card style={{ marginBottom: '20px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              loadMatches(searchText.trim());
+            }}
+            style={{ display: 'flex', gap: 6 }}
+          >
+            <input
+              className="fqp-input"
+              aria-label="搜索历史赔率比赛"
+              placeholder="搜索球队、联赛或编号"
+              value={searchText}
+              onChange={(event) => setSearchText(event.target.value)}
+              style={{ width: 180 }}
+            />
+            <button className="fqp-btn" type="submit">搜索</button>
+          </form>
           <select
             className="fqp-select"
             value={selectedMatchId ?? ''}
@@ -178,8 +201,8 @@ export default function OddsMovementPage() {
           >
             {matches.length === 0 && <option value="">暂无比赛</option>}
             {matches.map((m) => (
-              <option key={m.match_id} value={m.match_id}>
-                [{m.match_num_str || `#${m.match_id}`}] {m.home_team_name} vs {m.away_team_name}
+              <option key={m.id} value={m.id}>
+                [{m.official_match_code || `#${m.id}`}] {m.home_team_name} vs {m.away_team_name}
               </option>
             ))}
           </select>

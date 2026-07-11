@@ -113,6 +113,16 @@ export interface OfficialCollectionStatus {
   updated_at: string;
 }
 
+export interface OfficialOddsHistoryMatch {
+  id: number;
+  official_match_code: string;
+  league_name: string;
+  home_team_name: string;
+  away_team_name: string;
+  kickoff_time: string;
+  play_types: string[];
+}
+
 // ---- Match Detail (Events Center drawer) ----
 
 export interface MatchDetailTeam {

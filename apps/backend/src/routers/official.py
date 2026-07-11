@@ -47,6 +47,56 @@ def list_official_matches(date: str = Query(...)):
     }
 
 
+@router.get("/api/official/odds-history/matches")
+def list_official_odds_history_matches(
+    search: str | None = Query(None),
+    limit: int = Query(200, ge=1, le=500),
+):
+    """List only official matches that have persisted SP history."""
+    params: dict[str, object] = {"limit": limit}
+    filters: list[str] = []
+    if search:
+        params["search"] = f"%{search.strip()}%"
+        filters.append(
+            "(m.official_match_code ILIKE %(search)s OR m.league_name ILIKE %(search)s "
+            "OR m.home_team_name ILIKE %(search)s OR m.away_team_name ILIKE %(search)s)"
+        )
+    where_clause = f"WHERE {' AND '.join(filters)}" if filters else ""
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                f"""
+                SELECT m.id, m.official_match_code, m.league_name,
+                       m.home_team_name, m.away_team_name, m.kickoff_time,
+                       ARRAY_AGG(DISTINCT oos.play_type ORDER BY oos.play_type) AS play_types
+                FROM official_matches m
+                JOIN official_odds_snapshots oos ON oos.match_id = m.id
+                {where_clause}
+                GROUP BY m.id
+                HAVING COUNT(oos.id) > 0
+                ORDER BY m.kickoff_time DESC, m.id DESC
+                LIMIT %(limit)s
+                """,
+                params,
+            )
+            rows = cur.fetchall()
+    return {
+        "matches": [
+            {
+                "id": row[0],
+                "official_match_code": row[1],
+                "league_name": row[2],
+                "home_team_name": row[3],
+                "away_team_name": row[4],
+                "kickoff_time": _to_iso(row[5]),
+                "play_types": row[6] or [],
+            }
+            for row in rows
+        ],
+        "total": len(rows),
+    }
+
+
 @router.get("/api/official/matches/{match_id}")
 def get_official_match(match_id: int):
     """Get one official match."""

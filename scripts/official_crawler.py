@@ -29,6 +29,7 @@ from scripts.official_storage import (
     store_results,
     update_health,
 )
+from scripts.official_odds_history import store_fixed_bonus_history
 from scripts.play_type_registry import (
     OPTION_LABELS,
     TRADITIONAL_GAME_TYPES,
@@ -485,23 +486,26 @@ def crawl_official_odds_snapshot(business_date: str) -> dict[str, Any]:
                 bdate = m["business_date"]
                 with conn.cursor() as cur:
                     cur.execute(
-                        "SELECT id FROM official_matches "
+                        "SELECT id, source_match_id FROM official_matches "
                         "WHERE official_match_code = %s AND business_date = %s",
                         (code, bdate),
                     )
                     row = cur.fetchone()
                 if row is None:
                     continue
-                match_id = row[0]
-
-                snapshots = parse_odds_snapshots_from_match(
-                    m.get("raw_json", {}), snapshot_time=snap_time
-                )
-                if snapshots:
-                    result = store_odds_snapshots(
-                        conn, match_id=match_id, market_id=None, snapshots=snapshots
+                match_id, source_match_id = row
+                if source_match_id:
+                    fixed_bonus = client.get_uniform_fixed_bonus(int(source_match_id))
+                    total_snapshots += store_fixed_bonus_history(conn, match_id, fixed_bonus)["inserted"]
+                else:
+                    snapshots = parse_odds_snapshots_from_match(
+                        m.get("raw_json", {}), snapshot_time=snap_time
                     )
-                    total_snapshots += result["inserted"]
+                    if snapshots:
+                        result = store_odds_snapshots(
+                            conn, match_id=match_id, market_id=None, snapshots=snapshots
+                        )
+                        total_snapshots += result["inserted"]
 
             log_crawl(
                 conn,

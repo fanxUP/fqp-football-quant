@@ -64,3 +64,25 @@ def test_list_collection_status_exposes_official_source_gaps(client):
     assert payload["items"][0]["source_name"] == "sporttery"
     assert payload["items"][0]["status"] == "blocked"
     assert "567" in payload["items"][0]["error_message"]
+
+
+def test_list_odds_history_matches_returns_only_matches_with_official_snapshots(client):
+    with patch("apps.backend.src.routers.official.get_db") as get_db:
+        connection = get_db.return_value.__enter__.return_value
+        cursor = connection.cursor.return_value.__enter__.return_value
+        cursor.fetchall.return_value = [
+            (304, "周一005", "英超", "曼彻斯特城", "利雅得新月", "2025-07-01T03:00:00", ["bf", "bqc", "spf", "zjq"])
+        ]
+
+        response = client.get("/api/official/odds-history/matches?limit=20&search=曼城")
+
+    assert response.status_code == 200
+    sql = cursor.execute.call_args.args[0]
+    params = cursor.execute.call_args.args[1]
+    assert "official_odds_snapshots" in sql
+    assert "HAVING COUNT(oos.id) > 0" in sql
+    assert params["search"] == "%曼城%"
+    payload = response.json()
+    assert payload["total"] == 1
+    assert payload["matches"][0]["id"] == 304
+    assert payload["matches"][0]["play_types"] == ["bf", "bqc", "spf", "zjq"]
