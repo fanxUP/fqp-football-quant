@@ -1,3 +1,4 @@
+import { StrictMode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -136,6 +137,12 @@ describe('Sidebar', () => {
 
       await waitFor(() => expect(screen.getByText('远程入口')).toBeTruthy());
       expect(screen.queryByText('今日驾驶舱')).toBeNull();
+    });
+
+    it('loads runtime panels once in StrictMode', async () => {
+      render(<StrictMode><Sidebar /></StrictMode>);
+
+      await waitFor(() => expect(mockRuntimePanels).toHaveBeenCalledTimes(1));
     });
 
     it('maps runtime icon codes to display symbols', async () => {

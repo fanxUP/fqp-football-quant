@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from '../../core/router';
 import { api } from '../../core/apiClient';
 import { getSidebarPanels, type SidebarPanel } from '../../panelRegistry';
@@ -57,23 +57,29 @@ export default function Sidebar({ isOpen = false, onClose }: SidebarProps) {
   const disabledModules = new Set(settings.disabledModules);
   const localSidebarPanels = getSidebarPanels(disabledModules);
   const [runtimePanels, setRuntimePanels] = useState<SidebarPanel[] | null>(null);
+  const isMounted = useRef(false);
+  const loadedSettingsKey = useRef<string | null>(null);
   const sidebarPanels = runtimePanels ?? localSidebarPanels;
 
   useEffect(() => {
-    let cancelled = false;
+    isMounted.current = true;
+    const settingsKey = settings.disabledModules.join(',');
     const loadRuntimePanels = () => {
       api.ui.panels()
         .then((resp) => {
-        if (!cancelled) setRuntimePanels(resp.panels);
+        if (isMounted.current) setRuntimePanels(resp.panels);
         })
         .catch(() => {
-        if (!cancelled) setRuntimePanels(null);
+        if (isMounted.current) setRuntimePanels(null);
         });
     };
-    loadRuntimePanels();
+    if (loadedSettingsKey.current !== settingsKey) {
+      loadedSettingsKey.current = settingsKey;
+      loadRuntimePanels();
+    }
     window.addEventListener('fqp-modules-updated', loadRuntimePanels);
     return () => {
-      cancelled = true;
+      isMounted.current = false;
       window.removeEventListener('fqp-modules-updated', loadRuntimePanels);
     };
   }, [settings.disabledModules]);
