@@ -2,6 +2,7 @@ import json
 from unittest.mock import MagicMock
 
 from scripts.official_history_importer import (
+    derive_business_date_from_match_date,
     extract_official_result_payloads,
     parse_local_official_history_text,
     parse_local_official_results_text,
@@ -45,6 +46,28 @@ def test_extracts_result_payload_from_har_entry():
 
     assert len(payloads) == 1
     assert payloads[0]["value"]["matchResultList"][0]["matchNum"] == "周五001"
+
+
+def test_extracts_uniform_result_payload_shape():
+    payload = {
+        "value": {
+            "matchResult": [
+                {
+                    "matchId": 2040456,
+                    "matchNumStr": "周四203",
+                    "matchDate": "2026-07-10",
+                }
+            ]
+        }
+    }
+
+    payloads = extract_official_result_payloads(json.dumps(payload, ensure_ascii=False))
+
+    assert payloads == [payload]
+
+
+def test_derives_ticket_business_date_from_official_code_and_match_date():
+    assert derive_business_date_from_match_date("2026-07-10", "周四203") == "2026-07-09"
 
 
 def test_parses_embedded_html_result_payload_into_normalized_results():
@@ -250,3 +273,35 @@ def test_missing_code_row_cannot_shift_the_next_official_result_identity():
     assert history["rejected"][0]["reason"] == "missing or invalid official display match code"
     assert history["results"][0]["_match_code"] == "周五098"
     assert history["results"][0]["score_result"] == "2:1"
+
+
+def test_parses_uniform_result_row_with_ticket_business_date_and_sections_scores():
+    payload = {
+        "value": {
+            "matchResult": [
+                {
+                    "matchId": 2040456,
+                    "matchNumStr": "周四203",
+                    "matchDate": "2026-07-10",
+                    "leagueName": "欧罗巴联赛",
+                    "allHomeTeam": "斯普利特海杜克",
+                    "allAwayTeam": "日利纳",
+                    "sectionsNo1": "1:0",
+                    "sectionsNo999": "2:0",
+                    "poolStatus": "Payout",
+                }
+            ]
+        }
+    }
+
+    history = parse_local_official_history_text(
+        json.dumps(payload, ensure_ascii=False),
+        source_path="/tmp/sporttery-uniform-result.json",
+    )
+
+    assert history["rejected"] == []
+    assert history["matches"][0]["business_date"] == "2026-07-09"
+    assert history["matches"][0]["official_match_code"] == "周四203"
+    assert history["matches"][0]["source_match_id"] == "2040456"
+    assert history["results"][0]["score_result"] == "2:0"
+    assert history["results"][0]["half_full_result"] == "3-3"

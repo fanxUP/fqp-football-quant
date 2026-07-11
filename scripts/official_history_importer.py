@@ -12,7 +12,7 @@ import argparse
 import hashlib
 import json
 import re
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -40,11 +40,12 @@ def _has_result_list(payload: Any) -> bool:
     if isinstance(value, dict) and (
         isinstance(value.get("matchResultList"), list)
         or isinstance(value.get("matchInfoList"), list)
+        or isinstance(value.get("matchResult"), list)
     ):
         return True
     return isinstance(payload.get("matchResultList"), list) or isinstance(
         payload.get("matchInfoList"), list
-    )
+    ) or isinstance(payload.get("matchResult"), list)
 
 
 def _walk_payloads(value: Any) -> list[dict[str, Any]]:
@@ -105,9 +106,13 @@ def extract_official_result_payloads(text: str) -> list[dict[str, Any]]:
         if isinstance(payload.get("value"), dict):
             result_block = payload["value"].get("matchResultList") or payload["value"].get(
                 "matchInfoList"
-            )
+            ) or payload["value"].get("matchResult")
         else:
-            result_block = payload.get("matchResultList") or payload.get("matchInfoList")
+            result_block = (
+                payload.get("matchResultList")
+                or payload.get("matchInfoList")
+                or payload.get("matchResult")
+            )
         fingerprint = json.dumps(result_block or payload, ensure_ascii=False, sort_keys=True)
         if fingerprint in seen:
             continue
@@ -142,10 +147,19 @@ def _result_rows(payload: dict[str, Any]) -> list[dict[str, Any]]:
     containers = [value] if isinstance(value, dict) else []
     containers.append(payload)
     for container in containers:
-        rows = container.get("matchResultList") or container.get("matchInfoList")
+        rows = (
+            container.get("matchResultList")
+            or container.get("matchInfoList")
+            or container.get("matchResult")
+        )
         if isinstance(rows, list):
             return [row for row in rows if isinstance(row, dict)]
     return []
+
+
+def _uses_uniform_result_shape(payload: dict[str, Any]) -> bool:
+    value = payload.get("value")
+    return isinstance(value, dict) and isinstance(value.get("matchResult"), list)
 
 
 def _first_text(row: dict[str, Any], *keys: str) -> str:
@@ -176,6 +190,28 @@ def official_match_identity_error(business_date: str, match_code: str) -> str | 
     return None
 
 
+def derive_business_date_from_match_date(match_date: str, match_code: str) -> str:
+    """Derive the ticket business date for uniform result rows without it.
+
+    The official uniform result endpoint supplies the scheduled calendar date
+    and the ticket-visible weekday code, but not ``businessDate``. A match
+    kicking off after midnight can therefore be listed under the prior ticket
+    day. The latest matching weekday on or before ``matchDate`` is the only
+    date consistent with both official fields.
+    """
+    normalized_code = normalize_official_match_code(match_code)
+    match = OFFICIAL_MATCH_CODE_RE.fullmatch(normalized_code)
+    if not match:
+        return ""
+    try:
+        parsed_date = date.fromisoformat(match_date)
+    except ValueError:
+        return ""
+    target_weekday = WEEKDAY_LABELS.index(match.group(1))
+    offset = (parsed_date.weekday() - target_weekday) % 7
+    return (parsed_date - timedelta(days=offset)).isoformat()
+
+
 def parse_local_official_history_text(
     text: str,
     source_path: str,
@@ -196,13 +232,20 @@ def parse_local_official_history_text(
     seen_identities: set[tuple[str, str]] = set()
 
     for payload in extract_official_result_payloads(text):
+        uses_uniform_result_shape = _uses_uniform_result_shape(payload)
         for row in _result_rows(payload):
-            business_date = _first_text(
-                row, "businessDate", "matchBusinessDate", "betDate"
-            ) or (default_business_date or "")
             match_code = normalize_official_match_code(
                 _first_text(row, "matchNumStr", "matchCode", "matchNum")
             )
+            business_date = _first_text(
+                row, "businessDate", "matchBusinessDate", "betDate"
+            ) or (default_business_date or "")
+            derived_business_date = False
+            if not business_date and match_code and uses_uniform_result_shape:
+                business_date = derive_business_date_from_match_date(
+                    _first_text(row, "matchDate"), match_code
+                )
+                derived_business_date = bool(business_date)
             error = official_match_identity_error(business_date, match_code)
             if error:
                 rejected.append(
@@ -235,6 +278,13 @@ def parse_local_official_history_text(
 
             source_match_id = _first_text(row, "matchId")
             raw = dict(result.get("raw_json") or row)
+            if derived_business_date:
+                raw["_business_date_derivation"] = {
+                    "method": "official_match_date_and_display_code",
+                    "match_date": _first_text(row, "matchDate"),
+                    "official_match_code": match_code,
+                    "derived_business_date": business_date,
+                }
             raw["_source_artifact"] = {
                 "path": source_path,
                 "hash": artifact_hash,
@@ -250,17 +300,17 @@ def parse_local_official_history_text(
                 row, "leagueAllName", "leagueName", "leagueAbbName"
             )
             home_team_name = _first_text(
-                row, "homeTeamAllName", "homeTeamName", "homeTeam"
+                row, "homeTeamAllName", "allHomeTeam", "homeTeamName", "homeTeam"
             )
             away_team_name = _first_text(
-                row, "awayTeamAllName", "awayTeamName", "awayTeam"
+                row, "awayTeamAllName", "allAwayTeam", "awayTeamName", "awayTeam"
             )
             match_date = _first_text(row, "matchDate")
             match_time = _first_text(row, "matchTime")
             kickoff_time = (
                 f"{match_date}T{match_time}"
                 if match_date and match_time and "T" not in match_time
-                else match_time or match_date
+                else match_time or (f"{match_date}T00:00:00" if match_date else "")
             )
             if league_name and home_team_name and away_team_name and kickoff_time:
                 matches.append(

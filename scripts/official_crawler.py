@@ -258,9 +258,13 @@ def parse_results_from_response(
     if not result_list:
         result_list = raw.get("value", {}).get("matchInfoList", [])
     if not result_list:
+        result_list = raw.get("value", {}).get("matchResult", [])
+    if not result_list:
         result_list = raw.get("matchResultList", [])
     if not result_list:
         result_list = raw.get("matchInfoList", [])
+    if not result_list:
+        result_list = raw.get("matchResult", [])
 
     for item in result_list:
         # ``matchNumStr`` is the ticket-visible identifier (for example
@@ -280,10 +284,22 @@ def parse_results_from_response(
                     return value
             return None
 
+        def _score_parts(value: Any) -> tuple[Any, Any]:
+            if not isinstance(value, str):
+                return None, None
+            parts = value.replace("：", ":").split(":", 1)
+            return (parts[0].strip(), parts[1].strip()) if len(parts) == 2 else (None, None)
+
+        section_half_home, section_half_away = _score_parts(item.get("sectionsNo1"))
+        section_full_home, section_full_away = _score_parts(item.get("sectionsNo999"))
         half_home = _first_present(item, "halfHomeGoals", "halfHomeScore")
         half_away = _first_present(item, "halfAwayGoals", "halfAwayScore")
         full_home = _first_present(item, "fullHomeGoals", "fullHomeScore", "homeGoals")
         full_away = _first_present(item, "fullAwayGoals", "fullAwayScore", "awayGoals")
+        half_home = section_half_home if half_home is None else half_home
+        half_away = section_half_away if half_away is None else half_away
+        full_home = section_full_home if full_home is None else full_home
+        full_away = section_full_away if full_away is None else full_away
 
         # Convert to int if present
         def _to_int(v: Any) -> int | None:
@@ -332,7 +348,7 @@ def parse_results_from_response(
                 "total_goals_result": fh + fa if fh is not None and fa is not None else None,
                 "score_result": score,
                 "half_full_result": half_full,
-                "result_status": item.get("resultStatus", "confirmed"),
+                "result_status": item.get("resultStatus") or item.get("poolStatus") or "confirmed",
                 "official_publish_time": item.get("publishTime") or item.get("officialPublishTime"),
                 "raw_json": item,
             }
