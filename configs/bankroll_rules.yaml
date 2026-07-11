@@ -1,0 +1,19 @@
+daily_budget: 500
+strategy_pools:
+  main: 300
+  value: 100
+  defensive: 50
+  experiment: 50
+limits:
+  max_ticket_stake: 100
+  max_match_exposure: 150
+  max_score_play_ratio: 0.10
+  max_parlay_3plus_ratio: 0.20
+  max_experiment_ratio: 0.10
+kelly:
+  enabled: true
+  fraction: 0.25
+loss_control:
+  losing_days_3: defensive_mode
+  losing_days_5: reduce_budget_200
+  losing_days_7: simulation_only

@@ -1,0 +1,99 @@
+panels:
+  - panel_id: today_dashboard
+    name: 今日驾驶舱
+    route: /
+    module_id: official_data_core
+    order: 10
+    visible: true
+    icon: chart
+  - panel_id: match_center
+    name: 比赛中心
+    route: /matches
+    module_id: official_data_core
+    order: 20
+    visible: true
+    icon: football
+  - panel_id: event_center
+    name: 赛事中心
+    route: /events
+    module_id: official_data_core
+    order: 30
+    visible: true
+    icon: trophy
+  - panel_id: odds_movement
+    name: 赔率走势
+    route: /odds
+    module_id: official_data_core
+    order: 50
+    visible: true
+    icon: trending-down
+  - panel_id: betting_center
+    name: 投注中心
+    route: /betting
+    module_id: betting_center_module
+    order: 60
+    visible: true
+    icon: ticket
+  - panel_id: deep_analysis
+    name: 深度分析
+    route: /analysis
+    module_id: recommendation_core
+    order: 70
+    visible: true
+    icon: microscope
+  - panel_id: feature_snapshots
+    name: 多维特征
+    route: /feature-snapshots
+    module_id: multidim_feature_module
+    order: 105
+    visible: true
+    icon: radar
+  - panel_id: model_lab
+    name: 模型中心
+    route: /models
+    module_id: model_research_module
+    order: 110
+    visible: true
+    icon: brain
+  - panel_id: backtest_lab
+    name: 策略回测
+    route: /backtest
+    module_id: model_research_module
+    order: 130
+    visible: true
+    icon: trending-up
+  - panel_id: pool_lottery
+    name: 足彩彩池
+    route: /pool
+    module_id: pool_lottery_module
+    order: 210
+    visible: true
+    icon: ticket
+  - panel_id: data_health
+    name: 系统监控
+    route: /data-health
+    module_id: ops_admin
+    order: 310
+    visible: true
+    icon: database
+  - panel_id: module_admin
+    name: 功能模块
+    route: /modules
+    module_id: module_runtime_core
+    order: 320
+    visible: true
+    icon: puzzle
+  - panel_id: settings
+    name: 系统设置
+    route: /settings
+    module_id: local_settings_core
+    order: 330
+    visible: true
+    icon: settings
+  - panel_id: codex_console
+    name: 智能代理
+    route: /agents
+    module_id: codex_agent_module
+    order: 340
+    visible: true
+    icon: bot

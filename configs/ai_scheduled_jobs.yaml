@@ -1,0 +1,50 @@
+jobs:
+  official_schedule_fetch:
+    owner_agent: data_agent
+    schedule: "00:10 daily"
+    command: "python -m scripts.jobs.run_official_schedule_fetch"
+    timeout_seconds: 600
+    retries: 3
+    on_failure: trigger_shutdown_if_today_unavailable
+  official_odds_snapshot:
+    owner_agent: data_agent
+    schedule: "every 30 minutes on matchday; every 5 minutes before stop_sale"
+    command: "python -m scripts.jobs.run_official_odds_snapshot"
+    timeout_seconds: 300
+    retries: 3
+    on_failure: mark_odds_snapshot_missing
+  feature_snapshot_build:
+    owner_agent: feature_agent
+    schedule: "16:00 daily and stop_sale_minus_120m"
+    command: "python -m scripts.jobs.run_feature_snapshot_build"
+    timeout_seconds: 900
+    retries: 2
+    on_failure: increase_uncertainty_and_notify
+  model_prediction:
+    owner_agent: model_agent
+    schedule: "stop_sale_minus_120m and stop_sale_minus_60m"
+    command: "python -m scripts.jobs.run_model_prediction"
+    timeout_seconds: 1200
+    retries: 2
+    on_failure: disable_recommendation_for_match
+  recommendation_candidate:
+    owner_agent: recommendation_agent
+    schedule: "stop_sale_minus_90m"
+    command: "python -m scripts.jobs.run_recommendation_candidate"
+    timeout_seconds: 600
+    retries: 2
+    on_failure: no_candidate_recommendation
+  risk_gate:
+    owner_agent: risk_agent
+    schedule: "stop_sale_minus_60m"
+    command: "python -m scripts.jobs.run_risk_gate"
+    timeout_seconds: 300
+    retries: 1
+    on_failure: shutdown_final_recommendation
+  daily_review:
+    owner_agent: review_agent
+    schedule: "08:00 daily"
+    command: "python -m scripts.jobs.run_daily_review"
+    timeout_seconds: 1200
+    retries: 2
+    on_failure: create_codex_fix_task

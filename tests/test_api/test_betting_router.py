@@ -1,0 +1,316 @@
+"""Unified betting router contract tests."""
+
+from __future__ import annotations
+
+from datetime import datetime
+
+from apps.backend.src.routers import betting
+
+
+def test_map_simulator_ticket_uses_my_simulation_contract():
+    ticket = betting._map_simulator_ticket(
+        {
+            "id": 7,
+            "play_type": "spf",
+            "pass_type": "2x1",
+            "multiple": 3,
+            "total_cost": 12,
+            "bet_count": 2,
+            "max_prize": 88.5,
+            "match_count": 2,
+            "status": "pending",
+            "created_at": "2026-07-07T10:00:00",
+            "item_count": 2,
+        }
+    )
+
+    assert ticket["ticketUid"] == "simulator:7"
+    assert ticket["owner"] == "me"
+    assert ticket["kind"] == "simulation"
+    assert ticket["date"] == "2026-07-07"
+    assert ticket["stake"] == 12.0
+    assert ticket["route"] == "/simulator/history/7"
+
+
+def test_map_real_ticket_can_belong_to_agent_column():
+    ticket = betting._map_real_ticket(
+        {
+            "id": 12,
+            "source_type": "agent",
+            "ocr_status": "recognized",
+            "settlement_status": "settled",
+            "purchase_time": "2026-07-06T20:00:00",
+            "created_at": "2026-07-06T21:00:00",
+            "total_amount": 24,
+            "theoretical_max_prize": 180,
+            "multiple": 2,
+            "pass_type": "3x1",
+            "item_count": 3,
+            "confirm_status": "confirmed",
+            "related_simulation_ticket_id": 99,
+        }
+    )
+
+    assert ticket["ticketUid"] == "real:12"
+    assert ticket["owner"] == "agent"
+    assert ticket["kind"] == "real"
+    assert ticket["source"] == "ocr"
+    assert ticket["status"] == "settled"
+    assert ticket["linkedSimulationId"] == 99
+
+
+def test_map_agent_ticket_uses_agent_recommendation_source():
+    row = (
+        31,
+        50,
+        0.1234,
+        "agent_value",
+        "medium",
+        "pending",
+        datetime(2026, 7, 7, 16, 0, 0),
+        "single",
+        "single",
+        1,
+    )
+
+    ticket = betting._map_agent_ticket(row)
+
+    assert ticket["ticketUid"] == "agent:31"
+    assert ticket["owner"] == "agent"
+    assert ticket["source"] == "agent_recommendation"
+    assert ticket["date"] == "2026-07-07"
+    assert ticket["expectedValue"] == 0.1234
+
+
+def test_create_real_betting_ticket_maps_agent_source(monkeypatch):
+    created: dict[str, object] = {}
+    inserted_items: list[dict] = []
+
+    def fake_create_real_ticket(conn, ticket):
+        created.update(ticket)
+        return 88
+
+    def fake_create_items(conn, ticket_id, items):
+        inserted_items.extend(items)
+        return [1]
+
+    monkeypatch.setattr(betting, "create_real_ticket", fake_create_real_ticket)
+    monkeypatch.setattr(betting, "create_real_ticket_items_batch", fake_create_items)
+
+    req = betting.CreateBettingTicketRequest(
+        source="real-agent",
+        play_type="spf",
+        pass_type="single",
+        multiple=2,
+        items=[
+            betting.BettingTicketItemRequest(
+                match_id=1001,
+                play_type="spf",
+                option_code="3",
+                option_name="胜",
+                sp_value=2.5,
+            )
+        ],
+    )
+
+    result = betting._create_real_betting_ticket(object(), req)
+
+    assert created["source_type"] == "agent"
+    assert created["total_amount"] == 4
+    assert created["theoretical_max_prize"] == 10
+    assert result["ticketUid"] == "real:88"
+    assert result["owner"] == "agent"
+    assert inserted_items[0]["match_id"] == 1001
+
+
+def test_create_real_betting_ticket_attaches_ocr_confirmation(monkeypatch):
+    created: dict[str, object] = {}
+
+    def fake_create_real_ticket(conn, ticket):
+        created.update(ticket)
+        return 89
+
+    monkeypatch.setattr(betting, "create_real_ticket", fake_create_real_ticket)
+    monkeypatch.setattr(betting, "create_real_ticket_items_batch", lambda conn, ticket_id, items: [1])
+
+    req = betting.CreateBettingTicketRequest(
+        source="real-user",
+        play_type="spf",
+        pass_type="single",
+        multiple=1,
+        ticket_no="T20260707001",
+        store_code="31010101",
+        ticket_image_url="/uploads/tickets/ticket.jpg",
+        ocr_status="recognized",
+        items=[
+            betting.BettingTicketItemRequest(
+                match_id=1002,
+                play_type="spf",
+                option_code="1",
+                option_name="平",
+                sp_value=3.0,
+            )
+        ],
+    )
+
+    result = betting._create_real_betting_ticket(object(), req)
+
+    assert created["ticket_image_url"] == "/uploads/tickets/ticket.jpg"
+    assert created["ticket_no"] == "T20260707001"
+    assert created["store_code"] == "31010101"
+    assert created["ocr_status"] == "recognized"
+    assert result["source"] == "ocr"
+
+
+def test_apply_settlements_updates_ticket_financials():
+    tickets = [
+        {
+            "ticketUid": "simulator:7",
+            "owner": "me",
+            "kind": "simulation",
+            "source": "manual",
+            "status": "pending",
+            "date": "2026-07-07",
+            "stake": 12.0,
+            "settledAmount": None,
+            "profitLoss": None,
+            "roi": None,
+        },
+        {
+            "ticketUid": "agent:31",
+            "owner": "agent",
+            "kind": "simulation",
+            "source": "agent_recommendation",
+            "status": "pending",
+            "date": "2026-07-07",
+            "stake": 50.0,
+            "settledAmount": None,
+            "profitLoss": None,
+            "roi": None,
+        },
+    ]
+
+    betting._apply_settlements(
+        tickets,
+        [
+            ("simulator", 7, datetime(2026, 7, 7, 22, 0, 0), True, 12, 30, 0, 30, 18, 1.5),
+            ("simulation", 31, datetime(2026, 7, 7, 22, 1, 0), False, 50, 0, 0, 0, -50, -1),
+        ],
+    )
+
+    assert tickets[0]["status"] == "settled"
+    assert tickets[0]["settledAmount"] == 30.0
+    assert tickets[0]["profitLoss"] == 18.0
+    assert tickets[0]["roi"] == 1.5
+    assert tickets[0]["settledAt"] == "2026-07-07T22:00:00"
+    assert tickets[1]["status"] == "settled"
+    assert tickets[1]["settledAmount"] == 0.0
+    assert tickets[1]["profitLoss"] == -50.0
+
+
+def test_attach_ticket_items_adds_compact_match_summaries():
+    class Cursor:
+        def __init__(self):
+            self.rows: list[tuple] = []
+
+        def execute(self, sql, params):
+            if "simulator_ticket_items" in sql:
+                self.rows = [
+                    (7, 1001, "周二001", "阿森纳", "切尔西", "spf", "3", "胜", 1.8),
+                ]
+            elif "real_ticket_items" in sql:
+                self.rows = [
+                    (12, 1002, "周二002", "米兰", "国米", "rqspf", "0", "让负", 2.1),
+                ]
+            elif "simulation_ticket_items" in sql:
+                self.rows = [
+                    (31, 1003, "周二003", "巴黎", "里昂", "bf", "2:1", "2:1", 7.5),
+                ]
+            else:
+                self.rows = []
+
+        def fetchall(self):
+            return self.rows
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    class Conn:
+        def cursor(self):
+            return Cursor()
+
+    tickets = [
+        {"ticketUid": "simulator:7"},
+        {"ticketUid": "real:12"},
+        {"ticketUid": "agent:31"},
+    ]
+
+    betting._attach_ticket_items(Conn(), tickets)
+
+    assert tickets[0]["items"][0] == {
+        "matchId": 1001,
+        "matchCode": "周二001",
+        "homeTeam": "阿森纳",
+        "awayTeam": "切尔西",
+        "playType": "spf",
+        "optionCode": "3",
+        "optionName": "胜",
+        "spValue": 1.8,
+    }
+    assert tickets[1]["items"][0]["homeTeam"] == "米兰"
+    assert tickets[2]["items"][0]["matchCode"] == "周二003"
+
+
+def test_build_betting_results_splits_me_and_agent():
+    result = betting._build_betting_results(
+        [
+            {
+                "ticketUid": "simulator:1",
+                "owner": "me",
+                "kind": "simulation",
+                "source": "manual",
+                "status": "settled",
+                "date": "2026-07-07",
+                "stake": 10,
+                "settledAmount": 25,
+                "profitLoss": 15,
+                "roi": 1.5,
+            },
+            {
+                "ticketUid": "real:2",
+                "owner": "agent",
+                "kind": "real",
+                "source": "ocr",
+                "status": "pending",
+                "date": "2026-07-07",
+                "stake": 20,
+                "settledAmount": None,
+                "profitLoss": None,
+                "roi": None,
+            },
+            {
+                "ticketUid": "agent:3",
+                "owner": "agent",
+                "kind": "simulation",
+                "source": "agent_recommendation",
+                "status": "settled",
+                "date": "2026-07-08",
+                "stake": 30,
+                "settledAmount": 0,
+                "profitLoss": -30,
+                "roi": -1,
+            },
+        ]
+    )
+
+    assert result["owners"]["me"]["stake"] == 10
+    assert result["owners"]["me"]["profitLoss"] == 15
+    assert result["owners"]["me"]["roi"] == 1.5
+    assert result["owners"]["agent"]["stake"] == 50
+    assert result["owners"]["agent"]["pending"] == 1
+    assert result["owners"]["agent"]["profitLoss"] == -30
+    assert result["leader"] == "me"
+    assert result["trend"][-1]["agentCumulativeProfitLoss"] == -30

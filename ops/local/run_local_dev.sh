@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+FRONTEND_DIR="$PROJECT_ROOT/apps/frontend"
+ENV_FILE="$PROJECT_ROOT/.env.local"
+
+log() { echo "[fqp-dev] $(date '+%H:%M:%S')  $*"; }
+fail() { echo "[fqp-dev] ERROR: $*" >&2; exit 1; }
+
+command -v python3 >/dev/null 2>&1 || fail "Python 3.11+ is required."
+command -v node >/dev/null 2>&1 || fail "Node.js is required."
+command -v npm >/dev/null 2>&1 || fail "npm is required."
+
+PYTHON_BIN="${FQP_PYTHON_BIN:-$PROJECT_ROOT/.venv/bin/python}"
+if [[ ! -x "$PYTHON_BIN" ]]; then
+    PYTHON_BIN="$(command -v python3)"
+fi
+PYTHON_VERSION="$("$PYTHON_BIN" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
+"$PYTHON_BIN" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)' \
+    || fail "Python 3.11+ is required; current runtime is $PYTHON_BIN ($PYTHON_VERSION)."
+
+if [[ ! -f "$ENV_FILE" ]]; then
+    fail "Missing $ENV_FILE. Copy .env.local.example to .env.local and configure the host database."
+fi
+
+set -a
+# shellcheck disable=SC1090
+source "$ENV_FILE"
+set +a
+
+[[ -n "${DATABASE_URL:-}" ]] || fail "DATABASE_URL is not configured in .env.local."
+if [[ "$DATABASE_URL" == *"@postgres:"* ]]; then
+    fail "DATABASE_URL still uses Docker hostname 'postgres'. Use 127.0.0.1 for local development."
+fi
+
+"$PYTHON_BIN" -c 'import psycopg2, os; conn=psycopg2.connect(os.environ["DATABASE_URL"]); conn.close()' \
+    || fail "Cannot connect to the local PostgreSQL database configured by DATABASE_URL."
+
+if [[ ! -d "$FRONTEND_DIR/node_modules" ]]; then
+    log "Installing frontend dependencies..."
+    npm --prefix "$FRONTEND_DIR" install
+fi
+
+cleanup() {
+    log "Stopping local development processes..."
+    [[ -n "${BACKEND_PID:-}" ]] && kill "$BACKEND_PID" 2>/dev/null || true
+    [[ -n "${FRONTEND_PID:-}" ]] && kill "$FRONTEND_PID" 2>/dev/null || true
+}
+trap cleanup EXIT INT TERM
+
+log "Starting backend at http://127.0.0.1:8000"
+cd "$PROJECT_ROOT"
+"$PYTHON_BIN" -m uvicorn main:app --host 127.0.0.1 --port 8000 --reload &
+BACKEND_PID=$!
+
+log "Starting frontend at http://127.0.0.1:3000"
+npm --prefix "$FRONTEND_DIR" run dev -- --host 127.0.0.1 &
+FRONTEND_PID=$!
+
+wait "$BACKEND_PID"

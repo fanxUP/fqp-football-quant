@@ -1,0 +1,11 @@
+jobs:
+  initialize_business_day: "05 00 * * *"
+  crawl_official_schedule: "10 00 * * *"
+  crawl_morning_odds: "00 06 * * *"
+  generate_morning_predictions: "00 09 * * *"
+  crawl_midday_odds: "00 12 * * *"
+  generate_candidates: "00 16 * * *"
+  settle_finished_matches: "*/30 * * * *"
+  daily_review: "00 08 * * *"
+  weekly_review: "00 09 * * 1"
+  monthly_review: "00 10 1 * *"

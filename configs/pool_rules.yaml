@@ -1,0 +1,15 @@
+football_pool:
+  unit_cost: 2
+  sf14:
+    matches: 14
+    prize_levels: [14, 13]
+  rx9:
+    select_matches: 9
+    from_matches: 14
+  combination_limits:
+    max_units_default: 250
+    max_cost_default: 500
+  selection_types:
+    banker: single
+    cover: double
+    full_cover: triple

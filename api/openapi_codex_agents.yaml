@@ -1,0 +1,44 @@
+openapi: 3.0.3
+info:
+  title: FQP Codex Multi-Agent API
+  version: 4.0.0
+paths:
+  /agents:
+    get:
+      summary: List agent definitions
+      responses:
+        '200': { description: OK }
+  /agent-tasks:
+    post:
+      summary: Create a Codex agent task
+      responses:
+        '201': { description: Created }
+    get:
+      summary: List Codex agent tasks
+      responses:
+        '200': { description: OK }
+  /agent-tasks/{taskCode}/transition:
+    post:
+      summary: Change task status
+      parameters:
+        - in: path
+          name: taskCode
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+  /ai-jobs/run:
+    post:
+      summary: Trigger a controlled AI/data job dry-run or execution
+      responses:
+        '202': { description: Accepted }
+  /risk-gates/check:
+    post:
+      summary: Check whether a recommendation/model/data task can proceed
+      responses:
+        '200': { description: OK }
+  /codex-review-reports:
+    get:
+      summary: List Codex QA/review reports
+      responses:
+        '200': { description: OK }

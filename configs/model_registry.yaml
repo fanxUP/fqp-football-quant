@@ -1,0 +1,34 @@
+models:
+  - name: market_baseline
+    version: v1
+    paper_key: none
+    role: market_probability
+    production_allowed: true
+  - name: maher_poisson
+    version: v1
+    paper_key: maher1982
+    role: score_distribution
+    production_allowed: false
+    require_backtest: true
+  - name: dixon_coles
+    version: v1
+    paper_key: dixoncoles1997
+    role: low_score_adjustment
+    production_allowed: false
+    require_backtest: true
+  - name: shin_probability
+    version: v1
+    paper_key: shin1993
+    role: odds_margin_removal
+    production_allowed: false
+  - name: favourite_longshot_bias
+    version: v1
+    paper_key: cainlawpeel2003
+    role: bias_adjustment
+    production_allowed: false
+  - name: elo_rating
+    version: v1
+    paper_key: elo1978
+    role: dynamic_strength_rating
+    production_allowed: false
+    require_backtest: true

@@ -1,0 +1,20 @@
+module_code: example_module
+module_name: 示例模块
+category: business
+version: 0.1.0
+schema_version: 0.1.0
+api_version: v1
+status: registered
+is_core: false
+owner_agent: ExampleAgent
+dependencies:
+  required: []
+  optional: []
+permissions:
+  - example_module.view
+panels:
+  - example_module.panel
+jobs: []
+rollback:
+  disable_flag: example_module_enabled
+  notes: 关闭 feature flag 后隐藏菜单并停止任务。

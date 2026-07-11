@@ -1,0 +1,34 @@
+# feature_source_confidence.yaml
+# 多维特征数据源分级。系统必须保留 source_name/source_confidence/raw_json。
+source_levels:
+  A:
+    description: 官方或权威一手来源，可进入正式推荐
+    default_confidence: 0.95
+    examples:
+      - 中国竞彩网官方赛程/赛果/赔率
+      - 联赛官网官方首发
+      - 俱乐部官网官方伤停公告
+  B:
+    description: 权威数据商或主流数据平台，需要映射校验
+    default_confidence: 0.85
+    examples:
+      - Transfermarkt 身价
+      - Open-Meteo 天气
+      - football-data.org（球队战绩、赛程、球员）
+      - API-Football v3（球员统计、伤停、首发、阵容）
+      - TheOddsAPI v4（多博彩公司赔率对比、赔率变动、历史赔率）
+      - 权威赛程/阵容数据商
+  C:
+    description: 媒体预测、新闻伤停，只用于预测首发和风险提示
+    default_confidence: 0.65
+    examples:
+      - 媒体预测首发
+      - 赛前新闻报道
+  D:
+    description: 社媒或无法验证来源，不直接进入正式模型
+    default_confidence: 0.35
+    examples:
+      - 社交媒体传闻
+      - 未验证自媒体消息
+minimum_confidence_for_formal_recommendation: 0.75
+unknown_source_confidence: 0.30

@@ -1,0 +1,96 @@
+official:
+  sporttery:
+    enabled: true
+    priority: 1
+    description: 中国竞彩网/中国体育彩票官方信息源，只用于官方赛程、玩法、SP、赛果。
+    fail_policy: shutdown_recommendation
+third_party:
+  football_data:
+    enabled: true
+    api_key_env: FOOTBALL_DATA_API_KEY
+    base_url: https://api.football-data.org/v4/
+    rate_limit:
+      requests_per_minute: 10
+    usage:
+      - 球队历史战绩、进球、失球
+      - 球员身价与阵容（部分联赛）
+      - 联赛积分榜
+      - 赛程与赛果（补充校验，不允许新增官方比赛）
+    coverage:
+      - 欧洲五大联赛及其次级联赛
+      - 欧冠、欧联
+      - 部分南美联赛
+    source_confidence: B
+    note: 免费计划，每分钟10次请求，不支持伤停数据。
+  api_football:
+    enabled: true
+    api_key_env: API_FOOTBALL_KEY
+    base_url: https://v3.football.api-sports.io/
+    rate_limit:
+      requests_per_day: 100
+    usage:
+      - 球员信息与赛季统计
+      - 球队阵容快照
+      - 伤停数据（injuries 端点）
+      - 首发阵容（fixtures/lineups 端点）
+      - 比赛事件（进球、换人、红黄牌）
+      - 联赛积分榜
+    coverage:
+      - 全球主要联赛（覆盖较 football-data.org 更广）
+    source_confidence: B
+    note: 免费计划，每天100次请求。伤停和首发数据可用但有限。
+  sportmonks:
+    enabled: true
+    api_key_env: SPORTMONKS_API_TOKEN
+    base_url: https://api.sportmonks.com/v3/football
+    usage:
+      - 当前赛季联赛积分榜
+      - 赛事赛季与球队排名补充
+    source_confidence: B
+    note: 仅作为积分榜补充源，不得替代体彩官方赛程。
+  theodds:
+    enabled: true
+    api_key_env: THEODDS_API_KEY
+    base_url: https://api.the-odds-api.com/v4/
+    rate_limit:
+      requests_per_month: 500
+    usage:
+      - 多家博彩公司赔率对比（h2h/spreads/totals）
+      - 赔率变动追踪（市场情绪信号）
+      - 与竞彩官方SP对比发现市场定价偏差
+      - 历史赔率回测交易策略
+      - 赛果与比分数据（辅助校验）
+    coverage:
+      - 全球主流足球联赛（与 football-data.org 覆盖相当）
+      - 主要欧洲、亚洲、美洲博彩公司
+      - 含加时赛/点球赔率（部分博彩公司）
+    source_confidence: B
+    note: 免费计划，每月500次请求。历史赔率数据受限。关键价值：多博彩公司赔率共识 vs 竞彩官方SP。
+  leisu:
+    enabled: true
+    base_url: https://www.leisu.com/
+    usage:
+      - 当前联赛积分榜和近期赛果补充
+      - 球队名称映射校验
+      - 官方页面不可访问时的状态交叉校验
+    source_confidence: C
+    note: 仅作补充来源，不得替代 Sporttery 官方赛程、编号、销售状态和 SP。
+  five_hundred:
+    enabled: true
+    base_url: https://live.500.com/
+    usage:
+      - 历史赛果和赛事信息补充
+      - 赛果采集降级校验
+    source_confidence: C
+    note: 仅作补充来源，不得替代 Sporttery 官方口径。
+    storage:
+      match_table: supplemental_matches
+      standings_source_name: 500com_derived
+      refresh_schedule: daily_03_40_local
+      never_write_tables:
+        - official_matches
+      result_policy: 已由体彩官方赛程确认的 match_id 可补充赛果，必须在 raw_json 标记 source_name=500.com、source_type=supplemental，且不得新增官方比赛或伪装为体彩赛果。
+health_check:
+  max_failure_count: 3
+  max_latency_ms: 8000
+  alert_on_schema_change: true

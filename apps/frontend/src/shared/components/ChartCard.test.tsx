@@ -1,0 +1,140 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen } from '@testing-library/react';
+import ChartCard from './ChartCard';
+
+// ----- Mock echarts entirely ------------------------------------------------
+// The source file imports:  import * as echarts from 'echarts'
+// and then calls echarts.init(...). So the mock must provide `init` as a
+// top-level named export.
+
+const { mockInit, mockInstance } = vi.hoisted(() => {
+  const inst = {
+    setOption: vi.fn(),
+    dispose: vi.fn(),
+    resize: vi.fn(),
+  };
+  return {
+    mockInit: vi.fn(() => inst),
+    mockInstance: inst,
+  };
+});
+
+vi.mock('echarts', () => ({
+  init: mockInit,
+}));
+
+// ----- Mock ThemeContext (ChartCard reads theme for textColor) ---------------
+let mockTheme = 'dark';
+vi.mock('../../app/ThemeContext', () => ({
+  useTheme: () => ({ theme: mockTheme, toggleTheme: vi.fn() }),
+}));
+
+// ----- Mock Card wrapper ----------------------------------------------------
+vi.mock('./Card', () => ({
+  default: ({ children }: { children: React.ReactNode }) => (
+    <div data-testid="card-wrapper">
+      <div data-testid="card-body">{children}</div>
+    </div>
+  ),
+}));
+
+// ----- Tests -----------------------------------------------------------------
+
+describe('ChartCard', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockTheme = 'dark';
+  });
+
+  const baseOption = {
+    xAxis: { type: 'category', data: ['A', 'B', 'C'] },
+    yAxis: { type: 'value' },
+    series: [{ type: 'bar', data: [1, 2, 3] }],
+  };
+
+  // ------------------------------------------------------------------
+  // Rendering
+  // ------------------------------------------------------------------
+  describe('rendering', () => {
+    it('renders the title via Card', () => {
+      render(<ChartCard title="Test Chart" option={baseOption} />);
+      expect(screen.getByRole('heading', { name: 'Test Chart' })).toBeTruthy();
+    });
+
+    it('renders a chart container div', () => {
+      const { container } = render(<ChartCard title="Chart" option={baseOption} />);
+      const chartDiv = container.querySelector('div[style]');
+      expect(chartDiv).toBeTruthy();
+    });
+
+    it('applies the height prop to the chart container', () => {
+      const { container } = render(
+        <ChartCard title="Tall Chart" option={baseOption} height={450} />,
+      );
+      const chartDiv = container.querySelector('[style*="height: 450px"]');
+      expect(chartDiv).toBeTruthy();
+    });
+
+    it('defaults height to 300', () => {
+      const { container } = render(
+        <ChartCard title="Default Height" option={baseOption} />,
+      );
+      const chartDiv = container.querySelector('[style*="height: 300px"]');
+      expect(chartDiv).toBeTruthy();
+    });
+  });
+
+  // ------------------------------------------------------------------
+  // Loading state
+  // ------------------------------------------------------------------
+  describe('loading state', () => {
+    it('shows loading message when loading=true', () => {
+      render(<ChartCard title="Loading Chart" option={baseOption} loading={true} />);
+      expect(screen.getByRole('status', { name: '加载图表...' })).toBeTruthy();
+    });
+
+    it('does not render chart container when loading', () => {
+      const { container } = render(
+        <ChartCard title="Loading" option={baseOption} loading={true} />,
+      );
+      expect(screen.getByRole('status', { name: '加载图表...' })).toBeTruthy();
+      // No canvas element should exist (echarts renders to canvas)
+      expect(container.querySelector('canvas')).toBeFalsy();
+    });
+  });
+
+  // ------------------------------------------------------------------
+  // Options / theme
+  // ------------------------------------------------------------------
+  describe('echarts integration', () => {
+    it('initialises echarts with the themed option', () => {
+      render(<ChartCard title="Theme Test" option={baseOption} />);
+      expect(mockInit).toHaveBeenCalledTimes(1);
+
+      const setOptCalls = mockInstance.setOption.mock.calls;
+      expect(setOptCalls.length).toBeGreaterThanOrEqual(1);
+
+      const passedOption = setOptCalls[0][0] as Record<string, unknown>;
+      expect(passedOption.backgroundColor).toBe('transparent');
+      expect(passedOption.textStyle).toEqual({ color: '#C4C4CC', fontSize: 14 });
+    });
+
+    it('uses light textColor when theme is light', () => {
+      mockTheme = 'light';
+      render(<ChartCard title="Light Chart" option={baseOption} />);
+      const passedOption = mockInstance.setOption.mock.calls[0][0] as Record<string, unknown>;
+      expect(passedOption.textStyle).toEqual({ color: '#4B5563', fontSize: 14 });
+    });
+  });
+
+  // ------------------------------------------------------------------
+  // Cleanup
+  // ------------------------------------------------------------------
+  describe('cleanup', () => {
+    it('disposes instance on unmount', () => {
+      const { unmount } = render(<ChartCard title="Cleanup" option={baseOption} />);
+      unmount();
+      expect(mockInstance.dispose).toHaveBeenCalledTimes(1);
+    });
+  });
+});

@@ -1,0 +1,28 @@
+theme_id: red_black_tech
+name: 红黑足球科技风
+colors:
+  background: '#050507'
+  panel: '#0B0D12'
+  panel_secondary: '#11151D'
+  primary_red: '#E50914'
+  neon_red: '#FF2A3D'
+  dark_red: '#7A0B12'
+  border: '#27272A'
+  text_primary: '#F5F5F7'
+  text_secondary: '#A1A1AA'
+  success: '#17C964'
+  warning: '#F5A524'
+  info: '#3B82F6'
+  muted: '#71717A'
+layout:
+  dashboard_grid: 12
+  card_radius: 16
+  card_border: 1px solid rgba(255,42,61,0.16)
+  card_shadow: 0 0 32px rgba(229,9,20,0.10)
+charts:
+  line_primary: '#FF2A3D'
+  grid: 'rgba(255,255,255,0.08)'
+  axis: '#A1A1AA'
+interaction:
+  hover_glow: '0 0 18px rgba(255,42,61,0.45)'
+  danger_pulse: true
