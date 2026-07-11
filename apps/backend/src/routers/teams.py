@@ -280,6 +280,7 @@ def list_event_catalog(
     start_date: str | None = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
     end_date: str | None = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
     limit: int = Query(500, ge=1, le=5000),
+    offset: int = Query(0, ge=0),
 ):
     """Browse the source-labelled official/supplemental match catalog."""
     conditions = []
@@ -300,6 +301,11 @@ def list_event_catalog(
     with get_db() as conn:
         with conn.cursor() as cur:
             cur.execute(
+                f"SELECT COUNT(*) FROM event_match_catalog {where}",
+                tuple(params),
+            )
+            total = cur.fetchone()[0]
+            cur.execute(
                 f"""
                 SELECT source, source_row_id, source_match_code,
                        competition_season_id, home_team_id, away_team_id,
@@ -309,8 +315,9 @@ def list_event_catalog(
                 {where}
                 ORDER BY kickoff_time DESC
                 LIMIT %s
+                OFFSET %s
                 """,
-                (*params, limit),
+                (*params, limit, offset),
             )
             rows = cur.fetchall()
     return {
@@ -333,7 +340,7 @@ def list_event_catalog(
             }
             for r in rows
         ],
-        "total": len(rows),
+        "total": total,
     }
 
 

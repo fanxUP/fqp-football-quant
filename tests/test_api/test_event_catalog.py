@@ -36,4 +36,19 @@ def test_event_catalog_defaults_to_official_and_supports_explicit_season_dates(c
     assert "source = %s" in sql
     assert "kickoff_time::date >= %s" in sql
     assert "kickoff_time::date <= %s" in sql
-    assert params == ("official", "2026-01-01", "2026-07-11", 5000)
+    assert params == ("official", "2026-01-01", "2026-07-11", 5000, 0)
+
+
+def test_event_catalog_returns_total_count_for_pagination(client):
+    with patch("apps.backend.src.routers.teams.get_db") as get_db:
+        connection = get_db.return_value.__enter__.return_value
+        cursor = connection.cursor.return_value.__enter__.return_value
+        cursor.fetchall.return_value = []
+        cursor.fetchone.return_value = (5179,)
+
+        response = client.get("/api/events/catalog?source=official&limit=50&offset=100")
+
+    assert response.status_code == 200
+    assert response.json()["total"] == 5179
+    _, params = cursor.execute.call_args.args
+    assert params == ("official", 50, 100)

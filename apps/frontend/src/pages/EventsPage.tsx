@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../core/apiClient';
 import type { EventCatalogMatch, EventSummary } from '../core/types';
 import { ApiError } from '../core/types';
@@ -14,22 +14,28 @@ import TeamName from '../shared/components/TeamName';
 import { statusLabel } from '../shared/constants';
 
 const LEAGUE_COLORS = ['#ef4444', '#f59e0b', '#22c55e', '#3b82f6', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316', '#84cc16', '#14b8a6'];
+const PAGE_SIZE = 50;
 
 export default function EventsPage() {
   const [matches, setMatches] = useState<EventCatalogMatch[]>([]);
+  const [events, setEvents] = useState<EventSummary[]>([]);
+  const [total, setTotal] = useState(0);
+  const [offset, setOffset] = useState(0);
+  const hasLoadedInitialData = useRef(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedLeague, setSelectedLeague] = useState<string>('__all__');
   const [selectedMatchId, setSelectedMatchId] = useState<number | null>(null);
 
-  useEffect(() => {
+  const loadMatches = useCallback((leagueName: string | null, offset = 0) => {
     setLoading(true);
     setError(null);
-    api.events.catalog({ source: 'official', limit: 5000 })
+    api.events.catalog({ source: 'official', league_name: leagueName ?? undefined, limit: PAGE_SIZE, offset })
       .then((res) => {
         setMatches(res.matches);
+        setTotal(res.total);
+        setOffset(offset);
         setLoading(false);
-        setSelectedLeague('__all__');
       })
       .catch((e) => {
         setError(e instanceof ApiError ? e.message : '加载失败');
@@ -37,22 +43,22 @@ export default function EventsPage() {
       });
   }, []);
 
+  useEffect(() => {
+    if (hasLoadedInitialData.current) return;
+    hasLoadedInitialData.current = true;
+    api.events.list().then((res) => setEvents(res.events)).catch(() => undefined);
+    loadMatches(null);
+  }, [loadMatches]);
+
   const selectLeague = (leagueName: string | null) => {
     const key = leagueName || '__all__';
     if (key === selectedLeague) return;
     setSelectedLeague(key);
+    loadMatches(leagueName);
   };
 
   const isAll = selectedLeague === '__all__';
-  const grouped = new Map<string, EventCatalogMatch[]>();
-  matches.forEach((match) => grouped.set(match.league_name, [...(grouped.get(match.league_name) || []), match]));
-  const events: EventSummary[] = Array.from(grouped, ([league_name, rows]) => ({
-    league_name,
-    match_count: rows.length,
-    first_match: rows.reduce((first, row) => row.kickoff_time < first ? row.kickoff_time : first, rows[0].kickoff_time),
-    last_match: rows.reduce((last, row) => row.kickoff_time > last ? row.kickoff_time : last, rows[0].kickoff_time),
-  })).sort((a, b) => b.last_match.localeCompare(a.last_match));
-  const leagueMatches = isAll ? matches : matches.filter((match) => match.league_name === selectedLeague);
+  const leagueMatches = matches;
 
   if (loading) return (
     <div>
@@ -121,9 +127,11 @@ export default function EventsPage() {
     },
   ];
 
-  const totalMatches = events.reduce((s, e) => s + e.match_count, 0);
+  const totalMatches = events.reduce((s, e) => s + e.match_count, 0) || total;
 
   const selectedEvent = isAll ? null : events.find((e) => e.league_name === selectedLeague);
+  const page = Math.floor(offset / PAGE_SIZE) + 1;
+  const pageCount = Math.ceil(total / PAGE_SIZE);
 
   return (
     <div>
@@ -223,7 +231,7 @@ export default function EventsPage() {
               {isAll ? '全部赛事' : selectedLeague}
             </span>
             <span style={{ color: 'var(--fqp-text-muted)', fontSize: '13px' }}>
-              {leagueMatches.length} 场比赛 · 体彩官方已收录
+              {total} 场比赛 · 体彩官方已收录
             </span>
             {selectedEvent && (
               <span style={{ color: 'var(--fqp-text-muted)', fontSize: '12px' }}>
@@ -233,19 +241,29 @@ export default function EventsPage() {
           </div>
 
           {leagueMatches.length > 0 ? (
-            <div style={{
-              background: 'var(--fqp-panel)', borderRadius: '8px',
-              padding: 0, overflow: 'hidden',
-            }}>
-              <DataTable
-                columns={matchColumns}
-                rows={leagueMatches}
-                emptyText="该赛事暂无比赛"
-                onRowClick={(row) => row.source === 'official' && setSelectedMatchId(row.source_row_id)}
-                rowKey={(row) => `${row.source}-${row.source_row_id}`}
-                selectedRowKey={selectedMatchId}
-              />
-            </div>
+            <>
+              <div style={{
+                background: 'var(--fqp-panel)', borderRadius: '8px',
+                padding: 0, overflow: 'hidden',
+              }}>
+                <DataTable
+                  columns={matchColumns}
+                  rows={leagueMatches}
+                  emptyText="该赛事暂无比赛"
+                  onRowClick={(row) => row.source === 'official' && setSelectedMatchId(row.source_row_id)}
+                  rowKey={(row) => `${row.source}-${row.source_row_id}`}
+                  selectedRowKey={selectedMatchId}
+                />
+              </div>
+              {total > PAGE_SIZE && (
+                <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '10px', marginTop: '12px' }}>
+                  <button className="fqp-btn" disabled={offset === 0} onClick={() => loadMatches(isAll ? null : selectedLeague, 0)}>首页</button>
+                  <button className="fqp-btn" disabled={offset === 0} onClick={() => loadMatches(isAll ? null : selectedLeague, Math.max(0, offset - PAGE_SIZE))}>上一页</button>
+                  <span style={{ fontSize: '12px', color: 'var(--fqp-text-muted)' }}>第 {page}/{pageCount} 页 · 每页 {PAGE_SIZE} 场</span>
+                  <button className="fqp-btn" disabled={offset + PAGE_SIZE >= total} onClick={() => loadMatches(isAll ? null : selectedLeague, offset + PAGE_SIZE)}>下一页</button>
+                </div>
+              )}
+            </>
           ) : (
             <EmptyState icon="⚽" title="暂无比赛" description="该赛事下没有找到比赛数据" />
           )}
