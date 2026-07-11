@@ -215,3 +215,38 @@ def test_resolves_history_result_by_exact_business_date_and_display_code_only():
     assert "official_match_code = %s" in sql
     assert "ORDER BY business_date DESC" not in sql
     assert params == ("2026-07-10", "周五098")
+
+
+def test_missing_code_row_cannot_shift_the_next_official_result_identity():
+    payload = {
+        "value": {
+            "matchResultList": [
+                {
+                    "businessDate": "2026-07-10",
+                    "fullHomeGoals": 9,
+                    "fullAwayGoals": 9,
+                },
+                {
+                    "matchId": 2040374,
+                    "businessDate": "2026-07-10",
+                    "matchNumStr": "周五098",
+                    "matchDate": "2026-07-11",
+                    "matchTime": "03:00",
+                    "leagueAllName": "世界杯",
+                    "homeTeamAllName": "西班牙",
+                    "awayTeamAllName": "比利时",
+                    "fullHomeGoals": 2,
+                    "fullAwayGoals": 1,
+                },
+            ]
+        }
+    }
+
+    history = parse_local_official_history_text(
+        json.dumps(payload, ensure_ascii=False),
+        source_path="/tmp/sporttery-history.json",
+    )
+
+    assert history["rejected"][0]["reason"] == "missing or invalid official display match code"
+    assert history["results"][0]["_match_code"] == "周五098"
+    assert history["results"][0]["score_result"] == "2:1"

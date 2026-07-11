@@ -1,6 +1,10 @@
 from unittest.mock import ANY, MagicMock, patch
 
-from scripts.official_crawler import crawl_official_results, parse_matches_from_response
+from scripts.official_crawler import (
+    crawl_official_results,
+    parse_matches_from_response,
+    parse_results_from_response,
+)
 
 
 def test_parse_uniform_match_keeps_official_display_code_and_sale_status():
@@ -61,3 +65,28 @@ def test_blocked_sporttery_results_use_labeled_500_supplement_for_existing_offic
     record_status.assert_called_once()
     update_health.assert_any_call(connection, "sporttery", "official", "error", 0, ANY)
     update_health.assert_any_call(connection, "500.com", "supplemental", "ok", ANY)
+
+
+def test_parse_official_result_preserves_numeric_zero_scores():
+    raw = {
+        "value": {
+            "matchResultList": [
+                {
+                    "matchNumStr": "周五098",
+                    "halfHomeGoals": 0,
+                    "halfAwayGoals": 0,
+                    "fullHomeGoals": 0,
+                    "fullAwayGoals": 1,
+                }
+            ]
+        }
+    }
+
+    result = parse_results_from_response(raw)[0]
+
+    assert result["half_home_goals"] == 0
+    assert result["half_away_goals"] == 0
+    assert result["full_home_goals"] == 0
+    assert result["full_away_goals"] == 1
+    assert result["score_result"] == "0:1"
+    assert result["spf_result"] == "0"

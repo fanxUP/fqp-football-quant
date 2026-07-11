@@ -23,5 +23,6 @@ FQP 是单用户本地使用的足球竞彩与足彩量化研究系统：官方�
 | 产品边界、架构与阶段计划 | `docs/00_项目总览与边界.md`、`docs/03_系统架构设计.md`、`docs/51_最终开发阶段计划与验收清单.md` |
 | 模块、页面与依赖事实来源 | `configs/final_module_registry.yaml`、`configs/final_panel_registry.yaml`、`configs/module_dependencies.yaml` |
 | API、数据结构与可验证行为 | `api/`、`sql/`、`tests/`、应用代码 |
+| 体彩官方历史回填与覆盖审计 | `docs/64_体彩官方历史比赛回填与审计.md` |
 
 完整文件列表由 Git 管理：使用 `git ls-files` 获取；不在本文件重复维护易过期的文件计数和逐项清单。

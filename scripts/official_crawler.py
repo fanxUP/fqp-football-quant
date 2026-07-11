@@ -273,10 +273,17 @@ def parse_results_from_response(
             continue
 
         # Goals
-        half_home = item.get("halfHomeGoals") or item.get("halfHomeScore")
-        half_away = item.get("halfAwayGoals") or item.get("halfAwayScore")
-        full_home = item.get("fullHomeGoals") or item.get("fullHomeScore") or item.get("homeGoals")
-        full_away = item.get("fullAwayGoals") or item.get("fullAwayScore") or item.get("awayGoals")
+        def _first_present(row: dict[str, Any], *keys: str) -> Any:
+            for key in keys:
+                value = row.get(key)
+                if value is not None and value != "":
+                    return value
+            return None
+
+        half_home = _first_present(item, "halfHomeGoals", "halfHomeScore")
+        half_away = _first_present(item, "halfAwayGoals", "halfAwayScore")
+        full_home = _first_present(item, "fullHomeGoals", "fullHomeScore", "homeGoals")
+        full_away = _first_present(item, "fullAwayGoals", "fullAwayScore", "awayGoals")
 
         # Convert to int if present
         def _to_int(v: Any) -> int | None:

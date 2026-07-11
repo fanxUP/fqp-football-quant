@@ -156,12 +156,12 @@ def _first_text(row: dict[str, Any], *keys: str) -> str:
     return ""
 
 
-def _normalize_display_code(value: str) -> str:
+def normalize_official_match_code(value: str) -> str:
     value = value.strip().replace("周天", "周日")
     return value if OFFICIAL_MATCH_CODE_RE.fullmatch(value) else ""
 
 
-def _identity_error(business_date: str, match_code: str) -> str | None:
+def official_match_identity_error(business_date: str, match_code: str) -> str | None:
     if not business_date:
         return "missing official business_date"
     if not match_code:
@@ -196,15 +196,14 @@ def parse_local_official_history_text(
     seen_identities: set[tuple[str, str]] = set()
 
     for payload in extract_official_result_payloads(text):
-        normalized_results = parse_results_from_response(payload)
-        for row, result in zip(_result_rows(payload), normalized_results):
+        for row in _result_rows(payload):
             business_date = _first_text(
                 row, "businessDate", "matchBusinessDate", "betDate"
             ) or (default_business_date or "")
-            match_code = _normalize_display_code(
+            match_code = normalize_official_match_code(
                 _first_text(row, "matchNumStr", "matchCode", "matchNum")
             )
-            error = _identity_error(business_date, match_code)
+            error = official_match_identity_error(business_date, match_code)
             if error:
                 rejected.append(
                     {
@@ -216,6 +215,18 @@ def parse_local_official_history_text(
                     }
                 )
                 continue
+
+            normalized_results = parse_results_from_response({"matchResultList": [row]})
+            if not normalized_results:
+                rejected.append(
+                    {
+                        "business_date": business_date,
+                        "official_match_code": match_code,
+                        "reason": "could not parse official result row",
+                    }
+                )
+                continue
+            result = normalized_results[0]
 
             identity = (business_date, match_code)
             if identity in seen_identities:
@@ -303,7 +314,7 @@ def resolve_official_match_id(
 
 def import_local_official_results_file(
     path: str,
-    business_date: str,
+    business_date: str | None = None,
     dry_run: bool = False,
 ) -> dict[str, Any]:
     """Import one local Sporttery result artifact into official_results."""
@@ -318,6 +329,10 @@ def import_local_official_results_file(
     matches = history["matches"]
     results = history["results"]
     rejected = history["rejected"]
+    log_business_date = business_date or min(
+        (result["_business_date"] for result in results),
+        default=date.today().isoformat(),
+    )
 
     if dry_run:
         return {
@@ -360,7 +375,7 @@ def import_local_official_results_file(
         }
         record_official_collection_status(
             conn,
-            business_date=business_date,
+            business_date=log_business_date,
             crawl_type="results_import",
             source_name="sporttery",
             status="ok" if not unresolved and not rejected else "partial",
@@ -399,7 +414,10 @@ def import_local_official_results_file(
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("path", help="Saved Sporttery HTML, HAR, or JSON artifact")
-    parser.add_argument("--business-date", required=True, help="Official business date")
+    parser.add_argument(
+        "--business-date",
+        help="Fallback official business date for a verified single-day artifact only",
+    )
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
