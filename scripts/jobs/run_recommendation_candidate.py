@@ -552,12 +552,21 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
         if training_observation_mode and candidates:
             observation_tickets = 0
             daily_budget = AGENT_DAILY_BUDGET
-            singles_budget = round(daily_budget * 0.60, 2)
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT match_id, play_type FROM official_markets WHERE is_single_allowed = true"
+                )
+                single_allowed = {(row[0], row[1]) for row in cur.fetchall()}
+            single_candidates = [
+                c for c in candidates if (c["match_id"], c["play_type"]) in single_allowed
+            ]
+            singles_budget = round(daily_budget * 0.60, 2) if single_candidates else 0.0
             combo_budget = round(daily_budget - singles_budget, 2)
-            base_single_stake = _official_stake(singles_budget / len(candidates))
-            single_stakes = [base_single_stake] * len(candidates)
-            single_stakes[-1] = _official_stake(singles_budget - sum(single_stakes[:-1]))
-            for c, stake in zip(candidates, single_stakes):
+            base_single_stake = _official_stake(singles_budget / len(single_candidates)) if single_candidates else 0.0
+            single_stakes = [base_single_stake] * len(single_candidates)
+            if single_stakes:
+                single_stakes[-1] = _official_stake(singles_budget - sum(single_stakes[:-1]))
+            for c, stake in zip(single_candidates, single_stakes):
                 ticket = {
                     "strategy_pool": "agent_training_observation",
                     "ticket_type": "training_observation",
