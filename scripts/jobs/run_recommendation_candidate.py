@@ -548,13 +548,15 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
             daily_budget = AGENT_DAILY_BUDGET
             singles_budget = round(daily_budget * 0.60, 2)
             combo_budget = round(daily_budget - singles_budget, 2)
-            single_stake = round(singles_budget / len(candidates), 2)
-            for c in candidates:
+            base_single_stake = round(singles_budget / len(candidates), 2)
+            single_stakes = [base_single_stake] * len(candidates)
+            single_stakes[-1] = round(singles_budget - sum(single_stakes[:-1]), 2)
+            for c, stake in zip(candidates, single_stakes):
                 ticket = {
                     "strategy_pool": "agent_training_observation",
                     "ticket_type": "training_observation",
                     "pass_type": "single",
-                    "suggested_stake": single_stake,
+                    "suggested_stake": stake,
                     "multiple": 1,
                     "estimated_return": round(MIN_STAKE * c["sp_value"], 2),
                     "max_return": round(MIN_STAKE * c["sp_value"], 2),
