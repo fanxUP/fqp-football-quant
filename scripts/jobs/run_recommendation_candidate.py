@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from itertools import combinations
+from math import floor
 from typing import Any
 
 from apps.backend.src.db import get_db
@@ -31,6 +32,11 @@ from scripts.agents.task_queue import finish_tracked_job, start_tracked_job
 
 def _now() -> str:
     return datetime.now().isoformat(timespec="seconds")
+
+
+def _official_stake(value: float) -> float:
+    """Round a virtual stake down to the official 2-yuan unit."""
+    return float(floor(max(0.0, value) / STAKE_UNIT) * STAKE_UNIT)
 
 
 # ── Selection config ──
@@ -548,9 +554,9 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
             daily_budget = AGENT_DAILY_BUDGET
             singles_budget = round(daily_budget * 0.60, 2)
             combo_budget = round(daily_budget - singles_budget, 2)
-            base_single_stake = round(singles_budget / len(candidates), 2)
+            base_single_stake = _official_stake(singles_budget / len(candidates))
             single_stakes = [base_single_stake] * len(candidates)
-            single_stakes[-1] = round(singles_budget - sum(single_stakes[:-1]), 2)
+            single_stakes[-1] = _official_stake(singles_budget - sum(single_stakes[:-1]))
             for c, stake in zip(candidates, single_stakes):
                 ticket = {
                     "strategy_pool": "agent_training_observation",
@@ -574,8 +580,8 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
                     combos = [("2x1", {"candidates": list(candidates[:2]), "combined_sp": candidates[0]["sp_value"] * candidates[1]["sp_value"], "combined_ev": candidates[0]["ev"] + candidates[1]["ev"]})]
                 if len(candidates) >= 3:
                     combos += [("3x1", combo) for combo in _build_parlays(candidates, 3)[:1]]
-                combo_stakes = [round(combo_budget / len(combos), 2)] * len(combos)
-                combo_stakes[-1] = round(combo_budget - sum(combo_stakes[:-1]), 2)
+                combo_stakes = [_official_stake(combo_budget / len(combos))] * len(combos)
+                combo_stakes[-1] = _official_stake(combo_budget - sum(combo_stakes[:-1]))
                 for (pass_type, combo), combo_stake in zip(combos, combo_stakes):
                     combo_items = [_make_item(c) for c in combo["candidates"]]
                     ticket = {
