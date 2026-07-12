@@ -233,7 +233,7 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
                     LIMIT 1
                 ) latest_os ON true
                 WHERE mp.predict_time = %s
-                  AND mp.play_type IN ('spf', 'rqspf')
+                  AND mp.play_type IN ('spf', 'rqspf', 'bf', 'zjq', 'bqc')
                   AND mv.model_name = ANY(%s)
                   AND m.kickoff_time > NOW()
                 ORDER BY mp.ev DESC
