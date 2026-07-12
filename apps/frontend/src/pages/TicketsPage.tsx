@@ -67,6 +67,10 @@ function TicketCard({ ticket }: { ticket: BettingTicket }) {
             <span>比赛编号</span>
             <strong>{ticketPrimaryMatchCode(ticket)}</strong>
           </span>
+          <span>
+            <span>注数 / 倍数</span>
+            <strong>{ticket.betCount ?? '—'} 注 · {ticket.multiple} 倍</strong>
+          </span>
         </span>
 
         <span className="lottery-ticket-foot">
@@ -118,8 +122,8 @@ function TicketCard({ ticket }: { ticket: BettingTicket }) {
             </strong>
           </div>
           <div>
-            <span>倍数 / 项数</span>
-            <strong>{ticket.multiple} 倍 · {ticket.itemCount} 项</strong>
+            <span>比赛项数</span>
+            <strong>{ticket.itemCount} 项</strong>
           </div>
           <div>
             <span>结算时间</span>
