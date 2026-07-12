@@ -954,7 +954,7 @@ export default function BettingTerminalPage() {
           )}
         </section>
 
-        <aside className="betting-slip" aria-label="投注单">
+        <aside className={`betting-slip ${betSlip.length > 0 ? 'has-selections' : 'is-empty'}`} aria-label="投注单">
           <div className="betting-slip-head">
             <div>
               <h3>投注单</h3>

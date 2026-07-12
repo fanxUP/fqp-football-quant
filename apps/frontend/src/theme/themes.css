@@ -1236,6 +1236,10 @@
   .betting-slip {
     position: static;
   }
+
+  .betting-slip.is-empty {
+    display: none;
+  }
 }
 
 @media (max-width: 760px) {
