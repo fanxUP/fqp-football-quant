@@ -259,6 +259,7 @@ def test_attach_ticket_items_adds_compact_match_summaries():
         "optionCode": "3",
         "optionName": "胜",
         "spValue": 1.8,
+        "oddsSource": "official",
     }
     assert tickets[1]["items"][0]["homeTeam"] == "米兰"
     assert tickets[2]["items"][0]["matchCode"] == "周二003"

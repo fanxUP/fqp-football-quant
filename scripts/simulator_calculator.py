@@ -327,6 +327,14 @@ def validate_items(items: list[dict], pass_type: str) -> list[str]:
         errors.append("至少需要选择1场比赛")
         return errors
 
+    # Official mixed-parlay rule: one match may appear only once in a ticket.
+    # This also prevents combining different games from the same match.
+    match_ids = [item.get("match_id") for item in items]
+    if any(match_id is None for match_id in match_ids):
+        errors.append("每个投注项必须包含官方比赛编号")
+    if len(match_ids) != len(set(match_ids)):
+        errors.append("同一场比赛不能在同一张过关票中重复选择不同玩法")
+
     # Check pass type exists
     if pass_type not in PASS_TYPE_REGISTRY:
         errors.append(f"不支持的过关方式: {pass_type}")
