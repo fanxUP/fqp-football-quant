@@ -44,13 +44,14 @@ export default function BettingCenterPage({ initialTab = 'bet-slip' }: BettingCe
   };
 
   return (
-    <div>
+    <div className="betting-center-page">
       <PageHeader
         title="投注中心"
         subtitle="投注台生成票，彩票管理票，比赛结果看结算与盈亏"
       />
 
       <div
+        className="betting-center-tabs"
         role="tablist"
         aria-label="投注中心视图"
         style={{
@@ -90,7 +91,7 @@ export default function BettingCenterPage({ initialTab = 'bet-slip' }: BettingCe
       </div>
 
       <div
-        className="fqp-card"
+        className="fqp-card betting-center-context"
         style={{
           marginBottom: '16px',
           padding: '12px 16px',

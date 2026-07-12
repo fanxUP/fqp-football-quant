@@ -1220,6 +1220,12 @@
 }
 
 @media (max-width: 760px) {
+  .betting-center-page > .fqp-page-header,
+  .betting-center-page > .betting-center-tabs,
+  .betting-center-page > .betting-center-context {
+    display: none;
+  }
+
   .betting-terminal {
     gap: 0;
     margin: -16px;
