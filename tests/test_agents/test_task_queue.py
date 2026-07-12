@@ -20,6 +20,15 @@ def test_latest_failed_dependency_blocks():
             check_job_dependencies(["official_schedule"])
 
 
+def test_latest_ok_dependency_is_completed_for_job_chaining():
+    conn = MagicMock()
+    cur = conn.cursor.return_value.__enter__.return_value
+    cur.fetchall.return_value = [("model_prediction", "ok")]
+    with patch("scripts.agents.task_queue.get_db") as get_db:
+        get_db.return_value.__enter__.return_value = conn
+        check_job_dependencies(["model_prediction"])
+
+
 def test_start_tracked_job_records_dependencies():
     conn = MagicMock()
     cur = conn.cursor.return_value.__enter__.return_value

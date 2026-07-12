@@ -40,7 +40,12 @@ def check_job_dependencies(job_codes: list[str]) -> None:
                 (job_codes,),
             )
             latest = {row[0]: row[1] for row in cur.fetchall()}
-    blocked = [code for code in job_codes if latest.get(code) != "completed"]
+    # Jobs in this repo use both ``completed`` (generic wrappers) and ``ok``
+    # (self-tracked data/model jobs) for a successful terminal state.  Both
+    # must satisfy downstream dependencies; otherwise recommendation jobs are
+    # blocked even though model prediction finished successfully.
+    successful_statuses = {"completed", "ok"}
+    blocked = [code for code in job_codes if latest.get(code) not in successful_statuses]
     if blocked:
         raise RuntimeError("Job dependencies not completed: " + ", ".join(blocked))
 
