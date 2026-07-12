@@ -37,6 +37,9 @@ export const PASS_TYPE_LABELS: Record<string, string> = {
 };
 
 export function passTypeLabel(code: string): string {
+  if (code.includes(',')) {
+    return code.split(',').map((item) => PASS_TYPE_LABELS[item.trim()] || item.trim()).join(' + ');
+  }
   return PASS_TYPE_LABELS[code] || code;
 }
 
