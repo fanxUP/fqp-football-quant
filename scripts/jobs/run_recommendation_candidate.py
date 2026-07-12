@@ -563,7 +563,10 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
                     "ticket_type": "training_observation",
                     "pass_type": "single",
                     "suggested_stake": stake,
-                    "multiple": 1,
+                    # Official竞彩倍数 is 2-99; use the minimum training
+                    # multiplier and express the remaining budget as the
+                    # number of generated tickets.
+                    "multiple": 2,
                     "estimated_return": round(MIN_STAKE * c["sp_value"], 2),
                     "max_return": round(MIN_STAKE * c["sp_value"], 2),
                     "expected_value": round(c["ev"], 4),
@@ -589,7 +592,7 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
                         "ticket_type": "training_observation",
                         "pass_type": pass_type,
                         "suggested_stake": combo_stake,
-                        "multiple": 1,
+                        "multiple": 2,
                         "estimated_return": round(combo_stake * combo["combined_sp"], 2),
                         "max_return": round(combo_stake * combo["combined_sp"], 2),
                         "expected_value": round(combo["combined_ev"], 4),
