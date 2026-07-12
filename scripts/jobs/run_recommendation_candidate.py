@@ -476,7 +476,7 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
                 "match_id": match_id,
                 "play_type": play_type,
                 "option_code": opt_code,
-                "option_name": _option_label(opt_code),
+                "option_name": _option_label(opt_code, play_type),
                 "model_probability": model_prob,
                 "market_probability": market_prob,
                 "ev": ev,
@@ -867,7 +867,14 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
 
 # ── Helpers ──
 
-def _option_label(code: str) -> str:
+def _option_label(code: str, play_type: str = "spf") -> str:
+    if play_type == "bqc" and len(code) == 2:
+        labels = {"3": "胜", "1": "平", "0": "负"}
+        return f"半{labels.get(code[0], code[0])}/全{labels.get(code[1], code[1])}"
+    if play_type == "zjq":
+        return "7+球" if code in {"7", "7+"} else f"{code}球"
+    if play_type == "bf":
+        return code.replace("_h", "其他胜").replace("_d", "其他平").replace("_a", "其他负")
     return {"3": "主胜", "1": "平", "0": "客胜"}.get(code, code)
 
 
