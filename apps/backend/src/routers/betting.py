@@ -131,7 +131,7 @@ def _map_agent_ticket(row: tuple) -> dict:
         "date": _date_key(row[6].isoformat() if row[6] else None),
         "createdAt": row[6].isoformat() if row[6] else None,
         "title": f"Agent 票 #{ticket_id}",
-        "playType": row[8] or "single",
+        "playType": "hhgg" if (row[7] or "single") != "single" else (row[8] or "spf"),
         "passType": row[7] or "single",
         "multiple": int(row[10] or 1) if len(row) > 10 else 1,
         "betCount": int(row[11] or 1) if len(row) > 11 else 1,
