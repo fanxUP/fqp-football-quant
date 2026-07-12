@@ -1,5 +1,6 @@
 from scripts.simulator_calculator import (
     calculate_all,
+    calculate_multi_all,
     calculate_bet_combinations,
     get_available_pass_types,
     validate_items,
@@ -48,3 +49,10 @@ def test_single_requires_official_single_eligibility_when_present():
     item = _items(1)[0]
     item["is_single_allowed"] = False
     assert validate_items([item], "single") == ["比赛 1 的该玩法不支持单关"]
+
+
+def test_multi_selected_pass_labels_are_added_not_replaced():
+    result = calculate_multi_all(_items(3), ["single", "2x1"], multiple=1)
+    assert result["pass_types"] == ["single", "2x1"]
+    assert result["bet_count"] == 6
+    assert result["total_cost"] == 12.0

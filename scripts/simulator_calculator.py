@@ -127,6 +127,35 @@ def get_pass_type_info(pass_type: str) -> dict:
     }
 
 
+def parse_pass_types(pass_type: str | list[str]) -> list[str]:
+    """Normalize the ticket's multi-select pass labels."""
+    values = pass_type if isinstance(pass_type, list) else str(pass_type).split(",")
+    result: list[str] = []
+    for value in values:
+        value = str(value).strip()
+        if value and value not in result:
+            result.append(value)
+    return result or ["single"]
+
+
+def calculate_multi_all(items: list[dict], pass_types: str | list[str], multiple: int = 1) -> dict:
+    """Aggregate independently selected pass labels into one ticket.
+
+    Example: 3 matches + ``single,2x1`` => 3 + C(3,2) = 6 bets.
+    """
+    types = parse_pass_types(pass_types)
+    results = [calculate_all(items, value, multiple) for value in types]
+    return {
+        **results[0],
+        "pass_type": ",".join(result["pass_type"] for result in results),
+        "pass_types": types,
+        "bet_count": sum(result["bet_count"] for result in results),
+        "total_cost": round(sum(result["total_cost"] for result in results), 2),
+        "max_prize": round(sum(result["max_prize"] for result in results), 2),
+        "combinations": [combo for result in results for combo in result["combinations"]],
+    }
+
+
 def get_available_pass_types(match_count: int) -> list[str]:
     """Return all pass types that are valid for the given number of matches.
 

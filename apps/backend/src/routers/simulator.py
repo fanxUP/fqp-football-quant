@@ -9,7 +9,9 @@ from apps.backend.src.db import get_db
 from scripts.real_ticket_storage import create_bankroll_transaction
 from scripts.simulator_calculator import (
     calculate_all,
+    calculate_multi_all,
     get_available_pass_types,
+    parse_pass_types,
     validate_items,
 )
 from scripts.simulator_storage import (
@@ -221,7 +223,8 @@ def calculate(req: CalculateRequest):
     items = [item.model_dump() for item in req.items]
 
     # Validate
-    errors = validate_items(items, req.pass_type)
+    pass_types = parse_pass_types(req.pass_type)
+    errors = [error for pass_type in pass_types for error in validate_items(items, pass_type)]
     if errors:
         raise HTTPException(status_code=400, detail={"errors": errors})
 
@@ -230,7 +233,7 @@ def calculate(req: CalculateRequest):
         raise HTTPException(status_code=400, detail="倍数必须在 1-99 之间")
 
     try:
-        result = calculate_all(items, req.pass_type, req.multiple)
+        result = calculate_multi_all(items, pass_types, req.multiple)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
 
@@ -248,7 +251,8 @@ def submit_ticket(req: SubmitTicketRequest):
     items = [item.model_dump() for item in req.items]
 
     # Validate
-    errors = validate_items(items, req.pass_type)
+    pass_types = parse_pass_types(req.pass_type)
+    errors = [error for pass_type in pass_types for error in validate_items(items, pass_type)]
     if errors:
         raise HTTPException(status_code=400, detail={"errors": errors})
 
@@ -257,7 +261,7 @@ def submit_ticket(req: SubmitTicketRequest):
 
     # Calculate
     try:
-        calc = calculate_all(items, req.pass_type, req.multiple)
+        calc = calculate_multi_all(items, pass_types, req.multiple)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
 
