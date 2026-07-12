@@ -581,6 +581,8 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
                     "expected_value": round(c["ev"], 4),
                     "risk_level": "observation",
                     "ticket_status": "generated",
+                    "bet_count": 1,
+                    "rule_metadata": {"source": "sporttery_rules", "single_eligible_checked": True},
                 }
                 # Agent observations belong to the competition/agent ledger,
                 # not the user's manual simulator ledger.
@@ -611,6 +613,8 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
                         "expected_value": round(combo["combined_ev"], 4),
                         "risk_level": "aggressive_training",
                         "ticket_status": "generated",
+                        "bet_count": 1,
+                        "rule_metadata": {"source": "sporttery_rules", "parlay_min_matches": 2, "unique_match_required": True},
                     }
                     if store_simulation_ticket(conn, ticket, combo_items):
                         observation_tickets += 1
@@ -893,6 +897,7 @@ def _make_item(c: dict) -> dict:
         "ev": c["ev"],
         "confidence_score": c["confidence_score"],
         "risk_score": c["risk_score"],
+        "odds_source": "official" if c["odds_snapshot_id"] else "synthetic_model",
     }
 
 

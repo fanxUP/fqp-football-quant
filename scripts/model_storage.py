@@ -137,11 +137,11 @@ def store_simulation_ticket(conn: Any, ticket: dict, items: list[dict]) -> int |
             INSERT INTO simulation_tickets (
                 budget_plan_id, strategy_pool, ticket_type, pass_type,
                 suggested_stake, multiple, estimated_return, max_return,
-                expected_value, risk_level, ticket_status, created_at
+                expected_value, risk_level, ticket_status, bet_count, rule_metadata, created_at
             ) VALUES (
                 %(budget_plan_id)s, %(strategy_pool)s, %(ticket_type)s, %(pass_type)s,
                 %(suggested_stake)s, %(multiple)s, %(estimated_return)s, %(max_return)s,
-                %(expected_value)s, %(risk_level)s, %(ticket_status)s, now()
+                %(expected_value)s, %(risk_level)s, %(ticket_status)s, %(bet_count)s, %(rule_metadata)s, now()
             )
             RETURNING id
             """,
@@ -157,6 +157,8 @@ def store_simulation_ticket(conn: Any, ticket: dict, items: list[dict]) -> int |
                 "expected_value": ticket.get("expected_value"),
                 "risk_level": ticket.get("risk_level", "medium"),
                 "ticket_status": ticket.get("ticket_status", "generated"),
+                "bet_count": ticket.get("bet_count", 1),
+                "rule_metadata": json.dumps(ticket.get("rule_metadata", {}), ensure_ascii=False),
             },
         )
         row = cur.fetchone()
@@ -173,12 +175,12 @@ def store_simulation_ticket(conn: Any, ticket: dict, items: list[dict]) -> int |
                     ticket_id, match_id, odds_snapshot_id, model_prediction_id, feature_snapshot_id,
                     play_type, option_code, option_name,
                     sp_value, model_probability, market_probability,
-                    ev, confidence_score, risk_score, created_at
+                    ev, confidence_score, risk_score, odds_source, created_at
                 ) VALUES (
                     %(ticket_id)s, %(match_id)s, %(odds_snapshot_id)s, %(model_prediction_id)s, %(feature_snapshot_id)s,
                     %(play_type)s, %(option_code)s, %(option_name)s,
                     %(sp_value)s, %(model_probability)s, %(market_probability)s,
-                    %(ev)s, %(confidence_score)s, %(risk_score)s, now()
+                    %(ev)s, %(confidence_score)s, %(risk_score)s, %(odds_source)s, now()
                 )
                 """,
                 {
@@ -196,6 +198,7 @@ def store_simulation_ticket(conn: Any, ticket: dict, items: list[dict]) -> int |
                     "ev": item.get("ev"),
                     "confidence_score": item.get("confidence_score"),
                     "risk_score": item.get("risk_score"),
+                    "odds_source": item.get("odds_source", "official" if item.get("odds_snapshot_id") else "synthetic_model"),
                 },
             )
 

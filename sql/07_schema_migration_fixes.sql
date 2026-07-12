@@ -6,6 +6,20 @@
 -- Safe to run on fresh databases (all statements use IF NOT EXISTS / IF EXISTS).
 
 -- -------------------------------------------------------------------
+-- Training ticket provenance and official-rule evidence.
+-- -------------------------------------------------------------------
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'simulation_tickets') THEN
+        ALTER TABLE simulation_tickets ADD COLUMN IF NOT EXISTS bet_count INT DEFAULT 1;
+        ALTER TABLE simulation_tickets ADD COLUMN IF NOT EXISTS rule_metadata JSONB DEFAULT '{}'::jsonb;
+    END IF;
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'simulation_ticket_items') THEN
+        ALTER TABLE simulation_ticket_items ADD COLUMN IF NOT EXISTS odds_source VARCHAR(32) DEFAULT 'official';
+    END IF;
+END $$;
+
+-- -------------------------------------------------------------------
 -- model_versions: API consumers use the explicit training-window names.
 -- Older local databases only have training_start_date/training_end_date.
 -- -------------------------------------------------------------------
