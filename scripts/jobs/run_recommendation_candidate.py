@@ -622,6 +622,25 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
                     }
                     if store_simulation_ticket(conn, ticket, combo_items):
                         observation_tickets += 1
+            with conn.cursor() as cur:
+                cur.execute(
+                    """UPDATE daily_budget_plans
+                       SET suggested_stake = COALESCE((
+                               SELECT SUM(suggested_stake)
+                               FROM simulation_tickets
+                               WHERE budget_plan_id = daily_budget_plans.id
+                                 AND created_at::date = CURRENT_DATE
+                           ), 0),
+                           unused_budget = GREATEST(total_budget - COALESCE((
+                               SELECT SUM(suggested_stake)
+                               FROM simulation_tickets
+                               WHERE budget_plan_id = daily_budget_plans.id
+                                 AND created_at::date = CURRENT_DATE
+                           ), 0), 0),
+                           updated_at = now()
+                     WHERE plan_date = CURRENT_DATE"""
+                )
+            conn.commit()
             return {
                 "status": "ok",
                 "tickets": observation_tickets,
