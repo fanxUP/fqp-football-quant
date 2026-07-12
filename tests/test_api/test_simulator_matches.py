@@ -35,3 +35,25 @@ def test_pool_capabilities_support_current_sporttery_field_names():
     assert capabilities["spf"] == {"single": False, "pass": True}
     assert capabilities["bf"] == {"single": True, "pass": True}
     assert capabilities["zjq"] == {"single": True, "pass": False}
+
+
+def test_simulator_matches_orders_official_had_options_home_draw_away(client):
+    raw = {"poolList": [{"poolCode": "HAD", "cbtSingle": 0, "cbtAllUp": 1}]}
+    with patch("apps.backend.src.routers.simulator.get_db") as get_db:
+        connection = get_db.return_value.__enter__.return_value
+        cursor = connection.cursor.return_value.__enter__.return_value
+        cursor.fetchall.side_effect = [
+            [(1, "2026-07-12", "挪超", "主队", "客队", "2026-07-13T03:00:00", "scheduled", "周日213", raw)],
+            [
+                (1, "spf", "a", "客胜", 3.2, None, False),
+                (1, "spf", "d", "平", 3.1, None, False),
+                (1, "spf", "h", "主胜", 2.1, None, False),
+            ],
+        ]
+
+        response = client.get("/api/simulator/matches")
+
+    assert response.status_code == 200
+    spf = response.json()["matches"][0]["odds"]["spf"]
+    assert [option["option_code"] for option in spf["options"]] == ["h", "d", "a"]
+    assert spf["is_pass_allowed"] is True

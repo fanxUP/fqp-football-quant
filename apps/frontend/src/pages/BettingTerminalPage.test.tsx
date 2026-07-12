@@ -1,333 +1,245 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
-import BettingTerminalPage, { calculateSentimentWeight } from './BettingTerminalPage';
-import type { BettingMatch, LiveRecommendation } from '../core/types';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import BettingTerminalPage from './BettingTerminalPage';
+import type { BettingMatch, CalculateItem } from '../core/types';
 
-const match: BettingMatch = {
-  match_id: 901,
-  business_date: '2026-07-08',
-  league_name: '中超',
-  home_team_name: '上海海港',
-  away_team_name: '山东泰山',
-  kickoff_time: '2026-07-08T19:35:00',
-  match_status: 'Scheduled',
-  match_num_str: '3001',
-  odds: {
-    spf: {
-      is_single_allowed: true,
-      options: [
-        { option_code: '3', option_name: '主胜', sp_value: 1.66 },
-        { option_code: '1', option_name: '平', sp_value: 3.4 },
-        { option_code: '0', option_name: '客胜', sp_value: 4.9 },
-      ],
-    },
-    rqspf: {
-      is_single_allowed: false,
-      handicap: -1,
-      options: [
-        { option_code: '3', option_name: '让主胜', sp_value: 2.9 },
-        { option_code: '1', option_name: '让平', sp_value: 3.6 },
-        { option_code: '0', option_name: '让客胜', sp_value: 2.2 },
-      ],
-    },
-    zjq: { is_single_allowed: false, options: [] },
-    bf: { is_single_allowed: false, options: [] },
-    bqc: { is_single_allowed: false, options: [] },
+const completeOdds = {
+  spf: {
+    is_single_allowed: true,
+    is_pass_allowed: true,
+    options: [
+      { option_code: '3', option_name: '主胜', sp_value: 2.04 },
+      { option_code: '1', option_name: '平', sp_value: 2.95 },
+      { option_code: '0', option_name: '主负', sp_value: 3.33 },
+    ],
   },
+  rqspf: {
+    handicap: -1,
+    is_single_allowed: false,
+    is_pass_allowed: true,
+    options: [
+      { option_code: '3', option_name: '让主胜', sp_value: 4.8 },
+      { option_code: '1', option_name: '让平', sp_value: 3.33 },
+      { option_code: '0', option_name: '让主负', sp_value: 1.61 },
+    ],
+  },
+  bf: {
+    is_single_allowed: true,
+    is_pass_allowed: true,
+    options: [
+      { option_code: '1:0', option_name: '1:0', sp_value: 8.5 },
+      { option_code: '2:0', option_name: '2:0', sp_value: 14 },
+    ],
+  },
+  zjq: {
+    is_single_allowed: true,
+    is_pass_allowed: true,
+    options: [
+      { option_code: '0', option_name: '0球', sp_value: 9 },
+      { option_code: '1', option_name: '1球', sp_value: 4.8 },
+    ],
+  },
+  bqc: {
+    is_single_allowed: true,
+    is_pass_allowed: true,
+    options: [
+      { option_code: '33', option_name: '胜/胜', sp_value: 3.2 },
+      { option_code: '31', option_name: '胜/平', sp_value: 12 },
+    ],
+  },
+};
+
+const firstMatch: BettingMatch = {
+  match_id: 901,
+  business_date: '2026-07-12',
+  league_name: '韩国职业联赛',
+  home_team_name: '首尔FC',
+  away_team_name: '江原FC',
+  kickoff_time: '2026-07-13T01:15:00',
+  match_status: 'scheduled',
+  match_num_str: '周日203',
+  odds: completeOdds,
 };
 
 const secondMatch: BettingMatch = {
-  ...match,
+  ...firstMatch,
   match_id: 902,
-  business_date: '2026-07-08',
-  home_team_name: '北京国安',
-  away_team_name: '成都蓉城',
-  match_num_str: '3002',
+  league_name: '瑞典超级联赛',
+  home_team_name: '马尔默',
+  away_team_name: '哥德堡',
+  kickoff_time: '2026-07-14T01:00:00',
+  match_num_str: '周一201',
   odds: {
-    ...match.odds,
+    ...completeOdds,
     spf: {
-      is_single_allowed: true,
+      ...completeOdds.spf,
       options: [
-        { option_code: 'h', option_name: '主胜', sp_value: 2.05 },
-        { option_code: 'd', option_name: '平', sp_value: 3.1 },
-        { option_code: 'a', option_name: '客胜', sp_value: 3.8 },
-      ],
-    },
-    rqspf: {
-      is_single_allowed: false,
-      handicap: 1,
-      options: [
-        { option_code: 'h', option_name: '让主胜', sp_value: 1.42 },
-        { option_code: 'd', option_name: '让平', sp_value: 4.1 },
-        { option_code: 'a', option_name: '让客胜', sp_value: 5.6 },
+        { option_code: '3', option_name: '主胜', sp_value: 1.67 },
+        { option_code: '1', option_name: '平', sp_value: 3.76 },
+        { option_code: '0', option_name: '主负', sp_value: 3.78 },
       ],
     },
   },
 };
 
-const thirdMatch: BettingMatch = {
-  ...match,
-  match_id: 903,
-  business_date: '2026-07-08',
-  home_team_name: '天津津门虎',
-  away_team_name: '河南队',
-  match_num_str: '3003',
-  odds: {
-    ...match.odds,
-    spf: {
-      is_single_allowed: true,
-      options: [
-        { option_code: '3', option_name: '主胜', sp_value: 2.25 },
-        { option_code: '1', option_name: '平', sp_value: 3.0 },
-        { option_code: '0', option_name: '客胜', sp_value: 3.2 },
-      ],
-    },
-  },
-};
+const apiMocks = vi.hoisted(() => ({
+  matches: vi.fn(),
+  calculate: vi.fn(),
+  createTicket: vi.fn(),
+}));
 
-const recommendation: LiveRecommendation = {
-  prediction_id: 10,
-  match_id: 901,
-  play_type: 'spf',
-  play_type_name: '胜平负',
-  option_code: '3',
-  option_name: '主胜',
-  model_probability: 0.62,
-  market_probability: 0.5,
-  fair_odds: 1.66,
-  ev: 0.13,
-  edge: 0.12,
-  confidence: 0.73,
-  predict_time: '2026-07-08T09:00:00',
-  model_name: 'xgb-main',
-  home_team: '上海海港',
-  away_team: '山东泰山',
-  league: '中超',
-  kickoff_time: '2026-07-08T19:35:00',
-  match_status: 'Scheduled',
-  match_num_str: '3001',
-  ht_home_goals: null,
-  ht_away_goals: null,
-  ft_home_goals: null,
-  ft_away_goals: null,
-  et_home_goals: null,
-  et_away_goals: null,
-  pk_home_goals: null,
-  pk_away_goals: null,
-  spf_result: null,
-  rqspf_result: null,
-  total_goals_result: null,
-  score_result: null,
-  half_full_result: null,
+const calculateResponse = async (body: { items: CalculateItem[]; pass_type: string; multiple: number }) => {
+  const groups = new Map<number, CalculateItem[]>();
+  body.items.forEach((item) => groups.set(item.match_id, [...(groups.get(item.match_id) ?? []), item]));
+  const singleItems = body.items.filter((item) => item.is_single_allowed);
+  const betCount = body.pass_type === 'single'
+    ? singleItems.length
+    : [...groups.values()].reduce((count, group) => count * group.length, 1);
+  return {
+    pass_type: body.pass_type,
+    multiple: body.multiple,
+    bet_count: betCount,
+    total_cost: betCount * 2 * body.multiple,
+    max_prize: betCount * 8.2 * body.multiple,
+    match_count: groups.size,
+    selection_count: body.items.length,
+    combinations: [],
+    available_pass_types: groups.size >= 2 ? ['single', '2x1'] : ['single'],
+  };
+};
+const ticketResponse = {
+  status: 'ok',
+  ticketUid: 'real:88',
+  legacyId: 88,
+  owner: 'me' as const,
+  kind: 'real' as const,
+  source: 'manual',
+  stake: 4,
+  maxPrize: 16.4,
+  betCount: 2,
+  route: '/betting?tab=tickets',
 };
 
 vi.mock('../core/apiClient', () => ({
   api: {
-    bettingTerminal: {
-      matches: vi.fn(async () => ({ matches: [match, secondMatch, thirdMatch], total: 3 })),
-      calculate: vi.fn(async (body: { items: unknown[]; pass_type: string; multiple: number }) => {
-        const typedItems = body.items as Array<{ match_id: number }>;
-        const matchCount = new Set(typedItems.map((item) => item.match_id)).size;
-        const passTypes = matchCount >= 3 ? ['single', '2x1', '3x1', '3x3', '3x4'] : matchCount >= 2 ? ['single', '2x1'] : ['single'];
-        return {
-          pass_type: body.pass_type,
-          multiple: body.multiple,
-          bet_count: body.pass_type === 'single' ? matchCount : 1,
-          total_cost: (body.pass_type === 'single' ? matchCount * 2 : 2) * body.multiple,
-          max_prize: 3.32 * matchCount * body.multiple,
-          match_count: matchCount,
-          combinations: [],
-          available_pass_types: passTypes,
-        };
-      }),
-    },
-    liveRecommendations: vi.fn(async () => ({
-      status: 'ok',
-      recommendations: [recommendation],
-      total: 1,
-    })),
-    betting: {
-      ocrUpload: vi.fn(),
-      createTicket: vi.fn(async () => ({})),
-    },
+    bettingTerminal: { matches: apiMocks.matches, calculate: apiMocks.calculate },
+    liveRecommendations: vi.fn(async () => ({ recommendations: [], total: 0, status: 'ok' })),
+    betting: { createTicket: apiMocks.createTicket, ocrUpload: vi.fn() },
   },
 }));
 
 vi.mock('../shared/components/Toast', () => ({
-  useToast: () => ({
-    success: vi.fn(),
-    error: vi.fn(),
-    warning: vi.fn(),
-  }),
+  useToast: () => ({ success: vi.fn(), error: vi.fn(), warning: vi.fn() }),
 }));
 
-describe('BettingTerminalPage', () => {
-  it('keeps the sentiment weight bounded and responsive to confidence', () => {
-    expect(calculateSentimentWeight({ edge: 0.12, ev: 0.13, confidence: 0.73 })).toBeGreaterThan(50);
-    expect(calculateSentimentWeight({ edge: -0.1, ev: -0.2, confidence: 0.2 })).toBeLessThan(50);
+describe('BettingTerminalPage complete replacement', () => {
+  beforeEach(() => {
+    apiMocks.matches.mockReset().mockResolvedValue({ matches: [firstMatch, secondMatch], total: 2 });
+    apiMocks.calculate.mockReset().mockImplementation(calculateResponse);
+    apiMocks.createTicket.mockReset().mockResolvedValue(ticketResponse);
   });
 
-  it('renders recommendation, terminal, and slip columns with recommendation rationale', async () => {
+  it('renders the standalone Sporttery terminal structure instead of the legacy workbench', async () => {
     render(<BettingTerminalPage />);
 
-    const recommendationPanel = await screen.findByLabelText('推荐单');
-    expect(within(recommendationPanel).getByText((_, node) => node?.textContent === '上海海港 vs 山东泰山')).toBeInTheDocument();
-    const terminalPanel = screen.getByLabelText('投注器');
-    const slipPanel = screen.getByLabelText('投注单');
-    expect(within(recommendationPanel).getByRole('heading', { name: '推荐单' })).toBeInTheDocument();
-    expect(within(terminalPanel).getByRole('heading', { name: '投注器' })).toBeInTheDocument();
-    expect(within(slipPanel).getByRole('heading', { name: '投注单' })).toBeInTheDocument();
-    expect(screen.getAllByRole('heading', { name: '投注器' })).toHaveLength(1);
-    expect(within(terminalPanel).getByRole('tab', { name: '胜负平/让球' })).toHaveAttribute(
-      'aria-selected',
-      'true',
-    );
-    expect(within(terminalPanel).queryByRole('tab', { name: '让球胜平负' })).not.toBeInTheDocument();
-    const combinedOdds = within(terminalPanel).getAllByLabelText('胜负平/让球赔率')[0];
-    expect(
-      within(combinedOdds)
-        .getAllByRole('button')
-        .filter((button) => button.getAttribute('aria-pressed') !== null)
-        .map((button) => button.textContent),
-    ).toEqual([
-      '主胜1.66',
-      '平3.40',
-      '主负4.90',
-      '主胜2.90',
-      '平3.60',
-      '主负2.20',
-    ]);
-    expect(within(combinedOdds).getByRole('button', { name: /全部\s*游戏/ })).toBeInTheDocument();
-    expect(within(combinedOdds).getByLabelText('胜平负支持单关，支持过关，让球-')).toBeInTheDocument();
-    expect(within(combinedOdds).getByLabelText('让球胜平负不支持单关，支持过关，让球-1')).toBeInTheDocument();
-
-    fireEvent.click(within(recommendationPanel).getByRole('button', { name: /加入 主胜/ }));
-
-    await waitFor(() => {
-      expect(within(slipPanel).getByText('模型 62.0%')).toBeInTheDocument();
-    });
-
-    expect(within(terminalPanel).getByRole('button', { name: '设胆' })).toBeDisabled();
-    expect(within(terminalPanel).getByText('过关方式')).toBeInTheDocument();
-    expect(within(terminalPanel).getByRole('checkbox', { name: '单关' })).toHaveAttribute('aria-pressed', 'true');
-    expect(within(terminalPanel).getByLabelText('投注倍数')).toHaveValue(1);
-    expect(within(terminalPanel).getByLabelText('方案备注')).toBeInTheDocument();
-    expect(within(terminalPanel).getByLabelText('上传彩票图片进行 OCR 识别')).toBeInTheDocument();
-    expect(within(slipPanel).queryByRole('radiogroup', { name: '投注方式' })).not.toBeInTheDocument();
-    expect(within(slipPanel).queryByLabelText('投注倍数')).not.toBeInTheDocument();
-    expect(within(slipPanel).queryByLabelText('方案备注')).not.toBeInTheDocument();
-    expect(within(slipPanel).getByText('市场 50.0%')).toBeInTheDocument();
-    expect(within(slipPanel).getByText('情绪权重')).toBeInTheDocument();
-    expect(within(slipPanel).getByText(/互联网情绪/)).toBeInTheDocument();
-    expect(within(slipPanel).getByText('推荐单')).toBeInTheDocument();
-    expect(within(slipPanel).getByText('投注金额')).toBeInTheDocument();
-    expect(within(slipPanel).getAllByText('¥2.00').length).toBeGreaterThan(0);
-  }, 10_000);
-
-  it('shows single and pass availability for every offered play in all-games view', async () => {
-    render(<BettingTerminalPage />);
-
-    const terminalPanel = await screen.findByLabelText('投注器');
-    const combinedOdds = within(terminalPanel).getAllByLabelText('胜负平/让球赔率')[0];
-    fireEvent.click(within(combinedOdds).getByRole('button', { name: /全部\s*游戏/ }));
-
-    const dialog = screen.getByRole('dialog', { name: '全部游戏' });
-    expect(within(dialog).getByLabelText('支持单场，支持过关')).toBeInTheDocument();
-    expect(within(dialog).getByLabelText('不支持单场，支持过关')).toBeInTheDocument();
-    expect(within(dialog).getByText('单场')).toHaveClass('is-single');
-    expect(within(dialog).getAllByText('过关')[0]).toHaveClass('is-pass');
+    const terminal = await screen.findByRole('region', { name: '竞彩足球模拟试玩投注器' });
+    expect(within(terminal).getByRole('heading', { name: '竞彩足球' })).toBeInTheDocument();
+    expect(within(terminal).getByText('模拟试玩')).toBeInTheDocument();
+    expect(within(terminal).getByRole('button', { name: '刷新赔率' })).toBeInTheDocument();
+    expect(within(terminal).getByRole('button', { name: '混合过关' })).toBeInTheDocument();
+    expect(within(terminal).getByRole('button', { name: '游戏规则' })).toBeInTheDocument();
+    expect(within(terminal).getByRole('button', { name: '筛选' })).toBeInTheDocument();
+    expect(within(terminal).getByText('周日203')).toBeInTheDocument();
+    expect(within(terminal).getAllByLabelText('胜平负支持单场，支持过关')[0]).toHaveTextContent('单过');
+    expect(within(terminal).getAllByLabelText('让球胜平负不支持单场，支持过关')[0]).toHaveTextContent('−过');
+    expect(screen.queryByLabelText('推荐单')).not.toBeInTheDocument();
+    expect(screen.queryByText('OCR 识别')).not.toBeInTheDocument();
   });
 
-  it('offers pass type buttons in the terminal based on selected matches', async () => {
+  it('opens the complete five-play selector with single and pass flags', async () => {
     render(<BettingTerminalPage />);
+    const matchCard = await screen.findByRole('article', { name: '周日203 首尔FC 对 江原FC' });
+    fireEvent.click(within(matchCard).getByRole('button', { name: '全部游戏' }));
 
-    const terminalPanel = await screen.findByLabelText('投注器');
-    const slipPanel = screen.getByLabelText('投注单');
-    fireEvent.click(within(terminalPanel).getByRole('button', { name: '主负4.90' }));
-    fireEvent.click(within(terminalPanel).getByRole('button', { name: '主负3.80' }));
-
-    await waitFor(() => {
-      expect(within(terminalPanel).getByRole('checkbox', { name: '2×1' })).toBeInTheDocument();
-    });
-    expect(within(terminalPanel).getAllByText('1组').length).toBeGreaterThan(0);
-
-    fireEvent.click(within(terminalPanel).getByRole('button', { name: '+' }));
-
-    await waitFor(() => {
-      expect(within(slipPanel).getByText('2×1')).toBeInTheDocument();
-    });
-
-    expect(within(terminalPanel).getByLabelText('投注倍数')).toHaveValue(2);
-    expect(within(slipPanel).getByText('2 倍')).toBeInTheDocument();
-    expect(within(slipPanel).getByText('2 场 / 2 项')).toBeInTheDocument();
-    expect(within(slipPanel).getByText('1 组')).toBeInTheDocument();
-    expect(within(slipPanel).getByText('1 注')).toBeInTheDocument();
-    expect(within(slipPanel).getAllByText('¥4.00').length).toBeGreaterThan(0);
+    const dialog = screen.getByRole('dialog', { name: '周日203 全部游戏' });
+    for (const title of ['胜平负', '让球胜平负', '比分', '总进球', '半全场']) {
+      expect(within(dialog).getByRole('heading', { name: title })).toBeInTheDocument();
+    }
+    expect(within(dialog).getAllByText('单场').length).toBeGreaterThan(0);
+    expect(within(dialog).getAllByText('过关')).toHaveLength(5);
   });
 
-  it('supports multiple pass buttons and toggles an already selected odd off', async () => {
+  it('expands same-match alternatives and links selection, pass, amount, and prize', async () => {
     render(<BettingTerminalPage />);
+    const first = await screen.findByRole('article', { name: '周日203 首尔FC 对 江原FC' });
+    const second = screen.getByRole('article', { name: '周一201 马尔默 对 哥德堡' });
 
-    const terminalPanel = await screen.findByLabelText('投注器');
-    const slipPanel = screen.getByLabelText('投注单');
-    fireEvent.click(within(terminalPanel).getByRole('button', { name: '主负4.90' }));
-    fireEvent.click(within(terminalPanel).getByRole('button', { name: '主负3.80' }));
-    fireEvent.click(within(terminalPanel).getByRole('button', { name: '主负3.20' }));
+    fireEvent.click(within(first).getByRole('button', { name: '胜平负 主胜 2.04' }));
+    fireEvent.click(within(first).getByRole('button', { name: '让球胜平负 主胜 4.80' }));
+    fireEvent.click(within(second).getByRole('button', { name: '胜平负 主胜 1.67' }));
 
-    await waitFor(() => {
-      expect(within(terminalPanel).getByRole('checkbox', { name: '3×1' })).toBeInTheDocument();
-    });
-
-    expect(within(terminalPanel).getByRole('checkbox', { name: '3×3' })).toBeInTheDocument();
-    expect(within(terminalPanel).getByRole('checkbox', { name: '3×4' })).toBeInTheDocument();
-    await waitFor(() => {
-      expect(within(slipPanel).getByText('3×1')).toBeInTheDocument();
-    });
-
-    fireEvent.click(within(terminalPanel).getByRole('checkbox', { name: '2×1' }));
-
-    await waitFor(() => {
-      expect(within(slipPanel).getByText('3×1 + 2×1')).toBeInTheDocument();
-    });
-    expect(within(terminalPanel).getByRole('checkbox', { name: '2×1' })).toHaveTextContent('3组');
-    expect(within(slipPanel).getByText('4 组')).toBeInTheDocument();
-    expect(within(slipPanel).getByText('4 注')).toBeInTheDocument();
-    expect(within(slipPanel).getByText('¥8.00')).toBeInTheDocument();
-    expect(within(slipPanel).queryByText(/2串1至少需要/)).not.toBeInTheDocument();
-
-    fireEvent.click(within(terminalPanel).getByRole('button', { name: '主负3.20' }));
-
-    await waitFor(() => {
-      expect(within(slipPanel).getByText('2 场 / 2 项')).toBeInTheDocument();
-    });
-    expect(within(terminalPanel).queryByText('天津津门虎 vs 河南队')).not.toBeInTheDocument();
+    const slip = await screen.findByRole('complementary', { name: '投注单' });
+    await waitFor(() => expect(within(slip).getByText((_, node) => node?.textContent === '共计: 2 注 4.00 元')).toBeInTheDocument());
+    expect(within(slip).getByText('2', { selector: '.selected-count strong' })).toBeInTheDocument();
+    expect(within(slip).getByText((_, node) => node?.textContent === '理论最高奖金: 16.40元')).toBeInTheDocument();
+    expect(within(slip).getByRole('button', { name: '2关' })).toHaveAttribute('aria-pressed', 'true');
+    expect(within(first).getByRole('button', { name: '已选 2项' })).toBeInTheDocument();
   });
 
-  it('keeps multiple selections from the same match as复式备选', async () => {
+  it('provides the 1-8 pass grid, clamps multiple to 50, and archives a confirmed ticket', async () => {
+    render(<BettingTerminalPage />);
+    const first = await screen.findByRole('article', { name: '周日203 首尔FC 对 江原FC' });
+    const second = screen.getByRole('article', { name: '周一201 马尔默 对 哥德堡' });
+    fireEvent.click(within(first).getByRole('button', { name: '胜平负 主胜 2.04' }));
+    fireEvent.click(within(second).getByRole('button', { name: '胜平负 主胜 1.67' }));
+
+    const slip = await screen.findByRole('complementary', { name: '投注单' });
+    const passGrid = within(slip).getByRole('group', { name: '过关方式' });
+    expect(within(passGrid).getAllByRole('button')).toHaveLength(8);
+    expect(within(passGrid).getByRole('button', { name: '3关' })).toBeDisabled();
+
+    for (let index = 1; index < 50; index += 1) {
+      fireEvent.click(within(slip).getByRole('button', { name: '增加倍数' }));
+    }
+    expect(within(slip).getByLabelText('当前倍数')).toHaveTextContent('50');
+    expect(within(slip).getByRole('button', { name: '增加倍数' })).toBeDisabled();
+
+    await waitFor(() => expect(within(slip).getByRole('button', { name: '确定' })).toBeEnabled());
+    fireEvent.click(within(slip).getByRole('button', { name: '确定' }));
+    await waitFor(() => expect(apiMocks.createTicket).toHaveBeenCalledTimes(1));
+    expect(apiMocks.createTicket.mock.calls[0][0]).toMatchObject({ pass_type: '2x1', multiple: 50 });
+    expect(await screen.findByRole('dialog', { name: '模拟投注明细' })).toHaveTextContent('已保存到我的彩票');
+  });
+
+  it('filters leagues and can restrict the list to single-play markets', async () => {
+    render(<BettingTerminalPage />);
+    const terminal = await screen.findByRole('region', { name: '竞彩足球模拟试玩投注器' });
+    fireEvent.click(within(terminal).getByRole('button', { name: '筛选' }));
+
+    const dialog = screen.getByRole('dialog', { name: '筛选比赛' });
+    fireEvent.change(within(dialog).getByLabelText('联赛'), { target: { value: '瑞典超级联赛' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: '完成' }));
+
+    expect(within(terminal).queryByText('周日203')).not.toBeInTheDocument();
+    expect(within(terminal).getByText('周一201')).toBeInTheDocument();
+  });
+
+  it('does not allow selection when the official market supports neither single nor pass betting', async () => {
+    apiMocks.matches.mockResolvedValue({
+      matches: [{
+        ...firstMatch,
+        odds: {
+          ...completeOdds,
+          spf: { ...completeOdds.spf, is_single_allowed: false, is_pass_allowed: false },
+        },
+      }],
+      total: 1,
+    });
+
     render(<BettingTerminalPage />);
 
-    const terminalPanel = await screen.findByLabelText('投注器');
-    const slipPanel = screen.getByLabelText('投注单');
-
-    fireEvent.click(within(terminalPanel).getByRole('button', { name: '主负4.90' }));
-    await waitFor(() => {
-      expect(within(slipPanel).getByText('主负')).toBeInTheDocument();
-      expect(within(slipPanel).getByText('@ 4.90')).toBeInTheDocument();
-    });
-
-    fireEvent.click(within(terminalPanel).getAllByRole('button', { name: '主负2.20' })[0]);
-
-    await waitFor(() => {
-      expect(within(slipPanel).getAllByText('主负')).toHaveLength(2);
-      expect(within(slipPanel).getByText('@ 4.90')).toBeInTheDocument();
-      expect(within(slipPanel).getByText('@ 2.20')).toBeInTheDocument();
-    });
-    expect(within(slipPanel).getByText('1 场 / 2 项')).toBeInTheDocument();
-    expect(within(slipPanel).getAllByText('让球胜平负')).toHaveLength(2);
-    expect(
-      within(terminalPanel)
-        .getAllByRole('button')
-        .filter((button) => button.getAttribute('aria-pressed') === 'true'),
-    ).toHaveLength(2);
+    const matchCard = await screen.findByRole('article', { name: '周日203 首尔FC 对 江原FC' });
+    expect(within(matchCard).getByRole('button', { name: '胜平负 主胜 2.04' })).toBeDisabled();
+    expect(within(matchCard).getByLabelText('胜平负不支持单场，不支持过关')).toHaveTextContent('−−');
   });
 });

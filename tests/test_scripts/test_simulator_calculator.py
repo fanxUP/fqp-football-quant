@@ -6,6 +6,7 @@ from scripts.simulator_calculator import (
     get_available_pass_types,
     validate_items,
 )
+import pytest
 
 
 def _items(count: int) -> list[dict]:
@@ -101,3 +102,43 @@ def test_settlement_treats_same_match_options_as_alternatives():
     ]
 
     assert calculate_winning_prize(items, "2x1", multiple=2) == 32.0
+
+
+def test_single_ticket_prize_is_capped_before_multiple():
+    items = [
+        {"match_id": 1, "play_type": "spf", "option_code": "3", "sp_value": 100_000, "is_won": True},
+    ]
+
+    result = calculate_all(items, "single", multiple=2)
+
+    assert result["max_prize"] == 200_000.0
+    assert calculate_winning_prize(items, "single", multiple=2) == 200_000.0
+
+
+def test_two_match_ticket_prize_uses_two_to_three_match_cap():
+    items = [
+        {"match_id": 1, "play_type": "spf", "option_code": "3", "sp_value": 1_000, "is_won": True},
+        {"match_id": 2, "play_type": "spf", "option_code": "3", "sp_value": 1_000, "is_won": True},
+    ]
+
+    result = calculate_all(items, "2x1", multiple=1)
+
+    assert result["max_prize"] == 200_000.0
+    assert calculate_winning_prize(items, "2x1", multiple=1) == 200_000.0
+
+
+def test_calculation_rejects_ticket_over_twenty_thousand_yuan():
+    items = [
+        {"match_id": match_id, "play_type": "spf", "option_code": str(option), "sp_value": 2.0}
+        for match_id in range(1, 5)
+        for option in range(5)
+    ]
+
+    with pytest.raises(ValueError, match="单票金额不得超过20000元"):
+        calculate_all(items, "4x1", multiple=50)
+
+
+@pytest.mark.parametrize("multiple", [0, 51])
+def test_calculation_rejects_multiple_outside_one_to_fifty(multiple):
+    with pytest.raises(ValueError, match="倍数必须在1到50之间"):
+        calculate_all(_items(1), "single", multiple=multiple)

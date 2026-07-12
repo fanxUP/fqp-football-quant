@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from datetime import datetime
 
+import pytest
+from fastapi import HTTPException
+
 from apps.backend.src.routers import betting
 
 
@@ -160,6 +163,25 @@ def test_create_real_betting_ticket_attaches_ocr_confirmation(monkeypatch):
     assert created["store_code"] == "31010101"
     assert created["ocr_status"] == "recognized"
     assert result["source"] == "ocr"
+
+
+def test_multi_pass_ticket_rejects_combined_cost_over_twenty_thousand():
+    items = [
+        {
+            "match_id": match_id,
+            "play_type": "spf",
+            "option_code": str(option),
+            "option_name": str(option),
+            "sp_value": 2.0,
+            "is_single_allowed": True,
+            "is_pass_allowed": True,
+        }
+        for match_id in range(1, 5)
+        for option in range(5)
+    ]
+
+    with pytest.raises(HTTPException, match="单票金额不得超过20000元"):
+        betting._calculate_multi_pass_ticket(items, "3x1,4x1", multiple=10)
 
 
 def test_apply_settlements_updates_ticket_financials():

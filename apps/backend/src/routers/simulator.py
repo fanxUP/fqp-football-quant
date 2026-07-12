@@ -229,7 +229,7 @@ def list_matches(
         for pt in m["odds"]:
             opts = m["odds"][pt].get("options", [])
             if pt == "spf" or pt == "rqspf":
-                order = {"3": 0, "1": 1, "0": 2}
+                order = {"3": 0, "h": 0, "1": 1, "d": 1, "0": 2, "a": 2}
                 opts.sort(key=lambda o: order.get(o["option_code"], 99))
             elif pt == "zjq":
                 order = {"0": 0, "1": 1, "2": 2, "3": 3, "4": 4, "5": 5, "6": 6, "7+": 7}

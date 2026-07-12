@@ -11,6 +11,21 @@ from __future__ import annotations
 from itertools import combinations, product
 from math import comb
 
+UNIT_STAKE = 2.0
+MAX_MULTIPLE = 50
+MAX_TICKET_COST = 20_000.0
+
+
+def payout_cap(match_count: int) -> float:
+    """Return the statutory per-bet prize ceiling for a concrete combination."""
+    if match_count <= 1:
+        return 100_000.0
+    if match_count <= 3:
+        return 200_000.0
+    if match_count <= 5:
+        return 500_000.0
+    return 1_000_000.0
+
 # ---- Play-type max matches per ticket ----
 
 PLAY_TYPE_MAX_MATCHES: dict[str, int] = {
@@ -145,7 +160,7 @@ def calculate_multi_all(items: list[dict], pass_types: str | list[str], multiple
     """
     types = parse_pass_types(pass_types)
     results = [calculate_all(items, value, multiple) for value in types]
-    return {
+    result = {
         **results[0],
         "pass_type": ",".join(result["pass_type"] for result in results),
         "pass_types": types,
@@ -154,6 +169,9 @@ def calculate_multi_all(items: list[dict], pass_types: str | list[str], multiple
         "max_prize": round(sum(result["max_prize"] for result in results), 2),
         "combinations": [combo for result in results for combo in result["combinations"]],
     }
+    if result["total_cost"] > MAX_TICKET_COST:
+        raise ValueError(f"单票金额不得超过20000元，当前为{result['total_cost']:.2f}元")
+    return result
 
 
 def _group_items_by_match(items: list[dict]) -> list[list[dict]]:
@@ -292,7 +310,7 @@ def calculate_max_prize(
         combo_sp = 1.0
         for item in combo:
             combo_sp *= float(item["sp_value"])
-        total += combo_sp * 2.0  # 2 yuan base per bet
+        total += min(combo_sp * UNIT_STAKE, payout_cap(len(combo)))
     return round(total * multiple, 2)
 
 
@@ -313,7 +331,7 @@ def calculate_winning_prize(
             combo_sp = 1.0
             for item in combo:
                 combo_sp *= float(item["sp_value"])
-            total += combo_sp * 2.0 * multiple
+            total += min(combo_sp * UNIT_STAKE, payout_cap(len(combo))) * multiple
     return round(total, 2)
 
 
@@ -332,7 +350,7 @@ def calculate_cost(match_count: int, pass_type: str, multiple: int = 1) -> float
         bet_count = comb(match_count, required)
     else:
         bet_count = info["bet_count"]
-    return round(bet_count * 2 * multiple, 2)
+    return round(bet_count * UNIT_STAKE * multiple, 2)
 
 
 def calculate_all(
@@ -352,6 +370,9 @@ def calculate_all(
         {pass_type, multiple, bet_count, total_cost, max_prize, match_count,
          combinations: [{items, combo_sp, max_prize}]}
     """
+    if not 1 <= multiple <= MAX_MULTIPLE:
+        raise ValueError("倍数必须在1到50之间")
+
     match_count = len(_group_items_by_match(items))
 
     # Generate combinations
@@ -359,7 +380,9 @@ def calculate_all(
 
     # Cost
     bet_count = len(combos)
-    total_cost = round(bet_count * 2 * multiple, 2)
+    total_cost = round(bet_count * UNIT_STAKE * multiple, 2)
+    if total_cost > MAX_TICKET_COST:
+        raise ValueError(f"单票金额不得超过20000元，当前为{total_cost:.2f}元")
     max_prize = calculate_max_prize(combos, multiple)
 
     # Format combinations for response
@@ -368,7 +391,7 @@ def calculate_all(
         combo_sp = 1.0
         for item in combo:
             combo_sp *= float(item["sp_value"])
-        combo_prize = round(combo_sp * 2 * multiple, 2)
+        combo_prize = round(min(combo_sp * UNIT_STAKE, payout_cap(len(combo))) * multiple, 2)
         combo_details.append({
             "items": [
                 {

@@ -11,7 +11,7 @@ interface BettingCenterPageProps {
 }
 
 const TABS: Array<{ code: BettingTab; label: string; description: string }> = [
-  { code: 'bet-slip', label: '投注台', description: '选号、OCR 识别、投注确认、注数与理论奖金' },
+  { code: 'bet-slip', label: '投注台', description: '官方赛事选号、混合过关、倍数、注数与理论奖金' },
   { code: 'tickets', label: '彩票', description: '我的彩票与 Agent 的彩票，按日期归档' },
   { code: 'competition', label: '比赛结果', description: '结算后的盈亏、ROI、命中与趋势视图' },
 ];

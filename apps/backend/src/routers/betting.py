@@ -18,7 +18,7 @@ from scripts.real_ticket_storage import (
     create_real_ticket_items_batch,
     list_real_tickets,
 )
-from scripts.simulator_calculator import calculate_all, validate_items
+from scripts.simulator_calculator import MAX_TICKET_COST, calculate_all, validate_items
 from scripts.simulator_storage import list_simulator_tickets
 
 router = APIRouter(tags=["betting"])
@@ -450,7 +450,7 @@ def _calculate_multi_pass_ticket(items: list[dict], pass_type: str, multiple: in
         raise HTTPException(status_code=400, detail="过关方式无效")
 
     primary = results[0]
-    return {
+    result = {
         **primary,
         "pass_type": ",".join(result["pass_type"] for result in results),
         "bet_count": sum(int(result["bet_count"]) for result in results),
@@ -458,6 +458,12 @@ def _calculate_multi_pass_ticket(items: list[dict], pass_type: str, multiple: in
         "max_prize": round(sum(float(result["max_prize"]) for result in results), 2),
         "combinations": [combo for result in results for combo in result.get("combinations", [])],
     }
+    if result["total_cost"] > MAX_TICKET_COST:
+        raise HTTPException(
+            status_code=400,
+            detail=f"单票金额不得超过20000元，当前为{result['total_cost']:.2f}元",
+        )
+    return result
 
 
 def _create_real_betting_ticket(conn, req: CreateBettingTicketRequest) -> dict:
