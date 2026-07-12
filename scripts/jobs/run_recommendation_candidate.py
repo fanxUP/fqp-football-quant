@@ -870,7 +870,7 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
 def _option_label(code: str, play_type: str = "spf") -> str:
     if play_type == "bqc" and len(code) == 2:
         labels = {"3": "胜", "1": "平", "0": "负"}
-        return f"半{labels.get(code[0], code[0])}/全{labels.get(code[1], code[1])}"
+        return f"{labels.get(code[0], code[0])}{labels.get(code[1], code[1])}"
     if play_type == "zjq":
         return "7+球" if code in {"7", "7+"} else f"{code}球"
     if play_type == "bf":
