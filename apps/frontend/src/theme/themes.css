@@ -810,7 +810,14 @@
 
 .betting-combined-odds {
   display: grid;
-  grid-template-columns: 64px minmax(0, 1fr) 54px;
+  grid-template-columns: minmax(0, 1fr) 54px;
+  gap: 6px;
+  align-items: stretch;
+}
+
+.betting-market-line {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
   gap: 6px;
   align-items: stretch;
 }
@@ -941,8 +948,20 @@
   font-weight: 900;
 }
 
+.betting-sale-marker.is-positive strong {
+  border-color: rgba(232, 72, 85, 0.32);
+  background: rgba(232, 72, 85, 0.12);
+  color: #e84855;
+}
+
+.betting-sale-marker.is-negative strong {
+  border-color: rgba(31, 210, 162, 0.32);
+  background: rgba(31, 210, 162, 0.12);
+  color: #1fd2a2;
+}
+
 .betting-all-games {
-  grid-column: 3;
+  grid-column: 2;
   grid-row: 1 / span 2;
   border: 1px solid var(--fqp-border);
   border-radius: 8px;
@@ -1446,7 +1465,11 @@
   }
 
   .betting-combined-odds {
-    grid-template-columns: 58px minmax(0, 1fr) 46px;
+    grid-template-columns: minmax(0, 1fr) 46px;
+  }
+
+  .betting-market-line {
+    grid-template-columns: 58px minmax(0, 1fr);
   }
 
   .betting-odd {

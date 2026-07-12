@@ -614,7 +614,7 @@ export default function BettingTerminalPage() {
     };
     const renderSaleMarker = (singleAllowed: boolean | undefined, handicap: string, label: string) => (
       <div
-        className={`betting-sale-marker ${singleAllowed ? 'is-single' : 'is-no-single'}`}
+        className={`betting-sale-marker ${singleAllowed ? 'is-single' : 'is-no-single'} ${handicap.startsWith('+') ? 'is-positive' : handicap.startsWith('-') ? 'is-negative' : ''}`}
         aria-label={`${label}${singleAllowed ? '支持单关' : '不支持单关'}，支持过关，让球${handicap}`}
       >
         <div className="betting-sale-flag" aria-hidden="true">
@@ -627,21 +627,25 @@ export default function BettingTerminalPage() {
 
     return (
       <div className="betting-combined-odds" aria-label="胜负平/让球赔率">
-        {renderSaleMarker(match.odds.spf?.is_single_allowed, '-', '胜平负')}
-        <div className="betting-odds-grid" data-play-type="spf">
-          {spfOptions.length > 0
-            ? orderedWinDrawLossOptions(spfOptions).map((option) => renderOddButton(match, 'spf', option))
-            : <div className="betting-odds-empty">胜平负未开售</div>}
+        <div className="betting-market-line">
+          {renderSaleMarker(match.odds.spf?.is_single_allowed, '-', '胜平负')}
+          <div className="betting-odds-grid" data-play-type="spf">
+            {spfOptions.length > 0
+              ? orderedWinDrawLossOptions(spfOptions).map((option) => renderOddButton(match, 'spf', option))
+              : <div className="betting-odds-empty">胜平负未开售</div>}
+          </div>
+        </div>
+        <div className="betting-market-line">
+          {renderSaleMarker(match.odds.rqspf?.is_single_allowed, formatHandicap(rqspfHandicap), '让球胜平负')}
+          <div className="betting-odds-grid" data-play-type="rqspf">
+            {rqspfOptions.length > 0
+              ? orderedWinDrawLossOptions(rqspfOptions).map((option) => renderOddButton(match, 'rqspf', option))
+              : <div className="betting-odds-empty">让球未开售</div>}
+          </div>
         </div>
         <button type="button" className="betting-all-games" onClick={() => setAllGamesMatch(match)}>
           全部<br />游戏
         </button>
-        {renderSaleMarker(match.odds.rqspf?.is_single_allowed, formatHandicap(rqspfHandicap), '让球胜平负')}
-        <div className="betting-odds-grid" data-play-type="rqspf">
-          {rqspfOptions.length > 0
-            ? orderedWinDrawLossOptions(rqspfOptions).map((option) => renderOddButton(match, 'rqspf', option))
-            : <div className="betting-odds-empty">让球未开售</div>}
-        </div>
       </div>
     );
   };
