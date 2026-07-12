@@ -133,8 +133,8 @@ def _map_agent_ticket(row: tuple) -> dict:
         "title": f"Agent 票 #{ticket_id}",
         "playType": row[8] or "single",
         "passType": row[7] or "single",
-        "multiple": 1,
-        "betCount": 1,
+        "multiple": int(row[10] or 1) if len(row) > 10 else 1,
+        "betCount": int(row[11] or 1) if len(row) > 11 else 1,
         "matchCount": int(row[9] or 0),
         "stake": stake,
         "maxPrize": None,
@@ -530,7 +530,7 @@ def _collect_betting_tickets(conn, limit: int) -> list[dict]:
                 SELECT st.id, st.suggested_stake, st.expected_value,
                        st.strategy_pool, st.risk_level, st.ticket_status,
                        st.created_at, st.pass_type, st.ticket_type,
-                       COUNT(sti.id) AS item_count
+                       COUNT(sti.id) AS item_count, st.multiple, st.bet_count
                 FROM simulation_tickets st
                 LEFT JOIN simulation_ticket_items sti ON sti.ticket_id = st.id
                 WHERE st.created_at::date BETWEEN %(start)s AND %(end)s
