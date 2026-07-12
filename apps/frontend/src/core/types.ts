@@ -901,6 +901,7 @@ export interface BettingTicketItemSummary {
   optionCode: string;
   optionName: string;
   spValue: number | null;
+  oddsSource?: 'official' | 'synthetic_model' | string;
 }
 
 export interface BettingTicket {

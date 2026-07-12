@@ -159,6 +159,7 @@ def _item_summary(row: tuple) -> dict:
         "optionCode": row[5] or "",
         "optionName": row[6] or row[5] or "",
         "spValue": _float(row[7]) if row[7] is not None else None,
+        "oddsSource": row[8] if len(row) > 8 and row[8] else "official",
     }
 
 
@@ -188,7 +189,7 @@ def _attach_ticket_items(conn, tickets: list[dict], limit_per_ticket: int = 4) -
                 SELECT sti.ticket_id, sti.match_id,
                        COALESCE(m.raw_json->>'matchNumStr', m.official_match_code::text),
                        m.home_team_name, m.away_team_name,
-                       sti.play_type, sti.option_code, sti.option_name, sti.sp_value
+                       sti.play_type, sti.option_code, sti.option_name, sti.sp_value, sti.odds_source
                 FROM simulator_ticket_items sti
                 LEFT JOIN official_matches m ON m.id = sti.match_id
                 WHERE sti.ticket_id = ANY(%(ids)s)
@@ -220,7 +221,7 @@ def _attach_ticket_items(conn, tickets: list[dict], limit_per_ticket: int = 4) -
                 SELECT sti.ticket_id, sti.match_id,
                        COALESCE(m.raw_json->>'matchNumStr', m.official_match_code::text),
                        m.home_team_name, m.away_team_name,
-                       sti.play_type, sti.option_code, sti.option_name, sti.sp_value
+                       sti.play_type, sti.option_code, sti.option_name, sti.sp_value, sti.odds_source
                 FROM simulation_ticket_items sti
                 LEFT JOIN official_matches m ON m.id = sti.match_id
                 WHERE sti.ticket_id = ANY(%(ids)s)

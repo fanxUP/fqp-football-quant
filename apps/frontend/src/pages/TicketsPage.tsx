@@ -139,7 +139,7 @@ function TicketCard({ ticket }: { ticket: BettingTicket }) {
                 <strong style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <TeamName name={item.homeTeam} size={18} /><span>vs</span><TeamName name={item.awayTeam} size={18} />
                 </strong>
-                <em>{playTypeLabel(item.playType)} · {optionLabel(item.playType, item.optionCode || item.optionName)}{item.spValue ? ` @ ${item.spValue}` : ''}</em>
+                <em>{playTypeLabel(item.playType)} · {optionLabel(item.playType, item.optionCode || item.optionName)}{item.spValue ? ` @ ${item.spValue}` : ''}{item.oddsSource === 'synthetic_model' ? ' · 模型估算' : ''}</em>
               </div>
             ))}
           </div>
