@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+import time
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any
@@ -29,6 +30,9 @@ HAFU_OPTIONS = {
     "dh": ("13", "平胜"), "dd": ("11", "平平"), "da": ("10", "平负"),
     "ah": ("03", "负胜"), "ad": ("01", "负平"), "aa": ("00", "负负"),
 }
+
+BATCH_SIZE = 300
+BATCH_PAUSE_SECONDS = 180
 
 
 def _snapshot_time(entry: dict[str, Any]) -> str | None:
@@ -251,6 +255,12 @@ def backfill_fixed_bonus_history(
                         break
                 else:
                     consecutive_forbidden = 0
+            if processed % BATCH_SIZE == 0 and processed < len(matches) and not source_blocked:
+                print(
+                    f"[official_odds_history] completed {processed} matches; "
+                    f"pausing {BATCH_PAUSE_SECONDS}s for source safety"
+                )
+                time.sleep(BATCH_PAUSE_SECONDS)
     finally:
         client.close()
 

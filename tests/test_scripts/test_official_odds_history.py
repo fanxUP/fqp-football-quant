@@ -90,3 +90,24 @@ def test_backfill_stops_after_consecutive_official_403_responses():
     client.get_uniform_fixed_bonus.assert_called_with(2035670)
     assert client.get_uniform_fixed_bonus.call_count == 3
     client.close.assert_called_once()
+
+
+def test_backfill_pauses_three_minutes_after_each_300_match_batch():
+    from unittest.mock import MagicMock, patch
+
+    connection = MagicMock()
+    cursor = connection.cursor.return_value.__enter__.return_value
+    cursor.fetchall.return_value = [(index, str(2037000 + index)) for index in range(301)]
+    client = MagicMock()
+    client.get_uniform_fixed_bonus.return_value = {}
+
+    with patch("scripts.official_odds_history.get_db") as get_db, \
+         patch("scripts.official_odds_history.store_fixed_bonus_history", return_value={"inserted": 0, "already_present": 0, "errors": 0}), \
+         patch("scripts.official_odds_history.time.sleep") as sleep, \
+         patch("scripts.official_odds_history.SportteryClient", return_value=client):
+        get_db.return_value.__enter__.return_value = connection
+
+        result = backfill_fixed_bonus_history("2025-07-01", "2025-07-01")
+
+    assert result["matches_processed"] == 301
+    sleep.assert_called_once_with(180)
