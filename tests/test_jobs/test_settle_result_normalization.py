@@ -9,3 +9,8 @@ def test_normalizes_win_draw_loss_and_half_full_codes():
 
 def test_normalizes_seven_plus_goals():
     assert _normalize_result("zjq", "7+") == "7"
+
+
+def test_normalizes_score_separator_and_half_full_separator():
+    assert _normalize_result("bf", "3-0") == "3:0"
+    assert _normalize_result("bqc", "H/A") == "30"
