@@ -31,6 +31,20 @@ def _calculate_tax(prize: float) -> float:
     return 0.0
 
 
+def _normalize_result(play_type: str, value: Any) -> str | None:
+    """Normalize official H/D/A-style results to stored ticket codes."""
+    if value is None:
+        return None
+    raw = str(value).strip()
+    if play_type in {"spf", "rqspf"}:
+        return {"H": "3", "h": "3", "D": "1", "d": "1", "A": "0", "a": "0"}.get(raw, raw)
+    if play_type == "bqc" and len(raw) == 2:
+        return "".join({"H": "3", "h": "3", "D": "1", "d": "1", "A": "0", "a": "0"}.get(ch, ch) for ch in raw)
+    if play_type == "zjq" and raw in {"7+", "7plus", "7以上"}:
+        return "7"
+    return raw
+
+
 def run(dry_run: bool = False) -> dict[str, Any]:
     """Settle all unsettled tickets that have confirmed match results."""
     if dry_run:
@@ -180,7 +194,7 @@ def run(dry_run: bool = False) -> dict[str, Any]:
                         "bf": result["score_result"],
                         "bqc": result["half_full_result"],
                     }
-                    actual_result = result_by_play.get(ai[3], result["spf_result"])
+                    actual_result = _normalize_result(ai[3], result_by_play.get(ai[3], result["spf_result"]))
                     item_won = ai_option == actual_result
                     if not item_won:
                         ticket_all_won = False
