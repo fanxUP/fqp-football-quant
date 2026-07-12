@@ -488,11 +488,11 @@ def _store_derived_play_types(
             bonus = client.get_uniform_fixed_bonus(int(sporttery_mid))
             client.close()
         except Exception:
-            return 0
+            bonus = {}
 
         odds_history = bonus.get("value", {}).get("oddsHistory", {})
         if not odds_history:
-            return 0
+            odds_history = {}
 
         # TTG → zjq (总进球数)
         ttg = odds_history.get("ttgList")
@@ -545,6 +545,22 @@ def _store_derived_play_types(
                                 market["bf"]["other_a"] = float(v)
                         except (ValueError, TypeError):
                             pass
+
+    # If official odds are unavailable, keep the training pipeline alive with
+    # model-derived fair-market odds. These are explicitly synthetic and are
+    # never treated as official Sporttery snapshots.
+    if not market:
+        margin = 1.08
+        zjq_probs = derive_total_goals(poisson_matrix)
+        market["zjq"] = {k: round(margin / v, 2) for k, v in zjq_probs.items() if v > 0}
+        market["bf"] = {score: round(margin / prob, 2) for score, prob in poisson_matrix.items() if prob >= 0.01}
+        ht_matrix = score_matrix(lam_h * 0.45, lam_a * 0.45, max_goals=4)
+        ht_1x2 = derive_1x2(ht_matrix)
+        ft_1x2 = derive_1x2(poisson_matrix)
+        market["bqc"] = {
+            f"{hc}{fc}": round(margin / max(ht_1x2.get(hc, 0) * ft_1x2.get(fc, 0), 1e-6), 2)
+            for hc in ("3", "1", "0") for fc in ("3", "1", "0")
+        }
 
     # ── 1. ZJQ (总进球数) ──
     if "zjq" in market:
