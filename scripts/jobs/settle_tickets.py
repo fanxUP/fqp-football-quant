@@ -140,7 +140,9 @@ def run(dry_run: bool = False) -> dict[str, Any]:
                         continue  # already settled
 
                 # Determine win/loss
-                stake = ticket["suggested_stake"] * ticket["multiple"]
+                # suggested_stake is the ticket's already-calculated total
+                # cost (注数 × 2 元 × 倍数), so do not multiply it again.
+                stake = ticket["suggested_stake"]
 
                 # For multi-match passes, we need all matches to have results
                 # This simplified version checks the current match only.
@@ -151,7 +153,7 @@ def run(dry_run: bool = False) -> dict[str, Any]:
                 # Get all match_ids for this ticket
                 with conn.cursor() as cur:
                     cur.execute(
-                        "SELECT match_id, option_code, sp_value FROM simulation_ticket_items WHERE ticket_id = %s",
+                        "SELECT match_id, option_code, sp_value, play_type FROM simulation_ticket_items WHERE ticket_id = %s",
                         (tid,),
                     )
                     all_items = cur.fetchall()
@@ -170,7 +172,16 @@ def run(dry_run: bool = False) -> dict[str, Any]:
                         unsettled_match = True
                         break  # skip this ticket — not all matches settled
 
-                    item_won = ai_option == result_map[ai_match_id]
+                    result = full_result_map[ai_match_id]
+                    result_by_play = {
+                        "spf": result["spf_result"],
+                        "rqspf": result["rqspf_result"],
+                        "zjq": result["total_goals_result"],
+                        "bf": result["score_result"],
+                        "bqc": result["half_full_result"],
+                    }
+                    actual_result = result_by_play.get(ai[3], result["spf_result"])
+                    item_won = ai_option == actual_result
                     if not item_won:
                         ticket_all_won = False
 
@@ -180,7 +191,7 @@ def run(dry_run: bool = False) -> dict[str, Any]:
                             "match_id": ai_match_id,
                             "option_code": ai_option,
                             "sp_value": ai_sp,
-                            "actual_result": result_map[ai_match_id],
+                            "actual_result": actual_result,
                             "is_won": item_won,
                         }
                     )
