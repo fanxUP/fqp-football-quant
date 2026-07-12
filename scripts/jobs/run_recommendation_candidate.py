@@ -25,6 +25,7 @@ from scripts.simulator_storage import (
     create_simulator_ticket,
     ensure_simulator_bankroll,
 )
+from scripts.model_storage import store_simulation_ticket
 from scripts.agents.task_queue import finish_tracked_job, start_tracked_job
 
 
@@ -547,7 +548,9 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
                     "risk_level": "observation",
                     "ticket_status": "generated",
                 }
-                if _buy_ticket(conn, ticket, [_make_item(c)], c):
+                # Agent observations belong to the competition/agent ledger,
+                # not the user's manual simulator ledger.
+                if store_simulation_ticket(conn, ticket, [_make_item(c)]):
                     observation_tickets += 1
             return {
                 "status": "ok",
