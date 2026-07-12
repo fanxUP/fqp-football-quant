@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from functools import lru_cache
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
@@ -132,12 +133,9 @@ def run_pool_analysis(
     return pool_analysis_to_dict(analysis)
 
 
-@router.get("/api/pool/sample")
-def get_pool_sample():
-    """生成示例14场比赛数据并返回分析结果（用于前端演示/测试）。
-
-    使用合成数据，不访问数据库。
-    """
+@lru_cache(maxsize=1)
+def _build_pool_sample() -> dict:
+    """Build the deterministic demonstration pool once per process."""
     import random
 
     rng = random.Random(42)
@@ -192,10 +190,17 @@ def get_pool_sample():
         matches,
         budget=256,
         strategy="balanced",
+        n_mc_simulations=1_000,
         period_id="sample-2026-07-03",
     )
 
     return pool_analysis_to_dict(analysis)
+
+
+@router.get("/api/pool/sample")
+def get_pool_sample():
+    """返回固定种子的14场演示分析结果；使用合成数据，不访问数据库。"""
+    return _build_pool_sample()
 
 
 @router.get("/api/pool/issues")

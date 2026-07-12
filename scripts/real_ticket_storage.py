@@ -903,12 +903,12 @@ def get_error_summary(conn: Any, days: int = 7) -> dict:
     sql = """
         SELECT error_type, error_level, COUNT(*) AS count
         FROM prediction_error_analysis
-        WHERE created_at >= now() - INTERVAL '%(days)s days'
+        WHERE created_at >= now() - (%(days)s * INTERVAL '1 day')
         GROUP BY error_type, error_level
         ORDER BY count DESC
     """
     with conn.cursor() as cur:
-        cur.execute(sql, {"days": str(days)})
+        cur.execute(sql, {"days": days})
         rows = cur.fetchall()
 
     error_types: dict[str, dict] = {}

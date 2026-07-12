@@ -12,6 +12,7 @@ from scripts.real_ticket_storage import (
     create_settlement,
     delete_real_ticket,
     get_daily_review,
+    get_error_summary,
     get_real_ticket,
     get_settlement_summary,
     get_settlements_by_date,
@@ -306,6 +307,16 @@ class TestErrorAnalyses:
 
         result = list_error_analyses(mock_conn)
         assert result == []
+
+    def test_error_summary_parameterizes_interval_days(self):
+        mock_conn, mock_cur = _mock_conn(fetchall=[])
+
+        result = get_error_summary(mock_conn, days=7)
+
+        sql, params = mock_cur.execute.call_args.args
+        assert "%(days)s * INTERVAL '1 day'" in sql
+        assert params == {"days": 7}
+        assert result == {"total_errors": 0, "days": 7, "error_types": {}}
 
 
 class TestBankroll:

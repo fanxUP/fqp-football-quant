@@ -80,7 +80,8 @@ def test_list_odds_history_matches_returns_only_matches_with_official_snapshots(
     sql = cursor.execute.call_args.args[0]
     params = cursor.execute.call_args.args[1]
     assert "official_odds_snapshots" in sql
-    assert "HAVING COUNT(oos.id) > 0" in sql
+    assert "EXISTS" in sql
+    assert sql.index("LIMIT %(limit)s") < sql.index("ARRAY_AGG")
     assert params["search"] == "%曼城%"
     payload = response.json()
     assert payload["total"] == 1

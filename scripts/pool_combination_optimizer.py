@@ -111,6 +111,7 @@ class PoolAnalysis:
     mc_rx9_prob: float = 0.0
     mc_total_cost: int = 0
     mc_combinations_used: int = 0
+    mc_simulations: int = 10000
 
     # 冷门覆盖
     cold_gate_coverage: float = 0.0
@@ -598,6 +599,7 @@ def analyze_pool(
         mc_rx9_prob=mc_results["rx9_prob"],
         mc_total_cost=stats["total_cost"],
         mc_combinations_used=stats["actual_combos"],
+        mc_simulations=n_mc_simulations,
         cold_gate_coverage=sum(r.cold_gate_coverage for r in full_results) / len(full_results)
         if full_results
         else 0.0,
@@ -713,7 +715,7 @@ def pool_analysis_to_dict(analysis: PoolAnalysis) -> dict[str, Any]:
             "hit14_prob": round(analysis.mc_hit14_prob, 6),
             "hit13_prob": round(analysis.mc_hit13_prob, 6),
             "rx9_prob": round(analysis.mc_rx9_prob, 6),
-            "simulations": 10000,
+            "simulations": analysis.mc_simulations,
         },
         "warnings": analysis.warnings,
         "generated_at": analysis.generated_at,

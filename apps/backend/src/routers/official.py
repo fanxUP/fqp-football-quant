@@ -66,16 +66,28 @@ def list_official_odds_history_matches(
         with conn.cursor() as cur:
             cur.execute(
                 f"""
-                SELECT m.id, m.official_match_code, m.league_name,
-                       m.home_team_name, m.away_team_name, m.kickoff_time,
-                       ARRAY_AGG(DISTINCT oos.play_type ORDER BY oos.play_type) AS play_types
-                FROM official_matches m
-                JOIN official_odds_snapshots oos ON oos.match_id = m.id
-                {where_clause}
-                GROUP BY m.id
-                HAVING COUNT(oos.id) > 0
-                ORDER BY m.kickoff_time DESC, m.id DESC
-                LIMIT %(limit)s
+                WITH selected_matches AS (
+                    SELECT m.id, m.official_match_code, m.league_name,
+                           m.home_team_name, m.away_team_name, m.kickoff_time
+                    FROM official_matches m
+                    {where_clause}
+                    {"AND" if where_clause else "WHERE"} EXISTS (
+                        SELECT 1
+                        FROM official_odds_snapshots existing
+                        WHERE existing.match_id = m.id
+                    )
+                    ORDER BY m.kickoff_time DESC, m.id DESC
+                    LIMIT %(limit)s
+                )
+                SELECT sm.id, sm.official_match_code, sm.league_name,
+                       sm.home_team_name, sm.away_team_name, sm.kickoff_time,
+                       (
+                           SELECT ARRAY_AGG(DISTINCT oos.play_type ORDER BY oos.play_type)
+                           FROM official_odds_snapshots oos
+                           WHERE oos.match_id = sm.id
+                       ) AS play_types
+                FROM selected_matches sm
+                ORDER BY sm.kickoff_time DESC, sm.id DESC
                 """,
                 params,
             )

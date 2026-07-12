@@ -209,7 +209,7 @@ def list_error_analyses(
 
 
 @router.get("/api/error-analysis/summary")
-def error_analysis_summary(days: int = Query(7)):
+def error_analysis_summary(days: int = Query(7, ge=1, le=365)):
     """Get error type distribution for recent days."""
     with get_db() as conn:
         summary = get_error_summary(conn, days=days)
