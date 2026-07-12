@@ -297,14 +297,7 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
         # 按框架 §9, 四池分散需要至少 4 场有效比赛
         MIN_MATCHES = 4
         valid_match_count = sum(1 for v in match_sp_quality.values() if v)
-        if valid_match_count < MIN_MATCHES:
-            return {
-                "status": "ok",
-                "tickets": 0,
-                "total_predictions": len(predictions),
-                "valid_matches": valid_match_count,
-                "note": f"有效比赛仅 {valid_match_count} 场 (<{MIN_MATCHES})，风险分散不足，今日不投注",
-            }
+        training_observation_mode = valid_match_count < MIN_MATCHES
 
         # ── 3. Data quality map ──
         with conn.cursor() as cur:
@@ -445,7 +438,7 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
                 continue
             if confidence < MIN_CONFIDENCE:
                 continue
-            if ev <= 0:
+            if ev <= 0 and not training_observation_mode:
                 continue
 
             # SP 数据质量：跳过 sp_value 异常的场次
@@ -534,6 +527,35 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
                 by_match[mid] = c
 
         candidates = sorted(by_match.values(), key=lambda c: c["ev"], reverse=True)
+
+        # Training mode deliberately records the agent's best available
+        # direction even when the day has too few matches for a real strategy
+        # ticket.  These low-stake simulator tickets are observations only;
+        # they are excluded from the normal pool/parlay budgets.
+        if training_observation_mode and candidates:
+            observation_tickets = 0
+            for c in candidates:
+                ticket = {
+                    "strategy_pool": "agent_training_observation",
+                    "ticket_type": "training_observation",
+                    "pass_type": "single",
+                    "suggested_stake": MIN_STAKE,
+                    "multiple": 1,
+                    "estimated_return": round(MIN_STAKE * c["sp_value"], 2),
+                    "max_return": round(MIN_STAKE * c["sp_value"], 2),
+                    "expected_value": round(c["ev"], 4),
+                    "risk_level": "observation",
+                    "ticket_status": "generated",
+                }
+                if _buy_ticket(conn, ticket, [_make_item(c)], c):
+                    observation_tickets += 1
+            return {
+                "status": "ok",
+                "tickets": observation_tickets,
+                "training_observation": True,
+                "valid_matches": valid_match_count,
+                "note": f"训练观察模式：有效比赛 {valid_match_count} 场，已记录 Agent 选择，不计入正式策略池",
+            }
 
         # ── 7. Assign singles to pools ──
         pools: dict[str, list] = {p["name"]: [] for p in POOL_CONFIG}
