@@ -569,16 +569,19 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
                 if store_simulation_ticket(conn, ticket, [_make_item(c)]):
                     observation_tickets += 1
             if len(candidates) >= 2:
-                combos = _build_parlays(candidates, 2) or [
-                    {"candidates": list(candidates[:2]), "combined_sp": candidates[0]["sp_value"] * candidates[1]["sp_value"], "combined_ev": candidates[0]["ev"] + candidates[1]["ev"]}
-                ]
-                combo_stake = round(combo_budget / len(combos[:2]), 2)
-                for combo in combos[:2]:
+                combos = [("2x1", combo) for combo in _build_parlays(candidates, 2)[:1]]
+                if not combos:
+                    combos = [("2x1", {"candidates": list(candidates[:2]), "combined_sp": candidates[0]["sp_value"] * candidates[1]["sp_value"], "combined_ev": candidates[0]["ev"] + candidates[1]["ev"]})]
+                if len(candidates) >= 3:
+                    combos += [("3x1", combo) for combo in _build_parlays(candidates, 3)[:1]]
+                combo_stakes = [round(combo_budget / len(combos), 2)] * len(combos)
+                combo_stakes[-1] = round(combo_budget - sum(combo_stakes[:-1]), 2)
+                for (pass_type, combo), combo_stake in zip(combos, combo_stakes):
                     combo_items = [_make_item(c) for c in combo["candidates"]]
                     ticket = {
                         "strategy_pool": "agent_training_parlay",
                         "ticket_type": "training_observation",
-                        "pass_type": "2x1",
+                        "pass_type": pass_type,
                         "suggested_stake": combo_stake,
                         "multiple": 1,
                         "estimated_return": round(combo_stake * combo["combined_sp"], 2),
