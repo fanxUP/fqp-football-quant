@@ -189,7 +189,7 @@ def _attach_ticket_items(conn, tickets: list[dict], limit_per_ticket: int = 4) -
                 SELECT sti.ticket_id, sti.match_id,
                        COALESCE(m.raw_json->>'matchNumStr', m.official_match_code::text),
                        m.home_team_name, m.away_team_name,
-                       sti.play_type, sti.option_code, sti.option_name, sti.sp_value, sti.odds_source
+                       sti.play_type, sti.option_code, sti.option_name, sti.sp_value
                 FROM simulator_ticket_items sti
                 LEFT JOIN official_matches m ON m.id = sti.match_id
                 WHERE sti.ticket_id = ANY(%(ids)s)
