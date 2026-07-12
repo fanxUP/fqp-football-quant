@@ -567,6 +567,7 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
             if single_stakes:
                 single_stakes[-1] = _official_stake(singles_budget - sum(single_stakes[:-1]))
             for c, stake in zip(single_candidates, single_stakes):
+                ticket_multiple = max(2, int(stake / 2))
                 ticket = {
                     "strategy_pool": "agent_training_observation",
                     "ticket_type": "training_observation",
@@ -575,7 +576,8 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
                     # Official竞彩倍数 is 2-99; use the minimum training
                     # multiplier and express the remaining budget as the
                     # number of generated tickets.
-                    "multiple": 2,
+                    "multiple": ticket_multiple,
+                    "bet_count": 1,
                     "estimated_return": round(MIN_STAKE * c["sp_value"], 2),
                     "max_return": round(MIN_STAKE * c["sp_value"], 2),
                     "expected_value": round(c["ev"], 4),
@@ -601,13 +603,15 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
                 combo_stakes = [_official_stake(combo_budget / len(combos))] * len(combos)
                 combo_stakes[-1] = _official_stake(combo_budget - sum(combo_stakes[:-1]))
                 for (pass_type, combo), combo_stake in zip(combos, combo_stakes):
+                    ticket_multiple = max(2, int(combo_stake / 2))
                     combo_items = [_make_item(c) for c in combo["candidates"]]
                     ticket = {
                         "strategy_pool": "agent_training_parlay",
                         "ticket_type": "training_observation",
                         "pass_type": pass_type,
                         "suggested_stake": combo_stake,
-                        "multiple": 2,
+                        "multiple": ticket_multiple,
+                        "bet_count": 1,
                         "estimated_return": round(combo_stake * combo["combined_sp"], 2),
                         "max_return": round(combo_stake * combo["combined_sp"], 2),
                         "expected_value": round(combo["combined_ev"], 4),
