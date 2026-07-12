@@ -20,7 +20,7 @@ import ErrorState from '../shared/components/ErrorState';
 import LoadingSpinner from '../shared/components/LoadingSpinner';
 import EmptyState from '../shared/components/EmptyState';
 import TeamName from '../shared/components/TeamName';
-import { passTypeLabel, playTypeLabel, statusLabel } from '../shared/constants';
+import { optionLabel, passTypeLabel, playTypeLabel, statusLabel } from '../shared/constants';
 
 type DateFilter = 'all' | string;
 
@@ -139,7 +139,7 @@ function TicketCard({ ticket }: { ticket: BettingTicket }) {
                 <strong style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <TeamName name={item.homeTeam} size={18} /><span>vs</span><TeamName name={item.awayTeam} size={18} />
                 </strong>
-                <em>{playTypeLabel(item.playType)} · {item.optionName || item.optionCode}{item.spValue ? ` @ ${item.spValue}` : ''}</em>
+                <em>{playTypeLabel(item.playType)} · {optionLabel(item.playType, item.optionCode || item.optionName)}{item.spValue ? ` @ ${item.spValue}` : ''}</em>
               </div>
             ))}
           </div>

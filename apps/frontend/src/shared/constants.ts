@@ -52,12 +52,20 @@ export const RQSPF_OPTION_LABELS: Record<string, string> = {
   h: '主胜', d: '平', a: '主负',
 };
 
+export const BQC_OPTION_LABELS: Record<string, string> = {
+  '33': '胜胜', '31': '胜平', '30': '胜负',
+  '13': '平胜', '11': '平平', '10': '平负',
+  '03': '负胜', '01': '负平', '00': '负负',
+};
+
 /** Map a play_type + option_code to a Chinese label. */
 export function optionLabel(playType: string, optionCode: string): string {
   const pt = PLAY_TYPE_LABELS[playType] ? playType : playType;
   if (pt === 'spf') return SPF_OPTION_LABELS[optionCode] || optionCode;
   if (pt === 'rqspf') return RQSPF_OPTION_LABELS[optionCode] || optionCode;
-  // bf / zjq / bqc — option_code IS the display value (e.g. "1:0", "3", "3-3")
+  if (pt === 'bqc') return BQC_OPTION_LABELS[optionCode] || optionCode;
+  if (pt === 'zjq') return optionCode === '7' || optionCode === '7+' ? '7+球' : `${optionCode}球`;
+  // bf keeps the official score notation (e.g. "1:0")
   return optionCode;
 }
 
