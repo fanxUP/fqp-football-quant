@@ -529,18 +529,21 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
 
         candidates = sorted(by_match.values(), key=lambda c: c["ev"], reverse=True)
 
-        # Training mode deliberately records the agent's best available
-        # direction even when the day has too few matches for a real strategy
-        # ticket.  These low-stake simulator tickets are observations only;
-        # they are excluded from the normal pool/parlay budgets.
+        # Training mode spends the fixed daily virtual bankroll aggressively.
+        # These are all Agent observations; EV is recorded for learning and is
+        # not used as a hard rejection rule.
         if training_observation_mode and candidates:
             observation_tickets = 0
+            daily_budget = AGENT_DAILY_BUDGET
+            singles_budget = round(daily_budget * 0.60, 2)
+            combo_budget = round(daily_budget - singles_budget, 2)
+            single_stake = round(singles_budget / len(candidates), 2)
             for c in candidates:
                 ticket = {
                     "strategy_pool": "agent_training_observation",
                     "ticket_type": "training_observation",
                     "pass_type": "single",
-                    "suggested_stake": MIN_STAKE,
+                    "suggested_stake": single_stake,
                     "multiple": 1,
                     "estimated_return": round(MIN_STAKE * c["sp_value"], 2),
                     "max_return": round(MIN_STAKE * c["sp_value"], 2),
@@ -552,12 +555,34 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
                 # not the user's manual simulator ledger.
                 if store_simulation_ticket(conn, ticket, [_make_item(c)]):
                     observation_tickets += 1
+            if len(candidates) >= 2:
+                combos = _build_parlays(candidates, 2) or [
+                    {"candidates": list(candidates[:2]), "combined_sp": candidates[0]["sp_value"] * candidates[1]["sp_value"], "combined_ev": candidates[0]["ev"] + candidates[1]["ev"]}
+                ]
+                combo_stake = round(combo_budget / len(combos[:2]), 2)
+                for combo in combos[:2]:
+                    combo_items = [_make_item(c) for c in combo["candidates"]]
+                    ticket = {
+                        "strategy_pool": "agent_training_parlay",
+                        "ticket_type": "training_observation",
+                        "pass_type": "2x1",
+                        "suggested_stake": combo_stake,
+                        "multiple": 1,
+                        "estimated_return": round(combo_stake * combo["combined_sp"], 2),
+                        "max_return": round(combo_stake * combo["combined_sp"], 2),
+                        "expected_value": round(combo["combined_ev"], 4),
+                        "risk_level": "aggressive_training",
+                        "ticket_status": "generated",
+                    }
+                    if store_simulation_ticket(conn, ticket, combo_items):
+                        observation_tickets += 1
             return {
                 "status": "ok",
                 "tickets": observation_tickets,
                 "training_observation": True,
+                "daily_virtual_budget": daily_budget,
                 "valid_matches": valid_match_count,
-                "note": f"训练观察模式：有效比赛 {valid_match_count} 场，已记录 Agent 选择，不计入正式策略池",
+                "note": f"训练模式：已激进使用每日虚拟资金 {daily_budget} 元，记录单场与过关样本",
             }
 
         # ── 7. Assign singles to pools ──
