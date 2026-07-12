@@ -578,8 +578,8 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
                     # number of generated tickets.
                     "multiple": ticket_multiple,
                     "bet_count": 1,
-                    "estimated_return": round(MIN_STAKE * c["sp_value"], 2),
-                    "max_return": round(MIN_STAKE * c["sp_value"], 2),
+                    "estimated_return": round(stake * c["sp_value"], 2),
+                    "max_return": round(stake * c["sp_value"], 2),
                     "expected_value": round(c["ev"], 4),
                     "risk_level": "observation",
                     "ticket_status": "generated",
