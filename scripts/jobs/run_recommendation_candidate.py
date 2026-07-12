@@ -587,11 +587,15 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
                 if store_simulation_ticket(conn, ticket, [_make_item(c)]):
                     observation_tickets += 1
             if len(candidates) >= 2:
-                combos = [("2x1", combo) for combo in _build_parlays(candidates, 2)[:1]]
-                if not combos:
-                    combos = [("2x1", {"candidates": list(candidates[:2]), "combined_sp": candidates[0]["sp_value"] * candidates[1]["sp_value"], "combined_ev": candidates[0]["ev"] + candidates[1]["ev"]})]
+                combos_2 = _build_parlays(candidates, 2)
+                if not combos_2:
+                    combos_2 = [{"candidates": list(pair), "combined_sp": pair[0]["sp_value"] * pair[1]["sp_value"], "combined_ev": pair[0]["ev"] + pair[1]["ev"]} for pair in combinations(candidates, 2)]
+                combos = [("2x1", combo) for combo in combos_2[:3]]
                 if len(candidates) >= 3:
-                    combos += [("3x1", combo) for combo in _build_parlays(candidates, 3)[:1]]
+                    combos_3 = _build_parlays(candidates, 3)
+                    if not combos_3:
+                        combos_3 = [{"candidates": list(triple), "combined_sp": triple[0]["sp_value"] * triple[1]["sp_value"] * triple[2]["sp_value"], "combined_ev": sum(c["ev"] for c in triple)} for triple in combinations(candidates, 3)]
+                    combos += [("3x1", combo) for combo in combos_3[:2]]
                 combo_stakes = [_official_stake(combo_budget / len(combos))] * len(combos)
                 combo_stakes[-1] = _official_stake(combo_budget - sum(combo_stakes[:-1]))
                 for (pass_type, combo), combo_stake in zip(combos, combo_stakes):
