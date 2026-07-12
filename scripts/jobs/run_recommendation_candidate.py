@@ -527,7 +527,18 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
             if mid not in by_match or c["ev"] > by_match[mid]["ev"]:
                 by_match[mid] = c
 
-        candidates = sorted(by_match.values(), key=lambda c: c["ev"], reverse=True)
+        if training_observation_mode:
+            # Training data should cover independent market views. Keep the
+            # best direction per match and play type instead of collapsing all
+            # markets into one choice per match.
+            by_market: dict[tuple[int, str], dict] = {}
+            for c in parsed:
+                key = (c["match_id"], c["play_type"])
+                if key not in by_market or c["ev"] > by_market[key]["ev"]:
+                    by_market[key] = c
+            candidates = sorted(by_market.values(), key=lambda c: c["ev"], reverse=True)
+        else:
+            candidates = sorted(by_match.values(), key=lambda c: c["ev"], reverse=True)
 
         # Training mode spends the fixed daily virtual bankroll aggressively.
         # These are all Agent observations; EV is recorded for learning and is
