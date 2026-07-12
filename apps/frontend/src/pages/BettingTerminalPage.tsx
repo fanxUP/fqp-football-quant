@@ -167,6 +167,7 @@ export default function BettingTerminalPage() {
   const [filterDate, setFilterDate] = useState('');
   const [filterLeague, setFilterLeague] = useState('');
   const [activePlayType, setActivePlayType] = useState<PlayTabKey>('spf-rqspf');
+  const [allGamesMatch, setAllGamesMatch] = useState<BettingMatch | null>(null);
   const [betSlip, setBetSlip] = useState<BetSlipItem[]>([]);
   const [selectedPassTypes, setSelectedPassTypes] = useState<string[]>([]);
   const [passSelectionMode, setPassSelectionMode] = useState<'auto' | 'manual'>('auto');
@@ -632,7 +633,7 @@ export default function BettingTerminalPage() {
             ? orderedWinDrawLossOptions(spfOptions).map((option) => renderOddButton(match, 'spf', option))
             : <div className="betting-odds-empty">胜平负未开售</div>}
         </div>
-        <button type="button" className="betting-all-games" onClick={() => setActivePlayType('zjq')}>
+        <button type="button" className="betting-all-games" onClick={() => setAllGamesMatch(match)}>
           全部<br />游戏
         </button>
         {renderSaleMarker(match.odds.rqspf?.is_single_allowed, formatHandicap(rqspfHandicap), '让球胜平负')}
@@ -654,6 +655,17 @@ export default function BettingTerminalPage() {
 
   return (
     <div className="betting-terminal">
+      <header className="betting-mobile-header">
+        <button type="button" aria-label="返回" className="betting-mobile-back">‹</button>
+        <strong>模拟试投</strong>
+        <span className="betting-mobile-actions" aria-hidden="true">•••　◎</span>
+      </header>
+      <nav className="betting-mobile-nav" aria-label="玩法导航">
+        {['胜平负', '让球胜平负', '半全场', '进球数', '竞彩足球', '竞彩篮'].map((label) => (
+          <span key={label} className={label === '竞彩足球' ? 'is-active' : ''}>{label}</span>
+        ))}
+        <span aria-hidden="true">☰　▣</span>
+      </nav>
       <div className="betting-workbench">
         <aside className="betting-recommendations" aria-label="推荐单">
           <div className="betting-slip-head">
@@ -1071,6 +1083,28 @@ export default function BettingTerminalPage() {
           </button>
         </aside>
       </div>
+
+      {allGamesMatch && (
+        <div className="betting-all-games-backdrop" role="presentation" onClick={() => setAllGamesMatch(null)}>
+          <section className="betting-all-games-modal" role="dialog" aria-modal="true" aria-label="全部游戏" onClick={(event) => event.stopPropagation()}>
+            <header className="betting-all-games-modal-head">
+              <div>
+                <strong>{allGamesMatch.match_num_str || `#${allGamesMatch.match_id}`}　{allGamesMatch.home_team_name} VS {allGamesMatch.away_team_name}</strong>
+                <span>{allGamesMatch.league_name} · {clockLabel(allGamesMatch.kickoff_time)}</span>
+              </div>
+              <button type="button" aria-label="关闭全部游戏" onClick={() => setAllGamesMatch(null)}>×</button>
+            </header>
+            <div className="betting-all-games-content">
+              <section><h4>胜平负</h4>{renderSinglePlayOdds(allGamesMatch, 'spf')}</section>
+              <section><h4>让球胜平负</h4>{renderSinglePlayOdds(allGamesMatch, 'rqspf')}</section>
+              <section><h4>比分</h4>{renderSinglePlayOdds(allGamesMatch, 'bf')}</section>
+              <section><h4>总进球数</h4>{renderSinglePlayOdds(allGamesMatch, 'zjq')}</section>
+              <section><h4>半全场</h4>{renderSinglePlayOdds(allGamesMatch, 'bqc')}</section>
+            </div>
+            <button type="button" className="betting-all-games-close" onClick={() => setAllGamesMatch(null)}>关闭</button>
+          </section>
+        </div>
+      )}
     </div>
   );
 }
