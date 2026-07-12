@@ -27,6 +27,7 @@ function slipItem(overrides: Partial<BetSlipItem>): BetSlipItem {
     sp_value: overrides.sp_value ?? 2.1,
     handicap: overrides.handicap,
     is_single_allowed: overrides.is_single_allowed ?? true,
+    is_pass_allowed: overrides.is_pass_allowed ?? true,
     is_dan: overrides.is_dan ?? false,
   };
 }
@@ -104,8 +105,27 @@ describe('bettingRules', () => {
     expect(getSlipWarnings([slipItem({ is_single_allowed: false })], 'single')).toEqual([
       '所选比赛包含未开单关的选项，请改用过关。',
     ]);
-    expect(getSlipWarnings([slipItem({ match_id: 1 }), slipItem({ match_id: 1, play_type: 'rqspf' })], '2x1')).toEqual([
-      '同一场比赛的不同玩法不可串关，请只保留该场一个玩法。',
-    ]);
+  });
+
+  it('expands multiple options on one match as alternatives instead of extra matches', () => {
+    const items = [
+      slipItem({ match_id: 1, play_type: 'spf', option_code: '3' }),
+      slipItem({ match_id: 1, play_type: 'rqspf', option_code: '1' }),
+      slipItem({ match_id: 2, play_type: 'spf', option_code: '0' }),
+    ];
+
+    expect(getAvailablePassTypes(items)).toEqual(['single', '2x1']);
+    expect(getPassTypeBetCount(items, '2x1')).toBe(2);
+    expect(getSlipWarnings(items, '2x1')).toEqual([]);
+  });
+
+  it('blocks pass selection when a chosen market is single-only', () => {
+    const items = [
+      slipItem({ match_id: 1, is_pass_allowed: false }),
+      slipItem({ match_id: 2 }),
+    ];
+
+    expect(getAvailablePassTypes(items)).toEqual(['single']);
+    expect(getSlipWarnings(items, '2x1')).toEqual(['所选比赛包含仅支持单场的选项，不能用于过关。']);
   });
 });

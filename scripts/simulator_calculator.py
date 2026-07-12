@@ -8,7 +8,7 @@ Covers:
 
 from __future__ import annotations
 
-from itertools import combinations
+from itertools import combinations, product
 from math import comb
 
 # ---- Play-type max matches per ticket ----
@@ -156,25 +156,45 @@ def calculate_multi_all(items: list[dict], pass_types: str | list[str], multiple
     }
 
 
-def get_available_pass_types(match_count: int) -> list[str]:
+def _group_items_by_match(items: list[dict]) -> list[list[dict]]:
+    grouped: dict[object, list[dict]] = {}
+    for index, item in enumerate(items):
+        match_id = item.get("match_id")
+        key = match_id if match_id is not None else f"__missing_{index}"
+        grouped.setdefault(key, []).append(item)
+    return list(grouped.values())
+
+
+def get_available_pass_types(match_count: int | list[dict]) -> list[str]:
     """Return all pass types that are valid for the given number of matches.
 
     Includes straight M串1 options where M is not greater than current match_count.
     Compound M串N types are only exposed for their exact M-match ticket.
     """
+    items = match_count if isinstance(match_count, list) else None
+    if items is not None:
+        match_count = len(_group_items_by_match(items))
     available: list[str] = []
     if match_count >= 1:
-        available.append("single")
+        if items is None or any(item.get("is_single_allowed", True) for item in items):
+            available.append("single")
+    pass_allowed = items is None or all(item.get("is_pass_allowed", True) for item in items)
+    strictest_limit = min(
+        (PLAY_TYPE_MAX_MATCHES.get(item.get("play_type", "spf"), 8) for item in (items or [])),
+        default=8,
+    )
     for pt, specs in PASS_TYPE_REGISTRY.items():
         if pt == "single":
             continue
+        if not pass_allowed:
+            continue
         if pt.endswith("x1"):
             required = int(pt.split("x")[0])
-            if required <= match_count:
+            if required <= match_count and required <= strictest_limit:
                 available.append(pt)
             continue
         for n, _k in specs:
-            if n == match_count:
+            if n == match_count and n <= strictest_limit:
                 available.append(pt)
                 break
     return available
@@ -194,18 +214,22 @@ def calculate_bet_combinations(
     if pass_type not in PASS_TYPE_REGISTRY:
         raise ValueError(f"Unknown pass_type: {pass_type}")
 
-    n_matches = len(matches)
+    match_groups = _group_items_by_match(matches)
+    n_matches = len(match_groups)
     specs = PASS_TYPE_REGISTRY[pass_type]
 
     # Separate dan (banker) matches — they appear in ALL combos
-    dan_matches = [m for m in matches if m.get("is_dan")]
-    normal_matches = [m for m in matches if not m.get("is_dan")]
-    n_dan = len(dan_matches)
-    n_normal = len(normal_matches)
+    dan_groups = [group for group in match_groups if any(item.get("is_dan") for item in group)]
+    normal_groups = [group for group in match_groups if not any(item.get("is_dan") for item in group)]
+    n_dan = len(dan_groups)
+    n_normal = len(normal_groups)
+
+    def expand(groups: list[list[dict]]) -> list[list[dict]]:
+        return [list(selection) for selection in product(*groups)] if groups else [[]]
 
     if pass_type == "single":
         # Each match is its own independent bet (1x1)
-        return [[m] for m in matches]
+        return [[item] for group in match_groups for item in group if item.get("is_single_allowed", True)]
 
     if pass_type.endswith("x1") and pass_type != "single":
         # M串1: choose every M-match combination from the current selections.
@@ -221,10 +245,11 @@ def calculate_bet_combinations(
                 f"at most {k} matches can be in a combo"
             )
         if k_effective == 0:
-            return [list(dan_matches)]
+            return expand(dan_groups)
         return [
-            dan_matches + [normal_matches[i] for i in combo_indices]
+            concrete
             for combo_indices in combinations(range(n_normal), k_effective)
+            for concrete in expand(dan_groups + [normal_groups[i] for i in combo_indices])
         ]
 
     # M串N: generate k-combinations per spec
@@ -243,11 +268,11 @@ def calculate_bet_combinations(
             )
         if k_effective == 0:
             # All required matches are dan → one combo of just dan matches
-            bet_combos.append(list(dan_matches))
+            bet_combos.extend(expand(dan_groups))
         else:
             for combo_indices in combinations(range(n_normal), k_effective):
-                combo = dan_matches + [normal_matches[i] for i in combo_indices]
-                bet_combos.append(combo)
+                groups = dan_groups + [normal_groups[i] for i in combo_indices]
+                bet_combos.extend(expand(groups))
 
     return bet_combos
 
@@ -269,6 +294,27 @@ def calculate_max_prize(
             combo_sp *= float(item["sp_value"])
         total += combo_sp * 2.0  # 2 yuan base per bet
     return round(total * multiple, 2)
+
+
+def calculate_winning_prize(
+    items: list[dict], pass_types: str | list[str], multiple: int = 1
+) -> float:
+    """Calculate the actual prize from settled selections.
+
+    Each item must include ``is_won``. Selections from the same match are
+    alternatives, so only one can enter a concrete combination. Multiple pass
+    labels are settled independently and their winning prizes are added.
+    """
+    total = 0.0
+    for pass_type in parse_pass_types(pass_types):
+        for combo in calculate_bet_combinations(items, pass_type):
+            if not combo or not all(bool(item.get("is_won")) for item in combo):
+                continue
+            combo_sp = 1.0
+            for item in combo:
+                combo_sp *= float(item["sp_value"])
+            total += combo_sp * 2.0 * multiple
+    return round(total, 2)
 
 
 def calculate_cost(match_count: int, pass_type: str, multiple: int = 1) -> float:
@@ -300,21 +346,20 @@ def calculate_all(
         items: list of bet item dicts with {match_id, play_type, option_code,
                option_name, sp_value, handicap, is_dan}
         pass_type: e.g. 'single', '2x1', '4x11'
-        multiple: multiplier (1-99)
+        multiple: multiplier (1-50)
 
     Returns:
         {pass_type, multiple, bet_count, total_cost, max_prize, match_count,
          combinations: [{items, combo_sp, max_prize}]}
     """
-    info = get_pass_type_info(pass_type)
-    match_count = len(items)
+    match_count = len(_group_items_by_match(items))
 
     # Generate combinations
     combos = calculate_bet_combinations(items, pass_type)
 
     # Cost
     bet_count = len(combos)
-    total_cost = calculate_cost(match_count, pass_type, multiple)
+    total_cost = round(bet_count * 2 * multiple, 2)
     max_prize = calculate_max_prize(combos, multiple)
 
     # Format combinations for response
@@ -344,6 +389,7 @@ def calculate_all(
         "total_cost": total_cost,
         "max_prize": max_prize,
         "match_count": match_count,
+        "selection_count": len(items),
         "combinations": combo_details,
     }
 
@@ -356,13 +402,13 @@ def validate_items(items: list[dict], pass_type: str) -> list[str]:
         errors.append("至少需要选择1场比赛")
         return errors
 
-    # Official mixed-parlay rule: one match may appear only once in a ticket.
-    # This also prevents combining different games from the same match.
     match_ids = [item.get("match_id") for item in items]
     if any(match_id is None for match_id in match_ids):
         errors.append("每个投注项必须包含官方比赛编号")
-    if len(match_ids) != len(set(match_ids)):
-        errors.append("同一场比赛不能在同一张过关票中重复选择不同玩法")
+    selection_keys = [(item.get("match_id"), item.get("play_type"), item.get("option_code")) for item in items]
+    if len(selection_keys) != len(set(selection_keys)):
+        errors.append("同一场比赛的同一投注选项不能重复添加")
+    match_count = len(set(match_ids))
 
     # Check pass type exists
     if pass_type not in PASS_TYPE_REGISTRY:
@@ -370,45 +416,38 @@ def validate_items(items: list[dict], pass_type: str) -> list[str]:
         return errors
 
     if pass_type == "single":
+        if not any(item.get("is_single_allowed", True) for item in items):
+            errors.append(f"比赛 {items[0].get('match_id')} 的该玩法不支持单关")
+    else:
         for item in items:
-            if item.get("is_single_allowed") is False:
-                errors.append(f"比赛 {item.get('match_id')} 的该玩法不支持单关")
+            if item.get("is_pass_allowed") is False:
+                errors.append(f"比赛 {item.get('match_id')} 的该玩法仅支持单场")
 
     # Check match count matches pass type
     info = get_pass_type_info(pass_type)
     if pass_type != "single":
         if pass_type.endswith("x1"):
             n_have = int(pass_type.split("x")[0])
-            if len(items) < n_have:
+            if match_count < n_have:
                 errors.append(
-                    f"过关方式 '{pass_type}' 至少需要 {n_have} 场比赛，当前选择了 {len(items)} 场"
+                    f"过关方式 '{pass_type}' 至少需要 {n_have} 场比赛，当前选择了 {match_count} 场"
                 )
         else:
             for n_have, _k in info["combo_specs"]:
-                if len(items) != n_have:
+                if match_count != n_have:
                     errors.append(
-                        f"过关方式 '{pass_type}' 需要恰好 {n_have} 场比赛，当前选择了 {len(items)} 场"
+                        f"过关方式 '{pass_type}' 需要恰好 {n_have} 场比赛，当前选择了 {match_count} 场"
                     )
                     break
 
     # Check per-play-type max matches
     play_types: set[str] = {item.get("play_type", "spf") for item in items}
-    if len(play_types) > 1:
-        # Mixed parlay — check each play type count against its limit
-        for pt in play_types:
-            pt_count = sum(1 for item in items if item.get("play_type") == pt)
-            pt_max = PLAY_TYPE_MAX_MATCHES.get(pt, 8)
-            if pt_count > pt_max:
-                errors.append(
-                    f"玩法 '{PLAY_TYPE_LABELS.get(pt, pt)}' 最多选 {pt_max} 场，当前选了 {pt_count} 场"
-                )
-    else:
-        pt = next(iter(play_types))
-        pt_max = PLAY_TYPE_MAX_MATCHES.get(pt, 8)
-        if len(items) > pt_max:
-            errors.append(
-                f"玩法 '{PLAY_TYPE_LABELS.get(pt, pt)}' 最多选 {pt_max} 场，当前选了 {len(items)} 场"
-            )
+    strictest_play = min(play_types, key=lambda pt: PLAY_TYPE_MAX_MATCHES.get(pt, 8))
+    strictest_max = PLAY_TYPE_MAX_MATCHES.get(strictest_play, 8)
+    if match_count > strictest_max:
+        errors.append(
+            f"玩法 '{PLAY_TYPE_LABELS.get(strictest_play, strictest_play)}' 最多选 {strictest_max} 场，当前选了 {match_count} 场"
+        )
 
     # Validate sp_value
     for i, item in enumerate(items):

@@ -4,6 +4,7 @@ from scripts.official_crawler import (
     crawl_official_odds_snapshot,
     crawl_official_results,
     parse_matches_from_response,
+    parse_odds_snapshots_from_match,
     parse_results_from_response,
 )
 
@@ -38,6 +39,31 @@ def test_parse_uniform_match_keeps_official_display_code_and_sale_status():
     assert match["official_match_code"] == "周五098"
     assert match["sale_status"] == "selling"
     assert match["match_status"] == "scheduled"
+
+
+def test_current_pool_flags_drive_single_and_pass_availability():
+    sub_match = {
+        "matchNumStr": "周日203",
+        "matchDate": "2026-07-12",
+        "matchTime": "18:30",
+        "leagueAllName": "韩国职业联赛",
+        "homeTeamAllName": "首尔FC",
+        "awayTeamAllName": "江原FC",
+        "sellStatus": "1",
+        "oddsList": [{"poolCode": "CRS", "h": 8.5, "d": 5.5, "a": 7.3}],
+        "poolList": [{"poolCode": "CRS", "cbtSingle": 1, "cbtAllUp": 1}],
+    }
+    raw = {"value": {"matchInfoList": [{"businessDate": "2026-07-12", "subMatchList": [sub_match]}]}}
+
+    match = parse_matches_from_response(raw, "2026-07-12")[0]
+    market = match["_markets"][0]
+    snapshots = parse_odds_snapshots_from_match(sub_match, "2026-07-12T12:00:00")
+
+    assert market["is_single_allowed"] is True
+    assert market["is_pass_allowed"] is True
+    assert market["raw_json"]["_pool"]["cbtSingle"] == 1
+    assert all(snapshot["is_single_allowed"] is True for snapshot in snapshots)
+    assert all(snapshot["is_pass_allowed"] is True for snapshot in snapshots)
 
 
 def test_blocked_sporttery_results_use_labeled_500_supplement_for_existing_official_matches():

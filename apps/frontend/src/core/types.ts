@@ -749,6 +749,7 @@ export interface SimulatorOddsOption {
 export interface SimulatorOddsGroup {
   handicap?: number | null;
   is_single_allowed?: boolean;
+  is_pass_allowed?: boolean;
   options: SimulatorOddsOption[];
 }
 
@@ -785,6 +786,7 @@ export interface BetSlipItem {
   sp_value: number;
   handicap?: number | null;
   is_single_allowed?: boolean;
+  is_pass_allowed?: boolean;
   is_dan: boolean;
   basis?: {
     source: 'manual' | 'ocr' | 'recommendation';
@@ -813,6 +815,8 @@ export interface CalculateItem {
   sp_value: number;
   handicap?: number | null;
   is_dan: boolean;
+  is_single_allowed?: boolean;
+  is_pass_allowed?: boolean;
 }
 
 export interface CalculationResult {
@@ -822,6 +826,7 @@ export interface CalculationResult {
   total_cost: number;
   max_prize: number;
   match_count: number;
+  selection_count?: number;
   combinations: BetComboDetail[];
   available_pass_types: string[];
 }

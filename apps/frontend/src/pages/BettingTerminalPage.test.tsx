@@ -126,7 +126,8 @@ vi.mock('../core/apiClient', () => ({
     bettingTerminal: {
       matches: vi.fn(async () => ({ matches: [match, secondMatch, thirdMatch], total: 3 })),
       calculate: vi.fn(async (body: { items: unknown[]; pass_type: string; multiple: number }) => {
-        const matchCount = body.items.length;
+        const typedItems = body.items as Array<{ match_id: number }>;
+        const matchCount = new Set(typedItems.map((item) => item.match_id)).size;
         const passTypes = matchCount >= 3 ? ['single', '2x1', '3x1', '3x3', '3x4'] : matchCount >= 2 ? ['single', '2x1'] : ['single'];
         return {
           pass_type: body.pass_type,
@@ -223,6 +224,20 @@ describe('BettingTerminalPage', () => {
     expect(within(slipPanel).getAllByText('¥2.00').length).toBeGreaterThan(0);
   }, 10_000);
 
+  it('shows single and pass availability for every offered play in all-games view', async () => {
+    render(<BettingTerminalPage />);
+
+    const terminalPanel = await screen.findByLabelText('投注器');
+    const combinedOdds = within(terminalPanel).getAllByLabelText('胜负平/让球赔率')[0];
+    fireEvent.click(within(combinedOdds).getByRole('button', { name: /全部\s*游戏/ }));
+
+    const dialog = screen.getByRole('dialog', { name: '全部游戏' });
+    expect(within(dialog).getByLabelText('支持单场，支持过关')).toBeInTheDocument();
+    expect(within(dialog).getByLabelText('不支持单场，支持过关')).toBeInTheDocument();
+    expect(within(dialog).getByText('单场')).toHaveClass('is-single');
+    expect(within(dialog).getAllByText('过关')[0]).toHaveClass('is-pass');
+  });
+
   it('offers pass type buttons in the terminal based on selected matches', async () => {
     render(<BettingTerminalPage />);
 
@@ -244,7 +259,7 @@ describe('BettingTerminalPage', () => {
 
     expect(within(terminalPanel).getByLabelText('投注倍数')).toHaveValue(2);
     expect(within(slipPanel).getByText('2 倍')).toBeInTheDocument();
-    expect(within(slipPanel).getByText('2 场')).toBeInTheDocument();
+    expect(within(slipPanel).getByText('2 场 / 2 项')).toBeInTheDocument();
     expect(within(slipPanel).getByText('1 组')).toBeInTheDocument();
     expect(within(slipPanel).getByText('1 注')).toBeInTheDocument();
     expect(within(slipPanel).getAllByText('¥4.00').length).toBeGreaterThan(0);
@@ -283,12 +298,12 @@ describe('BettingTerminalPage', () => {
     fireEvent.click(within(terminalPanel).getByRole('button', { name: '主负3.20' }));
 
     await waitFor(() => {
-      expect(within(slipPanel).getByText('2 场')).toBeInTheDocument();
+      expect(within(slipPanel).getByText('2 场 / 2 项')).toBeInTheDocument();
     });
     expect(within(terminalPanel).queryByText('天津津门虎 vs 河南队')).not.toBeInTheDocument();
   });
 
-  it('replaces a selection when another play is picked from the same match', async () => {
+  it('keeps multiple selections from the same match as复式备选', async () => {
     render(<BettingTerminalPage />);
 
     const terminalPanel = await screen.findByLabelText('投注器');
@@ -303,16 +318,16 @@ describe('BettingTerminalPage', () => {
     fireEvent.click(within(terminalPanel).getAllByRole('button', { name: '主负2.20' })[0]);
 
     await waitFor(() => {
-      expect(within(slipPanel).getByText('主负')).toBeInTheDocument();
+      expect(within(slipPanel).getAllByText('主负')).toHaveLength(2);
+      expect(within(slipPanel).getByText('@ 4.90')).toBeInTheDocument();
       expect(within(slipPanel).getByText('@ 2.20')).toBeInTheDocument();
     });
-    expect(within(slipPanel).getByText('1 场')).toBeInTheDocument();
-    expect(within(slipPanel).queryByText('@ 4.90')).not.toBeInTheDocument();
+    expect(within(slipPanel).getByText('1 场 / 2 项')).toBeInTheDocument();
     expect(within(slipPanel).getAllByText('让球胜平负')).toHaveLength(2);
     expect(
       within(terminalPanel)
         .getAllByRole('button')
         .filter((button) => button.getAttribute('aria-pressed') === 'true'),
-    ).toHaveLength(1);
+    ).toHaveLength(2);
   });
 });

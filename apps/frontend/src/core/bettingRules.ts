@@ -103,7 +103,13 @@ export function normalizePassType(mode: TicketMode, selectedPassType: string, ma
 }
 
 export function canUseSinglePass(items: BetSlipItem[]): boolean {
-  return items.length > 0 && items.every((item) => item.is_single_allowed === true);
+  return items.some((item) => item.is_single_allowed === true);
+}
+
+function groupItemsByMatch(items: BetSlipItem[]): BetSlipItem[][] {
+  const grouped = new Map<number, BetSlipItem[]>();
+  items.forEach((item) => grouped.set(item.match_id, [...(grouped.get(item.match_id) ?? []), item]));
+  return [...grouped.values()];
 }
 
 export function getPassTypeRequiredMatchCount(passType: string): number | null {
@@ -132,12 +138,15 @@ export function getPassTypeGroupCount(matchCount: number, passType: string): num
 
 /** Returns every officially supported pass type for the current selections. */
 export function getAvailablePassTypes(items: BetSlipItem[]): string[] {
-  const matchCount = items.length;
+  const matchCount = groupItemsByMatch(items).length;
   if (matchCount === 0) return [];
 
   return Object.entries(PASS_TYPE_SPECS)
     .filter(([passType, specs]) => {
       if (passType === 'single') return canUseSinglePass(items);
+      if (items.some((item) => item.is_pass_allowed === false)) return false;
+      const strictestLimit = Math.min(...items.map((item) => getPlayRule(item.play_type).maxMatches));
+      if (specs.some(([required]) => required > strictestLimit)) return false;
       if (passType.endsWith('x1')) return matchCount >= specs[0][0];
       return specs.some(([requiredMatchCount]) => requiredMatchCount === matchCount);
     })
@@ -155,17 +164,37 @@ export function getAvailablePassTypes(items: BetSlipItem[]): string[] {
  * is the same amount that will be archived on the ticket.
  */
 export function getPassTypeBetCount(items: BetSlipItem[], passType: string): number {
-  if (passType === 'single') return canUseSinglePass(items) ? items.length : 0;
+  if (passType === 'single') return items.filter((item) => item.is_single_allowed === true).length;
   const specs = PASS_TYPE_SPECS[passType];
   if (!specs || items.length === 0) return 0;
-  const danCount = items.filter((item) => item.is_dan).length;
-  const normalCount = items.length - danCount;
+  const groups = groupItemsByMatch(items);
+  const danGroups = groups.filter((group) => group.some((item) => item.is_dan));
+  const normalGroups = groups.filter((group) => !group.some((item) => item.is_dan));
+  const danCount = danGroups.length;
+  const normalCount = normalGroups.length;
+  const danWeight = danGroups.reduce((weight, group) => weight * group.length, 1);
+
+  const weightedCombinations = (count: number): number => {
+    if (count < 0 || count > normalGroups.length) return 0;
+    let total = 0;
+    const visit = (start: number, remaining: number, weight: number) => {
+      if (remaining === 0) {
+        total += weight;
+        return;
+      }
+      for (let index = start; index <= normalGroups.length - remaining; index += 1) {
+        visit(index + 1, remaining - 1, weight * normalGroups[index].length);
+      }
+    };
+    visit(0, count, danWeight);
+    return total;
+  };
 
   return specs.reduce((total, [requiredMatchCount, selectionCount]) => {
-    if (passType.endsWith('x1') ? items.length < requiredMatchCount : items.length !== requiredMatchCount) return total;
+    if (passType.endsWith('x1') ? groups.length < requiredMatchCount : groups.length !== requiredMatchCount) return total;
     const normalSelections = selectionCount - danCount;
     if (normalSelections < 0 || normalSelections > normalCount) return total;
-    return total + combination(normalCount, normalSelections);
+    return total + weightedCombinations(normalSelections);
   }, 0);
 }
 
@@ -181,17 +210,11 @@ export function getSlipWarnings(items: BetSlipItem[], passType: string): string[
   const warnings: string[] = [];
   if (items.length === 0) return warnings;
 
-  const countsByPlay = new Map<string, number>();
-  items.forEach((item) => {
-    countsByPlay.set(item.play_type, (countsByPlay.get(item.play_type) ?? 0) + 1);
-  });
-
-  countsByPlay.forEach((count, playType) => {
-    const rule = getPlayRule(playType);
-    if (count > rule.maxMatches) {
-      warnings.push(`${rule.label}最多支持${rule.maxMatches}场，当前${count}场。`);
-    }
-  });
+  const matchCount = groupItemsByMatch(items).length;
+  const strictestRule = items.map((item) => getPlayRule(item.play_type)).reduce((left, right) => left.maxMatches <= right.maxMatches ? left : right);
+  if (matchCount > strictestRule.maxMatches) {
+    warnings.push(`${strictestRule.label}最多支持${strictestRule.maxMatches}场，当前${matchCount}场。`);
+  }
 
   if (passType === 'single') {
     if (!canUseSinglePass(items)) {
@@ -200,17 +223,16 @@ export function getSlipWarnings(items: BetSlipItem[], passType: string): string[
     return warnings;
   }
 
-  const selectedMatchIds = new Set(items.map((item) => item.match_id));
-  if (selectedMatchIds.size !== items.length) {
-    warnings.push('同一场比赛的不同玩法不可串关，请只保留该场一个玩法。');
+  if (items.some((item) => item.is_pass_allowed === false)) {
+    warnings.push('所选比赛包含仅支持单场的选项，不能用于过关。');
   }
 
   const requiredMatchCount = getPassTypeRequiredMatchCount(passType);
-  if (requiredMatchCount != null && items.length < requiredMatchCount) {
-    warnings.push(`${passType.replace('x', '串')}至少需要${requiredMatchCount}场，当前${items.length}场。`);
+  if (requiredMatchCount != null && matchCount < requiredMatchCount) {
+    warnings.push(`${passType.replace('x', '串')}至少需要${requiredMatchCount}场，当前${matchCount}场。`);
   }
 
-  if (items.length >= (requiredMatchCount ?? 0) && getPassTypeBetCount(items, passType) === 0) {
+  if (matchCount >= (requiredMatchCount ?? 0) && getPassTypeBetCount(items, passType) === 0) {
     warnings.push(`${passType.replace('x', '串')}的胆码数量不符合该过关方式。`);
   }
 

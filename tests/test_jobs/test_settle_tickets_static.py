@@ -17,7 +17,8 @@ def test_simulator_prize_credit_uses_simulator_win_flag():
     source = SETTLE_TICKETS.read_text(encoding="utf-8")
     simulator_section = _section(source, "# 3. Settle simulator tickets", "# 4. Settle real tickets")
 
-    assert "if all_won and net_prize > 0:" in simulator_section
+    assert "if ticket_won and net_prize > 0:" in simulator_section
+    assert "calculate_winning_prize(detail, pass_type, multiple)" in simulator_section
     assert "if ticket_all_won and net_prize > 0:" not in simulator_section
 
 

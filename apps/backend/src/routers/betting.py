@@ -32,6 +32,8 @@ class BettingTicketItemRequest(BaseModel):
     sp_value: float
     handicap: float | None = None
     is_dan: bool = False
+    is_single_allowed: bool = True
+    is_pass_allowed: bool = True
     official_match_code: str | None = None
 
 
@@ -39,7 +41,7 @@ class CreateBettingTicketRequest(BaseModel):
     source: str = Field(..., description="simulator | real-user | real-agent")
     play_type: str = "spf"
     pass_type: str = "single"
-    multiple: int = Field(1, ge=1, le=99)
+    multiple: int = Field(1, ge=1, le=50)
     items: list[BettingTicketItemRequest]
     notes: str = ""
     ticket_no: str | None = None

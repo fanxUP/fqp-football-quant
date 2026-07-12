@@ -137,6 +137,8 @@ function buildSubmitItems(betSlip: BetSlipItem[]) {
     sp_value: item.sp_value,
     handicap: item.handicap ?? undefined,
     is_dan: item.is_dan,
+    is_single_allowed: item.is_single_allowed,
+    is_pass_allowed: item.is_pass_allowed,
   }));
 }
 
@@ -232,6 +234,11 @@ export default function BettingTerminalPage() {
   const localTotalCost = useMemo(
     () => localGroupCount * STAKE_UNIT * multiple,
     [localGroupCount, multiple],
+  );
+
+  const selectedMatchCount = useMemo(
+    () => new Set(betSlip.map((item) => item.match_id)).size,
+    [betSlip],
   );
 
   const isDanAvailable = normalizedPassTypes.some((passType) => passType !== 'single');
@@ -357,7 +364,9 @@ export default function BettingTerminalPage() {
     playType: SportteryPlayType,
     option: BettingOddsOption,
   ) => {
-    const existingIdx = betSlip.findIndex((item) => item.match_id === match.match_id);
+    const existingIdx = betSlip.findIndex(
+      (item) => item.match_id === match.match_id && item.play_type === playType && item.option_code === option.option_code,
+    );
     const nextItem: BetSlipItem = {
       match_id: match.match_id,
       home_team: match.home_team_name,
@@ -371,6 +380,7 @@ export default function BettingTerminalPage() {
       sp_value: option.sp_value,
       handicap: playType === 'rqspf' ? (match.odds.rqspf?.handicap ?? null) : undefined,
       is_single_allowed: match.odds[playType]?.is_single_allowed === true,
+      is_pass_allowed: match.odds[playType]?.is_pass_allowed !== false,
       is_dan: false,
       basis: {
         source: 'manual',
@@ -379,13 +389,7 @@ export default function BettingTerminalPage() {
     };
 
     if (existingIdx >= 0) {
-      if (betSlip[existingIdx].play_type === playType && betSlip[existingIdx].option_code === option.option_code) {
-        setBetSlip(betSlip.filter((_, itemIndex) => itemIndex !== existingIdx));
-        return;
-      }
-      const updated = [...betSlip];
-      updated[existingIdx] = nextItem;
-      setBetSlip(updated);
+      setBetSlip(betSlip.filter((_, itemIndex) => itemIndex !== existingIdx));
       return;
     }
     setBetSlip([...betSlip, nextItem]);
@@ -410,6 +414,7 @@ export default function BettingTerminalPage() {
       sp_value: matchedOption?.sp_value ?? recommendation.fair_odds,
       handicap: playType === 'rqspf' ? (matched?.odds.rqspf?.handicap ?? null) : undefined,
       is_single_allowed: matched?.odds[playType]?.is_single_allowed === true,
+      is_pass_allowed: matched?.odds[playType]?.is_pass_allowed !== false,
       is_dan: false,
       basis: {
         source: 'recommendation',
@@ -423,7 +428,9 @@ export default function BettingTerminalPage() {
       },
     };
 
-    const existingIdx = betSlip.findIndex((item) => item.match_id === nextItem.match_id);
+    const existingIdx = betSlip.findIndex(
+      (item) => item.match_id === nextItem.match_id && item.play_type === nextItem.play_type && item.option_code === nextItem.option_code,
+    );
     if (existingIdx >= 0) {
       const updated = [...betSlip];
       updated[existingIdx] = nextItem;
@@ -439,9 +446,9 @@ export default function BettingTerminalPage() {
 
   const toggleDan = (index: number) => {
     if (!isDanAvailable) return;
-    const updated = [...betSlip];
-    updated[index] = { ...updated[index], is_dan: !updated[index].is_dan };
-    setBetSlip(updated);
+    const target = betSlip[index];
+    const nextDan = !target.is_dan;
+    setBetSlip(betSlip.map((item) => item.match_id === target.match_id ? { ...item, is_dan: nextDan } : item));
   };
 
   const togglePassType = (passType: string) => {
@@ -452,6 +459,11 @@ export default function BettingTerminalPage() {
       return;
     }
     setSelectedPassTypes([...selectedPassTypes, passType]);
+  };
+
+  const selectMobilePassType = (passType: string) => {
+    setPassSelectionMode('manual');
+    setSelectedPassTypes([passType]);
   };
 
   const clearSlip = () => {
@@ -513,7 +525,7 @@ export default function BettingTerminalPage() {
         setPassSelectionMode(nextPassTypes.length > 0 ? 'manual' : 'auto');
       }
       if (result.multiple && Number.isFinite(result.multiple)) {
-        setMultiple(Math.min(99, Math.max(1, result.multiple)));
+        setMultiple(Math.min(50, Math.max(1, result.multiple)));
       }
       if (result.success) {
         toast.success(`OCR 已投射到投注器：自动匹配 ${mapping.mapped.length} 场，请核对后确认投注。`);
@@ -600,6 +612,17 @@ export default function BettingTerminalPage() {
     );
   };
 
+  const renderPlayAvailability = (match: BettingMatch, playType: SportteryPlayType) => {
+    const group = match.odds[playType];
+    if (!group?.options?.length) return null;
+    return (
+      <span className="betting-play-availability" aria-label={`${group.is_single_allowed ? '支持单场' : '不支持单场'}，${group.is_pass_allowed !== false ? '支持过关' : '不支持过关'}`}>
+        {group.is_single_allowed && <em className="is-single">单场</em>}
+        {group.is_pass_allowed !== false && <em className="is-pass">过关</em>}
+      </span>
+    );
+  };
+
   const renderCombinedWinDrawLossOdds = (match: BettingMatch) => {
     const spfOptions = match.odds.spf?.options ?? [];
     const rqspfOptions = match.odds.rqspf?.options ?? [];
@@ -612,14 +635,14 @@ export default function BettingTerminalPage() {
       if (value === undefined || value === null || value === 0) return '-';
       return value > 0 ? `+${value}` : String(value);
     };
-    const renderSaleMarker = (singleAllowed: boolean | undefined, handicap: string, label: string) => (
+    const renderSaleMarker = (singleAllowed: boolean | undefined, passAllowed: boolean | undefined, handicap: string, label: string) => (
       <div
         className={`betting-sale-marker ${singleAllowed ? 'is-single' : 'is-no-single'} ${handicap.startsWith('+') ? 'is-positive' : handicap.startsWith('-') ? 'is-negative' : ''}`}
-        aria-label={`${label}${singleAllowed ? '支持单关' : '不支持单关'}，支持过关，让球${handicap}`}
+        aria-label={`${label}${singleAllowed ? '支持单关' : '不支持单关'}，${passAllowed !== false ? '支持过关' : '不支持过关'}，让球${handicap}`}
       >
         <div className="betting-sale-flag" aria-hidden="true">
           <span>{singleAllowed ? '单' : '-'}</span>
-          <em>过</em>
+          <em className={passAllowed !== false ? '' : 'is-disabled'}>{passAllowed !== false ? '过' : '-'}</em>
         </div>
         <strong>{handicap}</strong>
       </div>
@@ -628,7 +651,7 @@ export default function BettingTerminalPage() {
     return (
       <div className="betting-combined-odds" aria-label="胜负平/让球赔率">
         <div className="betting-market-line">
-          {renderSaleMarker(match.odds.spf?.is_single_allowed, '-', '胜平负')}
+          {renderSaleMarker(match.odds.spf?.is_single_allowed, match.odds.spf?.is_pass_allowed, '-', '胜平负')}
           <div className="betting-odds-grid" data-play-type="spf">
             {spfOptions.length > 0
               ? orderedWinDrawLossOptions(spfOptions).map((option) => renderOddButton(match, 'spf', option))
@@ -636,7 +659,7 @@ export default function BettingTerminalPage() {
           </div>
         </div>
         <div className="betting-market-line">
-          {renderSaleMarker(match.odds.rqspf?.is_single_allowed, formatHandicap(rqspfHandicap), '让球胜平负')}
+          {renderSaleMarker(match.odds.rqspf?.is_single_allowed, match.odds.rqspf?.is_pass_allowed, formatHandicap(rqspfHandicap), '让球胜平负')}
           <div className="betting-odds-grid" data-play-type="rqspf">
             {rqspfOptions.length > 0
               ? orderedWinDrawLossOptions(rqspfOptions).map((option) => renderOddButton(match, 'rqspf', option))
@@ -782,7 +805,7 @@ export default function BettingTerminalPage() {
             <div className="betting-builder-head">
               <div>
                 <strong>方案设置</strong>
-                <span>{betSlip.length > 0 ? `已选 ${betSlip.length} 场` : '先点击赔率加入方案'}</span>
+                <span>{betSlip.length > 0 ? `已选 ${selectedMatchCount} 场 / ${betSlip.length} 项` : '先点击赔率加入方案'}</span>
               </div>
               <button type="button" className="fqp-btn fqp-btn-sm" onClick={clearSlip} disabled={betSlip.length === 0}>
                 清空方案
@@ -792,7 +815,7 @@ export default function BettingTerminalPage() {
             {betSlip.length > 0 && (
               <div className="betting-builder-picks">
                 {betSlip.map((item, index) => (
-                  <div key={`${item.match_id}-${item.play_type}`} className="betting-builder-pick">
+                  <div key={`${item.match_id}-${item.play_type}-${item.option_code}`} className="betting-builder-pick">
                     <div>
                       <span>{item.play_type_label}</span>
                       <strong style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -853,15 +876,15 @@ export default function BettingTerminalPage() {
                     type="number"
                     className="fqp-input"
                     min={1}
-                    max={99}
+                    max={50}
                     value={multiple}
                     onChange={(event) => {
                       const next = Number.parseInt(event.target.value, 10);
-                      if (Number.isFinite(next)) setMultiple(Math.min(99, Math.max(1, next)));
+                      if (Number.isFinite(next)) setMultiple(Math.min(50, Math.max(1, next)));
                     }}
                     aria-label="投注倍数"
                   />
-                  <button type="button" onClick={() => setMultiple(Math.min(99, multiple + 1))} disabled={multiple >= 99}>+</button>
+                  <button type="button" onClick={() => setMultiple(Math.min(50, multiple + 1))} disabled={multiple >= 50}>+</button>
                 </div>
               </label>
 
@@ -958,7 +981,7 @@ export default function BettingTerminalPage() {
           <div className="betting-slip-head">
             <div>
               <h3>投注单</h3>
-              <span>{betSlip.length} 场</span>
+              <span>{selectedMatchCount} 场 / {betSlip.length} 项</span>
             </div>
           </div>
 
@@ -970,7 +993,7 @@ export default function BettingTerminalPage() {
           ) : (
             <div className="betting-slip-items">
               {betSlip.map((item, index) => (
-                <div key={`${item.match_id}-${item.play_type}`} className="betting-slip-item">
+                <div key={`${item.match_id}-${item.play_type}-${item.option_code}`} className="betting-slip-item">
                   <div>
                     <span>{item.play_type_label}</span>
                     <strong style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -1020,6 +1043,59 @@ export default function BettingTerminalPage() {
               {slipWarnings.map((warning) => (
                 <div key={warning}>{warning}</div>
               ))}
+            </div>
+          )}
+
+          {betSlip.length > 0 && (
+            <div className="betting-mobile-slip-panel" aria-label="移动端投注方案">
+              <div className="betting-mobile-slip-overview">
+                <div className="betting-mobile-selected-count">
+                  <strong>{selectedMatchCount}</strong>
+                  <span>已选</span>
+                </div>
+                <div>
+                  <strong>共计：{localGroupCount} 注 {money(localTotalCost)} 元</strong>
+                  <span>理论最高奖金：{money(calcResult?.max_prize ?? 0)}元</span>
+                </div>
+              </div>
+              <div className="betting-mobile-pass-buttons" role="group" aria-label="移动端过关方式">
+                {availablePassTypes
+                  .filter((type) => type === 'single' || type.endsWith('x1'))
+                  .map((type) => (
+                    <button
+                      key={type}
+                      type="button"
+                      className={normalizedPassTypes.includes(type) ? 'is-active' : ''}
+                      aria-pressed={normalizedPassTypes.includes(type)}
+                      onClick={() => selectMobilePassType(type)}
+                    >
+                      {type === 'single' ? '单场' : `${type.split('x')[0]}关`}
+                    </button>
+                  ))}
+              </div>
+              <div className="betting-mobile-slip-controls">
+                <strong>
+                  {normalizedPassTypes.length === 1
+                    ? normalizedPassTypes[0] === 'single'
+                      ? '单场'
+                      : `${normalizedPassTypes[0].split('x')[0]}关`
+                    : `${normalizedPassTypes.length}种过关`}
+                </strong>
+                <span>倍数</span>
+                <button type="button" onClick={() => setMultiple(Math.max(1, multiple - 1))} disabled={multiple <= 1}>−</button>
+                <input
+                  type="number"
+                  min={1}
+                  max={50}
+                  value={multiple}
+                  onChange={(event) => {
+                    const next = Number.parseInt(event.target.value, 10);
+                    if (Number.isFinite(next)) setMultiple(Math.min(50, Math.max(1, next)));
+                  }}
+                  aria-label="移动端投注倍数"
+                />
+                <button type="button" onClick={() => setMultiple(Math.min(50, multiple + 1))} disabled={multiple >= 50}>＋</button>
+              </div>
             </div>
           )}
 
@@ -1099,11 +1175,11 @@ export default function BettingTerminalPage() {
               <button type="button" aria-label="关闭全部游戏" onClick={() => setAllGamesMatch(null)}>×</button>
             </header>
             <div className="betting-all-games-content">
-              <section><h4>胜平负</h4>{renderSinglePlayOdds(allGamesMatch, 'spf')}</section>
-              <section><h4>让球胜平负</h4>{renderSinglePlayOdds(allGamesMatch, 'rqspf')}</section>
-              <section><h4>比分</h4>{renderSinglePlayOdds(allGamesMatch, 'bf')}</section>
-              <section><h4>总进球数</h4>{renderSinglePlayOdds(allGamesMatch, 'zjq')}</section>
-              <section><h4>半全场</h4>{renderSinglePlayOdds(allGamesMatch, 'bqc')}</section>
+              <section><h4><span>胜平负</span>{renderPlayAvailability(allGamesMatch, 'spf')}</h4>{renderSinglePlayOdds(allGamesMatch, 'spf')}</section>
+              <section><h4><span>让球胜平负</span>{renderPlayAvailability(allGamesMatch, 'rqspf')}</h4>{renderSinglePlayOdds(allGamesMatch, 'rqspf')}</section>
+              <section><h4><span>比分</span>{renderPlayAvailability(allGamesMatch, 'bf')}</h4>{renderSinglePlayOdds(allGamesMatch, 'bf')}</section>
+              <section><h4><span>总进球数</span>{renderPlayAvailability(allGamesMatch, 'zjq')}</h4>{renderSinglePlayOdds(allGamesMatch, 'zjq')}</section>
+              <section><h4><span>半全场</span>{renderPlayAvailability(allGamesMatch, 'bqc')}</h4>{renderSinglePlayOdds(allGamesMatch, 'bqc')}</section>
             </div>
             <button type="button" className="betting-all-games-close" onClick={() => setAllGamesMatch(null)}>关闭</button>
           </section>

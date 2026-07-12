@@ -18,6 +18,7 @@ from typing import Any
 
 from apps.backend.src.db import get_db
 from scripts.five100_client import get_match_results as get_results_via_500
+from scripts.official_odds_history import store_fixed_bonus_history
 from scripts.official_storage import (
     log_crawl,
     record_official_collection_status,
@@ -29,7 +30,6 @@ from scripts.official_storage import (
     store_results,
     update_health,
 )
-from scripts.official_odds_history import store_fixed_bonus_history
 from scripts.play_type_registry import (
     OPTION_LABELS,
     TRADITIONAL_GAME_TYPES,
@@ -145,10 +145,19 @@ def parse_matches_from_response(
             for pl in pool_list:
                 pl_code = pl.get("poolCode", "")
                 pl_play_type = POOL_CODE_MAP.get(pl_code, pl_code.lower())
-                pl_single = pl.get("single", 0) == 1 or pl.get("bettingSingle", 0) == 1
+                pl_single = any(
+                    pl.get(field, 0) == 1
+                    for field in ("single", "bettingSingle", "cbtSingle", "intSingle")
+                )
+                pl_pass = any(
+                    pl.get(field, 0) == 1
+                    for field in ("allUp", "bettingAllup", "cbtAllUp", "intAllUp")
+                )
                 for mkt in markets:
                     if mkt["play_type"] == pl_play_type:
                         mkt["is_single_allowed"] = pl_single
+                        mkt["is_pass_allowed"] = pl_pass
+                        mkt["raw_json"] = {**mkt["raw_json"], "_pool": pl}
 
             matches.append(
                 {
@@ -197,6 +206,13 @@ def parse_odds_snapshots_from_match(
             pass
 
     odds_list = match_raw.get("oddsList", [])
+    pool_capabilities = {
+        pl.get("poolCode", ""): {
+            "single": any(pl.get(field, 0) == 1 for field in ("single", "bettingSingle", "cbtSingle", "intSingle")),
+            "pass": any(pl.get(field, 0) == 1 for field in ("allUp", "bettingAllup", "cbtAllUp", "intAllUp")),
+        }
+        for pl in match_raw.get("poolList", [])
+    }
     seen_pool_codes: set[str] = set()
     for odds in odds_list:
         pool_code = odds.get("poolCode", "")
@@ -205,6 +221,7 @@ def parse_odds_snapshots_from_match(
         seen_pool_codes.add(pool_code)
 
         play_type = POOL_CODE_MAP.get(pool_code, pool_code.lower())
+        capability = pool_capabilities.get(pool_code, {})
         handicap = odds.get("goalLine")
         if handicap is not None and handicap != "":
             try:
@@ -238,8 +255,9 @@ def parse_odds_snapshots_from_match(
                     "sp_value": sp_val,
                     "handicap": handicap_val,
                     "is_open": odds.get("isOpen", True),
-                    "is_single_allowed": odds.get("isSingleAllowed", False),
-                    "raw_json": odds,
+                    "is_single_allowed": capability.get("single", odds.get("isSingleAllowed", False)),
+                    "is_pass_allowed": capability.get("pass", True),
+                    "raw_json": {**odds, "_pool": next((pl for pl in match_raw.get("poolList", []) if pl.get("poolCode") == pool_code), {})},
                 }
             )
 

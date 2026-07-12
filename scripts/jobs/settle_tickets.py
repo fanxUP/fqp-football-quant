@@ -17,6 +17,7 @@ from scripts.real_ticket_storage import (
     create_bankroll_transaction,
     create_settlement,
 )
+from scripts.simulator_calculator import calculate_winning_prize
 from scripts.simulator_storage import update_ticket_status as update_sim_ticket_status
 
 
@@ -351,8 +352,6 @@ def run(dry_run: bool = False) -> dict[str, Any]:
                     all_sitems = cur.fetchall()
 
                 unsettled = False
-                all_won = True
-                product_sp = 1.0
                 detail = []
 
                 for ai in all_sitems:
@@ -370,18 +369,15 @@ def run(dry_run: bool = False) -> dict[str, Any]:
                     # Determine win/loss based on play_type (canonical + legacy aliases)
                     from scripts.play_type_registry import result_column
                     col = result_column(ai_play_type)
-                    actual = fm.get(col, fm.get("spf_result"))
+                    actual = _normalize_result(ai_play_type, fm.get(col, fm.get("spf_result")))
 
                     item_won = ai_option == actual if actual else False
-                    if not item_won:
-                        all_won = False
-
-                    product_sp *= ai_sp
                     detail.append({
                         "match_id": ai_match_id,
                         "play_type": ai_play_type,
                         "option_code": ai_option,
                         "sp_value": ai_sp,
+                        "is_dan": bool(ai[4]),
                         "actual_result": actual,
                         "is_won": item_won,
                     })
@@ -394,36 +390,8 @@ def run(dry_run: bool = False) -> dict[str, Any]:
                 multiple = ticket["multiple"]
                 stake = ticket["total_cost"]
 
-                if all_won:
-                    if pass_type == "single":
-                        # Each match independent: sum of (sp × 2 × multiple) across all items
-                        prize = sum(
-                            item["sp_value"] * 2 * multiple
-                            for item in detail
-                        )
-                    elif pass_type.endswith("x1"):
-                        # M串1: one combination, product of all sp × 2 × multiple
-                        m = int(pass_type.split("x")[0])
-                        if len(detail) == m:
-                            prize = product_sp * 2 * multiple
-                        else:
-                            prize = 0.0
-                    else:
-                        # M串N: simplified — all items must win for max prize
-                        # Full M串N partial-win calculation deferred to v2
-                        prize = ticket["max_prize"]
-                else:
-                    # Not all won: prize = 0 for M串1
-                    # For M串N with partial wins, prize could be > 0 (deferred to v2)
-                    if pass_type != "single":
-                        prize = 0.0
-                    else:
-                        # Single: only count winning items
-                        prize = sum(
-                            item["sp_value"] * 2 * multiple
-                            for item in detail
-                            if item["is_won"]
-                        )
+                prize = calculate_winning_prize(detail, pass_type, multiple)
+                ticket_won = prize > 0
 
                 tax = _calculate_tax(prize)
                 net_prize = prize - tax
@@ -435,7 +403,7 @@ def run(dry_run: bool = False) -> dict[str, Any]:
                     "ticket_source": "simulator",
                     "ticket_id": tid,
                     "settle_time": _now(),
-                    "is_won": all_won,
+                    "is_won": ticket_won,
                     "stake_amount": stake,
                     "prize_amount": prize,
                     "tax_amount": tax,
@@ -447,13 +415,14 @@ def run(dry_run: bool = False) -> dict[str, Any]:
                         "items": detail,
                         "pass_type": pass_type,
                         "multiple": multiple,
-                        "all_won": all_won,
+                        "all_won": all(item["is_won"] for item in detail),
+                        "has_winning_combination": ticket_won,
                     },
                 })
 
                 if settlement_id:
                     # Bankroll: credit the prize (if won) — stake already deducted at purchase
-                    if all_won and net_prize > 0:
+                    if ticket_won and net_prize > 0:
                         create_bankroll_transaction(
                             conn,
                             {

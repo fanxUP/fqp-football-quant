@@ -8,7 +8,6 @@ from pydantic import BaseModel
 from apps.backend.src.db import get_db
 from scripts.real_ticket_storage import create_bankroll_transaction
 from scripts.simulator_calculator import (
-    calculate_all,
     calculate_multi_all,
     get_available_pass_types,
     parse_pass_types,
@@ -28,6 +27,27 @@ from scripts.simulator_storage import (
 
 router = APIRouter(tags=["simulator"])
 
+POOL_PLAY_TYPES = {
+    "HAD": "spf",
+    "HHAD": "rqspf",
+    "TTG": "zjq",
+    "CRS": "bf",
+    "HAFU": "bqc",
+}
+
+
+def _pool_capabilities(raw_json: dict | None) -> dict[str, dict[str, bool]]:
+    capabilities: dict[str, dict[str, bool]] = {}
+    for pool in (raw_json or {}).get("poolList", []):
+        play_type = POOL_PLAY_TYPES.get(pool.get("poolCode", ""))
+        if not play_type:
+            continue
+        capabilities[play_type] = {
+            "single": any(pool.get(field, 0) == 1 for field in ("single", "bettingSingle", "cbtSingle", "intSingle")),
+            "pass": any(pool.get(field, 0) == 1 for field in ("allUp", "bettingAllup", "cbtAllUp", "intAllUp")),
+        }
+    return capabilities
+
 
 # ---- Request models ----
 
@@ -39,6 +59,8 @@ class BetItemRequest(BaseModel):
     sp_value: float
     handicap: float | None = None
     is_dan: bool = False
+    is_single_allowed: bool = True
+    is_pass_allowed: bool = True
 
 
 class CalculateRequest(BaseModel):
@@ -93,7 +115,8 @@ def list_matches(
                 SELECT m.id, m.business_date, m.league_name,
                        m.home_team_name, m.away_team_name,
                        m.kickoff_time, m.match_status,
-                       COALESCE(m.raw_json->>'matchNumStr', m.official_match_code::text) AS match_num_str
+                       COALESCE(m.raw_json->>'matchNumStr', m.official_match_code::text) AS match_num_str,
+                       m.raw_json
                 FROM official_matches m
                 WHERE {where_clause}
                 ORDER BY m.kickoff_time ASC
@@ -124,6 +147,7 @@ def list_matches(
     # Build response — group odds by match and play_type
     matches_map: dict[int, dict] = {}
     for mr in match_rows:
+        capabilities = _pool_capabilities(mr[8] if len(mr) > 8 and isinstance(mr[8], dict) else None)
         matches_map[mr[0]] = {
             "match_id": mr[0],
             "business_date": str(mr[1]),
@@ -133,17 +157,19 @@ def list_matches(
             "kickoff_time": mr[5].isoformat() if hasattr(mr[5], "isoformat") else str(mr[5]),
             "match_status": mr[6],
             "match_num_str": mr[7] if len(mr) > 7 else "",
+            "_pool_capabilities": capabilities,
             "odds": {},
         }
 
     # Pre-fill empty odds groups for all 5 play types
     for mid in matches_map:
+        capabilities = matches_map[mid]["_pool_capabilities"]
         matches_map[mid]["odds"] = {
-            "spf": {"options": []},
-            "rqspf": {"handicap": None, "options": []},
-            "zjq": {"options": []},
-            "bf": {"options": []},
-            "bqc": {"options": []},
+            "spf": {"is_single_allowed": capabilities.get("spf", {}).get("single", False), "is_pass_allowed": capabilities.get("spf", {}).get("pass", True), "options": []},
+            "rqspf": {"handicap": None, "is_single_allowed": capabilities.get("rqspf", {}).get("single", False), "is_pass_allowed": capabilities.get("rqspf", {}).get("pass", True), "options": []},
+            "zjq": {"is_single_allowed": capabilities.get("zjq", {}).get("single", False), "is_pass_allowed": capabilities.get("zjq", {}).get("pass", True), "options": []},
+            "bf": {"is_single_allowed": capabilities.get("bf", {}).get("single", False), "is_pass_allowed": capabilities.get("bf", {}).get("pass", True), "options": []},
+            "bqc": {"is_single_allowed": capabilities.get("bqc", {}).get("single", False), "is_pass_allowed": capabilities.get("bqc", {}).get("pass", True), "options": []},
         }
 
     for orow in odds_rows:
@@ -160,7 +186,7 @@ def list_matches(
 
         odds = matches_map[mid]["odds"]
         if play_type == "spf":
-            odds["spf"]["is_single_allowed"] = is_single
+            odds["spf"]["is_single_allowed"] = odds["spf"]["is_single_allowed"] or is_single
             odds["spf"]["options"].append({
                 "option_code": option_code,
                 "option_name": option_name,
@@ -169,28 +195,28 @@ def list_matches(
         elif play_type == "rqspf":
             if handicap is not None:
                 odds["rqspf"]["handicap"] = handicap
-            odds["rqspf"]["is_single_allowed"] = is_single
+            odds["rqspf"]["is_single_allowed"] = odds["rqspf"]["is_single_allowed"] or is_single
             odds["rqspf"]["options"].append({
                 "option_code": option_code,
                 "option_name": option_name,
                 "sp_value": sp_value,
             })
         elif play_type in ("total_goals", "zjq"):
-            odds["zjq"]["is_single_allowed"] = is_single
+            odds["zjq"]["is_single_allowed"] = odds["zjq"]["is_single_allowed"] or is_single
             odds["zjq"]["options"].append({
                 "option_code": option_code,
                 "option_name": option_name,
                 "sp_value": sp_value,
             })
         elif play_type in ("score", "bf"):
-            odds["bf"]["is_single_allowed"] = is_single
+            odds["bf"]["is_single_allowed"] = odds["bf"]["is_single_allowed"] or is_single
             odds["bf"]["options"].append({
                 "option_code": option_code,
                 "option_name": option_name,
                 "sp_value": sp_value,
             })
         elif play_type in ("half_full", "bqc"):
-            odds["bqc"]["is_single_allowed"] = is_single
+            odds["bqc"]["is_single_allowed"] = odds["bqc"]["is_single_allowed"] or is_single
             odds["bqc"]["options"].append({
                 "option_code": option_code,
                 "option_name": option_name,
@@ -199,6 +225,7 @@ def list_matches(
 
     # Sort options for each play type (SPF: 3→1→0, ZJQ: 0→7+, BF: by code, BQC: 33→00)
     for m in matches_map.values():
+        m.pop("_pool_capabilities", None)
         for pt in m["odds"]:
             opts = m["odds"][pt].get("options", [])
             if pt == "spf" or pt == "rqspf":
@@ -229,8 +256,8 @@ def calculate(req: CalculateRequest):
         raise HTTPException(status_code=400, detail={"errors": errors})
 
     # Validate multiple
-    if req.multiple < 1 or req.multiple > 99:
-        raise HTTPException(status_code=400, detail="倍数必须在 1-99 之间")
+    if req.multiple < 1 or req.multiple > 50:
+        raise HTTPException(status_code=400, detail="倍数必须在 1-50 之间")
 
     try:
         result = calculate_multi_all(items, pass_types, req.multiple)
@@ -238,7 +265,7 @@ def calculate(req: CalculateRequest):
         raise HTTPException(status_code=400, detail=str(e)) from e
 
     # Add available pass types for the frontend dropdown
-    result["available_pass_types"] = get_available_pass_types(len(items))
+    result["available_pass_types"] = get_available_pass_types(items)
 
     return result
 
@@ -256,8 +283,8 @@ def submit_ticket(req: SubmitTicketRequest):
     if errors:
         raise HTTPException(status_code=400, detail={"errors": errors})
 
-    if req.multiple < 1 or req.multiple > 99:
-        raise HTTPException(status_code=400, detail="倍数必须在 1-99 之间")
+    if req.multiple < 1 or req.multiple > 50:
+        raise HTTPException(status_code=400, detail="倍数必须在 1-50 之间")
 
     # Calculate
     try:
@@ -288,7 +315,7 @@ def submit_ticket(req: SubmitTicketRequest):
             "total_cost": total_cost,
             "bet_count": calc["bet_count"],
             "max_prize": calc["max_prize"],
-            "match_count": len(items),
+            "match_count": len({item.get("match_id") for item in items}),
             "status": "pending",
             "notes": req.notes,
         })
