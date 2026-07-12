@@ -39,6 +39,16 @@ def _official_stake(value: float) -> float:
     return float(floor(max(0.0, value) / STAKE_UNIT) * STAKE_UNIT)
 
 
+def _payout_cap(match_count: int) -> float:
+    if match_count <= 1:
+        return 100_000.0
+    if match_count <= 3:
+        return 200_000.0
+    if match_count <= 5:
+        return 500_000.0
+    return 1_000_000.0
+
+
 # ── Selection config ──
 
 ALL_MODELS = ["market_baseline", "elo_rating", "dixon_coles", "maher_poisson"]
@@ -578,8 +588,8 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
                     # number of generated tickets.
                     "multiple": ticket_multiple,
                     "bet_count": 1,
-                    "estimated_return": round(stake * c["sp_value"], 2),
-                    "max_return": round(stake * c["sp_value"], 2),
+                    "estimated_return": round(min(stake * c["sp_value"], _payout_cap(1)), 2),
+                    "max_return": round(min(stake * c["sp_value"], _payout_cap(1)), 2),
                     "expected_value": round(c["ev"], 4),
                     "risk_level": "observation",
                     "ticket_status": "generated",
@@ -612,8 +622,8 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
                         "suggested_stake": combo_stake,
                         "multiple": ticket_multiple,
                         "bet_count": 1,
-                        "estimated_return": round(combo_stake * combo["combined_sp"], 2),
-                        "max_return": round(combo_stake * combo["combined_sp"], 2),
+                        "estimated_return": round(min(combo_stake * combo["combined_sp"], _payout_cap(len(combo["candidates"]))), 2),
+                        "max_return": round(min(combo_stake * combo["combined_sp"], _payout_cap(len(combo["candidates"]))), 2),
                         "expected_value": round(combo["combined_ev"], 4),
                         "risk_level": "aggressive_training",
                         "ticket_status": "generated",
