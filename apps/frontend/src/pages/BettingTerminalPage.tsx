@@ -778,7 +778,7 @@ export default function BettingTerminalPage() {
             })}
           </div>
 
-          <div className="betting-builder-panel" aria-label="投注方案设置">
+          <div className={`betting-builder-panel ${betSlip.length > 0 ? 'has-selections' : 'is-empty'}`} aria-label="投注方案设置">
             <div className="betting-builder-head">
               <div>
                 <strong>方案设置</strong>
