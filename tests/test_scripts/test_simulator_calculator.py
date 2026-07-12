@@ -42,3 +42,9 @@ def test_available_pass_types_include_lower_straight_passes():
 
     assert "2x1" in available
     assert "3x1" in available
+
+
+def test_single_requires_official_single_eligibility_when_present():
+    item = _items(1)[0]
+    item["is_single_allowed"] = False
+    assert validate_items([item], "single") == ["比赛 1 的该玩法不支持单关"]

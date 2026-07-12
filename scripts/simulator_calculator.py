@@ -340,6 +340,11 @@ def validate_items(items: list[dict], pass_type: str) -> list[str]:
         errors.append(f"不支持的过关方式: {pass_type}")
         return errors
 
+    if pass_type == "single":
+        for item in items:
+            if item.get("is_single_allowed") is False:
+                errors.append(f"比赛 {item.get('match_id')} 的该玩法不支持单关")
+
     # Check match count matches pass type
     info = get_pass_type_info(pass_type)
     if pass_type != "single":
