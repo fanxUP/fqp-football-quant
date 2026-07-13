@@ -69,7 +69,17 @@ export default function BetSlip(props: BetSlipProps) {
         <span className="sporttery-current-pass">{props.passType === 'single' ? '单场⌃' : props.passType ? `${props.passType.split('x')[0]}关⌃` : '请选择过关'}</span>
         <span className="sporttery-multiple-label">倍数</span>
         <button type="button" aria-label="减少倍数" onClick={() => props.onMultiple(Math.max(1, props.multiple - 1))} disabled={props.multiple <= 1}>−</button>
-        <output aria-label="当前倍数">{props.multiple}</output>
+        <input
+          type="number"
+          min={1}
+          max={50}
+          value={props.multiple}
+          aria-label="当前倍数"
+          onChange={(event) => {
+            const next = Number.parseInt(event.target.value, 10);
+            if (Number.isFinite(next)) props.onMultiple(Math.min(50, Math.max(1, next)));
+          }}
+        />
         <button type="button" aria-label="增加倍数" onClick={() => props.onMultiple(Math.min(50, props.multiple + 1))} disabled={props.multiple >= 50}>＋</button>
         <button
           type="button"

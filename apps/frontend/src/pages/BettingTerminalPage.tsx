@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../core/apiClient';
 import { getAvailablePassTypes, getTicketPlayType, type SportteryPlayType } from '../core/bettingRules';
 import { navigate } from '../core/router';
-import type { BetSlipItem, BettingMatch, BettingOddsOption, CalculationResult } from '../core/types';
+import type { BetSlipItem, BettingMatch, BettingOddsOption, CalculationResult, LiveRecommendation } from '../core/types';
 import { ApiError } from '../core/types';
 import BetSlip from '../features/betting-terminal/BetSlip';
 import {
@@ -13,11 +13,13 @@ import {
 } from '../features/betting-terminal/Dialogs';
 import MatchCard from '../features/betting-terminal/MatchCard';
 import {
+  PLAY_TYPES,
   createSlipItem,
   selectedMatchCount,
   selectionKey,
   toCalculateItems,
 } from '../features/betting-terminal/model';
+import { RecommendationPanel, TicketPreview } from '../features/betting-terminal/WorkbenchPanels';
 import { useToast } from '../shared/components/Toast';
 import '../features/betting-terminal/SportteryBettingTerminal.css';
 
@@ -46,6 +48,9 @@ export default function BettingTerminalPage() {
   const [matches, setMatches] = useState<BettingMatch[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
+  const [recommendations, setRecommendations] = useState<LiveRecommendation[]>([]);
+  const [recommendationsLoading, setRecommendationsLoading] = useState(true);
+  const [recommendationsError, setRecommendationsError] = useState('');
   const [selections, setSelections] = useState<BetSlipItem[]>([]);
   const [passType, setPassType] = useState<string | null>(null);
   const [passTouched, setPassTouched] = useState(false);
@@ -74,6 +79,15 @@ export default function BettingTerminalPage() {
 
   useEffect(() => { fetchMatches(); }, [fetchMatches]);
 
+  useEffect(() => {
+    setRecommendationsLoading(true);
+    setRecommendationsError('');
+    api.liveRecommendations({ limit: 12, min_ev: 0.02, min_confidence: 0.45 })
+      .then((response) => setRecommendations(response.recommendations || []))
+      .catch((error) => setRecommendationsError(errorMessage(error, '推荐投注加载失败')))
+      .finally(() => setRecommendationsLoading(false));
+  }, []);
+
   const leagues = useMemo(
     () => [...new Set(matches.map((match) => match.league_name).filter(Boolean))].sort(),
     [matches],
@@ -93,6 +107,20 @@ export default function BettingTerminalPage() {
     [selections],
   );
   const matchCount = useMemo(() => selectedMatchCount(selections), [selections]);
+  const availableRecommendationIds = useMemo(() => {
+    const ids = new Set<number>();
+    recommendations.forEach((recommendation) => {
+      const playType = recommendation.play_type as SportteryPlayType;
+      if (!PLAY_TYPES.includes(playType)) return;
+      const match = matches.find((item) => item.match_id === recommendation.match_id);
+      const market = match?.odds[playType];
+      const option = market?.options.find((item) => item.option_code === recommendation.option_code);
+      if (match && market && option && (market.is_single_allowed || market.is_pass_allowed)) {
+        ids.add(recommendation.prediction_id);
+      }
+    });
+    return ids;
+  }, [matches, recommendations]);
 
   useEffect(() => {
     if (selections.length === 0) {
@@ -141,6 +169,47 @@ export default function BettingTerminalPage() {
     if (!passTouched) setPassType(null);
   };
 
+  const addRecommendation = (recommendation: LiveRecommendation) => {
+    const playType = recommendation.play_type as SportteryPlayType;
+    const match = matches.find((item) => item.match_id === recommendation.match_id);
+    const market = PLAY_TYPES.includes(playType) ? match?.odds[playType] : undefined;
+    const option = market?.options.find((item) => item.option_code === recommendation.option_code);
+    if (!match || !market || !option || (!market.is_single_allowed && !market.is_pass_allowed)) {
+      toast.warning('该推荐当前没有对应的官方可售选项，未加入投注器。');
+      return;
+    }
+    const nextItem: BetSlipItem = {
+      ...createSlipItem(match, playType, option),
+      basis: {
+        source: 'recommendation',
+        modelProbability: recommendation.model_probability,
+        marketProbability: recommendation.market_probability,
+        edge: recommendation.edge,
+        ev: recommendation.ev,
+        confidence: recommendation.confidence,
+        summary: '推荐投注使用当前官方固定奖金入单',
+      },
+    };
+    const key = selectionKey(nextItem.match_id, nextItem.play_type, nextItem.option_code);
+    setSelections((current) => {
+      const existingIndex = current.findIndex(
+        (item) => selectionKey(item.match_id, item.play_type, item.option_code) === key,
+      );
+      if (existingIndex < 0) return [...current, nextItem];
+      const next = [...current];
+      next[existingIndex] = nextItem;
+      return next;
+    });
+    if (!passTouched) setPassType(null);
+  };
+
+  const removeSelection = (target: BetSlipItem) => {
+    const key = selectionKey(target.match_id, target.play_type, target.option_code);
+    setSelections((current) => current.filter(
+      (item) => selectionKey(item.match_id, item.play_type, item.option_code) !== key,
+    ));
+  };
+
   const refresh = () => {
     setSelections([]);
     setPassType(null);
@@ -171,21 +240,43 @@ export default function BettingTerminalPage() {
   };
 
   return (
-    <section className="sporttery-terminal" role="region" aria-label="竞彩足球模拟试玩投注器">
-      <header className="sporttery-hero">
-        <div className="sporttery-hero-title">
-          <span aria-hidden="true">⚽</span>
-          <div><h2>竞彩足球</h2><small>模拟试玩</small></div>
-          <button type="button" aria-label="刷新赔率" onClick={refresh}>↻</button>
-        </div>
-        <nav aria-label="竞彩玩法"><span>胜平负</span><span>4场进球</span><strong>竞彩足球</strong><span>竞彩篮球</span></nav>
-      </header>
+    <div className="betting-terminal betting-desktop-workbench">
+      <div className="betting-workbench">
+        <RecommendationPanel
+          recommendations={recommendations}
+          loading={recommendationsLoading}
+          error={recommendationsError}
+          availableRecommendationIds={availableRecommendationIds}
+          onAdd={addRecommendation}
+        />
 
+        <section className="betting-market sporttery-widget-column" aria-label="投注器">
+          <div className="betting-slip-head betting-market-head">
+            <div><h3>投注器</h3><span>可手工选号，也可接收左侧推荐投注</span></div>
+          </div>
+          <section className="sporttery-terminal" role="region" aria-label="竞彩足球模拟试玩投注器">
       <div className="sporttery-main">
         <div className="sporttery-toolbar">
           <button type="button" className="sporttery-mode-button" aria-label="混合过关">混合过关 <span aria-hidden="true">▾</span></button>
-          <div><button type="button" onClick={() => setShowRules(true)}>游戏规则</button><button type="button" onClick={() => setShowFilter(true)}>筛选</button></div>
+          <div><button type="button" aria-label="刷新赔率" onClick={refresh}>刷新</button><button type="button" onClick={() => setShowRules(true)}>游戏规则</button><button type="button" onClick={() => setShowFilter(true)}>筛选</button></div>
         </div>
+
+        <BetSlip
+          selections={selections}
+          selectedMatchCount={matchCount}
+          passType={passType}
+          availablePassTypes={availablePassTypes}
+          multiple={multiple}
+          calculation={calculation}
+          calculating={calculating}
+          submitting={submitting}
+          warning={calculationWarning}
+          detailsOpen={detailsOpen}
+          onPassType={(value) => { setPassType(value); setPassTouched(true); }}
+          onMultiple={setMultiple}
+          onToggleDetails={() => setDetailsOpen((current) => !current)}
+          onConfirm={confirmTicket}
+        />
 
         {loading && <div className="sporttery-status" role="status">正在读取官方开售比赛…</div>}
         {loadError && <div className="sporttery-status is-error" role="alert">{loadError}<button type="button" onClick={fetchMatches}>重试</button></div>}
@@ -208,27 +299,27 @@ export default function BettingTerminalPage() {
         <p className="sporttery-disclaimer">比赛信息及固定奖金仅供参考，请以出票时刻为准。</p>
       </div>
 
-      <BetSlip
-        selections={selections}
-        selectedMatchCount={matchCount}
-        passType={passType}
-        availablePassTypes={availablePassTypes}
-        multiple={multiple}
-        calculation={calculation}
-        calculating={calculating}
-        submitting={submitting}
-        warning={calculationWarning}
-        detailsOpen={detailsOpen}
-        onPassType={(value) => { setPassType(value); setPassTouched(true); }}
-        onMultiple={setMultiple}
-        onToggleDetails={() => setDetailsOpen((current) => !current)}
-        onConfirm={confirmTicket}
-      />
+          </section>
+        </section>
+
+        <TicketPreview
+          selections={selections}
+          selectedMatchCount={matchCount}
+          passType={passType}
+          multiple={multiple}
+          calculation={calculation}
+          calculating={calculating}
+          submitting={submitting}
+          warning={calculationWarning}
+          onRemove={removeSelection}
+          onConfirm={confirmTicket}
+        />
+      </div>
 
       {activeMatch && <AllGamesDialog match={activeMatch} selections={selections} onToggle={toggleSelection} onClose={() => setActiveMatch(null)} />}
       {showRules && <RulesDialog onClose={() => setShowRules(false)} />}
       {showFilter && <FilterDialog leagues={leagues} league={league} singleOnly={singleOnly} onLeague={setLeague} onSingleOnly={setSingleOnly} onClose={() => setShowFilter(false)} />}
       {confirmation && <ConfirmationDialog selections={confirmation.selections} passType={confirmation.passType} multiple={confirmation.multiple} betCount={confirmation.calculation.bet_count} stake={confirmation.calculation.total_cost} prize={confirmation.calculation.max_prize} ticketUid={confirmation.ticketUid} onClose={() => setConfirmation(null)} />}
-    </section>
+    </div>
   );
 }

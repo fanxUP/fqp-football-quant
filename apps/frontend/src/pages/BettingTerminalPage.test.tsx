@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import BettingTerminalPage from './BettingTerminalPage';
-import type { BettingMatch, CalculateItem } from '../core/types';
+import type { BettingMatch, CalculateItem, LiveRecommendation } from '../core/types';
 
 const completeOdds = {
   spf: {
@@ -82,10 +82,47 @@ const secondMatch: BettingMatch = {
   },
 };
 
+const recommendation: LiveRecommendation = {
+  prediction_id: 10,
+  match_id: firstMatch.match_id,
+  play_type: 'spf',
+  play_type_name: '胜平负',
+  option_code: '3',
+  option_name: '主胜',
+  model_probability: 0.62,
+  market_probability: 0.49,
+  fair_odds: 2.04,
+  ev: 0.13,
+  edge: 0.12,
+  confidence: 0.73,
+  predict_time: '2026-07-12T09:00:00',
+  model_name: 'xgb-main',
+  home_team: firstMatch.home_team_name,
+  away_team: firstMatch.away_team_name,
+  league: firstMatch.league_name,
+  kickoff_time: firstMatch.kickoff_time,
+  match_status: firstMatch.match_status,
+  match_num_str: firstMatch.match_num_str ?? null,
+  ht_home_goals: null,
+  ht_away_goals: null,
+  ft_home_goals: null,
+  ft_away_goals: null,
+  et_home_goals: null,
+  et_away_goals: null,
+  pk_home_goals: null,
+  pk_away_goals: null,
+  spf_result: null,
+  rqspf_result: null,
+  total_goals_result: null,
+  score_result: null,
+  half_full_result: null,
+};
+
 const apiMocks = vi.hoisted(() => ({
   matches: vi.fn(),
   calculate: vi.fn(),
   createTicket: vi.fn(),
+  recommendations: vi.fn(),
 }));
 
 const calculateResponse = async (body: { items: CalculateItem[]; pass_type: string; multiple: number }) => {
@@ -123,7 +160,7 @@ const ticketResponse = {
 vi.mock('../core/apiClient', () => ({
   api: {
     bettingTerminal: { matches: apiMocks.matches, calculate: apiMocks.calculate },
-    liveRecommendations: vi.fn(async () => ({ recommendations: [], total: 0, status: 'ok' })),
+    liveRecommendations: apiMocks.recommendations,
     betting: { createTicket: apiMocks.createTicket, ocrUpload: vi.fn() },
   },
 }));
@@ -132,19 +169,24 @@ vi.mock('../shared/components/Toast', () => ({
   useToast: () => ({ success: vi.fn(), error: vi.fn(), warning: vi.fn() }),
 }));
 
-describe('BettingTerminalPage complete replacement', () => {
+describe('BettingTerminalPage desktop workbench', () => {
   beforeEach(() => {
     apiMocks.matches.mockReset().mockResolvedValue({ matches: [firstMatch, secondMatch], total: 2 });
     apiMocks.calculate.mockReset().mockImplementation(calculateResponse);
     apiMocks.createTicket.mockReset().mockResolvedValue(ticketResponse);
+    apiMocks.recommendations.mockReset().mockResolvedValue({ recommendations: [recommendation], total: 1, status: 'ok' });
   });
 
-  it('renders the standalone Sporttery terminal structure instead of the legacy workbench', async () => {
+  it('keeps recommendation, new betting widget, and ticket preview as three linked desktop panels', async () => {
     render(<BettingTerminalPage />);
 
-    const terminal = await screen.findByRole('region', { name: '竞彩足球模拟试玩投注器' });
-    expect(within(terminal).getByRole('heading', { name: '竞彩足球' })).toBeInTheDocument();
-    expect(within(terminal).getByText('模拟试玩')).toBeInTheDocument();
+    const recommendationPanel = await screen.findByLabelText('推荐投注');
+    const widgetPanel = screen.getByLabelText('投注器');
+    const previewPanel = screen.getByLabelText('票面预览');
+    const terminal = within(widgetPanel).getByRole('region', { name: '竞彩足球模拟试玩投注器' });
+    expect(within(widgetPanel).getByRole('heading', { name: '投注器' })).toBeInTheDocument();
+    expect(within(widgetPanel).queryByRole('heading', { name: '竞彩足球' })).not.toBeInTheDocument();
+    expect(widgetPanel.querySelector('.sporttery-hero')).not.toBeInTheDocument();
     expect(within(terminal).getByRole('button', { name: '刷新赔率' })).toBeInTheDocument();
     expect(within(terminal).getByRole('button', { name: '混合过关' })).toBeInTheDocument();
     expect(within(terminal).getByRole('button', { name: '游戏规则' })).toBeInTheDocument();
@@ -152,8 +194,13 @@ describe('BettingTerminalPage complete replacement', () => {
     expect(within(terminal).getByText('周日203')).toBeInTheDocument();
     expect(within(terminal).getAllByLabelText('胜平负支持单场，支持过关')[0]).toHaveTextContent('单过');
     expect(within(terminal).getAllByLabelText('让球胜平负不支持单场，支持过关')[0]).toHaveTextContent('−过');
-    expect(screen.queryByLabelText('推荐单')).not.toBeInTheDocument();
-    expect(screen.queryByText('OCR 识别')).not.toBeInTheDocument();
+    expect(within(previewPanel).getByText('等待投注器生成票面')).toBeInTheDocument();
+
+    fireEvent.click(within(recommendationPanel).getByRole('button', { name: '加入 主胜' }));
+
+    await waitFor(() => expect(within(terminal).getByRole('button', { name: '胜平负 主胜 2.04' })).toHaveClass('is-selected'));
+    expect(within(previewPanel).getByText('首尔FC vs 江原FC')).toBeInTheDocument();
+    expect(within(previewPanel).getAllByText('推荐投注').length).toBeGreaterThan(0);
   });
 
   it('opens the complete five-play selector with single and pass flags', async () => {
@@ -184,6 +231,12 @@ describe('BettingTerminalPage complete replacement', () => {
     expect(within(slip).getByText((_, node) => node?.textContent === '理论最高奖金: 16.40元')).toBeInTheDocument();
     expect(within(slip).getByRole('button', { name: '2关' })).toHaveAttribute('aria-pressed', 'true');
     expect(within(first).getByRole('button', { name: '已选 2项' })).toBeInTheDocument();
+
+    const preview = screen.getByLabelText('票面预览');
+    expect(within(preview).getAllByText('首尔FC vs 江原FC')).toHaveLength(2);
+    expect(within(preview).getByText('马尔默 vs 哥德堡')).toBeInTheDocument();
+    fireEvent.click(within(preview).getAllByRole('button', { name: '移除' })[0]);
+    expect(within(first).getByRole('button', { name: '胜平负 主胜 2.04' })).not.toHaveClass('is-selected');
   });
 
   it('provides the 1-8 pass grid, clamps multiple to 50, and archives a confirmed ticket', async () => {
@@ -198,10 +251,8 @@ describe('BettingTerminalPage complete replacement', () => {
     expect(within(passGrid).getAllByRole('button')).toHaveLength(8);
     expect(within(passGrid).getByRole('button', { name: '3关' })).toBeDisabled();
 
-    for (let index = 1; index < 50; index += 1) {
-      fireEvent.click(within(slip).getByRole('button', { name: '增加倍数' }));
-    }
-    expect(within(slip).getByLabelText('当前倍数')).toHaveTextContent('50');
+    fireEvent.change(within(slip).getByLabelText('当前倍数'), { target: { value: '99' } });
+    expect(within(slip).getByLabelText('当前倍数')).toHaveValue(50);
     expect(within(slip).getByRole('button', { name: '增加倍数' })).toBeDisabled();
 
     await waitFor(() => expect(within(slip).getByRole('button', { name: '确定' })).toBeEnabled());
