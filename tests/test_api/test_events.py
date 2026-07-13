@@ -53,3 +53,19 @@ def test_active_matches_mark_started_unsettled_matches_as_awaiting_result(client
     sql = cursor.execute.call_args.args[0]
     assert "m.kickoff_time <= CURRENT_TIMESTAMP" in sql
     assert "awaiting_result" in sql
+
+
+def test_active_matches_prioritize_upcoming_over_unsettled_history(client):
+    with patch("apps.backend.src.routers.teams.get_db") as get_db:
+        connection = get_db.return_value.__enter__.return_value
+        cursor = connection.cursor.return_value.__enter__.return_value
+        cursor.fetchall.return_value = []
+
+        response = client.get("/api/matches/active")
+
+    assert response.status_code == 200
+    sql = " ".join(cursor.execute.call_args.args[0].split())
+    assert (
+        "ORDER BY CASE WHEN m.kickoff_time > CURRENT_TIMESTAMP THEN 0 ELSE 1 END"
+        in sql
+    )

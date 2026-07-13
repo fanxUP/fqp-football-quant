@@ -154,7 +154,10 @@ def list_active_matches(limit: int = Query(500, ge=1, le=5000)):
                        COALESCE(m.raw_json->>'matchNumStr', m.official_match_code::text) AS match_num_str
                 FROM official_matches m
                 WHERE LOWER(COALESCE(m.match_status, 'scheduled')) NOT IN %s
-                ORDER BY m.kickoff_time ASC
+                ORDER BY
+                    CASE WHEN m.kickoff_time > CURRENT_TIMESTAMP THEN 0 ELSE 1 END,
+                    CASE WHEN m.kickoff_time > CURRENT_TIMESTAMP THEN m.kickoff_time END ASC,
+                    CASE WHEN m.kickoff_time <= CURRENT_TIMESTAMP THEN m.kickoff_time END DESC
                 LIMIT %s
                 """,
                 (completed_statuses, limit),
