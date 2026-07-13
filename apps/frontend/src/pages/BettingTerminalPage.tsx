@@ -106,6 +106,16 @@ export default function BettingTerminalPage() {
     () => getAvailablePassTypes(selections).filter((item) => item === 'single' || /^\d+x1$/.test(item)),
     [selections],
   );
+  const hasPublishedOdds = useMemo(
+    () => matches.some((match) => Object.values(match.odds).some((market) => market.options.length > 0)),
+    [matches],
+  );
+  const hasSelectableOfficialMarket = useMemo(
+    () => matches.some((match) => Object.values(match.odds).some(
+      (market) => market.options.length > 0 && (market.is_single_allowed || market.is_pass_allowed),
+    )),
+    [matches],
+  );
   const matchCount = useMemo(() => selectedMatchCount(selections), [selections]);
   const availableRecommendationIds = useMemo(() => {
     const ids = new Set<number>();
@@ -281,6 +291,9 @@ export default function BettingTerminalPage() {
         {loading && <div className="sporttery-status" role="status">正在读取官方开售比赛…</div>}
         {loadError && <div className="sporttery-status is-error" role="alert">{loadError}<button type="button" onClick={fetchMatches}>重试</button></div>}
         {!loading && !loadError && filteredMatches.length === 0 && <div className="sporttery-status">当前筛选条件下没有开售比赛</div>}
+        {!loading && !loadError && matches.length > 0 && hasPublishedOdds && !hasSelectableOfficialMarket && (
+          <div className="sporttery-status" role="status">官方赔率已发布，但当前未开放单关或过关，请稍后刷新。</div>
+        )}
         <section className="sporttery-match-list" aria-label="开售比赛">
           {filteredMatches.map((match) => (
             <MatchCard

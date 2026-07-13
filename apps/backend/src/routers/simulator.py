@@ -165,11 +165,11 @@ def list_matches(
     for mid in matches_map:
         capabilities = matches_map[mid]["_pool_capabilities"]
         matches_map[mid]["odds"] = {
-            "spf": {"is_single_allowed": capabilities.get("spf", {}).get("single", False), "is_pass_allowed": capabilities.get("spf", {}).get("pass", True), "options": []},
-            "rqspf": {"handicap": None, "is_single_allowed": capabilities.get("rqspf", {}).get("single", False), "is_pass_allowed": capabilities.get("rqspf", {}).get("pass", True), "options": []},
-            "zjq": {"is_single_allowed": capabilities.get("zjq", {}).get("single", False), "is_pass_allowed": capabilities.get("zjq", {}).get("pass", True), "options": []},
-            "bf": {"is_single_allowed": capabilities.get("bf", {}).get("single", False), "is_pass_allowed": capabilities.get("bf", {}).get("pass", True), "options": []},
-            "bqc": {"is_single_allowed": capabilities.get("bqc", {}).get("single", False), "is_pass_allowed": capabilities.get("bqc", {}).get("pass", True), "options": []},
+            "spf": {"is_single_allowed": capabilities.get("spf", {}).get("single", False), "is_pass_allowed": capabilities.get("spf", {}).get("pass", False), "options": []},
+            "rqspf": {"handicap": None, "is_single_allowed": capabilities.get("rqspf", {}).get("single", False), "is_pass_allowed": capabilities.get("rqspf", {}).get("pass", False), "options": []},
+            "zjq": {"is_single_allowed": capabilities.get("zjq", {}).get("single", False), "is_pass_allowed": capabilities.get("zjq", {}).get("pass", False), "options": []},
+            "bf": {"is_single_allowed": capabilities.get("bf", {}).get("single", False), "is_pass_allowed": capabilities.get("bf", {}).get("pass", False), "options": []},
+            "bqc": {"is_single_allowed": capabilities.get("bqc", {}).get("single", False), "is_pass_allowed": capabilities.get("bqc", {}).get("pass", False), "options": []},
         }
 
     for orow in odds_rows:

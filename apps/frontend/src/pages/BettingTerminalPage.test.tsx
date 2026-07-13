@@ -293,4 +293,21 @@ describe('BettingTerminalPage desktop workbench', () => {
     expect(within(matchCard).getByRole('button', { name: '胜平负 主胜 2.04' })).toBeDisabled();
     expect(within(matchCard).getByLabelText('胜平负不支持单场，不支持过关')).toHaveTextContent('−−');
   });
+
+  it('explains when official odds exist but no market is currently selectable', async () => {
+    const unavailableOdds = Object.fromEntries(
+      Object.entries(completeOdds).map(([playType, market]) => [
+        playType,
+        { ...market, is_single_allowed: false, is_pass_allowed: false },
+      ]),
+    );
+    apiMocks.matches.mockResolvedValue({
+      matches: [{ ...firstMatch, odds: unavailableOdds }],
+      total: 1,
+    });
+
+    render(<BettingTerminalPage />);
+
+    expect(await screen.findByText('官方赔率已发布，但当前未开放单关或过关，请稍后刷新。')).toBeInTheDocument();
+  });
 });
