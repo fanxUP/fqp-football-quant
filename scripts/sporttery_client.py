@@ -4,9 +4,9 @@ Official Chinese sports lottery data source. No auth required.
 Rate-limited to respect the server.
 
 Endpoints:
-  - getMatchCalculatorV1.qry  → match schedule + odds (JC API, may WAF)
+  - Uniform getMatchCalculatorV1.qry → current card + all five play-type odds
   - getMatchResultV1.qry      → finished match results (may WAF)
-  - Uniform API (no WAF):     → match list + fixed bonus odds
+  - Uniform API (no WAF):     → match list + calculator + fixed bonus history
   - Traditional lottery:      → draw info / match pool (needs Playwright)
 """
 
@@ -86,7 +86,11 @@ class SportteryClient:
         )
 
     def _request_url(
-        self, url: str, params: dict[str, Any] | None = None
+        self,
+        url: str,
+        params: dict[str, Any] | None = None,
+        *,
+        referer: str | None = None,
     ) -> dict[str, Any]:
         """Make a GET request to an arbitrary URL with retry and rate limiting."""
         self._rate_limit()
@@ -94,7 +98,8 @@ class SportteryClient:
         for attempt in range(1, self._max_retries + 1):
             try:
                 print(f"[sporttery] GET {url} params={params} (attempt {attempt})")
-                resp = self._client.get(url, params=params)
+                headers = {"Referer": referer} if referer else None
+                resp = self._client.get(url, params=params, headers=headers)
                 self._last_request_time = time.monotonic()
                 resp.raise_for_status()
                 data = resp.json()
@@ -122,14 +127,40 @@ class SportteryClient:
     # Public API
     # ------------------------------------------------------------------
 
+    @staticmethod
+    def _require_success(data: dict[str, Any], endpoint: str) -> dict[str, Any]:
+        """Reject HTTP-200 API error payloads instead of treating them as empty data."""
+        error_code = data.get("errorCode")
+        if error_code is not None and str(error_code) != "0":
+            message = data.get("errorMessage") or data.get("message") or "unknown error"
+            raise RuntimeError(f"SportteryClient: {endpoint} error {error_code}: {message}")
+        return data
+
     def get_uniform_match_list(self) -> dict[str, Any]:
         """Fetch match list from uniform API (no WAF issues).
 
         Returns matches across multiple dates with oddsList + poolList.
         """
-        return self._request_url(
-            self.UNIFORM_BASE_URL + "getMatchListV1.qry",
-            {"clientCode": "3001"},
+        endpoint = "getMatchListV1.qry"
+        return self._require_success(
+            self._request_url(
+                self.UNIFORM_BASE_URL + endpoint,
+                {"clientCode": "3001"},
+                referer="https://www.sporttery.cn/jc/zqszsc/",
+            ),
+            endpoint,
+        )
+
+    def get_uniform_match_calculator(self) -> dict[str, Any]:
+        """Fetch all five current Sporttery play types and their full odds."""
+        endpoint = "getMatchCalculatorV1.qry"
+        return self._require_success(
+            self._request_url(
+                self.UNIFORM_BASE_URL + endpoint,
+                {"channel": "c"},
+                referer="https://www.sporttery.cn/jc/jsq/zqspf/",
+            ),
+            endpoint,
         )
 
     def get_uniform_fixed_bonus(self, match_id: int) -> dict[str, Any]:
@@ -209,13 +240,11 @@ class SportteryClient:
             Raw JSON response from the API. The match list is at
             ``response["value"]["matchInfoList"]``.
         """
-        params = {
-            "poolCode": "hhad,had",
-            "channel": "c",
-        }
-        # The business_date is often inferred server-side from the current date,
-        # but we pass it for logging / future API changes.
-        return self._request("getMatchCalculatorV1.qry", params=params)
+        # The official calculator returns the current selling card across its
+        # business-date groups. ``business_date`` is retained for API
+        # compatibility; Sporttery infers the active card server-side.
+        del business_date
+        return self.get_uniform_match_calculator()
 
     def get_match_results(self, begin_date: str, end_date: str, page: int = 1) -> dict[str, Any]:
         """Fetch finished match results for a date range.

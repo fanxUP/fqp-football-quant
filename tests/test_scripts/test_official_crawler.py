@@ -66,6 +66,69 @@ def test_current_pool_flags_drive_single_and_pass_availability():
     assert all(snapshot["is_pass_allowed"] is True for snapshot in snapshots)
 
 
+def test_pool_list_builds_all_official_markets_and_respects_sale_status():
+    sub_match = {
+        "matchNumStr": "周一202",
+        "matchDate": "2026-07-14",
+        "matchTime": "02:00",
+        "leagueAllName": "测试联赛",
+        "homeTeamAllName": "主队",
+        "awayTeamAllName": "客队",
+        "sellStatus": "1",
+        "oddsList": [{"poolCode": "HAD", "h": 2.0, "d": 3.0, "a": 4.0}],
+        "poolList": [
+            {"poolCode": "HAD", "poolStatus": "Selling", "cbtSingle": 1, "cbtAllUp": 1},
+            {"poolCode": "HHAD", "poolStatus": "Selling", "cbtAllUp": 1},
+            {"poolCode": "CRS", "poolStatus": "Stopped", "cbtSingle": 0, "cbtAllUp": 0},
+            {"poolCode": "TTG", "poolStatus": "Selling", "cbtAllUp": 1},
+            {"poolCode": "HAFU", "poolStatus": "Selling", "cbtAllUp": 1},
+        ],
+    }
+    raw = {"value": {"matchInfoList": [{"businessDate": "2026-07-13", "subMatchList": [sub_match]}]}}
+
+    markets = parse_matches_from_response(raw, "2026-07-13")[0]["_markets"]
+    by_play = {market["play_type"]: market for market in markets}
+
+    assert set(by_play) == {"spf", "rqspf", "bf", "zjq", "bqc"}
+    assert by_play["spf"]["is_open"] is True
+    assert by_play["spf"]["is_single_allowed"] is True
+    assert by_play["spf"]["is_pass_allowed"] is True
+    assert by_play["bf"]["is_open"] is False
+    assert by_play["bf"]["market_status"] == "stopped"
+
+
+def test_match_calculator_payload_parses_all_five_play_odds():
+    sub_match = {
+        "matchNumStr": "周一203",
+        "matchDate": "2026-07-14",
+        "matchTime": "03:00",
+        "leagueAllName": "测试联赛",
+        "homeTeamAllName": "主队",
+        "awayTeamAllName": "客队",
+        "poolList": [
+            {"poolCode": code, "poolStatus": "Selling", "cbtSingle": 1, "cbtAllUp": 1}
+            for code in ("HAD", "HHAD", "CRS", "TTG", "HAFU")
+        ],
+        "had": {"h": "2.10", "d": "3.20", "a": "3.40"},
+        "hhad": {"goalLine": "-1", "h": "4.20", "d": "3.60", "a": "1.62"},
+        "crs": {"s01s00": "7.50", "s1sh": "20.00", "s01s00f": "0"},
+        "ttg": {"s0": "12.00", "s7": "15.00", "s0f": "0"},
+        "hafu": {"hh": "3.20", "da": "18.00", "hhf": "0"},
+    }
+
+    snapshots = parse_odds_snapshots_from_match(sub_match, "2026-07-13T12:00:00")
+
+    assert {snapshot["play_type"] for snapshot in snapshots} == {"spf", "rqspf", "bf", "zjq", "bqc"}
+    assert len(snapshots) == 12
+    assert next(item for item in snapshots if item["play_type"] == "rqspf" and item["option_code"] == "h")["handicap"] == -1.0
+    assert next(item for item in snapshots if item["play_type"] == "bf" and item["option_code"] == "1:0")["option_name"] == "1:0"
+    assert next(item for item in snapshots if item["play_type"] == "bf" and item["option_code"] == "other_h")["option_name"] == "胜其他"
+    assert {item["option_code"] for item in snapshots if item["play_type"] == "zjq"} == {"0", "7"}
+    assert {item["option_code"] for item in snapshots if item["play_type"] == "bqc"} == {"33", "10"}
+    assert all(item["is_single_allowed"] is True for item in snapshots)
+    assert all(item["is_pass_allowed"] is True for item in snapshots)
+
+
 def test_missing_pool_code_is_ignored_and_missing_permissions_fail_closed():
     sub_match = {
         "matchNumStr": "周一201",
@@ -145,19 +208,29 @@ def test_parse_official_result_preserves_numeric_zero_scores():
     assert result["spf_result"] == "0"
 
 
-def test_odds_snapshot_uses_fixed_bonus_history_when_sporttery_match_id_exists():
+def test_odds_snapshot_uses_one_uniform_calculator_response_for_current_full_odds():
     client = MagicMock()
-    client.get_daily_matches.return_value = {}
-    client.get_uniform_fixed_bonus.return_value = {"value": {"oddsHistory": {}}}
+    client.get_uniform_match_calculator.return_value = {
+        "value": {"lastUpdateTime": "2026-07-10 12:00:00"}
+    }
     connection = MagicMock()
     cursor = connection.cursor.return_value.__enter__.return_value
-    cursor.fetchone.return_value = (12, "2040374")
-    matches = [{"official_match_code": "周五098", "business_date": "2026-07-10"}]
+    cursor.fetchone.return_value = (12,)
+    matches = [{
+        "official_match_code": "周五098",
+        "business_date": "2026-07-10",
+        "raw_json": {"matchNumStr": "周五098"},
+        "_markets": [{"play_type": "spf", "is_open": True}],
+    }]
+    snapshots = [{"play_type": "spf", "option_code": "h", "sp_value": 2.1}]
 
     with patch("scripts.official_crawler.SportteryClient", return_value=client), \
          patch("scripts.official_crawler.parse_matches_from_response", return_value=matches), \
+         patch("scripts.official_crawler.parse_odds_snapshots_from_match", return_value=snapshots) as parse_odds, \
          patch("scripts.official_crawler.get_db") as get_db, \
-         patch("scripts.official_crawler.store_fixed_bonus_history", return_value={"inserted": 9}), \
+         patch("scripts.official_crawler.store_markets") as store_markets, \
+         patch("scripts.official_crawler.store_odds_snapshots", return_value={"inserted": 1, "errors": []}), \
+         patch("scripts.official_crawler._now", return_value="2026-07-10T12:30:00"), \
          patch("scripts.official_crawler.log_crawl"), \
          patch("scripts.official_crawler.update_health"):
         get_db.return_value.__enter__.return_value = connection
@@ -165,5 +238,8 @@ def test_odds_snapshot_uses_fixed_bonus_history_when_sporttery_match_id_exists()
         result = crawl_official_odds_snapshot("2026-07-10")
 
     assert result["status"] == "ok"
-    assert result["snapshots_inserted"] == 9
-    client.get_uniform_fixed_bonus.assert_called_once_with(2040374)
+    assert result["snapshots_inserted"] == 1
+    client.get_uniform_match_calculator.assert_called_once_with()
+    client.get_uniform_fixed_bonus.assert_not_called()
+    store_markets.assert_called_once_with(connection, 12, matches[0]["_markets"])
+    parse_odds.assert_called_once_with(matches[0]["raw_json"], snapshot_time="2026-07-10T12:30:00")

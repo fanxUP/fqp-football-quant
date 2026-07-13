@@ -12,13 +12,13 @@ Data quality rules (from docs/04):
 
 from __future__ import annotations
 
+import re
 import time
 from datetime import datetime
 from typing import Any
 
 from apps.backend.src.db import get_db
 from scripts.five100_client import get_match_results as get_results_via_500
-from scripts.official_odds_history import store_fixed_bonus_history
 from scripts.official_storage import (
     log_crawl,
     record_official_collection_status,
@@ -57,18 +57,70 @@ _SALE_STATUS_MAP: dict[int, str] = {
     4: "finished",
 }
 
+_DIRECT_ODDS_NODES: dict[str, str] = {
+    "HAD": "had",
+    "HHAD": "hhad",
+    "CRS": "crs",
+    "TTG": "ttg",
+    "HAFU": "hafu",
+}
+
+_HAFU_OPTIONS: dict[str, tuple[str, str]] = {
+    "hh": ("33", "胜胜"),
+    "hd": ("31", "胜平"),
+    "ha": ("30", "胜负"),
+    "dh": ("13", "平胜"),
+    "dd": ("11", "平平"),
+    "da": ("10", "平负"),
+    "ah": ("03", "负胜"),
+    "ad": ("01", "负平"),
+    "aa": ("00", "负负"),
+}
+
+
+def _pool_enabled(pool: dict[str, Any], *fields: str) -> bool:
+    return any(pool.get(field, 0) == 1 for field in fields)
+
+
+def _pool_is_open(pool: dict[str, Any] | None, has_odds: bool) -> bool:
+    if not pool or not pool.get("poolStatus"):
+        return has_odds
+    return str(pool["poolStatus"]).lower() == "selling"
+
+
+def _market_status(pool: dict[str, Any] | None, is_open: bool) -> str:
+    if is_open:
+        return "open"
+    status = str((pool or {}).get("poolStatus") or "closed").strip().lower()
+    return status or "closed"
+
+
+def _odds_by_pool(match_raw: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """Return odds nodes from either match-list or calculator payloads."""
+    odds_by_pool: dict[str, dict[str, Any]] = {}
+    for odds in match_raw.get("oddsList", []) or []:
+        pool_code = odds.get("poolCode", "")
+        if pool_code and pool_code not in odds_by_pool:
+            odds_by_pool[pool_code] = odds
+    for pool_code, node_name in _DIRECT_ODDS_NODES.items():
+        node = match_raw.get(node_name)
+        if isinstance(node, dict) and node:
+            odds_by_pool[pool_code] = node
+    return odds_by_pool
+
 
 def parse_matches_from_response(
     raw: dict[str, Any],
     business_date: str,
 ) -> list[dict[str, Any]]:
-    """Parse sporttery getMatchCalculatorV1 response into normalized match dicts.
+    """Parse Sporttery match-list or calculator responses into normalized matches.
 
     Real API structure (2026-07 observed):
       value.matchInfoList[].businessDate   — betting publish date
       value.matchInfoList[].subMatchList[] — array of matches
         matchDate + matchTime → kickoff_time
-        oddsList[] has HAD/HHAD (duplicated by poolId, dedup by poolCode)
+        oddsList[] has HAD/HHAD; calculator payloads additionally expose
+        had/hhad/crs/ttg/hafu nodes with complete current odds.
     """
     matches: list[dict] = []
     match_info_list = raw.get("value", {}).get("matchInfoList", [])
@@ -110,18 +162,21 @@ def parse_matches_from_response(
             else:
                 sale_status = str(sale_status_raw) if sale_status_raw else "unknown"
 
-            # Parse markets from oddsList, deduplicated by poolCode
+            # The match-list endpoint exposes HAD/HHAD in oddsList, while
+            # poolList is authoritative for all five available play types.
+            # The calculator endpoint additionally exposes direct had/hhad/
+            # crs/ttg/hafu nodes with the complete current odds.
             markets: list[dict] = []
-            seen_pool_codes: set[str] = set()
-            odds_list = sub.get("oddsList", [])
-            for odds in odds_list:
-                pool_code = odds.get("poolCode", "")
-                if not pool_code:
-                    continue
-                if pool_code in seen_pool_codes:
-                    continue  # oddsList has duplicate entries by poolId
-                seen_pool_codes.add(pool_code)
-
+            odds_by_pool = _odds_by_pool(sub)
+            pools_by_code = {
+                pool.get("poolCode", ""): pool
+                for pool in sub.get("poolList", []) or []
+                if pool.get("poolCode")
+            }
+            pool_codes = list(dict.fromkeys([*pools_by_code, *odds_by_pool]))
+            for pool_code in pool_codes:
+                odds = odds_by_pool.get(pool_code, {})
+                pool = pools_by_code.get(pool_code)
                 play_type = POOL_CODE_MAP.get(pool_code, pool_code.lower())
                 handicap = odds.get("goalLine")
                 if handicap is not None and handicap != "":
@@ -132,36 +187,29 @@ def parse_matches_from_response(
                 else:
                     handicap_val = None
 
+                is_open = _pool_is_open(pool, bool(odds))
+                raw_market = {**odds, "_pool": pool or {}}
                 markets.append(
                     {
                         "play_type": play_type,
                         "handicap": handicap_val,
-                        "is_open": True,  # odds presence implies market is open
-                        "is_single_allowed": False,  # determined from poolList
-                        "raw_json": odds,
+                        "is_open": is_open,
+                        "is_single_allowed": is_open and _pool_enabled(
+                            pool or {}, "single", "bettingSingle", "cbtSingle", "intSingle"
+                        ),
+                        "is_pass_allowed": is_open and _pool_enabled(
+                            pool or {}, "allUp", "bettingAllup", "cbtAllUp", "intAllUp"
+                        ),
+                        "market_status": _market_status(pool, is_open),
+                        "raw_json": raw_market,
                     }
                 )
 
-            # Also check poolList for single-allowed status
-            pool_list = sub.get("poolList", [])
-            for pl in pool_list:
-                pl_code = pl.get("poolCode", "")
-                if not pl_code:
-                    continue
-                pl_play_type = POOL_CODE_MAP.get(pl_code, pl_code.lower())
-                pl_single = any(
-                    pl.get(field, 0) == 1
-                    for field in ("single", "bettingSingle", "cbtSingle", "intSingle")
-                )
-                pl_pass = any(
-                    pl.get(field, 0) == 1
-                    for field in ("allUp", "bettingAllup", "cbtAllUp", "intAllUp")
-                )
-                for mkt in markets:
-                    if mkt["play_type"] == pl_play_type:
-                        mkt["is_single_allowed"] = pl_single
-                        mkt["is_pass_allowed"] = pl_pass
-                        mkt["raw_json"] = {**mkt["raw_json"], "_pool": pl}
+            source_endpoint = (
+                "getMatchCalculatorV1.qry"
+                if any(node in sub for node in _DIRECT_ODDS_NODES.values())
+                else "getMatchListV1.qry"
+            )
 
             matches.append(
                 {
@@ -175,7 +223,7 @@ def parse_matches_from_response(
                     "sale_stop_time": None,  # sporttery API doesn't expose this directly
                     "sale_status": sale_status,
                     "match_status": "scheduled",
-                    "source_url": "https://webapi.sporttery.cn/gateway/uniform/football/getMatchListV1.qry",
+                    "source_url": f"https://webapi.sporttery.cn/gateway/uniform/football/{source_endpoint}",
                     "raw_json": sub,
                     "_markets": markets,
                 }
@@ -209,25 +257,24 @@ def parse_odds_snapshots_from_match(
         except (ValueError, TypeError):
             pass
 
-    odds_list = match_raw.get("oddsList", [])
-    pool_capabilities = {
-        pl.get("poolCode", ""): {
-            "single": any(pl.get(field, 0) == 1 for field in ("single", "bettingSingle", "cbtSingle", "intSingle")),
-            "pass": any(pl.get(field, 0) == 1 for field in ("allUp", "bettingAllup", "cbtAllUp", "intAllUp")),
-        }
-        for pl in match_raw.get("poolList", [])
+    odds_by_pool = _odds_by_pool(match_raw)
+    pools_by_code = {
+        pool.get("poolCode", ""): pool
+        for pool in match_raw.get("poolList", []) or []
+        if pool.get("poolCode")
     }
-    seen_pool_codes: set[str] = set()
-    for odds in odds_list:
-        pool_code = odds.get("poolCode", "")
-        if not pool_code:
-            continue
-        if pool_code in seen_pool_codes:
-            continue  # dedup by poolCode
-        seen_pool_codes.add(pool_code)
-
+    for pool_code, odds in odds_by_pool.items():
         play_type = POOL_CODE_MAP.get(pool_code, pool_code.lower())
-        capability = pool_capabilities.get(pool_code, {})
+        pool = pools_by_code.get(pool_code)
+        is_open = _pool_is_open(pool, True)
+        if not is_open:
+            continue
+        is_single = _pool_enabled(
+            pool or {}, "single", "bettingSingle", "cbtSingle", "intSingle"
+        )
+        is_pass = _pool_enabled(
+            pool or {}, "allUp", "bettingAllup", "cbtAllUp", "intAllUp"
+        )
         handicap = odds.get("goalLine")
         if handicap is not None and handicap != "":
             try:
@@ -237,12 +284,39 @@ def parse_odds_snapshots_from_match(
         else:
             handicap_val = None
 
-        labels = OPTION_LABELS.get(play_type, {"h": "胜", "d": "平", "a": "负"})
+        option_rows: list[tuple[str, str, Any]] = []
+        if pool_code in {"HAD", "HHAD"}:
+            labels = OPTION_LABELS[play_type]
+            option_rows = [(code, labels[code], odds.get(code)) for code in ("h", "d", "a")]
+        elif pool_code == "CRS":
+            other = {
+                "s1sh": ("other_h", "胜其他"),
+                "s1sd": ("other_d", "平其他"),
+                "s1sa": ("other_a", "负其他"),
+            }
+            for source_code, sp_value in odds.items():
+                if source_code.endswith("f"):
+                    continue
+                if source_code in other:
+                    option_code, option_name = other[source_code]
+                elif match := re.fullmatch(r"s(\d{1,2})s(\d{1,2})", source_code):
+                    option_code = f"{int(match.group(1))}:{int(match.group(2))}"
+                    option_name = option_code
+                else:
+                    continue
+                option_rows.append((option_code, option_name, sp_value))
+        elif pool_code == "TTG":
+            option_rows = [
+                (str(goals), "7+" if goals == 7 else f"{goals}球", odds.get(f"s{goals}"))
+                for goals in range(8)
+            ]
+        elif pool_code == "HAFU":
+            option_rows = [
+                (option_code, option_name, odds.get(source_code))
+                for source_code, (option_code, option_name) in _HAFU_OPTIONS.items()
+            ]
 
-        for option_code in ("h", "d", "a"):
-            sp_value = odds.get(option_code)
-            if sp_value is None:
-                continue
+        for option_code, option_name, sp_value in option_rows:
             try:
                 sp_val = float(sp_value)
             except (ValueError, TypeError):
@@ -257,13 +331,13 @@ def parse_odds_snapshots_from_match(
                     "minutes_before_stop": minutes_before_stop,
                     "play_type": play_type,
                     "option_code": option_code,
-                    "option_name": labels.get(option_code, option_code),
+                    "option_name": option_name,
                     "sp_value": sp_val,
                     "handicap": handicap_val,
-                    "is_open": odds.get("isOpen", True),
-                    "is_single_allowed": capability.get("single", odds.get("isSingleAllowed", False)),
-                    "is_pass_allowed": capability.get("pass", False),
-                    "raw_json": {**odds, "_pool": next((pl for pl in match_raw.get("poolList", []) if pl.get("poolCode") == pool_code), {})},
+                    "is_open": True,
+                    "is_single_allowed": is_single,
+                    "is_pass_allowed": is_pass,
+                    "raw_json": {**odds, "_pool": pool or {}},
                 }
             )
 
@@ -493,7 +567,7 @@ def crawl_official_odds_snapshot(business_date: str) -> dict[str, Any]:
     client = SportteryClient()
     try:
         t0 = time.monotonic()
-        raw = client.get_daily_matches(business_date)
+        raw = client.get_uniform_match_calculator()
         latency_ms = int((time.monotonic() - t0) * 1000)
 
         matches = parse_matches_from_response(raw, business_date)
@@ -502,6 +576,9 @@ def crawl_official_odds_snapshot(business_date: str) -> dict[str, Any]:
             return {"status": "ok", "matches_processed": 0, "snapshots_inserted": 0}
 
         total_snapshots = 0
+        # A row represents this collector run. Keep the official
+        # ``lastUpdateTime`` in raw_json, but timestamp the append-only
+        # snapshot at collection time just like the source periodic exporter.
         snap_time = _now()
 
         with get_db() as conn:
@@ -510,26 +587,23 @@ def crawl_official_odds_snapshot(business_date: str) -> dict[str, Any]:
                 bdate = m["business_date"]
                 with conn.cursor() as cur:
                     cur.execute(
-                        "SELECT id, source_match_id FROM official_matches "
+                        "SELECT id FROM official_matches "
                         "WHERE official_match_code = %s AND business_date = %s",
                         (code, bdate),
                     )
                     row = cur.fetchone()
                 if row is None:
                     continue
-                match_id, source_match_id = row
-                if source_match_id:
-                    fixed_bonus = client.get_uniform_fixed_bonus(int(source_match_id))
-                    total_snapshots += store_fixed_bonus_history(conn, match_id, fixed_bonus)["inserted"]
-                else:
-                    snapshots = parse_odds_snapshots_from_match(
-                        m.get("raw_json", {}), snapshot_time=snap_time
+                match_id = row[0]
+                store_markets(conn, match_id, m.get("_markets", []))
+                snapshots = parse_odds_snapshots_from_match(
+                    m.get("raw_json", {}), snapshot_time=snap_time
+                )
+                if snapshots:
+                    result = store_odds_snapshots(
+                        conn, match_id=match_id, market_id=None, snapshots=snapshots
                     )
-                    if snapshots:
-                        result = store_odds_snapshots(
-                            conn, match_id=match_id, market_id=None, snapshots=snapshots
-                        )
-                        total_snapshots += result["inserted"]
+                    total_snapshots += result["inserted"]
 
             log_crawl(
                 conn,
