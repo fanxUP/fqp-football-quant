@@ -82,6 +82,16 @@ const secondMatch: BettingMatch = {
   },
 };
 
+const thirdMatch: BettingMatch = {
+  ...secondMatch,
+  match_id: 903,
+  league_name: '挪威超级联赛',
+  home_team_name: '罗森博格',
+  away_team_name: '维京',
+  kickoff_time: '2026-07-14T02:00:00',
+  match_num_str: '周一202',
+};
+
 const recommendation: LiveRecommendation = {
   prediction_id: 10,
   match_id: firstMatch.match_id,
@@ -129,9 +139,26 @@ const calculateResponse = async (body: { items: CalculateItem[]; pass_type: stri
   const groups = new Map<number, CalculateItem[]>();
   body.items.forEach((item) => groups.set(item.match_id, [...(groups.get(item.match_id) ?? []), item]));
   const singleItems = body.items.filter((item) => item.is_single_allowed);
-  const betCount = body.pass_type === 'single'
-    ? singleItems.length
-    : [...groups.values()].reduce((count, group) => count * group.length, 1);
+  const groupedItems = [...groups.values()];
+  const countStraightPass = (requiredMatches: number): number => {
+    let total = 0;
+    const visit = (start: number, remaining: number, weight: number) => {
+      if (remaining === 0) {
+        total += weight;
+        return;
+      }
+      for (let index = start; index <= groupedItems.length - remaining; index += 1) {
+        visit(index + 1, remaining - 1, weight * groupedItems[index].length);
+      }
+    };
+    visit(0, requiredMatches, 1);
+    return total;
+  };
+  const passTypes = body.pass_type.split(',');
+  const betCount = passTypes.reduce((total, passType) => {
+    if (passType === 'single') return total + singleItems.length;
+    return total + countStraightPass(Number.parseInt(passType.split('x')[0], 10));
+  }, 0);
   return {
     pass_type: body.pass_type,
     multiple: body.multiple,
@@ -260,6 +287,64 @@ describe('BettingTerminalPage desktop workbench', () => {
     await waitFor(() => expect(apiMocks.createTicket).toHaveBeenCalledTimes(1));
     expect(apiMocks.createTicket.mock.calls[0][0]).toMatchObject({ pass_type: '2x1', multiple: 50 });
     expect(await screen.findByRole('dialog', { name: '模拟投注明细' })).toHaveTextContent('已保存到我的彩票');
+  });
+
+  it('allows single, 2-pass, and 3-pass selections on the same three-match ticket', async () => {
+    apiMocks.matches.mockResolvedValue({ matches: [firstMatch, secondMatch, thirdMatch], total: 3 });
+    render(<BettingTerminalPage />);
+
+    for (const [label, option] of [
+      ['周日203 首尔FC 对 江原FC', '胜平负 主胜 2.04'],
+      ['周一201 马尔默 对 哥德堡', '胜平负 主胜 1.67'],
+      ['周一202 罗森博格 对 维京', '胜平负 主胜 1.67'],
+    ]) {
+      const match = await screen.findByRole('article', { name: label });
+      fireEvent.click(within(match).getByRole('button', { name: option }));
+    }
+
+    const slip = await screen.findByRole('complementary', { name: '投注单' });
+    const single = within(slip).getByRole('button', { name: '单场' });
+    const twoPass = within(slip).getByRole('button', { name: '2关' });
+    const threePass = within(slip).getByRole('button', { name: '3关' });
+    expect(threePass).toHaveAttribute('aria-pressed', 'true');
+
+    fireEvent.click(single);
+    fireEvent.click(twoPass);
+
+    await waitFor(() => {
+      expect(single).toHaveAttribute('aria-pressed', 'true');
+      expect(twoPass).toHaveAttribute('aria-pressed', 'true');
+      expect(threePass).toHaveAttribute('aria-pressed', 'true');
+    });
+    await waitFor(() => expect(apiMocks.calculate).toHaveBeenLastCalledWith(expect.objectContaining({
+      pass_type: 'single,2x1,3x1',
+    })));
+    expect(within(slip).getByText((_, node) => node?.textContent === '共计: 7 注 14.00 元')).toBeInTheDocument();
+
+    fireEvent.click(twoPass);
+    await waitFor(() => expect(apiMocks.calculate).toHaveBeenLastCalledWith(expect.objectContaining({
+      pass_type: 'single,3x1',
+    })));
+    expect(single).toHaveAttribute('aria-pressed', 'true');
+    expect(twoPass).toHaveAttribute('aria-pressed', 'false');
+    expect(threePass).toHaveAttribute('aria-pressed', 'true');
+
+    fireEvent.click(twoPass);
+    fireEvent.click(single);
+    await waitFor(() => expect(apiMocks.calculate).toHaveBeenLastCalledWith(expect.objectContaining({
+      pass_type: '2x1,3x1',
+    })));
+    expect(single).toHaveAttribute('aria-pressed', 'false');
+    expect(twoPass).toHaveAttribute('aria-pressed', 'true');
+    expect(threePass).toHaveAttribute('aria-pressed', 'true');
+
+    fireEvent.click(single);
+    await waitFor(() => expect(within(slip).getByRole('button', { name: '确定' })).toBeEnabled());
+    fireEvent.click(within(slip).getByRole('button', { name: '确定' }));
+    await waitFor(() => expect(apiMocks.createTicket).toHaveBeenCalledWith(expect.objectContaining({
+      pass_type: 'single,2x1,3x1',
+    })));
+    expect(await screen.findByRole('dialog', { name: '模拟投注明细' })).toHaveTextContent('过关方式：单场 + 2关 + 3关');
   });
 
   it('filters leagues and can restrict the list to single-play markets', async () => {

@@ -1,9 +1,10 @@
 import type { BetSlipItem, CalculationResult } from '../../core/types';
+import { formatPassTypes } from './model';
 
 interface BetSlipProps {
   selections: BetSlipItem[];
   selectedMatchCount: number;
-  passType: string | null;
+  selectedPassTypes: string[];
   availablePassTypes: string[];
   multiple: number;
   calculation: CalculationResult | null;
@@ -11,7 +12,7 @@ interface BetSlipProps {
   submitting: boolean;
   warning: string;
   detailsOpen: boolean;
-  onPassType: (passType: string) => void;
+  onTogglePassType: (passType: string) => void;
   onMultiple: (multiple: number) => void;
   onToggleDetails: () => void;
   onConfirm: () => void;
@@ -51,14 +52,15 @@ export default function BetSlip(props: BetSlipProps) {
             {Array.from({ length: 8 }, (_, index) => index + 1).map((k) => {
               const passType = passTypeForK(k);
               const allowed = props.availablePassTypes.includes(passType);
+              const selected = props.selectedPassTypes.includes(passType);
               return (
                 <button
                   key={passType}
                   type="button"
-                  className={props.passType === passType ? 'is-selected' : ''}
+                  className={selected ? 'is-selected' : ''}
                   disabled={!allowed}
-                  aria-pressed={props.passType === passType}
-                  onClick={() => props.onPassType(passType)}
+                  aria-pressed={selected}
+                  onClick={() => props.onTogglePassType(passType)}
                 >{passLabel(k)}</button>
               );
             })}
@@ -66,7 +68,7 @@ export default function BetSlip(props: BetSlipProps) {
         </div>
       )}
       <div className="sporttery-slip-footer">
-        <span className="sporttery-current-pass">{props.passType === 'single' ? '单场⌃' : props.passType ? `${props.passType.split('x')[0]}关⌃` : '请选择过关'}</span>
+        <span className="sporttery-current-pass">{props.selectedPassTypes.length > 0 ? `${formatPassTypes(props.selectedPassTypes)}⌃` : '请选择过关'}</span>
         <span className="sporttery-multiple-label">倍数</span>
         <button type="button" aria-label="减少倍数" onClick={() => props.onMultiple(Math.max(1, props.multiple - 1))} disabled={props.multiple <= 1}>−</button>
         <input
@@ -85,7 +87,7 @@ export default function BetSlip(props: BetSlipProps) {
           type="button"
           className="sporttery-confirm-button"
           onClick={props.onConfirm}
-          disabled={!props.passType || !props.calculation || props.calculating || props.submitting || overLimit || Boolean(props.warning)}
+          disabled={props.selectedPassTypes.length === 0 || !props.calculation || props.calculating || props.submitting || overLimit || Boolean(props.warning)}
         >{props.submitting ? '保存中' : '确定'}</button>
       </div>
       {(props.warning || overLimit) && <div className="sporttery-warning" role="alert">{overLimit ? '单票金额不能超过20,000元' : props.warning}</div>}

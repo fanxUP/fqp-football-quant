@@ -74,6 +74,13 @@ export function selectedForMatch(items: BetSlipItem[], matchId: number): number 
   return items.filter((item) => item.match_id === matchId).length;
 }
 
+export function formatPassTypes(passTypes: string[]): string {
+  if (passTypes.length === 0) return '待选择';
+  return passTypes
+    .map((passType) => passType === 'single' ? '单场' : `${passType.split('x')[0]}关`)
+    .join(' + ');
+}
+
 export function formatHandicap(value: number | null | undefined): string {
   if (value === undefined || value === null || value === 0) return '-';
   return value > 0 ? `+${value}` : String(value);

@@ -1,4 +1,5 @@
 import type { BetSlipItem, CalculationResult, LiveRecommendation } from '../../core/types';
+import { formatPassTypes } from './model';
 
 interface RecommendationPanelProps {
   recommendations: LiveRecommendation[];
@@ -11,7 +12,7 @@ interface RecommendationPanelProps {
 interface TicketPreviewProps {
   selections: BetSlipItem[];
   selectedMatchCount: number;
-  passType: string | null;
+  selectedPassTypes: string[];
   multiple: number;
   calculation: CalculationResult | null;
   calculating: boolean;
@@ -23,11 +24,6 @@ interface TicketPreviewProps {
 
 function percent(value: number): string {
   return `${(value * 100).toFixed(1)}%`;
-}
-
-function passLabel(passType: string | null): string {
-  if (!passType) return '待选择';
-  return passType === 'single' ? '单场' : `${passType.split('x')[0]}关`;
 }
 
 export function RecommendationPanel(props: RecommendationPanelProps) {
@@ -84,7 +80,7 @@ export function TicketPreview(props: TicketPreviewProps) {
   const source = props.selections.some((item) => item.basis?.source === 'recommendation') ? '推荐投注' : '手工选号';
   const canConfirm = Boolean(
     props.selections.length > 0 &&
-    props.passType &&
+    props.selectedPassTypes.length > 0 &&
     props.calculation &&
     !props.calculating &&
     !props.submitting &&
@@ -116,7 +112,7 @@ export function TicketPreview(props: TicketPreviewProps) {
       <div className="betting-summary">
         <h4>投注确认</h4>
         <div><span>来源</span><strong>{source}</strong></div>
-        <div><span>过关方式</span><strong>{passLabel(props.passType)}</strong></div>
+        <div><span>过关方式</span><strong>{formatPassTypes(props.selectedPassTypes)}</strong></div>
         <div><span>倍数</span><strong>{props.multiple} 倍</strong></div>
         <div><span>注数</span><strong>{props.calculation?.bet_count ?? 0} 注</strong></div>
         <div><span>投注金额</span><strong>¥{(props.calculation?.total_cost ?? 0).toFixed(2)}</strong></div>

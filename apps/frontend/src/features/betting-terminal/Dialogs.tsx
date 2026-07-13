@@ -1,6 +1,6 @@
 import type { BetSlipItem, BettingMatch, BettingOddsOption } from '../../core/types';
 import type { SportteryPlayType } from '../../core/bettingRules';
-import { displayOption, optionAriaLabel, PLAY_LABELS, PLAY_TYPES, selectionKey } from './model';
+import { displayOption, formatPassTypes, optionAriaLabel, PLAY_LABELS, PLAY_TYPES, selectionKey } from './model';
 
 interface AllGamesDialogProps {
   match: BettingMatch;
@@ -113,7 +113,7 @@ export function FilterDialog({ leagues, league, singleOnly, onLeague, onSingleOn
 
 interface ConfirmationDialogProps {
   selections: BetSlipItem[];
-  passType: string;
+  passTypes: string[];
   multiple: number;
   betCount: number;
   stake: number;
@@ -131,7 +131,7 @@ export function ConfirmationDialog(props: ConfirmationDialogProps) {
           <p className="sporttery-saved">已保存到我的彩票 · {props.ticketUid}</p>
           <p><strong>{new Set(props.selections.map((item) => item.match_id)).size} 场 / {props.selections.length} 项</strong></p>
           <ol>{props.selections.map((item) => <li key={selectionKey(item.match_id, item.play_type, item.option_code)}>{item.home_team}vs{item.away_team} {item.play_type_label}{item.option_name} @{item.sp_value.toFixed(2)}</li>)}</ol>
-          <p>过关方式：{props.passType === 'single' ? '单场' : props.passType.replace('x1', '关')}<br />倍数：{props.multiple}倍<br />注数：{props.betCount}注<br />模拟金额：{props.stake.toFixed(2)}元<br />理论最高奖金：{props.prize.toFixed(2)}元</p>
+          <p>过关方式：{formatPassTypes(props.passTypes)}<br />倍数：{props.multiple}倍<br />注数：{props.betCount}注<br />模拟金额：{props.stake.toFixed(2)}元<br />理论最高奖金：{props.prize.toFixed(2)}元</p>
         </div>
         <button type="button" className="sporttery-dialog-close" onClick={props.onClose}>完成</button>
       </section>

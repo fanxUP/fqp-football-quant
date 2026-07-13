@@ -27,7 +27,7 @@ interface ConfirmationState {
   ticketUid: string;
   calculation: CalculationResult;
   selections: BetSlipItem[];
-  passType: string;
+  passTypes: string[];
   multiple: number;
 }
 
@@ -35,12 +35,12 @@ function errorMessage(error: unknown, fallback: string): string {
   return error instanceof ApiError ? error.message : error instanceof Error ? error.message : fallback;
 }
 
-function autoPassType(items: BetSlipItem[], availablePassTypes: string[]): string | null {
+function autoPassTypes(availablePassTypes: string[]): string[] {
   const straightPasses = availablePassTypes.filter((passType) => /^\d+x1$/.test(passType));
   if (straightPasses.length > 0) {
-    return straightPasses.reduce((largest, current) => Number(current.split('x')[0]) > Number(largest.split('x')[0]) ? current : largest);
+    return [straightPasses.reduce((largest, current) => Number(current.split('x')[0]) > Number(largest.split('x')[0]) ? current : largest)];
   }
-  return availablePassTypes.includes('single') ? 'single' : null;
+  return availablePassTypes.includes('single') ? ['single'] : [];
 }
 
 export default function BettingTerminalPage() {
@@ -52,7 +52,7 @@ export default function BettingTerminalPage() {
   const [recommendationsLoading, setRecommendationsLoading] = useState(true);
   const [recommendationsError, setRecommendationsError] = useState('');
   const [selections, setSelections] = useState<BetSlipItem[]>([]);
-  const [passType, setPassType] = useState<string | null>(null);
+  const [selectedPassTypes, setSelectedPassTypes] = useState<string[]>([]);
   const [passTouched, setPassTouched] = useState(false);
   const [multiple, setMultiple] = useState(1);
   const [calculation, setCalculation] = useState<CalculationResult | null>(null);
@@ -117,6 +117,7 @@ export default function BettingTerminalPage() {
     [matches],
   );
   const matchCount = useMemo(() => selectedMatchCount(selections), [selections]);
+  const encodedPassTypes = selectedPassTypes.join(',');
   const availableRecommendationIds = useMemo(() => {
     const ids = new Set<number>();
     recommendations.forEach((recommendation) => {
@@ -134,27 +135,32 @@ export default function BettingTerminalPage() {
 
   useEffect(() => {
     if (selections.length === 0) {
-      setPassType(null);
+      if (selectedPassTypes.length > 0) setSelectedPassTypes([]);
       setPassTouched(false);
       return;
     }
-    if (passType && availablePassTypes.includes(passType)) return;
-    const nextPassType = autoPassType(selections, availablePassTypes);
-    setPassType(nextPassType);
-    if (!nextPassType) setPassTouched(false);
-  }, [availablePassTypes, passType, selections]);
+    const validPassTypes = selectedPassTypes.filter((passType) => availablePassTypes.includes(passType));
+    if (validPassTypes.length !== selectedPassTypes.length) {
+      setSelectedPassTypes(validPassTypes);
+      return;
+    }
+    if (validPassTypes.length === 0 && !passTouched) {
+      const nextPassTypes = autoPassTypes(availablePassTypes);
+      if (nextPassTypes.length > 0) setSelectedPassTypes(nextPassTypes);
+    }
+  }, [availablePassTypes, passTouched, selectedPassTypes, selections.length]);
 
   useEffect(() => {
     const requestId = ++calculateRequestRef.current;
-    if (!passType || selections.length === 0) {
+    if (selectedPassTypes.length === 0 || selections.length === 0) {
       setCalculation(null);
       setCalculating(false);
-      setCalculationWarning(passType ? '' : selections.length > 0 ? '请选择可用的过关方式' : '');
+      setCalculationWarning(selections.length > 0 ? '请选择可用的过关方式' : '');
       return;
     }
     setCalculating(true);
     setCalculationWarning('');
-    api.bettingTerminal.calculate({ items: toCalculateItems(selections), pass_type: passType, multiple })
+    api.bettingTerminal.calculate({ items: toCalculateItems(selections), pass_type: encodedPassTypes, multiple })
       .then((result) => {
         if (requestId === calculateRequestRef.current) setCalculation(result);
       })
@@ -166,7 +172,7 @@ export default function BettingTerminalPage() {
       .finally(() => {
         if (requestId === calculateRequestRef.current) setCalculating(false);
       });
-  }, [multiple, passType, selections]);
+  }, [encodedPassTypes, multiple, selections, selectedPassTypes.length]);
 
   const toggleSelection = (match: BettingMatch, playType: SportteryPlayType, option: BettingOddsOption) => {
     const key = selectionKey(match.match_id, playType, option.option_code);
@@ -176,7 +182,7 @@ export default function BettingTerminalPage() {
         ? current.filter((item) => selectionKey(item.match_id, item.play_type, item.option_code) !== key)
         : [...current, createSlipItem(match, playType, option)];
     });
-    if (!passTouched) setPassType(null);
+    if (!passTouched) setSelectedPassTypes([]);
   };
 
   const addRecommendation = (recommendation: LiveRecommendation) => {
@@ -210,7 +216,7 @@ export default function BettingTerminalPage() {
       next[existingIndex] = nextItem;
       return next;
     });
-    if (!passTouched) setPassType(null);
+    if (!passTouched) setSelectedPassTypes([]);
   };
 
   const removeSelection = (target: BetSlipItem) => {
@@ -222,7 +228,7 @@ export default function BettingTerminalPage() {
 
   const refresh = () => {
     setSelections([]);
-    setPassType(null);
+    setSelectedPassTypes([]);
     setPassTouched(false);
     setMultiple(1);
     setConfirmation(null);
@@ -230,17 +236,17 @@ export default function BettingTerminalPage() {
   };
 
   const confirmTicket = async () => {
-    if (!passType || !calculation || calculation.total_cost > 20_000 || calculationWarning) return;
+    if (selectedPassTypes.length === 0 || !calculation || calculation.total_cost > 20_000 || calculationWarning) return;
     setSubmitting(true);
     try {
       const result = await api.betting.createTicket({
         source: 'real-user',
         play_type: getTicketPlayType(selections),
-        pass_type: passType,
+        pass_type: encodedPassTypes,
         multiple,
         items: toCalculateItems(selections),
       });
-      setConfirmation({ ticketUid: result.ticketUid, calculation, selections: [...selections], passType, multiple });
+      setConfirmation({ ticketUid: result.ticketUid, calculation, selections: [...selections], passTypes: [...selectedPassTypes], multiple });
       toast.success('投注已保存到我的彩票。');
     } catch (error) {
       toast.error(errorMessage(error, '投注保存失败'));
@@ -274,7 +280,7 @@ export default function BettingTerminalPage() {
         <BetSlip
           selections={selections}
           selectedMatchCount={matchCount}
-          passType={passType}
+          selectedPassTypes={selectedPassTypes}
           availablePassTypes={availablePassTypes}
           multiple={multiple}
           calculation={calculation}
@@ -282,7 +288,12 @@ export default function BettingTerminalPage() {
           submitting={submitting}
           warning={calculationWarning}
           detailsOpen={detailsOpen}
-          onPassType={(value) => { setPassType(value); setPassTouched(true); }}
+          onTogglePassType={(value) => {
+            setPassTouched(true);
+            setSelectedPassTypes((current) => availablePassTypes.filter((passType) => (
+              passType === value ? !current.includes(passType) : current.includes(passType)
+            )));
+          }}
           onMultiple={setMultiple}
           onToggleDetails={() => setDetailsOpen((current) => !current)}
           onConfirm={confirmTicket}
@@ -318,7 +329,7 @@ export default function BettingTerminalPage() {
         <TicketPreview
           selections={selections}
           selectedMatchCount={matchCount}
-          passType={passType}
+          selectedPassTypes={selectedPassTypes}
           multiple={multiple}
           calculation={calculation}
           calculating={calculating}
@@ -332,7 +343,7 @@ export default function BettingTerminalPage() {
       {activeMatch && <AllGamesDialog match={activeMatch} selections={selections} onToggle={toggleSelection} onClose={() => setActiveMatch(null)} />}
       {showRules && <RulesDialog onClose={() => setShowRules(false)} />}
       {showFilter && <FilterDialog leagues={leagues} league={league} singleOnly={singleOnly} onLeague={setLeague} onSingleOnly={setSingleOnly} onClose={() => setShowFilter(false)} />}
-      {confirmation && <ConfirmationDialog selections={confirmation.selections} passType={confirmation.passType} multiple={confirmation.multiple} betCount={confirmation.calculation.bet_count} stake={confirmation.calculation.total_cost} prize={confirmation.calculation.max_prize} ticketUid={confirmation.ticketUid} onClose={() => setConfirmation(null)} />}
+      {confirmation && <ConfirmationDialog selections={confirmation.selections} passTypes={confirmation.passTypes} multiple={confirmation.multiple} betCount={confirmation.calculation.bet_count} stake={confirmation.calculation.total_cost} prize={confirmation.calculation.max_prize} ticketUid={confirmation.ticketUid} onClose={() => setConfirmation(null)} />}
     </div>
   );
 }
