@@ -9,6 +9,7 @@ FQP 是单用户本地使用的足球竞彩与足彩量化研究系统：官方�
 - 源码仅在本机工作目录开发、测试、提交；Git 提交是唯一代码版本边界。
 - 日常热开发：`./ops/local/run_local_dev.sh`。
 - 发布运行：`./ops/local/run_local_stack.sh deploy`；该命令会推送 GitHub、核验 SHA 后重建 Docker Desktop 服务。
+- 可以根据任务自动选择本机或 Docker 运行方式；启动 Docker 不再要求用户另行明确授权。
 - `data/` 是宿主机持久数据，不能提交 Git 或用删除 Docker 卷替代恢复。
 - Scheduler/Worker 的本机热开发模式与 Docker 发布模式互斥。
 

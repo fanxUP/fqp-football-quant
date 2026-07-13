@@ -4,6 +4,8 @@
 
 自 2026-07-11 起，本项目恢复 Docker Desktop 作为运行环境；开发仍在 macOS 本机工作目录中进行。每次 Docker 部署均以已推送 GitHub 的提交为版本边界。
 
+自 2026-07-13 起，取消“只有用户明确要求部署时才可启动 Docker”的限制。日常代码修改和快速测试仍优先使用本机环境；当任务需要完整服务栈、长期 Scheduler/Worker、发布验收或环境复现时，可以直接使用 Docker Desktop。选择依据是任务目标，而不是是否出现特定口令。
+
 本文是当前运行规则；其他文档中“未使用 Docker Desktop”的表述，除非明确标为当前规则，均为对应阶段的历史验收事实。
 
 ## 本机开发
@@ -27,4 +29,5 @@ cp .env.local.example .env.local
 
 - 代码在本机开发、测试与提交；禁止在容器内直接修改源码。
 - Docker Desktop 仅通过 `ops/local/run_local_stack.sh deploy` 同步，避免容器版本和 GitHub 版本漂移。
+- 本机 Scheduler/Worker 与 Docker Scheduler/Worker 不得同时运行；切换运行方式前必须先停止另一套任务执行器。
 - API 密钥仅保存在忽略的本地 `.env.local` 中；示例文件只保留占位符。
