@@ -721,6 +721,13 @@ body {
   text-transform: uppercase;
 }
 .fqp-nav-item {
+  width: 100%;
+  border-top: 0;
+  border-right: 0;
+  border-bottom: 0;
+  background: transparent;
+  font: inherit;
+  text-align: left;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -735,6 +742,11 @@ body {
 .fqp-nav-item:hover {
   color: var(--fqp-text);
   background: rgba(255, 42, 61, 0.04);
+}
+.fqp-nav-item:focus-visible,
+.fqp-theme-toggle:focus-visible {
+  outline: 2px solid var(--fqp-red-neon);
+  outline-offset: -2px;
 }
 .fqp-nav-item.active {
   color: var(--fqp-red-neon);
@@ -764,6 +776,10 @@ body {
 
 /* ---- Theme toggle ---- */
 .fqp-theme-toggle {
+  width: 100%;
+  background: transparent;
+  font: inherit;
+  text-align: left;
   display: flex;
   align-items: center;
   gap: 10px;

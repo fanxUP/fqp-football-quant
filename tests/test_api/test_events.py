@@ -1,7 +1,7 @@
 from unittest.mock import patch
 
 
-def test_events_include_scheduled_official_matches(client):
+def test_events_summarize_the_full_official_and_supplemental_catalog(client):
     with patch("apps.backend.src.routers.teams.get_db") as get_db:
         connection = get_db.return_value.__enter__.return_value
         cursor = connection.cursor.return_value.__enter__.return_value
@@ -13,8 +13,9 @@ def test_events_include_scheduled_official_matches(client):
 
     assert response.status_code == 200
     assert response.json()["total"] == 1
-    assert "match_status" not in cursor.execute.call_args.args[0]
-    assert "scheduled" not in cursor.execute.call_args.args[0]
+    sql = cursor.execute.call_args.args[0]
+    assert "event_match_catalog" in sql
+    assert "source = 'official'" not in sql
 
 
 def test_active_matches_exclude_finished_official_history(client):

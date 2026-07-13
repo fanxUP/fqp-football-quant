@@ -30,7 +30,7 @@ export default function EventsPage() {
   const loadMatches = useCallback((leagueName: string | null, offset = 0) => {
     setLoading(true);
     setError(null);
-    api.events.catalog({ source: 'official', league_name: leagueName ?? undefined, limit: PAGE_SIZE, offset })
+    api.events.catalog({ source: 'all', league_name: leagueName ?? undefined, limit: PAGE_SIZE, offset })
       .then((res) => {
         setMatches(res.matches);
         setTotal(res.total);
@@ -127,7 +127,7 @@ export default function EventsPage() {
     },
   ];
 
-  const totalMatches = events.reduce((s, e) => s + e.match_count, 0) || total;
+  const totalMatches = isAll ? total : events.reduce((s, e) => s + e.match_count, 0) || total;
 
   const selectedEvent = isAll ? null : events.find((e) => e.league_name === selectedLeague);
   const page = Math.floor(offset / PAGE_SIZE) + 1;
@@ -135,7 +135,7 @@ export default function EventsPage() {
 
   return (
     <div>
-      <PageHeader title="赛事中心" subtitle={`${events.length} 个联赛 · ${totalMatches} 场比赛 · 体彩官方已收录`} />
+      <PageHeader title="赛事中心" subtitle={`${events.length} 个联赛 · ${totalMatches} 场比赛 · 赛季档案包含体彩官方与赛程补充`} />
 
       <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-start' }}>
         {/* ── Left: league nav ── */}
@@ -231,7 +231,7 @@ export default function EventsPage() {
               {isAll ? '全部赛事' : selectedLeague}
             </span>
             <span style={{ color: 'var(--fqp-text-muted)', fontSize: '13px' }}>
-              {total} 场比赛 · 体彩官方已收录
+              {total} 场比赛 · 体彩官方与赛程补充分层展示
             </span>
             {selectedEvent && (
               <span style={{ color: 'var(--fqp-text-muted)', fontSize: '12px' }}>

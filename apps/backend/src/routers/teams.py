@@ -251,15 +251,14 @@ def list_feature_snapshots(
 
 @router.get("/api/events")
 def list_events():
-    """List all leagues/tournaments with match counts (仅体彩官网数据)."""
+    """List leagues from the source-labelled season archive."""
     with get_db() as conn:
         with conn.cursor() as cur:
             cur.execute("""
                 SELECT league_name, COUNT(*) AS match_count,
                        MIN(kickoff_time) AS first_match,
                        MAX(kickoff_time) AS last_match
-                FROM official_matches
-                WHERE raw_json->>'source' IS DISTINCT FROM '500.com'
+                FROM event_match_catalog
                 GROUP BY league_name
                 ORDER BY MAX(kickoff_time) DESC
             """)

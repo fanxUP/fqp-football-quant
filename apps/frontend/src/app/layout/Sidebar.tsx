@@ -108,16 +108,18 @@ export default function Sidebar({ isOpen = false, onClose }: SidebarProps) {
                     ? currentPath === '/'
                     : currentPath.startsWith(item.routePath);
                 return (
-                  <div
+                  <button
+                    type="button"
                     key={item.panelCode}
                     className={`fqp-nav-item${isActive ? ' active' : ''}`}
                     onClick={() => handleNav(item.routePath)}
+                    aria-current={isActive ? 'page' : undefined}
                   >
                     <span className="fqp-nav-icon" aria-hidden="true">
                       {normalizeSidebarIcon(item.icon)}
                     </span>
                     <span>{item.panelName}</span>
-                  </div>
+                  </button>
                 );
               })}
             </section>
@@ -126,10 +128,10 @@ export default function Sidebar({ isOpen = false, onClose }: SidebarProps) {
       </nav>
 
       {/* Theme toggle */}
-      <div className="fqp-theme-toggle" onClick={toggleTheme}>
+      <button type="button" className="fqp-theme-toggle" onClick={toggleTheme}>
         <span className="fqp-nav-icon">{theme === 'dark' ? '☀️' : '🌙'}</span>
         <span>{theme === 'dark' ? '亮色模式' : '暗色模式'}</span>
-      </div>
+      </button>
     </aside>
   );
 }

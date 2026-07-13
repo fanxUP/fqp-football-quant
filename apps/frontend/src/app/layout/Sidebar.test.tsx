@@ -139,6 +139,36 @@ describe('Sidebar', () => {
       expect(screen.queryByText('今日驾驶舱')).toBeNull();
     });
 
+    it('renders the runtime system monitor in the maintenance group', async () => {
+      mockRuntimePanels.mockResolvedValue({
+        total: 1,
+        panels: [
+          {
+            panelCode: 'data_health',
+            moduleCode: 'ops_admin',
+            panelName: '系统监控',
+            routePath: '/data-health',
+            menuGroup: '运维设置',
+            category: 'maintenance',
+            icon: 'database',
+            order: 310,
+          },
+        ],
+      });
+
+      renderSidebar();
+
+      expect(await screen.findByRole('button', { name: /系统监控/ })).toBeInTheDocument();
+      expect(screen.getByText('系统管理')).toBeInTheDocument();
+    });
+
+    it('uses semantic buttons for navigation and theme switching', () => {
+      renderSidebar();
+
+      expect(screen.getByRole('button', { name: /今日驾驶舱/ })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /亮色模式/ })).toBeInTheDocument();
+    });
+
     it('loads runtime panels once in StrictMode', async () => {
       render(<StrictMode><Sidebar /></StrictMode>);
 

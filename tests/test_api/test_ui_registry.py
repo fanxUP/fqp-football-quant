@@ -67,10 +67,13 @@ def test_ui_panels_endpoint_reads_final_registry_in_order(client, tmp_path, monk
         "moduleCode": "official_data_core",
         "moduleName": "官方数据核心",
         "category": "core_loop",
+        "menuGroup": "核心闭环",
         "order": 10,
         "visible": True,
         "icon": "chart",
     }
+    data_health = next(panel for panel in data["panels"] if panel["panelCode"] == "data_health")
+    assert data_health["menuGroup"] == "运维设置"
 
 
 def test_ui_panels_endpoint_filters_only_safely_disabled_modules(client, tmp_path, monkeypatch):

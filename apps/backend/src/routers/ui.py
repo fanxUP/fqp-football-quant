@@ -16,6 +16,12 @@ MODULE_REGISTRY_PATH = ROOT / "configs" / "final_module_registry.yaml"
 PANEL_REGISTRY_PATH = ROOT / "configs" / "final_panel_registry.yaml"
 RUNTIME_STATE_PATH = ROOT / "data" / "runtime" / "module_state.json"
 CATEGORY_ORDER = ["core_loop", "research", "strategy_lab", "maintenance"]
+CATEGORY_MENU_GROUP = {
+    "core_loop": "核心闭环",
+    "research": "研究优化",
+    "strategy_lab": "策略实验",
+    "maintenance": "运维设置",
+}
 
 
 def _load_yaml(path: Path) -> dict[str, Any]:
@@ -175,6 +181,7 @@ def list_ui_panels(
         if module_code in safely_disabled:
             continue
         module = modules.get(module_code, {})
+        category = str(module.get("category", "maintenance"))
         panel_code = str(panel.get("panel_id", ""))
         panels.append(
             {
@@ -183,7 +190,8 @@ def list_ui_panels(
                 "routePath": str(panel.get("route", "/")),
                 "moduleCode": module_code,
                 "moduleName": str(module.get("moduleName", module_code)),
-                "category": str(module.get("category", "maintenance")),
+                "category": category,
+                "menuGroup": CATEGORY_MENU_GROUP.get(category, "运维设置"),
                 "order": int(panel.get("order", 9999)),
                 "visible": True,
                 "icon": str(panel.get("icon", "")),
