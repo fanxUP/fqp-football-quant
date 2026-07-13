@@ -14,7 +14,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
 OFFICIAL_MATCH_CODE_RE = re.compile(r"^周[一二三四五六日]\d{3}$")
@@ -31,6 +31,24 @@ def _hash_raw(raw: Any) -> str:
 
 def _now() -> str:
     return datetime.now().isoformat(timespec="seconds")
+
+
+def _event_season_targets(conn: Any) -> dict[str, tuple[date, date]]:
+    """Load the active event-center season gate; an empty table disables it."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT league_name, season_start_date, season_end_date
+            FROM official_event_season_targets
+            """
+        )
+        return {
+            str(row[0]): (
+                row[1] if isinstance(row[1], date) else date.fromisoformat(str(row[1])),
+                row[2] if isinstance(row[2], date) else date.fromisoformat(str(row[2])),
+            )
+            for row in cur.fetchall()
+        }
 
 
 # ---------------------------------------------------------------------------
@@ -72,6 +90,29 @@ def store_matches(conn: Any, matches: list[dict]) -> dict[str, Any]:
             )
             continue
         valid_matches.append(match)
+
+    if not valid_matches:
+        return {"inserted": 0, "updated": 0, "errors": errors}
+
+    season_targets = _event_season_targets(conn)
+    if season_targets:
+        season_valid: list[dict] = []
+        for match in valid_matches:
+            raw_date = match["business_date"]
+            business_date = (
+                raw_date if isinstance(raw_date, date) else date.fromisoformat(str(raw_date))
+            )
+            target = season_targets.get(str(match.get("league_name") or ""))
+            if target is None or not target[0] <= business_date <= target[1]:
+                errors.append(
+                    {
+                        "match_code": str(match["official_match_code"]),
+                        "error": "outside selected event season",
+                    }
+                )
+                continue
+            season_valid.append(match)
+        valid_matches = season_valid
 
     if not valid_matches:
         return {"inserted": 0, "updated": 0, "errors": errors}

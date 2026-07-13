@@ -40,3 +40,13 @@ def test_scheduler_does_not_refresh_numberless_official_season_archive():
 
     source = Path("scripts/jobs/run_scheduler.py").read_text()
     assert 'id="refresh_official_seasons"' not in source
+
+
+def test_scheduler_reconciles_numbered_event_seasons_before_daily_crawl():
+    from pathlib import Path
+
+    source = Path("scripts/jobs/run_scheduler.py").read_text()
+    assert 'id="reconcile_event_seasons"' in source
+    assert source.index('id="reconcile_event_seasons"') < source.index(
+        'id="crawl_official_schedule"'
+    )

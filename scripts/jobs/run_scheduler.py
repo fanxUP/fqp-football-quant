@@ -114,6 +114,22 @@ def main() -> None:
 
         # ----- Stage 2: official data jobs -----
         if _official_source_enabled():
+            # Daily: select one valid season per event before accepting new matches.
+            scheduler.add_job(
+                _audited_job(
+                    "reconcile_event_seasons",
+                    "赛事中心赛季校准",
+                    "crawler_agent",
+                    lambda: __import__(
+                        "scripts.jobs.reconcile_event_seasons", fromlist=["run"]
+                    ).run(),
+                ),
+                "cron",
+                hour=0,
+                minute=5,
+                id="reconcile_event_seasons",
+            )
+
             # Daily: crawl official schedule at 00:10
             scheduler.add_job(
                 lambda: __import__(
