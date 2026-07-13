@@ -38,6 +38,19 @@ def test_active_matches_exclude_finished_official_history(client):
     assert "settled" in completed_statuses
 
 
+def test_active_matches_require_canonical_official_match_codes(client):
+    with patch("apps.backend.src.routers.teams.get_db") as get_db:
+        connection = get_db.return_value.__enter__.return_value
+        cursor = connection.cursor.return_value.__enter__.return_value
+        cursor.fetchall.return_value = []
+
+        response = client.get("/api/matches/active")
+
+    assert response.status_code == 200
+    sql = cursor.execute.call_args.args[0]
+    assert "m.official_match_code ~ '^周[一二三四五六日][0-9]{3}$'" in sql
+
+
 def test_active_matches_mark_started_unsettled_matches_as_awaiting_result(client):
     with patch("apps.backend.src.routers.teams.get_db") as get_db:
         connection = get_db.return_value.__enter__.return_value
