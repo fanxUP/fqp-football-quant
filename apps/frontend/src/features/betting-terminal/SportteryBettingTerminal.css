@@ -163,11 +163,9 @@
 .sporttery-saved { border-radius: 6px; padding: 9px 12px; background: #e8f7f2; color: #16836d; }
 
 @media (max-width: 760px) {
-  .fqp-main:has(.sporttery-terminal) { padding: 0; }
+  .fqp-main:has(.sporttery-terminal) { padding: 56px 0 0; }
   .fqp-page-transition:has(.sporttery-terminal) { transform: none !important; animation: none !important; }
-  .fqp-layout:has(.sporttery-terminal) .fqp-hamburger { display: none; }
   .betting-center-page:has(.sporttery-terminal) > .fqp-page-header,
-  .betting-center-page:has(.sporttery-terminal) > .betting-center-tabs,
   .betting-center-page:has(.sporttery-terminal) > .betting-center-context { display: none !important; }
   .sporttery-terminal { width: 100%; box-shadow: none; }
 }

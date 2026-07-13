@@ -1276,7 +1276,7 @@
 
 @media (max-width: 760px) {
   .fqp-main:has(.betting-center-page) {
-    padding: 0;
+    padding: 56px 0 0;
   }
 
   .fqp-page-transition:has(.betting-center-page) {
@@ -1284,17 +1284,29 @@
     animation: none !important;
   }
 
-  .fqp-layout:has(.betting-center-page) .fqp-hamburger {
-    display: none;
-  }
-
   .betting-center-page {
     width: 100%;
   }
 
   .betting-center-page > .fqp-page-header,
-  .betting-center-page > .betting-center-tabs,
   .betting-center-page > .betting-center-context {
+    display: none !important;
+  }
+
+  .betting-center-page > .betting-center-tabs {
+    gap: 6px !important;
+    margin: 0 !important;
+    padding: 8px 12px;
+    background: var(--fqp-panel);
+  }
+
+  .betting-center-page > .betting-center-tabs > button {
+    min-height: 42px !important;
+    padding: 7px 8px !important;
+    text-align: center !important;
+  }
+
+  .betting-center-tab-description {
     display: none !important;
   }
 

@@ -79,10 +79,10 @@ export default function BettingCenterPage({ initialTab = 'bet-slip' }: BettingCe
                 background: selected ? 'rgba(34, 197, 94, 0.12)' : 'var(--fqp-card-bg)',
               }}
             >
-              <span style={{ display: 'block', fontWeight: 700, color: 'var(--fqp-text)' }}>
+              <span className="betting-center-tab-label" style={{ display: 'block', fontWeight: 700, color: 'var(--fqp-text)' }}>
                 {tab.label}
               </span>
-              <span style={{ display: 'block', marginTop: '4px', fontSize: '12px', color: 'var(--fqp-text-muted)' }}>
+              <span className="betting-center-tab-description" style={{ display: 'block', marginTop: '4px', fontSize: '12px', color: 'var(--fqp-text-muted)' }}>
                 {tab.description}
               </span>
             </button>
