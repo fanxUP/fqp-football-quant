@@ -66,6 +66,32 @@ def test_current_pool_flags_drive_single_and_pass_availability():
     assert all(snapshot["is_pass_allowed"] is True for snapshot in snapshots)
 
 
+def test_missing_pool_code_is_ignored_and_missing_permissions_fail_closed():
+    sub_match = {
+        "matchNumStr": "周一201",
+        "matchDate": "2026-07-14",
+        "matchTime": "01:00",
+        "leagueAllName": "测试联赛",
+        "homeTeamAllName": "主队",
+        "awayTeamAllName": "客队",
+        "sellStatus": "1",
+        "oddsList": [
+            {"poolCode": "", "h": 2.0, "d": 3.0, "a": 4.0},
+            {"poolCode": "HAD", "h": 2.1, "d": 3.1, "a": 4.1},
+        ],
+        "poolList": [],
+    }
+    raw = {"value": {"matchInfoList": [{"businessDate": "2026-07-13", "subMatchList": [sub_match]}]}}
+
+    match = parse_matches_from_response(raw, "2026-07-13")[0]
+    snapshots = parse_odds_snapshots_from_match(sub_match, "2026-07-13T12:00:00")
+
+    assert [market["play_type"] for market in match["_markets"]] == ["spf"]
+    assert {snapshot["play_type"] for snapshot in snapshots} == {"spf"}
+    assert all(snapshot["is_single_allowed"] is False for snapshot in snapshots)
+    assert all(snapshot["is_pass_allowed"] is False for snapshot in snapshots)
+
+
 def test_blocked_sporttery_results_use_labeled_500_supplement_for_existing_official_matches():
     client = MagicMock()
     client.get_match_results.side_effect = RuntimeError("403 Forbidden")

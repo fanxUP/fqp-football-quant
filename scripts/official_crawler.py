@@ -116,6 +116,8 @@ def parse_matches_from_response(
             odds_list = sub.get("oddsList", [])
             for odds in odds_list:
                 pool_code = odds.get("poolCode", "")
+                if not pool_code:
+                    continue
                 if pool_code in seen_pool_codes:
                     continue  # oddsList has duplicate entries by poolId
                 seen_pool_codes.add(pool_code)
@@ -144,6 +146,8 @@ def parse_matches_from_response(
             pool_list = sub.get("poolList", [])
             for pl in pool_list:
                 pl_code = pl.get("poolCode", "")
+                if not pl_code:
+                    continue
                 pl_play_type = POOL_CODE_MAP.get(pl_code, pl_code.lower())
                 pl_single = any(
                     pl.get(field, 0) == 1
@@ -216,6 +220,8 @@ def parse_odds_snapshots_from_match(
     seen_pool_codes: set[str] = set()
     for odds in odds_list:
         pool_code = odds.get("poolCode", "")
+        if not pool_code:
+            continue
         if pool_code in seen_pool_codes:
             continue  # dedup by poolCode
         seen_pool_codes.add(pool_code)
@@ -256,7 +262,7 @@ def parse_odds_snapshots_from_match(
                     "handicap": handicap_val,
                     "is_open": odds.get("isOpen", True),
                     "is_single_allowed": capability.get("single", odds.get("isSingleAllowed", False)),
-                    "is_pass_allowed": capability.get("pass", True),
+                    "is_pass_allowed": capability.get("pass", False),
                     "raw_json": {**odds, "_pool": next((pl for pl in match_raw.get("poolList", []) if pl.get("poolCode") == pool_code), {})},
                 }
             )
