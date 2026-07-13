@@ -2,10 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import ChartCard from './ChartCard';
 
-// ----- Mock echarts entirely ------------------------------------------------
-// The source file imports:  import * as echarts from 'echarts'
-// and then calls echarts.init(...). So the mock must provide `init` as a
-// top-level named export.
+// ----- Mock the tree-shakeable ECharts core entry ---------------------------
 
 const { mockInit, mockInstance } = vi.hoisted(() => {
   const inst = {
@@ -19,8 +16,9 @@ const { mockInit, mockInstance } = vi.hoisted(() => {
   };
 });
 
-vi.mock('echarts', () => ({
+vi.mock('echarts/core', () => ({
   init: mockInit,
+  use: vi.fn(),
 }));
 
 // ----- Mock ThemeContext (ChartCard reads theme for textColor) ---------------

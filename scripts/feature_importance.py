@@ -220,6 +220,7 @@ def _load_training_data(
 # Module-level cache
 _trained_model: Any = None
 _trained_explainer: Any = None
+_explainer_initialized = False
 _feature_names_cache: list[str] = []
 _importance_cache: dict[str, Any] = {}
 _train_score: float = 0.0
@@ -232,7 +233,8 @@ def train_if_needed(conn: Any, force: bool = False) -> dict[str, Any]:
         {"status": "ok", "n_samples": int, "n_features": int,
          "train_accuracy": float, "feature_count": int}
     """
-    global _trained_model, _trained_explainer, _feature_names_cache, _importance_cache, _train_score
+    global _trained_model, _trained_explainer, _explainer_initialized
+    global _feature_names_cache, _importance_cache, _train_score
 
     if _trained_model is not None and not force:
         return {
@@ -267,19 +269,15 @@ def train_if_needed(conn: Any, force: bool = False) -> dict[str, Any]:
         eval_metric="mlogloss",
         enable_categorical=False,
         random_state=42,
-        n_jobs=-1,
+        n_jobs=1,
     )
     model.fit(X, y)
 
     _trained_model = model
     _feature_names_cache = feature_names
     _train_score = float(model.score(X, y))
-
-    # Build SHAP explainer
-    try:
-        _trained_explainer = _build_shap_explainer(model, X)
-    except Exception:
-        _trained_explainer = None
+    _trained_explainer = None
+    _explainer_initialized = False
 
     # Compute permutation importance
     _importance_cache = _compute_permutation_importance(model, X, y, feature_names)
@@ -322,7 +320,7 @@ def _compute_permutation_importance(
         from sklearn.inspection import permutation_importance
 
         r = permutation_importance(
-            model, X, y, n_repeats=n_repeats, random_state=42, n_jobs=-1
+            model, X, y, n_repeats=n_repeats, random_state=42, n_jobs=1
         )
 
         rankings = []
@@ -419,7 +417,7 @@ def explain_prediction(
         {"status": "ok", "match_id": int, "shap_values": [...],
          "base_value": float, "predicted_probs": [float, float, float]}
     """
-    global _trained_model, _trained_explainer, _feature_names_cache
+    global _trained_model, _trained_explainer, _explainer_initialized, _feature_names_cache
 
     # Ensure model is trained
     train_result = train_if_needed(conn)
@@ -471,6 +469,13 @@ def explain_prediction(
     # SHAP values
     shap_data: list[dict[str, Any]] = []
     base_values: list[float] = [0.33, 0.34, 0.33]
+
+    if not _explainer_initialized:
+        try:
+            _trained_explainer = _build_shap_explainer(_trained_model, X_single)
+        except Exception:
+            _trained_explainer = None
+        _explainer_initialized = True
 
     if _trained_explainer is not None:
         try:
@@ -548,7 +553,7 @@ def get_model_comparison_data(conn: Any) -> dict[str, Any]:
         """)
         columns = [desc[0] for desc in cur.description]
         for row in cur.fetchall():
-            d = dict(zip(columns, row))
+            d = dict(zip(columns, row, strict=False))
             name = d["model_name"]
             models_data[name] = {
                 "name": name,
@@ -579,7 +584,7 @@ def get_model_comparison_data(conn: Any) -> dict[str, Any]:
         """)
         columns = [desc[0] for desc in cur.description]
         for row in cur.fetchall():
-            d = dict(zip(columns, row))
+            d = dict(zip(columns, row, strict=False))
             name = d["model_name"]
             if name in models_data:
                 models_data[name].update(
@@ -637,7 +642,7 @@ def get_evaluation_summary(conn: Any) -> dict[str, Any]:
         columns = [desc[0] for desc in cur.description]
         models = []
         for row in cur.fetchall():
-            d = dict(zip(columns, row))
+            d = dict(zip(columns, row, strict=False))
             models.append(
                 {
                     "model_name": d["model_name"],
@@ -783,7 +788,7 @@ def get_condition_performance(
                 ORDER BY m.league_name, avg_brier ASC
             """)
             columns = [desc[0] for desc in cur.description]
-            segments = [dict(zip(columns, row)) for row in cur.fetchall()]
+            segments = [dict(zip(columns, row, strict=False)) for row in cur.fetchall()]
 
     elif dimension == "odds_range":
         with conn.cursor() as cur:
@@ -813,7 +818,7 @@ def get_condition_performance(
                 ORDER BY odds_range, avg_brier ASC
             """)
             columns = [desc[0] for desc in cur.description]
-            segments = [dict(zip(columns, row)) for row in cur.fetchall()]
+            segments = [dict(zip(columns, row, strict=False)) for row in cur.fetchall()]
 
     elif dimension == "confidence":
         with conn.cursor() as cur:
@@ -842,7 +847,7 @@ def get_condition_performance(
                 ORDER BY confidence_range, avg_brier ASC
             """)
             columns = [desc[0] for desc in cur.description]
-            segments = [dict(zip(columns, row)) for row in cur.fetchall()]
+            segments = [dict(zip(columns, row, strict=False)) for row in cur.fetchall()]
     else:
         return {"status": "error", "error": f"未知维度: {dimension}"}
 

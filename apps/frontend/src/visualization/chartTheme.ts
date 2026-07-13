@@ -1,6 +1,6 @@
 /** Red-black tech ECharts theme — shared defaults for all charts. */
 
-import * as echarts from 'echarts';
+import type { EChartsCoreOption } from 'echarts/core';
 
 // Palette from the FQP red-black tech design system
 const PALETTE = ['#FF2A3D', '#3B82F6', '#F5A524', '#22C55E', '#8B5CF6', '#06B6D4'];
@@ -24,7 +24,7 @@ export const CHART_COLORS = {
 };
 
 /** Apply FQP red-black theme defaults to any ECharts option. */
-export function applyChartTheme(option: echarts.EChartsOption): echarts.EChartsOption {
+export function applyChartTheme(option: EChartsCoreOption): EChartsCoreOption {
   return {
     backgroundColor: 'transparent',
     color: PALETTE,

@@ -1,7 +1,33 @@
 import { useEffect, useRef } from 'react';
-import * as echarts from 'echarts';
+import { BarChart, HeatmapChart, LineChart, PieChart, RadarChart, ScatterChart } from 'echarts/charts';
+import {
+  GridComponent,
+  LegendComponent,
+  MarkLineComponent,
+  RadarComponent,
+  TooltipComponent,
+  VisualMapComponent,
+} from 'echarts/components';
+import { init, use, type ECharts } from 'echarts/core';
+import { CanvasRenderer } from 'echarts/renderers';
 import Card from './Card';
 import { useTheme } from '../../app/ThemeContext';
+
+use([
+  BarChart,
+  HeatmapChart,
+  LineChart,
+  PieChart,
+  RadarChart,
+  ScatterChart,
+  GridComponent,
+  LegendComponent,
+  MarkLineComponent,
+  RadarComponent,
+  TooltipComponent,
+  VisualMapComponent,
+  CanvasRenderer,
+]);
 
 interface ChartCardProps {
   title: string;
@@ -27,7 +53,7 @@ export default function ChartCard({
   updatedAt,
 }: ChartCardProps) {
   const chartRef = useRef<HTMLDivElement>(null);
-  const instanceRef = useRef<echarts.ECharts | null>(null);
+  const instanceRef = useRef<ECharts | null>(null);
   const { theme } = useTheme();
 
   useEffect(() => {
@@ -42,7 +68,7 @@ export default function ChartCard({
       ...option,
     };
 
-    const inst = echarts.init(chartRef.current, undefined, { renderer: 'canvas' });
+    const inst = init(chartRef.current, undefined, { renderer: 'canvas' });
     inst.setOption(themedOption);
     instanceRef.current = inst;
 
