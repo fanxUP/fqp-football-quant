@@ -1,6 +1,17 @@
 from unittest.mock import patch
 
 
+def test_strict_official_catalog_migration_rebuilds_dependent_views_safely():
+    from pathlib import Path
+
+    sql = Path("sql/31_strict_official_event_catalog.sql").read_text()
+    assert sql.index("DROP VIEW IF EXISTS competition_data_coverage") < sql.index(
+        "DROP VIEW IF EXISTS event_match_catalog"
+    )
+    assert "DROP TABLE IF EXISTS official_season_matches" in sql
+    assert "ALTER COLUMN source_match_id SET NOT NULL" in sql
+
+
 def test_events_summarize_only_canonical_official_matches(client):
     with patch("apps.backend.src.routers.teams.get_db") as get_db:
         connection = get_db.return_value.__enter__.return_value
