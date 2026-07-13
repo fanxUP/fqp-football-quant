@@ -19,10 +19,6 @@ def _official_source_enabled() -> bool:
     return os.getenv("OFFICIAL_SOURCE_ENABLED", "true").lower() == "true"
 
 
-def _supplemental_season_enabled() -> bool:
-    return os.getenv("SUPPLEMENTAL_SEASON_ENABLED", "false").lower() == "true"
-
-
 def _audited_job(
     job_code: str, job_name: str, owner_agent: str, fn: Callable[[], Any]
 ) -> Callable[[], None]:
@@ -217,24 +213,6 @@ def main() -> None:
                 minute=7,
                 id="collect_standings",
             )
-
-            # Third-party season data is isolated and opt-in only. It is never
-            # allowed to repopulate a cleaned installation by default.
-            if _supplemental_season_enabled():
-                scheduler.add_job(
-                    _audited_job(
-                        "refresh_supplemental_seasons",
-                        "补充赛季数据刷新",
-                        "crawler_agent",
-                        lambda: __import__(
-                            "scripts.jobs.refresh_supplemental_seasons", fromlist=["run"]
-                        ).run(),
-                    ),
-                    "cron",
-                    hour=3,
-                    minute=50,
-                    id="refresh_supplemental_seasons",
-                )
 
             # Daily at 08:00: collect injury data from API-Football
             scheduler.add_job(

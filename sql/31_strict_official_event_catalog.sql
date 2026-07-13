@@ -4,6 +4,7 @@
 DROP VIEW IF EXISTS competition_data_coverage;
 DROP VIEW IF EXISTS event_match_catalog;
 DROP TABLE IF EXISTS official_season_matches;
+DROP TABLE IF EXISTS supplemental_matches;
 
 -- Remove legacy rows that predate the strict official-identity contract,
 -- then make that contract impossible to bypass with another writer.

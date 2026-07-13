@@ -9,6 +9,7 @@ def test_strict_official_catalog_migration_rebuilds_dependent_views_safely():
         "DROP VIEW IF EXISTS event_match_catalog"
     )
     assert "DROP TABLE IF EXISTS official_season_matches" in sql
+    assert "DROP TABLE IF EXISTS supplemental_matches" in sql
     assert "ALTER COLUMN source_match_id SET NOT NULL" in sql
 
 

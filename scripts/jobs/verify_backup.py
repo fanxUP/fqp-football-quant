@@ -193,7 +193,7 @@ def _test_restore(filepath: str) -> bool:
     try:
         with open(filepath) as f:
             content = f.read()
-        required_tables = ("official_matches", "supplemental_matches")
+        required_tables = ("official_matches",)
         return (
             "COPY failed:" not in content
             and all(f"COPY public.{table} " in content or f'COPY "public"."{table}" ' in content

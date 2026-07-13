@@ -1,4 +1,4 @@
-from scripts.jobs.run_scheduler import _audited_job, _supplemental_season_enabled
+from scripts.jobs.run_scheduler import _audited_job
 
 
 def test_self_tracked_job_is_not_wrapped_again():
@@ -27,16 +27,12 @@ def test_scheduler_uses_completed_status_for_successful_legacy_jobs():
     assert 'finish_job_run(conn, run_id, "success"' not in source
 
 
-def test_supplemental_season_refresh_is_disabled_by_default(monkeypatch):
-    monkeypatch.delenv("SUPPLEMENTAL_SEASON_ENABLED", raising=False)
+def test_scheduler_has_no_numberless_match_refresh_path():
+    from pathlib import Path
 
-    assert _supplemental_season_enabled() is False
-
-
-def test_supplemental_season_refresh_requires_explicit_opt_in(monkeypatch):
-    monkeypatch.setenv("SUPPLEMENTAL_SEASON_ENABLED", "true")
-
-    assert _supplemental_season_enabled() is True
+    source = Path("scripts/jobs/run_scheduler.py").read_text()
+    assert "refresh_supplemental_seasons" not in source
+    assert "SUPPLEMENTAL_SEASON_ENABLED" not in source
 
 
 def test_scheduler_does_not_refresh_numberless_official_season_archive():

@@ -23,18 +23,31 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from apps.backend.src.db import get_db  # noqa: E402
-from scripts.season_crawler import LEAGUE_PAGE_URL, _fetch_page  # noqa: E402
 
 ASSET_DIR = ROOT / "apps/frontend/public/team-crests"
 REGISTRY_PATH = ROOT / "apps/frontend/src/shared/data/teamCrests.generated.ts"
 ICON_URL = "https://liansai.500.com/static/soccerdata/images/TeamPic/teamsignnew_{team_id}.png"
+LEAGUE_PAGE_URL = "https://liansai.500.com/zuqiu-{league_id}/"
 LEAGUE_IDS = (19476, 19554, 19501, 19506, 19507)
+PROVIDER_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    ),
+    "Accept-Language": "zh-CN,zh;q=0.9",
+}
 
 # Provider and internal naming order differ for this club.
 MANUAL_PROVIDER_NAMES = {"奥斯陆KFUM": "KFUM奥斯陆"}
 # Official Sporttery uses this spelling while the existing 500.com team row
 # uses the reverse order.  Keep one crest entry and retain both names.
 MANUAL_TEAM_NAME_ALIASES = {"KFUM奥斯陆": "奥斯陆KFUM"}
+
+
+def _fetch_provider_page(url: str) -> str:
+    request = urllib.request.Request(url, headers=PROVIDER_HEADERS)
+    with urllib.request.urlopen(request, timeout=20) as response:
+        return response.read().decode("gbk", errors="ignore")
 
 
 def normalize_team_name(value: str) -> str:
@@ -46,7 +59,7 @@ def fetch_provider_teams() -> dict[str, dict[str, str]]:
     teams: dict[str, dict[str, str]] = {}
     pattern = re.compile(r'href="https://liansai\.500\.com/team/(\d+)/">([^<]+)</a>')
     for league_id in LEAGUE_IDS:
-        html = _fetch_page(f"{LEAGUE_PAGE_URL.format(league_id=league_id)}teams/")
+        html = _fetch_provider_page(f"{LEAGUE_PAGE_URL.format(league_id=league_id)}teams/")
         for provider_id, name in pattern.findall(html):
             teams[normalize_team_name(name)] = {"id": provider_id, "name": name}
     return teams
