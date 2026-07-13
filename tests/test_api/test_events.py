@@ -35,3 +35,20 @@ def test_active_matches_exclude_finished_official_history(client):
     assert "NOT IN %s" in sql
     assert "finished" in completed_statuses
     assert "settled" in completed_statuses
+
+
+def test_active_matches_mark_started_unsettled_matches_as_awaiting_result(client):
+    with patch("apps.backend.src.routers.teams.get_db") as get_db:
+        connection = get_db.return_value.__enter__.return_value
+        cursor = connection.cursor.return_value.__enter__.return_value
+        cursor.fetchall.return_value = [
+            (1, "中超", "上海海港", "北京国安", "2026-07-12T19:35:00", "awaiting_result", "周日001")
+        ]
+
+        response = client.get("/api/matches/active")
+
+    assert response.status_code == 200
+    assert response.json()["matches"][0]["match_status"] == "awaiting_result"
+    sql = cursor.execute.call_args.args[0]
+    assert "m.kickoff_time <= CURRENT_TIMESTAMP" in sql
+    assert "awaiting_result" in sql

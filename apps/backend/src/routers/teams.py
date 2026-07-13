@@ -145,7 +145,12 @@ def list_active_matches(limit: int = Query(500, ge=1, le=5000)):
             cur.execute(
                 """
                 SELECT m.id, m.league_name, m.home_team_name, m.away_team_name,
-                       m.kickoff_time, m.match_status,
+                       m.kickoff_time,
+                       CASE
+                           WHEN m.kickoff_time <= CURRENT_TIMESTAMP
+                               THEN 'awaiting_result'
+                           ELSE COALESCE(m.match_status, 'scheduled')
+                       END AS effective_match_status,
                        COALESCE(m.raw_json->>'matchNumStr', m.official_match_code::text) AS match_num_str
                 FROM official_matches m
                 WHERE LOWER(COALESCE(m.match_status, 'scheduled')) NOT IN %s

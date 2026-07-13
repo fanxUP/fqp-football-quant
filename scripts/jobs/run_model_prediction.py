@@ -120,7 +120,11 @@ def _run_impl(match_id: int | None = None, dry_run: bool = False) -> dict[str, A
             with conn.cursor() as cur:
                 cur.execute(
                     """SELECT id, home_team_name, away_team_name
-                       FROM official_matches WHERE sale_status = 'selling'"""
+                       FROM official_matches
+                       WHERE sale_status = 'selling'
+                         AND LOWER(COALESCE(match_status, '')) IN ('scheduled', 'selling', 'not_started')
+                         AND kickoff_time > CURRENT_TIMESTAMP
+                         AND (sale_stop_time IS NULL OR sale_stop_time > CURRENT_TIMESTAMP)"""
                 )
                 match_rows = cur.fetchall()
 
@@ -152,10 +156,14 @@ def _run_impl(match_id: int | None = None, dry_run: bool = False) -> dict[str, A
                 available_markets[mid] = []
             available_markets[mid].append(pt)
 
-        # If no markets open, fall back to SPF (legacy behavior)
         if not available_markets:
-            for mid in match_ids:
-                available_markets[mid] = ["spf"]
+            return {
+                "status": "ok",
+                "predictions": 0,
+                "votes": 0,
+                "matches_processed": 0,
+                "note": "no matches with open official markets",
+            }
 
         for match_row in match_rows:
             mid, home_team_name, away_team_name = (
@@ -163,7 +171,7 @@ def _run_impl(match_id: int | None = None, dry_run: bool = False) -> dict[str, A
                 match_row[1],
                 match_row[2],
             )
-            play_types = available_markets.get(mid, ["spf"])
+            play_types = available_markets.get(mid, [])
             for play_type in play_types:
                 p, v = _predict_match_play_type(
                     conn, mid, home_team_name, away_team_name,
@@ -223,34 +231,28 @@ def _predict_match_play_type(
             SELECT id, option_code, sp_value
             FROM official_odds_snapshots
             WHERE match_id = %s AND play_type = %s
+              AND is_open = true
             ORDER BY snapshot_time DESC
             """,
             (mid, play_type),
         )
         odds_rows = cur.fetchall()
 
-    odds_dict: dict[str, float]
-    latest_snapshot_id: int | None
     if not odds_rows:
-        # Fallback: use uniform odds (1/3 each) for matches without odds data
-        odds_dict = {"3": 3.0, "1": 3.0, "0": 3.0}
-        latest_snapshot_id = None
-    else:
-        odds_dict = {}
-        latest_snapshot_id = None
-        for row in odds_rows:
-            snap_id, opt, sp = row
-            code = OPTION_MAP.get(opt, opt)
-            if code not in odds_dict:
-                odds_dict[code] = float(sp)
-            if latest_snapshot_id is None:
-                latest_snapshot_id = snap_id
+        return 0, 0
 
-        if len(odds_dict) < 3:
-            # Fill missing options with uniform odds
-            for opt in ("3", "1", "0"):
-                if opt not in odds_dict:
-                    odds_dict[opt] = 3.0
+    odds_dict: dict[str, float] = {}
+    latest_snapshot_id: int | None = None
+    for row in odds_rows:
+        snap_id, opt, sp = row
+        code = OPTION_MAP.get(opt, opt)
+        if code not in odds_dict:
+            odds_dict[code] = float(sp)
+        if latest_snapshot_id is None:
+            latest_snapshot_id = snap_id
+
+    if not {"3", "1", "0"}.issubset(odds_dict):
+        return 0, 0
 
     # 2. Odds processing
     market_probs = normalize_probabilities(odds_dict)

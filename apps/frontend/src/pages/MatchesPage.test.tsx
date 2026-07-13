@@ -9,7 +9,7 @@ active.mockResolvedValue({
   matches: [
     {
       match_id: 11, league_name: '中超', home_team_name: '上海海港', away_team_name: '北京国安',
-      kickoff_time: '2026-07-12T19:35:00', match_status: 'scheduled', match_num_str: '周日001',
+      kickoff_time: '2026-07-12T19:35:00', match_status: 'awaiting_result', match_num_str: '周日001',
     },
     {
       match_id: 12, league_name: '中超', home_team_name: '成都蓉城', away_team_name: '山东泰山',
@@ -29,5 +29,6 @@ describe('MatchesPage', () => {
     expect(screen.getByText(/体彩官方未结束比赛/)).toBeInTheDocument();
     expect(screen.getByText('上海海港')).toBeInTheDocument();
     expect(screen.getByText('成都蓉城')).toBeInTheDocument();
+    expect(screen.getByText('等待赛果')).toBeInTheDocument();
   });
 });

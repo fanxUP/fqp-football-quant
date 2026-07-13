@@ -7,6 +7,26 @@ from unittest.mock import MagicMock, patch
 
 
 class TestPredictionsEndpoint:
+    def test_live_recommendations_require_actionable_official_evidence(self, client):
+        mock_conn = MagicMock()
+        mock_cur = MagicMock()
+        mock_conn.__enter__.return_value = mock_conn
+        mock_conn.cursor.return_value.__enter__.return_value = mock_cur
+        mock_cur.fetchall.return_value = []
+
+        with patch("apps.backend.src.routers.predictions.get_db", return_value=mock_conn):
+            resp = client.get("/api/recommendations/live")
+
+        assert resp.status_code == 200
+        sql = mock_cur.execute.call_args.args[0]
+        assert "m.sale_status = 'selling'" in sql
+        assert "m.kickoff_time > CURRENT_TIMESTAMP" in sql
+        assert "m.sale_stop_time IS NULL OR m.sale_stop_time > CURRENT_TIMESTAMP" in sql
+        assert "mp.odds_snapshot_id IS NOT NULL" in sql
+        assert "mp.feature_snapshot_id IS NOT NULL" in sql
+        assert "mv.is_active = true" in sql
+        assert "official_markets" in sql
+
     def test_returns_empty_when_no_predictions(self, client):
         mock_conn = MagicMock()
         mock_cur = MagicMock()

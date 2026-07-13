@@ -97,6 +97,7 @@ export const STATUS_LABELS: Record<string, string> = {
   Finished: '已结束',
   scheduled: '待开赛',
   Scheduled: '待开赛',
+  awaiting_result: '等待赛果',
   // job statuses
   success: '成功',
   failed: '失败',

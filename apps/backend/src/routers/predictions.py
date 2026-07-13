@@ -115,7 +115,20 @@ def get_live_recommendations(
                     ) om ON true
                     WHERE mp.ev > %(min_ev)s
                       AND mp.confidence_score >= %(min_confidence)s
-                      AND m.match_status != 'Cancelled'
+                      AND mv.is_active = true
+                      AND mp.odds_snapshot_id IS NOT NULL
+                      AND mp.feature_snapshot_id IS NOT NULL
+                      AND m.sale_status = 'selling'
+                      AND LOWER(COALESCE(m.match_status, '')) IN ('scheduled', 'selling', 'not_started')
+                      AND m.kickoff_time > CURRENT_TIMESTAMP
+                      AND (m.sale_stop_time IS NULL OR m.sale_stop_time > CURRENT_TIMESTAMP)
+                      AND EXISTS (
+                          SELECT 1
+                          FROM official_markets market
+                          WHERE market.match_id = m.id
+                            AND market.play_type = mp.play_type
+                            AND market.is_open = true
+                      )
                     ORDER BY mp.match_id, mp.play_type, mp.option_code, mp.predict_time DESC
                 )
                 SELECT *
