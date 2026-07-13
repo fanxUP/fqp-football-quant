@@ -25,5 +25,6 @@ def test_health_is_degraded_when_audit_samples_are_missing():
         result = run(dry_run=True)
 
     assert result["overall_health"] == "degraded"
+    assert result["metrics"]["data_contamination_count"] is None
     assert "证据链暂无审计样本" in result["notes"]
     assert "污染审计暂无样本" in result["notes"]

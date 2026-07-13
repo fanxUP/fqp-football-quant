@@ -251,6 +251,12 @@ def run(dry_run: bool = False) -> dict[str, Any]:
                 notes_parts.append("污染审计暂无样本")
             notes = "; ".join(notes_parts) if notes_parts else "Some metrics below target."
 
+        contamination_count = (
+            contamination["contamination_found"]
+            if contamination["has_data"]
+            else None
+        )
+
         # Assemble snapshot
         snapshot = {
             "snapshot_date": today.isoformat(),
@@ -261,7 +267,7 @@ def run(dry_run: bool = False) -> dict[str, Any]:
             "review_generation_success_rate": reviews["rate"],
             "backup_success": backups["success_rate"] >= 1.0,
             "evidence_chain_completeness_rate": evidence["completeness_rate"],
-            "data_contamination_count": contamination["contamination_found"],
+            "data_contamination_count": contamination_count,
             "total_official_matches": official["total_official_matches"],
             "successful_official_collections": official["successful_official_collections"],
             "total_odds_snapshots_expected": odds_missing["total_odds_snapshots_expected"],
@@ -302,7 +308,7 @@ def run(dry_run: bool = False) -> dict[str, Any]:
             "review_generation_rate": reviews["rate"],
             "backup_success_rate": backups["success_rate"],
             "evidence_chain_completeness": evidence["completeness_rate"],
-            "data_contamination_count": contamination["contamination_found"],
+            "data_contamination_count": contamination_count,
             "uptime_days": uptime_days,
             "disk_usage_pct": disk_pct,
         },
