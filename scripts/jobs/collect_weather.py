@@ -11,9 +11,9 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from apps.backend.src.db import get_db
+from scripts.agents.task_queue import finish_tracked_job, start_tracked_job
 from scripts.features.build_weather_features import build_weather_for_match
 from scripts.openmeteo_client import OpenMeteoClient
-from scripts.agents.task_queue import finish_tracked_job, start_tracked_job
 
 
 def _now() -> str:

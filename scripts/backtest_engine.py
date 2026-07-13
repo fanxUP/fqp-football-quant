@@ -248,7 +248,7 @@ class BacktestEngine:
         with self.conn.cursor() as cur:
             cur.execute(sql, params)
             columns = [desc[0] for desc in cur.description]
-            rows = [dict(zip(columns, row)) for row in cur.fetchall()]
+            rows = [dict(zip(columns, row, strict=False)) for row in cur.fetchall()]
         return rows
 
     # ------------------------------------------------------------------

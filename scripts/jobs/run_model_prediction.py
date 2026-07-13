@@ -16,6 +16,7 @@ from datetime import datetime
 from typing import Any
 
 from apps.backend.src.db import get_db
+from scripts.agents.task_queue import finish_tracked_job, start_tracked_job
 from scripts.dixon_coles_model import dixon_coles_matrix
 from scripts.elo_model import get_or_create_elo, run_elo_1x2_prediction
 from scripts.model_storage import store_committee_vote, store_model_prediction
@@ -32,7 +33,6 @@ from scripts.poisson_model import (
     estimate_lambdas_from_odds,
     score_matrix,
 )
-from scripts.agents.task_queue import finish_tracked_job, start_tracked_job
 
 # Dixon-Coles rho — hardcoded until historical results enable MLE.
 # Negative means low scores (0:0, 1:0, 0:1, 1:1) are less common than
@@ -615,7 +615,7 @@ def _store_derived_play_types(
         dc_scores = sorted(dc_matrix.items(), key=lambda x: -x[1]) if dc_matrix else poisson_scores
 
         count = 0
-        for poisson_entry, dc_entry in zip(poisson_scores, dc_scores):
+        for poisson_entry, dc_entry in zip(poisson_scores, dc_scores, strict=False):
             score_str = poisson_entry[0]
             p_prob = poisson_entry[1]
             d_prob = dc_entry[1] if dc_matrix else p_prob

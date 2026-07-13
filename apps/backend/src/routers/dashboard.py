@@ -50,7 +50,7 @@ def get_today_summary():
         return _empty("今日总览", "暂无今日数据")
 
     columns = [desc[0] for desc in cur.description]
-    data = dict(zip(columns, row))
+    data = dict(zip(columns, row, strict=False))
     return {
         "code": 0,
         "data": {
@@ -131,7 +131,7 @@ def get_roi_daily(
     if not rows:
         return _empty("每日 ROI 对比", f"近 {days} 天无 ROI 数据")
 
-    series = [dict(zip(columns, r)) for r in rows]
+    series = [dict(zip(columns, r, strict=False)) for r in rows]
     return {
         "code": 0,
         "data": {
@@ -167,7 +167,7 @@ def get_roi_period(
     if not rows:
         return _empty("周期 ROI 汇总", "暂无周期比赛数据")
 
-    series = [dict(zip(columns, r)) for r in rows]
+    series = [dict(zip(columns, r, strict=False)) for r in rows]
     return {
         "code": 0,
         "data": {
@@ -216,7 +216,7 @@ def get_recommendations(
                        and "暂无满足 EV 阈值的推荐"
                        or "暂无推荐数据")
 
-    series = [dict(zip(columns, r)) for r in rows]
+    series = [dict(zip(columns, r, strict=False)) for r in rows]
     return {
         "code": 0,
         "data": {
@@ -263,7 +263,7 @@ def get_odds_movement(
     if not rows:
         return _empty("赔率走势", "该比赛暂无赔率快照数据")
 
-    series = [dict(zip(columns, r)) for r in rows]
+    series = [dict(zip(columns, r, strict=False)) for r in rows]
     # Build anomalies list
     anomalies: list[dict] = []
     for r in series:
@@ -324,7 +324,7 @@ def get_model_performance(
     if not rows:
         return _empty("模型表现", "暂无模型评估数据")
 
-    series = [dict(zip(columns, r)) for r in rows]
+    series = [dict(zip(columns, r, strict=False)) for r in rows]
     return {
         "code": 0,
         "data": {
@@ -370,7 +370,7 @@ def get_backtest_equity(
     if not rows:
         return _empty("回测资金曲线", "该回测运行暂无数据")
 
-    series = [dict(zip(columns, r)) for r in rows]
+    series = [dict(zip(columns, r, strict=False)) for r in rows]
     return {
         "code": 0,
         "data": {
@@ -419,7 +419,7 @@ def get_ticket_review(
     if not rows:
         return _empty("票单复盘", f"近 {days} 天无结算记录")
 
-    series = [dict(zip(columns, r)) for r in rows]
+    series = [dict(zip(columns, r, strict=False)) for r in rows]
     return {
         "code": 0,
         "data": {

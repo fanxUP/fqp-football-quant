@@ -1,6 +1,7 @@
-from scripts.official_odds_history import backfill_fixed_bonus_history, parse_fixed_bonus_history
 import subprocess
 import sys
+
+from scripts.official_odds_history import backfill_fixed_bonus_history, parse_fixed_bonus_history
 
 
 def test_parse_fixed_bonus_history_preserves_each_official_update_time_and_play():

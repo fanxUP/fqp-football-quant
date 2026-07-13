@@ -10,8 +10,8 @@ from __future__ import annotations
 import sys
 from datetime import datetime
 
-from scripts.official_crawler import crawl_official_schedule_v2
 from scripts.agents.task_queue import finish_tracked_job, start_tracked_job
+from scripts.official_crawler import crawl_official_schedule_v2
 
 
 def run(business_date: str | None = None) -> dict:

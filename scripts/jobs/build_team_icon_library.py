@@ -22,9 +22,8 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from apps.backend.src.db import get_db
-from scripts.season_crawler import LEAGUE_PAGE_URL, _fetch_page
-
+from apps.backend.src.db import get_db  # noqa: E402
+from scripts.season_crawler import LEAGUE_PAGE_URL, _fetch_page  # noqa: E402
 
 ASSET_DIR = ROOT / "apps/frontend/public/team-crests"
 REGISTRY_PATH = ROOT / "apps/frontend/src/shared/data/teamCrests.generated.ts"

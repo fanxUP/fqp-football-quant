@@ -340,9 +340,6 @@ def crawl_league_full(league_name: str, league_id: int) -> dict[str, Any]:
         with conn.cursor() as cur:
             for m in all_matches:
                 kt = m["kickoff_time"]
-                bd = kt.strftime("%Y-%m-%d")
-                # Use 500.com fid as official_match_code
-                code = f"500-{m['match_id_500']}"
 
                 # Check if match already exists by league+teams+kickoff
                 cur.execute(

@@ -14,7 +14,7 @@ import json
 import re
 from datetime import date, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from apps.backend.src.db import get_db
 from scripts.official_crawler import parse_results_from_response
@@ -423,6 +423,10 @@ def import_local_official_results_file(
             "updated": 0,
             "errors": [],
         }
+        matches_inserted = cast(int, stored_matches.get("inserted", 0) or 0)
+        results_inserted = cast(int, stored.get("inserted", 0) or 0)
+        matches_updated = cast(int, stored_matches.get("updated", 0) or 0)
+        results_updated = cast(int, stored.get("updated", 0) or 0)
         record_official_collection_status(
             conn,
             business_date=log_business_date,
@@ -433,10 +437,8 @@ def import_local_official_results_file(
             source_artifact_path=str(artifact),
             source_artifact_hash=artifact_hash,
             records_found=len(results) + len(rejected),
-            records_inserted=stored_matches.get("inserted", 0)
-            + stored.get("inserted", 0),
-            records_updated=stored_matches.get("updated", 0)
-            + stored.get("updated", 0),
+            records_inserted=matches_inserted + results_inserted,
+            records_updated=matches_updated + results_updated,
             error_message=(
                 f"unresolved identities: {', '.join(unresolved)}; "
                 f"rejected rows: {len(rejected)}"

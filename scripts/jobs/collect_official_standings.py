@@ -12,8 +12,8 @@ import subprocess
 from datetime import datetime
 from typing import Any
 
-import httpx
 import certifi
+import httpx
 from bs4 import BeautifulSoup
 
 from apps.backend.src.db import get_db

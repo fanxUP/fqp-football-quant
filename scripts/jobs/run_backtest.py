@@ -26,8 +26,8 @@ _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(
 if _PROJECT_ROOT not in sys.path:
     sys.path.insert(0, _PROJECT_ROOT)
 
+from scripts.agents.task_queue import finish_tracked_job, start_tracked_job  # noqa: E402
 from scripts.backtest_engine import BacktestConfig, run_backtest_from_config  # noqa: E402
-from scripts.agents.task_queue import finish_tracked_job, start_tracked_job
 
 
 def _default_config(name: str, model_names: list[str] | None = None) -> BacktestConfig:
@@ -162,7 +162,7 @@ def run_parameter_sweep(
     best_result = None
 
     for combo in combinations:
-        param_dict = dict(zip(keys, combo))
+        param_dict = dict(zip(keys, combo, strict=False))
         cfg_dict = base_config.to_dict()
         cfg_dict.update(param_dict)
         cfg_dict["name"] = f"sweep-{'-'.join(f'{k}={v}' for k, v in param_dict.items())}"

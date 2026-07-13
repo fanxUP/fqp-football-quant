@@ -189,11 +189,14 @@ def get_available_pass_types(match_count: int | list[dict]) -> list[str]:
     Includes straight M串1 options where M is not greater than current match_count.
     Compound M串N types are only exposed for their exact M-match ticket.
     """
-    items = match_count if isinstance(match_count, list) else None
-    if items is not None:
-        match_count = len(_group_items_by_match(items))
+    if isinstance(match_count, list):
+        items = match_count
+        effective_match_count = len(_group_items_by_match(items))
+    else:
+        items = None
+        effective_match_count = match_count
     available: list[str] = []
-    if match_count >= 1:
+    if effective_match_count >= 1:
         if items is None or any(item.get("is_single_allowed", True) for item in items):
             available.append("single")
     pass_allowed = items is None or all(item.get("is_pass_allowed", True) for item in items)
@@ -208,11 +211,11 @@ def get_available_pass_types(match_count: int | list[dict]) -> list[str]:
             continue
         if pt.endswith("x1"):
             required = int(pt.split("x")[0])
-            if required <= match_count and required <= strictest_limit:
+            if required <= effective_match_count and required <= strictest_limit:
                 available.append(pt)
             continue
         for n, _k in specs:
-            if n == match_count and n <= strictest_limit:
+            if n == effective_match_count and n <= strictest_limit:
                 available.append(pt)
                 break
     return available

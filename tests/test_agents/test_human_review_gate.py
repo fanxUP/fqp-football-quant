@@ -11,4 +11,4 @@ def test_recommendation_publish_requires_approval():
 
 
 def test_approved_recommendation_can_cross_publish_boundary():
-    assert_recommendation_publishable("approved") is None
+    assert assert_recommendation_publishable("approved") is None

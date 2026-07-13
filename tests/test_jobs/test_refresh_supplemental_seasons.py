@@ -1,5 +1,5 @@
-from unittest.mock import patch
 from pathlib import Path
+from unittest.mock import patch
 
 from scripts.jobs.refresh_supplemental_seasons import run
 
@@ -22,6 +22,7 @@ def test_refresh_sql_scopes_season_backfill_to_league_name():
 
 def test_refresh_skips_when_another_process_holds_the_lock(tmp_path, monkeypatch):
     import fcntl
+
     import scripts.jobs.refresh_supplemental_seasons as refresh
 
     lock_path = tmp_path / "refresh.lock"

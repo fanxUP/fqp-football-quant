@@ -9,13 +9,18 @@ ENV_FILE="$PROJECT_ROOT/.env.local"
 log() { echo "[fqp-dev] $(date '+%H:%M:%S')  $*"; }
 fail() { echo "[fqp-dev] ERROR: $*" >&2; exit 1; }
 
-command -v python3 >/dev/null 2>&1 || fail "Python 3.11+ is required."
 command -v node >/dev/null 2>&1 || fail "Node.js is required."
 command -v npm >/dev/null 2>&1 || fail "npm is required."
 
 PYTHON_BIN="${FQP_PYTHON_BIN:-$PROJECT_ROOT/.venv/bin/python}"
 if [[ ! -x "$PYTHON_BIN" ]]; then
-    PYTHON_BIN="$(command -v python3)"
+    if command -v python3.11 >/dev/null 2>&1; then
+        PYTHON_BIN="$(command -v python3.11)"
+    elif command -v python3 >/dev/null 2>&1; then
+        PYTHON_BIN="$(command -v python3)"
+    else
+        fail "Python 3.11+ is required."
+    fi
 fi
 PYTHON_VERSION="$("$PYTHON_BIN" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
 "$PYTHON_BIN" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)' \

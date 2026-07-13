@@ -19,16 +19,25 @@ def calculate(rows: list[tuple[Any, ...]]) -> list[dict[str, Any]]:
         if None in (home_id, away_id, home_goals, away_goals):
             continue
         home, away = table[home_id], table[away_id]
-        home["played"] += 1; away["played"] += 1
-        home["goals_for"] += home_goals; home["goals_against"] += away_goals
-        away["goals_for"] += away_goals; away["goals_against"] += home_goals
+        home["played"] += 1
+        away["played"] += 1
+        home["goals_for"] += home_goals
+        home["goals_against"] += away_goals
+        away["goals_for"] += away_goals
+        away["goals_against"] += home_goals
         if home_goals > away_goals:
-            home["won"] += 1; away["lost"] += 1; home["points"] += 3
+            home["won"] += 1
+            away["lost"] += 1
+            home["points"] += 3
         elif home_goals < away_goals:
-            away["won"] += 1; home["lost"] += 1; away["points"] += 3
+            away["won"] += 1
+            home["lost"] += 1
+            away["points"] += 3
         else:
-            home["drawn"] += 1; away["drawn"] += 1
-            home["points"] += 1; away["points"] += 1
+            home["drawn"] += 1
+            away["drawn"] += 1
+            home["points"] += 1
+            away["points"] += 1
     ordered = sorted(table.items(), key=lambda item: (
         -item[1]["points"],
         -(item[1]["goals_for"] - item[1]["goals_against"]),

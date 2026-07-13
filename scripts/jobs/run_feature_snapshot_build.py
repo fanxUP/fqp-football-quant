@@ -14,13 +14,13 @@ from datetime import datetime
 from typing import Any
 
 from apps.backend.src.db import get_db
+from scripts.agents.task_queue import finish_tracked_job, start_tracked_job
 from scripts.feature_storage import store_match_feature_snapshot, store_team_season_profile
 from scripts.features.build_basic_features import (
     compute_odds_implied_probabilities,
     compute_rest_days,
     compute_team_form,
 )
-from scripts.agents.task_queue import finish_tracked_job, start_tracked_job
 
 
 def _now() -> str:

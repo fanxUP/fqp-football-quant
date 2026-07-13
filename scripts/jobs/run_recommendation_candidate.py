@@ -19,15 +19,15 @@ from math import floor
 from typing import Any
 
 from apps.backend.src.db import get_db
+from scripts.agents.task_queue import finish_tracked_job, start_tracked_job
 from scripts.competition_storage import AGENT_DAILY_BUDGET
+from scripts.model_storage import store_simulation_ticket
 from scripts.real_ticket_storage import create_bankroll_transaction
 from scripts.simulator_storage import (
     create_simulator_items_batch,
     create_simulator_ticket,
     ensure_simulator_bankroll,
 )
-from scripts.model_storage import store_simulation_ticket
-from scripts.agents.task_queue import finish_tracked_job, start_tracked_job
 
 
 def _now() -> str:
@@ -576,7 +576,7 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
             single_stakes = [base_single_stake] * len(single_candidates)
             if single_stakes:
                 single_stakes[-1] = _official_stake(singles_budget - sum(single_stakes[:-1]))
-            for c, stake in zip(single_candidates, single_stakes):
+            for c, stake in zip(single_candidates, single_stakes, strict=False):
                 ticket_multiple = max(2, int(stake / 2))
                 ticket = {
                     "strategy_pool": "agent_training_observation",
@@ -593,7 +593,6 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
                     "expected_value": round(c["ev"], 4),
                     "risk_level": "observation",
                     "ticket_status": "generated",
-                    "bet_count": 1,
                     "rule_metadata": {"source": "sporttery_rules", "single_eligible_checked": True},
                 }
                 # Agent observations belong to the competition/agent ledger,
@@ -612,7 +611,7 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
                     combos += [("3x1", combo) for combo in combos_3[:2]]
                 combo_stakes = [_official_stake(combo_budget / len(combos))] * len(combos)
                 combo_stakes[-1] = _official_stake(combo_budget - sum(combo_stakes[:-1]))
-                for (pass_type, combo), combo_stake in zip(combos, combo_stakes):
+                for (pass_type, combo), combo_stake in zip(combos, combo_stakes, strict=False):
                     ticket_multiple = max(2, int(combo_stake / 2))
                     combo_items = [_make_item(c) for c in combo["candidates"]]
                     ticket = {
@@ -627,7 +626,6 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
                         "expected_value": round(combo["combined_ev"], 4),
                         "risk_level": "aggressive_training",
                         "ticket_status": "generated",
-                        "bet_count": 1,
                         "rule_metadata": {"source": "sporttery_rules", "parlay_min_matches": 2, "unique_match_required": True},
                     }
                     if store_simulation_ticket(conn, ticket, combo_items):

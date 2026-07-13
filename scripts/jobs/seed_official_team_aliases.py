@@ -2,16 +2,15 @@
 
 from __future__ import annotations
 
-from apps.backend.src.db import get_db
 import re
+
+from apps.backend.src.db import get_db
 
 ALIASES = {
     "挪威超级联赛": {
         "奥勒松": "Aalesund", "布兰": "Brann", "桑纳菲尤尔": "Sandefjord",
-        "特罗姆瑟": "Tromso", "罗森博格": "Rosenborg", "腓特烈斯塔": "Fredrikstad",
-        "萨尔普斯堡": "Sarpsborg 08", "奥斯陆KFUM": "KFUM Oslo", "维京": "Viking",
-        "汉坎": "HamKam", "利勒斯特罗姆": "Lillestrom", "莫尔德": "Molde",
-        "瓦勒伦加": "Valerenga", "博德闪耀": "Bodo/Glimt", "斯达": "Start",
+        "罗森博格": "Rosenborg", "腓特烈斯塔": "Fredrikstad", "维京": "Viking",
+        "汉坎": "HamKam", "莫尔德": "Molde", "斯达": "Start",
         "克里斯蒂安松": "Kristiansund", "特罗姆瑟": "Tromsø",
         "博德闪耀": "Bodø/Glimt", "利勒斯特罗姆": "Lillestrøm",
         "萨尔普斯堡": "Sarpsborg", "瓦勒伦加": "Vålerenga", "奥斯陆KFUM": "KFUM",
@@ -30,7 +29,7 @@ ALIASES = {
 }
 
 
-def run() -> dict[str, int]:
+def run() -> dict[str, int | str]:
     inserted = 0
     unresolved = 0
     with get_db() as conn:

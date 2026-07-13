@@ -8,7 +8,9 @@ from apps.backend.src.db import get_db
 from scripts.agent_storage import (
     create_agent_task as _create_task,
 )
-from scripts.local.scheduler_heartbeat import get_scheduler_status
+from scripts.agent_storage import (
+    get_agent_summary as _get_summary,
+)
 from scripts.agent_storage import (
     list_agent_tasks as _list_tasks,
 )
@@ -20,14 +22,20 @@ from scripts.agent_storage import (
 )
 from scripts.agent_storage import (
     list_job_runs as _list_jobs,
+)
+from scripts.agent_storage import (
     list_review_gates as _list_gates,
-    get_agent_summary as _get_summary,
+)
+from scripts.agent_storage import (
     list_stale_jobs as _list_stale_jobs,
+)
+from scripts.agent_storage import (
     resolve_review_gate as _resolve_gate,
 )
 from scripts.agent_storage import (
     transition_task as _transition,
 )
+from scripts.local.scheduler_heartbeat import get_scheduler_status
 
 router = APIRouter(tags=["agents"])
 

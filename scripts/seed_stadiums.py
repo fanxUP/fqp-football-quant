@@ -61,12 +61,9 @@ STADIUMS = [
 TEAM_STADIUM_CITIES = {
     "瓦萨": "Vaasa",
     "塞伊奈约基": "Seinajoki",
-    "浦项制铁": "Pohang",
     "富川FC": "Bucheon",
-    "全北现代": "Jeonju",
     "安养FC": "Anyang",
     "大田市民": "Daejeon",
-    "江原FC": "Gangneung",
     "光州FC": "Gwangju",
     "浦项制铁": "Pohang",
     "金泉尚武": "Gimcheon",

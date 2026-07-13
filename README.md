@@ -39,9 +39,9 @@ FQP 是一套面向个人本地部署的足球竞彩/足彩量化研究与长期
 
 先按 `docs/51_最终开发阶段计划与验收清单.md` 拆阶段执行，再根据 `configs/final_module_registry.yaml` 和 `configs/final_panel_registry.yaml` 控制模块与功能面板上线顺序。
 
-## 运行方式：本机开发，Docker Desktop 运行
+## 运行方式：默认本机开发，Docker 按需部署
 
-日常修改始终在本机工作目录中完成；提交并推送 GitHub 后，再通过 Docker Desktop 运行完整服务栈。源码以 Git 提交为准，容器仅是可重建运行环境；`data/` 中的数据库和备份不提交 Git。
+日常开发和运行默认都在本机工作目录中完成，不需要启动 Docker Desktop。只有明确需要部署时，才提交并推送当前分支，再通过 Docker Desktop 重建完整服务栈。源码以 Git 提交为准，容器仅是可重建的部署环境；`data/` 中的数据库和备份不提交 Git。
 
 ```bash
 cp .env.local.example .env.local
@@ -54,7 +54,7 @@ cp .env.local.example .env.local
 - 本机开发要求 Python 3.11+、Node.js 和 PostgreSQL。
 - `.env.local` 只保存在本机，不提交 GitHub。
 
-部署到 Docker Desktop（自动检查工作区、推送 GitHub、重建容器并做健康检查）：
+按需部署到 Docker Desktop（自动检查工作区、推送 GitHub、重建容器并做健康检查）：
 
 ```bash
 ./ops/local/run_local_stack.sh deploy

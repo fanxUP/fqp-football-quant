@@ -15,8 +15,8 @@ from datetime import datetime
 from typing import Any
 
 from apps.backend.src.db import get_db
-from scripts.ops_storage import store_evidence_chain_audit
 from scripts.agents.task_queue import finish_tracked_job, start_tracked_job
+from scripts.ops_storage import store_evidence_chain_audit
 
 
 def _now() -> str:
@@ -43,7 +43,7 @@ def _get_recent_ticket_items(conn: Any, days: int = 7) -> list[dict]:
             (days,),
         )
         cols = ["ticket_id", "item_id", "odds_snapshot_id", "model_prediction_id", "budget_plan_id"]
-        return [dict(zip(cols, row)) for row in cur.fetchall()]
+        return [dict(zip(cols, row, strict=False)) for row in cur.fetchall()]
 
 
 def _get_prediction_chain(conn: Any, prediction_id: int) -> dict | None:
@@ -75,7 +75,7 @@ def _get_prediction_chain(conn: Any, prediction_id: int) -> dict | None:
         "model_name",
         "version_number",
     ]
-    return dict(zip(cols, row))
+    return dict(zip(cols, row, strict=False))
 
 
 def _get_feature_snapshot_for_match(conn: Any, match_id: int, before_time: str) -> dict | None:
@@ -96,7 +96,7 @@ def _get_feature_snapshot_for_match(conn: Any, match_id: int, before_time: str) 
     if not row:
         return None
     cols = ["feature_snapshot_id", "feature_version", "snapshot_time", "completeness_score"]
-    return dict(zip(cols, row))
+    return dict(zip(cols, row, strict=False))
 
 
 def _get_match_id_from_odds_snapshot(conn: Any, odds_snapshot_id: int) -> int | None:

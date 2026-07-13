@@ -13,6 +13,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from apps.backend.src.db import get_db
+from scripts.agents.task_queue import finish_tracked_job, start_tracked_job
 from scripts.api_football_client import ApiFootballClient
 from scripts.feature_storage import (
     get_player_by_code,
@@ -20,7 +21,6 @@ from scripts.feature_storage import (
     store_match_lineup_snapshot,
     store_player,
 )
-from scripts.agents.task_queue import finish_tracked_job, start_tracked_job
 
 
 def _now() -> str:

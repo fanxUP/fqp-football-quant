@@ -24,7 +24,6 @@ from apps.backend.src.db import get_db
 from scripts.official_storage import store_odds_snapshots
 from scripts.sporttery_client import SportteryClient
 
-
 HAFU_OPTIONS = {
     "hh": ("33", "胜胜"), "hd": ("31", "胜平"), "ha": ("30", "胜负"),
     "dh": ("13", "平胜"), "dd": ("11", "平平"), "da": ("10", "平负"),

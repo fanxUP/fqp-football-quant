@@ -33,7 +33,7 @@ def get_pipeline_status():
         src_cols = ["name", "status", "last_success", "last_failure", "failures", "latency_ms"]
         sources = []
         for row in cur.fetchall():
-            d = dict(zip(src_cols, row))
+            d = dict(zip(src_cols, row, strict=False))
             d["last_success"] = str(d["last_success"]) if d["last_success"] else None
             d["last_failure"] = str(d["last_failure"]) if d["last_failure"] else None
             sources.append(d)
@@ -46,7 +46,7 @@ def get_pipeline_status():
         job_cols = ["name", "status", "finished_at"]
         jobs = []
         for row in cur.fetchall():
-            d = dict(zip(job_cols, row))
+            d = dict(zip(job_cols, row, strict=False))
             d["finished_at"] = str(d["finished_at"]) if d["finished_at"] else None
             jobs.append(d)
 

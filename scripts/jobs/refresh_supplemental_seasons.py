@@ -5,8 +5,8 @@ from __future__ import annotations
 import fcntl
 from pathlib import Path
 
-from scripts.season_crawler import LEAGUE_IDS, crawl_league_full
 from scripts.jobs.build_supplemental_standings import run as build_standings
+from scripts.season_crawler import LEAGUE_IDS, crawl_league_full
 
 LOCK_PATH = Path(".runtime/supplemental_refresh.lock")
 

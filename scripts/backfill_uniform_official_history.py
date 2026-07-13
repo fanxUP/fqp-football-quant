@@ -87,7 +87,7 @@ def fetch_and_backfill(
         for begin, finish in month_chunks(start, end):
             page, pages = 1, 1
             while page <= pages:
-                params = {
+                params: dict[str, str | int] = {
                     "matchBeginDate": begin,
                     "matchEndDate": finish,
                     "leagueId": "",

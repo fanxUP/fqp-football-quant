@@ -19,7 +19,6 @@ select = [
 ]
 ignore = [
     "E501",  # line too long (handled by formatter)
-    "B905",  # zip() strict parameter (Python 3.9 runtime, 3.10+ feature)
 ]
 
 [tool.ruff.lint.isort]

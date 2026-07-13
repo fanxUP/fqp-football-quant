@@ -1,3 +1,5 @@
+import pytest
+
 from scripts.simulator_calculator import (
     calculate_all,
     calculate_bet_combinations,
@@ -6,7 +8,6 @@ from scripts.simulator_calculator import (
     get_available_pass_types,
     validate_items,
 )
-import pytest
 
 
 def _items(count: int) -> list[dict]:

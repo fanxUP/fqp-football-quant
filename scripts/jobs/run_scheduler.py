@@ -34,7 +34,7 @@ def _audited_job(
         "run_backtest",
     }
     if job_code in self_tracked:
-        return fn  # type: ignore[return-value]
+        return fn
 
     def wrapper() -> None:
         run_id = None

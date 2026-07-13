@@ -70,7 +70,7 @@ def ocr_with_pytesseract(image_path: str, lang: str = "chi_sim") -> tuple[str, f
 
         img = Image.open(image_path)
         # 预处理：转灰度、增强对比度
-        img = img.convert("L")  # type: ignore[assignment]  # Image.open→ImageFile, convert→Image
+        img = img.convert("L")
         text = pytesseract.image_to_string(img, lang=lang)
         # Tesseract 不直接返回每张图片的置信度，估计值
         confidence = 0.7 if len(text.strip()) > 20 else 0.3

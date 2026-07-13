@@ -167,7 +167,7 @@ def _item_summary(row: tuple) -> dict:
 
 def _attach_ticket_items(conn, tickets: list[dict], limit_per_ticket: int = 4) -> None:
     """Attach compact match summaries for ledger cards."""
-    ids_by_source = {"simulator": [], "real": [], "agent": []}
+    ids_by_source: dict[str, list[int]] = {"simulator": [], "real": [], "agent": []}
     for ticket in tickets:
         source, _, raw_id = str(ticket.get("ticketUid", "")).partition(":")
         if source in ids_by_source and raw_id.isdigit():

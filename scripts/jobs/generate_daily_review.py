@@ -10,9 +10,9 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from apps.backend.src.db import get_db
+from scripts.agents.task_queue import finish_tracked_job, start_tracked_job
 from scripts.real_ticket_storage import upsert_daily_review
 from scripts.review_generator import daily_summary
-from scripts.agents.task_queue import finish_tracked_job, start_tracked_job
 
 
 def _now() -> str:

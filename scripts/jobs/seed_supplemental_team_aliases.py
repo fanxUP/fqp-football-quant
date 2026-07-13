@@ -6,7 +6,6 @@ import re
 
 from apps.backend.src.db import get_db
 
-
 ALIASES = {
     "瑞典超级联赛": {
         "瓦斯特拉斯": "韦斯特罗斯",
@@ -39,7 +38,7 @@ LEAGUE_COUNTRIES = {
 }
 
 
-def run() -> dict[str, int]:
+def run() -> dict[str, int | str]:
     inserted = 0
     source_teams_created = 0
     unresolved = 0
