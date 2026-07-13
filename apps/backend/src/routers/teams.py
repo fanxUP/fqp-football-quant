@@ -283,14 +283,16 @@ def list_events():
 
 @router.get("/api/events/catalog")
 def list_event_catalog(
-    source: str = Query("official", pattern="^(official|supplemental|all)$"),
+    source: str = Query(
+        "official", pattern="^(official|official_season|supplemental|all)$"
+    ),
     league_name: str | None = Query(None),
     start_date: str | None = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
     end_date: str | None = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
     limit: int = Query(500, ge=1, le=5000),
     offset: int = Query(0, ge=0),
 ):
-    """Browse the source-labelled official/supplemental match catalog."""
+    """Browse betting matches and source-labelled season-archive fixtures."""
     conditions = []
     params: list[Any] = []
     if source != "all":

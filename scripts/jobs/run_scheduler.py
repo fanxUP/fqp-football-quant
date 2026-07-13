@@ -19,6 +19,10 @@ def _official_source_enabled() -> bool:
     return os.getenv("OFFICIAL_SOURCE_ENABLED", "true").lower() == "true"
 
 
+def _supplemental_season_enabled() -> bool:
+    return os.getenv("SUPPLEMENTAL_SEASON_ENABLED", "false").lower() == "true"
+
+
 def _audited_job(
     job_code: str, job_name: str, owner_agent: str, fn: Callable[[], Any]
 ) -> Callable[[], None]:
@@ -214,22 +218,39 @@ def main() -> None:
                 id="collect_standings",
             )
 
-            # Daily at 03:40: refresh isolated third-party season schedules
-            # and derived standings. This never creates official_matches rows.
+            # Daily at 03:40: refresh official Sporttery league-season archive.
             scheduler.add_job(
                 _audited_job(
-                    "refresh_supplemental_seasons",
-                    "补充赛季数据刷新",
+                    "refresh_official_seasons",
+                    "体彩官方赛季赛程刷新",
                     "crawler_agent",
                     lambda: __import__(
-                        "scripts.jobs.refresh_supplemental_seasons", fromlist=["run"]
+                        "scripts.jobs.refresh_official_seasons", fromlist=["run"]
                     ).run(),
                 ),
                 "cron",
                 hour=3,
                 minute=40,
-                id="refresh_supplemental_seasons",
+                id="refresh_official_seasons",
             )
+
+            # Third-party season data is isolated and opt-in only. It is never
+            # allowed to repopulate a cleaned installation by default.
+            if _supplemental_season_enabled():
+                scheduler.add_job(
+                    _audited_job(
+                        "refresh_supplemental_seasons",
+                        "补充赛季数据刷新",
+                        "crawler_agent",
+                        lambda: __import__(
+                            "scripts.jobs.refresh_supplemental_seasons", fromlist=["run"]
+                        ).run(),
+                    ),
+                    "cron",
+                    hour=3,
+                    minute=50,
+                    id="refresh_supplemental_seasons",
+                )
 
             # Daily at 08:00: collect injury data from API-Football
             scheduler.add_job(
@@ -567,16 +588,8 @@ def main() -> None:
                 id="snapshot_runtime",
             )
 
-            print(
-                "APScheduler started with 25 jobs: "
-                "test_heartbeat, seed_agent_registry, crawl_official_schedule, crawl_official_odds, "
-                "settle_finished_matches, populate_teams_leagues, build_feature_snapshots, "
-                "collect_standings, collect_injury_data, collect_lineup_data, collect_weather, "
-                "mle_train_models, update_elo_ratings, run_model_prediction, run_recommendation_candidate, "
-                "settle_tickets, generate_daily_review, analyze_prediction_errors, tag_errors, compute_evaluation_metrics, "
-                "verify_backup, validate_evidence_chain, audit_data_contamination, "
-                "collect_health_metrics, snapshot_runtime, run_backtest"
-            )
+            job_ids = ", ".join(job.id for job in scheduler.get_jobs())
+            print(f"APScheduler started with {len(scheduler.get_jobs())} jobs: {job_ids}")
         else:
             print(
                 "APScheduler started with 2 jobs: test_heartbeat, seed_agent_registry. "

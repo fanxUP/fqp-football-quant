@@ -37,6 +37,49 @@ def test_uniform_match_list_uses_official_schedule_referer():
     )
 
 
+def test_uniform_league_catalog_uses_official_league_referer():
+    client = SportteryClient(min_interval=0)
+    client._request_url = MagicMock(return_value={"errorCode": "0", "value": {}})
+
+    try:
+        result = client.get_uniform_league_list()
+    finally:
+        client.close()
+
+    assert result["errorCode"] == "0"
+    client._request_url.assert_called_once_with(
+        "https://webapi.sporttery.cn/gateway/uniform/football/league/getLeagueListV1.qry",
+        referer="https://www.sporttery.cn/zqlszl/",
+    )
+
+
+def test_uniform_league_matches_passes_official_season_window_parameters():
+    client = SportteryClient(min_interval=0)
+    client._request_url = MagicMock(return_value={"errorCode": "0", "value": {}})
+
+    try:
+        result = client.get_uniform_league_matches(
+            uniform_league_id=1085,
+            season_id=14355,
+            start_date="2026-04-04",
+            end_date="2026-04-10",
+        )
+    finally:
+        client.close()
+
+    assert result["errorCode"] == "0"
+    client._request_url.assert_called_once_with(
+        "https://webapi.sporttery.cn/gateway/uniform/football/league/getMatchResultV1.qry",
+        {
+            "uniformLeagueId": 1085,
+            "seasonId": 14355,
+            "startDate": "2026-04-04",
+            "endDate": "2026-04-10",
+        },
+        referer="https://www.sporttery.cn/zqlszl/",
+    )
+
+
 def test_uniform_match_calculator_rejects_official_api_error_payload():
     client = SportteryClient(min_interval=0)
     client._request_url = MagicMock(return_value={"errorCode": "1001", "errorMessage": "invalid channel"})

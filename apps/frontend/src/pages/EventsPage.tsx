@@ -85,7 +85,7 @@ export default function EventsPage() {
       key: 'source_match_code',
       title: '编号',
       width: '90px',
-      render: (v, row) => <span className="fqp-mono" style={{ color: 'var(--fqp-accent)', fontWeight: 600 }}>{row.source === 'official' ? String(v) : '无官方编号'}</span>,
+      render: (v, row) => <span className="fqp-mono" style={{ color: 'var(--fqp-accent)', fontWeight: 600 }}>{row.source === 'official' ? String(v) : '无体彩编号'}</span>,
     },
     {
       key: 'kickoff_time',
@@ -110,8 +110,12 @@ export default function EventsPage() {
     {
       key: 'source',
       title: '来源',
-      width: '100px',
-      render: (v) => <StatusBadge status={v === 'official' ? 'ok' : 'info'} label={v === 'official' ? '体彩官方' : '赛程补充'} />,
+      width: '120px',
+      render: (v) => {
+        if (v === 'official') return <StatusBadge status="ok" label="体彩官方" />;
+        if (v === 'official_season') return <StatusBadge status="info" label="体彩官方赛程" />;
+        return <StatusBadge status="warning" label="赛程补充" />;
+      },
     },
     {
       key: 'match_status',
@@ -135,7 +139,7 @@ export default function EventsPage() {
 
   return (
     <div>
-      <PageHeader title="赛事中心" subtitle={`${events.length} 个联赛 · ${totalMatches} 场比赛 · 赛季档案包含体彩官方与赛程补充`} />
+      <PageHeader title="赛事中心" subtitle={`${events.length} 个联赛 · ${totalMatches} 场比赛 · 赛季档案来自中国竞彩网官方数据`} />
 
       <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-start' }}>
         {/* ── Left: league nav ── */}
@@ -231,7 +235,7 @@ export default function EventsPage() {
               {isAll ? '全部赛事' : selectedLeague}
             </span>
             <span style={{ color: 'var(--fqp-text-muted)', fontSize: '13px' }}>
-              {total} 场比赛 · 体彩官方与赛程补充分层展示
+              {total} 场比赛 · 体彩可投注比赛与官方联赛赛程分层展示
             </span>
             {selectedEvent && (
               <span style={{ color: 'var(--fqp-text-muted)', fontSize: '12px' }}>

@@ -6,8 +6,21 @@ def test_event_catalog_preserves_source_label(client):
         connection = get_db.return_value.__enter__.return_value
         cursor = connection.cursor.return_value.__enter__.return_value
         cursor.fetchall.return_value = [
-            ("supplemental", 7, "abc", 2, 10, 11, "瑞典超级联赛", "A", "B",
-             "2026-07-11T00:00:00", "Settled", 2, 1)
+            (
+                "supplemental",
+                7,
+                "abc",
+                2,
+                10,
+                11,
+                "瑞典超级联赛",
+                "A",
+                "B",
+                "2026-07-11T00:00:00",
+                "Settled",
+                2,
+                1,
+            )
         ]
 
         response = client.get("/api/events/catalog?source=supplemental&limit=10")
@@ -17,6 +30,21 @@ def test_event_catalog_preserves_source_label(client):
     assert payload["source"] == "supplemental"
     assert payload["matches"][0]["source"] == "supplemental"
     assert payload["matches"][0]["competition_season_id"] == 2
+
+
+def test_event_catalog_accepts_official_season_archive_source(client):
+    with patch("apps.backend.src.routers.teams.get_db") as get_db:
+        connection = get_db.return_value.__enter__.return_value
+        cursor = connection.cursor.return_value.__enter__.return_value
+        cursor.fetchall.return_value = []
+        cursor.fetchone.return_value = (0,)
+
+        response = client.get("/api/events/catalog?source=official_season&limit=10")
+
+    assert response.status_code == 200
+    assert response.json()["source"] == "official_season"
+    _, params = cursor.execute.call_args.args
+    assert params == ("official_season", 10, 0)
 
 
 def test_event_catalog_defaults_to_official_and_supports_explicit_season_dates(client):

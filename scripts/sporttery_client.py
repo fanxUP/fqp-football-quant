@@ -163,6 +163,44 @@ class SportteryClient:
             endpoint,
         )
 
+    def get_uniform_league_list(self) -> dict[str, Any]:
+        """Fetch the official league catalog and its ordered season lists."""
+        endpoint = "league/getLeagueListV1.qry"
+        return self._require_success(
+            self._request_url(
+                self.UNIFORM_BASE_URL + endpoint,
+                referer="https://www.sporttery.cn/zqlszl/",
+            ),
+            endpoint,
+        )
+
+    def get_uniform_league_matches(
+        self,
+        *,
+        uniform_league_id: int,
+        season_id: int,
+        start_date: str | None = None,
+        end_date: str | None = None,
+    ) -> dict[str, Any]:
+        """Fetch one official league-season match-result window."""
+        endpoint = "league/getMatchResultV1.qry"
+        params: dict[str, Any] = {
+            "uniformLeagueId": uniform_league_id,
+            "seasonId": season_id,
+        }
+        if start_date is not None:
+            params["startDate"] = start_date
+        if end_date is not None:
+            params["endDate"] = end_date
+        return self._require_success(
+            self._request_url(
+                self.UNIFORM_BASE_URL + endpoint,
+                params,
+                referer="https://www.sporttery.cn/zqlszl/",
+            ),
+            endpoint,
+        )
+
     def get_uniform_fixed_bonus(self, match_id: int) -> dict[str, Any]:
         """Fetch fixed bonus (all play types + odds history) for a match.
 
