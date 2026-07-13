@@ -61,4 +61,28 @@ describe('DataHealthPage', () => {
     expect(screen.getByText('补充')).toBeInTheDocument();
     expect(mockCollectionStatus).toHaveBeenCalledWith({ limit: 8 });
   });
+
+  it('uses degraded operational health for the overall system badge', async () => {
+    mockOpsHealth.mockResolvedValue({
+      status: 'degraded',
+      snapshot_date: '2026-07-13',
+      metrics: {
+        uptime_days: 1,
+        official_collection_rate: 1,
+        odds_missing_rate: 1,
+        review_generation_rate: 0.5,
+        backup_success: true,
+        evidence_chain_completeness: null,
+        data_contamination_count: null,
+      },
+      services: { scheduler: false, worker: true, api: true, db: true },
+      disk_usage_pct: 20,
+      notes: '部分指标未达标',
+    });
+
+    render(<DataHealthPage />);
+
+    expect(await screen.findByText('系统运行降级')).toBeInTheDocument();
+    expect(screen.queryByText('系统运行正常')).not.toBeInTheDocument();
+  });
 });

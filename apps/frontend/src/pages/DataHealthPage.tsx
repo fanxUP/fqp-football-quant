@@ -67,6 +67,7 @@ const STAGE8_TARGETS: Record<string, { label: string; target: string; pass: (v: 
 export default function DataHealthPage() {
   const [health, setHealth] = useState<HealthStatus | null>(null);
   const [opsHealth, setOpsHealth] = useState<OpsHealth | null>(null);
+  const [opsStatus, setOpsStatus] = useState<string | null>(null);
   const [pipeline, setPipeline] = useState<PipelineStatus | null>(null);
   const [officialCollection, setOfficialCollection] = useState<OfficialCollectionStatus[] | null>(null);
   const [officialCollectionError, setOfficialCollectionError] = useState<string | null>(null);
@@ -94,8 +95,11 @@ export default function DataHealthPage() {
         });
       }
       const opsData = ops as Record<string, unknown> | null;
-      if (opsData && opsData.status !== 'no_data') {
-        setOpsHealth(opsData as unknown as OpsHealth);
+      if (opsData) {
+        setOpsStatus(String(opsData.status || 'no_data'));
+        if (opsData.status !== 'no_data') {
+          setOpsHealth(opsData as unknown as OpsHealth);
+        }
       }
       const pipeData = pipe as Record<string, unknown> | null;
       if (pipeData) {
@@ -199,6 +203,21 @@ export default function DataHealthPage() {
   const stage8Total = Object.keys(STAGE8_TARGETS).length;
   const stage8AllPass = stage8Passes === stage8Total;
   const latestOfficialCollection = officialCollection?.[0] ?? null;
+  const overallHealth = (() => {
+    if (opsStatus === 'critical') {
+      return { status: 'error' as const, label: '系统运行异常', detail: opsHealth?.notes || '关键运行指标异常' };
+    }
+    if (opsStatus === 'degraded') {
+      return { status: 'warning' as const, label: '系统运行降级', detail: opsHealth?.notes || '部分运行指标未达标' };
+    }
+    if (opsStatus === 'no_data') {
+      return { status: 'warning' as const, label: '监控数据不足', detail: '后端可响应，但缺少运维健康快照' };
+    }
+    if (health?.status === 'ok') {
+      return { status: 'ok' as const, label: '系统运行正常', detail: health.detail };
+    }
+    return { status: 'error' as const, label: '后端服务异常', detail: health?.detail || '后端服务未响应' };
+  })();
   const officialCollectionBadge = latestOfficialCollection?.status === 'ok'
     ? { status: 'ok' as const, label: '已导入' }
     : latestOfficialCollection?.status === 'partial'
@@ -216,12 +235,12 @@ export default function DataHealthPage() {
       {/* Overall health */}
       <Card style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '16px' }}>
         <StatusBadge
-          status={health?.status || 'error'}
-          label={health?.status === 'ok' ? '系统运行正常' : '后端服务异常'}
+          status={overallHealth.status}
+          label={overallHealth.label}
           dot
         />
         <span style={{ fontSize: '13px', color: 'var(--fqp-text-muted)' }}>
-          {health?.detail}
+          {overallHealth.detail}
         </span>
         <span style={{ marginLeft: 'auto', fontSize: '12px', color: 'var(--fqp-text-muted)' }}>
           最后检测: {health?.lastCheck}

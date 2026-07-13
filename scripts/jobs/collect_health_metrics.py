@@ -209,8 +209,15 @@ def run(dry_run: bool = False) -> dict[str, Any]:
         odds_ok = odds_missing["rate"] <= 0.02
         reviews_ok = reviews["rate"] >= 0.99
         backup_ok = backups["success_rate"] >= 1.0
-        evidence_ok = evidence["completeness_rate"] >= 1.0
-        contamination_ok = contamination["contamination_found"] == 0
+        evidence_ok = bool(
+            evidence["has_data"]
+            and evidence["completeness_rate"] is not None
+            and evidence["completeness_rate"] >= 1.0
+        )
+        contamination_ok = bool(
+            contamination["has_data"]
+            and contamination["contamination_found"] == 0
+        )
 
         all_ok = all([official_ok, odds_ok, reviews_ok, backup_ok, evidence_ok, contamination_ok])
         any_critical = not official_ok or contamination["critical_found"] > 0
@@ -236,7 +243,12 @@ def run(dry_run: bool = False) -> dict[str, Any]:
             if not backup_ok:
                 notes_parts.append(f"备份成功率 {backups['success_rate']:.1%} < 100%")
             if not evidence_ok:
-                notes_parts.append(f"证据链完整率 {evidence['completeness_rate']:.1%} < 100%")
+                if evidence["has_data"] and evidence["completeness_rate"] is not None:
+                    notes_parts.append(f"证据链完整率 {evidence['completeness_rate']:.1%} < 100%")
+                else:
+                    notes_parts.append("证据链暂无审计样本")
+            if not contamination_ok and not contamination["has_data"]:
+                notes_parts.append("污染审计暂无样本")
             notes = "; ".join(notes_parts) if notes_parts else "Some metrics below target."
 
         # Assemble snapshot

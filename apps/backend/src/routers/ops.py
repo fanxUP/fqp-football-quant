@@ -127,10 +127,15 @@ def get_evidence_chain_audit(
         broken = get_broken_chains(conn, limit=50) if show_broken else []
 
     return {
+        "status": "ok" if stats["has_data"] else "no_data",
         "period_days": days,
         "stats": stats,
         "broken_chains": broken if show_broken else [],
-        "passes_stage8": stats["completeness_rate"] >= 1.0,
+        "passes_stage8": bool(
+            stats["has_data"]
+            and stats["completeness_rate"] is not None
+            and stats["completeness_rate"] >= 1.0
+        ),
     }
 
 
@@ -142,10 +147,13 @@ def get_contamination_audit(days: int = Query(30)):
         issues = get_recent_contamination_issues(conn, limit=50)
 
     return {
+        "status": "ok" if stats["has_data"] else "no_data",
         "period_days": days,
         "stats": stats,
         "issues": issues,
-        "passes_stage8": stats["contamination_found"] == 0,
+        "passes_stage8": bool(
+            stats["has_data"] and stats["contamination_found"] == 0
+        ),
     }
 
 

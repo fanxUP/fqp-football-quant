@@ -117,6 +117,40 @@ class TestOpsHealth:
         assert data["services"]["db"] is True
 
 
+class TestOpsAuditGates:
+    def test_evidence_chain_does_not_pass_without_audited_samples(self, client):
+        mock_conn, _ = _mock_db_conn()
+        with patch("apps.backend.src.routers.ops.get_db", return_value=mock_conn), \
+             patch("apps.backend.src.routers.ops.get_evidence_chain_stats", return_value={
+                 "total_audited": 0,
+                 "complete_chains": 0,
+                 "unique_recommendations": 0,
+                 "completeness_rate": None,
+                 "has_data": False,
+             }):
+            resp = client.get("/api/ops/evidence-chain")
+
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "no_data"
+        assert resp.json()["passes_stage8"] is False
+
+    def test_contamination_audit_does_not_pass_without_checks(self, client):
+        mock_conn, _ = _mock_db_conn()
+        with patch("apps.backend.src.routers.ops.get_db", return_value=mock_conn), \
+             patch("apps.backend.src.routers.ops.get_contamination_stats", return_value={
+                 "total_checks": 0,
+                 "contamination_found": 0,
+                 "critical_found": 0,
+                 "has_data": False,
+             }), \
+             patch("apps.backend.src.routers.ops.get_recent_contamination_issues", return_value=[]):
+            resp = client.get("/api/ops/contamination-audit")
+
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "no_data"
+        assert resp.json()["passes_stage8"] is False
+
+
 class TestReviewsEndpoint:
     def test_daily_reviews_returns_list(self, client):
         mock_conn, mock_cur = _mock_db_conn()

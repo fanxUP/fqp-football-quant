@@ -391,8 +391,8 @@ def get_evidence_chain_stats(conn: Any, days: int = 30) -> dict:
         "total_audited": total,
         "complete_chains": complete,
         "unique_recommendations": row[2] or 0,
-        # If there's nothing to audit, the chain is complete (nothing broken).
-        "completeness_rate": round(complete / total, 4) if total > 0 else 1.0,
+        "has_data": total > 0,
+        "completeness_rate": round(complete / total, 4) if total > 0 else None,
     }
 
 
@@ -480,10 +480,12 @@ def get_contamination_stats(conn: Any, days: int = 30) -> dict:
             (days,),
         )
         row = cur.fetchone()
+    total = row[0] or 0
     return {
-        "total_checks": row[0] or 0,
+        "total_checks": total,
         "contamination_found": row[1] or 0,
         "critical_found": row[2] or 0,
+        "has_data": total > 0,
     }
 
 
