@@ -5,7 +5,7 @@ CREATE TABLE IF NOT EXISTS official_matches (
     sport_type VARCHAR(32) NOT NULL DEFAULT 'football',
     business_date DATE NOT NULL,
     official_match_code VARCHAR(32) NOT NULL,
-    source_match_id VARCHAR(64),
+    source_match_id VARCHAR(64) NOT NULL,
     league_name VARCHAR(128) NOT NULL,
     home_team_name VARCHAR(128) NOT NULL,
     away_team_name VARCHAR(128) NOT NULL,

@@ -218,22 +218,6 @@ def main() -> None:
                 id="collect_standings",
             )
 
-            # Daily at 03:40: refresh official Sporttery league-season archive.
-            scheduler.add_job(
-                _audited_job(
-                    "refresh_official_seasons",
-                    "体彩官方赛季赛程刷新",
-                    "crawler_agent",
-                    lambda: __import__(
-                        "scripts.jobs.refresh_official_seasons", fromlist=["run"]
-                    ).run(),
-                ),
-                "cron",
-                hour=3,
-                minute=40,
-                id="refresh_official_seasons",
-            )
-
             # Third-party season data is isolated and opt-in only. It is never
             # allowed to repopulate a cleaned installation by default.
             if _supplemental_season_enabled():

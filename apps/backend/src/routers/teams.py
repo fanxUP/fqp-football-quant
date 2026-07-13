@@ -255,7 +255,7 @@ def list_feature_snapshots(
 
 @router.get("/api/events")
 def list_events():
-    """List leagues from the source-labelled season archive."""
+    """List leagues represented by canonical Sporttery betting matches."""
     with get_db() as conn:
         with conn.cursor() as cur:
             cur.execute("""
@@ -263,6 +263,8 @@ def list_events():
                        MIN(kickoff_time) AS first_match,
                        MAX(kickoff_time) AS last_match
                 FROM event_match_catalog
+                WHERE source = 'official'
+                  AND source_match_code IS NOT NULL
                 GROUP BY league_name
                 ORDER BY MAX(kickoff_time) DESC
             """)
@@ -283,21 +285,16 @@ def list_events():
 
 @router.get("/api/events/catalog")
 def list_event_catalog(
-    source: str = Query(
-        "official", pattern="^(official|official_season|supplemental|all)$"
-    ),
+    source: str = Query("official", pattern="^official$"),
     league_name: str | None = Query(None),
     start_date: str | None = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
     end_date: str | None = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
     limit: int = Query(500, ge=1, le=5000),
     offset: int = Query(0, ge=0),
 ):
-    """Browse betting matches and source-labelled season-archive fixtures."""
-    conditions = []
-    params: list[Any] = []
-    if source != "all":
-        conditions.append("source = %s")
-        params.append(source)
+    """Browse canonical Sporttery matches with ticket-visible match codes."""
+    conditions = ["source = %s", "source_match_code IS NOT NULL"]
+    params: list[Any] = [source]
     if league_name:
         conditions.append("league_name = %s")
         params.append(league_name)

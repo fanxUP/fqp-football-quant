@@ -5,21 +5,14 @@ import EventsPage from './EventsPage';
 const { catalog, list } = vi.hoisted(() => ({ catalog: vi.fn(), list: vi.fn() }));
 
 catalog.mockResolvedValue({
-  source: 'all',
-  total: 2,
+  source: 'official',
+  total: 1,
   matches: [
     {
       source: 'official', source_row_id: 101, source_match_code: '周五001',
       competition_season_id: null, home_team_id: null, away_team_id: null,
       league_name: '英超', home_team_name: '阿森纳', away_team_name: '切尔西',
       kickoff_time: '2026-08-15T19:30:00', match_status: 'Selling',
-      ft_home_goals: null, ft_away_goals: null,
-    },
-    {
-      source: 'official_season', source_row_id: 202, source_match_code: null,
-      competition_season_id: 9, home_team_id: null, away_team_id: null,
-      league_name: '英超', home_team_name: '布伦特福德', away_team_name: '富勒姆',
-      kickoff_time: '2026-08-16T21:00:00', match_status: 'scheduled',
       ft_home_goals: null, ft_away_goals: null,
     },
   ],
@@ -34,16 +27,14 @@ vi.mock('../core/apiClient', () => ({
 }));
 
 describe('EventsPage', () => {
-  it('shows betting matches and clearly labelled official season entries', async () => {
+  it('shows only Sporttery matches with official display codes', async () => {
     render(<EventsPage />);
 
-    await waitFor(() => expect(catalog).toHaveBeenCalledWith({ source: 'all', league_name: undefined, limit: 50, offset: 0 }));
+    await waitFor(() => expect(catalog).toHaveBeenCalledWith({ source: 'official', league_name: undefined, limit: 50, offset: 0 }));
 
-    expect(await screen.findByText(/赛季档案来自中国竞彩网官方数据/)).toBeInTheDocument();
+    expect(await screen.findByText(/仅展示有官方体彩编号的中国竞彩网比赛/)).toBeInTheDocument();
     expect(screen.getByText('体彩官方')).toBeInTheDocument();
     expect(screen.getByText('阿森纳')).toBeInTheDocument();
-    expect(screen.getByText('体彩官方赛程')).toBeInTheDocument();
-    expect(screen.getByText('无体彩编号')).toBeInTheDocument();
-    expect(screen.getByText('布伦特福德')).toBeInTheDocument();
+    expect(screen.queryByText('无体彩编号')).not.toBeInTheDocument();
   });
 });

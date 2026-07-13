@@ -37,3 +37,10 @@ def test_supplemental_season_refresh_requires_explicit_opt_in(monkeypatch):
     monkeypatch.setenv("SUPPLEMENTAL_SEASON_ENABLED", "true")
 
     assert _supplemental_season_enabled() is True
+
+
+def test_scheduler_does_not_refresh_numberless_official_season_archive():
+    from pathlib import Path
+
+    source = Path("scripts/jobs/run_scheduler.py").read_text()
+    assert 'id="refresh_official_seasons"' not in source

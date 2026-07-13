@@ -13,8 +13,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from datetime import datetime
 from typing import Any
+
+OFFICIAL_MATCH_CODE_RE = re.compile(r"^周[一二三四五六日]\d{3}$")
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -45,6 +48,34 @@ def store_matches(conn: Any, matches: list[dict]) -> dict[str, Any]:
     Unique key: (business_date, official_match_code)
     """
     inserted, updated, errors = 0, 0, []
+    valid_matches: list[dict] = []
+    for match in matches:
+        match_code = str(match.get("official_match_code") or "").strip()
+        raw = match.get("raw_json", {})
+        source_match_id = str(
+            match.get("source_match_id") or raw.get("matchId") or ""
+        ).strip()
+        if not OFFICIAL_MATCH_CODE_RE.fullmatch(match_code):
+            errors.append(
+                {
+                    "match_code": match_code,
+                    "error": "missing or invalid Sporttery match code",
+                }
+            )
+            continue
+        if not source_match_id:
+            errors.append(
+                {
+                    "match_code": match_code,
+                    "error": "missing Sporttery matchId",
+                }
+            )
+            continue
+        valid_matches.append(match)
+
+    if not valid_matches:
+        return {"inserted": 0, "updated": 0, "errors": errors}
+
     sql = """
         INSERT INTO official_matches (
             sport_type, business_date, official_match_code, source_match_id, league_name,
@@ -71,7 +102,7 @@ def store_matches(conn: Any, matches: list[dict]) -> dict[str, Any]:
         RETURNING id, (xmax = 0) AS is_inserted
     """
     with conn.cursor() as cur:
-        for m in matches:
+        for m in valid_matches:
             try:
                 raw = m.get("raw_json", {})
                 cur.execute(

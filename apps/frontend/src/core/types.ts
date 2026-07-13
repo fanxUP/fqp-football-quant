@@ -80,9 +80,9 @@ export interface EventMatch {
 }
 
 export interface EventCatalogMatch {
-  source: 'official' | 'official_season' | 'supplemental';
+  source: 'official';
   source_row_id: number;
-  source_match_code: string | null;
+  source_match_code: string;
   competition_season_id: number | null;
   home_team_id: number | null;
   away_team_id: number | null;
