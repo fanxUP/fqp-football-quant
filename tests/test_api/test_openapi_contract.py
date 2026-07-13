@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import tomllib
 from pathlib import Path
 
 import yaml
@@ -10,6 +11,20 @@ import yaml
 from apps.backend.src.app import create_app
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
+def test_project_release_version_is_consistent() -> None:
+    release_version = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
+    project_version = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))[
+        "project"
+    ]["version"]
+    contract_version = yaml.safe_load((ROOT / "api/openapi.yaml").read_text(encoding="utf-8"))[
+        "info"
+    ]["version"]
+    runtime_version = create_app().version
+
+    assert re.fullmatch(r"\d+\.\d+\.\d+", release_version)
+    assert {project_version, contract_version, runtime_version} == {release_version}
 
 
 def _documented_api_v1_routes() -> list[tuple[str, str]]:
