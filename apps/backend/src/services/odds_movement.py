@@ -52,12 +52,12 @@ def _movement_sql(scope: OddsScope, resolution: Resolution) -> str:
         sampled_snapshots = """
             SELECT DISTINCT ON (
                 snapshot.match_id, snapshot.play_type, snapshot.option_code,
-                date_trunc('hour', snapshot.snapshot_time)
+                date_trunc('hour', snapshot.business_snapshot_time)
             ) snapshot.*
             FROM source_snapshots snapshot
             ORDER BY snapshot.match_id, snapshot.play_type, snapshot.option_code,
-                     date_trunc('hour', snapshot.snapshot_time),
-                     snapshot.snapshot_time DESC, snapshot.id DESC
+                     date_trunc('hour', snapshot.business_snapshot_time),
+                     snapshot.business_snapshot_time DESC, snapshot.id DESC
         """
     else:
         sampled_snapshots = "SELECT snapshot.* FROM source_snapshots snapshot"
@@ -72,7 +72,13 @@ def _movement_sql(scope: OddsScope, resolution: Resolution) -> str:
             LIMIT %(limit)s
         ),
         source_snapshots AS (
-            SELECT snapshot.*
+            SELECT snapshot.*,
+                   CASE
+                       WHEN snapshot.raw_json->>'_collector_timezone' = 'Asia/Shanghai'
+                         OR snapshot.raw_json->>'source_endpoint' = 'getFixedBonusV1.qry'
+                       THEN snapshot.snapshot_time
+                       ELSE snapshot.snapshot_time + INTERVAL '8 hours'
+                   END AS business_snapshot_time
             FROM official_odds_snapshots snapshot
             WHERE snapshot.match_id IN (SELECT id FROM selected_matches)
               AND snapshot.play_type = %(play_type)s
@@ -84,13 +90,13 @@ def _movement_sql(scope: OddsScope, resolution: Resolution) -> str:
             SELECT snapshot.*,
                    LAG(snapshot.sp_value) OVER (
                        PARTITION BY snapshot.match_id, snapshot.play_type, snapshot.option_code
-                       ORDER BY snapshot.snapshot_time, snapshot.id
+                       ORDER BY snapshot.business_snapshot_time, snapshot.id
                    ) AS prev_sp_value
             FROM sampled_snapshots snapshot
         )
         SELECT snapshot.id, match.id, match.official_match_code, match.business_date,
                match.league_name, match.home_team_name, match.away_team_name,
-               match.kickoff_time, snapshot.snapshot_time,
+               match.kickoff_time, snapshot.business_snapshot_time,
                snapshot.option_code, snapshot.option_name, snapshot.sp_value,
                snapshot.handicap,
                CASE WHEN snapshot.sp_value > 0 THEN 1.0 / snapshot.sp_value ELSE NULL END,
@@ -106,7 +112,7 @@ def _movement_sql(scope: OddsScope, resolution: Resolution) -> str:
             LIMIT 1
         ) capture ON TRUE
         ORDER BY match.kickoff_time, match.id,
-                 snapshot.snapshot_time, snapshot.option_code, snapshot.id
+                 snapshot.business_snapshot_time, snapshot.option_code, snapshot.id
     """
 
 

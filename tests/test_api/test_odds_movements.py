@@ -59,6 +59,9 @@ def test_batch_odds_movements_returns_all_current_matches_in_one_query(client):
     sql = cursor.execute.call_args.args[0]
     assert "LEFT JOIN selected_snapshots" in sql
     assert "timezone('Asia/Shanghai', NOW())" in sql
+    assert "_collector_timezone" in sql
+    assert "getFixedBonusV1.qry" in sql
+    assert "snapshot.snapshot_time + INTERVAL '8 hours'" in sql
     payload = response.json()
     assert payload["total"] == 2
     assert payload["matches"][0]["series"][0]["sp_value"] == 2.1
@@ -85,5 +88,5 @@ def test_historical_odds_movements_requires_date_and_supports_hourly_resolution(
     assert response.status_code == 200
     sql = cursor.execute.call_args.args[0]
     assert "DISTINCT ON" in sql
-    assert "date_trunc('hour', snapshot.snapshot_time)" in sql
+    assert "date_trunc('hour', snapshot.business_snapshot_time)" in sql
     assert cursor.execute.call_args.args[1]["business_date"] == "2026-07-13"

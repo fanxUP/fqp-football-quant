@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import Counter
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
@@ -78,7 +79,7 @@ def capture_decision(candidate: CaptureCandidate, now: datetime) -> CaptureDecis
 
 
 def evaluate_capture_completeness(
-    expected_play_types: object,
+    expected_play_types: Iterable[str],
     snapshots: list[dict],
 ) -> CaptureCompleteness:
     """Validate that every officially offered play has its canonical options."""

@@ -200,6 +200,11 @@ def collect_due_official_odds(now: datetime | None = None) -> dict[str, Any]:
                     for snapshot in snapshots
                     if snapshot.get("play_type") in candidate.expected_play_types
                 ]
+                for snapshot in snapshots:
+                    snapshot["raw_json"] = {
+                        **snapshot.get("raw_json", {}),
+                        "_collector_timezone": "Asia/Shanghai",
+                    }
                 completeness = evaluate_capture_completeness(
                     candidate.expected_play_types, snapshots
                 )

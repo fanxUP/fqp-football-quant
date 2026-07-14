@@ -66,4 +66,9 @@ def test_due_collector_fetches_once_and_records_complete_offered_play():
     }
     client.get_uniform_match_calculator.assert_called_once_with()
     store_odds.assert_called_once()
+    stored_snapshots = store_odds.call_args.kwargs["snapshots"]
+    assert all(
+        snapshot["raw_json"]["_collector_timezone"] == "Asia/Shanghai"
+        for snapshot in stored_snapshots
+    )
     finish_batch.assert_called_once_with(connection, 99, "complete", ("spf",), 3, None)
