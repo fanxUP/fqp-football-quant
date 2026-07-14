@@ -1,3 +1,4 @@
+from datetime import date
 from unittest.mock import patch
 
 
@@ -71,7 +72,15 @@ def test_list_odds_history_matches_returns_only_matches_with_official_snapshots(
         connection = get_db.return_value.__enter__.return_value
         cursor = connection.cursor.return_value.__enter__.return_value
         cursor.fetchall.return_value = [
-            (304, "周一005", "英超", "曼彻斯特城", "利雅得新月", "2025-07-01T03:00:00", ["bf", "bqc", "spf", "zjq"])
+            (
+                304,
+                "周一005",
+                "英超",
+                "曼彻斯特城",
+                "利雅得新月",
+                "2025-07-01T03:00:00",
+                ["bf", "bqc", "spf", "zjq"],
+            )
         ]
 
         response = client.get("/api/official/odds-history/matches?limit=20&search=曼城")
@@ -87,3 +96,28 @@ def test_list_odds_history_matches_returns_only_matches_with_official_snapshots(
     assert payload["total"] == 1
     assert payload["matches"][0]["id"] == 304
     assert payload["matches"][0]["play_types"] == ["bf", "bqc", "spf", "zjq"]
+
+
+def test_odds_index_separates_current_open_matches_from_historical_dates(client):
+    with patch("apps.backend.src.routers.official.get_db") as get_db:
+        connection = get_db.return_value.__enter__.return_value
+        cursor = connection.cursor.return_value.__enter__.return_value
+        cursor.fetchall.return_value = [
+            ("current", None, 4),
+            ("history", date(2026, 7, 13), 6),
+            ("history", date(2026, 7, 12), 8),
+        ]
+
+        response = client.get("/api/official/odds-index")
+
+    assert response.status_code == 200
+    sql = cursor.execute.call_args.args[0]
+    assert "timezone('Asia/Shanghai', NOW())" in sql
+    assert "market.is_open = TRUE" in sql
+    assert response.json() == {
+        "current": {"count": 4},
+        "history": [
+            {"business_date": "2026-07-13", "match_count": 6},
+            {"business_date": "2026-07-12", "match_count": 8},
+        ],
+    }

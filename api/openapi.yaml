@@ -6,6 +6,30 @@ info:
 servers:
   - url: http://localhost:8000
 paths:
+  /api/official/odds-index:
+    get:
+      summary: 查询当前在售比赛与历史赔率日期索引
+      responses:
+        '200': { description: 当前数量与历史业务日列表 }
+  /api/dashboard/odds/movements:
+    get:
+      summary: 批量查询指定范围内全部比赛的赔率走势
+      parameters:
+        - name: scope
+          in: query
+          schema: { type: string, enum: [current, history], default: current }
+        - name: business_date
+          in: query
+          schema: { type: string, format: date }
+        - name: play_type
+          in: query
+          schema: { type: string, enum: [spf, rqspf, bf, zjq, bqc], default: spf }
+        - name: resolution
+          in: query
+          schema: { type: string, enum: [raw, hour], default: raw }
+      responses:
+        '200': { description: 按比赛分组的赔率时间序列 }
+        '422': { description: 历史范围缺少日期或参数无效 }
   /api/v1/official/matches:
     get:
       summary: 查询官方赛程

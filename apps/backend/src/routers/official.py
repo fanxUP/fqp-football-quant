@@ -109,6 +109,55 @@ def list_official_odds_history_matches(
     }
 
 
+@router.get("/api/official/odds-index")
+def get_official_odds_index():
+    """Return the open-match tab and historical business-date index."""
+    with get_db() as conn, conn.cursor() as cur:
+        cur.execute(
+            """
+            WITH current_matches AS (
+                SELECT DISTINCT m.id
+                FROM official_matches m
+                WHERE m.sale_status = 'selling'
+                  AND m.kickoff_time > timezone('Asia/Shanghai', NOW())
+                  AND EXISTS (
+                      SELECT 1 FROM official_markets market
+                      WHERE market.match_id = m.id
+                        AND market.is_open = TRUE
+                        AND market.play_type = ANY(%s)
+                  )
+            ), historical_dates AS (
+                SELECT m.business_date, COUNT(DISTINCT m.id) AS match_count
+                FROM official_matches m
+                WHERE m.kickoff_time <= timezone('Asia/Shanghai', NOW())
+                  AND EXISTS (
+                      SELECT 1 FROM official_odds_snapshots snapshot
+                      WHERE snapshot.match_id = m.id
+                  )
+                GROUP BY m.business_date
+            )
+            SELECT 'current' AS scope, NULL::date AS business_date, COUNT(*) AS match_count
+            FROM current_matches
+            UNION ALL
+            SELECT 'history', business_date, match_count
+            FROM historical_dates
+            ORDER BY business_date DESC NULLS FIRST
+            """,
+            (["spf", "rqspf", "bf", "zjq", "bqc"],),
+        )
+        rows = cur.fetchall()
+
+    current_count = next((int(row[2]) for row in rows if row[0] == "current"), 0)
+    return {
+        "current": {"count": current_count},
+        "history": [
+            {"business_date": _to_iso(row[1]), "match_count": int(row[2])}
+            for row in rows
+            if row[0] == "history"
+        ],
+    }
+
+
 @router.get("/api/official/matches/{match_id}")
 def get_official_match(match_id: int):
     """Get one official match."""

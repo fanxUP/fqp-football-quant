@@ -6,11 +6,13 @@ Empty data → {"empty": true, "empty_reason": "..."}  (never 500).
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
+from typing import Literal
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query
 
 from apps.backend.src.db import get_db
+from apps.backend.src.services.odds_movement import list_odds_movements
 
 router = APIRouter(tags=["dashboard"])
 
@@ -292,6 +294,33 @@ def get_odds_movement(
             "meta": _meta("v_dashboard_odds_movement"),
         },
     }
+
+
+@router.get("/api/dashboard/odds/movements")
+def get_odds_movements(
+    scope: Literal["current", "history"] = Query("current"),
+    business_date: str | None = Query(None),
+    play_type: Literal["spf", "rqspf", "bf", "zjq", "bqc"] = Query("spf"),
+    resolution: Literal["raw", "hour"] = Query("raw"),
+    limit: int = Query(200, ge=1, le=200),
+):
+    """Return all date-scoped matches and their selected-play odds in one request."""
+    if scope == "history" and not business_date:
+        raise HTTPException(status_code=422, detail="历史走势必须指定 business_date")
+    if business_date:
+        try:
+            date.fromisoformat(business_date)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=422, detail="business_date 格式必须为 YYYY-MM-DD"
+            ) from exc
+    return list_odds_movements(
+        scope=scope,
+        business_date=business_date,
+        play_type=play_type,
+        resolution=resolution,
+        limit=limit,
+    )
 
 
 # ---------------------------------------------------------------------------
