@@ -123,6 +123,51 @@ export interface OfficialOddsHistoryMatch {
   play_types: string[];
 }
 
+export interface OfficialOddsIndex {
+  current: { count: number };
+  history: { business_date: string; match_count: number }[];
+}
+
+export interface OddsMovementPoint {
+  snapshot_id: number;
+  snapshot_time: string;
+  play_type: string;
+  option_code: string;
+  option_name: string;
+  sp_value: number;
+  handicap: number | null;
+  implied_probability: number | null;
+  prev_sp_value: number | null;
+}
+
+export interface OddsCaptureStatus {
+  status: 'running' | 'complete' | 'partial' | 'not_offered' | 'failed';
+  capture_kind: 'opening' | 'periodic' | 'retry' | 'final';
+  failure_reason: string | null;
+}
+
+export interface OddsMovementMatch {
+  id: number;
+  official_match_code: string;
+  business_date: string;
+  league_name: string;
+  home_team_name: string;
+  away_team_name: string;
+  kickoff_time: string;
+  capture_status: OddsCaptureStatus | null;
+  series: OddsMovementPoint[];
+  anomalies: DashboardOddsAnomaly[];
+}
+
+export interface OddsMovementsResponse {
+  scope: 'current' | 'history';
+  business_date: string | null;
+  play_type: string;
+  resolution: 'raw' | 'hour';
+  matches: OddsMovementMatch[];
+  total: number;
+}
+
 // ---- Match Detail (Events Center drawer) ----
 
 export interface MatchDetailTeam {

@@ -8,6 +8,7 @@ export { default as DrawdownChart } from './DrawdownChart';
 export { default as EvBarChart } from './EvBarChart';
 export { default as FeatureRadarChart } from './FeatureRadarChart';
 export { default as OddsMovementChart } from './OddsMovementChart';
+export { default as OddsSeriesChart } from './OddsSeriesChart';
 export { default as HeatmapPanel } from './HeatmapPanel';
 export { default as EmptyChartState } from './EmptyChartState';
 export { default as AiPoolDashboard } from './AiPoolDashboard';

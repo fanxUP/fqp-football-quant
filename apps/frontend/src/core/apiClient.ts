@@ -163,6 +163,8 @@ export const api = {
 
   // Official Sporttery source tracking. Third-party sources are not returned here.
   official: {
+    oddsIndex: () =>
+      request<import('./types').OfficialOddsIndex>('/api/official/odds-index'),
     oddsHistoryMatches: (params?: { search?: string; limit?: number }) =>
       request<{ matches: import('./types').OfficialOddsHistoryMatch[]; total: number }>(
         `/api/official/odds-history/matches${qs({ search: params?.search, limit: params?.limit ?? 200 })}`,
@@ -516,6 +518,11 @@ export const api = {
     oddsMovement: (params: { match_id: number; play_type?: string; option_code?: string }) =>
       request<import('./types').DashboardResponse<import('./types').DashboardOddsPoint>>(
         `/api/dashboard/odds/movement${qs({ match_id: params.match_id, play_type: params?.play_type, option_code: params?.option_code })}`,
+      ),
+
+    oddsMovements: (params: { scope: 'current' | 'history'; business_date?: string; play_type: string; resolution: 'raw' | 'hour'; limit?: number }) =>
+      request<import('./types').OddsMovementsResponse>(
+        `/api/dashboard/odds/movements${qs({ scope: params.scope, business_date: params.business_date, play_type: params.play_type, resolution: params.resolution, limit: params.limit ?? 200 })}`,
       ),
 
     modelPerformance: (params?: { model_name?: string }) =>

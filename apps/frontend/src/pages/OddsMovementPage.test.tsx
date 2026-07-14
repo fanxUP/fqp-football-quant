@@ -2,54 +2,64 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import OddsMovementPage from './OddsMovementPage';
 
-const { oddsHistoryMatches, oddsMovement } = vi.hoisted(() => ({
-  oddsHistoryMatches: vi.fn(),
-  oddsMovement: vi.fn(),
+const { oddsIndex, oddsMovements } = vi.hoisted(() => ({
+  oddsIndex: vi.fn(),
+  oddsMovements: vi.fn(),
 }));
 
-oddsHistoryMatches.mockResolvedValue({
-  total: 1,
-  matches: [{
-    id: 304, official_match_code: '周一005', league_name: '英超',
-    home_team_name: '曼彻斯特城', away_team_name: '利雅得新月',
-    kickoff_time: '2025-07-01T03:00:00', play_types: ['spf'],
-  }],
+oddsIndex.mockResolvedValue({
+  current: { count: 2 },
+  history: [{ business_date: '2026-07-13', match_count: 3 }],
 });
-oddsMovement.mockResolvedValue({
-  data: {
-    series: [
-      { option_code: 'h', option_name: '主胜', snapshot_time: '2025-06-28T09:48:36', sp_value: 1.27, implied_probability: 0.78, handicap: null },
-      { option_code: 'h', option_name: '主胜', snapshot_time: '2025-06-30T10:19:40', sp_value: 1.18, implied_probability: 0.85, handicap: null },
-    ],
-    anomalies: [],
-  },
+oddsMovements.mockResolvedValue({
+  scope: 'current',
+  business_date: null,
+  play_type: 'spf',
+  resolution: 'raw',
+  total: 2,
+  matches: [
+    {
+      id: 304, official_match_code: '周二201', business_date: '2026-07-14', league_name: '英超',
+      home_team_name: '曼彻斯特城', away_team_name: '利雅得新月',
+      kickoff_time: '2026-07-14T19:15:00+08:00', capture_status: { status: 'complete', capture_kind: 'opening', failure_reason: null },
+      series: [{ snapshot_id: 1, snapshot_time: '2026-07-14T17:30:00+08:00', play_type: 'spf', option_code: 'h', option_name: '主胜', sp_value: 1.27, handicap: null, implied_probability: 0.78, prev_sp_value: null }],
+      anomalies: [],
+    },
+    {
+      id: 305, official_match_code: '周二202', business_date: '2026-07-14', league_name: '西甲',
+      home_team_name: '巴塞罗那', away_team_name: '皇家马德里',
+      kickoff_time: '2026-07-14T20:00:00+08:00', capture_status: null,
+      series: [], anomalies: [],
+    },
+  ],
 });
 
 vi.mock('../core/apiClient', () => ({
   api: {
-    official: { oddsHistoryMatches },
-    dashboard: { oddsMovement },
+    official: { oddsIndex },
+    dashboard: { oddsMovements },
   },
 }));
 vi.mock('../visualization', () => ({
-  OddsMovementChart: () => <div>走势图已渲染</div>,
-  applyChartTheme: <T,>(option: T) => option,
-  CHART_COLORS: { blue: '#00f', amber: '#fa0', areaAgent: 'transparent' },
+  OddsSeriesChart: ({ title }: { title: string }) => <div>{title} 图表</div>,
 }));
-vi.mock('../shared/components/ChartCard', () => ({ default: () => <div>隐含概率图</div> }));
 
 describe('OddsMovementPage', () => {
-  it('loads persisted official history and searches historical matches', async () => {
+  it('按当前与历史日期批量展示全部比赛', async () => {
     render(<OddsMovementPage />);
 
-    await waitFor(() => expect(oddsHistoryMatches).toHaveBeenCalledWith({ limit: 200, search: undefined }));
-    await waitFor(() => expect(oddsMovement).toHaveBeenCalledWith({ match_id: 304, play_type: 'spf' }));
-    expect(await screen.findByText('走势图已渲染')).toBeInTheDocument();
-    expect(screen.getByRole('option', { name: /周一005.*曼彻斯特城/ })).toBeInTheDocument();
+    await waitFor(() => expect(oddsIndex).toHaveBeenCalledOnce());
+    await waitFor(() => expect(oddsMovements).toHaveBeenCalledWith({
+      scope: 'current', business_date: undefined, play_type: 'spf', resolution: 'raw', limit: 200,
+    }));
+    expect(await screen.findByText(/周二201/)).toBeInTheDocument();
+    expect(screen.getByText(/周二202/)).toBeInTheDocument();
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText('搜索历史赔率比赛'), { target: { value: '曼彻斯特城' } });
-    fireEvent.click(screen.getByRole('button', { name: '搜索' }));
+    fireEvent.click(screen.getByRole('button', { name: /07-13/ }));
 
-    await waitFor(() => expect(oddsHistoryMatches).toHaveBeenLastCalledWith({ limit: 200, search: '曼彻斯特城' }));
+    await waitFor(() => expect(oddsMovements).toHaveBeenLastCalledWith({
+      scope: 'history', business_date: '2026-07-13', play_type: 'spf', resolution: 'hour', limit: 200,
+    }));
   });
 });
