@@ -6,7 +6,7 @@
   3. 四池分层：主策略池 / 防守池 / 价值池 / 小额进攻池
   4. 2串1 优先，3串1 小额（框架 §8.5）
   5. 平局风险检测降权（框架 §7.3）
-  6. 不强花 ¥500 — 没好机会少买或不买
+  6. 常规资金池不强花 ¥500；有正 EV 但未过常规风控时，最小 2 元虚拟观察票留作竞赛样本
 
 Daily budget: ¥500 max, unused portion resets at 23:59.
 """
@@ -106,8 +106,15 @@ def _no_candidate_note(
     return "候选未通过置信度、赔率质量或风险门槛，今日不投注"
 
 
-def _ticket_generation_note(*, tickets_created: int, candidate_count: int) -> str:
+def _ticket_generation_note(
+    *,
+    tickets_created: int,
+    candidate_count: int,
+    observation_fallback: bool = False,
+) -> str:
     """Describe the terminal buy-or-abstain decision after pool assignment."""
+    if observation_fallback:
+        return "常规资金池未放行，已用 2 元生成 1 张高风险虚拟观察票，用于 Agent 竞赛与复盘"
     if tickets_created > 0:
         return f"已创建 {tickets_created} 张 Agent 虚拟票"
     if candidate_count > 0:
@@ -116,6 +123,94 @@ def _ticket_generation_note(*, tickets_created: int, candidate_count: int) -> st
             "资金池风险与置信度门槛，今日不投注"
         )
     return "没有候选通过数据质量与风险门槛，今日不投注"
+
+
+def _build_competition_observation_ticket(
+    candidates: list[dict[str, Any]],
+    *,
+    single_allowed: set[tuple[int, str]],
+    pass_allowed: set[tuple[int, str]],
+) -> tuple[dict[str, Any], list[dict[str, Any]]] | None:
+    """Build one minimum-stake virtual ticket when standard pools reject all candidates.
+
+    The observation ticket never bypasses official market availability. It prefers
+    a sellable single; otherwise it uses two distinct open-market selections.
+    """
+    eligible_candidates = [
+        candidate
+        for candidate in candidates
+        if float(candidate.get("sp_value") or 0) > 0
+    ]
+    single_candidate = next(
+        (
+            candidate
+            for candidate in eligible_candidates
+            if (candidate["match_id"], candidate["play_type"]) in single_allowed
+        ),
+        None,
+    )
+    if single_candidate:
+        selected = [single_candidate]
+        pass_type = "single"
+    else:
+        selected = []
+        seen_matches: set[int] = set()
+        for candidate in eligible_candidates:
+            market_key = (candidate["match_id"], candidate["play_type"])
+            if market_key not in pass_allowed:
+                continue
+            if candidate["match_id"] in seen_matches:
+                continue
+            selected.append(candidate)
+            seen_matches.add(candidate["match_id"])
+            if len(selected) == 2:
+                break
+        if len(selected) < 2:
+            return None
+        pass_type = "2x1"
+
+    combined_sp = 1.0
+    combined_ev = 1.0
+    for candidate in selected:
+        combined_sp *= float(candidate["sp_value"])
+        combined_ev *= float(candidate["ev"]) + 1
+    combined_ev -= 1
+    stake = MIN_STAKE
+    ticket = {
+        "strategy_pool": "agent_competition_observation",
+        "ticket_type": "single" if pass_type == "single" else "parlay",
+        "pass_type": pass_type,
+        "suggested_stake": stake,
+        "multiple": 1,
+        "bet_count": 1,
+        "estimated_return": round(
+            min(stake * combined_sp, _payout_cap(len(selected))),
+            2,
+        ),
+        "max_return": round(
+            min(stake * combined_sp, _payout_cap(len(selected))),
+            2,
+        ),
+        "expected_value": round(combined_ev, 4),
+        "risk_level": "high",
+        "ticket_status": "generated",
+        "rule_metadata": {
+            "source": "sporttery_rules",
+            "virtual_competition": True,
+            "observation_fallback": True,
+        },
+    }
+    return ticket, selected
+
+
+def _market_allows_pass(raw_json: dict[str, Any] | None) -> bool:
+    """Read the official all-up capability retained in the market source payload."""
+    pool = (raw_json or {}).get("_pool") or {}
+    for field in ("allUp", "bettingAllup", "cbtAllUp", "intAllUp"):
+        value = pool.get(field)
+        if value is True or value == 1 or value == "1":
+            return True
+    return False
 
 # ── 四池分层配置（框架 §9.1） ──
 POOL_CONFIG: list[dict[str, Any]] = [
@@ -182,6 +277,30 @@ def _prediction_sp_value(prediction_row: tuple[Any, ...]) -> float:
     """
     value = prediction_row[16]
     return float(value or 0) if value else 0.0
+
+
+def _market_sp_quality(
+    predictions: list[tuple[Any, ...]],
+) -> tuple[dict[tuple[int, str], bool], int]:
+    """Evaluate odds quality independently for each match and play type."""
+    market_values: dict[tuple[int, str], dict[str, float]] = {}
+    for prediction in predictions:
+        market_key = (prediction[1], prediction[3])
+        market_values.setdefault(market_key, {})[prediction[4]] = _prediction_sp_value(
+            prediction
+        )
+
+    quality: dict[tuple[int, str], bool] = {}
+    for market_key, option_values in market_values.items():
+        values = list(option_values.values())
+        quality[market_key] = not (
+            any(value <= 0 for value in values)
+            or (len(values) >= 2 and len(set(values)) == 1)
+        )
+    valid_match_count = len(
+        {match_id for (match_id, _play_type), is_valid in quality.items() if is_valid}
+    )
+    return quality, valid_match_count
 
 # ── 平局风险检测（框架 §7.3） ──
 DRAW_ODDS_THRESHOLD = 3.50
@@ -313,6 +432,8 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
                 WHERE mp.predict_time = %s
                   AND mp.play_type IN ('spf', 'rqspf', 'bf', 'zjq', 'bqc')
                   AND mv.model_name = ANY(%s)
+                  AND mp.odds_snapshot_id IS NOT NULL
+                  AND mp.feature_snapshot_id IS NOT NULL
                   AND m.kickoff_time > NOW()
                 ORDER BY mp.ev DESC
                 """,
@@ -346,36 +467,15 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
         # 检测每个 match 的 sp_value 异常:
         #   - NULL sp (无赔率数据)
         #   - 同一场三个方向 SP 完全相等 (数据损坏信号)
-        match_sp_quality: dict[int, bool] = {}  # True = ok
-        match_sp_values: dict[int, dict[str, float]] = {}
-
-        for p in predictions:
-            mid = p[1]
-            opt = p[4]
-            # SELECT order: kickoff_time is p[15], sp_value is p[16].
-            sp = _prediction_sp_value(p)
-            if mid not in match_sp_values:
-                match_sp_values[mid] = {}
-            match_sp_values[mid][opt] = sp
-
-        for mid, sps in match_sp_values.items():
-            values = list(sps.values())
-            if any(v == 0 for v in values):
-                match_sp_quality[mid] = False  # NULL sp_value detected
-            elif len(values) >= 2 and len(set(values)) == 1:
-                match_sp_quality[mid] = False  # all SPs identical → data damage
-            else:
-                match_sp_quality[mid] = True
-
-        bad_sp_matches = [mid for mid, ok in match_sp_quality.items() if not ok]
-        if bad_sp_matches:
+        match_sp_quality, valid_match_count = _market_sp_quality(predictions)
+        bad_sp_markets = [market for market, ok in match_sp_quality.items() if not ok]
+        if bad_sp_markets:
             # 不阻止所有推荐，但标记劣质场次
             pass
 
         # ── 2c. 最低比赛数检查 ──
         # 按框架 §9, 四池分散需要至少 4 场有效比赛
         MIN_MATCHES = 4
-        valid_match_count = sum(1 for v in match_sp_quality.values() if v)
         training_observation_mode = valid_match_count < MIN_MATCHES
 
         # ── 3. Data quality map ──
@@ -528,7 +628,7 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
                 continue
 
             # SP 数据质量：跳过 sp_value 异常的场次
-            if not match_sp_quality.get(match_id, True):
+            if not match_sp_quality.get((match_id, play_type), False):
                 reject("odds_quality")
                 continue
 
@@ -937,6 +1037,54 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
             "tickets": parlay_tickets,
         }
 
+        # ── 9b. 竞赛最小观察票 ──
+        # 常规四池仍保持原有风控；仅当正 EV 候选已通过数据与官方市场硬门槛，
+        # 但全部被常规资金池拒绝时，以最小 2 元虚拟仓位留下可结算的竞赛样本。
+        observation_fallback = False
+        observation_usage = {"used": 0.0, "tickets": 0}
+        if tickets_created == 0 and candidates:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT match_id, play_type, is_single_allowed, raw_json
+                    FROM official_markets
+                    WHERE match_id = ANY(%s)
+                      AND is_open = true
+                    """,
+                    (list({candidate["match_id"] for candidate in candidates}),),
+                )
+                market_permissions = cur.fetchall()
+                single_allowed = {
+                    (row[0], row[1]) for row in market_permissions if row[2]
+                }
+                pass_allowed = {
+                    (row[0], row[1])
+                    for row in market_permissions
+                    if _market_allows_pass(row[3])
+                }
+            observation = _build_competition_observation_ticket(
+                candidates,
+                single_allowed=single_allowed,
+                pass_allowed=pass_allowed,
+            )
+            if observation:
+                observation_ticket, observation_candidates = observation
+                ticket_id = _buy_ticket(
+                    conn,
+                    observation_ticket,
+                    [_make_item(candidate) for candidate in observation_candidates],
+                )
+                if ticket_id:
+                    observation_fallback = True
+                    tickets_created = 1
+                    observation_stake = float(observation_ticket["suggested_stake"])
+                    total_stake += observation_stake
+                    observation_usage = {
+                        "used": observation_stake,
+                        "tickets": 1,
+                        "pass_type": observation_ticket["pass_type"],
+                    }
+
         # ── 10. Risk-flag summaries ──
         draw_flagged = [
             {
@@ -965,6 +1113,7 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
             "note": _ticket_generation_note(
                 tickets_created=tickets_created,
                 candidate_count=len(candidates),
+                observation_fallback=observation_fallback,
             ),
             "total_stake": round(total_stake, 2),
             "total_budget": AGENT_DAILY_BUDGET,
@@ -974,6 +1123,7 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
             "top_ev": round(candidates[0]["ev"], 6) if candidates else None,
             "pool_usage": pool_usage,
             "parlay_usage": parlay_usage,
+            "observation_usage": observation_usage,
             "draw_risk_flags": draw_flagged,
             "odds_risk_flags": odds_flagged,
             "direction_conflicts": direction_conflicts,
@@ -990,6 +1140,8 @@ def _option_label(code: str, play_type: str = "spf") -> str:
         return "7+球" if code in {"7", "7+"} else f"{code}球"
     if play_type == "bf":
         return code.replace("_h", "其他胜").replace("_d", "其他平").replace("_a", "其他负")
+    if play_type == "rqspf":
+        return {"3": "让胜", "1": "让平", "0": "让负"}.get(code, code)
     return {"3": "主胜", "1": "平", "0": "客胜"}.get(code, code)
 
 
