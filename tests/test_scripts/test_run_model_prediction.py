@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-from scripts.jobs.run_model_prediction import _predict_match_play_type, _run_impl
+from scripts.feature_adjustment import GoalRateAdjustment
+from scripts.jobs.run_model_prediction import _predict_match_play_type, _run_impl, run
 
 
 def _run_with_odds(odds_rows):
@@ -76,3 +77,65 @@ def test_prediction_job_does_not_fallback_to_spf_when_no_market_is_open():
         "note": "no matches with open official markets",
     }
     predict.assert_not_called()
+
+
+def test_poisson_prediction_persists_raw_and_feature_adjusted_probabilities():
+    conn = MagicMock()
+    cursor = conn.cursor.return_value.__enter__.return_value
+    cursor.fetchall.side_effect = [
+        [(11, "h", 2.1), (12, "d", 3.2), (13, "a", 3.6)],
+        [],
+    ]
+    adjustment = GoalRateAdjustment(
+        home_lambda=2.0,
+        away_lambda=0.5,
+        applied=True,
+        home_log_shift=0.12,
+        total_goal_multiplier=1.0,
+        reasons=[{"feature": "motivation_diff", "value": 20.0, "log_shift": 0.016}],
+    )
+
+    with (
+        patch(
+            "scripts.jobs.run_model_prediction._latest_feature_snapshot",
+            return_value={"id": 88, "data_completeness_score": 70},
+        ),
+        patch("scripts.jobs.run_model_prediction.adjust_goal_rates", return_value=adjustment),
+        patch("scripts.jobs.run_model_prediction._store_derived_play_types", return_value=0),
+        patch("scripts.jobs.run_model_prediction.store_model_prediction") as store_prediction,
+        patch("scripts.jobs.run_model_prediction.store_committee_vote"),
+    ):
+        _predict_match_play_type(
+            conn=conn,
+            mid=101,
+            home_team_name="主队",
+            away_team_name="客队",
+            play_type="spf",
+            active_models={"maher_poisson": 1},
+            rho=-0.08,
+            mle_rho=None,
+            predict_time="2026-07-13T14:00:00",
+        )
+
+    stored = [call.args[1] for call in store_prediction.call_args_list]
+    assert len(stored) == 3
+    assert any(item["raw_model_probability"] != item["model_probability"] for item in stored)
+    assert all(item["feature_snapshot_id"] == 88 for item in stored)
+    assert all(item["uncertainty_reason"]["feature_adjustment"]["applied"] for item in stored)
+
+
+def test_prediction_job_requires_odds_and_feature_snapshot_jobs() -> None:
+    with (
+        patch("scripts.jobs.run_model_prediction.start_tracked_job", return_value=9) as start,
+        patch("scripts.jobs.run_model_prediction.finish_tracked_job"),
+        patch(
+            "scripts.jobs.run_model_prediction._run_impl",
+            return_value={"status": "ok", "predictions": 0},
+        ),
+    ):
+        run()
+
+    assert start.call_args.kwargs["dependencies"] == [
+        "official_odds_snapshot",
+        "feature_snapshot_build",
+    ]

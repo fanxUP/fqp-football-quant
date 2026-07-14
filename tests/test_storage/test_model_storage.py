@@ -37,6 +37,7 @@ class TestStoreModelPrediction:
         assert result == 42
         call_args = mock_cur.execute.call_args[0][1]
         assert call_args["feature_snapshot_id"] is None
+        assert call_args["raw_model_probability"] == 0.45
         mock_cur.execute.assert_called_once()
         mock_conn.commit.assert_called_once()
 

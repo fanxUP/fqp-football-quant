@@ -78,6 +78,31 @@ class EvaluationConnection:
         return self.cursor_instance
 
 
+class CaptureTrainingCursor:
+    def __init__(self) -> None:
+        self.query = ""
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args) -> None:
+        return None
+
+    def execute(self, query: str) -> None:
+        self.query = " ".join(query.split())
+
+    def fetchall(self):
+        return []
+
+
+class CaptureTrainingConnection:
+    def __init__(self) -> None:
+        self.cursor_instance = CaptureTrainingCursor()
+
+    def cursor(self) -> CaptureTrainingCursor:
+        return self.cursor_instance
+
+
 def test_training_defers_shap_explainer_until_prediction_explanation(monkeypatch) -> None:
     classifier = FakeClassifier()
     classifier_factory = Mock(return_value=classifier)
@@ -160,3 +185,14 @@ def test_evaluation_summary_assigns_metrics_directly_to_their_model_version() ->
     summary_query = conn.cursor_instance.queries[0]
     assert "JOIN model_versions mv ON mv.id = mem.model_version_id" in summary_query
     assert "JOIN model_predictions" not in summary_query
+
+
+def test_feature_training_uses_one_pre_match_snapshot_per_match() -> None:
+    conn = CaptureTrainingConnection()
+
+    result = feature_importance._load_training_data(conn, min_samples=1)
+
+    assert result is None
+    query = conn.cursor_instance.query
+    assert "DISTINCT ON (fs.match_id)" in query
+    assert "fs.snapshot_time < m.kickoff_time" in query

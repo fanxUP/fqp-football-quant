@@ -19,6 +19,7 @@ from apps.backend.src.db import get_db
 from scripts.agents.task_queue import finish_tracked_job, start_tracked_job
 from scripts.dixon_coles_model import dixon_coles_matrix
 from scripts.elo_model import get_or_create_elo, run_elo_1x2_prediction
+from scripts.feature_adjustment import GoalRateAdjustment, adjust_goal_rates
 from scripts.model_storage import store_committee_vote, store_model_prediction
 from scripts.odds_conversion import (
     expected_value,
@@ -62,6 +63,33 @@ def _latest_feature_snapshot_id(conn: Any, match_id: int) -> int | None:
         )
         row = cur.fetchone()
     return row[0] if row else None
+
+
+def _latest_feature_snapshot(conn: Any, match_id: int) -> dict[str, Any] | None:
+    """Load the latest pre-match fields used by the explainable adjustment layer."""
+    columns = [
+        "id",
+        "data_completeness_score",
+        "lineup_strength_diff",
+        "absence_impact_diff",
+        "rest_days_diff",
+        "motivation_diff",
+        "rotation_risk_diff",
+        "goal_expectation_weather_adjustment",
+    ]
+    with conn.cursor() as cur:
+        cur.execute(
+            f"""
+            SELECT {", ".join(columns)}
+            FROM match_feature_snapshots
+            WHERE match_id = %s
+            ORDER BY snapshot_time DESC
+            LIMIT 1
+            """,
+            (match_id,),
+        )
+        row = cur.fetchone()
+    return dict(zip(columns, row, strict=False)) if row else None
 
 
 def _run_impl(match_id: int | None = None, dry_run: bool = False) -> dict[str, Any]:
@@ -192,7 +220,9 @@ def run(match_id: int | None = None, dry_run: bool = False) -> dict[str, Any]:
     """Run predictions and persist its multi-agent execution record."""
     run_id = start_tracked_job(
         "model_prediction", "model_agent", {"dry_run": dry_run, "match_id": match_id},
-        dependencies=[] if dry_run else ["official_odds_snapshot"],
+        dependencies=[]
+        if dry_run
+        else ["official_odds_snapshot", "feature_snapshot_build"],
     )
     try:
         result = _run_impl(match_id=match_id, dry_run=dry_run)
@@ -222,7 +252,8 @@ def _predict_match_play_type(
     Returns:
         (predictions_count, votes_count)
     """
-    feature_snapshot_id = _latest_feature_snapshot_id(conn, mid)
+    feature_snapshot = _latest_feature_snapshot(conn, mid)
+    feature_snapshot_id = feature_snapshot.get("id") if feature_snapshot else None
 
     # 1. Load latest odds for this play type
     with conn.cursor() as cur:
@@ -276,11 +307,23 @@ def _predict_match_play_type(
 
     # 4. Poisson model
     poisson_matrix = None
+    raw_poisson_matrix = None
     dc_matrix = None
+    raw_dc_matrix = None
+    feature_adjustment = GoalRateAdjustment(1.3, 1.1, False, 0.0, 1.0, [])
     try:
-        lam_h, lam_a = estimate_lambdas_from_odds(
+        raw_lam_h, raw_lam_a = estimate_lambdas_from_odds(
             shin_flb_probs["3"], shin_flb_probs["1"], shin_flb_probs["0"]
         )
+        raw_poisson_matrix = score_matrix(raw_lam_h, raw_lam_a)
+        raw_poisson_probs = (
+            derive_handicap(raw_poisson_matrix, handicap)
+            if play_type == "rqspf" and handicap is not None
+            else derive_1x2(raw_poisson_matrix)
+        )
+        feature_adjustment = adjust_goal_rates(raw_lam_h, raw_lam_a, feature_snapshot)
+        lam_h = feature_adjustment.home_lambda
+        lam_a = feature_adjustment.away_lambda
         poisson_matrix = score_matrix(lam_h, lam_a)
         if play_type == "rqspf" and handicap is not None:
             poisson_probs = derive_handicap(poisson_matrix, handicap)
@@ -288,6 +331,8 @@ def _predict_match_play_type(
             poisson_probs = derive_1x2(poisson_matrix)
     except Exception:
         lam_h, lam_a = 1.3, 1.1
+        raw_lam_h, raw_lam_a = lam_h, lam_a
+        raw_poisson_probs = dict(market_probs)
         poisson_probs = dict(market_probs)
         try:
             poisson_matrix = score_matrix(lam_h, lam_a)
@@ -296,12 +341,19 @@ def _predict_match_play_type(
 
     # 5. Dixon-Coles model
     try:
+        raw_dc_matrix = dixon_coles_matrix(raw_lam_h, raw_lam_a, rho)
+        raw_dc_probs = (
+            derive_handicap(raw_dc_matrix, handicap)
+            if play_type == "rqspf" and handicap is not None
+            else derive_1x2(raw_dc_matrix)
+        )
         dc_matrix = dixon_coles_matrix(lam_h, lam_a, rho)
         if play_type == "rqspf" and handicap is not None:
             dc_probs = derive_handicap(dc_matrix, handicap)
         else:
             dc_probs = derive_1x2(dc_matrix)
     except Exception:
+        raw_dc_probs = dict(raw_poisson_probs)
         dc_probs = dict(poisson_probs)
 
     # 5b. Derive BF/ZJQ/BQC from SPF score matrix
@@ -331,22 +383,23 @@ def _predict_match_play_type(
 
     # 6. Write predictions per model
     model_results = {
-        "market_baseline": market_probs,
-        "maher_poisson": poisson_probs,
-        "dixon_coles": dc_probs,
-        "elo_rating": elo_1x2,
+        "market_baseline": (market_probs, market_probs),
+        "maher_poisson": (raw_poisson_probs, poisson_probs),
+        "dixon_coles": (raw_dc_probs, dc_probs),
+        "elo_rating": (elo_1x2, elo_1x2),
     }
 
     total_p = 0
     total_v = 0
 
-    for model_name, probs in model_results.items():
+    for model_name, (raw_probs, probs) in model_results.items():
         mv_id = active_models.get(model_name)
         if mv_id is None:
             continue
 
         for opt_code in ("3", "1", "0"):
             model_p = probs.get(opt_code, 0.0)
+            raw_model_p = raw_probs.get(opt_code, model_p)
             market_p = market_probs.get(opt_code, 0.0)
             sp_val = odds_dict.get(opt_code, 0.0)
 
@@ -370,6 +423,7 @@ def _predict_match_play_type(
                 "predict_time": predict_time,
                 "play_type": play_type,
                 "option_code": opt_code,
+                "raw_model_probability": round(raw_model_p, 6),
                 "model_probability": round(model_p, 6),
                 "market_probability": round(market_p, 6),
                 "probability_lower_bound": round(max(0, model_p - uncertainty * 2), 6),
@@ -386,6 +440,15 @@ def _predict_match_play_type(
                     "rho_source": "mle" if (model_name == "dixon_coles" and mle_rho is not None) else "default",
                     "margin_removal": "shin_flb" if model_name in ("maher_poisson", "dixon_coles") else "proportional",
                     "elo_based": model_name == "elo_rating",
+                    "feature_adjustment": {
+                        "version": feature_adjustment.version,
+                        "applied": feature_adjustment.applied
+                        and model_name in ("maher_poisson", "dixon_coles"),
+                        "snapshot_id": feature_snapshot_id,
+                        "home_log_shift": feature_adjustment.home_log_shift,
+                        "total_goal_multiplier": feature_adjustment.total_goal_multiplier,
+                        "reasons": feature_adjustment.reasons,
+                    },
                 },
             }
             store_model_prediction(conn, pred)

@@ -27,6 +27,8 @@ _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _PROJECT_ROOT not in sys.path:
     sys.path.insert(0, _PROJECT_ROOT)
 
+MIN_FEATURE_MODEL_MATCHES = 100
+
 # ---------------------------------------------------------------------------
 # Feature column definitions — must match match_feature_snapshots table
 # ---------------------------------------------------------------------------
@@ -151,7 +153,7 @@ def _label(name: str) -> str:
 
 def _load_training_data(
     conn: Any,
-    min_samples: int = 30,
+    min_samples: int = MIN_FEATURE_MODEL_MATCHES,
 ) -> tuple[np.ndarray, np.ndarray, list[int], list[str]] | None:
     """从 match_feature_snapshots + official_results 构建训练集。
 
@@ -163,6 +165,14 @@ def _load_training_data(
 
     with conn.cursor() as cur:
         cur.execute(f"""
+            WITH latest_feature_snapshots AS (
+                SELECT DISTINCT ON (fs.match_id) fs.*
+                FROM match_feature_snapshots fs
+                JOIN official_matches m ON m.id = fs.match_id
+                WHERE fs.feature_version IS NOT NULL
+                  AND fs.snapshot_time < m.kickoff_time
+                ORDER BY fs.match_id, fs.snapshot_time DESC
+            )
             SELECT
                 fs.match_id,
                 m.league_name,
@@ -172,11 +182,10 @@ def _load_training_data(
                     WHEN r.full_home_goals = r.full_away_goals THEN 1
                     ELSE 0
                 END AS label
-            FROM match_feature_snapshots fs
+            FROM latest_feature_snapshots fs
             JOIN official_matches m ON m.id = fs.match_id
             JOIN official_results r ON r.match_id = fs.match_id
-            WHERE fs.feature_version IS NOT NULL
-            ORDER BY fs.snapshot_time DESC
+            ORDER BY m.business_date DESC, fs.match_id
             LIMIT 5000
         """)
         rows = cur.fetchall()
@@ -252,7 +261,10 @@ def train_if_needed(conn: Any, force: bool = False) -> dict[str, Any]:
 
     data = _load_training_data(conn)
     if data is None:
-        return {"status": "error", "error": "训练数据不足（需要至少50条已结算的特征快照）"}
+        return {
+            "status": "error",
+            "error": f"训练数据不足（需要至少{MIN_FEATURE_MODEL_MATCHES}场独立已结算比赛）",
+        }
 
     X, y, _match_ids, feature_names = data
 

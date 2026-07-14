@@ -32,7 +32,7 @@ def store_model_prediction(conn: Any, pred: dict) -> int | None:
         INSERT INTO model_predictions (
             match_id, model_version_id, odds_snapshot_id, feature_snapshot_id, predict_time,
             play_type, option_code,
-            model_probability, market_probability,
+            raw_model_probability, model_probability, market_probability,
             probability_lower_bound, probability_upper_bound,
             uncertainty_score, adjusted_probability,
             fair_odds, ev, confidence_score, risk_score,
@@ -40,7 +40,7 @@ def store_model_prediction(conn: Any, pred: dict) -> int | None:
         ) VALUES (
             %(match_id)s, %(model_version_id)s, %(odds_snapshot_id)s, %(feature_snapshot_id)s, %(predict_time)s,
             %(play_type)s, %(option_code)s,
-            %(model_probability)s, %(market_probability)s,
+            %(raw_model_probability)s, %(model_probability)s, %(market_probability)s,
             %(probability_lower_bound)s, %(probability_upper_bound)s,
             %(uncertainty_score)s, %(adjusted_probability)s,
             %(fair_odds)s, %(ev)s, %(confidence_score)s, %(risk_score)s,
@@ -59,6 +59,9 @@ def store_model_prediction(conn: Any, pred: dict) -> int | None:
                 "predict_time": pred.get("predict_time", _now()),
                 "play_type": pred["play_type"],
                 "option_code": pred["option_code"],
+                "raw_model_probability": pred.get(
+                    "raw_model_probability", pred.get("model_probability")
+                ),
                 "model_probability": pred.get("model_probability"),
                 "market_probability": pred.get("market_probability"),
                 "probability_lower_bound": pred.get("probability_lower_bound"),

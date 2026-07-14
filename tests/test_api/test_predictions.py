@@ -43,7 +43,7 @@ class TestPredictionsEndpoint:
 
     def test_returns_predictions_with_expected_fields(self, client):
         # Columns: id, match_id, predict_time, model_name, play_type, option_code,
-        #          model_probability, market_probability, fair_odds, ev, confidence_score,
+        #          raw_model_probability, model_probability, market_probability, fair_odds, ev, confidence_score,
         #          home_team_name, away_team_name
         now = datetime(2025, 1, 1, 10, 0, 0)
         mock_conn = MagicMock()
@@ -51,7 +51,7 @@ class TestPredictionsEndpoint:
         mock_conn.__enter__.return_value = mock_conn
         mock_conn.cursor.return_value.__enter__.return_value = mock_cur
         mock_cur.fetchall.return_value = [
-            (1, 101, now, "xgboost_v2", "SPF", "胜", 0.45, 0.42, 2.22, 0.05, 0.85, "曼联", "利物浦"),
+            (1, 101, now, "xgboost_v2", "SPF", "胜", 0.40, 0.45, 0.42, 2.22, 0.05, 0.85, "曼联", "利物浦"),
         ]
 
         with patch("apps.backend.src.routers.predictions.get_db", return_value=mock_conn):
@@ -62,7 +62,9 @@ class TestPredictionsEndpoint:
         p = data["predictions"][0]
         assert p["match_id"] == 101
         assert p["model_name"] == "xgboost_v2"
+        assert p["raw_model_probability"] == 0.4
         assert p["model_probability"] == 0.45
+        assert p["feature_adjusted"] is True
         assert p["ev"] == 0.05
         assert p["home_team"] == "曼联"
 
@@ -73,7 +75,7 @@ class TestPredictionsEndpoint:
         mock_conn.__enter__.return_value = mock_conn
         mock_conn.cursor.return_value.__enter__.return_value = mock_cur
         mock_cur.fetchall.return_value = [
-            (1, 101, now, "poisson_v1", "SPF", "胜", None, None, None, None, None, "曼联", "利物浦"),
+            (1, 101, now, "poisson_v1", "SPF", "胜", None, None, None, None, None, None, "曼联", "利物浦"),
         ]
 
         with patch("apps.backend.src.routers.predictions.get_db", return_value=mock_conn):

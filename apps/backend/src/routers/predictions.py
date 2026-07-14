@@ -229,6 +229,7 @@ def list_predictions(
                     """
                     SELECT mp.id, mp.match_id, mp.predict_time,
                            mv.model_name, mp.play_type, mp.option_code,
+                           COALESCE(mp.raw_model_probability, mp.model_probability),
                            mp.model_probability, mp.market_probability,
                            mp.fair_odds, mp.ev, mp.confidence_score,
                            m.home_team_name, m.away_team_name
@@ -246,6 +247,7 @@ def list_predictions(
                     """
                     SELECT mp.id, mp.match_id, mp.predict_time,
                            mv.model_name, mp.play_type, mp.option_code,
+                           COALESCE(mp.raw_model_probability, mp.model_probability),
                            mp.model_probability, mp.market_probability,
                            mp.fair_odds, mp.ev, mp.confidence_score,
                            m.home_team_name, m.away_team_name
@@ -267,13 +269,17 @@ def list_predictions(
                 "model_name": r[3],
                 "play_type": r[4],
                 "option_code": r[5],
-                "model_probability": float(r[6]) if r[6] else None,
-                "market_probability": float(r[7]) if r[7] else None,
-                "fair_odds": float(r[8]) if r[8] else None,
-                "ev": float(r[9]) if r[9] else None,
-                "confidence": float(r[10]) if r[10] else None,
-                "home_team": r[11],
-                "away_team": r[12],
+                "raw_model_probability": float(r[6]) if r[6] is not None else None,
+                "model_probability": float(r[7]) if r[7] is not None else None,
+                "feature_adjusted": (
+                    r[6] is not None and r[7] is not None and abs(float(r[7]) - float(r[6])) > 1e-9
+                ),
+                "market_probability": float(r[8]) if r[8] is not None else None,
+                "fair_odds": float(r[9]) if r[9] is not None else None,
+                "ev": float(r[10]) if r[10] is not None else None,
+                "confidence": float(r[11]) if r[11] is not None else None,
+                "home_team": r[12],
+                "away_team": r[13],
             }
             for r in rows
         ],
