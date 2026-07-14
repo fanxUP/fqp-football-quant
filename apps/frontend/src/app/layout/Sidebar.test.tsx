@@ -72,9 +72,9 @@ describe('Sidebar', () => {
         '赛事中心',
         '赔率走势',
         '投注中心',
-        '深度分析',
-        '模型中心',
-        '策略回测',
+        '今日决策分析',
+        '模型表现',
+        '策略验证',
         '足彩彩池',
         '系统监控',
         '功能模块',
@@ -102,7 +102,7 @@ describe('Sidebar', () => {
       renderSidebar();
 
       expect(screen.queryByText('投注中心')).toBeNull();
-      expect(screen.getByText('深度分析')).toBeTruthy();
+      expect(screen.getByText('今日决策分析')).toBeTruthy();
       expect(screen.getByText('功能模块')).toBeTruthy();
     });
 
@@ -219,9 +219,9 @@ describe('Sidebar', () => {
         ['赛事中心', '/events'],
         ['赔率走势', '/odds'],
         ['投注中心', '/betting'],
-        ['深度分析', '/analysis'],
-        ['模型中心', '/models'],
-        ['策略回测', '/backtest'],
+        ['今日决策分析', '/analysis'],
+        ['模型表现', '/models'],
+        ['策略验证', '/backtest'],
         ['足彩彩池', '/pool'],
         ['系统监控', '/data-health'],
         ['功能模块', '/modules'],
@@ -268,7 +268,7 @@ describe('Sidebar', () => {
     it('does not mark inactive paths', () => {
       mockCurrentPath = '/matches';
       renderSidebar();
-      const otherItem = screen.getByText('深度分析').closest('.fqp-nav-item');
+      const otherItem = screen.getByText('今日决策分析').closest('.fqp-nav-item');
       expect(otherItem?.classList.contains('active')).toBe(false);
     });
 

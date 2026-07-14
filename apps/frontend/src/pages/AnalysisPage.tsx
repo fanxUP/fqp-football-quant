@@ -10,7 +10,6 @@ import type {
   ConditionSegment,
   ConditionPerformanceData,
   FeatureModelInfo,
-  FeatureSnapshot,
   DailyReview,
   EvaluationSummary,
   LiveRecommendation,
@@ -19,10 +18,10 @@ import PageHeader from '../shared/components/PageHeader';
 import Card from '../shared/components/Card';
 import ChartCard from '../shared/components/ChartCard';
 import ErrorState from '../shared/components/ErrorState';
-import DataTable, { type Column } from '../shared/components/DataTable';
 import RecommendationsPage, { type RecommendationMatchSelection } from './RecommendationsPage';
 import ReviewsPage from './ReviewsPage';
 import TeamName from '../shared/components/TeamName';
+import FeatureSnapshotPanel from '../features/analysis/FeatureSnapshotPanel';
 
 // ---------------------------------------------------------------------------
 // Tab definitions
@@ -40,7 +39,7 @@ const MODEL_TABS: { key: ModelTabKey; label: string; icon: string }[] = [
 
 const ANALYSIS_SECTIONS: { key: AnalysisSectionKey; label: string; shortLabel: string; metricLabel: string }[] = [
   { key: 'pre_match', label: '赛前分析', shortLabel: '赛前', metricLabel: '分析' },
-  { key: 'features', label: '多维特征', shortLabel: '特征', metricLabel: '数据' },
+  { key: 'features', label: '特征数据健康', shortLabel: '特征', metricLabel: '数据' },
   { key: 'explanations', label: '推荐解释', shortLabel: '解释', metricLabel: '模型' },
   { key: 'reviews', label: '复盘分析', shortLabel: '复盘', metricLabel: '结果' },
 ];
@@ -1168,60 +1167,6 @@ function ConditionTab() {
   );
 }
 
-function FeatureSnapshotTab() {
-  const [snapshots, setSnapshots] = useState<FeatureSnapshot[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    api.features({ limit: 100 })
-      .then((response) => {
-        setSnapshots(response.snapshots || []);
-        setLoading(false);
-      })
-      .catch((e) => {
-        setError(e instanceof ApiError ? e.message : '加载多维特征失败');
-        setLoading(false);
-      });
-  }, []);
-
-  const columns: Column<FeatureSnapshot>[] = [
-    { key: 'match_num_str', title: '场次', render: (value) => typeof value === 'string' && value ? value : '—' },
-    { key: 'home_team_name', title: '主队', render: (value) => <TeamName name={String(value)} /> },
-    { key: 'away_team_name', title: '客队', render: (value) => <TeamName name={String(value)} /> },
-    { key: 'league_name', title: '赛事' },
-    { key: 'feature_version', title: '版本' },
-    {
-      key: 'data_completeness_score',
-      title: '完整度',
-      render: (value) => value == null ? '—' : `${Number(value).toFixed(1)}%`,
-    },
-    {
-      key: 'uncertainty_score',
-      title: '不确定性',
-      render: (value) => value == null ? '—' : `${Number(value).toFixed(1)}%`,
-    },
-    {
-      key: 'snapshot_time',
-      title: '生成时间',
-      render: (value) => String(value || '').replace('T', ' ').slice(0, 19),
-    },
-  ];
-
-  if (error) return <ErrorState message={error} />;
-  return (
-    <Card title="比赛多维特征快照" style={{ padding: 0, overflow: 'hidden' }}>
-      <DataTable
-        columns={columns}
-        rows={snapshots}
-        loading={loading}
-        emptyText="暂无多维特征快照"
-        rowKey={(row) => row.id}
-      />
-    </Card>
-  );
-}
-
 function pivotSegments(
   segments: ConditionSegment[],
   dimension: ConditionDim,
@@ -1268,15 +1213,15 @@ export default function AnalysisPage({ standaloneSection }: { standaloneSection?
   if (standaloneSection === 'features') {
     return (
       <div>
-        <PageHeader title="多维特征" subtitle="比赛特征快照、数据完整度与不确定性" />
-        <FeatureSnapshotTab />
+        <PageHeader title="特征数据健康" subtitle="检查比赛特征的覆盖率、完整度与不确定性" />
+        <FeatureSnapshotPanel />
       </div>
     );
   }
 
   return (
     <div>
-      <PageHeader title="深度分析" subtitle="模型对竞赛的赛前推荐、过程解释和赛后复盘" />
+      <PageHeader title="今日决策分析" subtitle="模型对今日竞赛的赛前推荐、过程解释和赛后复盘" />
 
       <AnalysisOverview activeSection={activeSection} onSectionChange={updateSection} />
 
@@ -1293,7 +1238,7 @@ export default function AnalysisPage({ standaloneSection }: { standaloneSection?
 
       <div key={activeSection} className="fqp-anim-fadeIn">
         {activeSection === 'pre_match' && <RecommendationsPage embedded onMatchSelect={setSelectedMatch} />}
-        {activeSection === 'features' && <FeatureSnapshotTab />}
+        {activeSection === 'features' && <FeatureSnapshotPanel />}
         {activeSection === 'reviews' && <ReviewsPage embedded />}
         {activeSection === 'explanations' && (
           <>

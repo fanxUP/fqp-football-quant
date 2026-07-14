@@ -295,7 +295,9 @@ export interface Prediction {
   model_name: string;
   play_type: string;
   option_code: string;
+  raw_model_probability: number | null;
   model_probability: number | null;
+  feature_adjusted: boolean;
   market_probability: number | null;
   fair_odds: number | null;
   ev: number | null;

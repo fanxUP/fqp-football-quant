@@ -26,7 +26,9 @@ describe('ModelsPage', () => {
           model_name: 'elo_rating',
           play_type: 'spf',
           option_code: '3',
+          raw_model_probability: 0.48,
           model_probability: 0.52,
+          feature_adjusted: true,
           market_probability: 0.5,
           fair_odds: 1.92,
           ev: 0.04,
@@ -58,6 +60,9 @@ describe('ModelsPage', () => {
 
     expect(await screen.findAllByText('Elo 实力评分')).toHaveLength(3);
     expect(screen.getByText('主胜')).toBeInTheDocument();
+    expect(screen.getByText('原始概率')).toBeInTheDocument();
+    expect(screen.getByText('最终概率')).toBeInTheDocument();
+    expect(screen.getByText('特征已修正')).toBeInTheDocument();
     expect(screen.queryByText('elo_rating')).not.toBeInTheDocument();
   });
 });

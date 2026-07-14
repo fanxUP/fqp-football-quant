@@ -133,8 +133,8 @@ export const MODULE_REGISTRY: ModuleManifest[] = [
   },
   {
     moduleCode: 'multidim_feature_module',
-    moduleName: '多维特征',
-    description: '球队身价、伤停、天气、战意等多维情报',
+    moduleName: '特征数据健康',
+    description: '检查球队身价、伤停、天气、战意等特征的覆盖率与完整度',
     version: '0.1.0',
     category: 'research',
     status: 'active',
@@ -274,7 +274,7 @@ export const PANEL_REGISTRY: PanelManifest[] = [
   {
     panelCode: 'deep_analysis',
     moduleCode: 'recommendation_core',
-    panelName: '深度分析',
+    panelName: '今日决策分析',
     panelType: 'analytics',
     routePath: '/analysis',
     componentName: 'AnalysisPage',
@@ -286,7 +286,7 @@ export const PANEL_REGISTRY: PanelManifest[] = [
   {
     panelCode: 'model_lab',
     moduleCode: 'model_research_module',
-    panelName: '模型中心',
+    panelName: '模型表现',
     panelType: 'analytics',
     routePath: '/models',
     componentName: 'ModelsPage',
@@ -298,7 +298,7 @@ export const PANEL_REGISTRY: PanelManifest[] = [
   {
     panelCode: 'feature_snapshots',
     moduleCode: 'multidim_feature_module',
-    panelName: '多维特征',
+    panelName: '特征数据健康',
     panelType: 'analytics',
     routePath: '/feature-snapshots',
     componentName: 'AnalysisPage',
@@ -310,7 +310,7 @@ export const PANEL_REGISTRY: PanelManifest[] = [
   {
     panelCode: 'backtest_lab',
     moduleCode: 'model_research_module',
-    panelName: '策略回测',
+    panelName: '策略验证',
     panelType: 'analytics',
     routePath: '/backtest',
     componentName: 'BacktestPage',

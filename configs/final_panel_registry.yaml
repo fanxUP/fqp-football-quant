@@ -35,28 +35,28 @@ panels:
     visible: true
     icon: ticket
   - panel_id: deep_analysis
-    name: 深度分析
+    name: 今日决策分析
     route: /analysis
     module_id: recommendation_core
     order: 70
     visible: true
     icon: microscope
   - panel_id: feature_snapshots
-    name: 多维特征
+    name: 特征数据健康
     route: /feature-snapshots
     module_id: multidim_feature_module
     order: 105
     visible: true
     icon: radar
   - panel_id: model_lab
-    name: 模型中心
+    name: 模型表现
     route: /models
     module_id: model_research_module
     order: 110
     visible: true
     icon: brain
   - panel_id: backtest_lab
-    name: 策略回测
+    name: 策略验证
     route: /backtest
     module_id: model_research_module
     order: 130

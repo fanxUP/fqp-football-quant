@@ -30,7 +30,7 @@ export function RecommendationPanel(props: RecommendationPanelProps) {
   return (
     <aside className="betting-recommendations" aria-label="推荐投注">
       <div className="betting-slip-head">
-        <div><h3>推荐投注</h3><span>深度分析产生的正 EV 方案</span></div>
+        <div><h3>推荐投注</h3><span>今日决策分析产生的正 EV 方案</span></div>
       </div>
       {props.error ? (
         <div className="betting-slip-empty"><strong>推荐加载失败</strong><span>{props.error}</span></div>

@@ -81,11 +81,27 @@ export default function ModelsPage() {
       render: (v, row) => optionLabel(row.play_type, String(v)),
     },
     {
-      key: 'model_probability',
-      title: '模型概率',
+      key: 'raw_model_probability',
+      title: '原始概率',
       render: (v) => {
         const val = v as number | null;
-        return val !== null ? `${(val * 100).toFixed(1)}%` : '—';
+        return val != null ? `${(val * 100).toFixed(1)}%` : '—';
+      },
+    },
+    {
+      key: 'model_probability',
+      title: '最终概率',
+      render: (v, row) => {
+        const val = v as number | null;
+        if (val == null) return '—';
+        return (
+          <span>
+            {(val * 100).toFixed(1)}%
+            {row.feature_adjusted && (
+              <small style={{ display: 'block', color: 'var(--fqp-success)' }}>特征已修正</small>
+            )}
+          </span>
+        );
       },
     },
     {
@@ -123,7 +139,10 @@ export default function ModelsPage() {
 
   return (
     <div>
-      <PageHeader title="模型实验室" />
+      <PageHeader
+        title="模型表现"
+        subtitle="按独立比赛评估模型，并区分基础模型概率与特征修正后的最终概率"
+      />
 
       {/* Stat cards — staggered entrance */}
       <div className="fqp-grid-4" style={{ marginBottom: '24px' }}>
@@ -189,7 +208,7 @@ export default function ModelsPage() {
                   {bestBrier?.avg_brier.toFixed(4)}
                 </div>
                 <div style={{ fontSize: '11px', color: 'var(--fqp-text-muted)' }}>
-                  {bestBrier ? modelNameLabel(bestBrier.model_name) : '—'}（{bestBrier?.n ?? 0} 条）
+                  {bestBrier ? modelNameLabel(bestBrier.model_name) : '—'}（{bestBrier?.n ?? 0} 场）
                 </div>
               </div>
               <div>
@@ -218,7 +237,7 @@ export default function ModelsPage() {
                   {evalModels.reduce((s, m) => s + m.n, 0)}
                 </div>
                 <div style={{ fontSize: '11px', color: 'var(--fqp-text-muted)' }}>
-                  已结算比赛 × 模型预测
+                  独立已结算比赛 × 模型
                 </div>
               </div>
             </div>

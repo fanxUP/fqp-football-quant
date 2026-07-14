@@ -166,7 +166,10 @@ export default function BacktestPage() {
   // —— 渲染 ——
   return (
     <div>
-      <PageHeader title="回测中心" subtitle="Walk-forward 验证 · 资金曲线 · 模型对比" />
+      <PageHeader
+        title="策略验证"
+        subtitle="赛前时点赔率 · 每场单一决策 · 独立比赛口径"
+      />
 
       {error && <ErrorState message={error} onRetry={loadRuns} />}
 
@@ -295,8 +298,11 @@ export default function BacktestPage() {
                   checked={form.walkForward}
                   onChange={(e) => setForm((f) => ({ ...f, walkForward: e.target.checked }))}
                 />{' '}
-                Walk-Forward 验证
+                滚动时间窗（不重训模型）
               </label>
+              <div className="fqp-muted" style={{ marginTop: '6px', fontSize: '12px' }}>
+                仅验证已经落库的历史预测，不会在每个时间窗内重新训练模型。
+              </div>
             </div>
           </div>
 
