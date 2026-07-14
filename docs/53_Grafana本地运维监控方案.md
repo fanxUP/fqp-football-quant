@@ -82,7 +82,7 @@ http://localhost:3001
 ## 注意事项
 
 1. Grafana 不使用固定版本 tag（`grafana/grafana` = latest）
-2. 端口 3001，不与前端 3000 冲突
+2. 端口 3001，不与前端 8066 冲突
 3. 不在 Grafana 中实现投注推荐页面
 4. 不在 Grafana 中展示核心模型逻辑
 5. 数据卷 `grafana_data` 持久化配置和 Dashboard

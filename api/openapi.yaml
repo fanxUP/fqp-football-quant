@@ -4,7 +4,7 @@ info:
   version: 1.1.1
   description: 官方足彩/竞彩足球量化研究与长期运行系统 API 草案。系统只提供数据分析、模拟与复盘接口，不提供购彩、代购、出票、收款接口。
 servers:
-  - url: http://localhost:8000
+  - url: http://localhost:8006
 paths:
   /api/official/odds-index:
     get:

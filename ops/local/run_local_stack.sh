@@ -6,6 +6,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 COMPOSE_FILE="$SCRIPT_DIR/docker-compose.local.yml"
+FRONTEND_PORT="${FQP_FRONTEND_PORT:-8066}"
+BACKEND_PORT="${FQP_BACKEND_PORT:-8006}"
 
 log() { echo "[fqp-docker] $(date '+%H:%M:%S')  $*"; }
 fail() { echo "[fqp-docker] ERROR: $*" >&2; exit 1; }
@@ -54,9 +56,9 @@ case "${1:-deploy}" in
         done
         COMPOSE_BAKE=false COMPOSE_PARALLEL_LIMIT=1 docker compose -f "$COMPOSE_FILE" up --detach --no-build --wait --remove-orphans
         "$SCRIPT_DIR/apply_local_migrations.sh"
-        curl --fail --silent --show-error http://127.0.0.1:8000/health >/dev/null || fail "Backend health check failed after Docker deployment."
-        curl --fail --silent --show-error 'http://127.0.0.1:8000/api/predictions?limit=1' >/dev/null || fail "Prediction contract check failed after database migration."
-        curl --fail --silent --show-error http://127.0.0.1:3000/ >/dev/null || fail "Frontend health check failed after Docker deployment."
+        curl --fail --silent --show-error "http://127.0.0.1:${BACKEND_PORT}/health" >/dev/null || fail "Backend health check failed after Docker deployment."
+        curl --fail --silent --show-error "http://127.0.0.1:${BACKEND_PORT}/api/predictions?limit=1" >/dev/null || fail "Prediction contract check failed after database migration."
+        curl --fail --silent --show-error "http://127.0.0.1:${FRONTEND_PORT}/" >/dev/null || fail "Frontend health check failed after Docker deployment."
         log "Deployment complete: GitHub and Docker Desktop are on ${REVISION:0:12}."
         ;;
     status) require_docker; docker compose -f "$COMPOSE_FILE" ps ;;

@@ -33,13 +33,13 @@ data/runtime_version_snapshot.json
 4. 验证后端：
 
 ```bash
-curl http://127.0.0.1:8000/health
+curl http://127.0.0.1:8006/health
 ```
 
 5. 验证前端：
 
 ```text
-浏览器打开 http://127.0.0.1:3000
+浏览器打开 http://127.0.0.1:8066
 ```
 
 6. 验证容器：

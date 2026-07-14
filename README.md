@@ -51,8 +51,8 @@ cp .env.local.example .env.local
 ./ops/local/run_local_dev.sh
 ```
 
-- 前端：http://127.0.0.1:3000
-- 后端：http://127.0.0.1:8000
+- 前端：http://127.0.0.1:8066
+- 后端：http://127.0.0.1:8006
 - 本机开发要求 Python 3.11+、Node.js 和 PostgreSQL。
 - `.env.local` 只保存在本机，不提交 GitHub。
 
@@ -70,4 +70,4 @@ cp .env.local.example .env.local
 ./ops/local/run_local_stack.sh stop
 ```
 
-详细运行规则见 `ops/local/README_Codex_Docker_Desktop.md`。
+唯一工作区、Git 同步和 Docker 运行规则见 `docs/54_本机运行与DockerDesktop弃用说明.md`；日常命令见 `ops/local/README_Codex_Docker_Desktop.md`。

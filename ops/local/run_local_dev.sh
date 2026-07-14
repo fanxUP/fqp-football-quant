@@ -5,6 +5,8 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 FRONTEND_DIR="$PROJECT_ROOT/apps/frontend"
 ENV_FILE="$PROJECT_ROOT/.env.local"
+FRONTEND_PORT="${FQP_FRONTEND_PORT:-8066}"
+BACKEND_PORT="${FQP_BACKEND_PORT:-8006}"
 
 log() { echo "[fqp-dev] $(date '+%H:%M:%S')  $*"; }
 fail() { echo "[fqp-dev] ERROR: $*" >&2; exit 1; }
@@ -55,13 +57,14 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-log "Starting backend at http://127.0.0.1:8000"
+log "Starting backend at http://127.0.0.1:${BACKEND_PORT}"
 cd "$PROJECT_ROOT"
-"$PYTHON_BIN" -m uvicorn main:app --host 127.0.0.1 --port 8000 --reload &
+"$PYTHON_BIN" -m uvicorn main:app --host 127.0.0.1 --port "$BACKEND_PORT" --reload &
 BACKEND_PID=$!
 
-log "Starting frontend at http://127.0.0.1:3000"
-npm --prefix "$FRONTEND_DIR" run dev -- --host 127.0.0.1 &
+log "Starting frontend at http://127.0.0.1:${FRONTEND_PORT}"
+VITE_PROXY_TARGET="${VITE_PROXY_TARGET:-http://127.0.0.1:${BACKEND_PORT}}" \
+    npm --prefix "$FRONTEND_DIR" run dev -- --host 127.0.0.1 --port "$FRONTEND_PORT" &
 FRONTEND_PID=$!
 
 wait "$BACKEND_PID"

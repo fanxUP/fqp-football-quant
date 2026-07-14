@@ -32,7 +32,7 @@ services:
       context: ../..
       dockerfile: ops/Dockerfile.api
     ports:
-      - "127.0.0.1:${FQP_BACKEND_PORT:-8000}:8000"
+      - "127.0.0.1:${FQP_BACKEND_PORT:-8006}:8000"
     env_file: .env.local
     environment:
       FQP_SCHEDULER_HEARTBEAT_MODE: shared
@@ -60,7 +60,7 @@ services:
       context: ../../apps/frontend
       dockerfile: Dockerfile
     ports:
-      - "127.0.0.1:${FQP_FRONTEND_PORT:-3000}:3000"
+      - "127.0.0.1:${FQP_FRONTEND_PORT:-8066}:3000"
     environment:
       VITE_PROXY_TARGET: http://backend:8000
     volumes:
