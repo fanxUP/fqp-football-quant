@@ -115,6 +115,7 @@ def test_scheduler_registers_startup_recommendation_catchup():
     source = Path("scripts/jobs/run_scheduler.py").read_text()
     assert 'id="run_recommendation_candidate_startup_catchup"' in source
     assert "run_date=_business_now(timezone_name)" in source
+    assert source.count("misfire_grace_time=30") >= 2
 
 
 def test_scheduler_refreshes_health_heartbeat_every_minute():

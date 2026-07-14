@@ -170,6 +170,7 @@ def main() -> None:
             job_seed_agents,
             "date",
             run_date=_business_now(timezone_name),
+            misfire_grace_time=30,
             id="seed_agent_registry",
         )
 
@@ -397,6 +398,7 @@ def main() -> None:
                 _run_recommendation_catchup,
                 "date",
                 run_date=_business_now(timezone_name),
+                misfire_grace_time=30,
                 id="run_recommendation_candidate_startup_catchup",
             )
 
