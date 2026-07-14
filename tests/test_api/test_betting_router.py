@@ -210,6 +210,18 @@ def test_apply_settlements_updates_ticket_financials():
             "profitLoss": None,
             "roi": None,
         },
+        {
+            "ticketUid": "real:12",
+            "owner": "me",
+            "kind": "real",
+            "source": "manual",
+            "status": "pending",
+            "date": "2026-07-07",
+            "stake": 20.0,
+            "settledAmount": None,
+            "profitLoss": None,
+            "roi": None,
+        },
     ]
 
     betting._apply_settlements(
@@ -217,6 +229,7 @@ def test_apply_settlements_updates_ticket_financials():
         [
             ("simulator", 7, datetime(2026, 7, 7, 22, 0, 0), True, 12, 30, 0, 30, 18, 1.5),
             ("simulation", 31, datetime(2026, 7, 7, 22, 1, 0), False, 50, 0, 0, 0, -50, -1),
+            ("real", 12, datetime(2026, 7, 7, 22, 2, 0), True, 20, 48, 0, 48, 28, 1.4),
         ],
     )
 
@@ -228,6 +241,9 @@ def test_apply_settlements_updates_ticket_financials():
     assert tickets[1]["status"] == "settled"
     assert tickets[1]["settledAmount"] == 0.0
     assert tickets[1]["profitLoss"] == -50.0
+    assert tickets[2]["status"] == "settled"
+    assert tickets[2]["settledAmount"] == 48.0
+    assert tickets[2]["profitLoss"] == 28.0
 
 
 def test_attach_ticket_items_adds_compact_match_summaries():

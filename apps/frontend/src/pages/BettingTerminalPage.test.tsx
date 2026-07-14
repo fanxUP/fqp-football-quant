@@ -294,7 +294,7 @@ describe('BettingTerminalPage desktop workbench', () => {
     expect(within(first).getByRole('button', { name: '胜平负 主胜 2.04' })).not.toHaveClass('is-selected');
   });
 
-  it('provides the 1-8 pass grid, clamps multiple to 50, and archives a confirmed ticket', async () => {
+  it('archives a confirmed ticket and restores the default slip after completion', async () => {
     render(<BettingTerminalPage />);
     const first = await screen.findByRole('article', { name: '周日203 首尔FC 对 江原FC' });
     const second = screen.getByRole('article', { name: '周一201 马尔默 对 哥德堡' });
@@ -314,7 +314,43 @@ describe('BettingTerminalPage desktop workbench', () => {
     fireEvent.click(within(slip).getByRole('button', { name: '确定' }));
     await waitFor(() => expect(apiMocks.createTicket).toHaveBeenCalledTimes(1));
     expect(apiMocks.createTicket.mock.calls[0][0]).toMatchObject({ pass_type: '2x1', multiple: 50 });
-    expect(await screen.findByRole('dialog', { name: '模拟投注明细' })).toHaveTextContent('已保存到我的彩票');
+    const confirmation = await screen.findByRole('dialog', { name: '模拟投注明细' });
+    expect(confirmation).toHaveTextContent('已保存到我的彩票');
+
+    fireEvent.click(within(confirmation).getByRole('button', { name: '完成' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: '模拟投注明细' })).not.toBeInTheDocument());
+    expect(screen.queryByRole('complementary', { name: '投注单' })).not.toBeInTheDocument();
+    expect(within(screen.getByLabelText('票面预览')).getByText('等待投注器生成票面')).toBeInTheDocument();
+    expect(within(first).getByRole('button', { name: '胜平负 主胜 2.04' })).not.toHaveClass('is-selected');
+    expect(within(second).getByRole('button', { name: '胜平负 主胜 1.67' })).not.toHaveClass('is-selected');
+
+    fireEvent.click(within(first).getByRole('button', { name: '胜平负 主胜 2.04' }));
+    const freshSlip = await screen.findByRole('complementary', { name: '投注单' });
+    expect(within(freshSlip).getByLabelText('当前倍数')).toHaveValue(1);
+  });
+
+  it('keeps the current slip when ticket saving fails', async () => {
+    apiMocks.createTicket.mockRejectedValueOnce(new Error('save failed'));
+    render(<BettingTerminalPage />);
+    const first = await screen.findByRole('article', { name: '周日203 首尔FC 对 江原FC' });
+    const second = screen.getByRole('article', { name: '周一201 马尔默 对 哥德堡' });
+    const firstOption = within(first).getByRole('button', { name: '胜平负 主胜 2.04' });
+    const secondOption = within(second).getByRole('button', { name: '胜平负 主胜 1.67' });
+    fireEvent.click(firstOption);
+    fireEvent.click(secondOption);
+
+    const slip = await screen.findByRole('complementary', { name: '投注单' });
+    const submit = within(slip).getByRole('button', { name: '确定' });
+    await waitFor(() => expect(submit).toBeEnabled());
+    fireEvent.click(submit);
+
+    await waitFor(() => expect(apiMocks.createTicket).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(submit).toBeEnabled());
+    expect(screen.queryByRole('dialog', { name: '模拟投注明细' })).not.toBeInTheDocument();
+    expect(firstOption).toHaveClass('is-selected');
+    expect(secondOption).toHaveClass('is-selected');
+    expect(screen.getByRole('complementary', { name: '投注单' })).toBeInTheDocument();
   });
 
   it('allows single, 2-pass, and 3-pass selections on the same three-match ticket', async () => {

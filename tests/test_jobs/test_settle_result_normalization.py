@@ -1,4 +1,9 @@
-from scripts.jobs.settle_tickets import _normalize_result
+from scripts.jobs.settle_tickets import (
+    _calculate_agent_prize,
+    _normalize_result,
+    _resolve_ticket_items,
+)
+from scripts.simulator_calculator import calculate_winning_prize
 
 
 def test_normalizes_win_draw_loss_and_half_full_codes():
@@ -14,3 +19,45 @@ def test_normalizes_seven_plus_goals():
 def test_normalizes_score_separator_and_half_full_separator():
     assert _normalize_result("bf", "3-0") == "3:0"
     assert _normalize_result("bqc", "H/A") == "30"
+
+
+def test_resolves_mixed_play_results_and_same_match_alternatives():
+    items = [
+        {"match_id": 1, "play_type": "spf", "option_code": "3", "sp_value": 2.0},
+        {"match_id": 1, "play_type": "spf", "option_code": "1", "sp_value": 3.0},
+        {"match_id": 2, "play_type": "zjq", "option_code": "3", "sp_value": 2.5},
+    ]
+    results = {
+        1: {"spf_result": "H"},
+        2: {"total_goals_result": "3"},
+    }
+
+    detail = _resolve_ticket_items(items, results)
+
+    assert detail is not None
+    assert [item["is_won"] for item in detail] == [True, False, True]
+    assert calculate_winning_prize(detail, "2x1", multiple=1) == 10.0
+
+
+def test_waits_when_selected_play_result_is_not_available():
+    items = [
+        {"match_id": 1, "play_type": "rqspf", "option_code": "3", "sp_value": 2.0},
+    ]
+
+    assert _resolve_ticket_items(items, {1: {"spf_result": "H", "rqspf_result": None}}) is None
+
+
+def test_agent_prize_scales_from_nominal_cost_to_committed_stake():
+    detail = [
+        {
+            "match_id": 1,
+            "play_type": "spf",
+            "option_code": "3",
+            "sp_value": 2.5,
+            "is_dan": False,
+            "actual_result": "3",
+            "is_won": True,
+        }
+    ]
+
+    assert _calculate_agent_prize(detail, "single", 1, bet_count=1, stake=20) == 50.0

@@ -69,6 +69,18 @@ export default function BettingTerminalPage() {
   const [confirmation, setConfirmation] = useState<ConfirmationState | null>(null);
   const calculateRequestRef = useRef(0);
 
+  const resetBetSlip = useCallback(() => {
+    calculateRequestRef.current += 1;
+    setSelections([]);
+    setSelectedPassTypes([]);
+    setPassTouched(false);
+    setMultiple(1);
+    setCalculation(null);
+    setCalculating(false);
+    setCalculationWarning('');
+    setDetailsOpen(true);
+  }, []);
+
   const fetchMatches = useCallback(() => {
     setLoading(true);
     setLoadError('');
@@ -232,12 +244,14 @@ export default function BettingTerminalPage() {
   };
 
   const refresh = () => {
-    setSelections([]);
-    setSelectedPassTypes([]);
-    setPassTouched(false);
-    setMultiple(1);
+    resetBetSlip();
     setConfirmation(null);
     fetchMatches();
+  };
+
+  const completeConfirmation = () => {
+    setConfirmation(null);
+    resetBetSlip();
   };
 
   const confirmTicket = async () => {
@@ -348,7 +362,7 @@ export default function BettingTerminalPage() {
       {activeMatch && <AllGamesDialog match={activeMatch} selections={selections} onToggle={toggleSelection} onClose={() => setActiveMatch(null)} />}
       {showRules && <RulesDialog onClose={() => setShowRules(false)} />}
       {showFilter && <FilterDialog leagues={leagues} league={league} singleOnly={singleOnly} onLeague={setLeague} onSingleOnly={setSingleOnly} onClose={() => setShowFilter(false)} />}
-      {confirmation && <ConfirmationDialog selections={confirmation.selections} passTypes={confirmation.passTypes} multiple={confirmation.multiple} betCount={confirmation.calculation.bet_count} stake={confirmation.calculation.total_cost} prize={confirmation.calculation.max_prize} ticketUid={confirmation.ticketUid} onClose={() => setConfirmation(null)} />}
+      {confirmation && <ConfirmationDialog selections={confirmation.selections} passTypes={confirmation.passTypes} multiple={confirmation.multiple} betCount={confirmation.calculation.bet_count} stake={confirmation.calculation.total_cost} prize={confirmation.calculation.max_prize} ticketUid={confirmation.ticketUid} onClose={completeConfirmation} />}
     </div>
   );
 }
