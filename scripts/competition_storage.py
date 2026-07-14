@@ -5,7 +5,7 @@ real_ticket_storage.py. All functions accept conn and call conn.commit()
 internally.
 
 Agent pool: simulation_tickets → ticket_settlements (ticket_source='simulation')
-User pool:  real_tickets       → ticket_settlements (ticket_source='real')
+User pool: real_tickets + simulator_tickets → real/simulator settlements
 """
 
 from __future__ import annotations
@@ -253,17 +253,25 @@ def compute_agent_daily_stats(conn: Any, target_date: date) -> dict:
 
 
 def compute_user_daily_stats(conn: Any, target_date: date) -> dict:
-    """Aggregate user pool stats for a given date from real_tickets.
+    """Aggregate user pool stats from real tickets and manual simulator tickets.
 
-    Stakes from real_tickets.total_amount on purchase_time date.
-    Prizes from ticket_settlements where ticket_source='real'.
+    Agent-owned virtual recommendations live in ``simulation_tickets`` and are
+    deliberately excluded from this user pool.
     """
     sql = """
         SELECT
-            COALESCE(SUM(rt.total_amount), 0) AS daily_stake,
-            COUNT(rt.id) AS ticket_count
-        FROM real_tickets rt
-        WHERE rt.purchase_time::date = %(target_date)s
+            COALESCE(SUM(t.stake), 0) AS daily_stake,
+            COUNT(*) AS ticket_count
+        FROM (
+            SELECT rt.total_amount AS stake
+            FROM real_tickets rt
+            WHERE rt.purchase_time::date = %(target_date)s
+            UNION ALL
+            SELECT st.total_cost AS stake
+            FROM simulator_tickets st
+            WHERE st.created_at::date = %(target_date)s
+              AND st.status <> 'cancelled'
+        ) t
     """
     with conn.cursor() as cur:
         cur.execute(sql, {"target_date": target_date})
@@ -272,13 +280,13 @@ def compute_user_daily_stats(conn: Any, target_date: date) -> dict:
     daily_stake = float(row[0] or 0)
     ticket_count = int(row[1] or 0)
 
-    # Prizes from settlements where real tickets were settled today
+    # Prizes from both user-owned settlement sources.
     sql_prize = """
         SELECT
             COALESCE(SUM(ts.prize_amount), 0) AS daily_prize,
             COALESCE(SUM(ts.profit_loss), 0) AS daily_profit_loss
         FROM ticket_settlements ts
-        WHERE ts.ticket_source = 'real'
+        WHERE ts.ticket_source IN ('real', 'simulator')
           AND ts.created_at::date = %(target_date)s
     """
     with conn.cursor() as cur:

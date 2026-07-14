@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { api } from '../core/apiClient';
 import { navigate } from '../core/router';
-import type { BettingResultBucket, BettingResults, BettingTicket } from '../core/types';
+import type { AgentDailyDecision, BettingResultBucket, BettingResults, BettingTicket } from '../core/types';
 import { ApiError } from '../core/types';
+import AgentDecisionTimeline from '../features/competition/AgentDecisionTimeline';
 import EmptyState from '../shared/components/EmptyState';
 import ErrorState from '../shared/components/ErrorState';
 import LoadingSpinner from '../shared/components/LoadingSpinner';
@@ -147,16 +148,22 @@ function TicketRow({ ticket }: { ticket: BettingTicket }) {
 export default function CompetitionPage() {
   const [results, setResults] = useState<BettingResults | null>(null);
   const [tickets, setTickets] = useState<BettingTicket[]>([]);
+  const [decisions, setDecisions] = useState<AgentDailyDecision[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const fetchResults = () => {
     setLoading(true);
     setError(null);
-    Promise.all([api.betting.results({ limit: 300 }), api.betting.tickets({ limit: 80 })])
-      .then(([resultRes, ticketRes]) => {
+    Promise.all([
+      api.betting.results({ limit: 300 }),
+      api.betting.tickets({ limit: 80 }),
+      api.competition.decisions(14),
+    ])
+      .then(([resultRes, ticketRes, decisionRes]) => {
         setResults(resultRes);
         setTickets(ticketRes.tickets || []);
+        setDecisions(decisionRes.decisions || []);
         setLoading(false);
       })
       .catch((e) => {
@@ -221,6 +228,14 @@ export default function CompetitionPage() {
           </div>
         </div>
         <TrendChart results={results} />
+      </div>
+
+      <div className="fqp-card" style={{ padding: 16, marginBottom: 16 }}>
+        <div style={{ fontWeight: 700, marginBottom: 4 }}>Agent 每日决策</div>
+        <div style={{ fontSize: 12, color: 'var(--fqp-text-muted)', marginBottom: 12 }}>
+          只记录系统内虚拟购买；放弃投注也会保留门槛原因
+        </div>
+        <AgentDecisionTimeline decisions={decisions} />
       </div>
 
       <div className="fqp-card" style={{ padding: 16, marginBottom: 16 }}>

@@ -24,87 +24,45 @@ def _now() -> str:
 
 
 def store_team_season_profile(conn: Any, profile: dict) -> int | None:
-    """Insert or update a team season profile.
+    """Upsert one canonical team-profile snapshot."""
+    competition_season_id = profile.get("competition_season_id")
+    if not competition_season_id:
+        return None
 
-    Required: team_id, competition_season_id
-    Unique key assumed: (team_id, competition_season_id) — if a unique
-    constraint exists. Otherwise does a SELECT-then-INSERT/UPDATE.
-
-    Returns the profile id.
-    """
+    params = {
+        "team_id": profile["team_id"],
+        "competition_season_id": competition_season_id,
+        "snapshot_time": profile.get("snapshot_time", _now()),
+        "attack_strength_score": profile.get("attack_strength_score"),
+        "defense_strength_score": profile.get("defense_strength_score"),
+        "data_source": profile.get("data_source", "computed_form"),
+        "data_confidence": profile.get("data_confidence"),
+        "raw_json": json.dumps(profile.get("raw_json", {}), ensure_ascii=False),
+    }
     with conn.cursor() as cur:
-        # Check for existing
         cur.execute(
-            "SELECT id FROM team_season_profiles "
-            "WHERE team_id = %(team_id)s AND competition_season_id = %(comp_season_id)s",
-            {
-                "team_id": profile["team_id"],
-                "comp_season_id": profile.get("competition_season_id"),
-            },
+            """
+            INSERT INTO team_season_profiles (
+                team_id, competition_season_id, snapshot_time,
+                attack_strength_score, defense_strength_score,
+                data_source, data_confidence, raw_json, created_at, updated_at
+            ) VALUES (
+                %(team_id)s, %(competition_season_id)s, %(snapshot_time)s,
+                %(attack_strength_score)s, %(defense_strength_score)s,
+                %(data_source)s, %(data_confidence)s, %(raw_json)s, now(), now()
+            )
+            ON CONFLICT (team_id, competition_season_id, snapshot_time) DO UPDATE SET
+                attack_strength_score = EXCLUDED.attack_strength_score,
+                defense_strength_score = EXCLUDED.defense_strength_score,
+                data_source = EXCLUDED.data_source,
+                data_confidence = EXCLUDED.data_confidence,
+                raw_json = EXCLUDED.raw_json,
+                updated_at = now()
+            RETURNING id
+            """,
+            params,
         )
         row = cur.fetchone()
-
-        common = {
-            "team_id": profile["team_id"],
-            "competition_season_id": profile.get("competition_season_id"),
-            "season_code": profile.get("season_code", ""),
-            "matches_played": profile.get("matches_played"),
-            "wins": profile.get("wins"),
-            "draws": profile.get("draws"),
-            "losses": profile.get("losses"),
-            "goals_for": profile.get("goals_for"),
-            "goals_against": profile.get("goals_against"),
-            "goal_diff": profile.get("goal_diff"),
-            "points": profile.get("points"),
-            "recent_form_5": profile.get("recent_form_5"),
-            "attack_strength_score": profile.get("attack_strength_score"),
-            "defense_strength_score": profile.get("defense_strength_score"),
-            "raw_json": json.dumps(profile.get("raw_json", {}), ensure_ascii=False),
-        }
-
-        if row:
-            cur.execute(
-                """
-                UPDATE team_season_profiles SET
-                    matches_played = %(matches_played)s,
-                    wins = %(wins)s,
-                    draws = %(draws)s,
-                    losses = %(losses)s,
-                    goals_for = %(goals_for)s,
-                    goals_against = %(goals_against)s,
-                    goal_diff = %(goal_diff)s,
-                    points = %(points)s,
-                    recent_form_5 = %(recent_form_5)s,
-                    attack_strength_score = %(attack_strength_score)s,
-                    defense_strength_score = %(defense_strength_score)s,
-                    raw_json = %(raw_json)s,
-                    updated_at = now()
-                WHERE id = %(id)s
-                """,
-                {**common, "id": row[0]},
-            )
-            return row[0]
-        else:
-            cur.execute(
-                """
-                INSERT INTO team_season_profiles (
-                    team_id, competition_season_id, season_code,
-                    matches_played, wins, draws, losses,
-                    goals_for, goals_against, goal_diff, points,
-                    recent_form_5, attack_strength_score, defense_strength_score,
-                    raw_json, created_at, updated_at
-                ) VALUES (
-                    %(team_id)s, %(competition_season_id)s, %(season_code)s,
-                    %(matches_played)s, %(wins)s, %(draws)s, %(losses)s,
-                    %(goals_for)s, %(goals_against)s, %(goal_diff)s, %(points)s,
-                    %(recent_form_5)s, %(attack_strength_score)s, %(defense_strength_score)s,
-                    %(raw_json)s, now(), now()
-                )
-                RETURNING id
-                """,
-                common,
-            )
-            row = cur.fetchone()
     conn.commit()
     return row[0] if row else None
 

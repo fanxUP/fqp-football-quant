@@ -473,6 +473,11 @@ export const api = {
     summary: () =>
       request<import('./types').CompetitionSummary>('/api/competition/summary'),
 
+    decisions: (limit = 14) =>
+      request<{ decisions: import('./types').AgentDailyDecision[]; total: number }>(
+        `/api/competition/decisions${qs({ limit })}`,
+      ),
+
     currentTickets: () =>
       request<{
         round_id: number;

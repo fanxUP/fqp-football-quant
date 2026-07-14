@@ -1083,6 +1083,16 @@ export interface CompetitionTicket {
   items: CompetitionTicketItem[];
 }
 
+export interface AgentDailyDecision {
+  decisionDate: string;
+  status: 'purchased' | 'abstained' | 'failed';
+  totalBudget: number;
+  totalStake: number;
+  unusedBudget: number;
+  reason: string;
+  updatedAt: string | null;
+}
+
 // ---- Settings (localStorage) ----
 
 export interface FqpSettings {

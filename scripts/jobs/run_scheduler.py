@@ -19,6 +19,11 @@ from typing import Any
 OFFICIAL_SCHEDULE_CRON = {"minute": "10,40"}
 
 
+def _scheduler_timezone_name() -> str:
+    """Return the business timezone used by every cron trigger."""
+    return os.getenv("FQP_TIMEZONE", "Asia/Shanghai")
+
+
 def _official_source_enabled() -> bool:
     return os.getenv("OFFICIAL_SOURCE_ENABLED", "true").lower() == "true"
 
@@ -87,7 +92,9 @@ def main() -> None:
     try:
         from apscheduler.schedulers.background import BackgroundScheduler
 
-        scheduler = BackgroundScheduler()
+        timezone_name = _scheduler_timezone_name()
+        scheduler = BackgroundScheduler(timezone=timezone_name)
+        print(f"FQP scheduler timezone: {timezone_name}")
 
         # ----- health heartbeat (always on) -----
         def test_heartbeat() -> None:

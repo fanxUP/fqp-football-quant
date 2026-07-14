@@ -1,4 +1,8 @@
-from scripts.jobs.run_scheduler import OFFICIAL_SCHEDULE_CRON, _audited_job
+from scripts.jobs.run_scheduler import (
+    OFFICIAL_SCHEDULE_CRON,
+    _audited_job,
+    _scheduler_timezone_name,
+)
 
 
 def test_self_tracked_job_is_not_wrapped_again():
@@ -58,3 +62,15 @@ def test_scheduler_refreshes_official_schedule_metadata_every_30_minutes():
     source = Path("scripts/jobs/run_scheduler.py").read_text()
     assert OFFICIAL_SCHEDULE_CRON == {"minute": "10,40"}
     assert "**OFFICIAL_SCHEDULE_CRON" in source
+
+
+def test_scheduler_defaults_to_shanghai_timezone(monkeypatch):
+    monkeypatch.delenv("FQP_TIMEZONE", raising=False)
+
+    assert _scheduler_timezone_name() == "Asia/Shanghai"
+
+
+def test_scheduler_timezone_can_be_overridden(monkeypatch):
+    monkeypatch.setenv("FQP_TIMEZONE", "Asia/Hong_Kong")
+
+    assert _scheduler_timezone_name() == "Asia/Hong_Kong"

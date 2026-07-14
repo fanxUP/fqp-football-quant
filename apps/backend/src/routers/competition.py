@@ -1,7 +1,7 @@
 """Competition API — two-pool ROI competition (Agent vs User).
 
 Agent pool: simulation_tickets, ¥500/day virtual budget, daily reset.
-User pool:  real_tickets, actual purchase amounts.
+User pool: real_tickets and user-created simulator_tickets.
 Competition judged by cumulative ROI over weekly rounds (Mon-Sun).
 """
 
@@ -19,8 +19,17 @@ from scripts.competition_storage import (
     get_trend_data,
     list_rounds,
 )
+from scripts.daily_decision_storage import list_agent_daily_decisions
 
 router = APIRouter(tags=["competition"])
+
+
+@router.get("/api/competition/decisions")
+def get_agent_daily_decisions(limit: int = Query(14, ge=1, le=90)):
+    """Return recent Agent buy-or-abstain decisions for review."""
+    with get_db() as conn:
+        decisions = list_agent_daily_decisions(conn, limit=limit)
+    return {"decisions": decisions, "total": len(decisions)}
 
 
 @router.get("/api/competition/rounds/current")

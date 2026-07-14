@@ -13,25 +13,49 @@ Daily budget: ¥500 max, unused portion resets at 23:59.
 
 from __future__ import annotations
 
+import os
 from datetime import datetime
 from itertools import combinations
 from math import floor
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from apps.backend.src.db import get_db
 from scripts.agents.task_queue import finish_tracked_job, start_tracked_job
 from scripts.competition_storage import AGENT_DAILY_BUDGET
+from scripts.daily_decision_storage import upsert_agent_daily_decision
 from scripts.model_storage import store_simulation_ticket
-from scripts.real_ticket_storage import create_bankroll_transaction
-from scripts.simulator_storage import (
-    create_simulator_items_batch,
-    create_simulator_ticket,
-    ensure_simulator_bankroll,
-)
 
 
 def _now() -> str:
     return datetime.now().isoformat(timespec="seconds")
+
+
+def _business_today():
+    timezone_name = os.getenv("FQP_TIMEZONE", "Asia/Shanghai")
+    return datetime.now(ZoneInfo(timezone_name)).date()
+
+
+def _record_daily_decision(result: dict[str, Any] | None = None, error: str | None = None) -> None:
+    tickets = int((result or {}).get("tickets") or 0)
+    total_stake = float((result or {}).get("total_stake") or 0)
+    if error:
+        status = "failed"
+        reason = f"推荐任务执行失败：{error}"
+    elif tickets > 0:
+        status = "purchased"
+        reason = (result or {}).get("note") or f"已创建 {tickets} 张 Agent 虚拟票"
+    else:
+        status = "abstained"
+        reason = (result or {}).get("note") or "没有候选通过数据质量与风险门槛，今日不投注"
+    with get_db() as conn:
+        upsert_agent_daily_decision(
+            conn,
+            decision_date=_business_today(),
+            status=status,
+            total_stake=total_stake,
+            reason=reason,
+        )
 
 
 def _official_stake(value: float) -> float:
@@ -193,14 +217,17 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
         # ── 0b. Idempotency ──
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT COUNT(*) FROM simulation_tickets WHERE created_at::date = CURRENT_DATE"
+                """SELECT COUNT(*), COALESCE(SUM(suggested_stake), 0)
+                   FROM simulation_tickets WHERE created_at::date = CURRENT_DATE"""
             )
-            already = cur.fetchone()[0]
+            already, existing_stake = cur.fetchone()
         if already > 0:
             return {
                 "status": "ok",
-                "tickets": 0,
-                "note": f"skipped: {already} tickets already exist for today",
+                "tickets": already,
+                "total_stake": float(existing_stake or 0),
+                "reused": True,
+                "note": f"今日已存在 {already} 张 Agent 虚拟票，本次不重复创建",
             }
 
         # ── 1. Latest prediction run ──
@@ -561,6 +588,7 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
         # not used as a hard rejection rule.
         if training_observation_mode and candidates:
             observation_tickets = 0
+            observation_stake = 0.0
             daily_budget = AGENT_DAILY_BUDGET
             with conn.cursor() as cur:
                 cur.execute(
@@ -599,6 +627,7 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
                 # not the user's manual simulator ledger.
                 if store_simulation_ticket(conn, ticket, [_make_item(c)]):
                     observation_tickets += 1
+                    observation_stake += stake
             if len(candidates) >= 2:
                 combos_2 = _build_parlays(candidates, 2)
                 if not combos_2:
@@ -630,6 +659,7 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
                     }
                     if store_simulation_ticket(conn, ticket, combo_items):
                         observation_tickets += 1
+                        observation_stake += combo_stake
             with conn.cursor() as cur:
                 cur.execute(
                     """UPDATE daily_budget_plans
@@ -652,6 +682,7 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
             return {
                 "status": "ok",
                 "tickets": observation_tickets,
+                "total_stake": round(observation_stake, 2),
                 "training_observation": True,
                 "daily_virtual_budget": daily_budget,
                 "valid_matches": valid_match_count,
@@ -733,8 +764,8 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
 
                 items = [_make_item(c)]
 
-                # 实际购买：创建 simulator_ticket + 扣款
-                tid = _buy_ticket(conn, ticket, items, c)
+                # Agent 虚拟购买：写入 Agent 专属竞赛票池。
+                tid = _buy_ticket(conn, ticket, items)
                 if tid:
                     tickets_created += 1
                     pool_stake += stake
@@ -799,7 +830,7 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
                     }
 
                     items = [_make_item(c) for c in combo["candidates"]]
-                    tid = _buy_ticket(conn, ticket, items, combo["candidates"][0])
+                    tid = _buy_ticket(conn, ticket, items)
                     if tid:
                         tickets_created += 1
                         parlay_tickets += 1
@@ -843,7 +874,7 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
                         }
 
                         items = [_make_item(c) for c in combo["candidates"]]
-                        tid = _buy_ticket(conn, ticket, items, combo["candidates"][0])
+                        tid = _buy_ticket(conn, ticket, items)
                         if tid:
                             tickets_created += 1
                             parlay_tickets += 1
@@ -941,16 +972,21 @@ def _make_item(c: dict) -> dict:
 
 def run(dry_run: bool = False) -> dict[str, Any]:
     """Generate candidates and persist its multi-agent execution record."""
-    run_id = start_tracked_job(
-        "recommendation_candidate", "recommendation_agent", {"dry_run": dry_run},
-        dependencies=[] if dry_run else ["official_odds_snapshot", "model_prediction"],
-    )
+    run_id = None
     try:
+        run_id = start_tracked_job(
+            "recommendation_candidate", "recommendation_agent", {"dry_run": dry_run},
+            dependencies=[] if dry_run else ["official_odds_snapshot", "model_prediction"],
+        )
         result = _run_impl(dry_run=dry_run)
         finish_tracked_job(run_id, result.get("status", "completed"), {"result": result})
+        if not dry_run:
+            _record_daily_decision(result=result)
         return result
     except Exception as exc:
         finish_tracked_job(run_id, "failed", error=str(exc))
+        if not dry_run:
+            _record_daily_decision(error=str(exc))
         raise
 
 
@@ -1003,74 +1039,22 @@ def _build_parlays(
     return result
 
 
-def _buy_ticket(conn: Any, ticket: dict, items: list[dict], candidate: dict) -> int | None:
-    """Create a real simulator ticket with bankroll deduction.
-
-    Instead of just creating a "recommendation" (simulation_tickets),
-    this creates an actual purchased ticket (simulator_tickets) and
-    deducts the stake from the bankroll.
+def _buy_ticket(conn: Any, ticket: dict, items: list[dict]) -> int | None:
+    """Create one Agent-owned virtual competition ticket.
 
     Args:
         conn: DB connection
         ticket: Ticket dict with suggested_stake, pass_type, multiple, etc.
         items: List of item dicts (match selections)
-        candidate: First candidate (for field mapping)
-
     Returns:
-        New ticket ID, or None on failure.
+        New Agent ticket ID, or None on failure.
     """
-    stake = ticket.get("suggested_stake", 0)
-    if stake <= 0:
+    if ticket.get("suggested_stake", 0) <= 0:
         return None
-
     try:
-        # 1. Ensure bankroll account exists
-        ensure_simulator_bankroll(conn)
-
-        # 2. Map fields for simulator_tickets table
-        sim_ticket = {
-            "play_type": candidate.get("play_type", "spf"),
-            "pass_type": ticket.get("pass_type", "single"),
-            "multiple": ticket.get("multiple", 1),
-            "total_cost": stake,
-            "bet_count": 1,
-            "max_prize": ticket.get("estimated_return", 0),
-            "match_count": len(items),
-            "status": "active",
-        }
-
-        # 3. Create ticket
-        ticket_id = create_simulator_ticket(conn, sim_ticket)
-        if not ticket_id:
-            return None
-
-        # 4. Create items
-        item_records = []
-        for it in items:
-            item_records.append({
-                "match_id": it.get("match_id"),
-                "play_type": it.get("play_type", candidate.get("play_type", "spf")),
-                "option_code": it.get("option_code"),
-                "option_name": it.get("option_name", ""),
-                "sp_value": it.get("sp_value", 0),
-                "handicap": it.get("handicap"),
-                "is_dan": it.get("is_dan", False),
-            })
-        create_simulator_items_batch(conn, ticket_id, item_records)
-
-        # 5. Deduct from bankroll
-        pool_label = ticket.get("strategy_pool", "agent")
-        create_bankroll_transaction(conn, {
-            "account_type": "simulator",
-            "transaction_type": "stake",
-            "amount": -stake,
-            "related_ticket_id": ticket_id,
-            "remark": f"AI推荐购买 #{ticket_id} ({pool_label} ¥{stake:.0f})",
-        })
-
-        return ticket_id
-
+        return store_simulation_ticket(conn, ticket, items)
     except Exception as e:
+        conn.rollback()
         print(f"[_buy_ticket] error creating ticket: {e}")
         return None
 

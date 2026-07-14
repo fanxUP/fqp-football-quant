@@ -5,7 +5,7 @@ collect_health_metrics at 23:55).
 
 1. Ensures current week round exists (creates on Monday)
 2. Aggregates Agent pool stats from ticket_settlements (simulation)
-3. Aggregates User pool stats from real_tickets + ticket_settlements
+3. Aggregates User pool stats from real/simulator tickets and settlements
 4. Writes competition_daily_snapshots
 5. Finalizes round on Sunday
 """
@@ -50,7 +50,7 @@ def _get_settled_user_stake(conn, round_id: int) -> float:
             SELECT COALESCE(SUM(ts.stake_amount), 0)
             FROM ticket_settlements ts
             JOIN competition_rounds cr ON cr.id = %(round_id)s
-            WHERE ts.ticket_source = 'real'
+            WHERE ts.ticket_source IN ('real', 'simulator')
               AND ts.created_at::date BETWEEN cr.round_start AND cr.round_end
             """,
             {"round_id": round_id},

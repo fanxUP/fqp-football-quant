@@ -43,6 +43,28 @@ def _resolve_team_id(conn: Any, official_name: str) -> int | None:
     return row[0] if row else None
 
 
+def _resolve_competition_season_id(
+    conn: Any, league_name: str, kickoff_time: datetime
+) -> int | None:
+    """Resolve the current canonical competition season for an official match."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT cs.id
+            FROM competition_seasons cs
+            JOIN competitions c ON c.id = cs.competition_id
+            JOIN seasons s ON s.id = cs.season_id
+            WHERE c.competition_name_cn = %(league_name)s
+              AND %(kickoff_date)s::date BETWEEN s.start_date AND s.end_date
+            ORDER BY s.is_current DESC, s.start_date DESC
+            LIMIT 1
+            """,
+            {"league_name": league_name, "kickoff_date": kickoff_time.date()},
+        )
+        row = cur.fetchone()
+    return row[0] if row else None
+
+
 _VENUE_CITY_ALIASES = {
     "英格尔伍德": "Inglewood",
     "迈阿密加登斯": "Miami Gardens",
@@ -207,12 +229,15 @@ def _run_impl(match_id: int | None = None, dry_run: bool = False) -> dict[str, A
                 home_id = _resolve_team_id(conn, match_data["home_team_name"])
                 away_id = _resolve_team_id(conn, match_data["away_team_name"])
                 has_mapping = can_build_team_dependent_features(home_id, away_id)
+                competition_season_id = _resolve_competition_season_id(
+                    conn, match_data["league_name"], kt
+                )
 
                 # ---------------------------------------------------
                 # 4. Compute team profiles
                 # ---------------------------------------------------
                 has_profile = False
-                if has_mapping and home_id and away_id:
+                if has_mapping and competition_season_id and home_id and away_id:
                     for tname, tid in [
                         (match_data["home_team_name"], home_id),
                         (match_data["away_team_name"], away_id),
@@ -221,15 +246,16 @@ def _run_impl(match_id: int | None = None, dry_run: bool = False) -> dict[str, A
                         if form["matches_played"] > 0:
                             profile = {
                                 "team_id": tid,
-                                "competition_season_id": None,
-                                "season_code": "WC2026",
-                                **form,
+                                "competition_season_id": competition_season_id,
+                                "snapshot_time": snap_time,
                                 "attack_strength_score": round(
                                     form["goals_for"] / max(1, form["matches_played"]), 2
                                 ),
                                 "defense_strength_score": round(
                                     form["goals_against"] / max(1, form["matches_played"]), 2
                                 ),
+                                "data_source": "computed_form",
+                                "data_confidence": min(1.0, form["matches_played"] / 10),
                                 "raw_json": form,
                             }
                             store_team_season_profile(conn, profile)
@@ -359,7 +385,7 @@ def _run_impl(match_id: int | None = None, dry_run: bool = False) -> dict[str, A
                         mid,
                         home_id,
                         away_id,
-                        competition_season_id=None,
+                        competition_season_id=competition_season_id,
                     )
                     has_motivation = motivation.get("has_motivation_data", False)
                 except Exception as e:
@@ -417,7 +443,7 @@ def _run_impl(match_id: int | None = None, dry_run: bool = False) -> dict[str, A
                     "feature_version": feature_version,
                     "home_team_id": home_id,
                     "away_team_id": away_id,
-                    "competition_season_id": None,
+                    "competition_season_id": competition_season_id,
                     # Team strength (basic + profiles)
                     "home_team_market_value": probs.get("home_win_prob"),
                     "away_team_market_value": probs.get("away_win_prob"),
