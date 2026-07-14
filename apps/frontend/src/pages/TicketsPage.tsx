@@ -39,7 +39,11 @@ function pct(value: number | null | undefined): string {
   return `${value >= 0 ? '+' : ''}${(value * 100).toFixed(1)}%`;
 }
 
-function TicketCard({ ticket }: { ticket: BettingTicket }) {
+function TicketCard({ ticket, deleting, onDelete }: {
+  ticket: BettingTicket;
+  deleting: boolean;
+  onDelete: (ticket: BettingTicket) => void;
+}) {
   const pl = ticket.profitLoss;
   const outcome = ticketOutcome(ticket);
   const plColor = pl === null || pl === undefined
@@ -159,12 +163,29 @@ function TicketCard({ ticket }: { ticket: BettingTicket }) {
           {!ticket.confirmStatus && ticket.source !== 'agent_recommendation' && <span>投注项已在本卡片归档。</span>}
         </div>
 
+        {ticket.kind === 'real' && (
+          <button
+            type="button"
+            className="fqp-btn fqp-btn-danger"
+            aria-label={`删除彩票 ${ticket.title}`}
+            disabled={deleting}
+            onClick={() => onDelete(ticket)}
+          >
+            {deleting ? '删除中...' : '删除彩票'}
+          </button>
+        )}
+
       </div>
     </details>
   );
 }
 
-function TicketColumn({ title, tickets }: { title: string; tickets: BettingTicket[] }) {
+function TicketColumn({ title, tickets, deletingTicketId, onDelete }: {
+  title: string;
+  tickets: BettingTicket[];
+  deletingTicketId: number | null;
+  onDelete: (ticket: BettingTicket) => void;
+}) {
   const stats = calculateLedgerStats(tickets);
   const grouped = groupTicketsByDate(tickets);
 
@@ -194,7 +215,14 @@ function TicketColumn({ title, tickets }: { title: string; tickets: BettingTicke
                 <em>{items.length} 张</em>
               </div>
               <div className="lottery-ticket-stack">
-                {items.map((ticket) => <TicketCard key={ticket.ticketUid} ticket={ticket} />)}
+                {items.map((ticket) => (
+                  <TicketCard
+                    key={ticket.ticketUid}
+                    ticket={ticket}
+                    deleting={deletingTicketId === ticket.legacyId}
+                    onDelete={onDelete}
+                  />
+                ))}
               </div>
             </div>
           ))}
@@ -208,6 +236,8 @@ export default function TicketsPage() {
   const [tickets, setTickets] = useState<BettingTicket[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deletingTicketId, setDeletingTicketId] = useState<number | null>(null);
   const [dateFilter, setDateFilter] = useState<DateFilter>('all');
   const [statusFilter, setStatusFilter] = useState('');
 
@@ -226,6 +256,21 @@ export default function TicketsPage() {
   };
 
   useEffect(() => { fetchTickets(); }, []);
+
+  const deleteTicket = async (ticket: BettingTicket) => {
+    if (!window.confirm('删除后无法恢复，确认删除这张彩票吗？')) return;
+
+    setDeleteError(null);
+    setDeletingTicketId(ticket.legacyId);
+    try {
+      await api.betting.deleteTicket(ticket.legacyId);
+      setTickets((current) => current.filter((item) => item.ticketUid !== ticket.ticketUid));
+    } catch (e) {
+      setDeleteError(e instanceof ApiError ? e.message : '删除彩票失败');
+    } finally {
+      setDeletingTicketId(null);
+    }
+  };
 
   const dateOptions = useMemo(
     () => Array.from(new Set(tickets.map((ticket) => ticket.date))).sort((a, b) => b.localeCompare(a)),
@@ -277,12 +322,24 @@ export default function TicketsPage() {
         </div>
       </div>
 
+      {deleteError && <div className="lottery-delete-error" role="alert">{deleteError}</div>}
+
       {error ? (
         <ErrorState message={error} onRetry={fetchTickets} />
       ) : (
         <div className="lottery-ledger">
-          <TicketColumn title={ticketOwnerLabel('me')} tickets={myTickets} />
-          <TicketColumn title={ticketOwnerLabel('agent')} tickets={agentTickets} />
+          <TicketColumn
+            title={ticketOwnerLabel('me')}
+            tickets={myTickets}
+            deletingTicketId={deletingTicketId}
+            onDelete={deleteTicket}
+          />
+          <TicketColumn
+            title={ticketOwnerLabel('agent')}
+            tickets={agentTickets}
+            deletingTicketId={deletingTicketId}
+            onDelete={deleteTicket}
+          />
         </div>
       )}
     </div>

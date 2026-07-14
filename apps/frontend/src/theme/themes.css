@@ -1752,6 +1752,15 @@
   gap: 8px;
 }
 
+.lottery-delete-error {
+  margin-bottom: 12px;
+  border: 1px solid var(--fqp-danger, #ef4444);
+  border-radius: 6px;
+  padding: 8px 10px;
+  color: var(--fqp-danger, #ef4444);
+  font-size: 13px;
+}
+
 .lottery-ledger {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);

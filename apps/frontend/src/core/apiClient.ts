@@ -403,6 +403,10 @@ export const api = {
       request<import('./types').BettingResults>(
         `/api/v1/betting/results${qs({ limit: params?.limit ?? 300 })}`,
       ),
+    deleteTicket: (ticketId: number) =>
+      request<{ status: 'ok' | 'error' }>(`/api/v1/real-tickets/${ticketId}`, {
+        method: 'DELETE',
+      }),
     createTicket: (body: {
       source: 'simulator' | 'real-user' | 'real-agent';
       play_type: string;
