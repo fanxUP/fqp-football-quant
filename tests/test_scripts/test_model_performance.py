@@ -84,4 +84,6 @@ def test_model_performance_history_uses_top_pick_and_all_official_result_types()
     assert "r.score_result" in query
     assert "r.half_full_result" in query
     assert "handicap" in query
+    assert "UNION ALL" in query
+    assert "'all' AS play_type" in query
     assert "ROWS BETWEEN %(preceding)s PRECEDING" in query

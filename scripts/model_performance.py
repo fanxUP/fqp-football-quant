@@ -103,6 +103,23 @@ _PERFORMANCE_HISTORY_SQL = """
         FROM resolved_picks
         WHERE actual_option IS NOT NULL AND actual_option <> ''
     ),
+    evaluation_scopes AS (
+        SELECT
+            match_id,
+            business_date,
+            model_name,
+            play_type,
+            is_correct
+        FROM scored_picks
+        UNION ALL
+        SELECT
+            match_id,
+            business_date,
+            model_name,
+            'all' AS play_type,
+            is_correct
+        FROM scored_picks
+    ),
     rolling_scores AS (
         SELECT
             match_id,
@@ -119,7 +136,7 @@ _PERFORMANCE_HISTORY_SQL = """
                 ORDER BY business_date, match_id
                 ROWS BETWEEN %(preceding)s PRECEDING AND CURRENT ROW
             ) AS sample_size
-        FROM scored_picks
+        FROM evaluation_scopes
     ),
     daily_points AS (
         SELECT DISTINCT ON (play_type, model_name, business_date)

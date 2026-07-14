@@ -6,6 +6,7 @@ import { modelNameLabel, playTypeLabel } from '../shared/constants';
 import { applyChartTheme, CHART_COLORS } from './chartTheme';
 
 const PLAY_TYPES = ['spf', 'rqspf', 'bf', 'zjq', 'bqc'] as const;
+const OVERALL_PLAY_TYPE = 'all';
 
 const MODEL_COLORS: Record<string, string> = {
   elo_rating: CHART_COLORS.blue,
@@ -84,9 +85,15 @@ export default function ModelPerformanceCharts({
   error,
 }: ModelPerformanceChartsProps) {
   const options = useMemo(
-    () => new Map(PLAY_TYPES.map((playType) => [playType, buildModelPerformanceOption(points, playType)])),
+    () => new Map(
+      [OVERALL_PLAY_TYPE, ...PLAY_TYPES].map((playType) => [
+        playType,
+        buildModelPerformanceOption(points, playType),
+      ]),
+    ),
     [points],
   );
+  const overallOption = options.get(OVERALL_PLAY_TYPE);
 
   return (
     <section aria-labelledby="model-performance-trend-title" style={{ marginBottom: '20px' }}>
@@ -95,8 +102,20 @@ export default function ModelPerformanceCharts({
           模型表现曲线
         </h2>
         <p style={{ margin: '4px 0 0', color: 'var(--fqp-text-muted)', fontSize: '12px' }}>
-          每场取模型概率最高的选项；纵轴为最多最近 {window} 场滚动命中率，越高越好
+          每场取模型概率最高的选项；分玩法按场统计，综合视图按已结算预测次数统计
         </p>
+      </div>
+      <div style={{ marginBottom: '16px' }}>
+        <ChartCard
+          title="综合表现 · 模型对比"
+          subtitle={`汇总模型已覆盖玩法 · 最多最近 ${window} 次预测`}
+          option={(overallOption || {}) as Record<string, unknown>}
+          height={340}
+          loading={loading}
+          error={error}
+          empty={!loading && !error && !overallOption}
+          emptyReason="暂无综合模型表现数据"
+        />
       </div>
       <div className="fqp-grid-2">
         {PLAY_TYPES.map((playType) => {
