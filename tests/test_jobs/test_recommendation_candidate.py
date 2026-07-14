@@ -2,7 +2,12 @@ from datetime import datetime
 from unittest.mock import MagicMock
 
 from scripts.jobs import run_recommendation_candidate as recommendation
-from scripts.jobs.run_recommendation_candidate import _buy_ticket, _prediction_sp_value
+from scripts.jobs.run_recommendation_candidate import (
+    _buy_ticket,
+    _no_candidate_note,
+    _prediction_sp_value,
+    _ticket_generation_note,
+)
 
 
 def test_prediction_sp_value_does_not_treat_kickoff_as_sp():
@@ -37,3 +42,19 @@ def test_agent_purchase_rolls_back_failed_ticket_write(monkeypatch):
 
     assert _buy_ticket(conn, {"suggested_stake": 20}, [{"match_id": 7}]) is None
     conn.rollback.assert_called_once()
+
+
+def test_no_candidate_note_exposes_data_quality_rejections():
+    note = _no_candidate_note(
+        total_predictions=78,
+        rejection_counts={"data_quality": 78},
+        minimum_quality=50,
+    )
+
+    assert note == "数据完整度不足：78 条预测未达到 50 分门槛，今日不投注"
+
+
+def test_ticket_generation_note_exposes_pool_risk_rejections():
+    assert _ticket_generation_note(tickets_created=0, candidate_count=3) == (
+        "发现 3 个正 EV 候选，但均未通过资金池风险与置信度门槛，今日不投注"
+    )

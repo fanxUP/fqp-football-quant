@@ -150,6 +150,31 @@ def compute_full_completeness(dimensions: dict[str, bool]) -> dict[str, Any]:
     }
 
 
+def _snapshot_job_result(
+    *,
+    feature_version: str,
+    matches_processed: int,
+    snapshots_built: int,
+    profiles_updated: int,
+    dim_stats: dict[str, int],
+    failed_matches: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Build an auditable summary without reporting an all-match failure as success."""
+    return {
+        "status": "failed" if matches_processed > 0 and snapshots_built == 0 else "ok",
+        "feature_version": feature_version,
+        "snapshots_built": snapshots_built,
+        "profiles_updated": profiles_updated,
+        "matches_processed": matches_processed,
+        "failed_count": len(failed_matches),
+        "failed_matches": failed_matches,
+        "dimensions_coverage": {
+            dimension: f"{dim_stats.get(dimension, 0)}/{matches_processed}"
+            for dimension in _DIMENSIONS
+        },
+    }
+
+
 # ---------------------------------------------------------------------------
 # Main pipeline
 # ---------------------------------------------------------------------------
@@ -197,6 +222,7 @@ def _run_impl(match_id: int | None = None, dry_run: bool = False) -> dict[str, A
         snapshots_built = 0
         profiles_updated = 0
         dim_stats = {d: 0 for d in _DIMENSIONS}
+        failed_matches: list[dict[str, Any]] = []
 
         for mid in match_ids:
             try:
@@ -542,17 +568,18 @@ def _run_impl(match_id: int | None = None, dry_run: bool = False) -> dict[str, A
 
             except Exception as e:
                 conn.rollback()
+                failed_matches.append({"match_id": mid, "error": str(e)[:500]})
                 print(f"[feature_snapshot_build] error on match {mid}: {e}")
                 continue
 
-    return {
-        "status": "ok",
-        "feature_version": feature_version,
-        "snapshots_built": snapshots_built,
-        "profiles_updated": profiles_updated,
-        "matches_processed": len(match_ids),
-        "dimensions_coverage": {d: f"{dim_stats.get(d, 0)}/{len(match_ids)}" for d in _DIMENSIONS},
-    }
+    return _snapshot_job_result(
+        feature_version=feature_version,
+        matches_processed=len(match_ids),
+        snapshots_built=snapshots_built,
+        profiles_updated=profiles_updated,
+        dim_stats=dim_stats,
+        failed_matches=failed_matches,
+    )
 
 
 def run(match_id: int | None = None, dry_run: bool = False) -> dict[str, Any]:

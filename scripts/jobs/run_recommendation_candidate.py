@@ -82,6 +82,41 @@ MIN_CONFIDENCE = 0.20
 MIN_STAKE = 2.0
 STAKE_UNIT = 2.0
 
+
+def _no_candidate_note(
+    *,
+    total_predictions: int,
+    rejection_counts: dict[str, int],
+    minimum_quality: int,
+) -> str:
+    """Explain the actual hard gate that removed all recommendation candidates."""
+    quality_rejections = rejection_counts.get("data_quality", 0)
+    if quality_rejections == total_predictions and total_predictions > 0:
+        return (
+            f"数据完整度不足：{quality_rejections} 条预测未达到 "
+            f"{minimum_quality} 分门槛，今日不投注"
+        )
+    if rejection_counts.get("non_positive_ev", 0) == total_predictions:
+        return "无正 EV 候选，今日不投注，未使用额度日终清空"
+    if quality_rejections > 0:
+        return (
+            f"数据完整度不足：{quality_rejections}/{total_predictions} 条预测未达到 "
+            f"{minimum_quality} 分门槛，其余候选也未通过风控，今日不投注"
+        )
+    return "候选未通过置信度、赔率质量或风险门槛，今日不投注"
+
+
+def _ticket_generation_note(*, tickets_created: int, candidate_count: int) -> str:
+    """Describe the terminal buy-or-abstain decision after pool assignment."""
+    if tickets_created > 0:
+        return f"已创建 {tickets_created} 张 Agent 虚拟票"
+    if candidate_count > 0:
+        return (
+            f"发现 {candidate_count} 个正 EV 候选，但均未通过"
+            "资金池风险与置信度门槛，今日不投注"
+        )
+    return "没有候选通过数据质量与风险门槛，今日不投注"
+
 # ── 四池分层配置（框架 §9.1） ──
 POOL_CONFIG: list[dict[str, Any]] = [
     {
@@ -460,6 +495,10 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
 
         # ── 5. Parse & pre-filter ──
         parsed: list[dict] = []
+        rejection_counts: dict[str, int] = {}
+
+        def reject(reason: str) -> None:
+            rejection_counts[reason] = rejection_counts.get(reason, 0) + 1
 
         for p in predictions:
             (
@@ -479,14 +518,18 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
 
             # 硬门槛
             if quality < MIN_QUALITY:
+                reject("data_quality")
                 continue
             if confidence < MIN_CONFIDENCE:
+                reject("confidence")
                 continue
             if ev <= 0 and not training_observation_mode:
+                reject("non_positive_ev")
                 continue
 
             # SP 数据质量：跳过 sp_value 异常的场次
             if not match_sp_quality.get(match_id, True):
+                reject("odds_quality")
                 continue
 
             # 模型-市场偏差过大时降级 confidence (模型盲区检测)
@@ -495,6 +538,7 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
             if deviation > MODEL_MARKET_DEVIATION_WARN:
                 confidence -= 0.10  # 大幅偏离降低置信度
                 if confidence < MIN_CONFIDENCE:
+                    reject("model_market_deviation")
                     continue
 
             # 多维风险综合（框架 §10）：
@@ -538,7 +582,12 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
                 "status": "ok",
                 "tickets": 0,
                 "total_predictions": len(predictions),
-                "note": "no positive-EV candidates — 今日不投注，未使用额度日终清空",
+                "rejection_counts": rejection_counts,
+                "note": _no_candidate_note(
+                    total_predictions=len(predictions),
+                    rejection_counts=rejection_counts,
+                    minimum_quality=MIN_QUALITY,
+                ),
             }
 
         # ── 6. Per-match: pick single best direction ──
@@ -913,6 +962,10 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
         return {
             "status": "ok",
             "tickets": tickets_created,
+            "note": _ticket_generation_note(
+                tickets_created=tickets_created,
+                candidate_count=len(candidates),
+            ),
             "total_stake": round(total_stake, 2),
             "total_budget": AGENT_DAILY_BUDGET,
             "unused": round(AGENT_DAILY_BUDGET - total_stake, 2),
