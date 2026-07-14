@@ -53,7 +53,9 @@ case "${1:-deploy}" in
             COMPOSE_BAKE=false COMPOSE_PARALLEL_LIMIT=1 docker compose -f "$COMPOSE_FILE" build "$service"
         done
         COMPOSE_BAKE=false COMPOSE_PARALLEL_LIMIT=1 docker compose -f "$COMPOSE_FILE" up --detach --no-build --wait --remove-orphans
+        "$SCRIPT_DIR/apply_local_migrations.sh"
         curl --fail --silent --show-error http://127.0.0.1:8000/health >/dev/null || fail "Backend health check failed after Docker deployment."
+        curl --fail --silent --show-error 'http://127.0.0.1:8000/api/predictions?limit=1' >/dev/null || fail "Prediction contract check failed after database migration."
         curl --fail --silent --show-error http://127.0.0.1:3000/ >/dev/null || fail "Frontend health check failed after Docker deployment."
         log "Deployment complete: GitHub and Docker Desktop are on ${REVISION:0:12}."
         ;;
