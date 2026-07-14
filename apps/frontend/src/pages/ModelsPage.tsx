@@ -6,7 +6,7 @@ import PageHeader from '../shared/components/PageHeader';
 import Card from '../shared/components/Card';
 import DataTable, { type Column } from '../shared/components/DataTable';
 import ErrorState from '../shared/components/ErrorState';
-import { playTypeLabel } from '../shared/constants';
+import { modelNameLabel, optionLabel, playTypeLabel } from '../shared/constants';
 import TeamName from '../shared/components/TeamName';
 
 export default function ModelsPage() {
@@ -60,7 +60,7 @@ export default function ModelsPage() {
       : null;
 
   const columns: Column<Prediction>[] = [
-    { key: 'model_name', title: '模型' },
+    { key: 'model_name', title: '模型', render: (v) => modelNameLabel(String(v)) },
     {
       key: 'home_team',
       title: '主队',
@@ -78,7 +78,7 @@ export default function ModelsPage() {
       key: 'option_code',
       title: '选项',
       width: '60px',
-      render: (v) => <span className="fqp-mono">{String(v)}</span>,
+      render: (v, row) => optionLabel(row.play_type, String(v)),
     },
     {
       key: 'model_probability',
@@ -136,7 +136,9 @@ export default function ModelsPage() {
         <Card title="模型版本" entranceDelay={80}>
           <div className="fqp-stat-card" style={{ padding: 0 }}>
             <div className="fqp-stat-value">{modelNames.length}</div>
-            <div className="fqp-stat-sub">{modelNames.join(', ') || '无'}</div>
+            <div className="fqp-stat-sub">
+              {modelNames.map(modelNameLabel).join('、') || '无'}
+            </div>
           </div>
         </Card>
         <Card title="正EV预测" entranceDelay={160}>
@@ -187,7 +189,7 @@ export default function ModelsPage() {
                   {bestBrier?.avg_brier.toFixed(4)}
                 </div>
                 <div style={{ fontSize: '11px', color: 'var(--fqp-text-muted)' }}>
-                  {bestBrier?.model_name}（{bestBrier?.n} 条）
+                  {bestBrier ? modelNameLabel(bestBrier.model_name) : '—'}（{bestBrier?.n ?? 0} 条）
                 </div>
               </div>
               <div>
@@ -237,7 +239,7 @@ export default function ModelsPage() {
                 {evalModels.map((m) => (
                   <tr key={m.model_name} style={{ borderBottom: '1px solid var(--fqp-border-light)' }}>
                     <td style={tdStyle}>
-                      <strong>{m.model_name}</strong>
+                      <strong>{modelNameLabel(m.model_name)}</strong>
                     </td>
                     <td style={{ ...tdStyle, textAlign: 'center' }} className="fqp-mono">{m.n}</td>
                     <td style={{ ...tdStyle, textAlign: 'right' }} className="fqp-mono">{m.avg_brier.toFixed(4)}</td>

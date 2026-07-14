@@ -1,6 +1,19 @@
 /** Shared label maps — single source of truth for all code→Chinese mappings. */
 
-// ── Play types (canonical codes → Chinese) ──────────────────────
+// ── Model names (internal identifiers → readable business names) ──
+
+export const MODEL_NAME_LABELS: Record<string, string> = {
+  elo_rating: 'Elo 实力评分',
+  market_baseline: '市场赔率基准',
+  dixon_coles: '迪克森-科尔斯比分模型',
+  maher_poisson: '马赫泊松进球模型',
+};
+
+export function modelNameLabel(code: string): string {
+  return MODEL_NAME_LABELS[code] || code;
+}
+
+// ── Play types (canonical codes → Chinese) ──
 
 export const PLAY_TYPE_LABELS: Record<string, string> = {
   spf: '胜平负',
