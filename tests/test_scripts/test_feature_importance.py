@@ -183,6 +183,7 @@ def test_evaluation_summary_assigns_metrics_directly_to_their_model_version() ->
 
     assert result["models"][0]["n"] == 12
     summary_query = conn.cursor_instance.queries[0]
+    assert "DISTINCT ON (source_mem.match_id, source_mem.model_version_id)" in summary_query
     assert "JOIN model_versions mv ON mv.id = mem.model_version_id" in summary_query
     assert "JOIN model_predictions" not in summary_query
 

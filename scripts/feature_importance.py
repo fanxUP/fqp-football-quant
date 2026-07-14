@@ -29,6 +29,37 @@ if _PROJECT_ROOT not in sys.path:
 
 MIN_FEATURE_MODEL_MATCHES = 100
 
+_LATEST_METRICS_CTE = """
+    WITH latest_metrics AS (
+        SELECT DISTINCT ON (source_mem.match_id, source_mem.model_version_id)
+            source_mem.*
+        FROM market_efficiency_metrics source_mem
+        WHERE source_mem.brier_score IS NOT NULL
+        ORDER BY source_mem.match_id,
+                 source_mem.model_version_id,
+                 source_mem.snapshot_time DESC,
+                 source_mem.id DESC
+    )
+"""
+
+_LATEST_PREDICTIONS_CTE = """
+    WITH latest_predictions AS (
+        SELECT DISTINCT ON (
+            source_mp.match_id,
+            source_mp.model_version_id,
+            source_mp.play_type,
+            source_mp.option_code
+        ) source_mp.*
+        FROM model_predictions source_mp
+        ORDER BY source_mp.match_id,
+                 source_mp.model_version_id,
+                 source_mp.play_type,
+                 source_mp.option_code,
+                 source_mp.predict_time DESC,
+                 source_mp.id DESC
+    )
+"""
+
 # ---------------------------------------------------------------------------
 # Feature column definitions — must match match_feature_snapshots table
 # ---------------------------------------------------------------------------
@@ -547,7 +578,8 @@ def get_model_comparison_data(conn: Any) -> dict[str, Any]:
 
     # 1. Evaluation metrics from market_efficiency_metrics
     with conn.cursor() as cur:
-        cur.execute("""
+        cur.execute(f"""
+            {_LATEST_METRICS_CTE}
             SELECT
                 mv.model_name,
                 COUNT(*) AS n_predictions,
@@ -556,7 +588,7 @@ def get_model_comparison_data(conn: Any) -> dict[str, Any]:
                 AVG(mem.rps) AS avg_rps,
                 AVG(mem.clv_score) AS avg_clv,
                 AVG(mem.favourite_longshot_score) AS avg_flb_score
-            FROM market_efficiency_metrics mem
+            FROM latest_metrics mem
             JOIN model_versions mv ON mv.id = mem.model_version_id
             WHERE mem.brier_score IS NOT NULL
             GROUP BY mv.model_name
@@ -635,7 +667,8 @@ def get_evaluation_summary(conn: Any) -> dict[str, Any]:
         {"status": "ok", "models": [...], "overall": {...}}
     """
     with conn.cursor() as cur:
-        cur.execute("""
+        cur.execute(f"""
+            {_LATEST_METRICS_CTE}
             SELECT
                 mv.model_name,
                 COUNT(*) AS n,
@@ -643,7 +676,7 @@ def get_evaluation_summary(conn: Any) -> dict[str, Any]:
                 ROUND(AVG(mem.log_loss)::numeric, 4) AS avg_logloss,
                 ROUND(AVG(mem.rps)::numeric, 4) AS avg_rps,
                 ROUND(AVG(mem.clv_score)::numeric, 4) AS avg_clv
-            FROM market_efficiency_metrics mem
+            FROM latest_metrics mem
             JOIN model_versions mv ON mv.id = mem.model_version_id
             WHERE mem.brier_score IS NOT NULL
             GROUP BY mv.model_name
@@ -665,13 +698,13 @@ def get_evaluation_summary(conn: Any) -> dict[str, Any]:
             )
 
         # Overall stats
-        cur.execute("""
+        cur.execute(f"""
+            {_LATEST_METRICS_CTE}
             SELECT
                 COUNT(*) AS total_evaluated,
                 ROUND(AVG(brier_score)::numeric, 4) AS overall_brier,
                 ROUND(AVG(log_loss)::numeric, 4) AS overall_logloss
-            FROM market_efficiency_metrics
-            WHERE brier_score IS NOT NULL
+            FROM latest_metrics
         """)
         overall_row = cur.fetchone()
         overall = {
@@ -702,7 +735,8 @@ def get_calibration_data(
 
     with conn.cursor() as cur:
         if model_name:
-            cur.execute("""
+            cur.execute(f"""
+                {_LATEST_PREDICTIONS_CTE}
                 SELECT
                     mp.model_probability,
                     CASE
@@ -711,7 +745,7 @@ def get_calibration_data(
                         WHEN r.full_home_goals < r.full_away_goals AND mp.option_code = '0' THEN 1
                         ELSE 0
                     END AS is_correct
-                FROM model_predictions mp
+                FROM latest_predictions mp
                 JOIN model_versions mv ON mv.id = mp.model_version_id
                 JOIN official_results r ON r.match_id = mp.match_id
                 WHERE mv.model_name = %s
@@ -721,7 +755,8 @@ def get_calibration_data(
                 LIMIT 2000
             """, (model_name,))
         else:
-            cur.execute("""
+            cur.execute(f"""
+                {_LATEST_PREDICTIONS_CTE}
                 SELECT
                     mp.model_probability,
                     CASE
@@ -730,7 +765,7 @@ def get_calibration_data(
                         WHEN r.full_home_goals < r.full_away_goals AND mp.option_code = '0' THEN 1
                         ELSE 0
                     END AS is_correct
-                FROM model_predictions mp
+                FROM latest_predictions mp
                 JOIN official_results r ON r.match_id = mp.match_id
                 WHERE mp.play_type = 'spf'
                   AND mp.model_probability IS NOT NULL
@@ -780,14 +815,15 @@ def get_condition_performance(
     """
     if dimension == "league":
         with conn.cursor() as cur:
-            cur.execute("""
+            cur.execute(f"""
+                {_LATEST_METRICS_CTE}
                 SELECT
                     m.league_name,
                     mv.model_name,
                     COUNT(*) AS n,
                     ROUND(AVG(mem.brier_score)::numeric, 4) AS avg_brier,
                     ROUND(AVG(mem.log_loss)::numeric, 4) AS avg_logloss
-                FROM market_efficiency_metrics mem
+                FROM latest_metrics mem
                 JOIN model_versions mv ON mv.id = mem.model_version_id
                 JOIN official_matches m ON m.id = mem.match_id
                 WHERE mem.brier_score IS NOT NULL
@@ -801,7 +837,8 @@ def get_condition_performance(
 
     elif dimension == "odds_range":
         with conn.cursor() as cur:
-            cur.execute("""
+            cur.execute(f"""
+                {_LATEST_METRICS_CTE}
                 SELECT
                     CASE
                         WHEN mp_home.market_probability < 0.30 THEN '低概率 (<30%)'
@@ -813,7 +850,7 @@ def get_condition_performance(
                     mv.model_name,
                     COUNT(*) AS n,
                     ROUND(AVG(mem.brier_score)::numeric, 4) AS avg_brier
-                FROM market_efficiency_metrics mem
+                FROM latest_metrics mem
                 JOIN model_versions mv ON mv.id = mem.model_version_id
                 JOIN model_predictions mp_home ON mp_home.match_id = mem.match_id
                     AND mp_home.model_version_id = mem.model_version_id
@@ -830,7 +867,8 @@ def get_condition_performance(
 
     elif dimension == "confidence":
         with conn.cursor() as cur:
-            cur.execute("""
+            cur.execute(f"""
+                {_LATEST_METRICS_CTE}
                 SELECT
                     CASE
                         WHEN mp_home.confidence_score < 0.3 THEN '低信心 (<30%)'
@@ -841,7 +879,7 @@ def get_condition_performance(
                     mv.model_name,
                     COUNT(*) AS n,
                     ROUND(AVG(mem.brier_score)::numeric, 4) AS avg_brier
-                FROM market_efficiency_metrics mem
+                FROM latest_metrics mem
                 JOIN model_versions mv ON mv.id = mem.model_version_id
                 JOIN model_predictions mp_home ON mp_home.match_id = mem.match_id
                     AND mp_home.model_version_id = mem.model_version_id
@@ -875,7 +913,8 @@ def recommend_best_combos(conn: Any, min_samples: int = 5, top_n: int = 15) -> l
     Handles per-play-type result column mapping (spf/rqspf/total_goals/score/half_full).
     Only includes combos with ≥ min_samples settled predictions.
     """
-    sql = """
+    sql = f"""
+        {_LATEST_PREDICTIONS_CTE}
         SELECT
             mv.model_name,
             mp.play_type,
@@ -902,7 +941,7 @@ def recommend_best_combos(conn: Any, min_samples: int = 5, top_n: int = 15) -> l
                     END
                 )::numeric / NULLIF(COUNT(*), 0)::numeric, 4
             ) AS hit_rate
-        FROM model_predictions mp
+        FROM latest_predictions mp
         JOIN model_versions mv ON mv.id = mp.model_version_id
         JOIN official_results r ON r.match_id = mp.match_id
         WHERE r.result_status = 'final'
