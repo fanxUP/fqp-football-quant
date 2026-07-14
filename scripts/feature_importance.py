@@ -545,8 +545,7 @@ def get_model_comparison_data(conn: Any) -> dict[str, Any]:
                 AVG(mem.clv_score) AS avg_clv,
                 AVG(mem.favourite_longshot_score) AS avg_flb_score
             FROM market_efficiency_metrics mem
-            JOIN model_predictions mp ON mp.match_id = mem.match_id AND mp.play_type = mem.play_type AND mp.option_code = mem.option_code
-            JOIN model_versions mv ON mv.id = mp.model_version_id
+            JOIN model_versions mv ON mv.id = mem.model_version_id
             WHERE mem.brier_score IS NOT NULL
             GROUP BY mv.model_name
             ORDER BY mv.model_name
@@ -568,7 +567,7 @@ def get_model_comparison_data(conn: Any) -> dict[str, Any]:
     # 2. Backtest performance (latest aggregate)
     with conn.cursor() as cur:
         cur.execute("""
-            SELECT
+            SELECT DISTINCT ON (brr.model_name)
                 brr.model_name,
                 brr.hit_rate,
                 brr.roi,
@@ -580,7 +579,7 @@ def get_model_comparison_data(conn: Any) -> dict[str, Any]:
             JOIN backtest_runs br ON br.id = brr.run_id
             WHERE brr.window_index IS NULL
               AND br.status = 'completed'
-            ORDER BY br.created_at DESC
+            ORDER BY brr.model_name, br.created_at DESC, br.id DESC
         """)
         columns = [desc[0] for desc in cur.description]
         for row in cur.fetchall():
@@ -633,8 +632,7 @@ def get_evaluation_summary(conn: Any) -> dict[str, Any]:
                 ROUND(AVG(mem.rps)::numeric, 4) AS avg_rps,
                 ROUND(AVG(mem.clv_score)::numeric, 4) AS avg_clv
             FROM market_efficiency_metrics mem
-            JOIN model_predictions mp ON mp.match_id = mem.match_id AND mp.play_type = mem.play_type AND mp.option_code = mem.option_code
-            JOIN model_versions mv ON mv.id = mp.model_version_id
+            JOIN model_versions mv ON mv.id = mem.model_version_id
             WHERE mem.brier_score IS NOT NULL
             GROUP BY mv.model_name
             ORDER BY avg_brier ASC
@@ -778,8 +776,7 @@ def get_condition_performance(
                     ROUND(AVG(mem.brier_score)::numeric, 4) AS avg_brier,
                     ROUND(AVG(mem.log_loss)::numeric, 4) AS avg_logloss
                 FROM market_efficiency_metrics mem
-                JOIN model_predictions mp ON mp.match_id = mem.match_id AND mp.play_type = mem.play_type AND mp.option_code = mem.option_code
-            JOIN model_versions mv ON mv.id = mp.model_version_id
+                JOIN model_versions mv ON mv.id = mem.model_version_id
                 JOIN official_matches m ON m.id = mem.match_id
                 WHERE mem.brier_score IS NOT NULL
                   AND m.league_name IS NOT NULL
@@ -805,13 +802,12 @@ def get_condition_performance(
                     COUNT(*) AS n,
                     ROUND(AVG(mem.brier_score)::numeric, 4) AS avg_brier
                 FROM market_efficiency_metrics mem
-                JOIN model_predictions mp ON mp.match_id = mem.match_id
-                    AND mp.play_type = mem.play_type
-                    AND mp.option_code = mem.option_code
-                JOIN model_versions mv ON mv.id = mp.model_version_id
+                JOIN model_versions mv ON mv.id = mem.model_version_id
                 JOIN model_predictions mp_home ON mp_home.match_id = mem.match_id
+                    AND mp_home.model_version_id = mem.model_version_id
                     AND mp_home.play_type = mem.play_type
                     AND mp_home.option_code = '3'
+                    AND mp_home.predict_time = mem.snapshot_time
                 WHERE mem.brier_score IS NOT NULL
                 GROUP BY odds_range, mv.model_name
                 HAVING COUNT(*) >= 3
@@ -834,13 +830,12 @@ def get_condition_performance(
                     COUNT(*) AS n,
                     ROUND(AVG(mem.brier_score)::numeric, 4) AS avg_brier
                 FROM market_efficiency_metrics mem
-                JOIN model_predictions mp ON mp.match_id = mem.match_id
-                    AND mp.play_type = mem.play_type
-                    AND mp.option_code = mem.option_code
-                JOIN model_versions mv ON mv.id = mp.model_version_id
+                JOIN model_versions mv ON mv.id = mem.model_version_id
                 JOIN model_predictions mp_home ON mp_home.match_id = mem.match_id
+                    AND mp_home.model_version_id = mem.model_version_id
                     AND mp_home.play_type = mem.play_type
                     AND mp_home.option_code = '3'
+                    AND mp_home.predict_time = mem.snapshot_time
                 WHERE mem.brier_score IS NOT NULL
                 GROUP BY confidence_range, mv.model_name
                 HAVING COUNT(*) >= 3

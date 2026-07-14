@@ -39,6 +39,45 @@ class FakeConnection:
         return FakeCursor()
 
 
+class EvaluationCursor:
+    def __init__(self) -> None:
+        self.queries: list[str] = []
+        self._result_index = 0
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args) -> None:
+        return None
+
+    def execute(self, query: str, *_args) -> None:
+        self.queries.append(" ".join(query.split()))
+
+    @property
+    def description(self):
+        if self._result_index == 0:
+            return [
+                ("model_name",), ("n",), ("avg_brier",),
+                ("avg_logloss",), ("avg_rps",), ("avg_clv",),
+            ]
+        return [("total_evaluated",), ("overall_brier",), ("overall_logloss",)]
+
+    def fetchall(self):
+        self._result_index = 1
+        return [("elo_rating", 12, 0.61, 1.01, 0.20, 0.03)]
+
+    def fetchone(self):
+        return (12, 0.61, 1.01)
+
+
+class EvaluationConnection:
+    def __init__(self) -> None:
+        self.cursor_instance = EvaluationCursor()
+
+    def cursor(self) -> EvaluationCursor:
+        return self.cursor_instance
+
+
 def test_training_defers_shap_explainer_until_prediction_explanation(monkeypatch) -> None:
     classifier = FakeClassifier()
     classifier_factory = Mock(return_value=classifier)
@@ -110,3 +149,14 @@ def test_prediction_stays_available_when_optional_shap_setup_fails(monkeypatch) 
     assert result["status"] == "ok"
     assert result["shap_values"] == []
     assert result["predicted_probs"] == {"home": 0.5, "draw": 0.3, "away": 0.2}
+
+
+def test_evaluation_summary_assigns_metrics_directly_to_their_model_version() -> None:
+    conn = EvaluationConnection()
+
+    result = feature_importance.get_evaluation_summary(conn)
+
+    assert result["models"][0]["n"] == 12
+    summary_query = conn.cursor_instance.queries[0]
+    assert "JOIN model_versions mv ON mv.id = mem.model_version_id" in summary_query
+    assert "JOIN model_predictions" not in summary_query
