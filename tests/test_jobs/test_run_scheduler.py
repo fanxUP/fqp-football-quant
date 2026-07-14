@@ -68,6 +68,20 @@ def test_scheduler_refreshes_official_schedule_metadata_every_30_minutes():
     assert "**OFFICIAL_SCHEDULE_CRON" in source
 
 
+def test_scheduler_dispatches_due_odds_captures_each_minute():
+    from pathlib import Path
+
+    source = Path("scripts/jobs/run_scheduler.py").read_text()
+    assert (
+        'scheduler.add_job(\n                lambda: __import__(\n                    "scripts.jobs.run_official_odds_snapshot"'
+        in source
+    )
+    assert (
+        '"interval",\n                minutes=1,\n                id="crawl_official_odds"'
+        in source
+    )
+
+
 def test_scheduler_defaults_to_shanghai_timezone(monkeypatch):
     monkeypatch.delenv("FQP_TIMEZONE", raising=False)
 

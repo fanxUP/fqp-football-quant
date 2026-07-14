@@ -24,7 +24,6 @@ from scripts.official_storage import (
     record_official_collection_status,
     store_markets,
     store_matches,
-    store_odds_snapshots,
     store_pool_issue,
     store_pool_issue_matches,
     store_results,
@@ -559,84 +558,10 @@ def crawl_official_schedule(business_date: str) -> dict[str, Any]:
 
 
 def crawl_official_odds_snapshot(business_date: str) -> dict[str, Any]:
-    """Take an odds snapshot for all active matches on the given date.
+    """Compatibility wrapper around the durable due-capture dispatcher."""
+    from scripts.official_odds_capture import collect_due_official_odds
 
-    Called by the scheduler every 30 min and by the worker's polling loop.
-    """
-    started = _now()
-    client = SportteryClient()
-    try:
-        t0 = time.monotonic()
-        raw = client.get_uniform_match_calculator()
-        latency_ms = int((time.monotonic() - t0) * 1000)
-
-        matches = parse_matches_from_response(raw, business_date)
-        if not matches:
-            client.close()
-            return {"status": "ok", "matches_processed": 0, "snapshots_inserted": 0}
-
-        total_snapshots = 0
-        # A row represents this collector run. Keep the official
-        # ``lastUpdateTime`` in raw_json, but timestamp the append-only
-        # snapshot at collection time just like the source periodic exporter.
-        snap_time = _now()
-
-        with get_db() as conn:
-            for m in matches:
-                code = m["official_match_code"]
-                bdate = m["business_date"]
-                with conn.cursor() as cur:
-                    cur.execute(
-                        "SELECT id FROM official_matches "
-                        "WHERE official_match_code = %s AND business_date = %s",
-                        (code, bdate),
-                    )
-                    row = cur.fetchone()
-                if row is None:
-                    continue
-                match_id = row[0]
-                store_markets(conn, match_id, m.get("_markets", []))
-                snapshots = parse_odds_snapshots_from_match(
-                    m.get("raw_json", {}), snapshot_time=snap_time
-                )
-                if snapshots:
-                    result = store_odds_snapshots(
-                        conn, match_id=match_id, market_id=None, snapshots=snapshots
-                    )
-                    total_snapshots += result["inserted"]
-
-            log_crawl(
-                conn,
-                source_name="sporttery",
-                crawl_type="odds_snapshot",
-                status="ok",
-                records_found=len(matches),
-                records_inserted=total_snapshots,
-                started_at=started,
-            )
-            update_health(conn, "sporttery", "official", "ok", latency_ms)
-
-        client.close()
-        return {
-            "status": "ok",
-            "matches_processed": len(matches),
-            "snapshots_inserted": total_snapshots,
-            "latency_ms": latency_ms,
-        }
-
-    except Exception as e:
-        client.close()
-        with get_db() as conn:
-            log_crawl(
-                conn,
-                source_name="sporttery",
-                crawl_type="odds_snapshot",
-                status="error",
-                error_message=str(e),
-                started_at=started,
-            )
-            update_health(conn, "sporttery", "official", "error", 0, str(e))
-        return {"status": "error", "error": str(e)}
+    return collect_due_official_odds()
 
 
 def crawl_official_results(begin_date: str, end_date: str) -> dict[str, Any]:
@@ -830,11 +755,10 @@ def _crawl_results_via_500(
 
 
 def crawl_official_schedule_v2(business_date: str | None = None) -> dict[str, Any]:
-    """Fetch match schedule + odds using uniform API (WAF-free).
+    """Fetch match and market metadata using the uniform API (WAF-free).
 
-    Uses getMatchListV1.qry (all matches) and getFixedBonusV1.qry (per-match
-    odds history). Falls back to original crawl_official_schedule if uniform API
-    fails.
+    Odds snapshots are intentionally written only by the dedicated odds
+    collector, which prevents duplicate :10/:40 history rows.
     """
     started = _now()
     client = SportteryClient()
@@ -860,13 +784,12 @@ def crawl_official_schedule_v2(business_date: str | None = None) -> dict[str, An
 
         # 3. Store matches
         total_inserted, total_updated = 0, 0
-        snapshots_inserted = 0
         with get_db() as conn:
             match_result = store_matches(conn, matches)
             total_inserted = match_result.get("inserted", 0)
             total_updated = match_result.get("updated", 0)
 
-            # 4. Store markets + odds snapshots for each match
+            # 4. Store market availability and permissions for each match.
             for m in matches:
                 code = m["official_match_code"]
                 bdate = m["business_date"]
@@ -884,17 +807,6 @@ def crawl_official_schedule_v2(business_date: str | None = None) -> dict[str, An
                 # Store markets
                 store_markets(conn, match_id, m.get("_markets", []))
 
-                # Store odds snapshots (from raw_json oddsList)
-                snap_time = _now()
-                snapshots = parse_odds_snapshots_from_match(
-                    m.get("raw_json", {}), snapshot_time=snap_time
-                )
-                if snapshots:
-                    snap_result = store_odds_snapshots(
-                        conn, match_id=match_id, market_id=None, snapshots=snapshots
-                    )
-                    snapshots_inserted += snap_result.get("inserted", 0)
-
             # 5. Log
             log_crawl(
                 conn, source_name="sporttery_v2", crawl_type="schedule",
@@ -910,7 +822,7 @@ def crawl_official_schedule_v2(business_date: str | None = None) -> dict[str, An
             "matches_found": len(matches),
             "matches_inserted": total_inserted,
             "matches_updated": total_updated,
-            "snapshots_inserted": snapshots_inserted,
+            "snapshots_inserted": 0,
             "latency_ms": latency_ms,
         }
 

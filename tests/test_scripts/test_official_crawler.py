@@ -3,6 +3,7 @@ from unittest.mock import ANY, MagicMock, patch
 from scripts.official_crawler import (
     crawl_official_odds_snapshot,
     crawl_official_results,
+    crawl_official_schedule_v2,
     parse_matches_from_response,
     parse_odds_snapshots_from_match,
     parse_results_from_response,
@@ -208,38 +209,48 @@ def test_parse_official_result_preserves_numeric_zero_scores():
     assert result["spf_result"] == "0"
 
 
-def test_odds_snapshot_uses_one_uniform_calculator_response_for_current_full_odds():
+def test_legacy_odds_snapshot_entrypoint_uses_durable_dispatcher():
+    expected = {"status": "ok", "matches_due": 1, "snapshots_inserted": 54}
+
+    with patch(
+        "scripts.official_odds_capture.collect_due_official_odds", return_value=expected
+    ) as collect:
+        result = crawl_official_odds_snapshot("2026-07-10")
+
+    assert result == expected
+    collect.assert_called_once_with()
+
+
+def test_schedule_refresh_updates_metadata_without_writing_odds_snapshots():
     client = MagicMock()
-    client.get_uniform_match_calculator.return_value = {
-        "value": {"lastUpdateTime": "2026-07-10 12:00:00"}
-    }
+    client.get_uniform_match_list.return_value = {"value": {"matchInfoList": []}}
     connection = MagicMock()
     cursor = connection.cursor.return_value.__enter__.return_value
     cursor.fetchone.return_value = (12,)
-    matches = [{
-        "official_match_code": "周五098",
-        "business_date": "2026-07-10",
-        "raw_json": {"matchNumStr": "周五098"},
-        "_markets": [{"play_type": "spf", "is_open": True}],
-    }]
-    snapshots = [{"play_type": "spf", "option_code": "h", "sp_value": 2.1}]
+    matches = [
+        {
+            "official_match_code": "周五098",
+            "business_date": "2026-07-10",
+            "_markets": [{"play_type": "spf", "is_open": True}],
+            "raw_json": {"matchId": "2040466"},
+        }
+    ]
 
-    with patch("scripts.official_crawler.SportteryClient", return_value=client), \
-         patch("scripts.official_crawler.parse_matches_from_response", return_value=matches), \
-         patch("scripts.official_crawler.parse_odds_snapshots_from_match", return_value=snapshots) as parse_odds, \
-         patch("scripts.official_crawler.get_db") as get_db, \
-         patch("scripts.official_crawler.store_markets") as store_markets, \
-         patch("scripts.official_crawler.store_odds_snapshots", return_value={"inserted": 1, "errors": []}), \
-         patch("scripts.official_crawler._now", return_value="2026-07-10T12:30:00"), \
-         patch("scripts.official_crawler.log_crawl"), \
-         patch("scripts.official_crawler.update_health"):
+    with (
+        patch("scripts.official_crawler.SportteryClient", return_value=client),
+        patch("scripts.official_crawler.parse_matches_from_response", return_value=matches),
+        patch("scripts.official_crawler.get_db") as get_db,
+        patch("scripts.official_crawler.store_matches", return_value={"inserted": 1, "updated": 0}),
+        patch("scripts.official_crawler.store_markets") as store_markets,
+        patch("scripts.official_crawler.parse_odds_snapshots_from_match") as parse_odds,
+        patch("scripts.official_crawler.log_crawl"),
+        patch("scripts.official_crawler.update_health"),
+    ):
         get_db.return_value.__enter__.return_value = connection
 
-        result = crawl_official_odds_snapshot("2026-07-10")
+        result = crawl_official_schedule_v2("2026-07-10")
 
     assert result["status"] == "ok"
-    assert result["snapshots_inserted"] == 1
-    client.get_uniform_match_calculator.assert_called_once_with()
-    client.get_uniform_fixed_bonus.assert_not_called()
+    assert result["snapshots_inserted"] == 0
     store_markets.assert_called_once_with(connection, 12, matches[0]["_markets"])
-    parse_odds.assert_called_once_with(matches[0]["raw_json"], snapshot_time="2026-07-10T12:30:00")
+    parse_odds.assert_not_called()

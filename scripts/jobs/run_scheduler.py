@@ -202,14 +202,14 @@ def main() -> None:
                 id="crawl_official_schedule",
             )
 
-            # Every 30 min between 06:00-23:59: snapshot odds
+            # Each minute: dispatch only matches whose opening, 30-minute, retry,
+            # or exact-kickoff capture is due. The policy prevents extra writes.
             scheduler.add_job(
                 lambda: __import__(
                     "scripts.jobs.run_official_odds_snapshot", fromlist=["run"]
                 ).run(),
-                "cron",
-                minute="*/30",
-                hour="6-23",
+                "interval",
+                minutes=1,
                 id="crawl_official_odds",
             )
 

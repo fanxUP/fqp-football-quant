@@ -2,15 +2,14 @@
 
 Hard rule: never overwrite historical odds snapshots (append-only).
 
-Called by scheduler every 30 min during match hours, or ad-hoc via CLI.
+Called by the minute-level scheduler; the durable policy writes at opening,
+every 30 minutes, retry windows, and kickoff only.
 """
 
 from __future__ import annotations
 
-from datetime import datetime
-
 from scripts.agents.task_queue import finish_tracked_job, start_tracked_job
-from scripts.official_crawler import crawl_official_odds_snapshot
+from scripts.official_odds_capture import collect_due_official_odds
 
 
 def run(dry_run: bool = False) -> dict:
@@ -22,11 +21,10 @@ def run(dry_run: bool = False) -> dict:
     if dry_run:
         return {"status": "dry_run", "note": "odds snapshot would be taken for today's matches"}
 
-    business_date = datetime.now().strftime("%Y-%m-%d")
-    print(f"[run_official_odds_snapshot] taking snapshot for {business_date}")
-    run_id = start_tracked_job("official_odds_snapshot", "data_agent", {"business_date": business_date})
+    print("[run_official_odds_snapshot] dispatching due captures")
+    run_id = start_tracked_job("official_odds_snapshot", "data_agent", {})
     try:
-        result = crawl_official_odds_snapshot(business_date)
+        result = collect_due_official_odds()
     except Exception as exc:
         finish_tracked_job(run_id, "failed", error=str(exc))
         raise
