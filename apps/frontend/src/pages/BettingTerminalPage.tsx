@@ -15,6 +15,7 @@ import MatchCard from '../features/betting-terminal/MatchCard';
 import {
   PLAY_TYPES,
   createSlipItem,
+  findMatchingOption,
   selectedMatchCount,
   selectionKey,
   toCalculateItems,
@@ -125,7 +126,9 @@ export default function BettingTerminalPage() {
       if (!PLAY_TYPES.includes(playType)) return;
       const match = matches.find((item) => item.match_id === recommendation.match_id);
       const market = match?.odds[playType];
-      const option = market?.options.find((item) => item.option_code === recommendation.option_code);
+      const option = market
+        ? findMatchingOption(playType, market.options, recommendation.option_code)
+        : undefined;
       if (match && market && option && (market.is_single_allowed || market.is_pass_allowed)) {
         ids.add(recommendation.prediction_id);
       }
@@ -189,7 +192,9 @@ export default function BettingTerminalPage() {
     const playType = recommendation.play_type as SportteryPlayType;
     const match = matches.find((item) => item.match_id === recommendation.match_id);
     const market = PLAY_TYPES.includes(playType) ? match?.odds[playType] : undefined;
-    const option = market?.options.find((item) => item.option_code === recommendation.option_code);
+    const option = market
+      ? findMatchingOption(playType, market.options, recommendation.option_code)
+      : undefined;
     if (!match || !market || !option || (!market.is_single_allowed && !market.is_pass_allowed)) {
       toast.warning('该推荐当前没有对应的官方可售选项，未加入投注器。');
       return;

@@ -27,6 +27,22 @@ export function selectionKey(matchId: number, playType: string, optionCode: stri
   return `${matchId}:${playType}:${optionCode}`;
 }
 
+function canonicalWinDrawLossCode(optionCode: string): string {
+  return { h: '3', d: '1', a: '0' }[optionCode.toLowerCase()] ?? optionCode;
+}
+
+export function findMatchingOption(
+  playType: SportteryPlayType,
+  options: BettingOddsOption[],
+  recommendationOptionCode: string,
+): BettingOddsOption | undefined {
+  if (playType !== 'spf' && playType !== 'rqspf') {
+    return options.find((option) => option.option_code === recommendationOptionCode);
+  }
+  const target = canonicalWinDrawLossCode(recommendationOptionCode);
+  return options.find((option) => canonicalWinDrawLossCode(option.option_code) === target);
+}
+
 export function createSlipItem(
   match: BettingMatch,
   playType: SportteryPlayType,

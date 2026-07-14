@@ -230,6 +230,34 @@ describe('BettingTerminalPage desktop workbench', () => {
     expect(within(previewPanel).getAllByText('推荐投注').length).toBeGreaterThan(0);
   });
 
+  it('matches model 3/1/0 recommendation codes to official h/d/a options', async () => {
+    apiMocks.matches.mockResolvedValue({
+      matches: [{
+        ...firstMatch,
+        odds: {
+          ...firstMatch.odds,
+          spf: {
+            ...firstMatch.odds.spf,
+            options: [
+              { option_code: 'h', option_name: '主胜', sp_value: 2.04 },
+              { option_code: 'd', option_name: '平', sp_value: 2.95 },
+              { option_code: 'a', option_name: '客胜', sp_value: 3.33 },
+            ],
+          },
+        },
+      }],
+      total: 1,
+    });
+
+    render(<BettingTerminalPage />);
+
+    const recommendationPanel = await screen.findByLabelText('推荐投注');
+    fireEvent.click(within(recommendationPanel).getByRole('button', { name: '加入 主胜' }));
+
+    const previewPanel = screen.getByLabelText('票面预览');
+    await waitFor(() => expect(within(previewPanel).getByText('首尔FC vs 江原FC')).toBeInTheDocument());
+  });
+
   it('opens the complete five-play selector with single and pass flags', async () => {
     render(<BettingTerminalPage />);
     const matchCard = await screen.findByRole('article', { name: '周日203 首尔FC 对 江原FC' });
