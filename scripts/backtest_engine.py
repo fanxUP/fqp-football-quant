@@ -115,6 +115,7 @@ class BetRecord:
     profit: float  # 盈亏 (正=赢, 负=输)
     ev: float
     confidence: float
+    play_type: str = "spf"
 
 
 @dataclass
@@ -160,6 +161,7 @@ class BacktestEngine:
         JOIN: model_predictions → model_versions → official_matches → official_results → official_odds_snapshots
         """
         where = [
+            "mp.prediction_rank = 1",
             "m.match_status = 'Settled'",
             "r.full_home_goals IS NOT NULL",
             "r.full_away_goals IS NOT NULL",
@@ -198,10 +200,24 @@ class BacktestEngine:
         where_clause = " AND ".join(where)
 
         sql = f"""
+            WITH ranked_predictions AS (
+                SELECT
+                    source_mp.*,
+                    DENSE_RANK() OVER (
+                        PARTITION BY source_mp.match_id,
+                                     source_mp.model_version_id,
+                                     source_mp.play_type
+                        ORDER BY source_mp.predict_time DESC
+                    ) AS prediction_rank
+                FROM model_predictions source_mp
+                JOIN official_matches source_m ON source_m.id = source_mp.match_id
+                WHERE source_mp.predict_time < source_m.kickoff_time
+            )
             SELECT
                 mp.match_id,
                 m.business_date AS match_date,
                 mv.model_name,
+                mp.play_type,
                 mp.option_code,
                 mp.model_probability,
                 mp.market_probability,
@@ -222,6 +238,7 @@ class BacktestEngine:
                      FROM official_odds_snapshots oos
                      WHERE oos.match_id = mp.match_id
                        AND oos.play_type = mp.play_type
+                       AND oos.snapshot_time <= mp.predict_time
                        AND oos.option_code = CASE mp.option_code
                            WHEN '3' THEN 'h'
                            WHEN '1' THEN 'd'
@@ -232,7 +249,7 @@ class BacktestEngine:
                      LIMIT 1),
                     0
                 ) AS sp_value
-            FROM model_predictions mp
+            FROM ranked_predictions mp
             JOIN model_versions mv ON mv.id = mp.model_version_id
             JOIN official_matches m ON m.id = mp.match_id
             JOIN official_results r ON r.match_id = mp.match_id
@@ -379,7 +396,7 @@ class BacktestEngine:
         test_end: str,
     ) -> list[BetRecord]:
         """在测试窗口内模拟投注。"""
-        bets: list[BetRecord] = []
+        candidates: dict[tuple[int, str, str], list[dict]] = defaultdict(list)
 
         for row in rows:
             match_date = str(row["match_date"])[:10]
@@ -388,6 +405,24 @@ class BacktestEngine:
 
             if not self._should_bet(row):
                 continue
+
+            key = (
+                int(row["match_id"]),
+                str(row["model_name"]),
+                str(row.get("play_type") or "spf"),
+            )
+            candidates[key].append(row)
+
+        bets: list[BetRecord] = []
+        for candidate_rows in candidates.values():
+            row = max(
+                candidate_rows,
+                key=lambda item: (
+                    float(item.get("ev", 0)),
+                    float(item.get("model_probability", 0)),
+                ),
+            )
+            match_date = str(row["match_date"])[:10]
 
             sp = float(row.get("sp_value", 0))
             if sp <= 0:
@@ -417,6 +452,7 @@ class BacktestEngine:
                     profit=profit,
                     ev=float(row.get("ev", 0)),
                     confidence=float(row.get("confidence_score", 0)),
+                    play_type=str(row.get("play_type") or "spf"),
                 )
             )
 
@@ -481,17 +517,18 @@ class BacktestEngine:
 
         # 资金曲线 + 最大回撤 + 最长连亏
         equity_curve: list[dict] = []
-        bankroll = 0.0
-        peak = 0.0
+        initial_bankroll = 100.0
+        bankroll = initial_bankroll
+        peak = initial_bankroll
         max_drawdown = 0.0
         max_drawdown_pct = 0.0
         current_losing_streak = 0
         longest_losing_streak = 0
-        daily_returns: list[float] = []
-        prev_bankroll = 0.0
+        daily_profits: dict[str, float] = defaultdict(float)
 
         for b in bets:
             bankroll += b.profit
+            daily_profits[b.match_date] += b.profit
             if bankroll > peak:
                 peak = bankroll
             drawdown = peak - bankroll
@@ -508,10 +545,6 @@ class BacktestEngine:
             else:
                 current_losing_streak = 0
 
-            if prev_bankroll > 0:
-                daily_returns.append((bankroll - prev_bankroll) / prev_bankroll)
-            prev_bankroll = bankroll
-
             equity_curve.append(
                 {
                     "date": b.match_date,
@@ -520,7 +553,8 @@ class BacktestEngine:
                 }
             )
 
-        # Sharpe ratio (annualized, assuming 1 bet ≈ 1 "day")
+        # Sharpe ratio uses daily returns against a fixed starting bankroll.
+        daily_returns = [profit / initial_bankroll for profit in daily_profits.values()]
         sharpe = None
         if len(daily_returns) > 1:
             mean_ret = sum(daily_returns) / len(daily_returns)
@@ -590,11 +624,17 @@ class BacktestEngine:
 
         # 3. 逐窗口模拟
         window_results: list[WindowResult] = []
-        all_bets: list[BetRecord] = []
+        all_bets_by_key: dict[tuple[int, str, str, str], BetRecord] = {}
 
         for wcfg in windows_cfg:
             bets = self._simulate_bets(rows, wcfg["test_start"], wcfg["test_end"])
-            all_bets.extend(bets)
+            for bet in bets:
+                all_bets_by_key[(
+                    bet.match_id,
+                    bet.model_name,
+                    bet.play_type,
+                    bet.match_date,
+                )] = bet
 
             # 按模型分组计算指标
             model_bets: dict[str, list[BetRecord]] = defaultdict(list)
@@ -609,11 +649,13 @@ class BacktestEngine:
             ts = wcfg["test_start"]
             te = wcfg["test_end"]
             n_train = (
-                sum(1 for r in rows if str(r["match_date"])[:10] < ts)
+                len({r["match_id"] for r in rows if str(r["match_date"])[:10] < ts})
                 if wcfg.get("train_start")
                 else 0
             )
-            n_test = sum(1 for r in rows if ts <= str(r["match_date"])[:10] <= te)
+            n_test = len({
+                r["match_id"] for r in rows if ts <= str(r["match_date"])[:10] <= te
+            })
 
             window_results.append(
                 WindowResult(
@@ -631,6 +673,7 @@ class BacktestEngine:
             )
 
         # 4. 聚合所有窗口
+        all_bets = list(all_bets_by_key.values())
         all_model_bets: dict[str, list[BetRecord]] = defaultdict(list)
         for b in all_bets:
             all_model_bets[b.model_name].append(b)
@@ -834,9 +877,21 @@ def run_backtest_from_config(
                 run_id = row[0]
         conn.commit()
 
-    # 执行回测
+    # 执行回测。计算异常也必须收口运行状态，避免永久停在 running。
     engine = BacktestEngine(conn, config)
-    result = engine.run()
+    try:
+        result = engine.run()
+    except Exception as e:
+        if store and run_id:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """UPDATE backtest_runs
+                       SET status = 'failed', error_message = %s, finished_at = NOW()
+                       WHERE id = %s""",
+                    (str(e)[:1000], run_id),
+                )
+            conn.commit()
+        raise
 
     # 存储结果
     if store and run_id:
