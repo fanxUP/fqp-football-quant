@@ -1,7 +1,8 @@
-"""Daily job: crawl official match schedule from sporttery.cn.
+"""Recurring job: crawl official match schedule from sporttery.cn.
 
 Uses uniform API (WAF-free) as primary source, falls back to V1 API.
-Called by the scheduler at 00:10 daily (after sporttery publishes the day's matches).
+Called by the scheduler every 30 minutes because Sporttery can publish or reopen
+matches after the first snapshot of the business day.
 Can also be invoked manually: python -m scripts.jobs.crawl_official_schedule [YYYY-MM-DD]
 """
 

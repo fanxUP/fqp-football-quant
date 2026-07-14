@@ -1,4 +1,4 @@
-from scripts.jobs.run_scheduler import _audited_job
+from scripts.jobs.run_scheduler import OFFICIAL_SCHEDULE_CRON, _audited_job
 
 
 def test_self_tracked_job_is_not_wrapped_again():
@@ -42,7 +42,7 @@ def test_scheduler_does_not_refresh_numberless_official_season_archive():
     assert 'id="refresh_official_seasons"' not in source
 
 
-def test_scheduler_reconciles_numbered_event_seasons_before_daily_crawl():
+def test_scheduler_reconciles_numbered_event_seasons_before_schedule_refresh():
     from pathlib import Path
 
     source = Path("scripts/jobs/run_scheduler.py").read_text()
@@ -50,3 +50,11 @@ def test_scheduler_reconciles_numbered_event_seasons_before_daily_crawl():
     assert source.index('id="reconcile_event_seasons"') < source.index(
         'id="crawl_official_schedule"'
     )
+
+
+def test_scheduler_refreshes_official_schedule_metadata_every_30_minutes():
+    from pathlib import Path
+
+    source = Path("scripts/jobs/run_scheduler.py").read_text()
+    assert OFFICIAL_SCHEDULE_CRON == {"minute": "10,40"}
+    assert "**OFFICIAL_SCHEDULE_CRON" in source

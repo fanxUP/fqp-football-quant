@@ -14,6 +14,10 @@ from collections.abc import Callable
 from datetime import datetime
 from typing import Any
 
+# Sporttery may add matches or change sale/pool permissions after midnight.
+# Refresh at :10 and :40 so the betting terminal never relies on a stale daily snapshot.
+OFFICIAL_SCHEDULE_CRON = {"minute": "10,40"}
+
 
 def _official_source_enabled() -> bool:
     return os.getenv("OFFICIAL_SOURCE_ENABLED", "true").lower() == "true"
@@ -130,14 +134,13 @@ def main() -> None:
                 id="reconcile_event_seasons",
             )
 
-            # Daily: crawl official schedule at 00:10
+            # Every 30 min: refresh official matches, sale states, and pool permissions.
             scheduler.add_job(
                 lambda: __import__(
                     "scripts.jobs.crawl_official_schedule", fromlist=["run"]
                 ).run(),
                 "cron",
-                hour=0,
-                minute=10,
+                **OFFICIAL_SCHEDULE_CRON,
                 id="crawl_official_schedule",
             )
 
