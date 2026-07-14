@@ -26,4 +26,18 @@ describe('DataTable', () => {
     expect(container.querySelectorAll('colgroup col')).toHaveLength(2);
     expect(container.querySelector('colgroup col')?.getAttribute('style')).toContain('width: 80px');
   });
+
+  it('caps row entrance delay so large tables become readable immediately', () => {
+    const columns: Column<Row>[] = [{ key: 'name', title: '名称' }];
+    const rows = Array.from({ length: 200 }, (_, index) => ({
+      id: index + 1,
+      name: `记录 ${index + 1}`,
+    }));
+
+    const { container } = render(<DataTable columns={columns} rows={rows} rowKey={(row) => row.id} />);
+    const lastRow = container.querySelectorAll('tbody tr').item(199);
+
+    expect(lastRow.getAttribute('style')).toContain('300ms');
+    expect(lastRow.getAttribute('style')).not.toContain('5970ms');
+  });
 });
