@@ -5,13 +5,21 @@ import ModelsPage from './ModelsPage';
 const apiMocks = vi.hoisted(() => ({
   predictions: vi.fn(),
   evaluationSummary: vi.fn(),
+  performanceHistory: vi.fn(),
 }));
 
 vi.mock('../core/apiClient', () => ({
   api: {
     predictions: apiMocks.predictions,
-    analysis: { evaluationSummary: apiMocks.evaluationSummary },
+    analysis: {
+      evaluationSummary: apiMocks.evaluationSummary,
+      performanceHistory: apiMocks.performanceHistory,
+    },
   },
+}));
+
+vi.mock('../visualization/ModelPerformanceCharts', () => ({
+  default: () => <div>五种玩法模型曲线</div>,
 }));
 
 describe('ModelsPage', () => {
@@ -53,6 +61,12 @@ describe('ModelsPage', () => {
       ],
       overall: { total_evaluated: 10, overall_brier: 0.2, overall_logloss: 0.5 },
     });
+    apiMocks.performanceHistory.mockResolvedValue({
+      status: 'ok',
+      metric: 'rolling_hit_rate',
+      window: 20,
+      points: [],
+    });
   });
 
   it('将模型内部代码统一显示为易懂的中文名称', async () => {
@@ -64,5 +78,6 @@ describe('ModelsPage', () => {
     expect(screen.getByText('最终概率')).toBeInTheDocument();
     expect(screen.getByText('特征已修正')).toBeInTheDocument();
     expect(screen.queryByText('elo_rating')).not.toBeInTheDocument();
+    expect(screen.getByText('五种玩法模型曲线')).toBeInTheDocument();
   });
 });

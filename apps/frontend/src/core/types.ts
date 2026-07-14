@@ -586,6 +586,21 @@ export interface EvaluationSummary {
   };
 }
 
+export interface ModelPerformancePoint {
+  date: string;
+  play_type: string;
+  model_name: string;
+  hit_rate: number;
+  sample_size: number;
+}
+
+export interface ModelPerformanceHistory {
+  status: string;
+  metric: 'rolling_hit_rate';
+  window: number;
+  points: ModelPerformancePoint[];
+}
+
 export interface CalibrationBin {
   bin_center: number;
   pred_mean: number;

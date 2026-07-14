@@ -292,6 +292,11 @@ export const api = {
     evaluationSummary: () =>
       request<import('./types').EvaluationSummary>('/api/analysis/evaluation/summary'),
 
+    performanceHistory: (params?: { window?: number; days?: number }) =>
+      request<import('./types').ModelPerformanceHistory>(
+        `/api/analysis/evaluation/history${qs({ window: params?.window, days: params?.days })}`,
+      ),
+
     calibration: (params?: { model_name?: string; n_bins?: number }) =>
       request<import('./types').CalibrationData>(
         `/api/analysis/evaluation/calibration${qs({ model_name: params?.model_name, n_bins: params?.n_bins })}`,

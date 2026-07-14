@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../core/apiClient';
-import type { Prediction, EvalModelSummary } from '../core/types';
+import type { Prediction, EvalModelSummary, ModelPerformanceHistory } from '../core/types';
 import { ApiError } from '../core/types';
 import PageHeader from '../shared/components/PageHeader';
 import Card from '../shared/components/Card';
@@ -8,12 +8,21 @@ import DataTable, { type Column } from '../shared/components/DataTable';
 import ErrorState from '../shared/components/ErrorState';
 import { modelNameLabel, optionLabel, playTypeLabel } from '../shared/constants';
 import TeamName from '../shared/components/TeamName';
+import ModelPerformanceCharts from '../visualization/ModelPerformanceCharts';
 
 export default function ModelsPage() {
   const [predictions, setPredictions] = useState<Prediction[]>([]);
   const [evalModels, setEvalModels] = useState<EvalModelSummary[]>([]);
+  const [performanceHistory, setPerformanceHistory] = useState<ModelPerformanceHistory>({
+    status: 'ok',
+    metric: 'rolling_hit_rate',
+    window: 20,
+    points: [],
+  });
   const [loading, setLoading] = useState(true);
   const [evalLoading, setEvalLoading] = useState(true);
+  const [historyLoading, setHistoryLoading] = useState(true);
+  const [historyError, setHistoryError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -25,6 +34,18 @@ export default function ModelsPage() {
       .catch((e) => {
         setError(e instanceof ApiError ? e.message : '加载失败');
         setLoading(false);
+      });
+  }, []);
+
+  useEffect(() => {
+    api.analysis.performanceHistory({ window: 20, days: 365 })
+      .then((res) => {
+        setPerformanceHistory(res);
+        setHistoryLoading(false);
+      })
+      .catch((e) => {
+        setHistoryError(e instanceof ApiError ? e.message : '加载模型曲线失败');
+        setHistoryLoading(false);
       });
   }, []);
 
@@ -177,6 +198,13 @@ export default function ModelsPage() {
           </div>
         </Card>
       </div>
+
+      <ModelPerformanceCharts
+        points={performanceHistory.points}
+        window={performanceHistory.window}
+        loading={historyLoading}
+        error={historyError}
+      />
 
       {/* Real evaluation metrics */}
       <Card title="评估指标" style={{ marginBottom: '20px' }}>
