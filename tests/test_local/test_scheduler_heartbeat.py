@@ -15,6 +15,18 @@ def test_write_heartbeat_and_read_recent(tmp_path):
             assert scheduler_heartbeat.is_scheduler_alive()
 
 
+def test_write_heartbeat_uses_business_timezone(tmp_path, monkeypatch):
+    path = tmp_path / "scheduler_heartbeat.json"
+    monkeypatch.setenv("FQP_TIMEZONE", "Asia/Shanghai")
+
+    with patch.object(scheduler_heartbeat, "HEARTBEAT_PATH", path):
+        timestamp = scheduler_heartbeat.write_heartbeat()
+
+    heartbeat = datetime.fromisoformat(timestamp)
+    assert heartbeat.tzinfo is not None
+    assert heartbeat.utcoffset() == timedelta(hours=8)
+
+
 def test_old_heartbeat_is_not_alive(tmp_path):
     path = tmp_path / "scheduler_heartbeat.json"
     pid_path = tmp_path / "scheduler.pid"
@@ -32,6 +44,23 @@ def test_recent_heartbeat_without_scheduler_pid_is_offline(tmp_path):
     with patch.object(scheduler_heartbeat, "HEARTBEAT_PATH", path), patch.object(scheduler_heartbeat, "PID_PATH", tmp_path / "missing.pid"):
         scheduler_heartbeat.write_heartbeat()
         assert scheduler_heartbeat.is_scheduler_alive() is False
+
+
+def test_shared_heartbeat_does_not_require_cross_container_pid(
+    tmp_path,
+    monkeypatch,
+):
+    path = tmp_path / "scheduler_heartbeat.json"
+    missing_pid = tmp_path / "missing.pid"
+    monkeypatch.setenv("FQP_SCHEDULER_HEARTBEAT_MODE", "shared")
+
+    with patch.object(scheduler_heartbeat, "HEARTBEAT_PATH", path), patch.object(
+        scheduler_heartbeat,
+        "PID_PATH",
+        missing_pid,
+    ):
+        scheduler_heartbeat.write_heartbeat()
+        assert scheduler_heartbeat.is_scheduler_alive() is True
 
 
 def test_scheduler_pid_is_owned_and_only_cleared_by_its_owner(tmp_path):

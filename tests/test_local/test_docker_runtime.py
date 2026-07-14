@@ -18,6 +18,17 @@ def test_frontend_has_a_readiness_healthcheck() -> None:
     assert healthcheck["retries"] >= 5
 
 
+def test_backend_and_scheduler_share_scheduler_heartbeat() -> None:
+    compose = yaml.safe_load(
+        (PROJECT_ROOT / "ops/local/docker-compose.local.yml").read_text(encoding="utf-8")
+    )
+
+    for service_name in ("backend", "scheduler"):
+        service = compose["services"][service_name]
+        assert "../../.runtime:/app/.runtime" in service["volumes"]
+        assert service["environment"]["FQP_SCHEDULER_HEARTBEAT_MODE"] == "shared"
+
+
 def test_deploy_applies_incremental_migrations_before_runtime_contract_check() -> None:
     script = (PROJECT_ROOT / "ops/local/run_local_stack.sh").read_text(encoding="utf-8")
 

@@ -11,8 +11,10 @@ from __future__ import annotations
 import os
 import time
 from collections.abc import Callable
-from datetime import datetime
+from datetime import date, datetime
+from datetime import time as clock_time
 from typing import Any
+from zoneinfo import ZoneInfo
 
 # Sporttery may add matches or change sale/pool permissions after midnight.
 # Refresh at :10 and :40 so the betting terminal never relies on a stale daily snapshot.
@@ -22,6 +24,54 @@ OFFICIAL_SCHEDULE_CRON = {"minute": "10,40"}
 def _scheduler_timezone_name() -> str:
     """Return the business timezone used by every cron trigger."""
     return os.getenv("FQP_TIMEZONE", "Asia/Shanghai")
+
+
+def _business_now(timezone_name: str | None = None) -> datetime:
+    """Return an aware wall-clock time for scheduler decisions."""
+    return datetime.now(ZoneInfo(timezone_name or _scheduler_timezone_name()))
+
+
+def _should_run_recommendation_catchup(
+    now: datetime,
+    decision_status: str | None,
+) -> bool:
+    """Catch up only after 16:00 when today's decision is not terminal."""
+    return (
+        now.timetz().replace(tzinfo=None) >= clock_time(hour=16)
+        and decision_status not in {"purchased", "abstained"}
+    )
+
+
+def _daily_decision_status(decision_date: date) -> str | None:
+    """Read the Agent's terminal decision state for one business date."""
+    from apps.backend.src.db import get_db
+
+    with get_db() as conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT status FROM daily_budget_plans WHERE plan_date = %s",
+            (decision_date,),
+        )
+        row = cur.fetchone()
+    return str(row[0]) if row and row[0] else None
+
+
+def _run_recommendation_catchup() -> dict[str, Any]:
+    """Recover a missed 16:00 recommendation after a scheduler restart."""
+    now = _business_now()
+    decision_status = _daily_decision_status(now.date())
+    if not _should_run_recommendation_catchup(now, decision_status):
+        result = {
+            "status": "skipped",
+            "reason": "before_cutoff" if now.hour < 16 else "decision_exists",
+        }
+        print(f"[scheduler] recommendation startup catch-up: {result}")
+        return result
+
+    from scripts.jobs.run_recommendation_candidate import run
+
+    result = run()
+    print(f"[scheduler] recommendation startup catch-up: {result}")
+    return result
 
 
 def _official_source_enabled() -> bool:
@@ -102,7 +152,7 @@ def main() -> None:
 
             print(f"scheduler heartbeat: {write_heartbeat()}")
 
-        scheduler.add_job(test_heartbeat, "interval", hours=1, id="test_heartbeat")
+        scheduler.add_job(test_heartbeat, "interval", minutes=1, id="test_heartbeat")
         test_heartbeat()
 
         # ----- Stage 7: seed agent registry at startup -----
@@ -119,7 +169,7 @@ def main() -> None:
         scheduler.add_job(
             job_seed_agents,
             "date",
-            run_date=datetime.now(),
+            run_date=_business_now(timezone_name),
             id="seed_agent_registry",
         )
 
@@ -339,6 +389,15 @@ def main() -> None:
                 hour=16,
                 minute=0,
                 id="run_recommendation_candidate",
+            )
+
+            # If the service was offline at 16:00, recover today's decision on
+            # startup. The helper is idempotent against purchased/abstained days.
+            scheduler.add_job(
+                _run_recommendation_catchup,
+                "date",
+                run_date=_business_now(timezone_name),
+                id="run_recommendation_candidate_startup_catchup",
             )
 
             # ----- Stage 5: settlement and review jobs -----
@@ -592,7 +651,10 @@ def main() -> None:
     except ImportError:
         print("APScheduler not available; falling back to basic sleep loop.")
         while True:
-            print(f"scheduler heartbeat: {datetime.now().isoformat(timespec='seconds')}")
+            print(
+                "scheduler heartbeat: "
+                f"{_business_now().isoformat(timespec='seconds')}"
+            )
             time.sleep(3600)
     finally:
         clear_scheduler_pid(scheduler_pid)

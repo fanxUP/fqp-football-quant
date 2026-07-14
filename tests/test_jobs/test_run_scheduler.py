@@ -1,7 +1,11 @@
+from datetime import datetime, timedelta
+
 from scripts.jobs.run_scheduler import (
     OFFICIAL_SCHEDULE_CRON,
     _audited_job,
+    _business_now,
     _scheduler_timezone_name,
+    _should_run_recommendation_catchup,
 )
 
 
@@ -74,3 +78,47 @@ def test_scheduler_timezone_can_be_overridden(monkeypatch):
     monkeypatch.setenv("FQP_TIMEZONE", "Asia/Hong_Kong")
 
     assert _scheduler_timezone_name() == "Asia/Hong_Kong"
+
+
+def test_scheduler_business_time_is_timezone_aware(monkeypatch):
+    monkeypatch.setenv("FQP_TIMEZONE", "Asia/Shanghai")
+
+    now = _business_now()
+
+    assert now.tzinfo is not None
+    assert now.utcoffset() == timedelta(hours=8)
+
+
+def test_scheduler_catches_up_missing_daily_recommendation_after_cutoff():
+    now = datetime.fromisoformat("2026-07-14T17:00:00+08:00")
+
+    assert _should_run_recommendation_catchup(now, decision_status=None) is True
+    assert _should_run_recommendation_catchup(now, decision_status="failed") is True
+
+
+def test_scheduler_does_not_duplicate_terminal_daily_decision():
+    now = datetime.fromisoformat("2026-07-14T17:00:00+08:00")
+
+    assert _should_run_recommendation_catchup(now, decision_status="purchased") is False
+    assert _should_run_recommendation_catchup(now, decision_status="abstained") is False
+
+
+def test_scheduler_waits_for_daily_recommendation_cutoff():
+    now = datetime.fromisoformat("2026-07-14T15:59:59+08:00")
+
+    assert _should_run_recommendation_catchup(now, decision_status=None) is False
+
+
+def test_scheduler_registers_startup_recommendation_catchup():
+    from pathlib import Path
+
+    source = Path("scripts/jobs/run_scheduler.py").read_text()
+    assert 'id="run_recommendation_candidate_startup_catchup"' in source
+    assert "run_date=_business_now(timezone_name)" in source
+
+
+def test_scheduler_refreshes_health_heartbeat_every_minute():
+    from pathlib import Path
+
+    source = Path("scripts/jobs/run_scheduler.py").read_text()
+    assert 'scheduler.add_job(test_heartbeat, "interval", minutes=1' in source

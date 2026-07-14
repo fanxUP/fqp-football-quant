@@ -34,9 +34,12 @@ services:
     ports:
       - "127.0.0.1:${FQP_BACKEND_PORT:-8000}:8000"
     env_file: .env.local
+    environment:
+      FQP_SCHEDULER_HEARTBEAT_MODE: shared
     volumes:
       - ../../apps/backend/src:/app/apps/backend/src
       - ../../scripts:/app/scripts
+      - ../../.runtime:/app/.runtime
     depends_on:
       postgres:
         condition: service_healthy
@@ -100,6 +103,8 @@ services:
       dockerfile: ops/Dockerfile.api
     command: python -u -m scripts.jobs.run_scheduler
     env_file: .env.local
+    environment:
+      FQP_SCHEDULER_HEARTBEAT_MODE: shared
     depends_on:
       postgres:
         condition: service_healthy
@@ -107,6 +112,7 @@ services:
         condition: service_started
     volumes:
       - ../../data/backups:/app/backups
+      - ../../.runtime:/app/.runtime
     labels:
       com.fqp.git.revision: "${FQP_DEPLOY_REVISION:-unknown}"
     restart: unless-stopped
