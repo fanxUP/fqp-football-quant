@@ -39,6 +39,11 @@ function pct(value: number | null | undefined): string {
   return `${value >= 0 ? '+' : ''}${(value * 100).toFixed(1)}%`;
 }
 
+function canDeleteTicket(ticket: BettingTicket): boolean {
+  return ticket.kind === 'real'
+    || (ticket.kind === 'simulation' && ticket.owner === 'me' && ticket.source === 'manual' && ticket.status === 'pending');
+}
+
 function TicketCard({ ticket, deleting, onDelete }: {
   ticket: BettingTicket;
   deleting: boolean;
@@ -163,7 +168,7 @@ function TicketCard({ ticket, deleting, onDelete }: {
           {!ticket.confirmStatus && ticket.source !== 'agent_recommendation' && <span>投注项已在本卡片归档。</span>}
         </div>
 
-        {ticket.kind === 'real' && (
+        {canDeleteTicket(ticket) && (
           <button
             type="button"
             className="fqp-btn fqp-btn-danger"
@@ -258,12 +263,19 @@ export default function TicketsPage() {
   useEffect(() => { fetchTickets(); }, []);
 
   const deleteTicket = async (ticket: BettingTicket) => {
-    if (!window.confirm('删除后无法恢复，确认删除这张彩票吗？')) return;
+    const message = ticket.kind === 'simulation'
+      ? '删除后将退回该票金额，确认删除这张彩票吗？'
+      : '删除后无法恢复，确认删除这张彩票吗？';
+    if (!window.confirm(message)) return;
 
     setDeleteError(null);
     setDeletingTicketId(ticket.legacyId);
     try {
-      await api.betting.deleteTicket(ticket.legacyId);
+      if (ticket.kind === 'simulation') {
+        await api.simulator.tickets.delete(ticket.legacyId);
+      } else {
+        await api.betting.deleteTicket(ticket.legacyId);
+      }
       setTickets((current) => current.filter((item) => item.ticketUid !== ticket.ticketUid));
     } catch (e) {
       setDeleteError(e instanceof ApiError ? e.message : '删除彩票失败');

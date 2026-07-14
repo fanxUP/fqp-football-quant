@@ -5,10 +5,11 @@ import TicketsPage from './TicketsPage';
 const apiMocks = vi.hoisted(() => ({
   tickets: vi.fn(),
   deleteTicket: vi.fn(),
+  deleteSimulationTicket: vi.fn(),
 }));
 
 vi.mock('../core/apiClient', () => ({
-  api: { betting: apiMocks },
+  api: { betting: apiMocks, simulator: { tickets: { delete: apiMocks.deleteSimulationTicket } } },
 }));
 
 const realTicket = {
@@ -29,14 +30,15 @@ describe('TicketsPage', () => {
   beforeEach(() => {
     apiMocks.tickets.mockReset().mockResolvedValue({ tickets: [realTicket, simulationTicket], total: 2 });
     apiMocks.deleteTicket.mockReset().mockResolvedValue({ status: 'ok' });
+    apiMocks.deleteSimulationTicket.mockReset().mockResolvedValue({ status: 'ok', refunded: 2 });
     vi.stubGlobal('confirm', vi.fn(() => true));
   });
 
-  it('confirms then removes a real ticket without exposing deletion for simulation tickets', async () => {
+  it('confirms then removes a real ticket and exposes deletion for pending simulation tickets', async () => {
     render(<TicketsPage />);
 
     const deleteButton = await screen.findByRole('button', { name: '删除彩票 实票 #12' });
-    expect(screen.queryByRole('button', { name: '删除彩票 模拟票 #7' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '删除彩票 模拟票 #7' })).toBeInTheDocument();
 
     fireEvent.click(deleteButton);
 
@@ -44,5 +46,10 @@ describe('TicketsPage', () => {
     await waitFor(() => expect(apiMocks.deleteTicket).toHaveBeenCalledWith(12));
     await waitFor(() => expect(screen.queryByText('real:12')).not.toBeInTheDocument());
     expect(screen.getByText('simulator:7')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '删除彩票 模拟票 #7' }));
+
+    expect(window.confirm).toHaveBeenLastCalledWith('删除后将退回该票金额，确认删除这张彩票吗？');
+    await waitFor(() => expect(apiMocks.deleteSimulationTicket).toHaveBeenCalledWith(7));
   });
 });
