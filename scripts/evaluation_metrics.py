@@ -329,6 +329,10 @@ def run(dry_run: bool = False) -> dict[str, Any]:
             JOIN official_matches m ON m.id = mp.match_id
             WHERE m.match_status = 'Settled'
               AND r.full_home_goals IS NOT NULL
+              AND r.result_status IN ('final', 'confirmed')
+              AND mp.play_type = 'spf'
+              AND mp.option_code IN ('3', '1', '0')
+              AND mp.predict_time < m.kickoff_time
               AND NOT EXISTS (
                   SELECT 1 FROM market_efficiency_metrics mem
                   WHERE mem.match_id = mp.match_id

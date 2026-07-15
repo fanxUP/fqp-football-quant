@@ -34,7 +34,8 @@ router = APIRouter(tags=["analysis"])
 def evaluation_summary():
     """获取所有模型的评估指标摘要（Brier / LogLoss / RPS / CLV）。
 
-    数据来源：market_efficiency_metrics 表。
+    数据来源：market_efficiency_metrics 表中赛前的胜平负预测，
+    且只接受已确认赛果。
     """
     with get_db() as conn:
         return get_evaluation_summary(conn)

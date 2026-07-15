@@ -56,7 +56,7 @@ describe('ModelsPage', () => {
           avg_brier: 0.2,
           avg_logloss: 0.5,
           avg_rps: 0.1,
-          avg_clv: 0.01,
+          avg_clv: null,
         },
       ],
       overall: { total_evaluated: 10, overall_brier: 0.2, overall_logloss: 0.5 },
@@ -81,5 +81,7 @@ describe('ModelsPage', () => {
     expect(screen.getByText('特征已修正')).toBeInTheDocument();
     expect(screen.queryByText('elo_rating')).not.toBeInTheDocument();
     expect(screen.getByText('五种玩法模型曲线')).toBeInTheDocument();
+    expect(screen.getByText('只统计胜平负玩法的赛前预测与已确认赛果')).toBeInTheDocument();
+    expect(screen.getByText('CLV 尚无真实收盘数据，不会用 0 代替')).toBeInTheDocument();
   });
 });

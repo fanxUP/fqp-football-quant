@@ -234,6 +234,10 @@ export default function ModelsPage() {
           </div>
         ) : (
           <>
+            <div style={{ marginBottom: '16px', fontSize: '12px', color: 'var(--fqp-text-muted)' }}>
+              <div>只统计胜平负玩法的赛前预测与已确认赛果</div>
+              <div>CLV 尚无真实收盘数据，不会用 0 代替</div>
+            </div>
             <div style={{ display: 'flex', gap: '32px', flexWrap: 'wrap', marginBottom: '16px' }}>
               <div>
                 <div className="fqp-label">最佳 Brier Score</div>
@@ -265,12 +269,12 @@ export default function ModelsPage() {
                 </div>
               </div>
               <div>
-                <div className="fqp-label">有效评估数</div>
+                <div className="fqp-label">胜平负评估数</div>
                 <div className="fqp-mono" style={{ fontSize: '18px', fontWeight: 700 }}>
                   {evalModels.reduce((s, m) => s + m.n, 0)}
                 </div>
                 <div style={{ fontSize: '11px', color: 'var(--fqp-text-muted)' }}>
-                  独立已结算比赛 × 模型
+                  独立已结算比赛 × 模型（每组一次）
                 </div>
               </div>
             </div>
@@ -298,9 +302,13 @@ export default function ModelsPage() {
                     <td style={{ ...tdStyle, textAlign: 'right' }} className="fqp-mono">{m.avg_logloss.toFixed(4)}</td>
                     <td style={{ ...tdStyle, textAlign: 'right' }} className="fqp-mono">{m.avg_rps.toFixed(4)}</td>
                     <td style={{ ...tdStyle, textAlign: 'right' }} className="fqp-mono">
-                      <span style={{ color: m.avg_clv > 0 ? 'var(--fqp-success)' : 'var(--fqp-red-neon)' }}>
-                        {m.avg_clv >= 0 ? '+' : ''}{m.avg_clv.toFixed(4)}
-                      </span>
+                      {m.avg_clv == null ? (
+                        <span style={{ color: 'var(--fqp-text-muted)' }}>—</span>
+                      ) : (
+                        <span style={{ color: m.avg_clv > 0 ? 'var(--fqp-success)' : 'var(--fqp-red-neon)' }}>
+                          {m.avg_clv >= 0 ? '+' : ''}{m.avg_clv.toFixed(4)}
+                        </span>
+                      )}
                     </td>
                   </tr>
                 ))}

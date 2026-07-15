@@ -34,7 +34,12 @@ _LATEST_METRICS_CTE = """
         SELECT DISTINCT ON (source_mem.match_id, source_mem.model_version_id)
             source_mem.*
         FROM market_efficiency_metrics source_mem
+        JOIN official_matches source_match ON source_match.id = source_mem.match_id
+        JOIN official_results source_result ON source_result.match_id = source_mem.match_id
         WHERE source_mem.brier_score IS NOT NULL
+          AND source_mem.play_type = 'spf'
+          AND source_mem.snapshot_time < source_match.kickoff_time
+          AND source_result.result_status IN ('final', 'confirmed')
         ORDER BY source_mem.match_id,
                  source_mem.model_version_id,
                  source_mem.snapshot_time DESC,
@@ -51,6 +56,10 @@ _LATEST_PREDICTIONS_CTE = """
             source_mp.option_code
         ) source_mp.*
         FROM model_predictions source_mp
+        JOIN official_matches source_match ON source_match.id = source_mp.match_id
+        JOIN official_results source_result ON source_result.match_id = source_mp.match_id
+        WHERE source_mp.predict_time < source_match.kickoff_time
+          AND source_result.result_status IN ('final', 'confirmed')
         ORDER BY source_mp.match_id,
                  source_mp.model_version_id,
                  source_mp.play_type,
@@ -693,7 +702,7 @@ def get_evaluation_summary(conn: Any) -> dict[str, Any]:
                     "avg_brier": float(d["avg_brier"] or 0),
                     "avg_logloss": float(d["avg_logloss"] or 0),
                     "avg_rps": float(d["avg_rps"] or 0),
-                    "avg_clv": float(d["avg_clv"] or 0),
+                    "avg_clv": float(d["avg_clv"]) if d["avg_clv"] is not None else None,
                 }
             )
 

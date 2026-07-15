@@ -618,7 +618,7 @@ export interface EvalModelSummary {
   avg_brier: number;
   avg_logloss: number;
   avg_rps: number;
-  avg_clv: number;
+  avg_clv: number | null;
 }
 
 export interface EvaluationSummary {

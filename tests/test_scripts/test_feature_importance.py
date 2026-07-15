@@ -64,7 +64,7 @@ class EvaluationCursor:
 
     def fetchall(self):
         self._result_index = 1
-        return [("elo_rating", 12, 0.61, 1.01, 0.20, 0.03)]
+        return [("elo_rating", 12, 0.61, 1.01, 0.20, None)]
 
     def fetchone(self):
         return (12, 0.61, 1.01)
@@ -186,6 +186,17 @@ def test_evaluation_summary_assigns_metrics_directly_to_their_model_version() ->
     assert "DISTINCT ON (source_mem.match_id, source_mem.model_version_id)" in summary_query
     assert "JOIN model_versions mv ON mv.id = mem.model_version_id" in summary_query
     assert "JOIN model_predictions" not in summary_query
+    assert "source_mem.snapshot_time < source_match.kickoff_time" in summary_query
+    assert "source_mem.play_type = 'spf'" in summary_query
+    assert "source_result.result_status IN ('final', 'confirmed')" in summary_query
+    assert result["models"][0]["avg_clv"] is None
+
+
+def test_latest_prediction_scope_excludes_post_match_predictions() -> None:
+    query = " ".join(feature_importance._LATEST_PREDICTIONS_CTE.split())
+
+    assert "source_mp.predict_time < source_match.kickoff_time" in query
+    assert "source_result.result_status IN ('final', 'confirmed')" in query
 
 
 def test_feature_training_uses_one_pre_match_snapshot_per_match() -> None:
