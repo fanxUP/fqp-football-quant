@@ -136,7 +136,7 @@
 .metric-positive { color: var(--fqp-metric-positive); }
 .metric-negative { color: var(--fqp-metric-negative); }
 
-[data-background-effect='off'] body { background: var(--fqp-bg); }
+html[data-theme][data-background-effect='off'] body { background: var(--fqp-bg); }
 
 [data-motion='off'] *,
 [data-motion='off'] *::before,

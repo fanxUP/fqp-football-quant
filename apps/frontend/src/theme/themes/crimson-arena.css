@@ -1,0 +1,40 @@
+[data-theme='crimson-arena'] {
+  color-scheme: dark;
+  --fqp-bg: #09090b;
+  --fqp-panel: #111216;
+  --fqp-panel-2: #191a20;
+  --fqp-red: #c91d2e;
+  --fqp-red-neon: #f02d42;
+  --fqp-red-dark: #6f1320;
+  --fqp-accent: #c91d2e;
+  --fqp-accent-strong: #f02d42;
+  --fqp-accent-muted: rgba(201, 29, 46, 0.12);
+  --fqp-border: rgba(183, 187, 196, 0.15);
+  --fqp-border-light: rgba(183, 187, 196, 0.07);
+  --fqp-text: #f5f5f6;
+  --fqp-text-muted: #999aa1;
+  --fqp-success: #35c990;
+  --fqp-warning: #e0a94a;
+  --fqp-info: #7ca7df;
+  --fqp-danger: #f02d42;
+  --fqp-hover-bg: rgba(201, 29, 46, 0.1);
+  --fqp-hover-subtle: rgba(255, 255, 255, 0.028);
+  --fqp-bg-glass: rgba(255, 255, 255, 0.02);
+  --fqp-shadow-red: 0 12px 32px rgba(0, 0, 0, 0.25);
+  --fqp-glow-red: 0 0 20px rgba(201, 29, 46, 0.24);
+  --fqp-chart-1: #f02d42;
+  --fqp-chart-2: #b7bbc4;
+  --fqp-chart-3: #e0a94a;
+  --fqp-chart-4: #35c990;
+  --fqp-chart-5: #a772d5;
+  --fqp-chart-6: #48a9c5;
+  --fqp-chart-text: #f5f5f6;
+  --fqp-chart-text-muted: #999aa1;
+  --fqp-chart-grid: rgba(183, 187, 196, 0.11);
+  --fqp-chart-tooltip: rgba(9, 9, 11, 0.97);
+  --fqp-chart-tooltip-border: rgba(240, 45, 66, 0.24);
+}
+
+[data-theme='crimson-arena'] body {
+  background: radial-gradient(ellipse at 50% -8%, rgba(201, 29, 46, 0.16), transparent 34%), var(--fqp-bg);
+}

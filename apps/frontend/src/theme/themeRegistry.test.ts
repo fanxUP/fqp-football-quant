@@ -7,13 +7,9 @@ describe('theme registry', () => {
     expect(new Set(THEME_REGISTRY.map((theme) => theme.id)).size).toBe(12);
   });
 
-  it('marks the first delivery themes as available', () => {
-    expect(AVAILABLE_THEME_IDS).toEqual([
-      'redline-quant',
-      'black-gold-terminal',
-      'polar-lab',
-      'deep-navy',
-    ]);
+  it('marks all documented themes as available in the completed visual system', () => {
+    expect(AVAILABLE_THEME_IDS).toEqual(THEME_REGISTRY.map((theme) => theme.id));
+    expect(THEME_REGISTRY.every((theme) => theme.available)).toBe(true);
   });
 
   it('provides preview colors and defaults for every theme', () => {

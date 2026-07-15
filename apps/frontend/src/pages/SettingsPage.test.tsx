@@ -8,7 +8,7 @@ import SettingsPage from './SettingsPage';
 describe('SettingsPage appearance settings', () => {
   beforeEach(() => localStorage.clear());
 
-  it('groups all documented themes and disables themes that are still planned', () => {
+  it('groups all documented themes and makes every theme selectable', () => {
     render(<ThemeProvider><SettingsPage /></ThemeProvider>);
 
     expect(screen.getByRole('heading', { name: '专业量化' })).toBeInTheDocument();
@@ -16,7 +16,8 @@ describe('SettingsPage appearance settings', () => {
     expect(screen.getByRole('heading', { name: '科技未来' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: '个性主题' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /黑红量化/ })).toBeEnabled();
-    expect(screen.getByRole('button', { name: /赛博朋克/ })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /赛博朋克/ })).toBeEnabled();
+    expect(screen.getByRole('button', { name: /次元前锋/ })).toBeEnabled();
   });
 
   it('previews a theme and only persists it after applying settings', async () => {
