@@ -8,6 +8,7 @@
   },
   "dependencies": {
     "echarts": "latest",
+    "lightweight-charts": "^5.2.0",
     "react": "latest",
     "react-dom": "latest"
   },

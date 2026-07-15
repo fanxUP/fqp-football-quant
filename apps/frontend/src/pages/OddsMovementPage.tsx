@@ -105,7 +105,12 @@ export default function OddsMovementPage() {
       ) : (
         <div style={{ display: 'grid', gap: 16 }}>
           {matches.map((match) => (
-            <OddsMatchCard key={match.id} match={match} playLabel={PLAY_LABELS[activePlay]} />
+            <OddsMatchCard
+              key={match.id}
+              match={match}
+              playType={activePlay}
+              playLabel={PLAY_LABELS[activePlay]}
+            />
           ))}
         </div>
       )}
