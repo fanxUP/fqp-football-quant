@@ -102,3 +102,15 @@ def test_prediction_review_integrity_migration_cleans_derived_contamination() ->
     assert "mp.predict_time < m.kickoff_time" in migration
     assert "CREATE UNIQUE INDEX IF NOT EXISTS" in migration
     assert "UPDATE daily_reviews" in migration
+
+
+def test_post_kickoff_derivative_migration_preserves_ticket_evidence() -> None:
+    migration = (
+        PROJECT_ROOT / "sql/38_purge_post_kickoff_model_derivatives.sql"
+    ).read_text(encoding="utf-8")
+
+    assert "DELETE FROM model_predictions" in migration
+    assert "DELETE FROM model_committee_votes" in migration
+    assert "DELETE FROM market_efficiency_metrics" in migration
+    assert "predict_time >= m.kickoff_time" in migration
+    assert "simulation_ticket_items" in migration
