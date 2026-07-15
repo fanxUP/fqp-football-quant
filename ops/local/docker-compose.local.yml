@@ -36,6 +36,7 @@ services:
     env_file: .env.local
     environment:
       FQP_SCHEDULER_HEARTBEAT_MODE: shared
+      FQP_API_HEALTH_URL: http://127.0.0.1:8000/health
     volumes:
       - ../../apps/backend/src:/app/apps/backend/src
       - ../../scripts:/app/scripts
@@ -90,6 +91,7 @@ services:
     env_file: .env.local
     environment:
       FQP_ODDS_DISPATCH_OWNER: worker
+      FQP_API_HEALTH_URL: http://backend:8000/health
     depends_on:
       postgres:
         condition: service_healthy

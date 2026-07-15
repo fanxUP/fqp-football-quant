@@ -114,3 +114,12 @@ def test_post_kickoff_derivative_migration_preserves_ticket_evidence() -> None:
     assert "DELETE FROM market_efficiency_metrics" in migration
     assert "predict_time >= m.kickoff_time" in migration
     assert "simulation_ticket_items" in migration
+
+
+def test_all_python_services_probe_an_in_network_api_health_url() -> None:
+    compose = (
+        PROJECT_ROOT / "ops/local/docker-compose.local.yml"
+    ).read_text(encoding="utf-8")
+
+    assert "FQP_API_HEALTH_URL: http://127.0.0.1:8000/health" in compose
+    assert compose.count("FQP_API_HEALTH_URL: http://backend:8000/health") >= 2
