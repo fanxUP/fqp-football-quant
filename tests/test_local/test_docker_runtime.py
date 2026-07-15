@@ -91,3 +91,14 @@ def test_prediction_time_migration_normalizes_existing_rows_to_shanghai() -> Non
     assert "UPDATE model_committee_votes" in migration
     assert "AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Shanghai'" in migration
     assert "ABS(EXTRACT(EPOCH FROM (predict_time - created_at))) < 300" in migration
+
+
+def test_prediction_review_integrity_migration_cleans_derived_contamination() -> None:
+    migration = (
+        PROJECT_ROOT / "sql/37_repair_prediction_review_integrity.sql"
+    ).read_text(encoding="utf-8")
+
+    assert "DELETE FROM prediction_error_analysis" in migration
+    assert "mp.predict_time < m.kickoff_time" in migration
+    assert "CREATE UNIQUE INDEX IF NOT EXISTS" in migration
+    assert "UPDATE daily_reviews" in migration

@@ -24,33 +24,57 @@ def _now() -> str:
 
 
 def run(dry_run: bool = False) -> dict[str, Any]:
-    """Analyze prediction errors for all predictions with confirmed results."""
+    """Analyze one latest pre-match top pick per model and settled SPF match."""
     if dry_run:
         return {"status": "dry_run", "message": "analyze prediction errors (dry run)"}
 
     with get_db() as conn:
-        # 1. Find predictions with confirmed results that haven't been analyzed yet
+        # 1. Build one decision per match/model from the latest pre-match option set.
         with conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT mp.id, mp.match_id, mp.model_version_id,
-                       mp.play_type, mp.option_code,
-                       mp.model_probability, mp.market_probability,
-                       mp.ev, mp.confidence_score, mp.risk_score,
-                       mp.predict_time,
-                       r.spf_result, r.full_home_goals, r.full_away_goals,
-                       mv.model_name
-                FROM model_predictions mp
-                JOIN official_results r ON r.match_id = mp.match_id
-                JOIN model_versions mv ON mv.id = mp.model_version_id
-                WHERE mp.play_type = 'spf'
-                  AND r.result_status = 'confirmed'
-                  AND r.spf_result IS NOT NULL
-                  AND mp.id NOT IN (
-                      SELECT prediction_id FROM prediction_error_analysis
-                      WHERE prediction_id IS NOT NULL
-                  )
-                ORDER BY mp.predict_time DESC
+                WITH latest_options AS (
+                    SELECT DISTINCT ON (
+                        mp.match_id, mp.model_version_id, mp.option_code
+                    )
+                        mp.id, mp.match_id, mp.model_version_id,
+                        mp.play_type, mp.option_code,
+                        mp.model_probability, mp.market_probability,
+                        mp.ev, mp.confidence_score, mp.risk_score,
+                        mp.predict_time,
+                        r.spf_result, r.full_home_goals, r.full_away_goals,
+                        mv.model_name
+                    FROM model_predictions mp
+                    JOIN official_matches m ON m.id = mp.match_id
+                    JOIN official_results r ON r.match_id = mp.match_id
+                    JOIN model_versions mv ON mv.id = mp.model_version_id
+                    WHERE mp.play_type = 'spf'
+                      AND mp.option_code IN ('3', '1', '0')
+                      AND mp.model_probability IS NOT NULL
+                      AND mp.predict_time < m.kickoff_time
+                      AND r.result_status IN ('final', 'confirmed')
+                      AND r.spf_result IS NOT NULL
+                    ORDER BY mp.match_id, mp.model_version_id, mp.option_code,
+                             mp.predict_time DESC, mp.id DESC
+                ), ranked_picks AS (
+                    SELECT latest_options.*,
+                           ROW_NUMBER() OVER (
+                               PARTITION BY match_id, model_version_id
+                               ORDER BY model_probability DESC NULLS LAST,
+                                        option_code, id DESC
+                           ) AS pick_rank
+                    FROM latest_options
+                )
+                SELECT id, match_id, model_version_id,
+                       play_type, option_code,
+                       model_probability, market_probability,
+                       ev, confidence_score, risk_score,
+                       predict_time,
+                       spf_result, full_home_goals, full_away_goals,
+                       model_name
+                FROM ranked_picks
+                WHERE pick_rank = 1
+                ORDER BY predict_time DESC
                 LIMIT 500
                 """
             )
@@ -74,11 +98,11 @@ def run(dry_run: bool = False) -> dict[str, Any]:
             match_id = row[1]
             option_code = row[4]  # predicted "3"/"1"/"0"
             model_prob = float(row[5] or 0)
-            market_prob = float(row[6] or 0)
-            ev = float(row[7] or 0)
-            spf_result = row[12]  # actual "3"/"1"/"0"
-            home_goals = row[13]
-            away_goals = row[14]
+            market_prob = float(row[6]) if row[6] is not None else None
+            ev = float(row[7]) if row[7] is not None else None
+            spf_result = row[11]  # actual "3"/"1"/"0"
+            home_goals = row[12]
+            away_goals = row[13]
 
             is_correct = option_code == spf_result
 
@@ -116,7 +140,7 @@ def run(dry_run: bool = False) -> dict[str, Any]:
                 suggested_fix = "检查球队实力评估是否偏差，审查 odds 隐含概率的 overround 去除方法"
 
             # 4) ODDS_DROP_AFTER_RECOMMENDATION: positive EV but wrong
-            elif ev > 0.03:
+            elif ev is not None and ev > 0.03:
                 error_type = "ODDS_DROP_AFTER_RECOMMENDATION"
                 error_level = "medium"
                 root_cause = f"正 EV（{ev:+.4f}）但预测错误"

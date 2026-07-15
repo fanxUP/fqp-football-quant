@@ -35,7 +35,7 @@ if _PROJECT_ROOT not in sys.path:
 
 # —— 数据结构 ——
 
-CURRENT_METHODOLOGY_VERSION = 3
+CURRENT_METHODOLOGY_VERSION = 4
 
 
 @dataclass
@@ -72,7 +72,7 @@ class BacktestConfig:
 
     def to_dict(self) -> dict:
         return {
-            # v2 起只采用赛前最新预测、预测时点赔率，并使用真实初始资金计算回撤。
+            # v4 起按玩法匹配官方赛果；继续采用赛前最新预测与预测时点赔率。
             # 版本由执行代码决定；旧配置重跑时自动升级，不能由请求覆盖。
             "methodology_version": CURRENT_METHODOLOGY_VERSION,
             "name": self.name,
@@ -229,13 +229,21 @@ class BacktestEngine:
                 mp.ev,
                 mp.confidence_score,
                 mp.predict_time,
-                COALESCE(r.spf_result,
-                    CASE
-                        WHEN r.full_home_goals > r.full_away_goals THEN '3'
-                        WHEN r.full_home_goals = r.full_away_goals THEN '1'
-                        ELSE '0'
-                    END
-                ) AS actual_result,
+                CASE
+                    WHEN mp.play_type = 'spf' THEN COALESCE(
+                        NULLIF(r.spf_result, ''),
+                        CASE
+                            WHEN r.full_home_goals > r.full_away_goals THEN '3'
+                            WHEN r.full_home_goals = r.full_away_goals THEN '1'
+                            ELSE '0'
+                        END
+                    )
+                    WHEN mp.play_type = 'rqspf' THEN NULLIF(r.rqspf_result, '')
+                    WHEN mp.play_type IN ('zjq', 'total_goals') THEN r.total_goals_result
+                    WHEN mp.play_type IN ('bf', 'score') THEN r.score_result
+                    WHEN mp.play_type IN ('bqc', 'half_full')
+                        THEN REPLACE(r.half_full_result, '-', '')
+                END AS actual_result,
                 -- Latest odds snapshot for this match before kickoff
                 -- Odds snapshots use h/d/a, model predictions use 3/1/0
                 COALESCE(
@@ -259,6 +267,7 @@ class BacktestEngine:
             JOIN official_matches m ON m.id = mp.match_id
             JOIN official_results r ON r.match_id = mp.match_id
             WHERE {where_clause}
+              AND r.result_status IN ('final', 'confirmed')
             ORDER BY m.business_date ASC, mp.predict_time ASC
         """
 
@@ -409,6 +418,9 @@ class BacktestEngine:
                 continue
 
             if not self._should_bet(row):
+                continue
+
+            if not row.get("actual_result"):
                 continue
 
             key = (

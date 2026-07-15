@@ -817,6 +817,7 @@ def create_error_analyses_batch(conn: Any, errors: list[dict]) -> int:
             %(root_cause)s, %(model_probability)s, %(market_probability)s,
             %(actual_result)s, %(suggested_fix)s, now()
         )
+        ON CONFLICT DO NOTHING
         RETURNING id
     """
     count = 0

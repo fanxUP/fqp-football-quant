@@ -48,6 +48,7 @@ def _run_impl(review_date: str | None = None, dry_run: bool = False) -> dict[str
                 FROM match_feature_snapshots fs
                 JOIN official_matches m ON m.id = fs.match_id
                 WHERE m.business_date = %s
+                  AND fs.snapshot_time < m.kickoff_time
                 """,
                 (date,),
             )
@@ -61,6 +62,7 @@ def _run_impl(review_date: str | None = None, dry_run: bool = False) -> dict[str
                 FROM model_predictions mp
                 JOIN official_matches m ON m.id = mp.match_id
                 WHERE m.business_date = %s
+                  AND mp.predict_time < m.kickoff_time
                 """,
                 (date,),
             )
@@ -166,8 +168,9 @@ def _run_impl(review_date: str | None = None, dry_run: bool = False) -> dict[str
             cur.execute(
                 """
                 SELECT error_type, COUNT(*) AS cnt
-                FROM prediction_error_analysis
-                WHERE (created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Shanghai')::date = %s
+                FROM prediction_error_analysis pea
+                JOIN official_matches m ON m.id = pea.match_id
+                WHERE m.business_date = %s
                 GROUP BY error_type
                 ORDER BY cnt DESC
                 LIMIT 3

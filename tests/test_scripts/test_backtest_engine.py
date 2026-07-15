@@ -37,6 +37,22 @@ def test_backtest_query_uses_latest_prediction_run_and_asof_odds() -> None:
     assert "oos.snapshot_time <= mp.predict_time" in normalized
 
 
+def test_backtest_query_maps_each_play_type_to_its_own_result() -> None:
+    engine = BacktestEngine(object(), BacktestConfig())
+
+    sql, _params = engine._build_query()
+    normalized = " ".join(sql.split())
+
+    assert "WHEN mp.play_type = 'spf' THEN COALESCE" in normalized
+    assert "r.spf_result" in normalized
+    assert "WHEN mp.play_type = 'rqspf'" in normalized
+    assert "r.rqspf_result" in normalized
+    assert "WHEN mp.play_type IN ('zjq', 'total_goals') THEN r.total_goals_result" in normalized
+    assert "WHEN mp.play_type IN ('bf', 'score') THEN r.score_result" in normalized
+    assert "WHEN mp.play_type IN ('bqc', 'half_full')" in normalized
+    assert "r.result_status IN ('final', 'confirmed')" in normalized
+
+
 def test_backtest_places_only_one_bet_per_match_model_and_play_type() -> None:
     engine = BacktestEngine(
         object(),
@@ -72,13 +88,13 @@ def test_drawdown_is_measured_from_a_real_initial_bankroll() -> None:
 def test_backtest_config_records_current_methodology_version() -> None:
     config = BacktestConfig(name="versioned-backtest")
 
-    assert config.to_dict()["methodology_version"] == 3
+    assert config.to_dict()["methodology_version"] == 4
 
 
 def test_legacy_config_is_upgraded_when_rerun() -> None:
     config = BacktestConfig.from_dict({"name": "legacy-rerun", "methodology_version": 1})
 
-    assert config.to_dict()["methodology_version"] == 3
+    assert config.to_dict()["methodology_version"] == 4
 
 
 def test_backtest_run_is_marked_failed_when_execution_crashes() -> None:
