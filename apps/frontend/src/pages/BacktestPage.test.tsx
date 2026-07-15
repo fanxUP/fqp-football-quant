@@ -1,20 +1,26 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import BacktestPage from './BacktestPage';
 
 const apiMocks = vi.hoisted(() => ({
   list: vi.fn(),
+  get: vi.fn(),
+  backtestEquity: vi.fn(),
 }));
 
 vi.mock('../core/apiClient', () => ({
   api: {
     backtests: {
       list: apiMocks.list,
-      get: vi.fn(),
+      get: apiMocks.get,
       create: vi.fn(),
     },
-    dashboard: { backtestEquity: vi.fn() },
+    dashboard: { backtestEquity: apiMocks.backtestEquity },
   },
+}));
+
+vi.mock('../visualization/backtest/BacktestPerformanceCharts', () => ({
+  default: () => <div aria-label="回测图表分析" />,
 }));
 
 describe('BacktestPage', () => {
@@ -28,5 +34,33 @@ describe('BacktestPage', () => {
 
     expect(await screen.findByText('策略验证')).toBeInTheDocument();
     expect(screen.getByText('滚动时间窗（不重训模型）')).toBeInTheDocument();
+  });
+
+  it('查看回测详情后直接展示图表分析', async () => {
+    apiMocks.list.mockResolvedValue({
+      runs: [{ id: 19, name: '全量回测', status: 'completed', created_at: '2026-07-12' }],
+      total: 1,
+    });
+    apiMocks.get.mockResolvedValue({
+      run: { id: 19 },
+      windows: [],
+      results: [{
+        window_index: null,
+        model_name: 'elo_rating',
+        n_bets: 100,
+        n_wins: 40,
+        hit_rate: 0.4,
+        roi: 0.08,
+        total_profit: 8,
+        max_drawdown_pct: 7,
+      }],
+    });
+    apiMocks.backtestEquity.mockResolvedValue({ data: { series: [] } });
+
+    render(<BacktestPage />);
+    fireEvent.click(await screen.findByRole('button', { name: '查看' }));
+
+    expect(await screen.findByLabelText('回测图表分析')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '📈 查看资金曲线' })).not.toBeInTheDocument();
   });
 });
