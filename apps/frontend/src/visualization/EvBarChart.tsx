@@ -5,6 +5,7 @@ import type { EChartsOption } from 'echarts';
 import ChartCard from '../shared/components/ChartCard';
 import { applyChartTheme, CHART_COLORS } from './chartTheme';
 import type { EvBarItem } from './chartTypes';
+import { useTheme } from '../app/ThemeContext';
 
 interface EvBarChartProps {
   data: EvBarItem[];
@@ -23,6 +24,7 @@ export default function EvBarChart({
   empty,
   emptyReason,
 }: EvBarChartProps) {
+  const { theme } = useTheme();
   const option = useMemo(() => {
     if (!data.length) return null;
     // Sort descending by EV
@@ -68,7 +70,7 @@ export default function EvBarChart({
         },
       ],
     } as EChartsOption);
-  }, [data]);
+  }, [data, theme]);
 
   return (
     <ChartCard

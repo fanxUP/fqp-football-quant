@@ -4,16 +4,10 @@ import type { ModelPerformancePoint } from '../core/types';
 import ChartCard from '../shared/components/ChartCard';
 import { modelNameLabel, playTypeLabel } from '../shared/constants';
 import { applyChartTheme, CHART_COLORS } from './chartTheme';
+import { useTheme } from '../app/ThemeContext';
 
 const PLAY_TYPES = ['spf', 'rqspf', 'bf', 'zjq', 'bqc'] as const;
 const OVERALL_PLAY_TYPE = 'all';
-
-const MODEL_COLORS: Record<string, string> = {
-  elo_rating: CHART_COLORS.blue,
-  market_baseline: CHART_COLORS.amber,
-  dixon_coles: CHART_COLORS.green,
-  maher_poisson: CHART_COLORS.primary,
-};
 
 interface ModelPerformanceChartsProps {
   points: ModelPerformancePoint[];
@@ -31,6 +25,12 @@ export function buildModelPerformanceOption(
 
   const dates = [...new Set(playPoints.map((point) => point.date))].sort();
   const models = [...new Set(playPoints.map((point) => point.model_name))].sort();
+  const modelColors: Record<string, string> = {
+    elo_rating: CHART_COLORS.blue,
+    market_baseline: CHART_COLORS.amber,
+    dixon_coles: CHART_COLORS.green,
+    maher_poisson: CHART_COLORS.primary,
+  };
   const values = new Map(
     playPoints.map((point) => [
       `${point.model_name}:${point.date}`,
@@ -62,7 +62,7 @@ export function buildModelPerformanceOption(
       axisLabel: { formatter: '{value}%' },
     },
     series: models.map((modelName) => {
-      const color = MODEL_COLORS[modelName];
+      const color = modelColors[modelName];
       return {
         name: modelNameLabel(modelName),
         type: 'line',
@@ -84,6 +84,7 @@ export default function ModelPerformanceCharts({
   loading = false,
   error,
 }: ModelPerformanceChartsProps) {
+  const { theme } = useTheme();
   const options = useMemo(
     () => new Map(
       [OVERALL_PLAY_TYPE, ...PLAY_TYPES].map((playType) => [
@@ -91,7 +92,7 @@ export default function ModelPerformanceCharts({
         buildModelPerformanceOption(points, playType),
       ]),
     ),
-    [points],
+    [points, theme],
   );
   const overallOption = options.get(OVERALL_PLAY_TYPE);
 

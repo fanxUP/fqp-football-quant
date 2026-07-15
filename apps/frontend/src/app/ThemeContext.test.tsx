@@ -1,192 +1,102 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { ThemeProvider, useTheme } from '../app/ThemeContext';
-import type { ReactNode } from 'react';
-
-// ---- Helper: component that reads context and exposes it to tests ----
-
-let themeValue: { theme: string; toggleTheme: () => void } | null = null;
+import { ThemeProvider, useTheme } from './ThemeContext';
+import { APPEARANCE_STORAGE_KEY } from '../theme/storage';
 
 function ThemeReader() {
-  themeValue = useTheme();
+  const {
+    appearance,
+    setTheme,
+    updateAppearance,
+    previewAppearance,
+    commitAppearance,
+    cancelPreview,
+    toggleTheme,
+  } = useTheme();
   return (
     <div>
-      <span data-testid="theme-value">{themeValue.theme}</span>
-      <button data-testid="theme-toggle" onClick={themeValue.toggleTheme}>
-        Toggle
-      </button>
+      <span data-testid="theme-value">{appearance.theme}</span>
+      <button type="button" onClick={() => setTheme('black-gold-terminal')}>Black gold</button>
+      <button type="button" onClick={() => updateAppearance({ density: 'terminal', radius: 'square' })}>Terminal density</button>
+      <button type="button" onClick={() => previewAppearance({ ...appearance, theme: 'deep-navy' })}>Preview navy</button>
+      <button type="button" onClick={commitAppearance}>Apply preview</button>
+      <button type="button" onClick={cancelPreview}>Cancel preview</button>
+      <button type="button" onClick={toggleTheme}>Toggle</button>
     </div>
   );
 }
 
-function renderWithTheme(ui: ReactNode) {
-  themeValue = null;
-  return render(<ThemeProvider>{ui}</ThemeProvider>);
-}
-
-// ---- Helper: manage localStorage + DOM attribute ----
-
-function clearStoredTheme() {
-  localStorage.removeItem('fqp-theme');
-  document.documentElement.removeAttribute('data-theme');
-}
-
-// ---- Tests ----
-
 describe('ThemeContext', () => {
   beforeEach(() => {
-    clearStoredTheme();
-    vi.stubGlobal('matchMedia', vi.fn(() => ({
-      matches: false,
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-    })));
+    localStorage.clear();
+    document.documentElement.removeAttribute('data-theme');
   });
 
-  // ------------------------------------------------------------------
-  // Initialisation
-  // ------------------------------------------------------------------
+  it('uses the redline quant appearance by default', () => {
+    render(<ThemeProvider><ThemeReader /></ThemeProvider>);
 
-  describe('initialisation', () => {
-    it('defaults to dark when nothing is stored and system prefers dark', () => {
-      renderWithTheme(<ThemeReader />);
-      expect(screen.getByTestId('theme-value').textContent).toBe('dark');
-    });
-
-    it('respects localStorage when "light" is stored', () => {
-      localStorage.setItem('fqp-theme', 'light');
-      renderWithTheme(<ThemeReader />);
-      expect(screen.getByTestId('theme-value').textContent).toBe('light');
-    });
-
-    it('respects localStorage when "dark" is stored', () => {
-      localStorage.setItem('fqp-theme', 'dark');
-      renderWithTheme(<ThemeReader />);
-      expect(screen.getByTestId('theme-value').textContent).toBe('dark');
-    });
-
-    it('falls back to system preference "light" when no stored value', () => {
-      vi.stubGlobal('matchMedia', vi.fn(() => ({
-        matches: true,
-        addEventListener: vi.fn(),
-        removeEventListener: vi.fn(),
-      })));
-      renderWithTheme(<ThemeReader />);
-      expect(screen.getByTestId('theme-value').textContent).toBe('light');
-    });
+    expect(screen.getByTestId('theme-value')).toHaveTextContent('redline-quant');
+    expect(document.documentElement).toHaveAttribute('data-theme', 'redline-quant');
+    expect(document.documentElement).toHaveAttribute('data-density', 'compact');
   });
 
-  // ------------------------------------------------------------------
-  // Toggling
-  // ------------------------------------------------------------------
-  describe('toggleTheme', () => {
-    it('switches from dark to light', async () => {
-      const user = userEvent.setup();
-      renderWithTheme(<ThemeReader />);
+  it('restores a complete appearance from localStorage', () => {
+    localStorage.setItem(APPEARANCE_STORAGE_KEY, JSON.stringify({
+      theme: 'polar-lab',
+      density: 'comfortable',
+      motion: 'off',
+      radius: 'soft',
+    }));
 
-      expect(screen.getByTestId('theme-value').textContent).toBe('dark');
-      await user.click(screen.getByTestId('theme-toggle'));
-      expect(screen.getByTestId('theme-value').textContent).toBe('light');
-    });
+    render(<ThemeProvider><ThemeReader /></ThemeProvider>);
 
-    it('switches from light to dark', async () => {
-      localStorage.setItem('fqp-theme', 'light');
-      const user = userEvent.setup();
-      renderWithTheme(<ThemeReader />);
+    expect(screen.getByTestId('theme-value')).toHaveTextContent('polar-lab');
+    expect(document.documentElement).toHaveAttribute('data-motion', 'off');
+    expect(document.documentElement).toHaveAttribute('data-radius', 'soft');
+  });
 
-      expect(screen.getByTestId('theme-value').textContent).toBe('light');
-      await user.click(screen.getByTestId('theme-toggle'));
-      expect(screen.getByTestId('theme-value').textContent).toBe('dark');
-    });
+  it('updates DOM attributes and persists changes immediately', async () => {
+    const user = userEvent.setup();
+    render(<ThemeProvider><ThemeReader /></ThemeProvider>);
 
-    it('persists the new value to localStorage', async () => {
-      const user = userEvent.setup();
-      renderWithTheme(<ThemeReader />);
+    await user.click(screen.getByRole('button', { name: 'Black gold' }));
+    await user.click(screen.getByRole('button', { name: 'Terminal density' }));
 
-      await user.click(screen.getByTestId('theme-toggle'));
-      expect(localStorage.getItem('fqp-theme')).toBe('light');
-
-      await user.click(screen.getByTestId('theme-toggle'));
-      expect(localStorage.getItem('fqp-theme')).toBe('dark');
+    expect(document.documentElement).toHaveAttribute('data-theme', 'black-gold-terminal');
+    expect(document.documentElement).toHaveAttribute('data-density', 'terminal');
+    expect(document.documentElement).toHaveAttribute('data-radius', 'square');
+    expect(JSON.parse(localStorage.getItem(APPEARANCE_STORAGE_KEY) ?? '{}')).toMatchObject({
+      theme: 'black-gold-terminal',
+      density: 'terminal',
+      radius: 'square',
     });
   });
 
-  // ------------------------------------------------------------------
-  // DOM attribute
-  // ------------------------------------------------------------------
-  describe('data-theme attribute on <html>', () => {
-    it('sets data-theme="light" when theme is light', () => {
-      localStorage.setItem('fqp-theme', 'light');
-      renderWithTheme(<ThemeReader />);
-      expect(document.documentElement.getAttribute('data-theme')).toBe('light');
-    });
+  it('uses the sidebar shortcut to switch between the default dark and light themes', async () => {
+    const user = userEvent.setup();
+    render(<ThemeProvider><ThemeReader /></ThemeProvider>);
 
-    it('sets data-theme="dark" when theme is dark', () => {
-      renderWithTheme(<ThemeReader />);
-      expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
-    });
+    await user.click(screen.getByRole('button', { name: 'Toggle' }));
+    expect(screen.getByTestId('theme-value')).toHaveTextContent('polar-lab');
 
-    it('updates the attribute on toggle', async () => {
-      const user = userEvent.setup();
-      renderWithTheme(<ThemeReader />);
-
-      expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
-      await user.click(screen.getByTestId('theme-toggle'));
-      expect(document.documentElement.getAttribute('data-theme')).toBe('light');
-    });
+    await user.click(screen.getByRole('button', { name: 'Toggle' }));
+    expect(screen.getByTestId('theme-value')).toHaveTextContent('redline-quant');
   });
 
-  // ------------------------------------------------------------------
-  // System-preference listener
-  // ------------------------------------------------------------------
-  describe('system preference changes', () => {
-    it('registers a change listener on the matchMedia object', () => {
-      const addEventListener = vi.fn();
-      const removeEventListener = vi.fn();
+  it('previews without persisting until apply and can cancel the preview', async () => {
+    const user = userEvent.setup();
+    render(<ThemeProvider><ThemeReader /></ThemeProvider>);
 
-      vi.stubGlobal('matchMedia', vi.fn(() => ({
-        matches: false,
-        addEventListener,
-        removeEventListener,
-      })));
+    await user.click(screen.getByRole('button', { name: 'Preview navy' }));
+    expect(document.documentElement).toHaveAttribute('data-theme', 'deep-navy');
+    expect(JSON.parse(localStorage.getItem(APPEARANCE_STORAGE_KEY) ?? '{}').theme).toBe('redline-quant');
 
-      renderWithTheme(<ThemeReader />);
-      expect(addEventListener).toHaveBeenCalledWith('change', expect.any(Function));
-    });
+    await user.click(screen.getByRole('button', { name: 'Cancel preview' }));
+    expect(document.documentElement).toHaveAttribute('data-theme', 'redline-quant');
 
-    it('returns a cleanup function that removes the listener', () => {
-      const removeEventListener = vi.fn();
-
-      vi.stubGlobal('matchMedia', vi.fn(() => ({
-        matches: false,
-        addEventListener: vi.fn(),
-        removeEventListener,
-      })));
-
-      const { unmount } = renderWithTheme(<ThemeReader />);
-      unmount();
-      expect(removeEventListener).toHaveBeenCalledWith('change', expect.any(Function));
-    });
-  });
-
-  // ------------------------------------------------------------------
-  // Edge cases
-  // ------------------------------------------------------------------
-  describe('edge cases', () => {
-    it('survives malformed localStorage values', () => {
-      localStorage.setItem('fqp-theme', 'INVALID');
-      renderWithTheme(<ThemeReader />);
-      // Falls back to dark (system mock says dark)
-      expect(screen.getByTestId('theme-value').textContent).toBe('dark');
-    });
-
-    it('returns default context value when used outside provider', () => {
-      // ThemeContext uses createContext with a default — no provider means default
-      themeValue = null;
-      render(<ThemeReader />);
-      // The default value from createContext is 'dark'
-      expect(screen.getByTestId('theme-value').textContent).toBe('dark');
-    });
+    await user.click(screen.getByRole('button', { name: 'Preview navy' }));
+    await user.click(screen.getByRole('button', { name: 'Apply preview' }));
+    expect(JSON.parse(localStorage.getItem(APPEARANCE_STORAGE_KEY) ?? '{}').theme).toBe('deep-navy');
   });
 });

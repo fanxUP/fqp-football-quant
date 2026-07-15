@@ -5,6 +5,7 @@ import type { EChartsOption } from 'echarts';
 import ChartCard from '../shared/components/ChartCard';
 import { applyChartTheme, CHART_COLORS } from './chartTheme';
 import type { RoiBarPoint } from './chartTypes';
+import { useTheme } from '../app/ThemeContext';
 
 interface RoiCompareBarChartProps {
   data: RoiBarPoint[];
@@ -23,6 +24,7 @@ export default function RoiCompareBarChart({
   empty,
   emptyReason,
 }: RoiCompareBarChartProps) {
+  const { theme } = useTheme();
   const option = useMemo(() => {
     if (!data.length) return null;
     const dates = data.map((d) => d.date);
@@ -68,7 +70,7 @@ export default function RoiCompareBarChart({
         },
       ],
     } as EChartsOption);
-  }, [data]);
+  }, [data, theme]);
 
   return (
     <ChartCard

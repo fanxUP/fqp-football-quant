@@ -129,8 +129,8 @@ export default function Sidebar({ isOpen = false, onClose }: SidebarProps) {
 
       {/* Theme toggle */}
       <button type="button" className="fqp-theme-toggle" onClick={toggleTheme}>
-        <span className="fqp-nav-icon">{theme === 'dark' ? '☀️' : '🌙'}</span>
-        <span>{theme === 'dark' ? '亮色模式' : '暗色模式'}</span>
+        <span className="fqp-nav-icon">{theme === 'polar-lab' ? '🌙' : '☀️'}</span>
+        <span>{theme === 'polar-lab' ? '切换黑红主题' : '切换极地浅色'}</span>
       </button>
     </aside>
   );

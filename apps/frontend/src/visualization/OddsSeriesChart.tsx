@@ -5,6 +5,7 @@ import type { EChartsOption } from 'echarts';
 import type { OddsMovementPoint } from '../core/types';
 import ChartCard from '../shared/components/ChartCard';
 import { applyChartTheme } from './chartTheme';
+import { useTheme } from '../app/ThemeContext';
 
 interface OddsSeriesChartProps {
   data: OddsMovementPoint[];
@@ -19,6 +20,7 @@ export default function OddsSeriesChart({
   subtitle,
   emptyReason,
 }: OddsSeriesChartProps) {
+  const { theme } = useTheme();
   const option = useMemo(() => {
     const times = Array.from(new Set(data.map((point) => point.snapshot_time))).sort();
     const options = new Map<string, { name: string; points: Map<string, number> }>();
@@ -64,7 +66,7 @@ export default function OddsSeriesChart({
         lineStyle: { width: 2 },
       })),
     } as EChartsOption);
-  }, [data]);
+  }, [data, theme]);
 
   return (
     <ChartCard

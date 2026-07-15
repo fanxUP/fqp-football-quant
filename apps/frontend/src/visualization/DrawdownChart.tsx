@@ -5,6 +5,7 @@ import type { EChartsOption } from 'echarts';
 import ChartCard from '../shared/components/ChartCard';
 import { applyChartTheme, CHART_COLORS } from './chartTheme';
 import type { DrawdownPoint } from './chartTypes';
+import { useTheme } from '../app/ThemeContext';
 
 interface DrawdownChartProps {
   data: DrawdownPoint[];
@@ -23,6 +24,7 @@ export default function DrawdownChart({
   empty,
   emptyReason,
 }: DrawdownChartProps) {
+  const { theme } = useTheme();
   const option = useMemo(() => {
     if (!data.length) return null;
     const dates = data.map((d) => d.date);
@@ -55,8 +57,8 @@ export default function DrawdownChart({
               type: 'linear',
               x: 0, y: 0, x2: 0, y2: 1,
               colorStops: [
-                { offset: 0, color: 'rgba(255,42,61,0.25)' },
-                { offset: 1, color: 'rgba(255,42,61,0.02)' },
+                { offset: 0, color: CHART_COLORS.areaDown },
+                { offset: 1, color: 'transparent' },
               ],
             },
           },
@@ -68,7 +70,7 @@ export default function DrawdownChart({
         },
       ],
     } as EChartsOption);
-  }, [data]);
+  }, [data, theme]);
 
   return (
     <ChartCard

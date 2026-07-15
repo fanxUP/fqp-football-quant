@@ -22,7 +22,7 @@ vi.mock('echarts/core', () => ({
 }));
 
 // ----- Mock ThemeContext (ChartCard reads theme for textColor) ---------------
-let mockTheme = 'dark';
+let mockTheme = 'redline-quant';
 vi.mock('../../app/ThemeContext', () => ({
   useTheme: () => ({ theme: mockTheme, toggleTheme: vi.fn() }),
 }));
@@ -41,7 +41,9 @@ vi.mock('./Card', () => ({
 describe('ChartCard', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockTheme = 'dark';
+    mockTheme = 'redline-quant';
+    document.documentElement.removeAttribute('style');
+    document.documentElement.style.setProperty('--fqp-chart-text', '#F5F5F7');
   });
 
   const baseOption = {
@@ -114,14 +116,15 @@ describe('ChartCard', () => {
 
       const passedOption = setOptCalls[0][0] as Record<string, unknown>;
       expect(passedOption.backgroundColor).toBe('transparent');
-      expect(passedOption.textStyle).toEqual({ color: '#C4C4CC', fontSize: 14 });
+      expect(passedOption.textStyle).toEqual({ color: '#F5F5F7', fontSize: 14 });
     });
 
-    it('uses light textColor when theme is light', () => {
-      mockTheme = 'light';
+    it('uses the active theme text token', () => {
+      mockTheme = 'polar-lab';
+      document.documentElement.style.setProperty('--fqp-chart-text', '#172033');
       render(<ChartCard title="Light Chart" option={baseOption} />);
       const passedOption = mockInstance.setOption.mock.calls[0][0] as Record<string, unknown>;
-      expect(passedOption.textStyle).toEqual({ color: '#4B5563', fontSize: 14 });
+      expect(passedOption.textStyle).toEqual({ color: '#172033', fontSize: 14 });
     });
   });
 

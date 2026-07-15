@@ -1,77 +1,108 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { DEFAULT_APPEARANCE_SETTINGS } from '../theme/defaults';
+import { loadAppearanceSettings, saveAppearanceSettings } from '../theme/storage';
+import type { AppearanceSettings, ThemeId } from '../theme/types';
 
-export type Theme = 'dark' | 'light' | 'matrix' | 'cyberpunk' | 'anime' | 'ink';
+export type Theme = ThemeId;
 
 interface ThemeContextValue {
-  theme: Theme;
-  setTheme: (t: Theme) => void;
-  toggleTheme: () => void; // quick toggle dark↔light
+  appearance: AppearanceSettings;
+  theme: ThemeId;
+  setTheme: (theme: ThemeId) => void;
+  updateAppearance: (patch: Partial<AppearanceSettings>) => void;
+  previewAppearance: (settings: AppearanceSettings) => void;
+  commitAppearance: () => void;
+  cancelPreview: () => void;
+  resetAppearance: () => void;
+  toggleTheme: () => void;
+  isPreviewing: boolean;
 }
 
-const ThemeContext = createContext<ThemeContextValue>({
-  theme: 'dark',
-  setTheme: () => {},
-  toggleTheme: () => {},
-});
-
-const STORAGE_KEY = 'fqp-theme';
-
-const VALID_THEMES: Set<string> = new Set(['dark', 'light', 'matrix', 'cyberpunk', 'anime', 'ink']);
-
-function getInitialTheme(): Theme {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored && VALID_THEMES.has(stored)) return stored as Theme;
-  } catch { /* ignore */ }
-  if (typeof window !== 'undefined' && window.matchMedia?.('(prefers-color-scheme: light)').matches) {
-    return 'light';
-  }
-  return 'dark';
+function applyAppearance(settings: AppearanceSettings): void {
+  const root = document.documentElement;
+  root.dataset.theme = settings.theme;
+  root.dataset.density = settings.density;
+  root.dataset.motion = settings.reduceMotion ? 'off' : settings.motion;
+  root.dataset.radius = settings.radius;
+  root.dataset.cardStyle = settings.cardStyle;
+  root.dataset.sidebarMode = settings.sidebarMode;
+  root.dataset.financialColors = settings.financialColorMode;
+  root.dataset.backgroundEffect = settings.backgroundEffect ? 'on' : 'off';
+  root.dataset.numberFont = settings.numberFont;
+  root.dataset.chartStyle = settings.chartStyle;
 }
+
+const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, _setTheme] = useState<Theme>(getInitialTheme);
+  const [appearance, setAppearance] = useState<AppearanceSettings>(() => loadAppearanceSettings());
+  const savedAppearance = useRef(appearance);
+  const [isPreviewing, setIsPreviewing] = useState(false);
 
-  const applyTheme = (t: Theme) => {
-    document.documentElement.setAttribute('data-theme', t);
-    try { localStorage.setItem(STORAGE_KEY, t); } catch { /* ignore */ }
-  };
+  useLayoutEffect(() => {
+    applyAppearance(appearance);
+  }, [appearance]);
 
-  useEffect(() => { applyTheme(theme); }, [theme]);
-
-  // Listen for system preference changes when no explicit choice
-  useEffect(() => {
-    const mq = window.matchMedia('(prefers-color-scheme: light)');
-    const handler = (e: MediaQueryListEvent) => {
-      try {
-        if (!localStorage.getItem(STORAGE_KEY)) {
-          _setTheme(e.matches ? 'light' : 'dark');
-        }
-      } catch { /* ignore */ }
-    };
-    mq.addEventListener('change', handler);
-    return () => mq.removeEventListener('change', handler);
+  useLayoutEffect(() => {
+    saveAppearanceSettings(savedAppearance.current);
   }, []);
 
-  const setTheme = (t: Theme) => _setTheme(t);
+  const commit = useCallback((next: AppearanceSettings) => {
+    savedAppearance.current = next;
+    setAppearance(next);
+    setIsPreviewing(false);
+    saveAppearanceSettings(next);
+  }, []);
 
-  // Quick toggle: cycles dark ↔ light, preserves other themes
-  const toggleTheme = () => {
-    _setTheme((t) => {
-      if (t === 'dark') return 'light';
-      if (t === 'light') return 'dark';
-      // If on a custom theme, switch to dark
-      return 'dark';
+  const setTheme = useCallback((theme: ThemeId) => {
+    commit({ ...savedAppearance.current, theme });
+  }, [commit]);
+
+  const updateAppearance = useCallback((patch: Partial<AppearanceSettings>) => {
+    commit({ ...savedAppearance.current, ...patch });
+  }, [commit]);
+
+  const previewAppearance = useCallback((settings: AppearanceSettings) => {
+    setAppearance(settings);
+    setIsPreviewing(true);
+  }, []);
+
+  const commitAppearance = useCallback(() => commit(appearance), [appearance, commit]);
+
+  const cancelPreview = useCallback(() => {
+    setAppearance(savedAppearance.current);
+    setIsPreviewing(false);
+  }, []);
+
+  const resetAppearance = useCallback(() => {
+    commit({ ...DEFAULT_APPEARANCE_SETTINGS });
+  }, [commit]);
+
+  const toggleTheme = useCallback(() => {
+    commit({
+      ...savedAppearance.current,
+      theme: savedAppearance.current.theme === 'polar-lab' ? 'redline-quant' : 'polar-lab',
     });
-  };
+  }, [commit]);
 
-  return (
-    <ThemeContext.Provider value={{ theme, setTheme, toggleTheme }}>
-      {children}
-    </ThemeContext.Provider>
-  );
+  const value = useMemo<ThemeContextValue>(() => ({
+    appearance,
+    theme: appearance.theme,
+    setTheme,
+    updateAppearance,
+    previewAppearance,
+    commitAppearance,
+    cancelPreview,
+    resetAppearance,
+    toggleTheme,
+    isPreviewing,
+  }), [appearance, cancelPreview, commitAppearance, isPreviewing, previewAppearance, resetAppearance, setTheme, toggleTheme, updateAppearance]);
+
+  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 }
 
 export function useTheme(): ThemeContextValue {
-  return useContext(ThemeContext);
+  const value = useContext(ThemeContext);
+  if (!value) throw new Error('useTheme must be used within ThemeProvider');
+  return value;
 }

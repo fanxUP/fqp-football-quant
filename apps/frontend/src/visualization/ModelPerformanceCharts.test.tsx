@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import ModelPerformanceCharts, { buildModelPerformanceOption } from './ModelPerformanceCharts';
+import { ThemeProvider } from '../app/ThemeContext';
 
 vi.mock('../shared/components/ChartCard', () => ({
   default: ({ title }: { title: string }) => <div>{title}</div>,
@@ -28,12 +29,14 @@ describe('buildModelPerformanceOption', () => {
 
   it('在五种玩法之外增加一张全模型综合视图', () => {
     render(
-      <ModelPerformanceCharts
-        points={[
-          { date: '2026-07-12', play_type: 'all', model_name: 'elo_rating', hit_rate: 0.55, sample_size: 20 },
-        ]}
-        window={20}
-      />,
+      <ThemeProvider>
+        <ModelPerformanceCharts
+          points={[
+            { date: '2026-07-12', play_type: 'all', model_name: 'elo_rating', hit_rate: 0.55, sample_size: 20 },
+          ]}
+          window={20}
+        />
+      </ThemeProvider>,
     );
 
     expect(screen.getByText('综合表现 · 模型对比')).toBeInTheDocument();

@@ -12,6 +12,7 @@ import { init, use, type ECharts } from 'echarts/core';
 import { CanvasRenderer } from 'echarts/renderers';
 import Card from './Card';
 import { useTheme } from '../../app/ThemeContext';
+import { getChartColors } from '../../theme/chartTokens';
 
 use([
   BarChart,
@@ -59,7 +60,7 @@ export default function ChartCard({
   useEffect(() => {
     if (!chartRef.current) return;
 
-    const textColor = theme === 'dark' ? '#C4C4CC' : '#4B5563';
+    const textColor = getChartColors().text;
 
     const themedOption = {
       backgroundColor: 'transparent',

@@ -6,7 +6,7 @@ import Sidebar, { normalizeSidebarIcon } from './Sidebar';
 
 // ---- Mocks ----------------------------------------------------------------
 
-let mockTheme = 'dark';
+let mockTheme = 'redline-quant';
 const mockToggleTheme = vi.fn();
 const mockNavigate = vi.fn();
 const { mockRuntimePanels } = vi.hoisted(() => ({
@@ -42,7 +42,7 @@ describe('Sidebar', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
-    mockTheme = 'dark';
+    mockTheme = 'redline-quant';
     mockCurrentPath = '/';
     mockRuntimePanels.mockRejectedValue(new Error('backend unavailable'));
   });
@@ -89,8 +89,7 @@ describe('Sidebar', () => {
 
     it('renders the theme toggle button', () => {
       renderSidebar();
-      // dark theme → shows "亮色模式"
-      expect(screen.getByText('亮色模式')).toBeTruthy();
+      expect(screen.getByText('切换极地浅色')).toBeTruthy();
     });
 
     it('hides menu items for disabled modules', () => {
@@ -166,7 +165,7 @@ describe('Sidebar', () => {
       renderSidebar();
 
       expect(screen.getByRole('button', { name: /今日驾驶舱/ })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: /亮色模式/ })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /切换极地浅色/ })).toBeInTheDocument();
     });
 
     it('loads runtime panels once in StrictMode', async () => {
@@ -295,33 +294,33 @@ describe('Sidebar', () => {
     it('calls toggleTheme when clicked', async () => {
       const user = userEvent.setup();
       renderSidebar();
-      await user.click(screen.getByText('亮色模式'));
+      await user.click(screen.getByText('切换极地浅色'));
       expect(mockToggleTheme).toHaveBeenCalledTimes(1);
     });
 
-    it('shows correct label in dark mode', () => {
-      mockTheme = 'dark';
+    it('shows the light-theme target in a dark theme', () => {
+      mockTheme = 'redline-quant';
       renderSidebar();
-      expect(screen.getByText('亮色模式')).toBeTruthy();
+      expect(screen.getByText('切换极地浅色')).toBeTruthy();
     });
 
-    it('shows correct label in light mode', () => {
-      mockTheme = 'light';
+    it('shows the dark-theme target in the light theme', () => {
+      mockTheme = 'polar-lab';
       renderSidebar();
-      expect(screen.getByText('暗色模式')).toBeTruthy();
+      expect(screen.getByText('切换黑红主题')).toBeTruthy();
     });
 
     it('shows ☀️ in dark mode', () => {
-      mockTheme = 'dark';
+      mockTheme = 'redline-quant';
       renderSidebar();
-      const toggle = screen.getByText('亮色模式');
+      const toggle = screen.getByText('切换极地浅色');
       expect(toggle.parentElement?.textContent).toContain('☀️');
     });
 
     it('shows 🌙 in light mode', () => {
-      mockTheme = 'light';
+      mockTheme = 'polar-lab';
       renderSidebar();
-      const toggle = screen.getByText('暗色模式');
+      const toggle = screen.getByText('切换黑红主题');
       expect(toggle.parentElement?.textContent).toContain('🌙');
     });
   });

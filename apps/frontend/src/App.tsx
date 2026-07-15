@@ -3,23 +3,9 @@ import { ThemeProvider } from './app/ThemeContext';
 import { ToastProvider } from './shared/components/Toast';
 import Layout from './app/layout/Layout';
 import LoadingSpinner from './shared/components/LoadingSpinner';
-import { useLocalSettings } from './shared/hooks/useLocalSettings';
 
 // Lazy-load all pages
 import { lazy, Suspense, useEffect } from 'react';
-
-// Wire animations setting to CSS
-function AnimationsSettingBridge() {
-  const { settings } = useLocalSettings();
-  useEffect(() => {
-    if (!settings.animationsEnabled) {
-      document.documentElement.setAttribute('data-animations', 'disabled');
-    } else {
-      document.documentElement.removeAttribute('data-animations');
-    }
-  }, [settings.animationsEnabled]);
-  return null;
-}
 
 const DashboardPage = lazy(() => import('./pages/DashboardPage'));
 const MatchesPage = lazy(() => import('./pages/MatchesPage'));
@@ -119,7 +105,6 @@ export default function App() {
   return (
     <ThemeProvider>
       <ToastProvider>
-        <AnimationsSettingBridge />
         <Layout>
           <PageOutlet />
         </Layout>
