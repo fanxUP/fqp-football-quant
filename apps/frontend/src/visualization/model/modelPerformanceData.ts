@@ -1,7 +1,6 @@
 import type { ModelPerformancePoint } from '../../core/types';
 import { modelNameLabel } from '../../shared/constants';
-
-const MODEL_ORDER = ['elo_rating', 'market_baseline', 'dixon_coles', 'maher_poisson'];
+import { modelOrderIndex } from './modelVisuals';
 
 export interface ModelPerformanceSeriesData {
   id: string;
@@ -20,11 +19,6 @@ export interface ModelPerformanceOverviewItem {
   changePercentagePoints: number | null;
   dateCount: number;
   insufficientHistory: boolean;
-}
-
-function modelIndex(modelName: string): number {
-  const index = MODEL_ORDER.indexOf(modelName);
-  return index === -1 ? MODEL_ORDER.length : index;
 }
 
 function percent(value: number): number {
@@ -50,7 +44,7 @@ export function buildModelPerformanceSeries(
   }
 
   return [...grouped.entries()]
-    .sort(([left], [right]) => modelIndex(left) - modelIndex(right) || left.localeCompare(right))
+    .sort(([left], [right]) => modelOrderIndex(left) - modelOrderIndex(right) || left.localeCompare(right))
     .map(([modelName, modelPoints]) => ({
       id: modelName,
       name: modelNameLabel(modelName),

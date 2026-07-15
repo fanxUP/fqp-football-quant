@@ -2,7 +2,6 @@ import { useMemo } from 'react';
 import type { ModelPerformancePoint } from '../core/types';
 import { playTypeLabel } from '../shared/constants';
 import { useTheme } from '../app/ThemeContext';
-import { getChartColors } from '../theme/chartTokens';
 import ChartFrame from './core/ChartFrame';
 import LightweightLineChart, {
   type LightweightLineSeries,
@@ -13,6 +12,7 @@ import {
   type ModelPerformanceOverviewItem,
   type ModelPerformanceSeriesData,
 } from './model/modelPerformanceData';
+import { getModelLineVisual } from './model/modelVisuals';
 import './ModelPerformanceCharts.css';
 
 const PLAY_TYPES = ['spf', 'rqspf', 'bf', 'zjq', 'bqc'] as const;
@@ -26,28 +26,12 @@ interface ModelPerformanceChartsProps {
   error?: string | null;
 }
 
-const MODEL_PATTERNS: Record<string, LightweightLineSeries['pattern']> = {
-  elo_rating: 'solid',
-  market_baseline: 'dashed',
-  dixon_coles: 'dotted',
-  maher_poisson: 'solid',
-};
-
 function addModelVisuals(series: ModelPerformanceSeriesData[]): LightweightLineSeries[] {
-  const colors = getChartColors();
-  const modelColors: Record<string, string> = {
-    elo_rating: colors.blue,
-    market_baseline: colors.amber,
-    dixon_coles: colors.green,
-    maher_poisson: colors.primary,
-  };
-
   return series.map((item) => ({
     id: item.id,
     name: item.name,
     data: item.data,
-    color: modelColors[item.id] ?? colors.purple,
-    pattern: MODEL_PATTERNS[item.id] ?? 'dashed',
+    ...getModelLineVisual(item.id),
   }));
 }
 
