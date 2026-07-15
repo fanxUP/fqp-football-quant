@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ColorType,
   CrosshairMode,
+  LineStyle,
   LineSeries,
   createChart,
   type IChartApi,
@@ -17,6 +18,8 @@ export interface LightweightLineSeries {
   id: string;
   name: string;
   data: LineData<Time>[];
+  color?: string;
+  pattern?: 'solid' | 'dashed' | 'dotted';
 }
 
 interface LightweightLineChartProps {
@@ -24,6 +27,8 @@ interface LightweightLineChartProps {
   ariaLabel: string;
   height?: number;
   valuePrecision?: number;
+  valueSuffix?: string;
+  valueRange?: readonly [number, number];
 }
 
 function formatTime(time: Time): string {
@@ -44,6 +49,8 @@ export default function LightweightLineChart({
   ariaLabel,
   height = 300,
   valuePrecision = 2,
+  valueSuffix = '',
+  valueRange,
 }: LightweightLineChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -82,7 +89,7 @@ export default function LightweightLineChart({
       },
       localization: {
         locale: 'zh-CN',
-        priceFormatter: (value: number) => value.toFixed(valuePrecision),
+        priceFormatter: (value: number) => `${value.toFixed(valuePrecision)}${valueSuffix}`,
         timeFormatter: (time: Time) => formatTime(time),
       },
       handleScale: { axisPressedMouseMove: true, mouseWheel: true, pinch: true },
@@ -104,7 +111,7 @@ export default function LightweightLineChart({
       chart.remove();
       chartRef.current = null;
     };
-  }, [height, theme, valuePrecision]);
+  }, [height, theme, valuePrecision, valueSuffix]);
 
   useEffect(() => {
     const chart = chartRef.current;
@@ -123,15 +130,30 @@ export default function LightweightLineChart({
     series.forEach((item, index) => {
       let api = seriesRef.current.get(item.id);
       if (!api) {
+        const pattern = item.pattern === 'dashed'
+          ? LineStyle.Dashed
+          : item.pattern === 'dotted'
+            ? LineStyle.Dotted
+            : LineStyle.Solid;
         api = chart.addSeries(LineSeries, {
-          color: palette[index % palette.length],
+          color: item.color ?? palette[index % palette.length],
+          lineStyle: pattern,
           lineWidth: 2,
           title: item.name,
           priceLineVisible: false,
           lastValueVisible: true,
           crosshairMarkerVisible: true,
           crosshairMarkerRadius: 4,
-          priceFormat: { type: 'price', precision: valuePrecision, minMove: 10 ** -valuePrecision },
+          autoscaleInfoProvider: valueRange
+            ? () => ({ priceRange: { minValue: valueRange[0], maxValue: valueRange[1] } })
+            : undefined,
+          priceFormat: valueSuffix
+            ? {
+                type: 'custom',
+                formatter: (value: number) => `${value.toFixed(valuePrecision)}${valueSuffix}`,
+                minMove: 10 ** -valuePrecision,
+              }
+            : { type: 'price', precision: valuePrecision, minMove: 10 ** -valuePrecision },
         });
         seriesRef.current.set(item.id, api);
       }
@@ -139,7 +161,7 @@ export default function LightweightLineChart({
     });
 
     chart.timeScale().fitContent();
-  }, [series, theme, valuePrecision]);
+  }, [series, theme, valuePrecision, valueRange, valueSuffix]);
 
   useEffect(() => {
     seriesRef.current.forEach((api, id) => {
@@ -174,7 +196,11 @@ export default function LightweightLineChart({
               aria-label={`${visible ? '隐藏' : '显示'}${item.name}`}
               onClick={() => toggleSeries(item.id)}
             >
-              <span style={{ backgroundColor: palette[index % palette.length] }} aria-hidden="true" />
+              <span
+                className={`lightweight-line-legend-swatch is-${item.pattern ?? 'solid'}`}
+                style={{ borderTopColor: item.color ?? palette[index % palette.length] }}
+                aria-hidden="true"
+              />
               {item.name}
             </button>
           );

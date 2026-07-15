@@ -38,10 +38,18 @@
   opacity: 0.48;
 }
 
-.lightweight-line-legend-item > span {
+.lightweight-line-legend-swatch {
   width: 14px;
-  height: 3px;
-  border-radius: 2px;
+  height: 0;
+  border-top: 3px solid;
+}
+
+.lightweight-line-legend-swatch.is-dashed {
+  border-top-style: dashed;
+}
+
+.lightweight-line-legend-swatch.is-dotted {
+  border-top-style: dotted;
 }
 
 .lightweight-line-canvas {

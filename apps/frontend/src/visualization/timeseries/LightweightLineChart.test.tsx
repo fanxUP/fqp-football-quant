@@ -28,6 +28,7 @@ const { addSeries, applyOptions, createChart, fitContent, setData } = vi.hoisted
 vi.mock('lightweight-charts', () => ({
   ColorType: { Solid: 'solid' },
   CrosshairMode: { Normal: 0 },
+  LineStyle: { Solid: 0, Dotted: 1, Dashed: 2 },
   LineSeries: 'LineSeries',
   createChart,
 }));
@@ -51,12 +52,33 @@ describe('LightweightLineChart', () => {
   ];
 
   it('创建真实时间轴图表并写入折线数据', () => {
-    render(<LightweightLineChart series={series} ariaLabel="胜平负赔率走势" />);
+    render(<LightweightLineChart
+      series={series}
+      ariaLabel="胜平负赔率走势"
+      valueSuffix="%"
+      valueRange={[0, 100]}
+    />);
 
     expect(createChart).toHaveBeenCalledOnce();
     expect(addSeries).toHaveBeenCalledOnce();
     expect(setData).toHaveBeenCalledWith(series[0].data);
     expect(screen.getByRole('img', { name: '胜平负赔率走势' })).toBeInTheDocument();
+    expect(addSeries).toHaveBeenCalledWith('LineSeries', expect.objectContaining({
+      priceFormat: expect.objectContaining({ type: 'custom' }),
+      autoscaleInfoProvider: expect.any(Function),
+    }));
+  });
+
+  it('允许业务图表固定系列颜色和线型', () => {
+    render(<LightweightLineChart
+      series={[{ ...series[0], color: '#123456', pattern: 'dashed' }]}
+      ariaLabel="模型表现"
+    />);
+
+    expect(addSeries).toHaveBeenCalledWith('LineSeries', expect.objectContaining({
+      color: '#123456',
+      lineStyle: 2,
+    }));
   });
 
   it('图例可通过键盘可访问按钮隐藏与显示折线', () => {
