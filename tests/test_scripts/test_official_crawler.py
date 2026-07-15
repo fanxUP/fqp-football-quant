@@ -180,7 +180,7 @@ def test_blocked_sporttery_results_use_labeled_500_supplement_for_existing_offic
     assert supplemental_result["raw_json"]["official_match_verified"] is True
     store_results.assert_called_once_with(connection, [supplemental_result])
     record_status.assert_called_once()
-    update_health.assert_any_call(connection, "sporttery", "official", "error", 0, ANY)
+    update_health.assert_any_call(connection, "sporttery", "results", "error", 0, ANY)
     update_health.assert_any_call(connection, "500.com", "supplemental", "ok", ANY)
 
 
@@ -244,7 +244,7 @@ def test_schedule_refresh_updates_metadata_without_writing_odds_snapshots():
         patch("scripts.official_crawler.store_markets") as store_markets,
         patch("scripts.official_crawler.parse_odds_snapshots_from_match") as parse_odds,
         patch("scripts.official_crawler.log_crawl"),
-        patch("scripts.official_crawler.update_health"),
+        patch("scripts.official_crawler.update_health") as update_health,
     ):
         get_db.return_value.__enter__.return_value = connection
 
@@ -254,3 +254,4 @@ def test_schedule_refresh_updates_metadata_without_writing_odds_snapshots():
     assert result["snapshots_inserted"] == 0
     store_markets.assert_called_once_with(connection, 12, matches[0]["_markets"])
     parse_odds.assert_not_called()
+    update_health.assert_called_once_with(connection, "sporttery_v2", "schedule", "ok", ANY)

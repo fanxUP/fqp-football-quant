@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from unittest.mock import MagicMock, patch
 
 
@@ -38,7 +39,6 @@ class TestBacktestsEndpoint:
         assert data["total"] == 0
 
     def test_lists_backtests_with_data(self, client):
-        from datetime import datetime
         now = datetime(2025, 1, 1, 10, 0, 0)
         mock_conn, mock_cur = _mock_db_conn(
             fetchall=[
@@ -115,6 +115,71 @@ class TestOpsHealth:
         assert data["status"] == "healthy"
         assert data["metrics"]["uptime_days"] == 30
         assert data["services"]["db"] is True
+
+    def test_returns_snapshot_time_as_explicit_utc(self, client):
+        mock_conn, _ = _mock_db_conn()
+        snapshot = {
+            "overall_health_status": "healthy",
+            "snapshot_date": "2026-07-15",
+            "snapshot_time": datetime(2026, 7, 15, 3, 55),
+        }
+
+        with patch("apps.backend.src.routers.ops.get_db", return_value=mock_conn), \
+             patch("apps.backend.src.routers.ops.get_latest_health_snapshot", return_value=snapshot):
+            resp = client.get("/api/ops/health")
+
+        assert resp.status_code == 200
+        assert resp.json()["snapshot_time"] == "2026-07-15T03:55:00Z"
+
+
+class TestOpsPipeline:
+    def test_normalizes_active_jobs_sources_and_utc_timestamps(self, client):
+        mock_conn, mock_cur = _mock_db_conn()
+        mock_cur.fetchall.side_effect = [
+            [
+                (1, "sporttery", "results", "error", None,
+                 datetime(2026, 7, 15, 3, 0, 2), 192, 0),
+                (4, "sporttery", "traditional_lottery", "ok",
+                 datetime(2026, 7, 15, 3, 7, 2), None, 5, 1909),
+                (5, "sporttery", "official", "ok",
+                 datetime(2026, 7, 15, 3, 8, 0), None, 0, 200),
+            ],
+            [
+                (101, "official_odds_snapshot", "completed",
+                 datetime(2026, 7, 15, 3, 8, 19), None),
+                (99, "crawl_official_odds", "success",
+                 datetime(2026, 7, 9, 23, 30), None),
+                (88, "refresh_supplemental_seasons", "failed",
+                 datetime(2026, 7, 13, 3, 40), "obsolete table"),
+            ],
+        ]
+
+        with patch("apps.backend.src.routers.ops.get_db", return_value=mock_conn):
+            resp = client.get("/api/ops/pipeline")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["sources"][0] == {
+            "name": "sporttery",
+            "source_type": "results",
+            "status": "error",
+            "last_success": None,
+            "last_failure": "2026-07-15T03:00:02Z",
+            "failures": 192,
+            "latency_ms": 0,
+        }
+        assert {source["source_type"] for source in data["sources"]} == {
+            "results", "traditional_lottery"
+        }
+        assert data["jobs"] == [{
+            "code": "official_odds_snapshot",
+            "name": "赔率快照采集",
+            "status": "success",
+            "finished_at": "2026-07-15T03:08:19Z",
+            "error": None,
+            "schedule": "按开盘/每30分钟/开赛时",
+            "category": "official",
+        }]
 
 
 class TestOpsAuditGates:

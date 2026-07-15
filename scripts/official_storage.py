@@ -14,7 +14,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from typing import Any
 
 OFFICIAL_MATCH_CODE_RE = re.compile(r"^周[一二三四五六日]\d{3}$")
@@ -30,7 +30,7 @@ def _hash_raw(raw: Any) -> str:
 
 
 def _now() -> str:
-    return datetime.now().isoformat(timespec="seconds")
+    return datetime.now(UTC).replace(tzinfo=None).isoformat(timespec="seconds")
 
 
 def _event_season_targets(conn: Any) -> dict[str, tuple[date, date]]:
@@ -379,8 +379,9 @@ def store_results(conn: Any, results: list[dict]) -> dict[str, Any]:
             cur.execute(
                 """
                 UPDATE official_matches
-                SET match_status = 'Settled', updated_at = now()
-                WHERE id = ANY(%s) AND match_status != 'Settled'
+                SET match_status = 'Settled', sale_status = 'closed', updated_at = now()
+                WHERE id = ANY(%s)
+                  AND (match_status != 'Settled' OR sale_status IS DISTINCT FROM 'closed')
                 """,
                 (settled_ids,),
             )

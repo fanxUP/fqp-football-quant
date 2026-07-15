@@ -31,6 +31,7 @@ if _PROJECT_ROOT not in sys.path:
     sys.path.insert(0, _PROJECT_ROOT)
 
 import numpy as np  # noqa: E402
+from psycopg2.extras import Json  # noqa: E402
 
 from scripts.poisson_model import poisson_pmf  # noqa: E402
 
@@ -417,18 +418,18 @@ def run(dry_run: bool = False) -> dict[str, Any]:
         # Update maher_poisson params
         cur.execute(
             """UPDATE model_versions
-               SET parameters_json = %s, updated_at = NOW()
+               SET parameters_json = %s
                WHERE model_name = 'maher_poisson'""",
-            (maher,),
+            (Json(maher),),
         )
 
         # Update dixon_coles params (include rho)
         dc_params = {"rho": dc.get("rho", -0.08), "nll": dc.get("nll")}
         cur.execute(
             """UPDATE model_versions
-               SET parameters_json = %s, updated_at = NOW()
+               SET parameters_json = %s
                WHERE model_name = 'dixon_coles'""",
-            (dc_params,),
+            (Json(dc_params),),
         )
 
         conn.commit()

@@ -4,8 +4,22 @@ from zoneinfo import ZoneInfo
 
 from scripts.official_odds_capture import (
     OfficialCaptureCandidate,
+    _close_expired_sales,
     collect_due_official_odds,
 )
+
+
+def test_expired_sales_close_after_final_capture_grace(mock_conn):
+    conn, cur = mock_conn
+    now = datetime(2026, 7, 15, 11, 30, tzinfo=ZoneInfo("Asia/Shanghai"))
+
+    _close_expired_sales(conn, now)
+
+    query, params = cur.execute.call_args.args
+    assert "sale_status = 'closed'" in query
+    assert "kickoff_time < %s" in query
+    assert params[0] == datetime(2026, 7, 15, 11, 20)
+    conn.commit.assert_called_once()
 
 
 def test_due_collector_fetches_once_and_records_complete_offered_play():
@@ -37,6 +51,7 @@ def test_due_collector_fetches_once_and_records_complete_offered_play():
     with (
         patch("scripts.official_odds_capture.get_db") as get_db,
         patch("scripts.official_odds_capture._load_candidates", return_value=[candidate]),
+        patch("scripts.official_odds_capture._close_expired_sales"),
         patch("scripts.official_odds_capture._reserve_batch", return_value=99),
         patch("scripts.official_odds_capture.SportteryClient", return_value=client),
         patch(
@@ -52,7 +67,7 @@ def test_due_collector_fetches_once_and_records_complete_offered_play():
         ) as store_odds,
         patch("scripts.official_odds_capture._finish_batch") as finish_batch,
         patch("scripts.official_odds_capture.log_crawl"),
-        patch("scripts.official_odds_capture.update_health"),
+        patch("scripts.official_odds_capture.update_health") as update_health,
     ):
         get_db.return_value.__enter__.return_value = connection
 
@@ -72,3 +87,4 @@ def test_due_collector_fetches_once_and_records_complete_offered_play():
         for snapshot in stored_snapshots
     )
     finish_batch.assert_called_once_with(connection, 99, "complete", ("spf",), 3, None)
+    update_health.assert_called_once_with(connection, "sporttery", "odds", "ok", 0)

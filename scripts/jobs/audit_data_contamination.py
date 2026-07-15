@@ -25,6 +25,19 @@ def _now() -> str:
     return datetime.now().isoformat(timespec="seconds")
 
 
+def _resolve_previous_findings(conn: Any, check_type: str) -> None:
+    """Close the prior audit state before writing the current check result."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """UPDATE data_contamination_audit_logs
+               SET resolved = true,
+                   resolution_notes = 'Superseded by a newer contamination audit'
+               WHERE check_type = %s AND contamination_detected = true AND NOT resolved""",
+            (check_type,),
+        )
+    conn.commit()
+
+
 def _check_lineup_temporal_integrity(conn: Any) -> list[dict]:
     """Check that lineups stored after kickoff are not used in pre-match features.
 
@@ -94,8 +107,9 @@ def _check_odds_temporal_integrity(conn: Any) -> list[dict]:
                 COUNT(os.id) AS post_kickoff_snapshots
             FROM official_matches m
             JOIN official_odds_snapshots os ON os.match_id = m.id
-            WHERE os.snapshot_time > m.kickoff_time
+            WHERE os.snapshot_time > m.kickoff_time + INTERVAL '10 minutes'
               AND m.sale_status = 'selling'
+              AND NULLIF(m.raw_json->>'matchTime', '') IS NOT NULL
             GROUP BY m.id, m.home_team_name, m.away_team_name, m.kickoff_time
             LIMIT 100
             """
@@ -192,6 +206,7 @@ def _check_feature_snapshot_staleness(conn: Any) -> list[dict]:
             FROM match_feature_snapshots mfs
             JOIN official_matches m ON m.id = mfs.match_id
             WHERE mfs.snapshot_time > m.kickoff_time + INTERVAL '24 hours'
+              AND NULLIF(m.raw_json->>'matchTime', '') IS NOT NULL
             LIMIT 100
             """
         )
@@ -246,6 +261,8 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
 
         # Store findings
         if not dry_run:
+            for check_name, _ in checks:
+                _resolve_previous_findings(conn, check_name)
             for f in all_findings:
                 store_contamination_audit(
                     conn,

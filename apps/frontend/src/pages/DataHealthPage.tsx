@@ -7,6 +7,7 @@ import StatusBadge from '../shared/components/StatusBadge';
 import LoadingSpinner from '../shared/components/LoadingSpinner';
 import Skeleton from '../shared/components/Skeleton';
 import ErrorState from '../shared/components/ErrorState';
+import { buildDataHealthRows, formatPipelineTime, type PipelineStatus } from './dataHealthPresentation';
 
 interface HealthStatus {
   service: string;
@@ -25,25 +26,10 @@ interface Stage8Metrics {
   data_contamination_count: number | null;
 }
 
-interface PipelineStatus {
-  sources: Array<{
-    name: string;
-    status: string;
-    last_success: string | null;
-    last_failure: string | null;
-    failures: number;
-    latency_ms: number;
-  }>;
-  jobs: Array<{
-    name: string;
-    status: string;
-    finished_at: string | null;
-  }>;
-}
-
 interface OpsHealth {
   status: string;
   snapshot_date: string | null;
+  snapshot_time: string | null;
   metrics: Stage8Metrics;
   services: {
     scheduler: boolean | null;
@@ -127,72 +113,7 @@ export default function DataHealthPage() {
     </div>
   );
 
-  // Build data source + task list from real pipeline data
-  const jobStatusMap = new Map<string, string>();
-  const jobTimeMap = new Map<string, string>();
-  if (pipeline?.jobs) {
-    for (const j of pipeline.jobs) {
-      jobStatusMap.set(j.name, j.status === 'success' ? 'ok' : 'error');
-      jobTimeMap.set(j.name, j.finished_at ? new Date(j.finished_at).toLocaleString('zh-CN', { hour12: false }) : '');
-    }
-  }
-  const srcStatus = pipeline?.sources?.find(s => s.name === 'sporttery');
-  const src500Status = pipeline?.sources?.find(s => s.name === '500.com');
-
-  // Job name → detail label mapping
-  const jobDetailMap: Record<string, string> = {
-    '赔率快照采集': '每30分钟', '赛果结算': '每30分钟', '联赛积分榜采集': '每日 03:07',
-    '伤停数据采集': '每日 08:07', '首发阵容采集': '每日 10:07/14:07', '天气数据采集': '每日 09:07/15:07',
-    '模型预测执行': '每6小时', '推荐候选生成': '每日 16:00', '日报生成': '每日 23:30',
-    '错因分析': '每日 23:45', 'Elo评分更新': '每日 01:00', '健康指标采集': '每日 23:55',
-    '模型评估指标计算': '每日 23:40', '数据污染审计': '每日 23:45', '证据链校验': '每日 23:30',
-    '备份验证': '每日 23:00', '票单结算': '每15分钟', '特征快照构建': '每日 00:00',
-    '官方赛程采集': '每10分钟', '球队联赛映射': '每日 02:00',
-  };
-  const jobTypeMap: Record<string, 'official' | 'model' | 'review'> = {
-    '赔率快照采集': 'official', '赛果结算': 'official', '联赛积分榜采集': 'official',
-    '伤停数据采集': 'official', '首发阵容采集': 'official', '天气数据采集': 'official',
-    '官方赛程采集': 'official', '球队联赛映射': 'official', '票单结算': 'official',
-    '模型预测执行': 'model', '推荐候选生成': 'model', 'Elo评分更新': 'model',
-    '模型评估指标计算': 'model', '特征快照构建': 'model',
-    '日报生成': 'review', '错因分析': 'review', '健康指标采集': 'review',
-    '数据污染审计': 'review', '证据链校验': 'review', '备份验证': 'review',
-  };
-
-  const sources: Array<{name: string; type: string; status: 'ok' | 'warning' | 'error' | 'info'; detail: string}> = [
-    {
-      name: '官方竞彩 (sporttery.cn)',
-      type: 'official',
-      status: srcStatus?.status === 'ok' ? 'ok' : 'error',
-      detail: srcStatus?.status === 'ok' ? `延迟 ${srcStatus.latency_ms}ms` : `失败 ${srcStatus?.failures ?? '?'} 次`,
-    },
-    {
-      name: '500.com 补充源',
-      type: 'supplemental',
-      status: src500Status?.status === 'ok' ? 'ok' : 'warning',
-      detail: src500Status?.status === 'ok' ? `补充数据正常，延迟 ${src500Status.latency_ms}ms` : '未启用',
-    },
-  ];
-
-  // Add task statuses from real job data
-  const taskNames = [
-    '赔率快照采集', '赛果结算', '联赛积分榜采集', '伤停数据采集', '首发阵容采集',
-    '天气数据采集', '模型预测执行', '推荐候选生成', '日报生成', '错因分析',
-    'Elo评分更新', '模型评估指标计算', '数据污染审计', '证据链校验',
-  ];
-  for (const name of taskNames) {
-    const jobStatus = jobStatusMap.get(name);
-    const lastTime = jobTimeMap.get(name);
-    const type = jobTypeMap[name] || 'official';
-    const defaultDetail = jobDetailMap[name] || '';
-    const detail = jobStatus === 'ok' && lastTime ? `最近: ${lastTime}` : defaultDetail;
-    sources.push({
-      name,
-      type,
-      status: jobStatus === 'ok' ? 'ok' : (jobStatus === 'error' ? 'error' : 'warning'),
-      detail,
-    });
-  }
+  const sources = buildDataHealthRows(pipeline);
 
   const stage8Passes = opsHealth?.metrics
     ? Object.entries(STAGE8_TARGETS).filter(([key, cfg]) => {
@@ -287,9 +208,9 @@ export default function DataHealthPage() {
                 {opsHealth.notes}
               </span>
             )}
-            {opsHealth.snapshot_date && (
+            {opsHealth.snapshot_time && (
               <span style={{ float: 'right', fontSize: '11px', color: 'var(--fqp-text-muted)' }}>
-                快照日期: {opsHealth.snapshot_date}
+                快照: {formatPipelineTime(opsHealth.snapshot_time)}
               </span>
             )}
           </div>
@@ -379,11 +300,11 @@ export default function DataHealthPage() {
           </div>
           <div>
             <div className="fqp-label">部署模式</div>
-            <div>本机进程 — PostgreSQL 本地版</div>
+            <div>本地服务栈 — PostgreSQL</div>
           </div>
           <div>
             <div className="fqp-label">调度任务</div>
-            <div>21 个定时任务</div>
+            <div>{pipeline?.jobs.length ?? 0} 个已记录任务</div>
           </div>
         </div>
       </Card>
@@ -431,7 +352,7 @@ export default function DataHealthPage() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
           {sources.map((src, i) => (
             <div
-              key={src.name}
+              key={src.key}
               className="fqp-anim-listItemEnter"
               style={{
                 display: 'flex',

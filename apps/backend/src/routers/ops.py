@@ -5,6 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Query
 
 from apps.backend.src.db import get_db
+from apps.backend.src.services.pipeline_status import get_pipeline_snapshot, utc_iso
 from scripts.ops_storage import (
     get_backup_success_rate,
     get_broken_chains,
@@ -23,34 +24,7 @@ router = APIRouter(tags=["ops"])
 def get_pipeline_status():
     """Get data source health + latest job run statuses for the Data Health dashboard."""
     with get_db() as conn:
-        cur = conn.cursor()
-
-        # Data source health
-        cur.execute(
-            "SELECT source_name, status, last_success_time, last_failure_time, "
-            "failure_count, latency_ms FROM data_source_health ORDER BY source_name"
-        )
-        src_cols = ["name", "status", "last_success", "last_failure", "failures", "latency_ms"]
-        sources = []
-        for row in cur.fetchall():
-            d = dict(zip(src_cols, row, strict=False))
-            d["last_success"] = str(d["last_success"]) if d["last_success"] else None
-            d["last_failure"] = str(d["last_failure"]) if d["last_failure"] else None
-            sources.append(d)
-
-        # Latest job runs
-        cur.execute(
-            "SELECT DISTINCT ON (job_name) job_name, status, finished_at "
-            "FROM ai_job_runs ORDER BY job_name, id DESC"
-        )
-        job_cols = ["name", "status", "finished_at"]
-        jobs = []
-        for row in cur.fetchall():
-            d = dict(zip(job_cols, row, strict=False))
-            d["finished_at"] = str(d["finished_at"]) if d["finished_at"] else None
-            jobs.append(d)
-
-    return {"sources": sources, "jobs": jobs}
+        return get_pipeline_snapshot(conn)
 
 
 @router.get("/api/ops/health")
@@ -69,6 +43,7 @@ def get_operational_health():
     return {
         "status": snapshot.get("overall_health_status", "unknown"),
         "snapshot_date": snapshot.get("snapshot_date"),
+        "snapshot_time": utc_iso(snapshot.get("snapshot_time")),
         "metrics": {
             "uptime_days": snapshot.get("continuous_uptime_days"),
             "official_collection_rate": snapshot.get("official_collection_success_rate"),

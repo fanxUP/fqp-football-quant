@@ -486,7 +486,7 @@ def crawl_official_schedule(business_date: str) -> dict[str, Any]:
                     records_found=0,
                     started_at=started,
                 )
-                update_health(conn, "sporttery", "official", "ok", latency_ms)
+                update_health(conn, "sporttery", "schedule", "ok", latency_ms)
             return {
                 "status": "ok",
                 "matches_found": 0,
@@ -529,7 +529,7 @@ def crawl_official_schedule(business_date: str) -> dict[str, Any]:
                 records_updated=total_updated,
                 started_at=started,
             )
-            update_health(conn, "sporttery", "official", "ok", latency_ms)
+            update_health(conn, "sporttery", "schedule", "ok", latency_ms)
 
         client.close()
         return {
@@ -553,7 +553,7 @@ def crawl_official_schedule(business_date: str) -> dict[str, Any]:
                 error_message=str(e),
                 started_at=started,
             )
-            update_health(conn, "sporttery", "official", "error", latency_ms, str(e))
+            update_health(conn, "sporttery", "schedule", "error", latency_ms, str(e))
         return {"status": "error", "error": str(e)}
 
 
@@ -592,6 +592,7 @@ def crawl_official_results(begin_date: str, end_date: str) -> dict[str, Any]:
                     records_found=0,
                     started_at=started,
                 )
+                update_health(conn, "sporttery", "results", "ok", latency_ms)
             return {"status": "ok", "results_found": 0, "results_stored": 0}
 
         # Resolve match_code → match_id
@@ -629,7 +630,7 @@ def crawl_official_results(begin_date: str, end_date: str) -> dict[str, Any]:
                 records_updated=store_result["updated"],
                 started_at=started,
             )
-            update_health(conn, "sporttery", "official", "ok", latency_ms)
+            update_health(conn, "sporttery", "results", "ok", latency_ms)
 
         client.close()
         return {
@@ -670,7 +671,7 @@ def crawl_official_results(begin_date: str, end_date: str) -> dict[str, Any]:
                     error_message=error_msg,
                     started_at=started,
                 )
-                update_health(conn, "sporttery", "official", "error", 0, error_msg)
+                update_health(conn, "sporttery", "results", "error", 0, error_msg)
             return _crawl_results_via_500(begin_date, end_date, started)
 
         with get_db() as conn:
@@ -682,7 +683,7 @@ def crawl_official_results(begin_date: str, end_date: str) -> dict[str, Any]:
                 error_message=error_msg,
                 started_at=started,
             )
-            update_health(conn, "sporttery", "official", "error", 0, error_msg)
+            update_health(conn, "sporttery", "results", "error", 0, error_msg)
         return {"status": "error", "error": error_msg}
 
 
@@ -779,7 +780,7 @@ def crawl_official_schedule_v2(business_date: str | None = None) -> dict[str, An
                     conn, source_name="sporttery_v2", crawl_type="schedule",
                     status="ok", records_found=0, started_at=started,
                 )
-                update_health(conn, "sporttery_v2", "official", "ok", latency_ms)
+                update_health(conn, "sporttery_v2", "schedule", "ok", latency_ms)
             return {"status": "ok", "matches_found": 0, "note": "no matches in response"}
 
         # 3. Store matches
@@ -814,7 +815,7 @@ def crawl_official_schedule_v2(business_date: str | None = None) -> dict[str, An
                 records_inserted=total_inserted, records_updated=total_updated,
                 started_at=started,
             )
-            update_health(conn, "sporttery_v2", "official", "ok", latency_ms)
+            update_health(conn, "sporttery_v2", "schedule", "ok", latency_ms)
 
         client.close()
         return {

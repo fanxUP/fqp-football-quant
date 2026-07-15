@@ -10,8 +10,10 @@ Stage 3b (v2_enriched): lineup, injury, rotation, travel, weather,
 
 from __future__ import annotations
 
+import os
 from datetime import datetime
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from apps.backend.src.db import get_db
 from scripts.agents.task_queue import finish_tracked_job, start_tracked_job
@@ -24,7 +26,13 @@ from scripts.features.build_basic_features import (
 
 
 def _now() -> str:
-    return datetime.now().isoformat(timespec="seconds")
+    return _business_now_naive().isoformat(timespec="seconds")
+
+
+def _business_now_naive() -> datetime:
+    """Return local business time for tables that store local-naive match times."""
+    timezone_name = os.getenv("FQP_TIMEZONE", "Asia/Shanghai")
+    return datetime.now(ZoneInfo(timezone_name)).replace(tzinfo=None)
 
 
 def _resolve_team_id(conn: Any, official_name: str) -> int | None:
@@ -193,7 +201,8 @@ def _run_impl(match_id: int | None = None, dry_run: bool = False) -> dict[str, A
     if dry_run:
         return {"status": "dry_run", "message": "feature snapshot build (dry run)"}
 
-    snap_time = _now()
+    business_now = _business_now_naive()
+    snap_time = business_now.isoformat(timespec="seconds")
     feature_version = "v2_enriched"
 
     with get_db() as conn:
@@ -202,7 +211,10 @@ def _run_impl(match_id: int | None = None, dry_run: bool = False) -> dict[str, A
         # ---------------------------------------------------------------
         if match_id:
             with conn.cursor() as cur:
-                cur.execute("SELECT id FROM official_matches WHERE id = %s", (match_id,))
+                cur.execute(
+                    "SELECT id FROM official_matches WHERE id = %s AND kickoff_time > %s",
+                    (match_id, business_now),
+                )
                 match_ids = [row[0] for row in cur.fetchall()]
         else:
             with conn.cursor() as cur:
@@ -211,8 +223,10 @@ def _run_impl(match_id: int | None = None, dry_run: bool = False) -> dict[str, A
                     SELECT DISTINCT m.id, m.kickoff_time FROM official_matches m
                     JOIN official_odds_snapshots os ON os.match_id = m.id
                     WHERE m.sale_status = 'selling'
+                      AND m.kickoff_time > %s
                     ORDER BY m.kickoff_time
-                    """
+                    """,
+                    (business_now,),
                 )
                 match_ids = [row[0] for row in cur.fetchall()]
 

@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import os
 import shutil
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from typing import Any
 
 from apps.backend.src.db import get_db
@@ -30,7 +30,7 @@ from scripts.ops_storage import (
 
 
 def _now() -> str:
-    return datetime.now().isoformat(timespec="seconds")
+    return datetime.now(UTC).replace(tzinfo=None).isoformat(timespec="seconds")
 
 
 def _compute_official_collection_rate(conn: Any) -> dict:
@@ -76,7 +76,11 @@ def _compute_odds_missing_rate(conn: Any) -> dict:
     """
     with conn.cursor() as cur:
         # Total expected snapshots (one per Selling match)
-        cur.execute("SELECT COUNT(*) FROM official_matches WHERE sale_status = 'selling'")
+        cur.execute(
+            """SELECT COUNT(*) FROM official_matches
+               WHERE sale_status = 'selling'
+                 AND kickoff_time > timezone('Asia/Shanghai', NOW())"""
+        )
         total = cur.fetchone()[0] or 0
 
         # Missing: matches with no odds snapshot in last 6 hours
@@ -84,6 +88,7 @@ def _compute_odds_missing_rate(conn: Any) -> dict:
             """
             SELECT COUNT(*) FROM official_matches m
             WHERE m.sale_status = 'selling'
+              AND m.kickoff_time > timezone('Asia/Shanghai', NOW())
               AND NOT EXISTS (
                 SELECT 1 FROM official_odds_snapshots os
                 WHERE os.match_id = m.id
@@ -249,6 +254,10 @@ def run(dry_run: bool = False) -> dict[str, Any]:
                     notes_parts.append("证据链暂无审计样本")
             if not contamination_ok and not contamination["has_data"]:
                 notes_parts.append("污染审计暂无样本")
+            elif not contamination_ok:
+                notes_parts.append(
+                    f"数据污染 {contamination['contamination_found']} 条待处理"
+                )
             notes = "; ".join(notes_parts) if notes_parts else "Some metrics below target."
 
         contamination_count = (

@@ -57,7 +57,7 @@ def _get_prediction_chain(conn: Any, prediction_id: int) -> dict | None:
                 mp.odds_snapshot_id AS pred_odds_snapshot_id,
                 mp.predict_time,
                 mv.model_name,
-                mv.version_number
+                mv.version
             FROM model_predictions mp
             LEFT JOIN model_versions mv ON mv.id = mp.model_version_id
             WHERE mp.id = %s
@@ -73,7 +73,7 @@ def _get_prediction_chain(conn: Any, prediction_id: int) -> dict | None:
         "pred_odds_snapshot_id",
         "predict_time",
         "model_name",
-        "version_number",
+        "version",
     ]
     return dict(zip(cols, row, strict=False))
 

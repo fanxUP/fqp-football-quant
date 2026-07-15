@@ -1,6 +1,8 @@
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from scripts.jobs.run_feature_snapshot_build import (
+    _business_now_naive,
     _resolve_competition_season_id,
     _snapshot_job_result,
     can_build_team_dependent_features,
@@ -45,3 +47,13 @@ def test_snapshot_job_reports_failure_when_every_match_write_fails():
     assert result["status"] == "failed"
     assert result["failed_count"] == 3
     assert result["failed_matches"][0]["match_id"] == 1
+
+
+def test_feature_snapshot_clock_uses_shanghai_business_time(monkeypatch):
+    monkeypatch.setenv("FQP_TIMEZONE", "Asia/Shanghai")
+
+    now = _business_now_naive()
+
+    assert now.tzinfo is None
+    expected = datetime.now(ZoneInfo("Asia/Shanghai")).replace(tzinfo=None)
+    assert abs((now - expected).total_seconds()) < 2

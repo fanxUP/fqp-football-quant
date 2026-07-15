@@ -470,12 +470,20 @@ def get_contamination_stats(conn: Any, days: int = 30) -> dict:
     with conn.cursor() as cur:
         cur.execute(
             """
+            WITH latest_checks AS (
+                SELECT DISTINCT ON (check_type, COALESCE(match_id, -1))
+                       contamination_detected, severity, resolved
+                FROM data_contamination_audit_logs
+                WHERE audit_time >= CURRENT_DATE - INTERVAL '%s days'
+                ORDER BY check_type, COALESCE(match_id, -1), audit_time DESC, id DESC
+            )
             SELECT
                 COUNT(*) AS total_checks,
-                SUM(CASE WHEN contamination_detected THEN 1 ELSE 0 END) AS contamination_found,
-                SUM(CASE WHEN severity = 'critical' AND contamination_detected THEN 1 ELSE 0 END) AS critical_found
-            FROM data_contamination_audit_logs
-            WHERE audit_time >= CURRENT_DATE - INTERVAL '%s days'
+                SUM(CASE WHEN contamination_detected AND NOT resolved THEN 1 ELSE 0 END)
+                    AS contamination_found,
+                SUM(CASE WHEN severity = 'critical' AND contamination_detected AND NOT resolved
+                         THEN 1 ELSE 0 END) AS critical_found
+            FROM latest_checks
             """,
             (days,),
         )
@@ -494,9 +502,13 @@ def get_recent_contamination_issues(conn: Any, limit: int = 50) -> list[dict]:
     with conn.cursor() as cur:
         cur.execute(
             """
-            SELECT * FROM data_contamination_audit_logs
-            WHERE contamination_detected = true
-            ORDER BY audit_time DESC
+            SELECT * FROM (
+                SELECT DISTINCT ON (check_type, COALESCE(match_id, -1)) *
+                FROM data_contamination_audit_logs
+                WHERE contamination_detected = true AND NOT resolved
+                ORDER BY check_type, COALESCE(match_id, -1), audit_time DESC, id DESC
+            ) latest_issues
+            ORDER BY audit_time DESC, id DESC
             LIMIT %s
             """,
             (limit,),

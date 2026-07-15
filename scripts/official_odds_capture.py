@@ -29,6 +29,22 @@ class OfficialCaptureCandidate(CaptureCandidate):
     expected_play_types: tuple[str, ...]
 
 
+def _close_expired_sales(conn: Any, now: datetime) -> int:
+    """Close local sales after the final-capture grace window expires."""
+    local_now = now.astimezone(BUSINESS_TIMEZONE).replace(tzinfo=None)
+    expiry_cutoff = local_now - FINAL_CAPTURE_GRACE
+    with conn.cursor() as cur:
+        cur.execute(
+            """UPDATE official_matches
+               SET sale_status = 'closed', updated_at = NOW()
+               WHERE sale_status = 'selling' AND kickoff_time < %s""",
+            (expiry_cutoff,),
+        )
+        changed = cur.rowcount
+    conn.commit()
+    return max(0, int(changed))
+
+
 def _load_candidates(conn: Any, now: datetime) -> list[OfficialCaptureCandidate]:
     """Load sellable future matches plus recently started final-capture matches."""
     local_now = now.astimezone(BUSINESS_TIMEZONE).replace(tzinfo=None)
@@ -158,6 +174,7 @@ def collect_due_official_odds(now: datetime | None = None) -> dict[str, Any]:
 
     reserved: list[tuple[OfficialCaptureCandidate, str, int]] = []
     with get_db() as conn:
+        _close_expired_sales(conn, current)
         for candidate in _load_candidates(conn, current):
             decision = capture_decision(candidate, current)
             if not decision.is_due or not decision.capture_kind or not decision.scheduled_for:
@@ -248,7 +265,7 @@ def collect_due_official_odds(now: datetime | None = None) -> dict[str, Any]:
                 records_inserted=inserted_total,
                 started_at=started_at,
             )
-            update_health(conn, "sporttery", "official", "ok", 0)
+            update_health(conn, "sporttery", "odds", "ok", 0)
 
         return {
             "status": "ok",
@@ -260,7 +277,7 @@ def collect_due_official_odds(now: datetime | None = None) -> dict[str, Any]:
         with get_db() as conn:
             for _, _, batch_id in reserved:
                 _finish_batch(conn, batch_id, "failed", failure_reason=str(exc))
-            update_health(conn, "sporttery", "official", "error", 0, str(exc))
+            update_health(conn, "sporttery", "odds", "error", 0, str(exc))
         return {"status": "error", "matches_due": len(reserved), "error": str(exc)}
     finally:
         client.close()
