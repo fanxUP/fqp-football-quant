@@ -9,27 +9,15 @@ def test_host_ports_use_the_canonical_local_endpoints() -> None:
     compose = yaml.safe_load(
         (PROJECT_ROOT / "ops/local/docker-compose.local.yml").read_text(encoding="utf-8")
     )
-    deploy_script = (PROJECT_ROOT / "ops/local/run_local_stack.sh").read_text(
-        encoding="utf-8"
-    )
-    dev_script = (PROJECT_ROOT / "ops/local/run_local_dev.sh").read_text(
-        encoding="utf-8"
-    )
+    deploy_script = (PROJECT_ROOT / "ops/local/run_local_stack.sh").read_text(encoding="utf-8")
+    dev_script = (PROJECT_ROOT / "ops/local/run_local_dev.sh").read_text(encoding="utf-8")
     deployment_config = yaml.safe_load(
-        (PROJECT_ROOT / "configs/local_personal_deployment.yaml").read_text(
-            encoding="utf-8"
-        )
+        (PROJECT_ROOT / "configs/local_personal_deployment.yaml").read_text(encoding="utf-8")
     )
-    vite_config = (PROJECT_ROOT / "apps/frontend/vite.config.ts").read_text(
-        encoding="utf-8"
-    )
+    vite_config = (PROJECT_ROOT / "apps/frontend/vite.config.ts").read_text(encoding="utf-8")
 
-    assert compose["services"]["frontend"]["ports"] == [
-        "127.0.0.1:${FQP_FRONTEND_PORT:-8066}:3000"
-    ]
-    assert compose["services"]["backend"]["ports"] == [
-        "127.0.0.1:${FQP_BACKEND_PORT:-8006}:8000"
-    ]
+    assert compose["services"]["frontend"]["ports"] == ["127.0.0.1:${FQP_FRONTEND_PORT:-8066}:3000"]
+    assert compose["services"]["backend"]["ports"] == ["127.0.0.1:${FQP_BACKEND_PORT:-8006}:8000"]
     assert 'FRONTEND_PORT="${FQP_FRONTEND_PORT:-8066}"' in deploy_script
     assert 'BACKEND_PORT="${FQP_BACKEND_PORT:-8006}"' in deploy_script
     assert 'FRONTEND_PORT="${FQP_FRONTEND_PORT:-8066}"' in dev_script
@@ -62,6 +50,19 @@ def test_backend_and_scheduler_share_scheduler_heartbeat() -> None:
         service = compose["services"][service_name]
         assert "../../.runtime:/app/.runtime" in service["volumes"]
         assert service["environment"]["FQP_SCHEDULER_HEARTBEAT_MODE"] == "shared"
+
+
+def test_worker_publishes_a_shared_health_heartbeat() -> None:
+    compose = yaml.safe_load(
+        (PROJECT_ROOT / "ops/local/docker-compose.local.yml").read_text(encoding="utf-8")
+    )
+
+    worker = compose["services"]["worker"]
+    assert "../../.runtime:/app/.runtime" in worker["volumes"]
+    assert "healthcheck" in worker
+    assert "is_worker_alive" in " ".join(worker["healthcheck"]["test"])
+    assert worker["environment"]["FQP_ODDS_DISPATCH_OWNER"] == "worker"
+    assert compose["services"]["scheduler"]["environment"]["FQP_ODDS_DISPATCH_OWNER"] == "worker"
 
 
 def test_deploy_applies_incremental_migrations_before_runtime_contract_check() -> None:

@@ -16,15 +16,18 @@ from __future__ import annotations
 
 import os
 import shutil
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 from apps.backend.src.db import get_db
+from scripts.business_time import business_today
+from scripts.local.scheduler_heartbeat import is_scheduler_alive
+from scripts.local.service_health import is_http_service_alive
+from scripts.local.worker_heartbeat import is_worker_alive
 from scripts.ops_storage import (
     get_backup_success_rate,
     get_contamination_stats,
     get_evidence_chain_stats,
-    get_latest_health_snapshot,
     store_health_snapshot,
 )
 
@@ -33,9 +36,9 @@ def _now() -> str:
     return datetime.now(UTC).replace(tzinfo=None).isoformat(timespec="seconds")
 
 
-def _compute_official_collection_rate(conn: Any) -> dict:
+def _compute_official_collection_rate(conn: Any, business_date: date | None = None) -> dict:
     """Compute official data collection success rate for today."""
-    today = date.today()
+    today = business_date or business_today()
     with conn.cursor() as cur:
         # Count matches in Selling status that should have been collected
         cur.execute(
@@ -72,7 +75,7 @@ def _compute_odds_missing_rate(conn: Any) -> dict:
     """Compute odds snapshot missing rate.
 
     An odds snapshot is "missing" if a Selling match has no snapshot
-    within the last 6 hours.
+    within 45 minutes, allowing a 15-minute grace over the 30-minute policy.
     """
     with conn.cursor() as cur:
         # Total expected snapshots (one per Selling match)
@@ -83,7 +86,7 @@ def _compute_odds_missing_rate(conn: Any) -> dict:
         )
         total = cur.fetchone()[0] or 0
 
-        # Missing: matches with no odds snapshot in last 6 hours
+        # Missing: matches outside the 30-minute policy plus 15-minute grace.
         cur.execute(
             """
             SELECT COUNT(*) FROM official_matches m
@@ -92,7 +95,7 @@ def _compute_odds_missing_rate(conn: Any) -> dict:
               AND NOT EXISTS (
                 SELECT 1 FROM official_odds_snapshots os
                 WHERE os.match_id = m.id
-                  AND os.snapshot_time >= NOW() - INTERVAL '6 hours'
+                  AND os.snapshot_time >= NOW() - INTERVAL '45 minutes'
               )
             """
         )
@@ -124,8 +127,7 @@ def _compute_review_generation_rate(conn: Any) -> dict:
         cur.execute("SELECT MIN(review_date) FROM daily_reviews")
         earliest = cur.fetchone()[0]
         if earliest:
-            from datetime import date
-            days_running = (date.today() - earliest).days + 1
+            days_running = (business_today() - earliest).days + 1
         else:
             days_running = 1
     # Expected = days since first review, capped at 30 and minimum 1
@@ -138,36 +140,55 @@ def _compute_review_generation_rate(conn: Any) -> dict:
     }
 
 
-def _compute_uptime_days(conn: Any) -> int:
-    """Compute consecutive uptime days from health snapshot history."""
-    prev = get_latest_health_snapshot(conn)
-    if not prev:
-        return 1
-    prev_days = prev.get("continuous_uptime_days", 0) or 0
-    return prev_days + 1
+def _compute_uptime_days(
+    conn: Any,
+    business_date: date,
+    services: dict[str, bool],
+) -> int:
+    """Count consecutive healthy calendar dates without same-day inflation."""
+    if not all(services.values()):
+        return 0
+    with conn.cursor() as cur:
+        cur.execute(
+            """SELECT snapshot_date, scheduler_running, worker_running,
+                      api_responding, db_responding
+               FROM operational_health_snapshots
+               WHERE snapshot_date < %s
+                 AND snapshot_date >= %s - INTERVAL '366 days'
+               ORDER BY snapshot_date DESC""",
+            (business_date, business_date),
+        )
+        rows = cur.fetchall()
+
+    healthy_dates = {row[0] for row in rows if all(bool(value) for value in row[1:5])}
+    uptime_days = 1
+    expected_date = business_date - timedelta(days=1)
+    while expected_date in healthy_dates:
+        uptime_days += 1
+        expected_date -= timedelta(days=1)
+    return uptime_days
 
 
 def _check_system_services(conn: Any) -> dict:
     """Check if core services are responding."""
-    from scripts.local.scheduler_heartbeat import is_scheduler_alive
-
-    result = {
+    return {
         "scheduler_running": is_scheduler_alive(),
-        "worker_running": True,  # assumed if jobs execute
-        "api_responding": True,  # placeholder — actual check needs HTTP call
-        "db_responding": True,  # if this query runs, DB is responding
+        "worker_running": is_worker_alive(),
+        "api_responding": is_http_service_alive(),
+        "db_responding": True,
     }
-    return result
 
 
 def _get_disk_usage() -> float | None:
     """Get disk usage percentage for the data directory."""
     data_dir = os.environ.get("FQP_DATA_DIR", "./data")
-    try:
-        usage = shutil.disk_usage(data_dir)
-        return round((usage.used / usage.total) * 100, 2)
-    except Exception:
-        return None
+    for path in (data_dir, "/"):
+        try:
+            usage = shutil.disk_usage(path)
+            return round((usage.used / usage.total) * 100, 2)
+        except OSError:
+            continue
+    return None
 
 
 def run(dry_run: bool = False) -> dict[str, Any]:
@@ -179,11 +200,11 @@ def run(dry_run: bool = False) -> dict[str, Any]:
         Summary dict with all computed metrics.
     """
     snap_time = _now()
-    today = date.today()
+    today = business_today()
 
     with get_db() as conn:
         # 1. Official collection success rate
-        official = _compute_official_collection_rate(conn)
+        official = _compute_official_collection_rate(conn, today)
 
         # 2. Odds snapshot missing rate
         odds_missing = _compute_odds_missing_rate(conn)
@@ -200,11 +221,11 @@ def run(dry_run: bool = False) -> dict[str, Any]:
         # 6. Data contamination
         contamination = get_contamination_stats(conn, days=30)
 
-        # 7. Uptime
-        uptime_days = _compute_uptime_days(conn)
-
         # System services
         services = _check_system_services(conn)
+
+        # 7. Uptime
+        uptime_days = _compute_uptime_days(conn, today, services)
 
         # Disk usage
         disk_pct = _get_disk_usage()
@@ -220,12 +241,22 @@ def run(dry_run: bool = False) -> dict[str, Any]:
             and evidence["completeness_rate"] >= 1.0
         )
         contamination_ok = bool(
-            contamination["has_data"]
-            and contamination["contamination_found"] == 0
+            contamination["has_data"] and contamination["contamination_found"] == 0
         )
 
-        all_ok = all([official_ok, odds_ok, reviews_ok, backup_ok, evidence_ok, contamination_ok])
-        any_critical = not official_ok or contamination["critical_found"] > 0
+        services_ok = all(services.values())
+        all_ok = all(
+            [
+                official_ok,
+                odds_ok,
+                reviews_ok,
+                backup_ok,
+                evidence_ok,
+                contamination_ok,
+                services_ok,
+            ]
+        )
+        any_critical = not official_ok or contamination["critical_found"] > 0 or not services_ok
 
         if all_ok:
             overall = "healthy"
@@ -237,6 +268,18 @@ def run(dry_run: bool = False) -> dict[str, Any]:
                 notes_parts.append(f"官方采集率 {official['rate']:.1%} < 98%")
             if contamination["critical_found"] > 0:
                 notes_parts.append(f"数据污染 {contamination['critical_found']} 条")
+            offline_services = [
+                label
+                for key, label in {
+                    "scheduler_running": "Scheduler",
+                    "worker_running": "Worker",
+                    "api_responding": "API",
+                    "db_responding": "数据库",
+                }.items()
+                if not services[key]
+            ]
+            if offline_services:
+                notes_parts.append("服务中断: " + ", ".join(offline_services))
             notes = "; ".join(notes_parts)
         else:
             overall = "degraded"
@@ -255,15 +298,11 @@ def run(dry_run: bool = False) -> dict[str, Any]:
             if not contamination_ok and not contamination["has_data"]:
                 notes_parts.append("污染审计暂无样本")
             elif not contamination_ok:
-                notes_parts.append(
-                    f"数据污染 {contamination['contamination_found']} 条待处理"
-                )
+                notes_parts.append(f"数据污染 {contamination['contamination_found']} 条待处理")
             notes = "; ".join(notes_parts) if notes_parts else "Some metrics below target."
 
         contamination_count = (
-            contamination["contamination_found"]
-            if contamination["has_data"]
-            else None
+            contamination["contamination_found"] if contamination["has_data"] else None
         )
 
         # Assemble snapshot

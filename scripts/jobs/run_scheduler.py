@@ -36,10 +36,10 @@ def _should_run_recommendation_catchup(
     decision_status: str | None,
 ) -> bool:
     """Catch up only after 16:00 when today's decision is not terminal."""
-    return (
-        now.timetz().replace(tzinfo=None) >= clock_time(hour=16)
-        and decision_status not in {"purchased", "abstained"}
-    )
+    return now.timetz().replace(tzinfo=None) >= clock_time(hour=16) and decision_status not in {
+        "purchased",
+        "abstained",
+    }
 
 
 def _daily_decision_status(decision_date: date) -> str | None:
@@ -78,6 +78,11 @@ def _official_source_enabled() -> bool:
     return os.getenv("OFFICIAL_SOURCE_ENABLED", "true").lower() == "true"
 
 
+def _odds_dispatch_owner() -> str:
+    """Choose one odds dispatcher: Scheduler on host, Worker in Docker."""
+    return os.getenv("FQP_ODDS_DISPATCH_OWNER", "scheduler").lower()
+
+
 def _audited_job(
     job_code: str, job_name: str, owner_agent: str, fn: Callable[[], Any]
 ) -> Callable[[], None]:
@@ -87,9 +92,15 @@ def _audited_job(
     # Wrapping them again here would create duplicate runs and stale outer
     # records with the wrong owner agent.
     self_tracked = {
-        "build_feature_snapshots", "collect_injury_data", "collect_lineup_data",
-        "collect_weather", "run_model_prediction", "run_recommendation_candidate",
-        "generate_daily_review", "validate_evidence_chain", "audit_data_contamination",
+        "build_feature_snapshots",
+        "collect_injury_data",
+        "collect_lineup_data",
+        "collect_weather",
+        "run_model_prediction",
+        "run_recommendation_candidate",
+        "generate_daily_review",
+        "validate_evidence_chain",
+        "audit_data_contamination",
         "run_backtest",
     }
     if job_code in self_tracked:
@@ -194,26 +205,23 @@ def main() -> None:
 
             # Every 30 min: refresh official matches, sale states, and pool permissions.
             scheduler.add_job(
-                lambda: __import__(
-                    "scripts.jobs.crawl_official_schedule", fromlist=["run"]
-                ).run(),
+                lambda: __import__("scripts.jobs.crawl_official_schedule", fromlist=["run"]).run(),
                 "cron",
                 **OFFICIAL_SCHEDULE_CRON,
                 id="crawl_official_schedule",
             )
 
-            # Each minute: dispatch only matches whose opening, 30-minute, retry,
-            # or exact-kickoff capture is due. The policy prevents extra writes.
-            scheduler.add_job(
-                lambda: __import__(
-                    "scripts.jobs.run_official_odds_snapshot", fromlist=["run"]
-                ).run(),
-                "interval",
-                minutes=1,
-                id="crawl_official_odds",
-            )
+            if _odds_dispatch_owner() == "scheduler":
+                scheduler.add_job(
+                    lambda: __import__(
+                        "scripts.jobs.run_official_odds_snapshot", fromlist=["run"]
+                    ).run(),
+                    "interval",
+                    minutes=1,
+                    id="crawl_official_odds",
+                )
 
-            # Every 2 hours: traditional lottery (14场/任九) crawl
+            # Hourly from 06:07 through 23:07: traditional lottery crawl.
             scheduler.add_job(
                 _audited_job(
                     "crawl_traditional_lottery",
@@ -564,9 +572,7 @@ def main() -> None:
                     "tag_errors",
                     "错因标签",
                     "review_agent",
-                    lambda: __import__(
-                        "scripts.jobs.tag_errors", fromlist=["run"]
-                    ).run(),
+                    lambda: __import__("scripts.jobs.tag_errors", fromlist=["run"]).run(),
                 ),
                 "cron",
                 hour=23,
@@ -580,9 +586,7 @@ def main() -> None:
                     "snapshot_competition",
                     "竞赛快照",
                     "review_agent",
-                    lambda: __import__(
-                        "scripts.jobs.snapshot_competition", fromlist=["run"]
-                    ).run(),
+                    lambda: __import__("scripts.jobs.snapshot_competition", fromlist=["run"]).run(),
                 ),
                 "cron",
                 hour=23,
@@ -612,9 +616,7 @@ def main() -> None:
                     "reset_agent_budget",
                     "竞赛代理资金重置",
                     "review_agent",
-                    lambda: __import__(
-                        "scripts.jobs.reset_agent_budget", fromlist=["run"]
-                    ).run(),
+                    lambda: __import__("scripts.jobs.reset_agent_budget", fromlist=["run"]).run(),
                 ),
                 "cron",
                 hour=23,
@@ -653,10 +655,7 @@ def main() -> None:
     except ImportError:
         print("APScheduler not available; falling back to basic sleep loop.")
         while True:
-            print(
-                "scheduler heartbeat: "
-                f"{_business_now().isoformat(timespec='seconds')}"
-            )
+            print(f"scheduler heartbeat: {_business_now().isoformat(timespec='seconds')}")
             time.sleep(3600)
     finally:
         clear_scheduler_pid(scheduler_pid)

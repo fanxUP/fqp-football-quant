@@ -49,13 +49,16 @@ function sourceRow(source: PipelineSource): DataHealthRow {
   const sourceKey = `${source.name}:${source.source_type}`;
   const isSupplemental = source.source_type === 'supplemental';
   const isHealthy = source.status === 'ok';
+  const isStale = source.status === 'stale';
   const eventTime = isHealthy ? source.last_success : source.last_failure;
   return {
     key: `source:${sourceKey}`,
     name: SOURCE_NAMES[sourceKey] ?? `${source.name} · ${source.source_type}`,
     type: isSupplemental ? 'supplemental' : 'official',
-    status: isHealthy ? 'ok' : (isSupplemental ? 'warning' : 'error'),
-    detail: isHealthy
+    status: isHealthy ? 'ok' : (isStale || isSupplemental ? 'warning' : 'error'),
+    detail: isStale
+      ? `状态已过期: 最近成功 ${formatPipelineTime(source.last_success)} · 请检查调度服务`
+      : isHealthy
       ? `最近成功: ${formatPipelineTime(eventTime)} · 延迟 ${source.latency_ms}ms`
       : `最近失败: ${formatPipelineTime(eventTime)} · 累计失败 ${source.failures} 次`,
   };
@@ -67,12 +70,16 @@ function jobRow(job: PipelineJob): DataHealthRow {
     failed: 'error',
     running: 'info',
     skipped: 'warning',
+    stale: 'warning',
+    pending: 'info',
   };
   const statusLabel: Record<string, string> = {
     success: '最近成功',
     failed: '最近失败',
     running: '正在执行',
     skipped: '最近跳过',
+    stale: '状态已过期',
+    pending: '尚未运行',
   };
   return {
     key: `job:${job.code}`,

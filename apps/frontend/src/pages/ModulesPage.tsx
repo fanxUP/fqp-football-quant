@@ -95,7 +95,7 @@ export default function ModulesPage() {
     if (mod.status === 'coming_soon') return <StatusBadge status="disabled" label="待开发" />;
     if (mod.disabled) return <StatusBadge status="error" label="已禁用" />;
     if (mod.required) return <StatusBadge status="ok" label="核心" />;
-    return <StatusBadge status="ok" label="运行中" />;
+    return <StatusBadge status="ok" label="已启用" />;
   };
 
   return (

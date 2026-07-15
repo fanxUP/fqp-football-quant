@@ -69,4 +69,11 @@ describe('ModulesPage', () => {
     });
     expect(localStorage.getItem('fqp-settings')).not.toContain('pool_lottery_module');
   });
+
+  it('labels registry state as enabled instead of claiming runtime health', async () => {
+    render(<ModulesPage />);
+
+    expect(await screen.findByText('已启用')).toBeInTheDocument();
+    expect(screen.queryByText('运行中')).not.toBeInTheDocument();
+  });
 });

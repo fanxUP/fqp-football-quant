@@ -69,7 +69,8 @@ def is_scheduler_alive(max_age_minutes: int = 5) -> bool:
         payload = json.loads(HEARTBEAT_PATH.read_text(encoding="utf-8"))
         heartbeat = datetime.fromisoformat(payload["heartbeat_at"])
         now = datetime.now(heartbeat.tzinfo) if heartbeat.tzinfo else datetime.now()
-        return now - heartbeat <= timedelta(minutes=max_age_minutes)
+        age = now - heartbeat
+        return timedelta(0) <= age <= timedelta(minutes=max_age_minutes)
     except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError):
         return False
 

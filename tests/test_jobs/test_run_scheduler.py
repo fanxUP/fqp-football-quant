@@ -1,9 +1,13 @@
+import re
 from datetime import datetime, timedelta
+from pathlib import Path
 
+from apps.backend.src.services.pipeline_status import JOB_DEFINITIONS
 from scripts.jobs.run_scheduler import (
     OFFICIAL_SCHEDULE_CRON,
     _audited_job,
     _business_now,
+    _odds_dispatch_owner,
     _scheduler_timezone_name,
     _should_run_recommendation_catchup,
 )
@@ -68,18 +72,40 @@ def test_scheduler_refreshes_official_schedule_metadata_every_30_minutes():
     assert "**OFFICIAL_SCHEDULE_CRON" in source
 
 
-def test_scheduler_dispatches_due_odds_captures_each_minute():
-    from pathlib import Path
+def test_scheduler_dispatches_odds_by_default_for_host_runtime(monkeypatch):
+    monkeypatch.delenv("FQP_ODDS_DISPATCH_OWNER", raising=False)
 
+    assert _odds_dispatch_owner() == "scheduler"
+
+
+def test_scheduler_can_delegate_odds_dispatch_to_worker(monkeypatch):
+    monkeypatch.setenv("FQP_ODDS_DISPATCH_OWNER", "worker")
+
+    assert _odds_dispatch_owner() == "worker"
+
+
+def test_scheduler_guards_odds_dispatch_with_single_owner_setting():
     source = Path("scripts/jobs/run_scheduler.py").read_text()
-    assert (
-        'scheduler.add_job(\n                lambda: __import__(\n                    "scripts.jobs.run_official_odds_snapshot"'
-        in source
-    )
-    assert (
-        '"interval",\n                minutes=1,\n                id="crawl_official_odds"'
-        in source
-    )
+
+    assert 'if _odds_dispatch_owner() == "scheduler"' in source
+    assert 'id="crawl_official_odds"' in source
+
+
+def test_high_frequency_odds_dispatch_has_one_worker_owner():
+    scheduler_source = Path("scripts/jobs/run_scheduler.py").read_text()
+    worker_source = Path("scripts/official_crawler_stub.py").read_text()
+
+    assert 'if _odds_dispatch_owner() == "scheduler"' in scheduler_source
+    assert "POLL_INTERVAL_SECONDS = 60" in worker_source
+    assert "scripts.jobs.run_official_odds_snapshot" in worker_source
+
+
+def test_every_monitored_job_has_a_runtime_owner():
+    scheduler_source = Path("scripts/jobs/run_scheduler.py").read_text()
+    scheduler_ids = set(re.findall(r'id="([^"]+)"', scheduler_source))
+
+    for canonical, definition in JOB_DEFINITIONS.items():
+        assert scheduler_ids.intersection((canonical, *definition.aliases)), canonical
 
 
 def test_scheduler_defaults_to_shanghai_timezone(monkeypatch):

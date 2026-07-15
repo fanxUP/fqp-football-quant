@@ -34,3 +34,5 @@
 - APScheduler 已安装
 
 Scheduler 负责触发任务；任务自身负责写入 `ai_job_runs` 的统一台账，已接入台账的任务不会被 Scheduler 重复包装。
+
+本机模式默认由 Scheduler 每分钟检查赔率采集时机；耐久策略仍只在开盘、每 30 分钟、重试窗口和开赛时写入快照。Docker 模式会通过 `FQP_ODDS_DISPATCH_OWNER=worker` 将该责任交给 Worker，两者不会同时执行。

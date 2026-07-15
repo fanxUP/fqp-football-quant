@@ -15,6 +15,13 @@
 - 容器带有 Git SHA 标签，可用 `docker inspect` 核对运行版本。
 - 不手动执行会绕过 GitHub 校验的 `docker compose up`；这会破坏版本可追溯性。
 
+## 调度与监控边界
+
+- Docker 模式下 Scheduler 负责定时任务，Worker 是赔率高频调度的唯一执行者；`FQP_ODDS_DISPATCH_OWNER=worker` 防止双重轮询。
+- 本机热开发模式没有独立 Worker，Scheduler 默认接管赔率调度，保证业务完整。
+- Scheduler 与 Worker 分别写入 `.runtime/scheduler_heartbeat.json` 和 `.runtime/worker_heartbeat.json`；数据监控页使用实时心跳，不使用固定“正常”值。
+- 容器和 PostgreSQL 使用 UTC，赛程、开赛、停售、竞赛和日报统一以 `Asia/Shanghai` 业务日期计算。
+
 ## 日常命令
 
 ```bash

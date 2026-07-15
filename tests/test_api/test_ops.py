@@ -2,8 +2,17 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock, patch
+
+from apps.backend.src.services.pipeline_status import _is_stale
+
+
+def test_pipeline_treats_missing_and_future_timestamps_as_stale():
+    now = datetime(2026, 7, 15, 3, 0, tzinfo=UTC)
+
+    assert _is_stale(None, timedelta(minutes=5), now) is True
+    assert _is_stale(datetime(2026, 7, 15, 4, 0), timedelta(minutes=5), now) is True
 
 
 def _mock_db_conn(fetchall=None, fetchone=None, description=None):
@@ -25,8 +34,15 @@ class TestBacktestsEndpoint:
             fetchall=[],
             fetchone=[0],
             description=[
-                ("id",), ("name",), ("description",), ("config",), ("status",),
-                ("started_at",), ("finished_at",), ("error_message",), ("created_at",),
+                ("id",),
+                ("name",),
+                ("description",),
+                ("config",),
+                ("status",),
+                ("started_at",),
+                ("finished_at",),
+                ("error_message",),
+                ("created_at",),
             ],
         )
 
@@ -42,13 +58,29 @@ class TestBacktestsEndpoint:
         now = datetime(2025, 1, 1, 10, 0, 0)
         mock_conn, mock_cur = _mock_db_conn(
             fetchall=[
-                (1, "baseline_v1", "Initial backtest", '{"model":"xgboost"}', "completed",
-                 now, now, None, now),
+                (
+                    1,
+                    "baseline_v1",
+                    "Initial backtest",
+                    '{"model":"xgboost"}',
+                    "completed",
+                    now,
+                    now,
+                    None,
+                    now,
+                ),
             ],
             fetchone=[1],
             description=[
-                ("id",), ("name",), ("description",), ("config",), ("status",),
-                ("started_at",), ("finished_at",), ("error_message",), ("created_at",),
+                ("id",),
+                ("name",),
+                ("description",),
+                ("config",),
+                ("status",),
+                ("started_at",),
+                ("finished_at",),
+                ("error_message",),
+                ("created_at",),
             ],
         )
 
@@ -64,8 +96,15 @@ class TestBacktestsEndpoint:
         mock_conn, mock_cur = _mock_db_conn(
             fetchone=None,
             description=[
-                ("id",), ("name",), ("description",), ("config",), ("status",),
-                ("started_at",), ("finished_at",), ("error_message",), ("created_at",),
+                ("id",),
+                ("name",),
+                ("description",),
+                ("config",),
+                ("status",),
+                ("started_at",),
+                ("finished_at",),
+                ("error_message",),
+                ("created_at",),
             ],
         )
 
@@ -80,8 +119,10 @@ class TestOpsHealth:
     def test_returns_no_data_when_no_snapshots(self, client):
         mock_conn, mock_cur = _mock_db_conn()
 
-        with patch("apps.backend.src.routers.ops.get_db", return_value=mock_conn), \
-             patch("apps.backend.src.routers.ops.get_latest_health_snapshot", return_value=None):
+        with (
+            patch("apps.backend.src.routers.ops.get_db", return_value=mock_conn),
+            patch("apps.backend.src.routers.ops.get_latest_health_snapshot", return_value=None),
+        ):
             resp = client.get("/api/ops/health")
         assert resp.status_code == 200
         data = resp.json()
@@ -107,14 +148,58 @@ class TestOpsHealth:
             "health_notes": "All systems normal",
         }
 
-        with patch("apps.backend.src.routers.ops.get_db", return_value=mock_conn), \
-             patch("apps.backend.src.routers.ops.get_latest_health_snapshot", return_value=snapshot):
+        with (
+            patch("apps.backend.src.routers.ops.get_db", return_value=mock_conn),
+            patch("apps.backend.src.routers.ops.get_latest_health_snapshot", return_value=snapshot),
+            patch(
+                "apps.backend.src.routers.ops.get_live_service_status",
+                return_value={
+                    "scheduler_running": True,
+                    "worker_running": True,
+                    "api_responding": True,
+                    "db_responding": True,
+                },
+            ),
+        ):
             resp = client.get("/api/ops/health")
         assert resp.status_code == 200
         data = resp.json()
         assert data["status"] == "healthy"
         assert data["metrics"]["uptime_days"] == 30
         assert data["services"]["db"] is True
+
+    def test_live_service_failure_overrides_stale_healthy_snapshot(self, client):
+        mock_conn, _ = _mock_db_conn()
+        snapshot = {
+            "overall_health_status": "healthy",
+            "snapshot_date": "2026-07-15",
+            "snapshot_time": "2026-07-15T03:55:00",
+            "scheduler_running": True,
+            "worker_running": True,
+            "api_responding": True,
+            "db_responding": True,
+            "health_notes": "All systems normal",
+        }
+
+        with (
+            patch("apps.backend.src.routers.ops.get_db", return_value=mock_conn),
+            patch("apps.backend.src.routers.ops.get_latest_health_snapshot", return_value=snapshot),
+            patch(
+                "apps.backend.src.routers.ops.get_live_service_status",
+                return_value={
+                    "scheduler_running": False,
+                    "worker_running": True,
+                    "api_responding": True,
+                    "db_responding": True,
+                },
+            ),
+        ):
+            resp = client.get("/api/ops/health")
+
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "critical"
+        assert resp.json()["services"]["scheduler"] is False
+        assert "Scheduler 心跳中断" in resp.json()["notes"]
 
     def test_returns_snapshot_time_as_explicit_utc(self, client):
         mock_conn, _ = _mock_db_conn()
@@ -124,8 +209,10 @@ class TestOpsHealth:
             "snapshot_time": "2026-07-15T03:55:00",
         }
 
-        with patch("apps.backend.src.routers.ops.get_db", return_value=mock_conn), \
-             patch("apps.backend.src.routers.ops.get_latest_health_snapshot", return_value=snapshot):
+        with (
+            patch("apps.backend.src.routers.ops.get_db", return_value=mock_conn),
+            patch("apps.backend.src.routers.ops.get_latest_health_snapshot", return_value=snapshot),
+        ):
             resp = client.get("/api/ops/health")
 
         assert resp.status_code == 200
@@ -137,28 +224,41 @@ class TestOpsPipeline:
         mock_conn, mock_cur = _mock_db_conn()
         mock_cur.fetchall.side_effect = [
             [
-                (1, "sporttery", "results", "error", None,
-                 datetime(2026, 7, 15, 3, 0, 2), 192, 0),
-                (4, "sporttery", "traditional_lottery", "ok",
-                 datetime(2026, 7, 15, 3, 7, 2), None, 5, 1909),
-                (5, "sporttery", "official", "ok",
-                 datetime(2026, 7, 15, 3, 8, 0), None, 0, 200),
-                (6, "500.com", "supplemental", "ok",
-                 datetime(2026, 7, 15, 3, 8, 1), None, 0, 300),
-                (7, "500.com", "official", "ok",
-                 datetime(2026, 7, 10, 3, 8, 0), None, 0, 400),
+                (1, "sporttery", "results", "error", None, datetime(2026, 7, 15, 3, 0, 2), 192, 0),
+                (
+                    4,
+                    "sporttery",
+                    "traditional_lottery",
+                    "ok",
+                    datetime(2026, 7, 15, 3, 7, 2),
+                    None,
+                    5,
+                    1909,
+                ),
+                (5, "sporttery", "official", "ok", datetime(2026, 7, 15, 3, 8, 0), None, 0, 200),
+                (6, "500.com", "supplemental", "ok", datetime(2026, 7, 15, 3, 8, 1), None, 0, 300),
+                (7, "500.com", "official", "ok", datetime(2026, 7, 10, 3, 8, 0), None, 0, 400),
             ],
             [
-                (101, "official_odds_snapshot", "completed",
-                 datetime(2026, 7, 15, 3, 8, 19), None),
-                (99, "crawl_official_odds", "success",
-                 datetime(2026, 7, 9, 23, 30), None),
-                (88, "refresh_supplemental_seasons", "failed",
-                 datetime(2026, 7, 13, 3, 40), "obsolete table"),
+                (101, "official_odds_snapshot", "completed", datetime(2026, 7, 15, 3, 8, 19), None),
+                (99, "crawl_official_odds", "success", datetime(2026, 7, 9, 23, 30), None),
+                (
+                    88,
+                    "refresh_supplemental_seasons",
+                    "failed",
+                    datetime(2026, 7, 13, 3, 40),
+                    "obsolete table",
+                ),
             ],
         ]
 
-        with patch("apps.backend.src.routers.ops.get_db", return_value=mock_conn):
+        with (
+            patch("apps.backend.src.routers.ops.get_db", return_value=mock_conn),
+            patch(
+                "apps.backend.src.services.pipeline_status._utc_now",
+                return_value=datetime(2026, 7, 15, 3, 9, tzinfo=UTC),
+            ),
+        ):
             resp = client.get("/api/ops/pipeline")
 
         assert resp.status_code == 200
@@ -173,30 +273,42 @@ class TestOpsPipeline:
             "latency_ms": 0,
         }
         assert {source["source_type"] for source in data["sources"]} == {
-            "results", "traditional_lottery", "supplemental"
+            "results",
+            "traditional_lottery",
+            "supplemental",
         }
-        assert data["jobs"] == [{
+        odds_job = next(job for job in data["jobs"] if job["code"] == "official_odds_snapshot")
+        assert odds_job == {
             "code": "official_odds_snapshot",
             "name": "赔率快照采集",
             "status": "success",
             "finished_at": "2026-07-15T03:08:19Z",
             "error": None,
-            "schedule": "按开盘/每30分钟/开赛时",
+            "schedule": "每分钟检查；开盘/每30分钟/开赛时采集",
             "category": "official",
-        }]
+        }
+        monthly = next(job for job in data["jobs"] if job["code"] == "generate_monthly_review")
+        assert monthly["status"] == "pending"
+        assert monthly["finished_at"] is None
+        assert len(data["jobs"]) == 30
 
 
 class TestOpsAuditGates:
     def test_evidence_chain_does_not_pass_without_audited_samples(self, client):
         mock_conn, _ = _mock_db_conn()
-        with patch("apps.backend.src.routers.ops.get_db", return_value=mock_conn), \
-             patch("apps.backend.src.routers.ops.get_evidence_chain_stats", return_value={
-                 "total_audited": 0,
-                 "complete_chains": 0,
-                 "unique_recommendations": 0,
-                 "completeness_rate": None,
-                 "has_data": False,
-             }):
+        with (
+            patch("apps.backend.src.routers.ops.get_db", return_value=mock_conn),
+            patch(
+                "apps.backend.src.routers.ops.get_evidence_chain_stats",
+                return_value={
+                    "total_audited": 0,
+                    "complete_chains": 0,
+                    "unique_recommendations": 0,
+                    "completeness_rate": None,
+                    "has_data": False,
+                },
+            ),
+        ):
             resp = client.get("/api/ops/evidence-chain")
 
         assert resp.status_code == 200
@@ -205,14 +317,19 @@ class TestOpsAuditGates:
 
     def test_contamination_audit_does_not_pass_without_checks(self, client):
         mock_conn, _ = _mock_db_conn()
-        with patch("apps.backend.src.routers.ops.get_db", return_value=mock_conn), \
-             patch("apps.backend.src.routers.ops.get_contamination_stats", return_value={
-                 "total_checks": 0,
-                 "contamination_found": 0,
-                 "critical_found": 0,
-                 "has_data": False,
-             }), \
-             patch("apps.backend.src.routers.ops.get_recent_contamination_issues", return_value=[]):
+        with (
+            patch("apps.backend.src.routers.ops.get_db", return_value=mock_conn),
+            patch(
+                "apps.backend.src.routers.ops.get_contamination_stats",
+                return_value={
+                    "total_checks": 0,
+                    "contamination_found": 0,
+                    "critical_found": 0,
+                    "has_data": False,
+                },
+            ),
+            patch("apps.backend.src.routers.ops.get_recent_contamination_issues", return_value=[]),
+        ):
             resp = client.get("/api/ops/contamination-audit")
 
         assert resp.status_code == 200
@@ -224,8 +341,10 @@ class TestReviewsEndpoint:
     def test_daily_reviews_returns_list(self, client):
         mock_conn, mock_cur = _mock_db_conn()
 
-        with patch("apps.backend.src.routers.tickets.get_db", return_value=mock_conn), \
-             patch("apps.backend.src.routers.tickets._list_daily_reviews", return_value=[]):
+        with (
+            patch("apps.backend.src.routers.tickets.get_db", return_value=mock_conn),
+            patch("apps.backend.src.routers.tickets._list_daily_reviews", return_value=[]),
+        ):
             resp = client.get("/api/reviews/daily?limit=30")
         assert resp.status_code == 200
         data = resp.json()
@@ -235,8 +354,10 @@ class TestReviewsEndpoint:
     def test_weekly_reviews_returns_list(self, client):
         mock_conn, mock_cur = _mock_db_conn()
 
-        with patch("apps.backend.src.routers.tickets.get_db", return_value=mock_conn), \
-             patch("apps.backend.src.routers.tickets._list_weekly_reviews", return_value=[]):
+        with (
+            patch("apps.backend.src.routers.tickets.get_db", return_value=mock_conn),
+            patch("apps.backend.src.routers.tickets._list_weekly_reviews", return_value=[]),
+        ):
             resp = client.get("/api/reviews/weekly?limit=12")
         assert resp.status_code == 200
         data = resp.json()
@@ -245,8 +366,10 @@ class TestReviewsEndpoint:
     def test_daily_review_by_date_not_found(self, client):
         mock_conn, mock_cur = _mock_db_conn()
 
-        with patch("apps.backend.src.routers.tickets.get_db", return_value=mock_conn), \
-             patch("apps.backend.src.routers.tickets._get_daily_review", return_value=None):
+        with (
+            patch("apps.backend.src.routers.tickets.get_db", return_value=mock_conn),
+            patch("apps.backend.src.routers.tickets._get_daily_review", return_value=None),
+        ):
             resp = client.get("/api/reviews/daily/2099-01-01")
         assert resp.status_code == 200
         assert resp.json()["status"] == "not_found"

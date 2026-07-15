@@ -88,11 +88,21 @@ services:
       dockerfile: ops/Dockerfile.api
     command: python -u -m scripts.official_crawler_stub
     env_file: .env.local
+    environment:
+      FQP_ODDS_DISPATCH_OWNER: worker
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_started
+    volumes:
+      - ../../.runtime:/app/.runtime
+    healthcheck:
+      test: ["CMD", "python", "-c", "from scripts.local.worker_heartbeat import is_worker_alive; raise SystemExit(0 if is_worker_alive() else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
     labels:
       com.fqp.git.revision: "${FQP_DEPLOY_REVISION:-unknown}"
     restart: unless-stopped
@@ -105,6 +115,8 @@ services:
     env_file: .env.local
     environment:
       FQP_SCHEDULER_HEARTBEAT_MODE: shared
+      FQP_API_HEALTH_URL: http://backend:8000/health
+      FQP_ODDS_DISPATCH_OWNER: worker
     depends_on:
       postgres:
         condition: service_healthy

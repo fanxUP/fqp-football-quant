@@ -130,4 +130,22 @@ describe('DataHealthPage', () => {
     expect(screen.getByText('1 个已记录任务')).toBeInTheDocument();
     expect(screen.getByText(/最近成功: .*按开盘\/每30分钟\/开赛时/)).toBeInTheDocument();
   });
+
+  it('shows stale sources and never-run jobs without claiming success', async () => {
+    mockPipeline.mockResolvedValue({
+      sources: [{
+        name: 'sporttery_v2', source_type: 'schedule', status: 'stale',
+        last_success: '2026-07-14T02:40:00Z', last_failure: null, failures: 0, latency_ms: 381,
+      }],
+      jobs: [{
+        code: 'generate_monthly_review', name: '月报生成', status: 'pending',
+        finished_at: null, error: null, schedule: '每月1日 10:00', category: 'review',
+      }],
+    });
+
+    render(<DataHealthPage />);
+
+    expect(await screen.findByText(/状态已过期/)).toBeInTheDocument();
+    expect(screen.getByText(/尚未运行: 尚无记录/)).toBeInTheDocument();
+  });
 });
