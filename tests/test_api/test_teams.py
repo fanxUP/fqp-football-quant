@@ -153,3 +153,30 @@ class TestFeaturesSnapshotsEndpoint:
         s = resp.json()["snapshots"][0]
         assert s["data_completeness_score"] is None
         assert s["uncertainty_score"] is None
+
+
+def test_match_detail_uses_latest_prematch_features_and_all_option_predictions(client):
+    now = datetime(2026, 7, 14, 12, 0, 0)
+    match_row = (
+        101, "英超", "曼联", "利物浦", now, "Settled", "closed",
+        None, None, 2, 1, "3", "confirmed",
+        None, None, None, None, None,
+        None, None, None, None, None,
+    )
+    conn = MagicMock()
+    cur = MagicMock()
+    conn.__enter__.return_value = conn
+    conn.cursor.return_value.__enter__.return_value = cur
+    cur.fetchone.side_effect = [match_row, None, None, None, None]
+    cur.fetchall.return_value = []
+
+    with patch("apps.backend.src.routers.teams.get_db", return_value=conn):
+        response = client.get("/api/matches/101/detail")
+
+    assert response.status_code == 200
+    queries = [" ".join(call.args[0].split()) for call in cur.execute.call_args_list]
+    feature_query = next(q for q in queries if "FROM match_feature_snapshots" in q)
+    prediction_query = next(q for q in queries if "FROM model_predictions mp" in q)
+    assert "snapshot_time <" in feature_query
+    assert "mp.predict_time <" in prediction_query
+    assert "DISTINCT ON (mv.model_name, mp.play_type, mp.option_code)" in prediction_query

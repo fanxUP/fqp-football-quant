@@ -64,16 +64,25 @@ def run_pool_analysis(
                       AND m.away_team_name = im.away_team_name
                       AND m.kickoff_time::date = im.kickoff_time::date)
                 LEFT JOIN LATERAL (
-                    SELECT MAX(mv.model_name) AS model_name,
-                           MAX(mp.model_probability) FILTER (WHERE mp.option_code = '3') AS prob_home,
-                           MAX(mp.model_probability) FILTER (WHERE mp.option_code = '1') AS prob_draw,
-                           MAX(mp.model_probability) FILTER (WHERE mp.option_code = '0') AS prob_away
-                    FROM model_predictions mp
-                    JOIN model_versions mv ON mv.id = mp.model_version_id
-                    WHERE mp.match_id = m.id AND mp.play_type = 'spf'
-                      AND mp.predict_time = (SELECT MAX(mp2.predict_time)
-                                             FROM model_predictions mp2
-                                             WHERE mp2.match_id = m.id AND mp2.play_type = 'spf')
+                    WITH latest_model_options AS (
+                        SELECT DISTINCT ON (mp.model_version_id, mp.option_code)
+                               mp.model_version_id, mp.option_code, mp.model_probability
+                        FROM model_predictions mp
+                        JOIN model_versions mv ON mv.id = mp.model_version_id
+                        WHERE mp.match_id = m.id
+                          AND mp.play_type = 'spf'
+                          AND mp.predict_time < m.kickoff_time
+                          AND mv.is_active = true
+                          AND mp.model_probability IS NOT NULL
+                        ORDER BY mp.model_version_id, mp.option_code,
+                                 mp.predict_time DESC, mp.id DESC
+                    )
+                    SELECT '模型共识' AS model_name,
+                           AVG(model_probability) FILTER (WHERE option_code = '3') AS prob_home,
+                           AVG(model_probability) FILTER (WHERE option_code = '1') AS prob_draw,
+                           AVG(model_probability) FILTER (WHERE option_code = '0') AS prob_away
+                    FROM latest_model_options
+                    HAVING COUNT(DISTINCT model_version_id) > 0
                 ) latest ON true
                 WHERE i.game_type = 't14c'
                   AND i.official_status = 'selling'
@@ -106,7 +115,7 @@ def run_pool_analysis(
                     f"当前只有 {len(matches)} 场官方比赛，需要14场",
                 )
 
-            # 对每场官方比赛使用同一最新模型预测。
+            # 对每场官方比赛使用各活跃模型最新赛前概率的共识均值。
             pool_matches = []
             for row in matches:
                 pool_match = PoolMatch(

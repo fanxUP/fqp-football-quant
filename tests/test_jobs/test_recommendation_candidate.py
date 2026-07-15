@@ -12,6 +12,23 @@ from scripts.jobs.run_recommendation_candidate import (
     _prediction_sp_value,
     _ticket_generation_note,
 )
+from scripts.recommendation_prediction_loader import load_actionable_predictions
+
+
+def test_actionable_predictions_are_latest_per_match_model_play_and_option(mock_conn):
+    conn, cur = mock_conn
+    cur.fetchall.return_value = []
+
+    assert load_actionable_predictions(conn, recommendation.ALL_MODELS) == []
+
+    query = " ".join(cur.execute.call_args.args[0].split())
+    assert "DISTINCT ON (" in query
+    assert "mp.match_id, mp.model_version_id, mp.play_type, mp.option_code" in query
+    assert "mp.predict_time < m.kickoff_time" in query
+    assert "m.kickoff_time > timezone('Asia/Shanghai', NOW())" in query
+    assert "SELECT MAX(predict_time)" not in query
+    assert "mp.model_probability * latest_os.sp_value - 1" in query
+    assert "latest_os.id" in query
 
 
 def test_prediction_sp_value_does_not_treat_kickoff_as_sp():

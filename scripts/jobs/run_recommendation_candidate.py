@@ -25,6 +25,7 @@ from scripts.agents.task_queue import finish_tracked_job, start_tracked_job
 from scripts.competition_storage import AGENT_DAILY_BUDGET
 from scripts.daily_decision_storage import upsert_agent_daily_decision
 from scripts.model_storage import store_simulation_ticket
+from scripts.recommendation_prediction_loader import load_actionable_predictions
 
 
 def _now() -> str:
@@ -398,62 +399,14 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
                 "note": f"今日已存在 {already} 张 Agent 虚拟票，本次不重复创建",
             }
 
-        # ── 1. Latest prediction run ──
-        with conn.cursor() as cur:
-            cur.execute("SELECT MAX(predict_time) FROM model_predictions")
-            row = cur.fetchone()
-        if not row or not row[0]:
-            return {"status": "ok", "tickets": 0, "note": "no predictions available"}
-        latest_time = row[0]
-
-        # ── 2. Load predictions with correct odds per option ──
+        # ── 1. Load latest actionable predictions with correct odds per option ──
         # Bug fix: mp.odds_snapshot_id points to a single snapshot row (one
         # option_code), so joining on os.id = mp.odds_snapshot_id gave every
         # prediction for a match the same SP value.
         # Fix: join via LATERAL on (match_id, play_type, mapped option_code).
         # NOTE: official_odds_snapshots uses 'h'/'d'/'a' while
         #       model_predictions uses '3'/'1'/'0' — must map.
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT
-                    mp.id, mp.match_id, mp.model_version_id,
-                    mp.play_type, mp.option_code,
-                    mp.model_probability, mp.market_probability,
-                    mp.ev, mp.confidence_score, mp.risk_score,
-                    mp.odds_snapshot_id, mp.feature_snapshot_id,
-                    m.home_team_name, m.away_team_name, m.league_name,
-                    m.kickoff_time,
-                    COALESCE(latest_os.sp_value, 0) AS sp_value,
-                    mv.model_name
-                FROM model_predictions mp
-                JOIN official_matches m ON m.id = mp.match_id
-                JOIN model_versions mv ON mv.id = mp.model_version_id
-                LEFT JOIN LATERAL (
-                    SELECT os.sp_value
-                    FROM official_odds_snapshots os
-                    WHERE os.match_id = mp.match_id
-                      AND os.play_type = mp.play_type
-                      AND os.option_code = CASE mp.option_code
-                          WHEN '3' THEN 'h'
-                          WHEN '1' THEN 'd'
-                          WHEN '0' THEN 'a'
-                          ELSE mp.option_code
-                      END
-                    ORDER BY os.snapshot_time DESC
-                    LIMIT 1
-                ) latest_os ON true
-                WHERE mp.predict_time = %s
-                  AND mp.play_type IN ('spf', 'rqspf', 'bf', 'zjq', 'bqc')
-                  AND mv.model_name = ANY(%s)
-                  AND mp.odds_snapshot_id IS NOT NULL
-                  AND mp.feature_snapshot_id IS NOT NULL
-                  AND m.kickoff_time > timezone('Asia/Shanghai', NOW())
-                ORDER BY mp.ev DESC
-                """,
-                (latest_time, ALL_MODELS),
-            )
-            predictions = cur.fetchall()
+        predictions = load_actionable_predictions(conn, ALL_MODELS)
 
         if not predictions:
             return {"status": "ok", "tickets": 0, "note": "no predictions from models"}

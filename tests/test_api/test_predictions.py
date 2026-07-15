@@ -21,6 +21,7 @@ class TestPredictionsEndpoint:
         sql = mock_cur.execute.call_args.args[0]
         assert "m.sale_status = 'selling'" in sql
         assert "m.kickoff_time > timezone('Asia/Shanghai', NOW())" in sql
+        assert "mp.predict_time < m.kickoff_time" in sql
         assert (
             "m.sale_stop_time IS NULL OR m.sale_stop_time > timezone('Asia/Shanghai', NOW())" in sql
         )
@@ -28,6 +29,10 @@ class TestPredictionsEndpoint:
         assert "mp.feature_snapshot_id IS NOT NULL" in sql
         assert "mv.is_active = true" in sql
         assert "official_markets" in sql
+        normalized = " ".join(sql.split())
+        assert "DISTINCT ON (mp.match_id, mp.model_version_id, mp.play_type, mp.option_code)" in normalized
+        assert "best_by_option" in normalized
+        assert normalized.index("best_by_option") < normalized.index("WHERE ev > %(min_ev)s")
 
     def test_returns_empty_when_no_predictions(self, client):
         mock_conn = MagicMock()
@@ -42,6 +47,8 @@ class TestPredictionsEndpoint:
         data = resp.json()
         assert data["total"] == 0
         assert data["predictions"] == []
+        sql = mock_cur.execute.call_args.args[0]
+        assert "mp.predict_time < m.kickoff_time" in sql
 
     def test_returns_predictions_with_expected_fields(self, client):
         # Columns: id, match_id, predict_time, model_name, play_type, option_code,

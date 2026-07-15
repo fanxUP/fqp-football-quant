@@ -70,10 +70,11 @@ def get_live_recommendations(
         with conn.cursor() as cur:
             cur.execute(
                 """
-                WITH latest AS (
-                    SELECT DISTINCT ON (mp.match_id, mp.play_type, mp.option_code)
+                WITH latest_by_model AS (
+                    SELECT DISTINCT ON (mp.match_id, mp.model_version_id, mp.play_type, mp.option_code)
                         mp.id,
                         mp.match_id,
+                        mp.model_version_id,
                         mp.play_type,
                         mp.option_code,
                         mp.model_probability,
@@ -113,14 +114,13 @@ def get_live_recommendations(
                           AND handicap IS NOT NULL
                         ORDER BY snapshot_time DESC LIMIT 1
                     ) om ON true
-                    WHERE mp.ev > %(min_ev)s
-                      AND mp.confidence_score >= %(min_confidence)s
-                      AND mv.is_active = true
+                    WHERE mv.is_active = true
                       AND mp.odds_snapshot_id IS NOT NULL
                       AND mp.feature_snapshot_id IS NOT NULL
                       AND m.sale_status = 'selling'
                       AND LOWER(COALESCE(m.match_status, '')) IN ('scheduled', 'selling', 'not_started')
                       AND m.kickoff_time > timezone('Asia/Shanghai', NOW())
+                      AND mp.predict_time < m.kickoff_time
                       AND (m.sale_stop_time IS NULL OR m.sale_stop_time > timezone('Asia/Shanghai', NOW()))
                       AND EXISTS (
                           SELECT 1
@@ -129,10 +129,30 @@ def get_live_recommendations(
                             AND market.play_type = mp.play_type
                             AND market.is_open = true
                       )
-                    ORDER BY mp.match_id, mp.play_type, mp.option_code, mp.predict_time DESC
+                    ORDER BY mp.match_id, mp.model_version_id, mp.play_type,
+                             mp.option_code, mp.predict_time DESC, mp.id DESC
+                ), best_by_option AS (
+                    SELECT DISTINCT ON (match_id, play_type, option_code) *
+                    FROM latest_by_model
+                    WHERE ev > %(min_ev)s
+                      AND confidence_score >= %(min_confidence)s
+                    ORDER BY match_id, play_type, option_code,
+                             ev DESC NULLS LAST, confidence_score DESC NULLS LAST,
+                             predict_time DESC, id DESC
                 )
-                SELECT *
-                FROM latest
+                SELECT id, match_id, play_type, option_code,
+                       model_probability, market_probability, fair_odds, ev,
+                       confidence_score, predict_time, model_name,
+                       home_team_name, away_team_name, league_name,
+                       kickoff_time, match_status, handicap,
+                       official_match_code,
+                       half_home_goals, half_away_goals,
+                       full_home_goals, full_away_goals,
+                       et_home_goals, et_away_goals,
+                       pk_home_goals, pk_away_goals,
+                       spf_result, rqspf_result, total_goals_result,
+                       score_result, half_full_result
+                FROM best_by_option
                 ORDER BY ev DESC, confidence_score DESC
                 LIMIT %(limit)s
                 """,
@@ -243,6 +263,7 @@ def list_predictions(
                     JOIN model_versions mv ON mv.id = mp.model_version_id
                     JOIN official_matches m ON m.id = mp.match_id
                     WHERE mp.match_id = %s
+                      AND mp.predict_time < m.kickoff_time
                     ORDER BY mp.predict_time DESC, mp.ev DESC
                     LIMIT %s
                     """,
@@ -260,6 +281,7 @@ def list_predictions(
                     FROM model_predictions mp
                     JOIN model_versions mv ON mv.id = mp.model_version_id
                     JOIN official_matches m ON m.id = mp.match_id
+                    WHERE mp.predict_time < m.kickoff_time
                     ORDER BY mp.predict_time DESC, mp.ev DESC
                     LIMIT %s
                     """,

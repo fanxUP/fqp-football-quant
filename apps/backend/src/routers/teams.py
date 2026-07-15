@@ -493,9 +493,10 @@ def get_match_detail(match_id: int):
                        stadium_id
                 FROM match_feature_snapshots
                 WHERE match_id = %s
+                  AND snapshot_time < %s
                 ORDER BY snapshot_time DESC LIMIT 1
             """,
-                (match_id,),
+                (match_id, row[4]),
             )
             fs = cur.fetchone()
             feature_snapshot = None
@@ -524,19 +525,21 @@ def get_match_detail(match_id: int):
                     "stadium_id": fs[20],
                 }
 
-            # 3. Predictions (latest per model)
+            # 3. Latest pre-match option set per model and play type.
             cur.execute(
                 """
-                SELECT DISTINCT ON (mv.model_name)
+                SELECT DISTINCT ON (mv.model_name, mp.play_type, mp.option_code)
                     mv.model_name, mp.play_type, mp.option_code,
                     mp.model_probability, mp.market_probability, mp.fair_odds, mp.ev,
                     mp.confidence_score, mp.predict_time
                 FROM model_predictions mp
                 JOIN model_versions mv ON mv.id = mp.model_version_id
                 WHERE mp.match_id = %s
-                ORDER BY mv.model_name, mp.predict_time DESC
+                  AND mp.predict_time < %s
+                ORDER BY mv.model_name, mp.play_type, mp.option_code,
+                         mp.predict_time DESC, mp.id DESC
             """,
-                (match_id,),
+                (match_id, row[4]),
             )
             pred_rows = cur.fetchall()
             predictions = None
