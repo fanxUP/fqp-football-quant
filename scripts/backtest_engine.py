@@ -35,6 +35,8 @@ if _PROJECT_ROOT not in sys.path:
 
 # —— 数据结构 ——
 
+CURRENT_METHODOLOGY_VERSION = 2
+
 
 @dataclass
 class BacktestConfig:
@@ -70,6 +72,9 @@ class BacktestConfig:
 
     def to_dict(self) -> dict:
         return {
+            # v2 起只采用赛前最新预测、预测时点赔率，并使用真实初始资金计算回撤。
+            # 版本由执行代码决定；旧配置重跑时自动升级，不能由请求覆盖。
+            "methodology_version": CURRENT_METHODOLOGY_VERSION,
             "name": self.name,
             "description": self.description,
             "time_start": self.time_start,

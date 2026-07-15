@@ -69,6 +69,18 @@ def test_drawdown_is_measured_from_a_real_initial_bankroll() -> None:
     assert metrics["equity_curve"][0]["bankroll"] == 102.0
 
 
+def test_backtest_config_records_current_methodology_version() -> None:
+    config = BacktestConfig(name="versioned-backtest")
+
+    assert config.to_dict()["methodology_version"] == 2
+
+
+def test_legacy_config_is_upgraded_when_rerun() -> None:
+    config = BacktestConfig.from_dict({"name": "legacy-rerun", "methodology_version": 1})
+
+    assert config.to_dict()["methodology_version"] == 2
+
+
 def test_backtest_run_is_marked_failed_when_execution_crashes() -> None:
     conn = MagicMock()
     cursor = conn.cursor.return_value.__enter__.return_value

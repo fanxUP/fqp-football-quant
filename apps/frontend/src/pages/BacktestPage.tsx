@@ -45,6 +45,13 @@ const DEFAULT_FORM: BacktestFormState = {
   success: null,
 };
 
+const CURRENT_METHODOLOGY_VERSION = 2;
+
+function methodologyVersion(config: Record<string, unknown> | null | undefined): number {
+  const version = config?.methodology_version;
+  return typeof version === 'number' ? version : 1;
+}
+
 // —— 组件 ——
 
 export default function BacktestPage() {
@@ -52,6 +59,7 @@ export default function BacktestPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedRun, setSelectedRun] = useState<number | null>(null);
+  const [selectedRunRecord, setSelectedRunRecord] = useState<BacktestRun | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [results, setResults] = useState<BacktestResult[]>([]);
   const [form, setForm] = useState<BacktestFormState>(DEFAULT_FORM);
@@ -80,11 +88,13 @@ export default function BacktestPage() {
   // —— 加载回测详情 ——
   const loadDetail = useCallback(async (runId: number) => {
     setSelectedRun(runId);
+    setSelectedRunRecord(null);
     setDetailLoading(true);
     setEquityData([]);
     setEquityError(null);
     try {
       const data = await api.backtests.get(runId);
+      setSelectedRunRecord(data.run);
       // 只显示聚合结果（window_index IS NULL）
       setResults(data.results.filter((r) => r.window_index === null));
 
@@ -166,6 +176,9 @@ export default function BacktestPage() {
     if (s === 'failed') return 'fqp-status-err';
     return '';
   };
+
+  const selectedRunIsLegacy = selectedRunRecord != null
+    && methodologyVersion(selectedRunRecord.config) < CURRENT_METHODOLOGY_VERSION;
 
   // —— 渲染 ——
   return (
@@ -328,6 +341,22 @@ export default function BacktestPage() {
             <p className="fqp-muted">暂无该回测的聚合结果</p>
           ) : (
             <div>
+              {selectedRunIsLegacy && (
+                <div
+                  role="alert"
+                  style={{
+                    marginBottom: 16,
+                    padding: '12px 14px',
+                    borderRadius: 8,
+                    color: 'var(--fqp-warning)',
+                    background: 'rgba(255,193,7,0.08)',
+                    border: '1px solid rgba(255,193,7,0.28)',
+                  }}
+                >
+                  旧算法结果仅供归档：可能包含赛后预测和旧资金曲线，不参与模型上线判断。请使用“当前 V2”口径重新回测。
+                </div>
+              )}
+
               {/* 指标表格 */}
               <DataTable
                 columns={[
@@ -382,7 +411,7 @@ export default function BacktestPage() {
               />
 
               {/* 模型上线门槛检查 — staggered reveal */}
-              {results.map((r, ri) => {
+              {!selectedRunIsLegacy && results.map((r, ri) => {
                 const checks = {
                   '样本量 ≥ 1000': r.n_bets >= 1000,
                   'ROI > 0': (r.roi ?? -1) > 0,
@@ -447,6 +476,14 @@ export default function BacktestPage() {
             columns={[
               { key: 'id', title: 'ID', width: '60px' },
               { key: 'name', title: '名称', width: '200px' },
+              {
+                key: 'methodology', title: '口径', width: '90px',
+                render: (_: unknown, row: BacktestRun) => (
+                  methodologyVersion(row.config) >= CURRENT_METHODOLOGY_VERSION
+                    ? <span className="fqp-status-ok">当前 V2</span>
+                    : <span className="fqp-status-warn">旧口径</span>
+                ),
+              },
               {
                 key: 'status', title: '状态', width: '80px',
                 render: (_: unknown, row: BacktestRun) => (

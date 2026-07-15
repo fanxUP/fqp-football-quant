@@ -63,4 +63,41 @@ describe('BacktestPage', () => {
     expect(await screen.findByLabelText('回测图表分析')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '📈 查看资金曲线' })).not.toBeInTheDocument();
   });
+
+  it('明确标记旧回测口径且不用于模型上线判断', async () => {
+    apiMocks.list.mockResolvedValue({
+      runs: [{
+        id: 18,
+        name: '旧全量回测',
+        config: {},
+        status: 'completed',
+        created_at: '2026-07-07',
+      }],
+      total: 1,
+    });
+    apiMocks.get.mockResolvedValue({
+      run: { id: 18, config: {} },
+      windows: [],
+      results: [{
+        window_index: null,
+        model_name: 'elo_rating',
+        n_bets: 100,
+        n_wins: 40,
+        hit_rate: 0.4,
+        roi: 0.08,
+        total_profit: 8,
+        max_drawdown_pct: 7,
+      }],
+    });
+    apiMocks.backtestEquity.mockResolvedValue({ data: { series: [] } });
+
+    render(<BacktestPage />);
+
+    expect(await screen.findByText('旧口径')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '查看' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('旧算法结果仅供归档');
+    expect(screen.queryByText('满足上线门槛')).not.toBeInTheDocument();
+    expect(screen.queryByText('未完全满足上线门槛')).not.toBeInTheDocument();
+  });
 });
