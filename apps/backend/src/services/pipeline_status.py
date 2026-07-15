@@ -70,10 +70,10 @@ JOB_DEFINITIONS: dict[str, JobDefinition] = {
     ),
     "model_prediction": JobDefinition(
         "模型预测执行",
-        "每日 01:00/07:00/13:00/19:00",
+        "每30分钟（官方赛程刷新后5分钟）",
         "model",
         ("run_model_prediction",),
-        timedelta(hours=8),
+        timedelta(hours=2),
     ),
     "recommendation_candidate": JobDefinition(
         "推荐候选生成",

@@ -2,10 +2,19 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from unittest.mock import MagicMock, patch
+from zoneinfo import ZoneInfo
 
 from scripts.feature_adjustment import GoalRateAdjustment
-from scripts.jobs.run_model_prediction import _predict_match_play_type, _run_impl, run
+from scripts.jobs.run_model_prediction import _now, _predict_match_play_type, _run_impl, run
+
+
+def test_prediction_timestamp_uses_naive_business_wall_clock() -> None:
+    shanghai_now = datetime(2026, 7, 15, 17, 30, tzinfo=ZoneInfo("Asia/Shanghai"))
+
+    with patch("scripts.jobs.run_model_prediction.business_now", return_value=shanghai_now):
+        assert _now() == "2026-07-15T17:30:00"
 
 
 def _run_with_odds(odds_rows):

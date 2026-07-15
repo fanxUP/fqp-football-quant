@@ -11,14 +11,14 @@ Same psycopg2 pattern as official_storage.py and feature_storage.py.
 from __future__ import annotations
 
 import json
-from datetime import datetime
 from typing import Any
 
 from scripts.agents.human_review_gate import assert_recommendation_publishable
+from scripts.business_time import business_now
 
 
 def _now() -> str:
-    return datetime.now().isoformat(timespec="seconds")
+    return business_now().replace(tzinfo=None).isoformat(timespec="seconds")
 
 
 # ---------------------------------------------------------------------------

@@ -30,7 +30,7 @@ jobs:
     on_failure: increase_uncertainty_and_notify
   model_prediction:
     owner_agent: model_agent
-    schedule: "stop_sale_minus_120m and stop_sale_minus_60m"
+    schedule: "every 30 minutes while official matches are selling"
     command: "python -m scripts.jobs.run_model_prediction"
     timeout_seconds: 1200
     retries: 2

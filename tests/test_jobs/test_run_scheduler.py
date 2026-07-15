@@ -4,6 +4,7 @@ from pathlib import Path
 
 from apps.backend.src.services.pipeline_status import JOB_DEFINITIONS
 from scripts.jobs.run_scheduler import (
+    MODEL_PREDICTION_CRON,
     OFFICIAL_SCHEDULE_CRON,
     _audited_job,
     _business_now,
@@ -70,6 +71,13 @@ def test_scheduler_refreshes_official_schedule_metadata_every_30_minutes():
     source = Path("scripts/jobs/run_scheduler.py").read_text()
     assert OFFICIAL_SCHEDULE_CRON == {"minute": "10,40"}
     assert "**OFFICIAL_SCHEDULE_CRON" in source
+
+
+def test_scheduler_runs_model_predictions_after_each_schedule_refresh():
+    source = Path("scripts/jobs/run_scheduler.py").read_text()
+
+    assert MODEL_PREDICTION_CRON == {"minute": "15,45"}
+    assert "**MODEL_PREDICTION_CRON" in source
 
 
 def test_scheduler_dispatches_odds_by_default_for_host_runtime(monkeypatch):

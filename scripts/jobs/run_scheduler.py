@@ -19,6 +19,9 @@ from zoneinfo import ZoneInfo
 # Sporttery may add matches or change sale/pool permissions after midnight.
 # Refresh at :10 and :40 so the betting terminal never relies on a stale daily snapshot.
 OFFICIAL_SCHEDULE_CRON = {"minute": "10,40"}
+# Run five minutes after each schedule refresh so newly sellable matches have
+# official markets and odds available before the prediction snapshot is written.
+MODEL_PREDICTION_CRON = {"minute": "15,45"}
 
 
 def _scheduler_timezone_name() -> str:
@@ -371,7 +374,7 @@ def main() -> None:
                 id="update_elo_ratings",
             )
 
-            # Every 6 hours: run model predictions (offset from features)
+            # Every 30 minutes: persist a pre-match prediction history snapshot.
             scheduler.add_job(
                 _audited_job(
                     "run_model_prediction",
@@ -380,7 +383,7 @@ def main() -> None:
                     lambda: __import__("scripts.jobs.run_model_prediction", fromlist=["run"]).run(),
                 ),
                 "cron",
-                hour="1,7,13,19",
+                **MODEL_PREDICTION_CRON,
                 id="run_model_prediction",
             )
 

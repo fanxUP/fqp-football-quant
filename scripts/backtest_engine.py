@@ -35,7 +35,7 @@ if _PROJECT_ROOT not in sys.path:
 
 # —— 数据结构 ——
 
-CURRENT_METHODOLOGY_VERSION = 2
+CURRENT_METHODOLOGY_VERSION = 3
 
 
 @dataclass

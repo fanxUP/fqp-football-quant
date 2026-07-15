@@ -12,11 +12,11 @@ Odds processing chain:
 
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Any
 
 from apps.backend.src.db import get_db
 from scripts.agents.task_queue import finish_tracked_job, start_tracked_job
+from scripts.business_time import business_now
 from scripts.dixon_coles_model import dixon_coles_matrix
 from scripts.elo_model import get_or_create_elo, run_elo_1x2_prediction
 from scripts.feature_adjustment import GoalRateAdjustment, adjust_goal_rates
@@ -46,7 +46,7 @@ OPTION_REVERSE = {"3": "h", "1": "d", "0": "a"}
 
 
 def _now() -> str:
-    return datetime.now().isoformat(timespec="seconds")
+    return business_now().replace(tzinfo=None).isoformat(timespec="seconds")
 
 
 def _latest_feature_snapshot_id(conn: Any, match_id: int) -> int | None:

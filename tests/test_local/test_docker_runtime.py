@@ -80,3 +80,14 @@ def test_incremental_migrations_track_applied_files() -> None:
     assert "local_schema_migrations" in script
     assert "ON_ERROR_STOP=1" in script
     assert "BASELINE_VERSION=32" in script
+
+
+def test_prediction_time_migration_normalizes_existing_rows_to_shanghai() -> None:
+    migration = (
+        PROJECT_ROOT / "sql/36_normalize_prediction_business_time.sql"
+    ).read_text(encoding="utf-8")
+
+    assert "UPDATE model_predictions" in migration
+    assert "UPDATE model_committee_votes" in migration
+    assert "AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Shanghai'" in migration
+    assert "ABS(EXTRACT(EPOCH FROM (predict_time - created_at))) < 300" in migration

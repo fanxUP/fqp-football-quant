@@ -45,7 +45,7 @@ const DEFAULT_FORM: BacktestFormState = {
   success: null,
 };
 
-const CURRENT_METHODOLOGY_VERSION = 2;
+const CURRENT_METHODOLOGY_VERSION = 3;
 
 function methodologyVersion(config: Record<string, unknown> | null | undefined): number {
   const version = config?.methodology_version;
@@ -353,7 +353,7 @@ export default function BacktestPage() {
                     border: '1px solid rgba(255,193,7,0.28)',
                   }}
                 >
-                  旧算法结果仅供归档：可能包含赛后预测和旧资金曲线，不参与模型上线判断。请使用“当前 V2”口径重新回测。
+                  旧口径结果仅供归档：可能包含赛后预测、旧资金曲线或未校准时区，不参与模型上线判断。请使用“当前 V{CURRENT_METHODOLOGY_VERSION}”口径重新回测。
                 </div>
               )}
 
@@ -480,7 +480,7 @@ export default function BacktestPage() {
                 key: 'methodology', title: '口径', width: '90px',
                 render: (_: unknown, row: BacktestRun) => (
                   methodologyVersion(row.config) >= CURRENT_METHODOLOGY_VERSION
-                    ? <span className="fqp-status-ok">当前 V2</span>
+                    ? <span className="fqp-status-ok">当前 V{CURRENT_METHODOLOGY_VERSION}</span>
                     : <span className="fqp-status-warn">旧口径</span>
                 ),
               },

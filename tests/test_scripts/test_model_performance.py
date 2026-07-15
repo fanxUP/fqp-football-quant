@@ -77,6 +77,7 @@ def test_model_performance_history_uses_top_pick_and_all_official_result_types()
 
     query = conn.cursor_instance.query
     assert "ROW_NUMBER() OVER" in query
+    assert "source_mp.predict_time < m.kickoff_time" in query
     assert "model_probability DESC" in query
     assert "r.spf_result" in query
     assert "r.rqspf_result" in query

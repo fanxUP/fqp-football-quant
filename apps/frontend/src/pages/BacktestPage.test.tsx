@@ -69,14 +69,14 @@ describe('BacktestPage', () => {
       runs: [{
         id: 18,
         name: '旧全量回测',
-        config: {},
+        config: { methodology_version: 2 },
         status: 'completed',
         created_at: '2026-07-07',
       }],
       total: 1,
     });
     apiMocks.get.mockResolvedValue({
-      run: { id: 18, config: {} },
+      run: { id: 18, config: { methodology_version: 2 } },
       windows: [],
       results: [{
         window_index: null,
@@ -96,8 +96,25 @@ describe('BacktestPage', () => {
     expect(await screen.findByText('旧口径')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '查看' }));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('旧算法结果仅供归档');
+    expect(await screen.findByRole('alert')).toHaveTextContent('旧口径结果仅供归档');
     expect(screen.queryByText('满足上线门槛')).not.toBeInTheDocument();
     expect(screen.queryByText('未完全满足上线门槛')).not.toBeInTheDocument();
+  });
+
+  it('将时区校准后的回测标记为当前V3口径', async () => {
+    apiMocks.list.mockResolvedValue({
+      runs: [{
+        id: 21,
+        name: '时区校准回测',
+        config: { methodology_version: 3 },
+        status: 'completed',
+        created_at: '2026-07-15',
+      }],
+      total: 1,
+    });
+
+    render(<BacktestPage />);
+
+    expect(await screen.findByText('当前 V3')).toBeInTheDocument();
   });
 });
