@@ -1,6 +1,8 @@
 import { useEffect, useRef } from 'react';
 import { BarChart, HeatmapChart, LineChart, PieChart, RadarChart, ScatterChart } from 'echarts/charts';
 import {
+  AriaComponent,
+  DataZoomComponent,
   GridComponent,
   LegendComponent,
   MarkLineComponent,
@@ -10,9 +12,9 @@ import {
 } from 'echarts/components';
 import { init, use, type ECharts } from 'echarts/core';
 import { CanvasRenderer } from 'echarts/renderers';
-import Card from './Card';
 import { useTheme } from '../../app/ThemeContext';
 import { getChartColors } from '../../theme/chartTokens';
+import ChartFrame from '../../visualization/core/ChartFrame';
 
 use([
   BarChart,
@@ -21,6 +23,8 @@ use([
   PieChart,
   RadarChart,
   ScatterChart,
+  AriaComponent,
+  DataZoomComponent,
   GridComponent,
   LegendComponent,
   MarkLineComponent,
@@ -56,132 +60,65 @@ export default function ChartCard({
   const chartRef = useRef<HTMLDivElement>(null);
   const instanceRef = useRef<ECharts | null>(null);
   const { theme } = useTheme();
+  const canRender = !loading && !empty && !error;
 
   useEffect(() => {
-    if (!chartRef.current) return;
+    if (!canRender || !chartRef.current) return;
+
+    const instance = init(chartRef.current, undefined, { renderer: 'canvas' });
+    instanceRef.current = instance;
+    const resize = () => instance.resize();
+    const observer = typeof ResizeObserver === 'undefined'
+      ? null
+      : new ResizeObserver(resize);
+
+    if (observer) observer.observe(chartRef.current);
+    else window.addEventListener('resize', resize);
+
+    return () => {
+      observer?.disconnect();
+      if (!observer) window.removeEventListener('resize', resize);
+      instance.dispose();
+      instanceRef.current = null;
+    };
+  }, [canRender]);
+
+  useEffect(() => {
+    const instance = instanceRef.current;
+    if (!instance || !canRender) return;
 
     const textColor = getChartColors().text;
-
-    const themedOption = {
+    instance.setOption({
       backgroundColor: 'transparent',
       textStyle: { color: textColor, fontSize: 14 },
       legend: { textStyle: { color: textColor, fontSize: 14 } },
+      aria: { show: true, description: subtitle ? `${title}。${subtitle}` : title },
       ...option,
-    };
+    }, {
+      notMerge: false,
+      lazyUpdate: true,
+      replaceMerge: ['series'],
+    });
+  }, [canRender, option, subtitle, theme, title]);
 
-    const inst = init(chartRef.current, undefined, { renderer: 'canvas' });
-    inst.setOption(themedOption);
-    instanceRef.current = inst;
-
-    const handleResize = () => inst.resize();
-    window.addEventListener('resize', handleResize);
-
-    return () => {
-      window.removeEventListener('resize', handleResize);
-      inst.dispose();
-    };
-  }, [option, theme]);
-
-  // Determine what to render inside the card
-  const renderBody = () => {
-    if (loading) {
-      return (
-        <div
-          role="status"
-          aria-label="加载图表..."
-          style={{
-            height,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: 'var(--fqp-text-muted)',
-          }}
-        >
-          <div
-            className="fqp-skeleton"
-            style={{ width: '90%', height: '70%', borderRadius: 'var(--fqp-radius-sm)' }}
-          />
-        </div>
-      );
-    }
-    if (error) {
-      return (
-        <div
-          style={{
-            height,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: 'var(--fqp-red-neon)',
-            gap: 8,
-          }}
-        >
-          <span style={{ fontSize: 28 }}>⚠️</span>
-          <span style={{ fontSize: 13 }}>{error}</span>
-        </div>
-      );
-    }
-    if (empty) {
-      return (
-        <div
-          style={{
-            height,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: 'var(--fqp-text-muted)',
-            gap: 8,
-          }}
-        >
-          <span style={{ fontSize: 28, opacity: 0.5 }}>📊</span>
-          <span style={{ fontSize: 13 }}>{emptyReason || '暂无数据'}</span>
-        </div>
-      );
-    }
-    return (
+  return (
+    <ChartFrame
+      title={title}
+      subtitle={subtitle}
+      updatedAt={updatedAt}
+      loading={loading}
+      empty={empty}
+      emptyReason={emptyReason}
+      error={error}
+      height={height}
+    >
       <div
         ref={chartRef}
         className="fqp-anim-chartReveal"
+        role="img"
+        aria-label={subtitle ? `${title}。${subtitle}` : title}
         style={{ width: '100%', height }}
       />
-    );
-  };
-
-  return (
-    <Card>
-      {/* Header: title + subtitle + updatedAt */}
-      {(title || subtitle || updatedAt) && (
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'baseline',
-            justifyContent: 'space-between',
-            marginBottom: '12px',
-            gap: 8,
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-            {title && (
-              <h3 style={{ color: 'var(--fqp-text)', fontSize: '16px', margin: 0, fontWeight: 600 }}>
-                {title}
-              </h3>
-            )}
-            {subtitle && (
-              <span style={{ fontSize: '12px', color: 'var(--fqp-text-muted)' }}>
-                {subtitle}
-              </span>
-            )}
-          </div>
-          {updatedAt && (
-            <span style={{ fontSize: '11px', color: 'var(--fqp-text-muted)', whiteSpace: 'nowrap' }}>
-              更新: {updatedAt}
-            </span>
-          )}
-        </div>
-      )}
-      {renderBody()}
-    </Card>
+    </ChartFrame>
   );
 }

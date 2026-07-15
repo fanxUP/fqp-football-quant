@@ -126,6 +126,21 @@ describe('ChartCard', () => {
       const passedOption = mockInstance.setOption.mock.calls[0][0] as Record<string, unknown>;
       expect(passedOption.textStyle).toEqual({ color: '#172033', fontSize: 14 });
     });
+
+    it('更新数据时复用图表实例', () => {
+      const { rerender } = render(<ChartCard title="Trend" option={baseOption} />);
+
+      rerender(
+        <ChartCard
+          title="Trend"
+          option={{ ...baseOption, series: [{ type: 'bar', data: [2, 3, 4] }] }}
+        />,
+      );
+
+      expect(mockInit).toHaveBeenCalledTimes(1);
+      expect(mockInstance.setOption).toHaveBeenCalledTimes(2);
+      expect(mockInstance.dispose).not.toHaveBeenCalled();
+    });
   });
 
   // ------------------------------------------------------------------
