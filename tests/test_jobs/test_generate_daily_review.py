@@ -3,6 +3,18 @@ from unittest.mock import patch
 from scripts.jobs import generate_daily_review
 
 
+def test_settlement_roi_uses_total_profit_over_total_stake():
+    totals = generate_daily_review._settlement_totals(
+        [
+            ("real", 100, 120, 20, 0.9),
+            ("simulation", 40, 30, -10, -0.1),
+        ]
+    )
+
+    assert totals["real"]["roi"] == 0.2
+    assert totals["simulation"]["roi"] == -0.25
+
+
 def test_daily_review_only_counts_prematch_features_and_predictions(mock_conn):
     conn, cur = mock_conn
     conn.__enter__.return_value = conn

@@ -88,6 +88,25 @@ def test_prediction_job_does_not_fallback_to_spf_when_no_market_is_open():
     predict.assert_not_called()
 
 
+def test_match_specific_prediction_still_requires_a_sellable_future_match():
+    conn = MagicMock()
+    cursor = conn.cursor.return_value.__enter__.return_value
+    cursor.fetchall.side_effect = [[(1, "market_baseline")], []]
+    cursor.fetchone.return_value = None
+    db_context = MagicMock()
+    db_context.__enter__.return_value = conn
+
+    with patch("scripts.jobs.run_model_prediction.get_db", return_value=db_context):
+        result = _run_impl(match_id=101)
+
+    assert result == {"status": "ok", "predictions": 0, "note": "no matches to predict"}
+    queries = [" ".join(call.args[0].split()) for call in cursor.execute.call_args_list]
+    match_query = next(q for q in queries if "FROM official_matches WHERE id = %s" in q)
+    assert "sale_status = 'selling'" in match_query
+    assert "kickoff_time > timezone('Asia/Shanghai', NOW())" in match_query
+    assert "sale_stop_time" in match_query
+
+
 def test_poisson_prediction_persists_raw_and_feature_adjusted_probabilities():
     conn = MagicMock()
     cursor = conn.cursor.return_value.__enter__.return_value

@@ -21,22 +21,27 @@ class FakeClassifier:
 
 
 class FakeCursor:
+    query = ""
+
     def __enter__(self):
         return self
 
     def __exit__(self, *_args) -> None:
         return None
 
-    def execute(self, *_args) -> None:
-        return None
+    def execute(self, query: str, *_args) -> None:
+        self.query = " ".join(query.split())
 
     def fetchone(self):
         return (88, "主队", "客队", *([1.0] * len(feature_importance.FEATURE_COLUMNS)))
 
 
 class FakeConnection:
+    def __init__(self) -> None:
+        self.cursor_instance = FakeCursor()
+
     def cursor(self) -> FakeCursor:
-        return FakeCursor()
+        return self.cursor_instance
 
 
 class EvaluationCursor:
@@ -214,6 +219,23 @@ def test_prediction_stays_available_when_optional_shap_setup_fails(monkeypatch) 
     assert result["status"] == "ok"
     assert result["shap_values"] == []
     assert result["predicted_probs"] == {"home": 0.5, "draw": 0.3, "away": 0.2}
+
+
+def test_prediction_explanation_uses_latest_prematch_feature_snapshot(monkeypatch) -> None:
+    monkeypatch.setattr(feature_importance, "_trained_model", FakeClassifier())
+    monkeypatch.setattr(feature_importance, "_trained_explainer", None)
+    monkeypatch.setattr(feature_importance, "_explainer_initialized", True)
+    monkeypatch.setattr(
+        feature_importance,
+        "_feature_names_cache",
+        [feature_importance.FEATURE_COLUMNS[0]],
+    )
+    monkeypatch.setattr(feature_importance, "train_if_needed", lambda _conn: {"status": "ok"})
+    conn = FakeConnection()
+
+    feature_importance.explain_prediction(conn, match_id=88)
+
+    assert "fs.snapshot_time < m.kickoff_time" in conn.cursor_instance.query
 
 
 def test_evaluation_summary_assigns_metrics_directly_to_their_model_version() -> None:

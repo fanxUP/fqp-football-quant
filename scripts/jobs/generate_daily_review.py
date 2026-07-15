@@ -24,6 +24,25 @@ def _yesterday(now: datetime | None = None) -> str:
     return business_yesterday(now or datetime.now(UTC)).isoformat()
 
 
+def _settlement_totals(rows: list[tuple]) -> dict[str, dict[str, float]]:
+    """Aggregate settlement P&L using weighted ROI instead of averaging ticket ROI."""
+    totals = {
+        "simulation": {"prize": 0.0, "profit_loss": 0.0, "roi": 0.0},
+        "real": {"prize": 0.0, "profit_loss": 0.0, "roi": 0.0},
+    }
+    for source, stake, prize, profit_loss, _average_roi in rows:
+        if source not in totals:
+            continue
+        stake_value = float(stake or 0)
+        profit_value = float(profit_loss or 0)
+        totals[source] = {
+            "prize": float(prize or 0),
+            "profit_loss": profit_value,
+            "roi": profit_value / stake_value if stake_value > 0 else 0.0,
+        }
+    return totals
+
+
 def _run_impl(review_date: str | None = None, dry_run: bool = False) -> dict[str, Any]:
     """Generate daily review for the given date (default: yesterday)."""
     if dry_run:
@@ -121,26 +140,15 @@ def _run_impl(review_date: str | None = None, dry_run: bool = False) -> dict[str
             )
             settlement_rows = cur.fetchall()
 
-        sim_prize = 0.0
-        sim_pl = 0.0
-        sim_roi = 0.0
-        real_prize = 0.0
-        real_pl = 0.0
-        real_roi = 0.0
-
-        for row in settlement_rows:
-            source = row[0]
-            prize = float(row[2] or 0)
-            pl = float(row[3] or 0)
-            roi = float(row[4] or 0)
-            if source == "simulation":
-                sim_prize = prize
-                sim_pl = pl
-                sim_roi = roi
-            elif source == "real":
-                real_prize = prize
-                real_pl = pl
-                real_roi = roi
+        settlement_totals = _settlement_totals(settlement_rows)
+        simulation = settlement_totals["simulation"]
+        real = settlement_totals["real"]
+        sim_prize = simulation["prize"]
+        sim_pl = simulation["profit_loss"]
+        sim_roi = simulation["roi"]
+        real_prize = real["prize"]
+        real_pl = real["profit_loss"]
+        real_roi = real["roi"]
 
         # 9. Budget usage rate (daily budget = 500)
         budget_usage_rate = actual_stake / 500.0 if actual_stake > 0 else 0.0

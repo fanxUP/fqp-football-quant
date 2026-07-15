@@ -140,7 +140,13 @@ def _run_impl(match_id: int | None = None, dry_run: bool = False) -> dict[str, A
             with conn.cursor() as cur:
                 cur.execute(
                     """SELECT id, home_team_name, away_team_name
-                       FROM official_matches WHERE id = %s""",
+                       FROM official_matches WHERE id = %s
+                         AND sale_status = 'selling'
+                         AND LOWER(COALESCE(match_status, ''))
+                             IN ('scheduled', 'selling', 'not_started')
+                         AND kickoff_time > timezone('Asia/Shanghai', NOW())
+                         AND (sale_stop_time IS NULL
+                              OR sale_stop_time > timezone('Asia/Shanghai', NOW()))""",
                     (match_id,),
                 )
                 match_rows = cur.fetchall()

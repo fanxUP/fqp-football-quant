@@ -26,6 +26,48 @@ def _previous_month(today: date | None = None) -> str:
     return last_previous_month.strftime("%Y-%m")
 
 
+def _aggregate_review_rows(rows: list[tuple]) -> dict[str, float | int]:
+    """Aggregate daily P&L into weighted ROI, drawdown, and losing streaks."""
+    total_stake = 0.0
+    total_prize = 0.0
+    profit_loss = 0.0
+    bankroll = 0.0
+    peak = 0.0
+    max_drawdown = 0.0
+    losing_days = 0
+    current_losing_streak = 0
+    longest_losing_streak = 0
+
+    for _review_date, stake, prize, daily_profit in sorted(rows, key=lambda row: str(row[0])):
+        stake_value = float(stake or 0)
+        prize_value = float(prize or 0)
+        profit_value = float(daily_profit or 0)
+        total_stake += stake_value
+        total_prize += prize_value
+        profit_loss += profit_value
+        bankroll += profit_value
+        peak = max(peak, bankroll)
+        max_drawdown = max(max_drawdown, peak - bankroll)
+
+        if profit_value < 0:
+            losing_days += 1
+            current_losing_streak += 1
+            longest_losing_streak = max(longest_losing_streak, current_losing_streak)
+        else:
+            current_losing_streak = 0
+
+    roi = profit_loss / total_stake if total_stake > 0 else 0.0
+    return {
+        "total_stake": round(total_stake, 2),
+        "total_prize": round(total_prize, 2),
+        "profit_loss": round(profit_loss, 2),
+        "roi": round(roi, 4),
+        "max_drawdown": round(max_drawdown, 2),
+        "losing_days_count": losing_days,
+        "longest_losing_streak": longest_losing_streak,
+    }
+
+
 def run_weekly(
     week_start: str | None = None,
     week_end: str | None = None,
@@ -41,29 +83,24 @@ def run_weekly(
         with conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT
-                    COALESCE(SUM(actual_stake), 0),
-                    COALESCE(SUM(real_prize), 0),
-                    COALESCE(SUM(real_profit_loss), 0),
-                    COALESCE(AVG(real_roi), 0),
-                    COALESCE(MIN(real_profit_loss), 0),
-                    COUNT(*) FILTER (WHERE real_profit_loss < 0)
+                SELECT review_date, actual_stake, real_prize, real_profit_loss
                 FROM daily_reviews
                 WHERE review_date BETWEEN %s AND %s
+                ORDER BY review_date
                 """,
                 (start, end),
             )
-            stake, prize, profit_loss, roi, max_drawdown, losing_days = cur.fetchone()
+            aggregate = _aggregate_review_rows(cur.fetchall())
 
         data = {
             "week_start": start,
             "week_end": end,
-            "total_stake": float(stake or 0),
-            "total_prize": float(prize or 0),
-            "profit_loss": float(profit_loss or 0),
-            "roi": float(roi or 0),
-            "max_drawdown": abs(float(max_drawdown or 0)),
-            "losing_days_count": int(losing_days or 0),
+            "total_stake": aggregate["total_stake"],
+            "total_prize": aggregate["total_prize"],
+            "profit_loss": aggregate["profit_loss"],
+            "roi": aggregate["roi"],
+            "max_drawdown": aggregate["max_drawdown"],
+            "losing_days_count": aggregate["losing_days_count"],
             "simulation_vs_real_gap": "详见日复盘偏离率",
             "strategy_suggestion": "延续预算纪律，优先复核高偏离玩法。",
         }
@@ -84,28 +121,23 @@ def run_monthly(month: str | None = None, dry_run: bool = False) -> dict[str, An
         with conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT
-                    COALESCE(SUM(actual_stake), 0),
-                    COALESCE(SUM(real_prize), 0),
-                    COALESCE(SUM(real_profit_loss), 0),
-                    COALESCE(AVG(real_roi), 0),
-                    COALESCE(MIN(real_profit_loss), 0),
-                    COUNT(*) FILTER (WHERE real_profit_loss < 0)
+                SELECT review_date, actual_stake, real_prize, real_profit_loss
                 FROM daily_reviews
                 WHERE to_char(review_date, 'YYYY-MM') = %s
+                ORDER BY review_date
                 """,
                 (target_month,),
             )
-            stake, prize, profit_loss, roi, max_drawdown, losing_days = cur.fetchone()
+            aggregate = _aggregate_review_rows(cur.fetchall())
 
         data = {
             "month": target_month,
-            "total_stake": float(stake or 0),
-            "total_prize": float(prize or 0),
-            "profit_loss": float(profit_loss or 0),
-            "roi": float(roi or 0),
-            "max_drawdown": abs(float(max_drawdown or 0)),
-            "longest_losing_streak": int(losing_days or 0),
+            "total_stake": aggregate["total_stake"],
+            "total_prize": aggregate["total_prize"],
+            "profit_loss": aggregate["profit_loss"],
+            "roi": aggregate["roi"],
+            "max_drawdown": aggregate["max_drawdown"],
+            "longest_losing_streak": aggregate["longest_losing_streak"],
             "best_strategy_pool": "待样本积累",
             "worst_strategy_pool": "待样本积累",
             "model_calibration_score": 0,

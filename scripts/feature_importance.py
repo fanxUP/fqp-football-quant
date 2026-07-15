@@ -489,6 +489,7 @@ def explain_prediction(
             FROM match_feature_snapshots fs
             JOIN official_matches m ON m.id = fs.match_id
             WHERE fs.match_id = %s
+              AND fs.snapshot_time < m.kickoff_time
             ORDER BY fs.snapshot_time DESC
             LIMIT 1
         """, (match_id,))
