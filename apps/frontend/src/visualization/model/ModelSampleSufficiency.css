@@ -1,0 +1,125 @@
+.model-sample-panel {
+  margin-bottom: 16px;
+  padding: 18px 20px;
+}
+
+.model-sample-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.model-sample-header h3 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.model-sample-header p {
+  max-width: 760px;
+  margin: 5px 0 0;
+  color: var(--fqp-text-muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.model-sample-legend {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+  color: var(--fqp-text-muted);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.model-sample-legend span {
+  border: 1px solid var(--fqp-border-light);
+  border-radius: var(--fqp-radius-xs);
+  padding: 3px 6px;
+}
+
+.model-sample-table-wrap {
+  overflow-x: auto;
+}
+
+.model-sample-table {
+  width: 100%;
+  min-width: 760px;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+
+.model-sample-table th,
+.model-sample-table td {
+  border-top: 1px solid var(--fqp-border-light);
+  padding: 8px;
+  text-align: center;
+}
+
+.model-sample-table thead th {
+  border-top: 0;
+  color: var(--fqp-text-muted);
+  font-weight: 600;
+}
+
+.model-sample-table th:first-child {
+  min-width: 132px;
+  text-align: left;
+}
+
+.model-sample-cell {
+  display: flex;
+  min-width: 78px;
+  flex-direction: column;
+  gap: 2px;
+  border-left: 3px solid transparent;
+  padding: 5px 7px;
+  text-align: left;
+}
+
+.model-sample-cell strong {
+  font-family: var(--fqp-font-mono);
+  font-size: 15px;
+}
+
+.model-sample-cell span {
+  color: var(--fqp-text-muted);
+  font-size: 10px;
+}
+
+.model-sample-cell.is-low {
+  border-left-color: var(--fqp-warning);
+  background: color-mix(in srgb, var(--fqp-warning) 8%, transparent);
+}
+
+.model-sample-cell.is-medium {
+  border-left-color: var(--fqp-accent);
+  background: color-mix(in srgb, var(--fqp-accent) 8%, transparent);
+}
+
+.model-sample-cell.is-high {
+  border-left-color: var(--fqp-info);
+  background: color-mix(in srgb, var(--fqp-info) 9%, transparent);
+}
+
+.model-sample-cell.is-empty {
+  opacity: 0.62;
+}
+
+.model-sample-empty {
+  padding: 20px 0;
+  color: var(--fqp-text-muted);
+  text-align: center;
+}
+
+@media (max-width: 767px) {
+  .model-sample-header {
+    flex-direction: column;
+  }
+
+  .model-sample-legend {
+    justify-content: flex-start;
+  }
+}

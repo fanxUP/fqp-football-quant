@@ -17,7 +17,9 @@ export default function ModelsPage() {
     status: 'ok',
     metric: 'rolling_hit_rate',
     window: 20,
+    days: 365,
     points: [],
+    samples: [],
   });
   const [loading, setLoading] = useState(true);
   const [evalLoading, setEvalLoading] = useState(true);
@@ -201,6 +203,9 @@ export default function ModelsPage() {
 
       <ModelPerformanceCharts
         points={performanceHistory.points}
+        samples={performanceHistory.samples}
+        days={performanceHistory.days}
+        modelNames={modelNames}
         window={performanceHistory.window}
         loading={historyLoading}
         error={historyError}

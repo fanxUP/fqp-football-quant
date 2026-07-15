@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import type { ModelPerformancePoint } from '../core/types';
+import type { ModelPerformancePoint, ModelPerformanceSample } from '../core/types';
 import { playTypeLabel } from '../shared/constants';
 import { useTheme } from '../app/ThemeContext';
 import ChartFrame from './core/ChartFrame';
@@ -13,6 +13,7 @@ import {
   type ModelPerformanceSeriesData,
 } from './model/modelPerformanceData';
 import { getModelLineVisual } from './model/modelVisuals';
+import ModelSampleSufficiency from './model/ModelSampleSufficiency';
 import './ModelPerformanceCharts.css';
 
 const PLAY_TYPES = ['spf', 'rqspf', 'bf', 'zjq', 'bqc'] as const;
@@ -21,6 +22,9 @@ const PERCENT_RANGE = [0, 100] as const;
 
 interface ModelPerformanceChartsProps {
   points: ModelPerformancePoint[];
+  samples: ModelPerformanceSample[];
+  days: number;
+  modelNames: string[];
   window: number;
   loading?: boolean;
   error?: string | null;
@@ -117,6 +121,9 @@ function PerformanceChart({
 
 export default function ModelPerformanceCharts({
   points,
+  samples,
+  days,
+  modelNames,
   window,
   loading = false,
   error,
@@ -148,6 +155,8 @@ export default function ModelPerformanceCharts({
         <h2 id="model-performance-trend-title">模型表现曲线</h2>
         <p>按结算日期比较各模型滚动命中率；颜色和线型共同区分模型，点击图例可隐藏或显示曲线。</p>
       </header>
+
+      <ModelSampleSufficiency samples={samples} modelNames={modelNames} days={days} />
 
       <div className="model-performance-overall">
         <PerformanceChart

@@ -121,6 +121,17 @@ _PERFORMANCE_HISTORY_SQL = """
             is_correct
         FROM scored_picks
     ),
+    scope_summaries AS (
+        SELECT
+            play_type,
+            model_name,
+            COUNT(*) AS total_samples,
+            COUNT(DISTINCT business_date) AS settled_dates,
+            MIN(business_date) AS first_date,
+            MAX(business_date) AS last_date
+        FROM evaluation_scopes
+        GROUP BY play_type, model_name
+    ),
     rolling_scores AS (
         SELECT
             match_id,
@@ -149,9 +160,19 @@ _PERFORMANCE_HISTORY_SQL = """
         FROM rolling_scores
         ORDER BY play_type, model_name, business_date, match_id DESC
     )
-    SELECT business_date, play_type, model_name, hit_rate, sample_size
+    SELECT
+        daily_points.business_date,
+        daily_points.play_type,
+        daily_points.model_name,
+        daily_points.hit_rate,
+        daily_points.sample_size,
+        scope_summaries.total_samples,
+        scope_summaries.settled_dates,
+        scope_summaries.first_date,
+        scope_summaries.last_date
     FROM daily_points
-    ORDER BY play_type, business_date, model_name
+    JOIN scope_summaries USING (play_type, model_name)
+    ORDER BY daily_points.play_type, daily_points.business_date, daily_points.model_name
 """
 
 
@@ -185,9 +206,23 @@ def get_model_performance_history(
         }
         for row in rows
     ]
+    samples_by_scope: dict[tuple[str, str], dict[str, Any]] = {}
+    for row in rows:
+        key = (str(row[1]), str(row[2]))
+        samples_by_scope[key] = {
+            "play_type": row[1],
+            "model_name": row[2],
+            "total_samples": int(row[5]),
+            "settled_dates": int(row[6]),
+            "first_date": _iso_date(row[7]),
+            "last_date": _iso_date(row[8]),
+        }
+
     return {
         "status": "ok",
         "metric": "rolling_hit_rate",
         "window": window,
+        "days": days,
         "points": points,
+        "samples": list(samples_by_scope.values()),
     }

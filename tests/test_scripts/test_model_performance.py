@@ -20,9 +20,18 @@ class HistoryCursor:
 
     def fetchall(self):
         return [
-            (date(2026, 7, 11), "spf", "elo_rating", 0.6, 5),
-            (date(2026, 7, 12), "spf", "elo_rating", 0.7, 10),
-            (date(2026, 7, 12), "bf", "maher_poisson", 0.2, 5),
+            (
+                date(2026, 7, 11), "spf", "elo_rating", 0.6, 5,
+                42, 8, date(2026, 6, 1), date(2026, 7, 12),
+            ),
+            (
+                date(2026, 7, 12), "spf", "elo_rating", 0.7, 10,
+                42, 8, date(2026, 6, 1), date(2026, 7, 12),
+            ),
+            (
+                date(2026, 7, 12), "bf", "maher_poisson", 0.2, 5,
+                5, 1, date(2026, 7, 12), date(2026, 7, 12),
+            ),
         ]
 
 
@@ -43,6 +52,7 @@ def test_model_performance_history_returns_rolling_hit_rate_by_play_type() -> No
         "status": "ok",
         "metric": "rolling_hit_rate",
         "window": 20,
+        "days": 90,
         "points": [
             {
                 "date": "2026-07-11",
@@ -64,6 +74,24 @@ def test_model_performance_history_returns_rolling_hit_rate_by_play_type() -> No
                 "model_name": "maher_poisson",
                 "hit_rate": 0.2,
                 "sample_size": 5,
+            },
+        ],
+        "samples": [
+            {
+                "play_type": "spf",
+                "model_name": "elo_rating",
+                "total_samples": 42,
+                "settled_dates": 8,
+                "first_date": "2026-06-01",
+                "last_date": "2026-07-12",
+            },
+            {
+                "play_type": "bf",
+                "model_name": "maher_poisson",
+                "total_samples": 5,
+                "settled_dates": 1,
+                "first_date": "2026-07-12",
+                "last_date": "2026-07-12",
             },
         ],
     }
@@ -88,3 +116,5 @@ def test_model_performance_history_uses_top_pick_and_all_official_result_types()
     assert "UNION ALL" in query
     assert "'all' AS play_type" in query
     assert "ROWS BETWEEN %(preceding)s PRECEDING" in query
+    assert "COUNT(*) AS total_samples" in query
+    assert "COUNT(DISTINCT business_date) AS settled_dates" in query

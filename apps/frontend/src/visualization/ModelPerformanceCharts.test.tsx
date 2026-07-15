@@ -17,16 +17,25 @@ describe('ModelPerformanceCharts', () => {
             { date: '2026-07-12', play_type: 'all', model_name: 'elo_rating', hit_rate: 0.55, sample_size: 20 },
             { date: '2026-07-12', play_type: 'spf', model_name: 'elo_rating', hit_rate: 0.5, sample_size: 12 },
           ]}
+          samples={[
+            {
+              play_type: 'all', model_name: 'elo_rating', total_samples: 20,
+              settled_dates: 2, first_date: '2026-07-11', last_date: '2026-07-12',
+            },
+          ]}
+          days={365}
+          modelNames={['elo_rating']}
           window={20}
         />
       </ThemeProvider>,
     );
 
     expect(screen.getByText('综合表现 · 模型对比')).toBeInTheDocument();
-    expect(screen.getByText('Elo 实力评分')).toBeInTheDocument();
+    expect(screen.getAllByText('Elo 实力评分')).toHaveLength(2);
     expect(screen.getByText('55.0%')).toBeInTheDocument();
     expect(screen.getAllByText('样本日期不足')).toHaveLength(2);
     expect(screen.getAllByText(/· 模型对比$/)).toHaveLength(6);
     expect(screen.getByRole('img', { name: '胜平负模型滚动命中率对比' })).toBeInTheDocument();
+    expect(screen.getByRole('table', { name: '模型与玩法赛前有效样本量' })).toBeInTheDocument();
   });
 });

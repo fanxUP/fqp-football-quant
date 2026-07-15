@@ -639,11 +639,22 @@ export interface ModelPerformancePoint {
   sample_size: number;
 }
 
+export interface ModelPerformanceSample {
+  play_type: string;
+  model_name: string;
+  total_samples: number;
+  settled_dates: number;
+  first_date: string;
+  last_date: string;
+}
+
 export interface ModelPerformanceHistory {
   status: string;
   metric: 'rolling_hit_rate';
   window: number;
+  days: number;
   points: ModelPerformancePoint[];
+  samples: ModelPerformanceSample[];
 }
 
 export interface CalibrationBin {

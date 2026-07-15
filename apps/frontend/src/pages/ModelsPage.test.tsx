@@ -65,7 +65,9 @@ describe('ModelsPage', () => {
       status: 'ok',
       metric: 'rolling_hit_rate',
       window: 20,
+      days: 365,
       points: [],
+      samples: [],
     });
   });
 
