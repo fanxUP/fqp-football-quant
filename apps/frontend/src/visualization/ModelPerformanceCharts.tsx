@@ -1,13 +1,23 @@
 import { useMemo } from 'react';
-import type { EChartsOption } from 'echarts';
 import type { ModelPerformancePoint } from '../core/types';
-import ChartCard from '../shared/components/ChartCard';
-import { modelNameLabel, playTypeLabel } from '../shared/constants';
-import { applyChartTheme, CHART_COLORS } from './chartTheme';
+import { playTypeLabel } from '../shared/constants';
 import { useTheme } from '../app/ThemeContext';
+import { getChartColors } from '../theme/chartTokens';
+import ChartFrame from './core/ChartFrame';
+import LightweightLineChart, {
+  type LightweightLineSeries,
+} from './timeseries/LightweightLineChart';
+import {
+  buildModelPerformanceOverview,
+  buildModelPerformanceSeries,
+  type ModelPerformanceOverviewItem,
+  type ModelPerformanceSeriesData,
+} from './model/modelPerformanceData';
+import './ModelPerformanceCharts.css';
 
 const PLAY_TYPES = ['spf', 'rqspf', 'bf', 'zjq', 'bqc'] as const;
-const OVERALL_PLAY_TYPE = 'all';
+const MIN_TREND_DATES = 8;
+const PERCENT_RANGE = [0, 100] as const;
 
 interface ModelPerformanceChartsProps {
   points: ModelPerformancePoint[];
@@ -16,66 +26,109 @@ interface ModelPerformanceChartsProps {
   error?: string | null;
 }
 
-export function buildModelPerformanceOption(
-  points: ModelPerformancePoint[],
-  playType: string,
-): EChartsOption | null {
-  const playPoints = points.filter((point) => point.play_type === playType);
-  if (playPoints.length === 0) return null;
+const MODEL_PATTERNS: Record<string, LightweightLineSeries['pattern']> = {
+  elo_rating: 'solid',
+  market_baseline: 'dashed',
+  dixon_coles: 'dotted',
+  maher_poisson: 'solid',
+};
 
-  const dates = [...new Set(playPoints.map((point) => point.date))].sort();
-  const models = [...new Set(playPoints.map((point) => point.model_name))].sort();
+function addModelVisuals(series: ModelPerformanceSeriesData[]): LightweightLineSeries[] {
+  const colors = getChartColors();
   const modelColors: Record<string, string> = {
-    elo_rating: CHART_COLORS.blue,
-    market_baseline: CHART_COLORS.amber,
-    dixon_coles: CHART_COLORS.green,
-    maher_poisson: CHART_COLORS.primary,
+    elo_rating: colors.blue,
+    market_baseline: colors.amber,
+    dixon_coles: colors.green,
+    maher_poisson: colors.primary,
   };
-  const values = new Map(
-    playPoints.map((point) => [
-      `${point.model_name}:${point.date}`,
-      Math.round(point.hit_rate * 1000) / 10,
-    ]),
-  );
 
-  return applyChartTheme({
-    tooltip: {
-      trigger: 'axis',
-      valueFormatter: (value: number) => `${Number(value).toFixed(1)}%`,
-    },
-    legend: {
-      type: 'scroll',
-      data: models.map(modelNameLabel),
-    },
-    grid: { left: '3%', right: '5%', bottom: '12%', top: '18%', containLabel: true },
-    xAxis: {
-      type: 'category',
-      data: dates.map((date) => date.slice(5)),
-      name: '日期',
-      boundaryGap: false,
-    },
-    yAxis: {
-      type: 'value',
-      name: '命中率',
-      min: 0,
-      max: 100,
-      axisLabel: { formatter: '{value}%' },
-    },
-    series: models.map((modelName) => {
-      const color = modelColors[modelName];
-      return {
-        name: modelNameLabel(modelName),
-        type: 'line',
-        data: dates.map((date) => values.get(`${modelName}:${date}`) ?? null),
-        connectNulls: true,
-        smooth: 0.2,
-        symbol: 'circle',
-        symbolSize: 6,
-        lineStyle: { width: 2, ...(color ? { color } : {}) },
-        itemStyle: color ? { color } : undefined,
-      };
-    }),
-  } as EChartsOption) as EChartsOption;
+  return series.map((item) => ({
+    id: item.id,
+    name: item.name,
+    data: item.data,
+    color: modelColors[item.id] ?? colors.purple,
+    pattern: MODEL_PATTERNS[item.id] ?? 'dashed',
+  }));
+}
+
+function TrendSufficiency({ dateCount }: { dateCount: number }) {
+  if (dateCount === 0 || dateCount >= MIN_TREND_DATES) return null;
+  return (
+    <span className="model-performance-sample-warning" title={`建议至少 ${MIN_TREND_DATES} 个结算日期`}>
+      样本日期不足
+    </span>
+  );
+}
+
+function OverviewRanking({ rows }: { rows: ModelPerformanceOverviewItem[] }) {
+  return (
+    <div className="model-performance-ranking" aria-label="模型综合表现排名">
+      {rows.map((row) => {
+        const change = row.changePercentagePoints;
+        const changeText = change == null ? '暂无环比' : `${change >= 0 ? '+' : ''}${change.toFixed(1)} 个百分点`;
+        return (
+          <article className="model-performance-rank-item" key={row.modelName}>
+            <span className="model-performance-rank-number" aria-label={`第 ${row.rank} 名`}>{row.rank}</span>
+            <div className="model-performance-rank-copy">
+              <strong>{row.label}</strong>
+              <span>滚动样本 {row.latestSampleSize} 次 · {row.dateCount} 个结算日期</span>
+            </div>
+            <div className="model-performance-rank-value">
+              <strong>{row.latestHitRate.toFixed(1)}%</strong>
+              <span className={change != null && change < 0 ? 'is-down' : undefined}>{changeText}</span>
+            </div>
+          </article>
+        );
+      })}
+    </div>
+  );
+}
+
+interface PerformanceChartProps {
+  title: string;
+  ariaLabel: string;
+  series: LightweightLineSeries[];
+  dateCount: number;
+  window: number;
+  height: number;
+  loading: boolean;
+  error?: string | null;
+  overview?: ModelPerformanceOverviewItem[];
+}
+
+function PerformanceChart({
+  title,
+  ariaLabel,
+  series,
+  dateCount,
+  window,
+  height,
+  loading,
+  error,
+  overview,
+}: PerformanceChartProps) {
+  return (
+    <ChartFrame
+      title={title}
+      subtitle={`最近 ${window} 次预测的滚动命中率 · ${dateCount} 个结算日期 · 纵轴单位 %`}
+      controls={<TrendSufficiency dateCount={dateCount} />}
+      height={height}
+      loading={loading}
+      error={error}
+      empty={!loading && !error && series.length === 0}
+      emptyReason="暂无已结算模型预测"
+    >
+      {overview && overview.length > 0 && <OverviewRanking rows={overview} />}
+      <LightweightLineChart
+        series={series}
+        ariaLabel={ariaLabel}
+        height={height}
+        valuePrecision={1}
+        valueSuffix="%"
+        valueRange={PERCENT_RANGE}
+      />
+    </ChartFrame>
+  );
 }
 
 export default function ModelPerformanceCharts({
@@ -85,56 +138,61 @@ export default function ModelPerformanceCharts({
   error,
 }: ModelPerformanceChartsProps) {
   const { theme } = useTheme();
-  const options = useMemo(
-    () => new Map(
-      [OVERALL_PLAY_TYPE, ...PLAY_TYPES].map((playType) => [
-        playType,
-        buildModelPerformanceOption(points, playType),
-      ]),
-    ),
-    [points, theme],
+  const chartData = useMemo(() => {
+    const result = new Map<string, ModelPerformanceSeriesData[]>();
+    for (const playType of ['all', ...PLAY_TYPES]) {
+      result.set(playType, buildModelPerformanceSeries(points, playType));
+    }
+    return result;
+  }, [points]);
+  const overview = useMemo(() => buildModelPerformanceOverview(points), [points]);
+
+  const renderData = useMemo(() => {
+    const result = new Map<string, LightweightLineSeries[]>();
+    chartData.forEach((series, playType) => result.set(playType, addModelVisuals(series)));
+    return result;
+  }, [chartData, theme]);
+
+  const dateCount = (playType: string) => Math.max(
+    0,
+    ...(chartData.get(playType) ?? []).map((item) => item.dateCount),
   );
-  const overallOption = options.get(OVERALL_PLAY_TYPE);
 
   return (
-    <section aria-labelledby="model-performance-trend-title" style={{ marginBottom: '20px' }}>
-      <div style={{ marginBottom: '12px' }}>
-        <h2 id="model-performance-trend-title" style={{ margin: 0, fontSize: '18px' }}>
-          模型表现曲线
-        </h2>
-        <p style={{ margin: '4px 0 0', color: 'var(--fqp-text-muted)', fontSize: '12px' }}>
-          每场取模型概率最高的选项；分玩法按场统计，综合视图按已结算预测次数统计
-        </p>
-      </div>
-      <div style={{ marginBottom: '16px' }}>
-        <ChartCard
+    <section aria-labelledby="model-performance-trend-title" className="model-performance-section">
+      <header className="model-performance-heading">
+        <h2 id="model-performance-trend-title">模型表现曲线</h2>
+        <p>按结算日期比较各模型滚动命中率；颜色和线型共同区分模型，点击图例可隐藏或显示曲线。</p>
+      </header>
+
+      <div className="model-performance-overall">
+        <PerformanceChart
           title="综合表现 · 模型对比"
-          subtitle={`汇总模型已覆盖玩法 · 最多最近 ${window} 次预测`}
-          option={(overallOption || {}) as Record<string, unknown>}
+          ariaLabel="综合模型滚动命中率对比"
+          series={renderData.get('all') ?? []}
+          dateCount={dateCount('all')}
+          window={window}
           height={340}
           loading={loading}
           error={error}
-          empty={!loading && !error && !overallOption}
-          emptyReason="暂无综合模型表现数据"
+          overview={overview}
         />
       </div>
-      <div className="fqp-grid-2">
-        {PLAY_TYPES.map((playType) => {
-          const option = options.get(playType);
-          return (
-            <ChartCard
-              key={playType}
-              title={`${playTypeLabel(playType)} · 模型对比`}
-              subtitle={`最多最近 ${window} 场滚动命中率`}
-              option={(option || {}) as Record<string, unknown>}
-              height={300}
-              loading={loading}
-              error={error}
-              empty={!loading && !error && !option}
-              emptyReason="暂无已结算模型预测"
-            />
-          );
-        })}
+
+      <div className="model-performance-grid">
+        {PLAY_TYPES.map((playType) => (
+          <PerformanceChart
+            key={playType}
+            title={`${playTypeLabel(playType)} · 模型对比`}
+            ariaLabel={`${playTypeLabel(playType)}模型滚动命中率对比`}
+            series={renderData.get(playType) ?? []}
+            dateCount={dateCount(playType)}
+            window={window}
+            height={280}
+            loading={loading}
+            error={error}
+          />
+        ))}
       </div>
     </section>
   );
