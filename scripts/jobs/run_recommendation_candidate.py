@@ -118,10 +118,7 @@ def _ticket_generation_note(
     if tickets_created > 0:
         return f"已创建 {tickets_created} 张 Agent 虚拟票"
     if candidate_count > 0:
-        return (
-            f"发现 {candidate_count} 个正 EV 候选，但均未通过"
-            "资金池风险与置信度门槛，今日不投注"
-        )
+        return f"发现 {candidate_count} 个正 EV 候选，但均未通过资金池风险与置信度门槛，今日不投注"
     return "没有候选通过数据质量与风险门槛，今日不投注"
 
 
@@ -137,9 +134,7 @@ def _build_competition_observation_ticket(
     a sellable single; otherwise it uses two distinct open-market selections.
     """
     eligible_candidates = [
-        candidate
-        for candidate in candidates
-        if float(candidate.get("sp_value") or 0) > 0
+        candidate for candidate in candidates if float(candidate.get("sp_value") or 0) > 0
     ]
     single_candidate = next(
         (
@@ -212,6 +207,7 @@ def _market_allows_pass(raw_json: dict[str, Any] | None) -> bool:
             return True
     return False
 
+
 # ── 四池分层配置（框架 §9.1） ──
 POOL_CONFIG: list[dict[str, Any]] = [
     {
@@ -258,14 +254,14 @@ POOL_CONFIG: list[dict[str, Any]] = [
 #   - 不建议多场热门硬串（单场 SP < 1.30 的不参与串关）
 #   - 不建议全部选深盘让胜
 
-PARLAY_BUDGET = 80.0         # 串关总预算
+PARLAY_BUDGET = 80.0  # 串关总预算
 PARLAY_2X1_MAX_STAKE = 40.0  # 2串1 单票上限
 PARLAY_3X1_MAX_STAKE = 20.0  # 3串1 单票上限
 PARLAY_3X1_TOTAL_MAX = 30.0  # 3串1 总预算上限
-PARLAY_MIN_COMBO_EV = 0.03   # 组合最低正EV
-PARLAY_MIN_SP = 1.30         # 单场最低SP（防过热）
-PARLAY_MAX_COMBO_SP = 15.0   # 组合SP上限
-PARLAY_MIN_QUALITY = 60      # 串关数据质量要求更高
+PARLAY_MIN_COMBO_EV = 0.03  # 组合最低正EV
+PARLAY_MIN_SP = 1.30  # 单场最低SP（防过热）
+PARLAY_MAX_COMBO_SP = 15.0  # 组合SP上限
+PARLAY_MIN_QUALITY = 60  # 串关数据质量要求更高
 
 
 def _prediction_sp_value(prediction_row: tuple[Any, ...]) -> float:
@@ -286,21 +282,19 @@ def _market_sp_quality(
     market_values: dict[tuple[int, str], dict[str, float]] = {}
     for prediction in predictions:
         market_key = (prediction[1], prediction[3])
-        market_values.setdefault(market_key, {})[prediction[4]] = _prediction_sp_value(
-            prediction
-        )
+        market_values.setdefault(market_key, {})[prediction[4]] = _prediction_sp_value(prediction)
 
     quality: dict[tuple[int, str], bool] = {}
     for market_key, option_values in market_values.items():
         values = list(option_values.values())
         quality[market_key] = not (
-            any(value <= 0 for value in values)
-            or (len(values) >= 2 and len(set(values)) == 1)
+            any(value <= 0 for value in values) or (len(values) >= 2 and len(set(values)) == 1)
         )
     valid_match_count = len(
         {match_id for (match_id, _play_type), is_valid in quality.items() if is_valid}
     )
     return quality, valid_match_count
+
 
 # ── 平局风险检测（框架 §7.3） ──
 DRAW_ODDS_THRESHOLD = 3.50
@@ -313,8 +307,8 @@ DEEP_OVERHEAT_SP = 1.20
 OVERHEAT_PENALTY = 0.05
 DEEP_OVERHEAT_PENALTY = 0.08
 # §7.1 SPF vs 让球矛盾：主胜很低但让胜很高 → "赢不穿"风险
-ODDS_GAP_HOME_SP_MAX = 1.50   # SPF主胜低于此值才触发检查
-ODDS_GAP_RQSPF_H_MIN = 2.20   # 让球主胜高于此值 = 让球深
+ODDS_GAP_HOME_SP_MAX = 1.50  # SPF主胜低于此值才触发检查
+ODDS_GAP_RQSPF_H_MIN = 2.20  # 让球主胜高于此值 = 让球深
 ODDS_GAP_PENALTY = 0.05
 
 # ── 联赛分级（框架 §4 + §10） ──
@@ -323,25 +317,43 @@ ODDS_GAP_PENALTY = 0.05
 # Tier 3: 小型联赛 → 数据不完整、冷门风险高
 LEAGUE_TIERS: dict[str, int] = {
     # Tier 1: 五大联赛 + 欧冠 + 欧联
-    "英超": 1, "English Premier League": 1,
-    "西甲": 1, "Spanish La Liga": 1,
-    "德甲": 1, "German Bundesliga": 1,
-    "意甲": 1, "Italian Serie A": 1,
-    "法甲": 1, "French Ligue 1": 1,
-    "欧冠": 1, "UEFA Champions League": 1,
-    "欧联": 1, "UEFA Europa League": 1,
+    "英超": 1,
+    "English Premier League": 1,
+    "西甲": 1,
+    "Spanish La Liga": 1,
+    "德甲": 1,
+    "German Bundesliga": 1,
+    "意甲": 1,
+    "Italian Serie A": 1,
+    "法甲": 1,
+    "French Ligue 1": 1,
+    "欧冠": 1,
+    "UEFA Champions League": 1,
+    "欧联": 1,
+    "UEFA Europa League": 1,
     # Tier 2: 五大次级 + 荷葡巴日韩
-    "英冠": 2, "English Championship": 2,
-    "德乙": 2, "German 2. Bundesliga": 2,
-    "西乙": 2, "Spanish Segunda Division": 2,
-    "意乙": 2, "Italian Serie B": 2,
-    "法乙": 2, "French Ligue 2": 2,
-    "荷甲": 2, "Dutch Eredivisie": 2,
-    "葡超": 2, "Portuguese Liga": 2,
-    "巴甲": 2, "Brazilian Serie A": 2,
-    "日职": 2, "Japanese J1 League": 2,
-    "韩职": 2, "Korean K League 1": 2,
-    "美职": 2, "American MLS": 2,
+    "英冠": 2,
+    "English Championship": 2,
+    "德乙": 2,
+    "German 2. Bundesliga": 2,
+    "西乙": 2,
+    "Spanish Segunda Division": 2,
+    "意乙": 2,
+    "Italian Serie B": 2,
+    "法乙": 2,
+    "French Ligue 2": 2,
+    "荷甲": 2,
+    "Dutch Eredivisie": 2,
+    "葡超": 2,
+    "Portuguese Liga": 2,
+    "巴甲": 2,
+    "Brazilian Serie A": 2,
+    "日职": 2,
+    "Japanese J1 League": 2,
+    "韩职": 2,
+    "Korean K League 1": 2,
+    "美职": 2,
+    "American MLS": 2,
 }
 # Default tier if league not found → Tier 3 (highest risk)
 LEAGUE_TIER_RISK = {1: -0.02, 2: 0.0, 3: 0.03}
@@ -361,7 +373,7 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
                 """
                 INSERT INTO daily_budget_plans (plan_date, total_budget, suggested_stake,
                                                  unused_budget, risk_mode, status)
-                VALUES (CURRENT_DATE, %s, 0.00, %s, 'balanced', 'active')
+                VALUES (timezone('Asia/Shanghai', NOW())::date, %s, 0.00, %s, 'balanced', 'active')
                 ON CONFLICT (plan_date) DO NOTHING
                 """,
                 (AGENT_DAILY_BUDGET, AGENT_DAILY_BUDGET),
@@ -372,7 +384,9 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
         with conn.cursor() as cur:
             cur.execute(
                 """SELECT COUNT(*), COALESCE(SUM(suggested_stake), 0)
-                   FROM simulation_tickets WHERE created_at::date = CURRENT_DATE"""
+                   FROM simulation_tickets
+                   WHERE (created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Shanghai')::date
+                         = timezone('Asia/Shanghai', NOW())::date"""
             )
             already, existing_stake = cur.fetchone()
         if already > 0:
@@ -434,7 +448,7 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
                   AND mv.model_name = ANY(%s)
                   AND mp.odds_snapshot_id IS NOT NULL
                   AND mp.feature_snapshot_id IS NOT NULL
-                  AND m.kickoff_time > NOW()
+                  AND m.kickoff_time > timezone('Asia/Shanghai', NOW())
                 ORDER BY mp.ev DESC
                 """,
                 (latest_time, ALL_MODELS),
@@ -456,10 +470,7 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
             )
             open_markets = {(row[0], row[1]) for row in cur.fetchall()}
 
-        predictions = [
-            p for p in predictions
-            if (p[1], p[3]) in open_markets
-        ]
+        predictions = [p for p in predictions if (p[1], p[3]) in open_markets]
         if not predictions:
             return {"status": "ok", "tickets": 0, "note": "no predictions with open markets"}
 
@@ -602,14 +613,41 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
 
         for p in predictions:
             (
-                pred_id, match_id, _mv_id, play_type, opt_code,
-                model_prob, market_prob, ev, confidence, risk,
-                snap_id, feature_snapshot_id, home, away, league, _kickoff_time, sp_value, model_name,
+                pred_id,
+                match_id,
+                _mv_id,
+                play_type,
+                opt_code,
+                model_prob,
+                market_prob,
+                ev,
+                confidence,
+                risk,
+                snap_id,
+                feature_snapshot_id,
+                home,
+                away,
+                league,
+                _kickoff_time,
+                sp_value,
+                model_name,
             ) = (
-                p[0], p[1], p[2], p[3], p[4],
-                float(p[5] or 0), float(p[6] or 0), float(p[7] or 0),
-                float(p[8] or 0), float(p[9] or 0),
-                p[10], p[11], p[12], p[13], p[14], p[15],
+                p[0],
+                p[1],
+                p[2],
+                p[3],
+                p[4],
+                float(p[5] or 0),
+                float(p[6] or 0),
+                float(p[7] or 0),
+                float(p[8] or 0),
+                float(p[9] or 0),
+                p[10],
+                p[11],
+                p[12],
+                p[13],
+                p[14],
+                p[15],
                 _prediction_sp_value(p),
                 p[17],
             )
@@ -646,36 +684,35 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
             league_tier = LEAGUE_TIERS.get(league, 3)
             league_risk = LEAGUE_TIER_RISK.get(league_tier, 0.03)
             effective_risk = (
-                risk
-                + draw_risk_map.get(match_id, 0)
-                + odds_risk_map.get(match_id, 0)
-                + league_risk
+                risk + draw_risk_map.get(match_id, 0) + odds_risk_map.get(match_id, 0) + league_risk
             )
 
-            parsed.append({
-                "prediction_id": pred_id,
-                "match_id": match_id,
-                "play_type": play_type,
-                "option_code": opt_code,
-                "option_name": _option_label(opt_code, play_type),
-                "model_probability": model_prob,
-                "market_probability": market_prob,
-                "ev": ev,
-                "confidence_score": confidence,
-                "risk_score": effective_risk,
-                "raw_risk_score": risk,
-                "odds_snapshot_id": snap_id,
-                "feature_snapshot_id": feature_snapshot_id,
-                "sp_value": sp_value,
-                "home_team": home,
-                "away_team": away,
-                "league": league,
-                "model_name": model_name,
-                "data_quality": quality,
-                "draw_risk": draw_risk_map.get(match_id, 0),
-                "odds_risk": odds_risk_map.get(match_id, 0),
-                "league_tier": league_tier,
-            })
+            parsed.append(
+                {
+                    "prediction_id": pred_id,
+                    "match_id": match_id,
+                    "play_type": play_type,
+                    "option_code": opt_code,
+                    "option_name": _option_label(opt_code, play_type),
+                    "model_probability": model_prob,
+                    "market_probability": market_prob,
+                    "ev": ev,
+                    "confidence_score": confidence,
+                    "risk_score": effective_risk,
+                    "raw_risk_score": risk,
+                    "odds_snapshot_id": snap_id,
+                    "feature_snapshot_id": feature_snapshot_id,
+                    "sp_value": sp_value,
+                    "home_team": home,
+                    "away_team": away,
+                    "league": league,
+                    "model_name": model_name,
+                    "data_quality": quality,
+                    "draw_risk": draw_risk_map.get(match_id, 0),
+                    "odds_risk": odds_risk_map.get(match_id, 0),
+                    "league_tier": league_tier,
+                }
+            )
 
         if not parsed:
             return {
@@ -705,15 +742,17 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
 
             # If model strongly favors one direction, only allow that direction
             if best_prob >= STRONG_MODEL_THRESHOLD and c["option_code"] != best_dir:
-                direction_conflicts.append({
-                    "match_id": mid,
-                    "home": c["home_team"],
-                    "away": c["away_team"],
-                    "rejected_direction": c["option_code"],
-                    "rejected_ev": round(c["ev"], 4),
-                    "model_direction": best_dir,
-                    "model_probability": round(best_prob, 4),
-                })
+                direction_conflicts.append(
+                    {
+                        "match_id": mid,
+                        "home": c["home_team"],
+                        "away": c["away_team"],
+                        "rejected_direction": c["option_code"],
+                        "rejected_ev": round(c["ev"], 4),
+                        "model_direction": best_dir,
+                        "model_probability": round(best_prob, 4),
+                    }
+                )
                 continue
 
             if mid not in by_match or c["ev"] > by_match[mid]["ev"]:
@@ -749,7 +788,11 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
             ]
             singles_budget = round(daily_budget * 0.60, 2) if single_candidates else 0.0
             combo_budget = round(daily_budget - singles_budget, 2)
-            base_single_stake = _official_stake(singles_budget / len(single_candidates)) if single_candidates else 0.0
+            base_single_stake = (
+                _official_stake(singles_budget / len(single_candidates))
+                if single_candidates
+                else 0.0
+            )
             single_stakes = [base_single_stake] * len(single_candidates)
             if single_stakes:
                 single_stakes[-1] = _official_stake(singles_budget - sum(single_stakes[:-1]))
@@ -780,12 +823,30 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
             if len(candidates) >= 2:
                 combos_2 = _build_parlays(candidates, 2)
                 if not combos_2:
-                    combos_2 = [{"candidates": list(pair), "combined_sp": pair[0]["sp_value"] * pair[1]["sp_value"], "combined_ev": pair[0]["ev"] + pair[1]["ev"]} for pair in combinations(candidates, 2) if len({c["match_id"] for c in pair}) == 2]
+                    combos_2 = [
+                        {
+                            "candidates": list(pair),
+                            "combined_sp": pair[0]["sp_value"] * pair[1]["sp_value"],
+                            "combined_ev": pair[0]["ev"] + pair[1]["ev"],
+                        }
+                        for pair in combinations(candidates, 2)
+                        if len({c["match_id"] for c in pair}) == 2
+                    ]
                 combos = [("2x1", combo) for combo in combos_2[:3]]
                 if len(candidates) >= 3:
                     combos_3 = _build_parlays(candidates, 3)
                     if not combos_3:
-                        combos_3 = [{"candidates": list(triple), "combined_sp": triple[0]["sp_value"] * triple[1]["sp_value"] * triple[2]["sp_value"], "combined_ev": sum(c["ev"] for c in triple)} for triple in combinations(candidates, 3) if len({c["match_id"] for c in triple}) == 3]
+                        combos_3 = [
+                            {
+                                "candidates": list(triple),
+                                "combined_sp": triple[0]["sp_value"]
+                                * triple[1]["sp_value"]
+                                * triple[2]["sp_value"],
+                                "combined_ev": sum(c["ev"] for c in triple),
+                            }
+                            for triple in combinations(candidates, 3)
+                            if len({c["match_id"] for c in triple}) == 3
+                        ]
                     combos += [("3x1", combo) for combo in combos_3[:2]]
                 combo_stakes = [_official_stake(combo_budget / len(combos))] * len(combos)
                 combo_stakes[-1] = _official_stake(combo_budget - sum(combo_stakes[:-1]))
@@ -799,12 +860,28 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
                         "suggested_stake": combo_stake,
                         "multiple": ticket_multiple,
                         "bet_count": 1,
-                        "estimated_return": round(min(combo_stake * combo["combined_sp"], _payout_cap(len(combo["candidates"]))), 2),
-                        "max_return": round(min(combo_stake * combo["combined_sp"], _payout_cap(len(combo["candidates"]))), 2),
+                        "estimated_return": round(
+                            min(
+                                combo_stake * combo["combined_sp"],
+                                _payout_cap(len(combo["candidates"])),
+                            ),
+                            2,
+                        ),
+                        "max_return": round(
+                            min(
+                                combo_stake * combo["combined_sp"],
+                                _payout_cap(len(combo["candidates"])),
+                            ),
+                            2,
+                        ),
                         "expected_value": round(combo["combined_ev"], 4),
                         "risk_level": "aggressive_training",
                         "ticket_status": "generated",
-                        "rule_metadata": {"source": "sporttery_rules", "parlay_min_matches": 2, "unique_match_required": True},
+                        "rule_metadata": {
+                            "source": "sporttery_rules",
+                            "parlay_min_matches": 2,
+                            "unique_match_required": True,
+                        },
                     }
                     if store_simulation_ticket(conn, ticket, combo_items):
                         observation_tickets += 1
@@ -816,16 +893,18 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
                                SELECT SUM(suggested_stake)
                                FROM simulation_tickets
                                WHERE budget_plan_id = daily_budget_plans.id
-                                 AND created_at::date = CURRENT_DATE
+                                 AND (created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Shanghai')::date
+                                     = timezone('Asia/Shanghai', NOW())::date
                            ), 0),
                            unused_budget = GREATEST(total_budget - COALESCE((
                                SELECT SUM(suggested_stake)
                                FROM simulation_tickets
                                WHERE budget_plan_id = daily_budget_plans.id
-                                 AND created_at::date = CURRENT_DATE
+                                 AND (created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Shanghai')::date
+                                     = timezone('Asia/Shanghai', NOW())::date
                            ), 0), 0),
                            updated_at = now()
-                     WHERE plan_date = CURRENT_DATE"""
+                     WHERE plan_date = timezone('Asia/Shanghai', NOW())::date"""
                 )
             conn.commit()
             return {
@@ -936,7 +1015,8 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
 
         # Filter candidates eligible for parlays (stricter quality, exclude hot favorites)
         parlay_candidates = [
-            c for c in candidates
+            c
+            for c in candidates
             if c["sp_value"] >= PARLAY_MIN_SP
             and c["data_quality"] >= PARLAY_MIN_QUALITY
             and c["ev"] > 0
@@ -1054,13 +1134,9 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
                     (list({candidate["match_id"] for candidate in candidates}),),
                 )
                 market_permissions = cur.fetchall()
-                single_allowed = {
-                    (row[0], row[1]) for row in market_permissions if row[2]
-                }
+                single_allowed = {(row[0], row[1]) for row in market_permissions if row[2]}
                 pass_allowed = {
-                    (row[0], row[1])
-                    for row in market_permissions
-                    if _market_allows_pass(row[3])
+                    (row[0], row[1]) for row in market_permissions if _market_allows_pass(row[3])
                 }
             observation = _build_competition_observation_ticket(
                 candidates,
@@ -1132,6 +1208,7 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
 
 # ── Helpers ──
 
+
 def _option_label(code: str, play_type: str = "spf") -> str:
     if play_type == "bqc" and len(code) == 2:
         labels = {"3": "胜", "1": "平", "0": "负"}
@@ -1180,7 +1257,9 @@ def run(dry_run: bool = False) -> dict[str, Any]:
     run_id = None
     try:
         run_id = start_tracked_job(
-            "recommendation_candidate", "recommendation_agent", {"dry_run": dry_run},
+            "recommendation_candidate",
+            "recommendation_agent",
+            {"dry_run": dry_run},
             dependencies=[] if dry_run else ["official_odds_snapshot", "model_prediction"],
         )
         result = _run_impl(dry_run=dry_run)
@@ -1195,9 +1274,7 @@ def run(dry_run: bool = False) -> dict[str, Any]:
         raise
 
 
-def _build_parlays(
-    candidates: list[dict], size: int
-) -> list[dict]:
+def _build_parlays(candidates: list[dict], size: int) -> list[dict]:
     """Generate and rank parlays of given size.
 
     Returns list of {candidates, combined_sp, combined_ev} sorted by EV desc.
@@ -1228,17 +1305,19 @@ def _build_parlays(
         # Combined EV = ∏(EV_i + 1) - 1
         combined_ev = 1.0
         for c in combo:
-            combined_ev *= (c["ev"] + 1)
+            combined_ev *= c["ev"] + 1
         combined_ev -= 1
 
         if combined_ev < PARLAY_MIN_COMBO_EV:
             continue
 
-        result.append({
-            "candidates": list(combo),
-            "combined_sp": round(combined_sp, 3),
-            "combined_ev": round(combined_ev, 4),
-        })
+        result.append(
+            {
+                "candidates": list(combo),
+                "combined_sp": round(combined_sp, 3),
+                "combined_ev": round(combined_ev, 4),
+            }
+        )
 
     result.sort(key=lambda x: x["combined_ev"], reverse=True)
     return result

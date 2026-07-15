@@ -13,6 +13,8 @@ from __future__ import annotations
 from datetime import date, timedelta
 from typing import Any
 
+from scripts.business_time import business_today
+
 AGENT_DAILY_BUDGET = 500.00  # Agent daily budget in CNY
 
 
@@ -33,6 +35,7 @@ def _date_str(val: Any) -> str | None:
 
 
 # ── Round helpers ───────────────────────────────────────────────────
+
 
 def _monday_of_week(d: date) -> date:
     """Return the Monday of the week containing d."""
@@ -99,13 +102,14 @@ def _snapshot_row(r: tuple) -> dict:
 
 # ── Round management ────────────────────────────────────────────────
 
+
 def ensure_current_round(conn: Any) -> dict:
     """Get or create the competition round for the current week (Mon-Sun).
 
     Returns the round dict. Creates a new round if today is Monday and
     no active round exists, or if the current round's week has passed.
     """
-    today = date.today()
+    today = business_today()
     monday = _monday_of_week(today)
     sunday = _sunday_of_week(today)
 
@@ -132,11 +136,14 @@ def ensure_current_round(conn: Any) -> dict:
             conn.commit()
             return _round_row(row)
 
-        cur.execute(sql_insert, {
-            "label": _round_label(monday),
-            "monday": monday,
-            "sunday": sunday,
-        })
+        cur.execute(
+            sql_insert,
+            {
+                "label": _round_label(monday),
+                "monday": monday,
+                "sunday": sunday,
+            },
+        )
         cur.execute(sql_select, {"monday": monday, "sunday": sunday})
         row = cur.fetchone()
     conn.commit()
@@ -202,6 +209,7 @@ def list_rounds(conn: Any, limit: int = 20, status: str | None = None) -> list[d
 
 # ── Daily stats computation ─────────────────────────────────────────
 
+
 def compute_agent_daily_stats(conn: Any, target_date: date) -> dict:
     """Aggregate agent pool stats for a given date.
 
@@ -216,7 +224,7 @@ def compute_agent_daily_stats(conn: Any, target_date: date) -> dict:
             COALESCE(SUM(st.suggested_stake), 0) AS daily_stake,
             COUNT(st.id) AS ticket_count
         FROM simulation_tickets st
-        WHERE st.created_at::date = %(target_date)s
+        WHERE (st.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Shanghai')::date = %(target_date)s
           AND st.ticket_status IN ('generated', 'activated', 'settled')
     """
     with conn.cursor() as cur:
@@ -232,7 +240,7 @@ def compute_agent_daily_stats(conn: Any, target_date: date) -> dict:
             COALESCE(SUM(ts.profit_loss), 0) AS daily_profit_loss
         FROM ticket_settlements ts
         WHERE ts.ticket_source = 'simulation'
-          AND ts.created_at::date = %(target_date)s
+          AND (ts.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Shanghai')::date = %(target_date)s
     """
     with conn.cursor() as cur:
         cur.execute(sql_prize, {"target_date": target_date})
@@ -248,7 +256,9 @@ def compute_agent_daily_stats(conn: Any, target_date: date) -> dict:
         "daily_profit_loss": round(daily_pl, 2),
         "daily_roi": round(daily_roi, 6),
         "ticket_count": ticket_count,
-        "budget_usage_rate": round(daily_stake / AGENT_DAILY_BUDGET, 4) if AGENT_DAILY_BUDGET > 0 else 0.0,
+        "budget_usage_rate": round(daily_stake / AGENT_DAILY_BUDGET, 4)
+        if AGENT_DAILY_BUDGET > 0
+        else 0.0,
     }
 
 
@@ -265,11 +275,11 @@ def compute_user_daily_stats(conn: Any, target_date: date) -> dict:
         FROM (
             SELECT rt.total_amount AS stake
             FROM real_tickets rt
-            WHERE rt.purchase_time::date = %(target_date)s
+            WHERE (rt.purchase_time AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Shanghai')::date = %(target_date)s
             UNION ALL
             SELECT st.total_cost AS stake
             FROM simulator_tickets st
-            WHERE st.created_at::date = %(target_date)s
+            WHERE (st.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Shanghai')::date = %(target_date)s
               AND st.status <> 'cancelled'
         ) t
     """
@@ -287,7 +297,7 @@ def compute_user_daily_stats(conn: Any, target_date: date) -> dict:
             COALESCE(SUM(ts.profit_loss), 0) AS daily_profit_loss
         FROM ticket_settlements ts
         WHERE ts.ticket_source IN ('real', 'simulator')
-          AND ts.created_at::date = %(target_date)s
+          AND (ts.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Shanghai')::date = %(target_date)s
     """
     with conn.cursor() as cur:
         cur.execute(sql_prize, {"target_date": target_date})
@@ -307,6 +317,7 @@ def compute_user_daily_stats(conn: Any, target_date: date) -> dict:
 
 
 # ── Snapshot management ─────────────────────────────────────────────
+
 
 def upsert_daily_snapshot(
     conn: Any,
@@ -445,18 +456,21 @@ def finalize_round(conn: Any, round_id: int) -> dict:
         WHERE id = %(round_id)s
     """
     with conn.cursor() as cur:
-        cur.execute(sql_update, {
-            "round_id": round_id,
-            "agent_stake": agent_stake,
-            "agent_prize": agent_prize,
-            "agent_pl": agent_pl,
-            "agent_roi": agent_roi,
-            "user_stake": user_stake,
-            "user_prize": user_prize,
-            "user_pl": user_pl,
-            "user_roi": user_roi,
-            "winner": winner,
-        })
+        cur.execute(
+            sql_update,
+            {
+                "round_id": round_id,
+                "agent_stake": agent_stake,
+                "agent_prize": agent_prize,
+                "agent_pl": agent_pl,
+                "agent_roi": agent_roi,
+                "user_stake": user_stake,
+                "user_prize": user_prize,
+                "user_pl": user_pl,
+                "user_roi": user_roi,
+                "winner": winner,
+            },
+        )
     conn.commit()
 
     return {
@@ -470,6 +484,7 @@ def finalize_round(conn: Any, round_id: int) -> dict:
 
 
 # ── Trend data ──────────────────────────────────────────────────────
+
 
 def get_trend_data(conn: Any, round_id: int) -> list[dict]:
     """Get cumulative ROI trend series for chart rendering.
@@ -506,6 +521,7 @@ def get_trend_data(conn: Any, round_id: int) -> list[dict]:
 
 
 # ── Summary ─────────────────────────────────────────────────────────
+
 
 def get_summary(conn: Any) -> dict:
     """Get overall competition summary: total rounds, wins per side."""
@@ -570,10 +586,13 @@ def ensure_agent_bankroll(conn: Any) -> dict:
                 "current_balance": float(row[3] or 0),
                 "daily_budget": float(row[4] or 0),
             }
-        cur.execute(sql_insert, {
-            "balance": AGENT_INITIAL_BALANCE,
-            "daily_budget": AGENT_DAILY_BUDGET,
-        })
+        cur.execute(
+            sql_insert,
+            {
+                "balance": AGENT_INITIAL_BALANCE,
+                "daily_budget": AGENT_DAILY_BUDGET,
+            },
+        )
         cur.execute(sql_select)
         row = cur.fetchone()
     conn.commit()
@@ -610,12 +629,15 @@ def reset_agent_budget(conn: Any) -> dict:
                 %(remark)s, now())
     """
     with conn.cursor() as cur:
-        cur.execute(sql_txn, {
-            "account_id": account_id,
-            "amount": new_balance - prev_balance,
-            "balance_after": new_balance,
-            "remark": f"Daily reset: {prev_balance:.2f} → {new_balance:.2f}",
-        })
+        cur.execute(
+            sql_txn,
+            {
+                "account_id": account_id,
+                "amount": new_balance - prev_balance,
+                "balance_after": new_balance,
+                "remark": f"Daily reset: {prev_balance:.2f} → {new_balance:.2f}",
+            },
+        )
 
     # Update balance
     sql_update = """

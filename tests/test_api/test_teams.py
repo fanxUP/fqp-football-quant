@@ -41,6 +41,21 @@ class TestTeamsEndpoint:
         assert data["teams"][0]["team_name_cn"] == "曼联"
         assert data["teams"][0]["team_code"] == "MUFC"
 
+    def test_today_matches_use_shanghai_business_date(self, client):
+        mock_conn = MagicMock()
+        mock_cur = MagicMock()
+        mock_conn.__enter__.return_value = mock_conn
+        mock_conn.cursor.return_value.__enter__.return_value = mock_cur
+        mock_cur.fetchall.return_value = []
+
+        with patch("apps.backend.src.routers.teams.get_db", return_value=mock_conn):
+            response = client.get("/api/matches/today")
+
+        assert response.status_code == 200
+        query = mock_cur.execute.call_args.args[0]
+        assert "timezone('Asia/Shanghai', NOW())::date" in query
+
+
 class TestFeaturesSnapshotsEndpoint:
     def test_returns_empty_list_when_no_snapshots(self, client):
         mock_conn = MagicMock()

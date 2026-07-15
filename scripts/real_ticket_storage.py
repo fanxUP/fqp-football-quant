@@ -427,7 +427,8 @@ def get_settlements_by_date(conn: Any, date_str: str, source: str | None = None)
                    ts.is_won, ts.stake_amount, ts.prize_amount, ts.tax_amount,
                    ts.net_prize, ts.profit_loss, ts.roi, ts.settlement_detail_json
             FROM ticket_settlements ts
-            WHERE ts.settle_time::date = %(date)s AND ts.ticket_source = %(source)s
+            WHERE (ts.settle_time AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Shanghai')::date = %(date)s
+              AND ts.ticket_source = %(source)s
             ORDER BY ts.settle_time DESC
         """
         params = {"date": date_str, "source": source}
@@ -437,7 +438,7 @@ def get_settlements_by_date(conn: Any, date_str: str, source: str | None = None)
                    ts.is_won, ts.stake_amount, ts.prize_amount, ts.tax_amount,
                    ts.net_prize, ts.profit_loss, ts.roi, ts.settlement_detail_json
             FROM ticket_settlements ts
-            WHERE ts.settle_time::date = %(date)s
+            WHERE (ts.settle_time AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Shanghai')::date = %(date)s
             ORDER BY ts.settle_time DESC
         """
         params = {"date": date_str}
@@ -479,7 +480,7 @@ def get_settlement_summary(conn: Any, date_str: str) -> dict:
                SUM(profit_loss) AS total_pl,
                AVG(roi) AS avg_roi
         FROM ticket_settlements
-        WHERE settle_time::date = %(date)s
+        WHERE (settle_time AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Shanghai')::date = %(date)s
         GROUP BY ticket_source
     """
     with conn.cursor() as cur:
@@ -986,7 +987,7 @@ def get_play_type_win_rate(conn: Any, days: int = 30) -> list[dict[str, Any]]:
     """
     sql = """
         SELECT
-            DATE(ts.settle_time)::text AS settle_date,
+            (ts.settle_time AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Shanghai')::date::text AS settle_date,
             rti.play_type,
             COUNT(*) AS total,
             SUM(CASE WHEN ts.is_won THEN 1 ELSE 0 END) AS wins,
@@ -999,8 +1000,10 @@ def get_play_type_win_rate(conn: Any, days: int = 30) -> list[dict[str, Any]]:
             ON ts.ticket_id = rti.real_ticket_id
             AND ts.ticket_source = 'real'
         WHERE ts.is_won IS NOT NULL
-          AND ts.settle_time >= CURRENT_DATE - %(days)s::int
-        GROUP BY DATE(ts.settle_time), rti.play_type
+          AND (ts.settle_time AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Shanghai')::date
+              >= timezone('Asia/Shanghai', NOW())::date - %(days)s::int
+        GROUP BY (ts.settle_time AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Shanghai')::date,
+                 rti.play_type
         ORDER BY settle_date ASC, play_type
     """
     with conn.cursor() as cur:

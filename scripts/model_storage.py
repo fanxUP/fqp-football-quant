@@ -130,7 +130,11 @@ def store_simulation_ticket(conn: Any, ticket: dict, items: list[dict]) -> int |
     """Insert a simulation ticket with its items. Returns the ticket id."""
     with conn.cursor() as cur:
         # 1. Get today's budget plan
-        cur.execute("SELECT id FROM daily_budget_plans WHERE plan_date = CURRENT_DATE LIMIT 1")
+        cur.execute(
+            """SELECT id FROM daily_budget_plans
+               WHERE plan_date = timezone('Asia/Shanghai', NOW())::date
+               LIMIT 1"""
+        )
         plan_row = cur.fetchone()
         budget_plan_id = plan_row[0] if plan_row else None
 
@@ -201,7 +205,10 @@ def store_simulation_ticket(conn: Any, ticket: dict, items: list[dict]) -> int |
                     "ev": item.get("ev"),
                     "confidence_score": item.get("confidence_score"),
                     "risk_score": item.get("risk_score"),
-                    "odds_source": item.get("odds_source", "official" if item.get("odds_snapshot_id") else "synthetic_model"),
+                    "odds_source": item.get(
+                        "odds_source",
+                        "official" if item.get("odds_snapshot_id") else "synthetic_model",
+                    ),
                 },
             )
 
@@ -209,9 +216,7 @@ def store_simulation_ticket(conn: Any, ticket: dict, items: list[dict]) -> int |
     return ticket_id
 
 
-def activate_simulation_ticket(
-    conn: Any, ticket_id: int, review_status: str | None
-) -> bool:
+def activate_simulation_ticket(conn: Any, ticket_id: int, review_status: str | None) -> bool:
     """Activate a generated ticket only after Risk/human approval."""
     assert_recommendation_publishable(review_status)
     with conn.cursor() as cur:

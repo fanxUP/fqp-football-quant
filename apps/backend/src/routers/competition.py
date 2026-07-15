@@ -12,6 +12,7 @@ from datetime import date
 from fastapi import APIRouter, HTTPException, Query
 
 from apps.backend.src.db import get_db
+from scripts.business_time import business_today
 from scripts.competition_storage import (
     ensure_current_round,
     get_round,
@@ -53,7 +54,7 @@ def get_current_round():
         full["trend"] = get_trend_data(conn, round_data["id"])
 
         # Days remaining
-        today = date.today()
+        today = business_today()
         round_end = date.fromisoformat(full["round_end"]) if full.get("round_end") else today
         days_left = (round_end - today).days
         full["days_remaining"] = max(0, days_left)
@@ -149,7 +150,8 @@ def get_current_round_tickets():
             FROM simulation_tickets st
             JOIN simulation_ticket_items sti ON sti.ticket_id = st.id
             JOIN official_matches m ON m.id = sti.match_id
-            WHERE st.created_at::date BETWEEN %(start)s AND %(end)s
+            WHERE (st.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Shanghai')::date
+                  BETWEEN %(start)s AND %(end)s
             ORDER BY st.id, sti.id
             """,
             {
@@ -176,19 +178,21 @@ def get_current_round_tickets():
                 "ticket_type": r[8] or "single",
                 "items": [],
             }
-        tickets_by_id[tid]["items"].append({
-            "item_id": r[9],
-            "play_type": r[10],
-            "option_code": r[11],
-            "option_name": r[12],
-            "sp_value": float(r[13] or 0),
-            "model_probability": float(r[14] or 0),
-            "home_team": r[15],
-            "away_team": r[16],
-            "league": r[17],
-            "kickoff_time": r[18].isoformat() if r[18] else None,
-            "match_code": r[19],
-        })
+        tickets_by_id[tid]["items"].append(
+            {
+                "item_id": r[9],
+                "play_type": r[10],
+                "option_code": r[11],
+                "option_name": r[12],
+                "sp_value": float(r[13] or 0),
+                "model_probability": float(r[14] or 0),
+                "home_team": r[15],
+                "away_team": r[16],
+                "league": r[17],
+                "kickoff_time": r[18].isoformat() if r[18] else None,
+                "match_code": r[19],
+            }
+        )
 
     tickets = list(tickets_by_id.values())
 

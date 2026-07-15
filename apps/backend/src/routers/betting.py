@@ -314,9 +314,7 @@ def _add_result_bucket(bucket: dict, ticket: dict) -> None:
     stake = _float(ticket.get("stake"))
     profit_loss = _float(ticket.get("profitLoss")) if ticket.get("profitLoss") is not None else 0.0
     settled_amount = (
-        _float(ticket.get("settledAmount"))
-        if ticket.get("settledAmount") is not None
-        else 0.0
+        _float(ticket.get("settledAmount")) if ticket.get("settledAmount") is not None else 0.0
     )
     bucket["ticketCount"] += 1
     bucket["stake"] += stake
@@ -399,9 +397,7 @@ def _build_betting_results(tickets: list[dict]) -> dict:
                 "agentDailyProfitLoss": round(row["agentProfitLoss"], 2),
                 "meCumulativeProfitLoss": round(cumulative["meProfitLoss"], 2),
                 "agentCumulativeProfitLoss": round(cumulative["agentProfitLoss"], 2),
-                "meCumulativeRoi": round(
-                    cumulative["meProfitLoss"] / cumulative["meStake"], 4
-                )
+                "meCumulativeRoi": round(cumulative["meProfitLoss"] / cumulative["meStake"], 4)
                 if cumulative["meStake"]
                 else 0.0,
                 "agentCumulativeRoi": round(
@@ -515,11 +511,15 @@ def create_betting_ticket(req: CreateBettingTicketRequest):
     and immediately appear in the unified lottery ledger.
     """
     if req.source not in {"simulator", "real-user", "real-agent"}:
-        raise HTTPException(status_code=400, detail="source must be simulator, real-user, or real-agent")
+        raise HTTPException(
+            status_code=400, detail="source must be simulator, real-user, or real-agent"
+        )
     if not req.items:
         raise HTTPException(status_code=400, detail="至少需要选择一场比赛")
     if req.source == "simulator":
-        raise HTTPException(status_code=409, detail="模拟票请继续使用 /api/simulator/tickets 以完成虚拟余额扣款")
+        raise HTTPException(
+            status_code=409, detail="模拟票请继续使用 /api/simulator/tickets 以完成虚拟余额扣款"
+        )
 
     with get_db() as conn:
         return _create_real_betting_ticket(conn, req)
@@ -541,7 +541,8 @@ def _collect_betting_tickets(conn, limit: int) -> list[dict]:
                        COUNT(sti.id) AS item_count, st.multiple, st.bet_count
                 FROM simulation_tickets st
                 LEFT JOIN simulation_ticket_items sti ON sti.ticket_id = st.id
-                WHERE st.created_at::date BETWEEN %(start)s AND %(end)s
+                WHERE (st.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Shanghai')::date
+                      BETWEEN %(start)s AND %(end)s
                 GROUP BY st.id
                 ORDER BY st.created_at DESC
                 LIMIT %(limit)s

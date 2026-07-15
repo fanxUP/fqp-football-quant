@@ -18,26 +18,20 @@ ERROR_TAG_RULES: list[dict[str, Any]] = [
     {
         "tag": "赔率过热",
         "description": "SP过低（<1.30）的热门方向输球",
-        "condition": lambda item, result, sp: (
-            item["option_code"] != result
-            and sp < 1.30
-        ),
+        "condition": lambda item, result, sp: item["option_code"] != result and sp < 1.30,
     },
     {
         "tag": "热门赢不穿",
         "description": "低SP主胜被打平（SPF胜但RQSPF不穿）",
         "condition": lambda item, result, sp: (
-            item["option_code"] == "3"
-            and result == "1"
-            and sp < 1.50
+            item["option_code"] == "3" and result == "1" and sp < 1.50
         ),
     },
     {
         "tag": "平局风险低估",
         "description": "模型低估平局概率（<25%）但实际打平",
         "condition": lambda item, result, sp: (
-            result == "1"
-            and item.get("model_probability", 0) < 0.25
+            result == "1" and item.get("model_probability", 0) < 0.25
         ),
     },
     {
@@ -52,17 +46,13 @@ ERROR_TAG_RULES: list[dict[str, Any]] = [
         "tag": "市场概率判断错误",
         "description": "市场最看好方向（>50%隐含概率）打不出",
         "condition": lambda item, result, sp: (
-            item["option_code"] != result
-            and item.get("market_probability", 0) > 0.50
+            item["option_code"] != result and item.get("market_probability", 0) > 0.50
         ),
     },
     {
         "tag": "冷门未识别",
         "description": "高SP（>4.00）方向预测错误",
-        "condition": lambda item, result, sp: (
-            item["option_code"] != result
-            and sp > 4.00
-        ),
+        "condition": lambda item, result, sp: item["option_code"] != result and sp > 4.00,
     },
 ]
 
@@ -96,7 +86,8 @@ def run(dry_run: bool = False) -> dict[str, Any]:
                 JOIN simulation_ticket_items sti ON sti.ticket_id = ts.ticket_id
                 JOIN official_results r ON r.match_id = sti.match_id
                 WHERE ts.ticket_source = 'simulation'
-                  AND ts.settle_time::date = CURRENT_DATE
+                  AND (ts.settle_time AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Shanghai')::date
+                      = timezone('Asia/Shanghai', NOW())::date
                   AND ts.is_won = false
                   AND r.result_status = 'confirmed'
                 """,
@@ -153,7 +144,8 @@ def run(dry_run: bool = False) -> dict[str, Any]:
                         SELECT COUNT(*) FROM prediction_error_analysis
                         WHERE prediction_id = %(pid)s
                           AND error_type = %(tag)s
-                          AND created_at::date = CURRENT_DATE
+                          AND (created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Shanghai')::date
+                              = timezone('Asia/Shanghai', NOW())::date
                         """,
                         {"pid": item["prediction_id"], "tag": tag},
                     )

@@ -20,8 +20,10 @@ class TestPredictionsEndpoint:
         assert resp.status_code == 200
         sql = mock_cur.execute.call_args.args[0]
         assert "m.sale_status = 'selling'" in sql
-        assert "m.kickoff_time > CURRENT_TIMESTAMP" in sql
-        assert "m.sale_stop_time IS NULL OR m.sale_stop_time > CURRENT_TIMESTAMP" in sql
+        assert "m.kickoff_time > timezone('Asia/Shanghai', NOW())" in sql
+        assert (
+            "m.sale_stop_time IS NULL OR m.sale_stop_time > timezone('Asia/Shanghai', NOW())" in sql
+        )
         assert "mp.odds_snapshot_id IS NOT NULL" in sql
         assert "mp.feature_snapshot_id IS NOT NULL" in sql
         assert "mv.is_active = true" in sql
@@ -51,7 +53,22 @@ class TestPredictionsEndpoint:
         mock_conn.__enter__.return_value = mock_conn
         mock_conn.cursor.return_value.__enter__.return_value = mock_cur
         mock_cur.fetchall.return_value = [
-            (1, 101, now, "xgboost_v2", "SPF", "胜", 0.40, 0.45, 0.42, 2.22, 0.05, 0.85, "曼联", "利物浦"),
+            (
+                1,
+                101,
+                now,
+                "xgboost_v2",
+                "SPF",
+                "胜",
+                0.40,
+                0.45,
+                0.42,
+                2.22,
+                0.05,
+                0.85,
+                "曼联",
+                "利物浦",
+            ),
         ]
 
         with patch("apps.backend.src.routers.predictions.get_db", return_value=mock_conn):
@@ -75,7 +92,22 @@ class TestPredictionsEndpoint:
         mock_conn.__enter__.return_value = mock_conn
         mock_conn.cursor.return_value.__enter__.return_value = mock_cur
         mock_cur.fetchall.return_value = [
-            (1, 101, now, "poisson_v1", "SPF", "胜", None, None, None, None, None, None, "曼联", "利物浦"),
+            (
+                1,
+                101,
+                now,
+                "poisson_v1",
+                "SPF",
+                "胜",
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                "曼联",
+                "利物浦",
+            ),
         ]
 
         with patch("apps.backend.src.routers.predictions.get_db", return_value=mock_conn):

@@ -46,7 +46,9 @@ def get_today_summary():
                 cur.execute("SELECT * FROM v_dashboard_today_summary")
                 row = cur.fetchone()
     except Exception:
-        return _empty("今日总览", "无法读取 Dashboard 视图，请确认 v_dashboard_today_summary 已创建")
+        return _empty(
+            "今日总览", "无法读取 Dashboard 视图，请确认 v_dashboard_today_summary 已创建"
+        )
 
     if not row:
         return _empty("今日总览", "暂无今日数据")
@@ -214,9 +216,7 @@ def get_recommendations(
         return _empty("推荐概览", "无法读取推荐视图")
 
     if not rows:
-        return _empty("推荐概览", min_ev > 0
-                       and "暂无满足 EV 阈值的推荐"
-                       or "暂无推荐数据")
+        return _empty("推荐概览", min_ev > 0 and "暂无满足 EV 阈值的推荐" or "暂无推荐数据")
 
     series = [dict(zip(columns, r, strict=False)) for r in rows]
     return {
@@ -274,14 +274,16 @@ def get_odds_movement(
         if prev and curr and curr > 0 and prev > 0:
             ratio = curr / prev
             if ratio > 3 or ratio < 0.33:
-                anomalies.append({
-                    "time": str(r.get("snapshot_time", "")),
-                    "option_name": r.get("option_name"),
-                    "sp_value": float(curr),
-                    "prev_sp_value": float(prev),
-                    "ratio": round(ratio, 2),
-                    "type": "jump" if ratio > 1 else "drop",
-                })
+                anomalies.append(
+                    {
+                        "time": str(r.get("snapshot_time", "")),
+                        "option_name": r.get("option_name"),
+                        "sp_value": float(curr),
+                        "prev_sp_value": float(prev),
+                        "ratio": round(ratio, 2),
+                        "type": "jump" if ratio > 1 else "drop",
+                    }
+                )
 
     return {
         "code": 0,
@@ -424,7 +426,7 @@ def get_ticket_review(
             with conn.cursor() as cur:
                 cur.execute(
                     """SELECT
-                        DATE(ts.settle_time) AS settle_date,
+                        (ts.settle_time AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Shanghai')::date AS settle_date,
                         ts.ticket_source,
                         COUNT(*) AS ticket_count,
                         SUM(CASE WHEN ts.is_won THEN 1 ELSE 0 END) AS won_count,
@@ -435,8 +437,10 @@ def get_ticket_review(
                              THEN SUM(ts.profit_loss) / NULLIF(SUM(ts.stake_amount), 0)
                              ELSE NULL END AS roi
                     FROM ticket_settlements ts
-                    WHERE DATE(ts.settle_time) >= CURRENT_DATE - %s::int
-                    GROUP BY DATE(ts.settle_time), ts.ticket_source
+                    WHERE (ts.settle_time AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Shanghai')::date
+                          >= timezone('Asia/Shanghai', NOW())::date - %s::int
+                    GROUP BY (ts.settle_time AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Shanghai')::date,
+                             ts.ticket_source
                     ORDER BY settle_date DESC""",
                     (days,),
                 )
@@ -473,13 +477,18 @@ def get_panels_config():
             "title": "面板配置",
             "empty": False,
             "panels": [
-                {"id": "today_kpi",      "name": "KPI 总览",     "route": "/",          "order": 1},
-                {"id": "roi_competition", "name": "ROI 对战",    "route": "/competition","order": 2},
-                {"id": "recommendations", "name": "推荐概览",    "route": "/recommendations","order": 3},
-                {"id": "odds_movement",   "name": "赔率走势",    "route": "/odds",       "order": 4},
-                {"id": "model_perf",      "name": "模型表现",    "route": "/models",     "order": 5},
-                {"id": "backtest",        "name": "回测分析",    "route": "/backtest",   "order": 6},
-                {"id": "ticket_review",   "name": "票单复盘",    "route": "/reviews",    "order": 7},
+                {"id": "today_kpi", "name": "KPI 总览", "route": "/", "order": 1},
+                {"id": "roi_competition", "name": "ROI 对战", "route": "/competition", "order": 2},
+                {
+                    "id": "recommendations",
+                    "name": "推荐概览",
+                    "route": "/recommendations",
+                    "order": 3,
+                },
+                {"id": "odds_movement", "name": "赔率走势", "route": "/odds", "order": 4},
+                {"id": "model_perf", "name": "模型表现", "route": "/models", "order": 5},
+                {"id": "backtest", "name": "回测分析", "route": "/backtest", "order": 6},
+                {"id": "ticket_review", "name": "票单复盘", "route": "/reviews", "order": 7},
             ],
             "meta": _meta("config"),
         },

@@ -41,5 +41,6 @@ def test_user_competition_stats_include_real_and_simulator_tickets():
     assert "real_tickets" in conn.sql[0]
     assert "simulator_tickets" in conn.sql[0]
     assert "ticket_source IN ('real', 'simulator')" in conn.sql[1]
+    assert all("AT TIME ZONE 'Asia/Shanghai'" in sql for sql in conn.sql)
     assert stats["daily_stake"] == 30.0
     assert stats["ticket_count"] == 2

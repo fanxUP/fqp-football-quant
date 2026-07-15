@@ -42,8 +42,12 @@ def list_event_coverage():
                 "supplemental_match_count": r[5],
                 "official_standings_snapshot_count": r[6],
                 "supplemental_standings_snapshot_count": r[7],
-                "latest_official_standings_at": r[8].isoformat() if hasattr(r[8], "isoformat") else (str(r[8]) if r[8] else None),
-                "latest_supplemental_standings_at": r[9].isoformat() if hasattr(r[9], "isoformat") else (str(r[9]) if r[9] else None),
+                "latest_official_standings_at": r[8].isoformat()
+                if hasattr(r[8], "isoformat")
+                else (str(r[8]) if r[8] else None),
+                "latest_supplemental_standings_at": r[9].isoformat()
+                if hasattr(r[9], "isoformat")
+                else (str(r[9]) if r[9] else None),
                 "mapped_supplemental_match_count": r[10],
                 "unmapped_supplemental_match_count": r[11],
             }
@@ -96,7 +100,7 @@ def list_teams():
 
 @router.get("/api/matches/today")
 def list_today_matches():
-    """List today's matches (kickoff_time::date = CURRENT_DATE)."""
+    """List matches on today's Asia/Shanghai business date."""
     with get_db() as conn:
         with conn.cursor() as cur:
             cur.execute("""
@@ -108,7 +112,7 @@ def list_today_matches():
                        (SELECT COUNT(*) FROM official_odds_snapshots os
                         WHERE os.match_id = m.id) AS odds_count
                 FROM official_matches m
-                WHERE m.kickoff_time::date = CURRENT_DATE
+                WHERE m.kickoff_time::date = timezone('Asia/Shanghai', NOW())::date
                 ORDER BY m.kickoff_time
             """)
             rows = cur.fetchall()
@@ -147,7 +151,7 @@ def list_active_matches(limit: int = Query(500, ge=1, le=5000)):
                 SELECT m.id, m.league_name, m.home_team_name, m.away_team_name,
                        m.kickoff_time,
                        CASE
-                           WHEN m.kickoff_time <= CURRENT_TIMESTAMP
+                           WHEN m.kickoff_time <= timezone('Asia/Shanghai', NOW())
                                THEN 'awaiting_result'
                            ELSE COALESCE(m.match_status, 'scheduled')
                        END AS effective_match_status,
@@ -156,9 +160,9 @@ def list_active_matches(limit: int = Query(500, ge=1, le=5000)):
                 WHERE LOWER(COALESCE(m.match_status, 'scheduled')) NOT IN %s
                   AND m.official_match_code ~ '^周[一二三四五六日][0-9]{3}$'
                 ORDER BY
-                    CASE WHEN m.kickoff_time > CURRENT_TIMESTAMP THEN 0 ELSE 1 END,
-                    CASE WHEN m.kickoff_time > CURRENT_TIMESTAMP THEN m.kickoff_time END ASC,
-                    CASE WHEN m.kickoff_time <= CURRENT_TIMESTAMP THEN m.kickoff_time END DESC
+                    CASE WHEN m.kickoff_time > timezone('Asia/Shanghai', NOW()) THEN 0 ELSE 1 END,
+                    CASE WHEN m.kickoff_time > timezone('Asia/Shanghai', NOW()) THEN m.kickoff_time END ASC,
+                    CASE WHEN m.kickoff_time <= timezone('Asia/Shanghai', NOW()) THEN m.kickoff_time END DESC
                 LIMIT %s
                 """,
                 (completed_statuses, limit),
@@ -241,7 +245,11 @@ def list_feature_snapshots(
                 "away_team_name": r[12],
                 "league_name": r[13],
                 "official_match_code": r[14],
-                "kickoff_time": r[15].isoformat() if hasattr(r[15], "isoformat") else str(r[15]) if r[15] else None,
+                "kickoff_time": r[15].isoformat()
+                if hasattr(r[15], "isoformat")
+                else str(r[15])
+                if r[15]
+                else None,
                 "match_num_str": r[16],
             }
             for r in rows
@@ -356,7 +364,8 @@ def list_event_matches(league_name: str):
     """List all matches for a specific league (仅体彩官网数据)."""
     with get_db() as conn:
         with conn.cursor() as cur:
-            cur.execute("""
+            cur.execute(
+                """
                 SELECT m.id, m.home_team_name, m.away_team_name, m.kickoff_time,
                        m.match_status,
                        COALESCE(m.raw_json->>'matchNumStr', m.official_match_code::text) AS match_num_str,
@@ -367,7 +376,9 @@ def list_event_matches(league_name: str):
                 WHERE m.league_name = %s
                   AND m.raw_json->>'source' IS DISTINCT FROM '500.com'
                 ORDER BY m.kickoff_time DESC
-            """, (league_name,))
+            """,
+                (league_name,),
+            )
             rows = cur.fetchall()
     return {
         "league_name": league_name,
@@ -397,7 +408,8 @@ def get_match_detail(match_id: int):
     with get_db() as conn:
         with conn.cursor() as cur:
             # 1. Basic match info + scores + team IDs
-            cur.execute("""
+            cur.execute(
+                """
                 SELECT
                     m.id, m.league_name, m.home_team_name, m.away_team_name,
                     m.kickoff_time, m.match_status, m.sale_status,
@@ -417,10 +429,13 @@ def get_match_detail(match_id: int):
                 LEFT JOIN teams at ON at.team_name_cn = m.away_team_name
                                    OR at.team_name_en = m.away_team_name
                 WHERE m.id = %s
-            """, (match_id,))
+            """,
+                (match_id,),
+            )
             row = cur.fetchone()
             if not row:
                 from fastapi import HTTPException
+
                 raise HTTPException(status_code=404, detail="Match not found")
 
             match_data = {
@@ -464,7 +479,8 @@ def get_match_detail(match_id: int):
             }
 
             # 2. Latest feature snapshot
-            cur.execute("""
+            cur.execute(
+                """
                 SELECT data_completeness_score, uncertainty_score,
                        home_rest_days, away_rest_days, rest_days_diff,
                        home_lineup_strength_score, away_lineup_strength_score,
@@ -478,7 +494,9 @@ def get_match_detail(match_id: int):
                 FROM match_feature_snapshots
                 WHERE match_id = %s
                 ORDER BY snapshot_time DESC LIMIT 1
-            """, (match_id,))
+            """,
+                (match_id,),
+            )
             fs = cur.fetchone()
             feature_snapshot = None
             if fs:
@@ -507,7 +525,8 @@ def get_match_detail(match_id: int):
                 }
 
             # 3. Predictions (latest per model)
-            cur.execute("""
+            cur.execute(
+                """
                 SELECT DISTINCT ON (mv.model_name)
                     mv.model_name, mp.play_type, mp.option_code,
                     mp.model_probability, mp.market_probability, mp.fair_odds, mp.ev,
@@ -516,7 +535,9 @@ def get_match_detail(match_id: int):
                 JOIN model_versions mv ON mv.id = mp.model_version_id
                 WHERE mp.match_id = %s
                 ORDER BY mv.model_name, mp.predict_time DESC
-            """, (match_id,))
+            """,
+                (match_id,),
+            )
             pred_rows = cur.fetchall()
             predictions = None
             best_model = None
@@ -525,17 +546,21 @@ def get_match_detail(match_id: int):
             if pred_rows:
                 models = []
                 for pr in pred_rows:
-                    models.append({
-                        "model_name": pr[0],
-                        "play_type": pr[1],
-                        "option_code": pr[2],
-                        "model_probability": float(pr[3]) if pr[3] else None,
-                        "market_probability": float(pr[4]) if pr[4] else None,
-                        "fair_odds": float(pr[5]) if pr[5] else None,
-                        "ev": float(pr[6]) if pr[6] else None,
-                        "confidence": float(pr[7]) if pr[7] else None,
-                        "predict_time": pr[8].isoformat() if hasattr(pr[8], "isoformat") else str(pr[8]),
-                    })
+                    models.append(
+                        {
+                            "model_name": pr[0],
+                            "play_type": pr[1],
+                            "option_code": pr[2],
+                            "model_probability": float(pr[3]) if pr[3] else None,
+                            "market_probability": float(pr[4]) if pr[4] else None,
+                            "fair_odds": float(pr[5]) if pr[5] else None,
+                            "ev": float(pr[6]) if pr[6] else None,
+                            "confidence": float(pr[7]) if pr[7] else None,
+                            "predict_time": pr[8].isoformat()
+                            if hasattr(pr[8], "isoformat")
+                            else str(pr[8]),
+                        }
+                    )
                     if pr[6] and float(pr[6]) > best_ev:
                         best_ev = float(pr[6])
                         best_model = pr[0]
@@ -551,18 +576,22 @@ def get_match_detail(match_id: int):
             for side, tid in [("home", home_team_id), ("away", away_team_id)]:
                 if not tid:
                     continue
-                cur.execute("""
+                cur.execute(
+                    """
                     SELECT mls.id, mls.formation, mls.lineup_strength_score,
                            mls.starting_11_market_value, mls.starting_11_key_player_count,
                            mls.lineup_type
                     FROM match_lineup_snapshots mls
                     WHERE mls.match_id = %s AND mls.team_id = %s
                     ORDER BY mls.snapshot_time DESC LIMIT 1
-                """, (match_id, tid))
+                """,
+                    (match_id, tid),
+                )
                 ls = cur.fetchone()
                 if not ls:
                     continue
-                cur.execute("""
+                cur.execute(
+                    """
                     SELECT mlp.player_id, mlp.is_starting, mlp.is_substitute,
                            mlp.position, mlp.tactical_role,
                            p.player_name_cn, p.player_name_en, p.primary_position
@@ -570,7 +599,9 @@ def get_match_detail(match_id: int):
                     LEFT JOIN players p ON p.id = mlp.player_id
                     WHERE mlp.lineup_snapshot_id = %s
                     ORDER BY mlp.is_starting DESC, mlp.id
-                """, (ls[0],))
+                """,
+                    (ls[0],),
+                )
                 players = [
                     {
                         "player_id": pl[0],
@@ -598,7 +629,8 @@ def get_match_detail(match_id: int):
             h2h_matches = []
             h2h_wins = {"home": 0, "draws": 0, "away": 0}
             if home_team_id and away_team_id:
-                cur.execute("""
+                cur.execute(
+                    """
                     SELECT m.kickoff_time, m.home_team_name, m.away_team_name,
                            r.full_home_goals, r.full_away_goals, m.league_name
                     FROM official_matches m
@@ -607,7 +639,9 @@ def get_match_detail(match_id: int):
                        OR (m.home_team_name = %s AND m.away_team_name = %s))
                       AND LOWER(m.match_status) = 'settled'
                     ORDER BY m.kickoff_time DESC
-                """, (row[2], row[3], row[3], row[2]))
+                """,
+                    (row[2], row[3], row[3], row[2]),
+                )
                 h2h_all = cur.fetchall()
                 for h in h2h_all:
                     if h[3] is not None and h[4] is not None:
@@ -618,12 +652,16 @@ def get_match_detail(match_id: int):
                                 h2h_wins["away"] += 1
                         elif h[3] == h[4]:
                             h2h_wins["draws"] += 1
-                    h2h_matches.append({
-                        "date": h[0].isoformat() if hasattr(h[0], "isoformat") else str(h[0]),
-                        "home": h[1], "away": h[2],
-                        "home_goals": h[3], "away_goals": h[4],
-                        "league": h[5],
-                    })
+                    h2h_matches.append(
+                        {
+                            "date": h[0].isoformat() if hasattr(h[0], "isoformat") else str(h[0]),
+                            "home": h[1],
+                            "away": h[2],
+                            "home_goals": h[3],
+                            "away_goals": h[4],
+                            "league": h[5],
+                        }
+                    )
                 h2h_matches = h2h_matches[:10]
 
             h2h = {
@@ -637,7 +675,8 @@ def get_match_detail(match_id: int):
             # 6. Recent form (last 5 matches per team)
             form: dict[str, list[dict[str, Any]]] = {"home": [], "away": []}
             for side_name, team_name in [("home", row[2]), ("away", row[3])]:
-                cur.execute("""
+                cur.execute(
+                    """
                     SELECT m.kickoff_time, m.home_team_name, m.away_team_name,
                            r.full_home_goals, r.full_away_goals, m.league_name
                     FROM official_matches m
@@ -646,7 +685,9 @@ def get_match_detail(match_id: int):
                       AND m.id != %s
                       AND LOWER(m.match_status) = 'settled'
                     ORDER BY m.kickoff_time DESC LIMIT 5
-                """, (team_name, team_name, match_id))
+                """,
+                    (team_name, team_name, match_id),
+                )
                 for fm in cur.fetchall():
                     is_home = fm[1] == team_name
                     home_goals = fm[3]
@@ -662,20 +703,25 @@ def get_match_detail(match_id: int):
                             f_status = "L"
                     else:
                         f_status = None
-                    form[side_name].append({
-                        "date": fm[0].isoformat() if hasattr(fm[0], "isoformat") else str(fm[0]),
-                        "opponent": fm[2] if is_home else fm[1],
-                        "is_home": is_home,
-                        "goals_for": goals_for,
-                        "goals_against": goals_against,
-                        "status": f_status,
-                        "league": fm[5],
-                    })
+                    form[side_name].append(
+                        {
+                            "date": fm[0].isoformat()
+                            if hasattr(fm[0], "isoformat")
+                            else str(fm[0]),
+                            "opponent": fm[2] if is_home else fm[1],
+                            "is_home": is_home,
+                            "goals_for": goals_for,
+                            "goals_against": goals_against,
+                            "status": f_status,
+                            "league": fm[5],
+                        }
+                    )
 
             # 7. Standings — latest snapshot for the team's competition season
             standings = []
             if home_team_id:
-                cur.execute("""
+                cur.execute(
+                    """
                     SELECT DISTINCT ON (sss.team_id)
                            sss.rank, COALESCE(t.team_name_cn, t.team_name_en),
                            sss.played, sss.won, sss.drawn, sss.lost,
@@ -690,23 +736,33 @@ def get_match_detail(match_id: int):
                         ORDER BY sss2.snapshot_time DESC LIMIT 1
                     )
                     ORDER BY sss.team_id, sss.snapshot_time DESC
-                """, (home_team_id,))
+                """,
+                    (home_team_id,),
+                )
                 for st in cur.fetchall():
-                    standings.append({
-                        "rank": st[0],
-                        "team_name": st[1],
-                        "played": st[2], "won": st[3], "drawn": st[4], "lost": st[5],
-                        "goals_for": st[6], "goals_against": st[7],
-                        "goal_diff": st[8], "points": st[9],
-                        "round": st[10],
-                    })
+                    standings.append(
+                        {
+                            "rank": st[0],
+                            "team_name": st[1],
+                            "played": st[2],
+                            "won": st[3],
+                            "drawn": st[4],
+                            "lost": st[5],
+                            "goals_for": st[6],
+                            "goals_against": st[7],
+                            "goal_diff": st[8],
+                            "points": st[9],
+                            "round": st[10],
+                        }
+                    )
                 # Sort by rank
                 standings.sort(key=lambda s: s["rank"] or 999)
 
             # 8. Injuries
             injuries = []
             for tid in filter(None, [home_team_id, away_team_id]):
-                cur.execute("""
+                cur.execute(
+                    """
                     SELECT pas.team_id, pas.availability_status,
                            pas.injury_type, pas.injury_body_part,
                            pas.expected_return_date, pas.absence_impact_score,
@@ -717,19 +773,23 @@ def get_match_detail(match_id: int):
                       AND pas.availability_status IN ('injured', 'suspended', 'doubtful')
                     ORDER BY pas.absence_impact_score DESC NULLS LAST
                     LIMIT 20
-                """, (tid,))
+                """,
+                    (tid,),
+                )
                 for ij in cur.fetchall():
-                    injuries.append({
-                        "team_id": ij[0],
-                        "status": ij[1],
-                        "injury_type": ij[2],
-                        "body_part": ij[3],
-                        "expected_return": str(ij[4]) if ij[4] else None,
-                        "impact_score": float(ij[5]) if ij[5] else None,
-                        "player_name_cn": ij[6],
-                        "player_name_en": ij[7],
-                        "position": ij[8],
-                    })
+                    injuries.append(
+                        {
+                            "team_id": ij[0],
+                            "status": ij[1],
+                            "injury_type": ij[2],
+                            "body_part": ij[3],
+                            "expected_return": str(ij[4]) if ij[4] else None,
+                            "impact_score": float(ij[5]) if ij[5] else None,
+                            "player_name_cn": ij[6],
+                            "player_name_en": ij[7],
+                            "position": ij[8],
+                        }
+                    )
 
     return {
         "match": match_data,

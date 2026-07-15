@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from unittest.mock import ANY, MagicMock, patch
 
 from scripts.official_crawler import (
@@ -7,7 +8,25 @@ from scripts.official_crawler import (
     parse_matches_from_response,
     parse_odds_snapshots_from_match,
     parse_results_from_response,
+    parse_traditional_lottery_response,
 )
+
+
+def test_traditional_lottery_sale_status_uses_shanghai_business_time():
+    raw = {
+        "value": {
+            "sfcDetail": {
+                "lotteryDrawNum": "26001",
+                "saleEndTime": "2026-07-15T03:00:00",
+                "matchList": [{"matchId": "1", "homeTeam": "A", "awayTeam": "B"}],
+            }
+        }
+    }
+    utc_now = datetime(2026, 7, 14, 20, 0, tzinfo=UTC)
+
+    pools = parse_traditional_lottery_response(raw, now=utc_now)
+
+    assert pools[0]["official_status"] == "closed"
 
 
 def test_parse_uniform_match_keeps_official_display_code_and_sale_status():
@@ -54,7 +73,9 @@ def test_current_pool_flags_drive_single_and_pass_availability():
         "oddsList": [{"poolCode": "CRS", "h": 8.5, "d": 5.5, "a": 7.3}],
         "poolList": [{"poolCode": "CRS", "cbtSingle": 1, "cbtAllUp": 1}],
     }
-    raw = {"value": {"matchInfoList": [{"businessDate": "2026-07-12", "subMatchList": [sub_match]}]}}
+    raw = {
+        "value": {"matchInfoList": [{"businessDate": "2026-07-12", "subMatchList": [sub_match]}]}
+    }
 
     match = parse_matches_from_response(raw, "2026-07-12")[0]
     market = match["_markets"][0]
@@ -85,7 +106,9 @@ def test_pool_list_builds_all_official_markets_and_respects_sale_status():
             {"poolCode": "HAFU", "poolStatus": "Selling", "cbtAllUp": 1},
         ],
     }
-    raw = {"value": {"matchInfoList": [{"businessDate": "2026-07-13", "subMatchList": [sub_match]}]}}
+    raw = {
+        "value": {"matchInfoList": [{"businessDate": "2026-07-13", "subMatchList": [sub_match]}]}
+    }
 
     markets = parse_matches_from_response(raw, "2026-07-13")[0]["_markets"]
     by_play = {market["play_type"]: market for market in markets}
@@ -121,9 +144,28 @@ def test_match_calculator_payload_parses_all_five_play_odds():
 
     assert {snapshot["play_type"] for snapshot in snapshots} == {"spf", "rqspf", "bf", "zjq", "bqc"}
     assert len(snapshots) == 12
-    assert next(item for item in snapshots if item["play_type"] == "rqspf" and item["option_code"] == "h")["handicap"] == -1.0
-    assert next(item for item in snapshots if item["play_type"] == "bf" and item["option_code"] == "1:0")["option_name"] == "1:0"
-    assert next(item for item in snapshots if item["play_type"] == "bf" and item["option_code"] == "other_h")["option_name"] == "胜其他"
+    assert (
+        next(
+            item
+            for item in snapshots
+            if item["play_type"] == "rqspf" and item["option_code"] == "h"
+        )["handicap"]
+        == -1.0
+    )
+    assert (
+        next(
+            item for item in snapshots if item["play_type"] == "bf" and item["option_code"] == "1:0"
+        )["option_name"]
+        == "1:0"
+    )
+    assert (
+        next(
+            item
+            for item in snapshots
+            if item["play_type"] == "bf" and item["option_code"] == "other_h"
+        )["option_name"]
+        == "胜其他"
+    )
     assert {item["option_code"] for item in snapshots if item["play_type"] == "zjq"} == {"0", "7"}
     assert {item["option_code"] for item in snapshots if item["play_type"] == "bqc"} == {"33", "10"}
     assert all(item["is_single_allowed"] is True for item in snapshots)
@@ -145,7 +187,9 @@ def test_missing_pool_code_is_ignored_and_missing_permissions_fail_closed():
         ],
         "poolList": [],
     }
-    raw = {"value": {"matchInfoList": [{"businessDate": "2026-07-13", "subMatchList": [sub_match]}]}}
+    raw = {
+        "value": {"matchInfoList": [{"businessDate": "2026-07-13", "subMatchList": [sub_match]}]}
+    }
 
     match = parse_matches_from_response(raw, "2026-07-13")[0]
     snapshots = parse_odds_snapshots_from_match(sub_match, "2026-07-13T12:00:00")
@@ -162,13 +206,17 @@ def test_blocked_sporttery_results_use_labeled_500_supplement_for_existing_offic
     connection = MagicMock()
     supplemental_result = {"match_id": 12, "raw_json": {"provider_id": "500-match-1"}}
 
-    with patch("scripts.official_crawler.SportteryClient", return_value=client), \
-         patch("scripts.official_crawler.get_db") as get_db, \
-         patch("scripts.official_crawler.record_official_collection_status") as record_status, \
-         patch("scripts.official_crawler.log_crawl"), \
-         patch("scripts.official_crawler.update_health") as update_health, \
-         patch("scripts.official_crawler.get_results_via_500", return_value=[supplemental_result]), \
-         patch("scripts.official_crawler.store_results", return_value={"inserted": 1, "updated": 0}) as store_results:
+    with (
+        patch("scripts.official_crawler.SportteryClient", return_value=client),
+        patch("scripts.official_crawler.get_db") as get_db,
+        patch("scripts.official_crawler.record_official_collection_status") as record_status,
+        patch("scripts.official_crawler.log_crawl"),
+        patch("scripts.official_crawler.update_health") as update_health,
+        patch("scripts.official_crawler.get_results_via_500", return_value=[supplemental_result]),
+        patch(
+            "scripts.official_crawler.store_results", return_value={"inserted": 1, "updated": 0}
+        ) as store_results,
+    ):
         get_db.return_value.__enter__.return_value = connection
 
         result = crawl_official_results("2026-07-10", "2026-07-11")

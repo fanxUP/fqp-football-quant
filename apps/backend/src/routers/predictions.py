@@ -120,8 +120,8 @@ def get_live_recommendations(
                       AND mp.feature_snapshot_id IS NOT NULL
                       AND m.sale_status = 'selling'
                       AND LOWER(COALESCE(m.match_status, '')) IN ('scheduled', 'selling', 'not_started')
-                      AND m.kickoff_time > CURRENT_TIMESTAMP
-                      AND (m.sale_stop_time IS NULL OR m.sale_stop_time > CURRENT_TIMESTAMP)
+                      AND m.kickoff_time > timezone('Asia/Shanghai', NOW())
+                      AND (m.sale_stop_time IS NULL OR m.sale_stop_time > timezone('Asia/Shanghai', NOW()))
                       AND EXISTS (
                           SELECT 1
                           FROM official_markets market
@@ -164,41 +164,47 @@ def get_live_recommendations(
         score_result = r[29] if len(r) > 29 else None
         half_full_result = r[30] if len(r) > 30 else None
 
-        recommendations.append({
-            "prediction_id": r[0],
-            "match_id": r[1],
-            "play_type": r[2],
-            "play_type_name": PLAY_TYPE_NAMES.get(r[2], r[2]),
-            "option_code": r[3],
-            "option_name": _option_name(r[2], r[3], handicap),
-            "model_probability": round(model_prob, 4),
-            "market_probability": round(market_prob, 4),
-            "fair_odds": round(fair_odds, 2),
-            "ev": round(ev, 4),
-            "edge": round(edge, 4),
-            "confidence": round(confidence, 4),
-            "predict_time": r[9].isoformat() if hasattr(r[9], "isoformat") else str(r[9]),
-            "model_name": r[10],
-            "home_team": r[11],
-            "away_team": r[12],
-            "league": r[13],
-            "kickoff_time": r[14].isoformat() if hasattr(r[14], "isoformat") else str(r[14]) if r[14] else None,
-            "match_status": r[15],
-            "match_num_str": official_match_code,
-            "ht_home_goals": ht_home_goals,
-            "ht_away_goals": ht_away_goals,
-            "ft_home_goals": ft_home_goals,
-            "ft_away_goals": ft_away_goals,
-            "et_home_goals": et_home_goals,
-            "et_away_goals": et_away_goals,
-            "pk_home_goals": pk_home_goals,
-            "pk_away_goals": pk_away_goals,
-            "spf_result": spf_result,
-            "rqspf_result": rqspf_result,
-            "total_goals_result": total_goals_result,
-            "score_result": score_result,
-            "half_full_result": half_full_result,
-        })
+        recommendations.append(
+            {
+                "prediction_id": r[0],
+                "match_id": r[1],
+                "play_type": r[2],
+                "play_type_name": PLAY_TYPE_NAMES.get(r[2], r[2]),
+                "option_code": r[3],
+                "option_name": _option_name(r[2], r[3], handicap),
+                "model_probability": round(model_prob, 4),
+                "market_probability": round(market_prob, 4),
+                "fair_odds": round(fair_odds, 2),
+                "ev": round(ev, 4),
+                "edge": round(edge, 4),
+                "confidence": round(confidence, 4),
+                "predict_time": r[9].isoformat() if hasattr(r[9], "isoformat") else str(r[9]),
+                "model_name": r[10],
+                "home_team": r[11],
+                "away_team": r[12],
+                "league": r[13],
+                "kickoff_time": r[14].isoformat()
+                if hasattr(r[14], "isoformat")
+                else str(r[14])
+                if r[14]
+                else None,
+                "match_status": r[15],
+                "match_num_str": official_match_code,
+                "ht_home_goals": ht_home_goals,
+                "ht_away_goals": ht_away_goals,
+                "ft_home_goals": ft_home_goals,
+                "ft_away_goals": ft_away_goals,
+                "et_home_goals": et_home_goals,
+                "et_away_goals": et_away_goals,
+                "pk_home_goals": pk_home_goals,
+                "pk_away_goals": pk_away_goals,
+                "spf_result": spf_result,
+                "rqspf_result": rqspf_result,
+                "total_goals_result": total_goals_result,
+                "score_result": score_result,
+                "half_full_result": half_full_result,
+            }
+        )
 
     return {"status": "ok", "recommendations": recommendations, "total": len(recommendations)}
 

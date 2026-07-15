@@ -43,13 +43,20 @@ def _pool_capabilities(raw_json: dict | None) -> dict[str, dict[str, bool]]:
         if not play_type:
             continue
         capabilities[play_type] = {
-            "single": any(pool.get(field, 0) == 1 for field in ("single", "bettingSingle", "cbtSingle", "intSingle")),
-            "pass": any(pool.get(field, 0) == 1 for field in ("allUp", "bettingAllup", "cbtAllUp", "intAllUp")),
+            "single": any(
+                pool.get(field, 0) == 1
+                for field in ("single", "bettingSingle", "cbtSingle", "intSingle")
+            ),
+            "pass": any(
+                pool.get(field, 0) == 1
+                for field in ("allUp", "bettingAllup", "cbtAllUp", "intAllUp")
+            ),
         }
     return capabilities
 
 
 # ---- Request models ----
+
 
 class BetItemRequest(BaseModel):
     match_id: int
@@ -83,6 +90,7 @@ class ResetBankrollRequest(BaseModel):
 
 # ---- Match browsing ----
 
+
 @router.get("/api/simulator/matches")
 def list_matches(
     date: str | None = Query(None, description="Business date (YYYY-MM-DD), optional"),
@@ -96,8 +104,8 @@ def list_matches(
             where_parts = [
                 "m.sale_status = 'selling'",
                 "LOWER(COALESCE(m.match_status, '')) IN ('scheduled', 'selling', 'not_started')",
-                "m.kickoff_time > CURRENT_TIMESTAMP",
-                "(m.sale_stop_time IS NULL OR m.sale_stop_time > CURRENT_TIMESTAMP)",
+                "m.kickoff_time > timezone('Asia/Shanghai', NOW())",
+                "(m.sale_stop_time IS NULL OR m.sale_stop_time > timezone('Asia/Shanghai', NOW()))",
             ]
             params: dict = {"limit": limit}
 
@@ -147,7 +155,9 @@ def list_matches(
     # Build response — group odds by match and play_type
     matches_map: dict[int, dict] = {}
     for mr in match_rows:
-        capabilities = _pool_capabilities(mr[8] if len(mr) > 8 and isinstance(mr[8], dict) else None)
+        capabilities = _pool_capabilities(
+            mr[8] if len(mr) > 8 and isinstance(mr[8], dict) else None
+        )
         matches_map[mr[0]] = {
             "match_id": mr[0],
             "business_date": str(mr[1]),
@@ -165,11 +175,32 @@ def list_matches(
     for mid in matches_map:
         capabilities = matches_map[mid]["_pool_capabilities"]
         matches_map[mid]["odds"] = {
-            "spf": {"is_single_allowed": capabilities.get("spf", {}).get("single", False), "is_pass_allowed": capabilities.get("spf", {}).get("pass", False), "options": []},
-            "rqspf": {"handicap": None, "is_single_allowed": capabilities.get("rqspf", {}).get("single", False), "is_pass_allowed": capabilities.get("rqspf", {}).get("pass", False), "options": []},
-            "zjq": {"is_single_allowed": capabilities.get("zjq", {}).get("single", False), "is_pass_allowed": capabilities.get("zjq", {}).get("pass", False), "options": []},
-            "bf": {"is_single_allowed": capabilities.get("bf", {}).get("single", False), "is_pass_allowed": capabilities.get("bf", {}).get("pass", False), "options": []},
-            "bqc": {"is_single_allowed": capabilities.get("bqc", {}).get("single", False), "is_pass_allowed": capabilities.get("bqc", {}).get("pass", False), "options": []},
+            "spf": {
+                "is_single_allowed": capabilities.get("spf", {}).get("single", False),
+                "is_pass_allowed": capabilities.get("spf", {}).get("pass", False),
+                "options": [],
+            },
+            "rqspf": {
+                "handicap": None,
+                "is_single_allowed": capabilities.get("rqspf", {}).get("single", False),
+                "is_pass_allowed": capabilities.get("rqspf", {}).get("pass", False),
+                "options": [],
+            },
+            "zjq": {
+                "is_single_allowed": capabilities.get("zjq", {}).get("single", False),
+                "is_pass_allowed": capabilities.get("zjq", {}).get("pass", False),
+                "options": [],
+            },
+            "bf": {
+                "is_single_allowed": capabilities.get("bf", {}).get("single", False),
+                "is_pass_allowed": capabilities.get("bf", {}).get("pass", False),
+                "options": [],
+            },
+            "bqc": {
+                "is_single_allowed": capabilities.get("bqc", {}).get("single", False),
+                "is_pass_allowed": capabilities.get("bqc", {}).get("pass", False),
+                "options": [],
+            },
         }
 
     for orow in odds_rows:
@@ -187,41 +218,51 @@ def list_matches(
         odds = matches_map[mid]["odds"]
         if play_type == "spf":
             odds["spf"]["is_single_allowed"] = odds["spf"]["is_single_allowed"] or is_single
-            odds["spf"]["options"].append({
-                "option_code": option_code,
-                "option_name": option_name,
-                "sp_value": sp_value,
-            })
+            odds["spf"]["options"].append(
+                {
+                    "option_code": option_code,
+                    "option_name": option_name,
+                    "sp_value": sp_value,
+                }
+            )
         elif play_type == "rqspf":
             if handicap is not None:
                 odds["rqspf"]["handicap"] = handicap
             odds["rqspf"]["is_single_allowed"] = odds["rqspf"]["is_single_allowed"] or is_single
-            odds["rqspf"]["options"].append({
-                "option_code": option_code,
-                "option_name": option_name,
-                "sp_value": sp_value,
-            })
+            odds["rqspf"]["options"].append(
+                {
+                    "option_code": option_code,
+                    "option_name": option_name,
+                    "sp_value": sp_value,
+                }
+            )
         elif play_type in ("total_goals", "zjq"):
             odds["zjq"]["is_single_allowed"] = odds["zjq"]["is_single_allowed"] or is_single
-            odds["zjq"]["options"].append({
-                "option_code": option_code,
-                "option_name": option_name,
-                "sp_value": sp_value,
-            })
+            odds["zjq"]["options"].append(
+                {
+                    "option_code": option_code,
+                    "option_name": option_name,
+                    "sp_value": sp_value,
+                }
+            )
         elif play_type in ("score", "bf"):
             odds["bf"]["is_single_allowed"] = odds["bf"]["is_single_allowed"] or is_single
-            odds["bf"]["options"].append({
-                "option_code": option_code,
-                "option_name": option_name,
-                "sp_value": sp_value,
-            })
+            odds["bf"]["options"].append(
+                {
+                    "option_code": option_code,
+                    "option_name": option_name,
+                    "sp_value": sp_value,
+                }
+            )
         elif play_type in ("half_full", "bqc"):
             odds["bqc"]["is_single_allowed"] = odds["bqc"]["is_single_allowed"] or is_single
-            odds["bqc"]["options"].append({
-                "option_code": option_code,
-                "option_name": option_name,
-                "sp_value": sp_value,
-            })
+            odds["bqc"]["options"].append(
+                {
+                    "option_code": option_code,
+                    "option_name": option_name,
+                    "sp_value": sp_value,
+                }
+            )
 
     # Sort options for each play type (SPF: 3→1→0, ZJQ: 0→7+, BF: by code, BQC: 33→00)
     for m in matches_map.values():
@@ -235,7 +276,17 @@ def list_matches(
                 order = {"0": 0, "1": 1, "2": 2, "3": 3, "4": 4, "5": 5, "6": 6, "7+": 7}
                 opts.sort(key=lambda o: order.get(o["option_code"], 99))
             elif pt == "bqc":
-                order = {"33": 0, "31": 1, "30": 2, "13": 3, "11": 4, "10": 5, "03": 6, "01": 7, "00": 8}
+                order = {
+                    "33": 0,
+                    "31": 1,
+                    "30": 2,
+                    "13": 3,
+                    "11": 4,
+                    "10": 5,
+                    "03": 6,
+                    "01": 7,
+                    "00": 8,
+                }
                 opts.sort(key=lambda o: order.get(o["option_code"], 99))
 
     result = sorted(matches_map.values(), key=lambda m: m["kickoff_time"])
@@ -243,6 +294,7 @@ def list_matches(
 
 
 # ---- Calculation ----
+
 
 @router.post("/api/simulator/calculate")
 def calculate(req: CalculateRequest):
@@ -271,6 +323,7 @@ def calculate(req: CalculateRequest):
 
 
 # ---- Ticket CRUD ----
+
 
 @router.post("/api/simulator/tickets")
 def submit_ticket(req: SubmitTicketRequest):
@@ -308,17 +361,20 @@ def submit_ticket(req: SubmitTicketRequest):
         overall_play_type = req.play_type if len(play_types) == 1 else "hhgg"
 
         # Create ticket
-        ticket_id = create_simulator_ticket(conn, {
-            "play_type": overall_play_type,
-            "pass_type": req.pass_type,
-            "multiple": req.multiple,
-            "total_cost": total_cost,
-            "bet_count": calc["bet_count"],
-            "max_prize": calc["max_prize"],
-            "match_count": len({item.get("match_id") for item in items}),
-            "status": "pending",
-            "notes": req.notes,
-        })
+        ticket_id = create_simulator_ticket(
+            conn,
+            {
+                "play_type": overall_play_type,
+                "pass_type": req.pass_type,
+                "multiple": req.multiple,
+                "total_cost": total_cost,
+                "bet_count": calc["bet_count"],
+                "max_prize": calc["max_prize"],
+                "match_count": len({item.get("match_id") for item in items}),
+                "status": "pending",
+                "notes": req.notes,
+            },
+        )
 
         if not ticket_id:
             raise HTTPException(status_code=500, detail="创建票单失败")
@@ -327,13 +383,16 @@ def submit_ticket(req: SubmitTicketRequest):
         create_simulator_items_batch(conn, ticket_id, items)
 
         # Deduct bankroll (negative amount = deduction)
-        create_bankroll_transaction(conn, {
-            "account_type": "simulator",
-            "transaction_type": "stake",
-            "amount": -total_cost,
-            "related_ticket_id": ticket_id,
-            "remark": f"模拟投注 #{ticket_id} ({req.pass_type} {req.multiple}倍)",
-        })
+        create_bankroll_transaction(
+            conn,
+            {
+                "account_type": "simulator",
+                "transaction_type": "stake",
+                "amount": -total_cost,
+                "related_ticket_id": ticket_id,
+                "remark": f"模拟投注 #{ticket_id} ({req.pass_type} {req.multiple}倍)",
+            },
+        )
 
         # Fetch created ticket
         ticket = get_simulator_ticket(conn, ticket_id)
@@ -377,7 +436,9 @@ def get_ticket(ticket_id: int):
                     "id": srow[0],
                     "ticket_source": srow[1],
                     "ticket_id": srow[2],
-                    "settle_time": srow[3].isoformat() if hasattr(srow[3], "isoformat") else str(srow[3]),
+                    "settle_time": srow[3].isoformat()
+                    if hasattr(srow[3], "isoformat")
+                    else str(srow[3]),
                     "is_won": srow[4],
                     "stake_amount": float(srow[5]) if srow[5] else 0,
                     "prize_amount": float(srow[6]) if srow[6] else 0,
@@ -404,13 +465,16 @@ def cancel_ticket(ticket_id: int):
         total_cost = float(ticket["total_cost"])
 
         # Refund
-        create_bankroll_transaction(conn, {
-            "account_type": "simulator",
-            "transaction_type": "refund",
-            "amount": total_cost,
-            "related_ticket_id": ticket_id,
-            "remark": f"取消模拟投注 #{ticket_id}（退款）",
-        })
+        create_bankroll_transaction(
+            conn,
+            {
+                "account_type": "simulator",
+                "transaction_type": "refund",
+                "amount": total_cost,
+                "related_ticket_id": ticket_id,
+                "remark": f"取消模拟投注 #{ticket_id}（退款）",
+            },
+        )
 
         # Delete ticket
         delete_simulator_ticket(conn, ticket_id)
@@ -419,6 +483,7 @@ def cancel_ticket(ticket_id: int):
 
 
 # ---- Bankroll ----
+
 
 @router.get("/api/simulator/bankroll")
 def bankroll_summary():

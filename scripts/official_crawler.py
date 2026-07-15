@@ -18,6 +18,7 @@ from datetime import datetime
 from typing import Any
 
 from apps.backend.src.db import get_db
+from scripts.business_time import business_now, business_today
 from scripts.five100_client import get_match_results as get_results_via_500
 from scripts.official_storage import (
     log_crawl,
@@ -193,10 +194,12 @@ def parse_matches_from_response(
                         "play_type": play_type,
                         "handicap": handicap_val,
                         "is_open": is_open,
-                        "is_single_allowed": is_open and _pool_enabled(
+                        "is_single_allowed": is_open
+                        and _pool_enabled(
                             pool or {}, "single", "bettingSingle", "cbtSingle", "intSingle"
                         ),
-                        "is_pass_allowed": is_open and _pool_enabled(
+                        "is_pass_allowed": is_open
+                        and _pool_enabled(
                             pool or {}, "allUp", "bettingAllup", "cbtAllUp", "intAllUp"
                         ),
                         "market_status": _market_status(pool, is_open),
@@ -268,12 +271,8 @@ def parse_odds_snapshots_from_match(
         is_open = _pool_is_open(pool, True)
         if not is_open:
             continue
-        is_single = _pool_enabled(
-            pool or {}, "single", "bettingSingle", "cbtSingle", "intSingle"
-        )
-        is_pass = _pool_enabled(
-            pool or {}, "allUp", "bettingAllup", "cbtAllUp", "intAllUp"
-        )
+        is_single = _pool_enabled(pool or {}, "single", "bettingSingle", "cbtSingle", "intSingle")
+        is_pass = _pool_enabled(pool or {}, "allUp", "bettingAllup", "cbtAllUp", "intAllUp")
         handicap = odds.get("goalLine")
         if handicap is not None and handicap != "":
             try:
@@ -368,9 +367,7 @@ def parse_results_from_response(
         # ``matchNumStr`` is the ticket-visible identifier (for example
         # 周五098). ``matchNum`` may be a numeric Sporttery internal value in
         # some responses and must not replace the display code.
-        match_code = (
-            item.get("matchNumStr") or item.get("matchCode") or item.get("matchNum", "")
-        )
+        match_code = item.get("matchNumStr") or item.get("matchCode") or item.get("matchNum", "")
         if not match_code:
             continue
 
@@ -687,9 +684,7 @@ def crawl_official_results(begin_date: str, end_date: str) -> dict[str, Any]:
         return {"status": "error", "error": error_msg}
 
 
-def _crawl_results_via_500(
-    begin_date: str, end_date: str, started: str
-) -> dict[str, Any]:
+def _crawl_results_via_500(begin_date: str, end_date: str, started: str) -> dict[str, Any]:
     """Supplement results only for matches already verified by Sporttery."""
     t0 = time.monotonic()
 
@@ -771,14 +766,18 @@ def crawl_official_schedule_v2(business_date: str | None = None) -> dict[str, An
         latency_ms = int((time.monotonic() - t0) * 1000)
 
         # 2. Parse using existing parsers (same JSON structure)
-        match_bdate = business_date or datetime.now().strftime("%Y-%m-%d")
+        match_bdate = business_date or business_today().isoformat()
         matches = parse_matches_from_response(raw, match_bdate)
         if not matches:
             client.close()
             with get_db() as conn:
                 log_crawl(
-                    conn, source_name="sporttery_v2", crawl_type="schedule",
-                    status="ok", records_found=0, started_at=started,
+                    conn,
+                    source_name="sporttery_v2",
+                    crawl_type="schedule",
+                    status="ok",
+                    records_found=0,
+                    started_at=started,
                 )
                 update_health(conn, "sporttery_v2", "schedule", "ok", latency_ms)
             return {"status": "ok", "matches_found": 0, "note": "no matches in response"}
@@ -810,9 +809,13 @@ def crawl_official_schedule_v2(business_date: str | None = None) -> dict[str, An
 
             # 5. Log
             log_crawl(
-                conn, source_name="sporttery_v2", crawl_type="schedule",
-                status="ok", records_found=len(matches),
-                records_inserted=total_inserted, records_updated=total_updated,
+                conn,
+                source_name="sporttery_v2",
+                crawl_type="schedule",
+                status="ok",
+                records_found=len(matches),
+                records_inserted=total_inserted,
+                records_updated=total_updated,
                 started_at=started,
             )
             update_health(conn, "sporttery_v2", "schedule", "ok", latency_ms)
@@ -831,7 +834,7 @@ def crawl_official_schedule_v2(business_date: str | None = None) -> dict[str, An
         client.close()
         print(f"[crawl_official_schedule_v2] error: {e}, falling back to V1…")
         # Fallback to original crawler
-        return crawl_official_schedule(business_date or datetime.now().strftime("%Y-%m-%d"))
+        return crawl_official_schedule(business_date or business_today().isoformat())
 
 
 # ---------------------------------------------------------------------------
@@ -839,7 +842,9 @@ def crawl_official_schedule_v2(business_date: str | None = None) -> dict[str, An
 # ---------------------------------------------------------------------------
 
 
-def parse_traditional_lottery_response(raw: dict[str, Any]) -> list[dict[str, Any]]:
+def parse_traditional_lottery_response(
+    raw: dict[str, Any], now: datetime | None = None
+) -> list[dict[str, Any]]:
     """Parse traditional lottery draw response into normalized pool/issue dicts.
 
     The response from getFootBallDrawInfoV2.qry has separate sections for
@@ -852,10 +857,10 @@ def parse_traditional_lottery_response(raw: dict[str, Any]) -> list[dict[str, An
     value = raw.get("value", {})
     # Map game codes to sections in the response
     game_sections = {
-        "sfcDetail": 90,   # 胜负彩 → t14c
-        "rjDetail": 91,    # 任九
-        "bqcDetail": 98,   # 半全场
-        "jqcDetail": 99,   # 进球彩
+        "sfcDetail": 90,  # 胜负彩 → t14c
+        "rjDetail": 91,  # 任九
+        "bqcDetail": 98,  # 半全场
+        "jqcDetail": 99,  # 进球彩
     }
 
     results = []
@@ -875,21 +880,27 @@ def parse_traditional_lottery_response(raw: dict[str, Any]) -> list[dict[str, An
         match_list = section.get("matchList", [])
         matches = []
         for i, m in enumerate(match_list):
-            matches.append({
-                "match_order": i + 1,
-                "match_id": m.get("infohubMatchId") or m.get("matchId"),
-                "league_name": m.get("matchName", ""),
-                "home_team_name": m.get("masterTeamAllName") or m.get("masterTeamName") or m.get("homeTeam", ""),
-                "away_team_name": m.get("guestTeamAllName") or m.get("guestTeamName") or m.get("awayTeam", ""),
-                "kickoff_time": m.get("startTime", ""),
-                "home_win_prob": m.get("homeWinProb"),
-                "draw_prob": m.get("drawProb"),
-                "away_win_prob": m.get("awayWinProb"),
-                "upset_score": m.get("upsetScore"),
-                "public_heat_home": m.get("homeRate"),
-                "public_heat_draw": m.get("drawRate"),
-                "public_heat_away": m.get("awayRate"),
-            })
+            matches.append(
+                {
+                    "match_order": i + 1,
+                    "match_id": m.get("infohubMatchId") or m.get("matchId"),
+                    "league_name": m.get("matchName", ""),
+                    "home_team_name": m.get("masterTeamAllName")
+                    or m.get("masterTeamName")
+                    or m.get("homeTeam", ""),
+                    "away_team_name": m.get("guestTeamAllName")
+                    or m.get("guestTeamName")
+                    or m.get("awayTeam", ""),
+                    "kickoff_time": m.get("startTime", ""),
+                    "home_win_prob": m.get("homeWinProb"),
+                    "draw_prob": m.get("drawProb"),
+                    "away_win_prob": m.get("awayWinProb"),
+                    "upset_score": m.get("upsetScore"),
+                    "public_heat_home": m.get("homeRate"),
+                    "public_heat_draw": m.get("drawRate"),
+                    "public_heat_away": m.get("awayRate"),
+                }
+            )
 
         sale_stop = section.get("saleEndTime") or section.get("estimateDrawTime")
         on_sale = section.get("onSale")
@@ -905,21 +916,24 @@ def parse_traditional_lottery_response(raw: dict[str, Any]) -> list[dict[str, An
                     stop_text = str(sale_stop).replace("Z", "+00:00")
                     stop_dt = datetime.fromisoformat(stop_text)
                     if stop_dt.tzinfo is not None:
-                        stop_dt = stop_dt.replace(tzinfo=None)
-                    official_status = "selling" if stop_dt > datetime.now() else "closed"
+                        stop_dt = stop_dt.astimezone(business_now(now).tzinfo).replace(tzinfo=None)
+                    current = business_now(now).replace(tzinfo=None)
+                    official_status = "selling" if stop_dt > current else "closed"
                 except ValueError:
                     pass
 
-        results.append({
-            "game_type": game_type,
-            "issue_no": issue_no,
-            "sale_start": section.get("saleStartTime"),
-            "sale_stop": sale_stop,
-            "total_matches": len(match_list),
-            "official_status": official_status,
-            "matches": matches,
-            "raw_json": section,
-        })
+        results.append(
+            {
+                "game_type": game_type,
+                "issue_no": issue_no,
+                "sale_start": section.get("saleStartTime"),
+                "sale_stop": sale_stop,
+                "total_matches": len(match_list),
+                "official_status": official_status,
+                "matches": matches,
+                "raw_json": section,
+            }
+        )
 
     return results
 
@@ -943,8 +957,12 @@ def crawl_traditional_lottery() -> dict[str, Any]:
             client.close()
             with get_db() as conn:
                 log_crawl(
-                    conn, source_name="sporttery", crawl_type="traditional_lottery",
-                    status="ok", records_found=0, started_at=started,
+                    conn,
+                    source_name="sporttery",
+                    crawl_type="traditional_lottery",
+                    status="ok",
+                    records_found=0,
+                    started_at=started,
                 )
             return {"status": "ok", "pools_found": 0, "note": "no traditional lottery data"}
 
@@ -969,9 +987,13 @@ def crawl_traditional_lottery() -> dict[str, Any]:
                         total_matches += n
 
             log_crawl(
-                conn, source_name="sporttery", crawl_type="traditional_lottery",
-                status="ok", records_found=len(pools),
-                records_inserted=total_issues, started_at=started,
+                conn,
+                source_name="sporttery",
+                crawl_type="traditional_lottery",
+                status="ok",
+                records_found=len(pools),
+                records_inserted=total_issues,
+                started_at=started,
             )
             update_health(conn, "sporttery", "traditional_lottery", "ok", latency_ms)
 
@@ -989,8 +1011,12 @@ def crawl_traditional_lottery() -> dict[str, Any]:
         latency_ms = 0
         with get_db() as conn:
             log_crawl(
-                conn, source_name="sporttery", crawl_type="traditional_lottery",
-                status="error", error_message=str(e), started_at=started,
+                conn,
+                source_name="sporttery",
+                crawl_type="traditional_lottery",
+                status="error",
+                error_message=str(e),
+                started_at=started,
             )
             update_health(conn, "sporttery", "traditional_lottery", "error", 0, str(e))
         return {"status": "error", "error": str(e)}

@@ -151,8 +151,8 @@ def _run_impl(match_id: int | None = None, dry_run: bool = False) -> dict[str, A
                        FROM official_matches
                        WHERE sale_status = 'selling'
                          AND LOWER(COALESCE(match_status, '')) IN ('scheduled', 'selling', 'not_started')
-                         AND kickoff_time > CURRENT_TIMESTAMP
-                         AND (sale_stop_time IS NULL OR sale_stop_time > CURRENT_TIMESTAMP)"""
+                         AND kickoff_time > timezone('Asia/Shanghai', NOW())
+                         AND (sale_stop_time IS NULL OR sale_stop_time > timezone('Asia/Shanghai', NOW()))"""
                 )
                 match_rows = cur.fetchall()
 
@@ -202,8 +202,15 @@ def _run_impl(match_id: int | None = None, dry_run: bool = False) -> dict[str, A
             play_types = available_markets.get(mid, [])
             for play_type in play_types:
                 p, v = _predict_match_play_type(
-                    conn, mid, home_team_name, away_team_name,
-                    play_type, active_models, rho, mle_rho, predict_time,
+                    conn,
+                    mid,
+                    home_team_name,
+                    away_team_name,
+                    play_type,
+                    active_models,
+                    rho,
+                    mle_rho,
+                    predict_time,
                 )
                 total_predictions += p
                 total_votes += v
@@ -219,10 +226,10 @@ def _run_impl(match_id: int | None = None, dry_run: bool = False) -> dict[str, A
 def run(match_id: int | None = None, dry_run: bool = False) -> dict[str, Any]:
     """Run predictions and persist its multi-agent execution record."""
     run_id = start_tracked_job(
-        "model_prediction", "model_agent", {"dry_run": dry_run, "match_id": match_id},
-        dependencies=[]
-        if dry_run
-        else ["official_odds_snapshot", "feature_snapshot_build"],
+        "model_prediction",
+        "model_agent",
+        {"dry_run": dry_run, "match_id": match_id},
+        dependencies=[] if dry_run else ["official_odds_snapshot", "feature_snapshot_build"],
     )
     try:
         result = _run_impl(match_id=match_id, dry_run=dry_run)
@@ -359,8 +366,14 @@ def _predict_match_play_type(
     # 5b. Derive BF/ZJQ/BQC from SPF score matrix
     if play_type == "spf" and poisson_matrix:
         _store_derived_play_types(
-            conn, mid, poisson_matrix, dc_matrix or poisson_matrix,
-            active_models, lam_h, lam_a, predict_time,
+            conn,
+            mid,
+            poisson_matrix,
+            dc_matrix or poisson_matrix,
+            active_models,
+            lam_h,
+            lam_a,
+            predict_time,
         )
 
     # 5. Elo model
@@ -437,8 +450,12 @@ def _predict_match_play_type(
                 "uncertainty_reason": {
                     "model_std": round(uncertainty, 6),
                     "rho": rho if model_name == "dixon_coles" else None,
-                    "rho_source": "mle" if (model_name == "dixon_coles" and mle_rho is not None) else "default",
-                    "margin_removal": "shin_flb" if model_name in ("maher_poisson", "dixon_coles") else "proportional",
+                    "rho_source": "mle"
+                    if (model_name == "dixon_coles" and mle_rho is not None)
+                    else "default",
+                    "margin_removal": "shin_flb"
+                    if model_name in ("maher_poisson", "dixon_coles")
+                    else "proportional",
                     "elo_based": model_name == "elo_rating",
                     "feature_adjustment": {
                         "version": feature_adjustment.version,
@@ -544,8 +561,11 @@ def _store_derived_play_types(
         if bqc_market:
             market["bqc"] = bqc_market
 
-        market["bf"] = {score: round(MARGIN / prob, 2) if prob > 0 else 100.0
-                        for score, prob in poisson_matrix.items() if prob >= 0.01}
+        market["bf"] = {
+            score: round(MARGIN / prob, 2) if prob > 0 else 100.0
+            for score, prob in poisson_matrix.items()
+            if prob >= 0.01
+        }
     else:
         # Fetch fixed-bonus odds from uniform API
         try:
@@ -573,9 +593,15 @@ def _store_derived_play_types(
 
         # HAFU → bqc (半全场)
         HAFU_MAP = {
-            "hh": "33", "hd": "31", "ha": "30",
-            "dh": "13", "dd": "11", "da": "10",
-            "ah": "03", "ad": "01", "aa": "00",
+            "hh": "33",
+            "hd": "31",
+            "ha": "30",
+            "dh": "13",
+            "dd": "11",
+            "da": "10",
+            "ah": "03",
+            "ad": "01",
+            "aa": "00",
         }
         hafu = odds_history.get("hafuList")
         if hafu:
@@ -618,13 +644,16 @@ def _store_derived_play_types(
         margin = 1.08
         zjq_probs = derive_total_goals(poisson_matrix)
         market["zjq"] = {k: round(margin / v, 2) for k, v in zjq_probs.items() if v > 0}
-        market["bf"] = {score: round(margin / prob, 2) for score, prob in poisson_matrix.items() if prob >= 0.01}
+        market["bf"] = {
+            score: round(margin / prob, 2) for score, prob in poisson_matrix.items() if prob >= 0.01
+        }
         ht_matrix = score_matrix(lam_h * 0.45, lam_a * 0.45, max_goals=4)
         ht_1x2 = derive_1x2(ht_matrix)
         ft_1x2 = derive_1x2(poisson_matrix)
         market["bqc"] = {
             f"{hc}{fc}": round(margin / max(ht_1x2.get(hc, 0) * ft_1x2.get(fc, 0), 1e-6), 2)
-            for hc in ("3", "1", "0") for fc in ("3", "1", "0")
+            for hc in ("3", "1", "0")
+            for fc in ("3", "1", "0")
         }
 
     # ── 1. ZJQ (总进球数) ──

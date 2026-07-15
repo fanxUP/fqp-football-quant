@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-from datetime import date as dt_date
-
 from fastapi import APIRouter, Query
 
 from apps.backend.src.db import get_db
 from scripts.backtest_engine import BacktestConfig, run_backtest_from_config
+from scripts.business_time import business_today
 
 router = APIRouter(tags=["backtests"])
 
@@ -185,7 +184,7 @@ def create_backtest(body: dict):
     if not model_names:
         return {"status": "error", "error": "no models to test"}
 
-    today = dt_date.today()
+    today = business_today()
     name = body.get("name") or f"手动回测-{today.isoformat()}"
 
     config = BacktestConfig(

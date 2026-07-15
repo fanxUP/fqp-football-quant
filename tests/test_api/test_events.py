@@ -77,7 +77,7 @@ def test_active_matches_mark_started_unsettled_matches_as_awaiting_result(client
     assert response.status_code == 200
     assert response.json()["matches"][0]["match_status"] == "awaiting_result"
     sql = cursor.execute.call_args.args[0]
-    assert "m.kickoff_time <= CURRENT_TIMESTAMP" in sql
+    assert "m.kickoff_time <= timezone('Asia/Shanghai', NOW())" in sql
     assert "awaiting_result" in sql
 
 
@@ -92,6 +92,6 @@ def test_active_matches_prioritize_upcoming_over_unsettled_history(client):
     assert response.status_code == 200
     sql = " ".join(cursor.execute.call_args.args[0].split())
     assert (
-        "ORDER BY CASE WHEN m.kickoff_time > CURRENT_TIMESTAMP THEN 0 ELSE 1 END"
+        "ORDER BY CASE WHEN m.kickoff_time > timezone('Asia/Shanghai', NOW()) THEN 0 ELSE 1 END"
         in sql
     )

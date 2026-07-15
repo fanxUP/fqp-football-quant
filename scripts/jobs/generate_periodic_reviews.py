@@ -2,16 +2,17 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 from typing import Any
 
 from apps.backend.src.db import get_db
+from scripts.business_time import business_today
 from scripts.real_ticket_storage import upsert_monthly_review, upsert_weekly_review
 from scripts.review_generator import monthly_summary, weekly_summary
 
 
 def _previous_week(today: date | None = None) -> tuple[str, str]:
-    base = today or datetime.now().date()
+    base = today or business_today()
     this_monday = base - timedelta(days=base.weekday())
     week_start = this_monday - timedelta(days=7)
     week_end = week_start + timedelta(days=6)
@@ -19,7 +20,7 @@ def _previous_week(today: date | None = None) -> tuple[str, str]:
 
 
 def _previous_month(today: date | None = None) -> str:
-    base = today or datetime.now().date()
+    base = today or business_today()
     first_this_month = base.replace(day=1)
     last_previous_month = first_this_month - timedelta(days=1)
     return last_previous_month.strftime("%Y-%m")

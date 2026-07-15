@@ -6,11 +6,12 @@ Runs at 23:30 daily — reviews yesterday's data (today incomplete).
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime
 from typing import Any
 
 from apps.backend.src.db import get_db
 from scripts.agents.task_queue import finish_tracked_job, start_tracked_job
+from scripts.business_time import business_yesterday
 from scripts.real_ticket_storage import upsert_daily_review
 from scripts.review_generator import daily_summary
 
@@ -19,8 +20,8 @@ def _now() -> str:
     return datetime.now().isoformat(timespec="seconds")
 
 
-def _yesterday() -> str:
-    return (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+def _yesterday(now: datetime | None = None) -> str:
+    return business_yesterday(now or datetime.now(UTC)).isoformat()
 
 
 def _run_impl(review_date: str | None = None, dry_run: bool = False) -> dict[str, Any]:
@@ -68,7 +69,8 @@ def _run_impl(review_date: str | None = None, dry_run: bool = False) -> dict[str
         # 4. Count simulation tickets created on this date
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT COUNT(*) FROM simulation_tickets WHERE created_at::date = %s",
+                """SELECT COUNT(*) FROM simulation_tickets
+                   WHERE (created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Shanghai')::date = %s""",
                 (date,),
             )
             sim_ticket_count = cur.fetchone()[0] or 0
@@ -76,7 +78,8 @@ def _run_impl(review_date: str | None = None, dry_run: bool = False) -> dict[str
         # 5. Count real tickets purchased on this date
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT COUNT(*) FROM real_tickets WHERE purchase_time::date = %s",
+                """SELECT COUNT(*) FROM real_tickets
+                   WHERE (purchase_time AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Shanghai')::date = %s""",
                 (date,),
             )
             real_ticket_count = cur.fetchone()[0] or 0
@@ -84,7 +87,8 @@ def _run_impl(review_date: str | None = None, dry_run: bool = False) -> dict[str
         # 6. Get suggested stakes (sum of simulation tickets)
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT COALESCE(SUM(suggested_stake), 0) FROM simulation_tickets WHERE created_at::date = %s",
+                """SELECT COALESCE(SUM(suggested_stake), 0) FROM simulation_tickets
+                   WHERE (created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Shanghai')::date = %s""",
                 (date,),
             )
             suggested_stake = float(cur.fetchone()[0] or 0)
@@ -92,7 +96,8 @@ def _run_impl(review_date: str | None = None, dry_run: bool = False) -> dict[str
         # 7. Get actual stakes (sum of real tickets)
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT COALESCE(SUM(total_amount), 0) FROM real_tickets WHERE purchase_time::date = %s",
+                """SELECT COALESCE(SUM(total_amount), 0) FROM real_tickets
+                   WHERE (purchase_time AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Shanghai')::date = %s""",
                 (date,),
             )
             actual_stake = float(cur.fetchone()[0] or 0)
@@ -107,7 +112,7 @@ def _run_impl(review_date: str | None = None, dry_run: bool = False) -> dict[str
                        COALESCE(SUM(profit_loss), 0),
                        AVG(roi)
                 FROM ticket_settlements
-                WHERE settle_time::date = %s
+                WHERE (settle_time AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Shanghai')::date = %s
                 GROUP BY ticket_source
                 """,
                 (date,),
@@ -144,7 +149,7 @@ def _run_impl(review_date: str | None = None, dry_run: bool = False) -> dict[str
                 """
                 SELECT COALESCE(MIN(profit_loss), 0)
                 FROM ticket_settlements
-                WHERE settle_time::date = %s
+                WHERE (settle_time AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Shanghai')::date = %s
                 """,
                 (date,),
             )
@@ -162,7 +167,7 @@ def _run_impl(review_date: str | None = None, dry_run: bool = False) -> dict[str
                 """
                 SELECT error_type, COUNT(*) AS cnt
                 FROM prediction_error_analysis
-                WHERE created_at::date = %s
+                WHERE (created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Shanghai')::date = %s
                 GROUP BY error_type
                 ORDER BY cnt DESC
                 LIMIT 3
@@ -220,13 +225,13 @@ def _run_impl(review_date: str | None = None, dry_run: bool = False) -> dict[str
         )
 
     return {
-            "status": "ok",
-            "review_id": review_id,
-            "review_date": date,
-            "official_match_count": official_count,
-            "simulation_ticket_count": sim_ticket_count,
-            "real_ticket_count": real_ticket_count,
-            "summary": summary,
+        "status": "ok",
+        "review_id": review_id,
+        "review_date": date,
+        "official_match_count": official_count,
+        "simulation_ticket_count": sim_ticket_count,
+        "real_ticket_count": real_ticket_count,
+        "summary": summary,
     }
 
 

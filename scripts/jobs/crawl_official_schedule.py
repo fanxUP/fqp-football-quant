@@ -9,9 +9,9 @@ Can also be invoked manually: python -m scripts.jobs.crawl_official_schedule [YY
 from __future__ import annotations
 
 import sys
-from datetime import datetime
 
 from scripts.agents.task_queue import finish_tracked_job, start_tracked_job
+from scripts.business_time import business_today
 from scripts.official_crawler import crawl_official_schedule_v2
 
 
@@ -24,13 +24,15 @@ def run(business_date: str | None = None) -> dict:
         business_date: Date in YYYY-MM-DD format. Defaults to today.
     """
     if business_date is None:
-        business_date = datetime.now().strftime("%Y-%m-%d")
+        business_date = business_today().isoformat()
 
     print(f"[crawl_official_schedule] running for {business_date}")
     run_id = start_tracked_job("official_schedule", "data_agent", {"business_date": business_date})
     try:
         result = crawl_official_schedule_v2(business_date)
-        finish_tracked_job(run_id, "completed" if result.get("status") == "ok" else "failed", result)
+        finish_tracked_job(
+            run_id, "completed" if result.get("status") == "ok" else "failed", result
+        )
         print(f"[crawl_official_schedule] done: {result}")
         return result
     except Exception as exc:
