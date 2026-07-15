@@ -183,6 +183,8 @@ def collect_due_official_odds(now: datetime | None = None) -> dict[str, Any]:
             batch_id = _reserve_batch(conn, candidate, decision.capture_kind, scheduled_for)
             if batch_id is not None:
                 reserved.append((candidate, decision.capture_kind, batch_id))
+        if not reserved:
+            update_health(conn, "sporttery", "odds", "ok", 0)
 
     if not reserved:
         return {"status": "ok", "matches_due": 0, "snapshots_inserted": 0}

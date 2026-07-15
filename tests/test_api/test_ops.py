@@ -121,7 +121,7 @@ class TestOpsHealth:
         snapshot = {
             "overall_health_status": "healthy",
             "snapshot_date": "2026-07-15",
-            "snapshot_time": datetime(2026, 7, 15, 3, 55),
+            "snapshot_time": "2026-07-15T03:55:00",
         }
 
         with patch("apps.backend.src.routers.ops.get_db", return_value=mock_conn), \
@@ -143,6 +143,10 @@ class TestOpsPipeline:
                  datetime(2026, 7, 15, 3, 7, 2), None, 5, 1909),
                 (5, "sporttery", "official", "ok",
                  datetime(2026, 7, 15, 3, 8, 0), None, 0, 200),
+                (6, "500.com", "supplemental", "ok",
+                 datetime(2026, 7, 15, 3, 8, 1), None, 0, 300),
+                (7, "500.com", "official", "ok",
+                 datetime(2026, 7, 10, 3, 8, 0), None, 0, 400),
             ],
             [
                 (101, "official_odds_snapshot", "completed",
@@ -169,7 +173,7 @@ class TestOpsPipeline:
             "latency_ms": 0,
         }
         assert {source["source_type"] for source in data["sources"]} == {
-            "results", "traditional_lottery"
+            "results", "traditional_lottery", "supplemental"
         }
         assert data["jobs"] == [{
             "code": "official_odds_snapshot",

@@ -56,6 +56,11 @@ def utc_iso(value: Any) -> str | None:
     """Serialize PostgreSQL's UTC-naive operational timestamps explicitly."""
     if value is None:
         return None
+    if isinstance(value, str):
+        try:
+            value = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return value
     if isinstance(value, datetime):
         if value.tzinfo is None:
             value = value.replace(tzinfo=UTC)
@@ -105,15 +110,15 @@ def get_pipeline_snapshot(conn: Any) -> dict[str, list[dict[str, Any]]]:
         )
         job_rows = cur.fetchall()
 
-    typed_source_names = {
+    explicit_source_names = {
         str(row[1])
         for row in source_rows
-        if str(row[2]) in {"schedule", "odds", "results"}
+        if str(row[2]) != "official"
     }
     visible_source_rows = [
         row
         for row in source_rows
-        if not (str(row[2]) == "official" and str(row[1]) in typed_source_names)
+        if not (str(row[2]) == "official" and str(row[1]) in explicit_source_names)
     ]
     sources = [
         {

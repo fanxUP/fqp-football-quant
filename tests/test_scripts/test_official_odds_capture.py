@@ -22,6 +22,24 @@ def test_expired_sales_close_after_final_capture_grace(mock_conn):
     conn.commit.assert_called_once()
 
 
+def test_no_due_matches_still_refreshes_odds_source_health():
+    now = datetime(2026, 7, 15, 11, 30, tzinfo=ZoneInfo("Asia/Shanghai"))
+    connection = MagicMock()
+
+    with (
+        patch("scripts.official_odds_capture.get_db") as get_db,
+        patch("scripts.official_odds_capture._load_candidates", return_value=[]),
+        patch("scripts.official_odds_capture._close_expired_sales"),
+        patch("scripts.official_odds_capture.update_health") as update_health,
+    ):
+        get_db.return_value.__enter__.return_value = connection
+
+        result = collect_due_official_odds(now)
+
+    assert result == {"status": "ok", "matches_due": 0, "snapshots_inserted": 0}
+    update_health.assert_called_once_with(connection, "sporttery", "odds", "ok", 0)
+
+
 def test_due_collector_fetches_once_and_records_complete_offered_play():
     now = datetime(2026, 7, 14, 17, 30, tzinfo=ZoneInfo("Asia/Shanghai"))
     candidate = OfficialCaptureCandidate(
