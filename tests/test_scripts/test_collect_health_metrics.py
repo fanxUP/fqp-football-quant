@@ -6,10 +6,26 @@ from unittest.mock import MagicMock, patch
 from scripts.jobs.collect_health_metrics import (
     _check_system_services,
     _compute_odds_missing_rate,
+    _compute_review_generation_rate,
     _compute_uptime_days,
     _get_disk_usage,
     run,
 )
+
+
+def test_review_generation_rate_expects_completed_days_through_yesterday(mock_conn):
+    conn, cur = mock_conn
+    cur.fetchone.side_effect = [(15,), (date(2026, 6, 30),)]
+
+    result = _compute_review_generation_rate(conn, review_end=date(2026, 7, 14))
+
+    assert result == {
+        "total_reviews_expected": 15,
+        "successful_review_generations": 15,
+        "rate": 1.0,
+    }
+    query = " ".join(cur.execute.call_args_list[0].args[0].split())
+    assert "review_date BETWEEN" in query
 
 
 def test_health_is_degraded_when_audit_samples_are_missing():
