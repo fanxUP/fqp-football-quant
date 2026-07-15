@@ -613,8 +613,12 @@ def get_model_comparison_data(conn: Any) -> dict[str, Any]:
                 "brier": round(float(d["avg_brier"] or 0), 4),
                 "log_loss": round(float(d["avg_log_loss"] or 0), 4),
                 "rps": round(float(d["avg_rps"] or 0), 4),
-                "clv": round(float(d["avg_clv"] or 0), 4),
-                "flb_score": round(float(d["avg_flb_score"] or 0), 4),
+                "clv": round(float(d["avg_clv"]), 4) if d["avg_clv"] is not None else None,
+                "flb_score": (
+                    round(float(d["avg_flb_score"]), 4)
+                    if d["avg_flb_score"] is not None
+                    else None
+                ),
             }
 
     # 2. Backtest performance (latest aggregate)

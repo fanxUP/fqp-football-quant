@@ -78,6 +78,46 @@ class EvaluationConnection:
         return self.cursor_instance
 
 
+class ComparisonCursor:
+    def __init__(self) -> None:
+        self.phase = 0
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args) -> None:
+        return None
+
+    def execute(self, *_args) -> None:
+        self.phase += 1
+
+    @property
+    def description(self):
+        if self.phase == 1:
+            return [
+                ("model_name",), ("n_predictions",), ("avg_brier",),
+                ("avg_log_loss",), ("avg_rps",), ("avg_clv",),
+                ("avg_flb_score",),
+            ]
+        return [
+            ("model_name",), ("hit_rate",), ("roi",), ("sharpe_ratio",),
+            ("max_drawdown_pct",), ("profit_factor",), ("total_profit",),
+        ]
+
+    def fetchall(self):
+        if self.phase == 1:
+            return [("elo_rating", 2, 0.61, 1.01, 0.20, None, None)]
+        return []
+
+
+class ComparisonConnection:
+    def __init__(self) -> None:
+        self.cursor_instance = ComparisonCursor()
+
+    def cursor(self) -> ComparisonCursor:
+        return self.cursor_instance
+
+
 class CaptureTrainingCursor:
     def __init__(self) -> None:
         self.query = ""
@@ -197,6 +237,13 @@ def test_latest_prediction_scope_excludes_post_match_predictions() -> None:
 
     assert "source_mp.predict_time < source_match.kickoff_time" in query
     assert "source_result.result_status IN ('final', 'confirmed')" in query
+
+
+def test_model_comparison_preserves_unavailable_metrics_as_null() -> None:
+    result = feature_importance.get_model_comparison_data(ComparisonConnection())
+
+    assert result["models"][0]["clv"] is None
+    assert result["models"][0]["flb_score"] is None
 
 
 def test_feature_training_uses_one_pre_match_snapshot_per_match() -> None:

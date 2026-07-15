@@ -702,8 +702,8 @@ export interface ModelCompareItem {
   brier: number;
   log_loss: number;
   rps: number;
-  clv: number;
-  flb_score: number;
+  clv: number | null;
+  flb_score: number | null;
   hit_rate?: number;
   roi?: number;
   sharpe?: number;
