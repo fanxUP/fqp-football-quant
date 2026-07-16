@@ -29,7 +29,7 @@ describe('DataHealthPage', () => {
     mockOpsHealth.mockResolvedValue({ status: 'no_data' });
     mockPipeline.mockResolvedValue({
       sources: [{
-        name: '500.com', source_type: 'supplemental', status: 'ok',
+        name: 'sporttery', source_type: 'results', status: 'ok',
         last_success: '2026-07-15T03:00:06Z', last_failure: null, failures: 0, latency_ms: 4033,
       }],
       jobs: [],
@@ -61,10 +61,9 @@ describe('DataHealthPage', () => {
 
     expect(await screen.findByText('官方历史数据采集')).toBeInTheDocument();
     expect(screen.getByText('体彩官方结果暂不可自动读取')).toBeInTheDocument();
-    expect(screen.getByText(/已由 500.com 为体彩已收录的比赛补充赛果/)).toBeInTheDocument();
-    expect(screen.getByText(/如需体彩原始证据/)).toBeInTheDocument();
-    expect(screen.getByText('500.com 赛果补充源')).toBeInTheDocument();
-    expect(screen.getByText('补充')).toBeInTheDocument();
+    expect(screen.getByText(/不会使用第三方赛果替代体彩官方结果/)).toBeInTheDocument();
+    expect(screen.getByText(/保存体彩官网 HTML 或 HAR 文件/)).toBeInTheDocument();
+    expect(screen.queryByText('500.com 赛果补充源')).not.toBeInTheDocument();
     expect(mockCollectionStatus).toHaveBeenCalledWith({ limit: 8 });
   });
 
@@ -107,10 +106,6 @@ describe('DataHealthPage', () => {
           name: 'sporttery', source_type: 'odds', status: 'ok',
           last_success: '2026-07-15T03:08:19Z', last_failure: null, failures: 0, latency_ms: 250,
         },
-        {
-          name: '500.com', source_type: 'supplemental', status: 'ok',
-          last_success: '2026-07-15T03:00:06Z', last_failure: null, failures: 0, latency_ms: 4033,
-        },
       ],
       jobs: [
         {
@@ -126,7 +121,7 @@ describe('DataHealthPage', () => {
     expect(await screen.findByText('官方竞彩赛果 (sporttery.cn)')).toBeInTheDocument();
     expect(screen.getByText('官方竞彩赛程 (sporttery.cn)')).toBeInTheDocument();
     expect(screen.getByText('官方竞彩赔率 (sporttery.cn)')).toBeInTheDocument();
-    expect(screen.getByText('500.com 赛果补充源')).toBeInTheDocument();
+    expect(screen.queryByText('500.com 赛果补充源')).not.toBeInTheDocument();
     expect(screen.getByText('1 个已记录任务')).toBeInTheDocument();
     expect(screen.getByText(/最近成功: .*按开盘\/每30分钟\/开赛时/)).toBeInTheDocument();
   });

@@ -220,6 +220,38 @@ class TestOpsHealth:
 
 
 class TestOpsPipeline:
+    def test_hides_retired_source_health_rows(self, client):
+        mock_conn, mock_cur = _mock_db_conn()
+        mock_cur.fetchall.side_effect = [
+            [
+                (1, "sporttery", "results", "ok", datetime(2026, 7, 15, 3, 8), None, 0, 200),
+                (2, "500.com", "supplemental", "ok", datetime(2026, 7, 15, 1, 0), None, 0, 300),
+            ],
+            [],
+        ]
+
+        with (
+            patch("apps.backend.src.routers.ops.get_db", return_value=mock_conn),
+            patch(
+                "apps.backend.src.services.pipeline_status._utc_now",
+                return_value=datetime(2026, 7, 15, 3, 9, tzinfo=UTC),
+            ),
+        ):
+            response = client.get("/api/ops/pipeline")
+
+        assert response.status_code == 200
+        assert response.json()["sources"] == [
+            {
+                "name": "sporttery",
+                "source_type": "results",
+                "status": "ok",
+                "last_success": "2026-07-15T03:08:00Z",
+                "last_failure": None,
+                "failures": 0,
+                "latency_ms": 200,
+            }
+        ]
+
     def test_normalizes_active_jobs_sources_and_utc_timestamps(self, client):
         mock_conn, mock_cur = _mock_db_conn()
         mock_cur.fetchall.side_effect = [
@@ -276,7 +308,6 @@ class TestOpsPipeline:
         assert {source["source_type"] for source in data["sources"]} == {
             "results",
             "traditional_lottery",
-            "supplemental",
         }
         odds_job = next(job for job in data["jobs"] if job["code"] == "official_odds_snapshot")
         assert odds_job == {

@@ -132,7 +132,6 @@ SOURCE_MAX_AGES: dict[tuple[str, str], timedelta] = {
     ("sporttery", "traditional_lottery"): timedelta(hours=8),
     ("sporttery", "schedule"): timedelta(minutes=90),
     ("sporttery_v2", "schedule"): timedelta(minutes=90),
-    ("500.com", "supplemental"): timedelta(minutes=90),
 }
 
 SUCCESS_STATUSES = {"completed", "ok", "success"}
@@ -246,7 +245,8 @@ def get_pipeline_snapshot(conn: Any) -> dict[str, list[dict[str, Any]]]:
     visible_source_rows = [
         row
         for row in source_rows
-        if not (str(row[2]) == "official" and str(row[1]) in explicit_source_names)
+        if (str(row[1]), str(row[2])) in SOURCE_MAX_AGES
+        and not (str(row[2]) == "official" and str(row[1]) in explicit_source_names)
     ]
     now = _utc_now()
     sources = []

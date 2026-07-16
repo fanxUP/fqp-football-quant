@@ -38,7 +38,6 @@ const SOURCE_NAMES: Record<string, string> = {
   'sporttery:schedule': '官方竞彩赛程 (sporttery.cn)',
   'sporttery_v2:schedule': '官方竞彩赛程 (sporttery.cn)',
   'sporttery:traditional_lottery': '传统足彩 (sporttery.cn)',
-  '500.com:supplemental': '500.com 赛果补充源',
 };
 
 export function formatPipelineTime(value: string | null): string {

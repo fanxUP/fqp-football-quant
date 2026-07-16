@@ -324,7 +324,7 @@ export default function DataHealthPage() {
               体彩官方结果暂不可自动读取
             </div>
             <div style={{ fontSize: '13px', color: 'var(--fqp-text-muted)', lineHeight: 1.6 }}>
-              已由 500.com 为体彩已收录的比赛补充赛果，并明确保留“补充”来源标记；如需体彩原始证据，可在浏览器保存官网 HTML 或 HAR 文件后再本地导入。
+              系统不会使用第三方赛果替代体彩官方结果；可稍后重试自动采集，或在浏览器保存体彩官网 HTML 或 HAR 文件后再本地导入。
             </div>
           </div>
         ) : latestOfficialCollection ? (
