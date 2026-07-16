@@ -126,7 +126,7 @@ def build_lineup_features(
         except Exception as e:
             print(f"[lineup] error away team {away_team_id}: {e}")
 
-    has_lineup = home_lineup is not None or away_lineup is not None
+    covered_team_count = int(home_lineup is not None) + int(away_lineup is not None)
 
     return {
         "home_lineup_confirmed": (
@@ -156,5 +156,6 @@ def build_lineup_features(
             if home_rotation is not None and away_rotation is not None
             else None
         ),
-        "has_lineup_data": has_lineup,
+        "has_lineup_data": covered_team_count == 2,
+        "covered_team_count": covered_team_count,
     }

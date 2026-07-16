@@ -14,6 +14,7 @@ export interface PipelineJob {
   status: string;
   finished_at: string | null;
   error: string | null;
+  detail?: string | null;
   schedule: string;
   category: 'official' | 'model' | 'review';
 }
@@ -71,6 +72,7 @@ function jobRow(job: PipelineJob): DataHealthRow {
     running: 'info',
     skipped: 'warning',
     stale: 'warning',
+    degraded: 'warning',
     pending: 'info',
   };
   const statusLabel: Record<string, string> = {
@@ -79,6 +81,7 @@ function jobRow(job: PipelineJob): DataHealthRow {
     running: '正在执行',
     skipped: '最近跳过',
     stale: '状态已过期',
+    degraded: '数据降级',
     pending: '尚未运行',
   };
   return {
@@ -86,7 +89,7 @@ function jobRow(job: PipelineJob): DataHealthRow {
     name: job.name,
     type: job.category,
     status: statusMap[job.status] ?? 'warning',
-    detail: `${statusLabel[job.status] ?? '状态未知'}: ${formatPipelineTime(job.finished_at)} · ${job.schedule}`,
+    detail: `${statusLabel[job.status] ?? '状态未知'}: ${formatPipelineTime(job.finished_at)} · ${job.schedule}${job.detail ? ` · ${job.detail}` : ''}`,
   };
 }
 

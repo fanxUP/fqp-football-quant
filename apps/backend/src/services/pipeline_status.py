@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -196,6 +197,24 @@ def _normalize_job_status(status: object) -> str:
     return "unknown"
 
 
+def _job_quality(output_refs: object) -> tuple[str | None, str | None]:
+    if isinstance(output_refs, str):
+        try:
+            output_refs = json.loads(output_refs)
+        except json.JSONDecodeError:
+            return None, None
+    if not isinstance(output_refs, dict):
+        return None, None
+    result = output_refs.get("result", output_refs)
+    if not isinstance(result, dict):
+        return None, None
+    quality_status = str(result.get("quality_status") or "") or None
+    quality_note = str(result.get("quality_note") or "") or None
+    if not quality_note and result.get("average_completeness") is not None:
+        quality_note = f"平均特征完整度 {float(result['average_completeness']):.1f}%"
+    return quality_status, quality_note
+
+
 def get_pipeline_snapshot(conn: Any) -> dict[str, list[dict[str, Any]]]:
     """Return only current scheduler jobs with stable names and UTC timestamps."""
     with conn.cursor() as cur:
@@ -215,7 +234,7 @@ def get_pipeline_snapshot(conn: Any) -> dict[str, list[dict[str, Any]]]:
         ]
         cur.execute(
             """SELECT DISTINCT ON (job_code)
-                      id, job_code, status, finished_at, error_message
+                      id, job_code, status, finished_at, error_message, output_refs
                FROM ai_job_runs
                WHERE job_code = ANY(%s)
                ORDER BY job_code, id DESC""",
@@ -265,6 +284,7 @@ def get_pipeline_snapshot(conn: Any) -> dict[str, list[dict[str, Any]]]:
                     "status": "pending",
                     "finished_at": None,
                     "error": None,
+                    "detail": None,
                     "schedule": definition.schedule,
                     "category": definition.category,
                 }
@@ -274,6 +294,9 @@ def get_pipeline_snapshot(conn: Any) -> dict[str, list[dict[str, Any]]]:
         status = _normalize_job_status(latest[2])
         if status == "success" and _is_stale(latest[3], definition.max_age, now):
             status = "stale"
+        quality_status, quality_note = _job_quality(latest[5])
+        if status == "success" and quality_status == "degraded":
+            status = "degraded"
         jobs.append(
             {
                 "code": canonical,
@@ -281,6 +304,7 @@ def get_pipeline_snapshot(conn: Any) -> dict[str, list[dict[str, Any]]]:
                 "status": status,
                 "finished_at": utc_iso(latest[3]),
                 "error": latest[4],
+                "detail": quality_note,
                 "schedule": definition.schedule,
                 "category": definition.category,
             }

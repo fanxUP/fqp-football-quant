@@ -240,14 +240,15 @@ class TestOpsPipeline:
                 (7, "500.com", "official", "ok", datetime(2026, 7, 10, 3, 8, 0), None, 0, 400),
             ],
             [
-                (101, "official_odds_snapshot", "completed", datetime(2026, 7, 15, 3, 8, 19), None),
-                (99, "crawl_official_odds", "success", datetime(2026, 7, 9, 23, 30), None),
+                (101, "official_odds_snapshot", "completed", datetime(2026, 7, 15, 3, 8, 19), None, None),
+                (99, "crawl_official_odds", "success", datetime(2026, 7, 9, 23, 30), None, None),
                 (
                     88,
                     "refresh_supplemental_seasons",
                     "failed",
                     datetime(2026, 7, 13, 3, 40),
                     "obsolete table",
+                    None,
                 ),
             ],
         ]
@@ -284,6 +285,7 @@ class TestOpsPipeline:
             "status": "success",
             "finished_at": "2026-07-15T03:08:19Z",
             "error": None,
+            "detail": None,
             "schedule": "每分钟检查；开盘/每30分钟/开赛时采集",
             "category": "official",
         }
@@ -291,6 +293,41 @@ class TestOpsPipeline:
         assert monthly["status"] == "pending"
         assert monthly["finished_at"] is None
         assert len(data["jobs"]) == 30
+
+    def test_pipeline_surfaces_feature_quality_degradation_from_job_output(self, client):
+        mock_conn, mock_cur = _mock_db_conn()
+        mock_cur.fetchall.side_effect = [
+            [],
+            [(
+                102,
+                "feature_snapshot_build",
+                "ok",
+                datetime(2026, 7, 15, 3, 8, 19),
+                None,
+                {
+                    "result": {
+                        "quality_status": "degraded",
+                        "average_completeness": 22.5,
+                    }
+                },
+            )],
+        ]
+
+        with (
+            patch("apps.backend.src.routers.ops.get_db", return_value=mock_conn),
+            patch(
+                "apps.backend.src.services.pipeline_status._utc_now",
+                return_value=datetime(2026, 7, 15, 3, 9, tzinfo=UTC),
+            ),
+        ):
+            response = client.get("/api/ops/pipeline")
+
+        job = next(
+            item for item in response.json()["jobs"]
+            if item["code"] == "feature_snapshot_build"
+        )
+        assert job["status"] == "degraded"
+        assert job["detail"] == "平均特征完整度 22.5%"
 
 
 class TestOpsAuditGates:

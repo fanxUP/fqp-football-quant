@@ -153,7 +153,7 @@ def compute_full_completeness(dimensions: dict[str, bool]) -> dict[str, Any]:
     return {
         "data_completeness_score": completeness,
         "uncertainty_score": uncertainty,
-        "source_confidence_score": max(0.30, completeness / 100.0 * 0.95),
+        "source_confidence_score": round(completeness / 100.0 * 0.95, 4),
         "missing_dimensions": missing,
     }
 
@@ -164,12 +164,33 @@ def _snapshot_job_result(
     matches_processed: int,
     snapshots_built: int,
     profiles_updated: int,
-    dim_stats: dict[str, int],
+    dim_stats: dict[str, float],
     failed_matches: list[dict[str, Any]],
 ) -> dict[str, Any]:
     """Build an auditable summary without reporting an all-match failure as success."""
+    execution_failed = matches_processed > 0 and snapshots_built == 0
+    dimension_rates = {
+        dimension: round(dim_stats.get(dimension, 0.0) / matches_processed, 4)
+        if matches_processed
+        else 0.0
+        for dimension in _DIMENSIONS
+    }
+    average_completeness = round(
+        sum(dimension_rates.values()) / len(_DIMENSIONS) * 100,
+        1,
+    )
+    quality_status = (
+        "failed"
+        if execution_failed
+        else "healthy"
+        if average_completeness >= 80
+        else "degraded"
+    )
     return {
-        "status": "failed" if matches_processed > 0 and snapshots_built == 0 else "ok",
+        "status": "failed" if execution_failed else "ok",
+        "quality_status": quality_status,
+        "quality_note": f"平均特征完整度 {average_completeness:.1f}%",
+        "average_completeness": average_completeness,
         "feature_version": feature_version,
         "snapshots_built": snapshots_built,
         "profiles_updated": profiles_updated,
@@ -177,9 +198,10 @@ def _snapshot_job_result(
         "failed_count": len(failed_matches),
         "failed_matches": failed_matches,
         "dimensions_coverage": {
-            dimension: f"{dim_stats.get(dimension, 0)}/{matches_processed}"
+            dimension: f"{dim_stats.get(dimension, 0.0):g}/{matches_processed}"
             for dimension in _DIMENSIONS
         },
+        "dimension_rates": dimension_rates,
     }
 
 
@@ -235,7 +257,7 @@ def _run_impl(match_id: int | None = None, dry_run: bool = False) -> dict[str, A
 
         snapshots_built = 0
         profiles_updated = 0
-        dim_stats = {d: 0 for d in _DIMENSIONS}
+        dim_stats = {d: 0.0 for d in _DIMENSIONS}
         failed_matches: list[dict[str, Any]] = []
 
         for mid in match_ids:
@@ -276,7 +298,7 @@ def _run_impl(match_id: int | None = None, dry_run: bool = False) -> dict[str, A
                 # ---------------------------------------------------
                 # 4. Compute team profiles
                 # ---------------------------------------------------
-                has_profile = False
+                profile_team_count = 0
                 if has_mapping and competition_season_id and home_id and away_id:
                     for tname, tid in [
                         (match_data["home_team_name"], home_id),
@@ -300,7 +322,8 @@ def _run_impl(match_id: int | None = None, dry_run: bool = False) -> dict[str, A
                             }
                             store_team_season_profile(conn, profile)
                             profiles_updated += 1
-                            has_profile = True
+                            profile_team_count += 1
+                has_profile = profile_team_count == 2
 
                 # ---------------------------------------------------
                 # 5. Load odds
@@ -335,11 +358,13 @@ def _run_impl(match_id: int | None = None, dry_run: bool = False) -> dict[str, A
                 # ---------------------------------------------------
                 lineup = {}
                 has_lineup = False
+                lineup_coverage = 0.0
                 try:
                     from scripts.features.build_lineup_strength import build_lineup_features
 
                     lineup = build_lineup_features(conn, mid, home_id, away_id)
                     has_lineup = lineup.get("has_lineup_data", False)
+                    lineup_coverage = float(lineup.get("covered_team_count", 0)) / 2
                 except Exception as e:
                     conn.rollback()
                     print(f"[snapshot] lineup error match {mid}: {e}")
@@ -349,11 +374,13 @@ def _run_impl(match_id: int | None = None, dry_run: bool = False) -> dict[str, A
                 # ---------------------------------------------------
                 injury = {}
                 has_injury = False
+                injury_coverage = 0.0
                 try:
                     from scripts.features.build_injury_impact import build_injury_features
 
                     injury = build_injury_features(conn, mid, home_id, away_id)
                     has_injury = injury.get("has_injury_data", False)
+                    injury_coverage = float(injury.get("covered_team_count", 0)) / 2
                 except Exception as e:
                     conn.rollback()
                     print(f"[snapshot] injury error match {mid}: {e}")
@@ -417,6 +444,7 @@ def _run_impl(match_id: int | None = None, dry_run: bool = False) -> dict[str, A
                 # ---------------------------------------------------
                 motivation = {}
                 has_motivation = False
+                motivation_coverage = 0.0
                 try:
                     from scripts.features.build_motivation_score import build_motivation_features
 
@@ -428,6 +456,7 @@ def _run_impl(match_id: int | None = None, dry_run: bool = False) -> dict[str, A
                         competition_season_id=competition_season_id,
                     )
                     has_motivation = motivation.get("has_motivation_data", False)
+                    motivation_coverage = float(motivation.get("covered_team_count", 0)) / 2
                 except Exception as e:
                     conn.rollback()
                     print(f"[snapshot] motivation error match {mid}: {e}")
@@ -449,7 +478,10 @@ def _run_impl(match_id: int | None = None, dry_run: bool = False) -> dict[str, A
                         away_id,
                         is_cup=False,
                     )
-                    has_tournament = tournament.get("has_tournament_incentive_data", False)
+                    has_tournament = bool(
+                        tournament.get("has_tournament_incentive_data", False)
+                        and has_motivation
+                    )
                 except Exception as e:
                     conn.rollback()
                     print(f"[snapshot] tournament error match {mid}: {e}")
@@ -469,10 +501,21 @@ def _run_impl(match_id: int | None = None, dry_run: bool = False) -> dict[str, A
                     "motivation": has_motivation,
                     "tournament": has_tournament,
                 }
+                dimension_coverage = {
+                    "odds": float(has_odds),
+                    "team_mapping": float(has_mapping),
+                    "team_profile": profile_team_count / 2,
+                    "lineup": lineup_coverage,
+                    "injury": injury_coverage,
+                    "rotation": lineup_coverage,
+                    "travel": float(has_travel),
+                    "weather": float(has_weather),
+                    "motivation": motivation_coverage,
+                    "tournament": float(has_tournament),
+                }
                 completeness = compute_full_completeness(dims)
                 for d in _DIMENSIONS:
-                    if dims[d]:
-                        dim_stats[d] += 1
+                    dim_stats[d] += dimension_coverage[d]
 
                 # ---------------------------------------------------
                 # 13. Assemble full 49-column snapshot
@@ -563,6 +606,15 @@ def _run_impl(match_id: int | None = None, dry_run: bool = False) -> dict[str, A
                     "raw_feature_refs": {
                         "feature_version": feature_version,
                         "dimensions": dims,
+                        "dimension_coverage": dimension_coverage,
+                        "dimension_status": {
+                            dimension: "available"
+                            if coverage >= 1
+                            else "partial"
+                            if coverage > 0
+                            else "missing"
+                            for dimension, coverage in dimension_coverage.items()
+                        },
                         "odds_implied": probs,
                         "source": "sporttery.cn",
                         "enrichment_sources": [

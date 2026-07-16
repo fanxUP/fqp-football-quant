@@ -120,11 +120,13 @@ def build_injury_features(
     away_impact = 0.0
     home_key = 0
     away_key = 0
+    home_injuries: list[dict] = []
+    away_injuries: list[dict] = []
 
     if home_team_id:
         try:
-            home_inj = get_injuries_for_team(conn, home_team_id)
-            result = compute_team_absence_impact(home_inj)
+            home_injuries = get_injuries_for_team(conn, home_team_id)
+            result = compute_team_absence_impact(home_injuries)
             home_impact = result["total_impact_score"]
             home_key = result["key_absence_count"]
         except Exception as e:
@@ -132,20 +134,24 @@ def build_injury_features(
 
     if away_team_id:
         try:
-            away_inj = get_injuries_for_team(conn, away_team_id)
-            result = compute_team_absence_impact(away_inj)
+            away_injuries = get_injuries_for_team(conn, away_team_id)
+            result = compute_team_absence_impact(away_injuries)
             away_impact = result["total_impact_score"]
             away_key = result["key_absence_count"]
         except Exception as e:
             print(f"[injury] error away team {away_team_id}: {e}")
 
+    covered_team_count = int(bool(home_injuries)) + int(bool(away_injuries))
     return {
-        "home_absence_impact_score": home_impact if home_team_id else None,
-        "away_absence_impact_score": away_impact if away_team_id else None,
+        "home_absence_impact_score": home_impact if home_injuries else None,
+        "away_absence_impact_score": away_impact if away_injuries else None,
         "absence_impact_diff": (
-            round(home_impact - away_impact, 4) if home_team_id and away_team_id else None
+            round(home_impact - away_impact, 4)
+            if home_injuries and away_injuries
+            else None
         ),
-        "home_key_absence_count": home_key if home_team_id else None,
-        "away_key_absence_count": away_key if away_team_id else None,
-        "has_injury_data": bool(home_team_id or away_team_id),
+        "home_key_absence_count": home_key if home_injuries else None,
+        "away_key_absence_count": away_key if away_injuries else None,
+        "has_injury_data": covered_team_count == 2,
+        "covered_team_count": covered_team_count,
     }

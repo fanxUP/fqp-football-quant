@@ -6,6 +6,7 @@ from scripts.jobs.run_feature_snapshot_build import (
     _resolve_competition_season_id,
     _snapshot_job_result,
     can_build_team_dependent_features,
+    compute_full_completeness,
 )
 
 
@@ -47,6 +48,38 @@ def test_snapshot_job_reports_failure_when_every_match_write_fails():
     assert result["status"] == "failed"
     assert result["failed_count"] == 3
     assert result["failed_matches"][0]["match_id"] == 1
+
+
+def test_snapshot_job_reports_degraded_quality_without_hiding_successful_writes():
+    result = _snapshot_job_result(
+        feature_version="v2_enriched",
+        matches_processed=4,
+        snapshots_built=4,
+        profiles_updated=0,
+        dim_stats={"odds": 4, "team_mapping": 4, "injury": 1},
+        failed_matches=[],
+    )
+
+    assert result["status"] == "ok"
+    assert result["quality_status"] == "degraded"
+    assert result["dimension_rates"]["odds"] == 1.0
+    assert result["dimension_rates"]["injury"] == 0.25
+    assert result["dimension_rates"]["weather"] == 0.0
+    assert result["average_completeness"] == 22.5
+
+
+def test_completeness_only_counts_real_usable_dimensions():
+    result = compute_full_completeness({
+        "odds": True,
+        "team_mapping": True,
+        "injury": False,
+        "motivation": False,
+    })
+
+    assert result["data_completeness_score"] == 20.0
+    assert result["source_confidence_score"] == 0.19
+    assert "injury" in result["missing_dimensions"]
+    assert "motivation" in result["missing_dimensions"]
 
 
 def test_feature_snapshot_clock_uses_shanghai_business_time(monkeypatch):
