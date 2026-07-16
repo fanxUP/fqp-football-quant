@@ -8,6 +8,7 @@ import EmptyState from '../shared/components/EmptyState';
 import ErrorState from '../shared/components/ErrorState';
 import LoadingSpinner from '../shared/components/LoadingSpinner';
 import PageHeader from '../shared/components/PageHeader';
+import ProfitLossTrendChart from '../visualization/ProfitLossTrendChart';
 
 function money(value: number): string {
   return `¥${value.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -87,42 +88,6 @@ function ResultBucketTable({ rows }: { rows: Array<[string, BettingResultBucket]
         </tbody>
       </table>
     </div>
-  );
-}
-
-function TrendChart({ results }: { results: BettingResults }) {
-  const data = results.trend;
-  if (data.length === 0) {
-    return <EmptyState icon="趋势" title="暂无趋势数据" description="完成比赛结算后会展示累计盈亏走势" />;
-  }
-
-  const width = 760;
-  const height = 260;
-  const padding = { top: 18, right: 24, bottom: 34, left: 56 };
-  const values = data.flatMap((point) => [point.meCumulativeProfitLoss, point.agentCumulativeProfitLoss, 0]);
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const range = max - min || 1;
-  const x = (index: number) => padding.left + (index / Math.max(data.length - 1, 1)) * (width - padding.left - padding.right);
-  const y = (value: number) => padding.top + (height - padding.top - padding.bottom) - ((value - min) / range) * (height - padding.top - padding.bottom);
-  const points = (key: 'meCumulativeProfitLoss' | 'agentCumulativeProfitLoss') =>
-    data.map((point, index) => `${x(index)},${y(point[key])}`).join(' ');
-  const zeroY = y(0);
-
-  return (
-    <svg viewBox={`0 0 ${width} ${height}`} style={{ width: '100%', height: 'auto', maxHeight: 320 }}>
-      <line x1={padding.left} y1={zeroY} x2={width - padding.right} y2={zeroY} stroke="var(--fqp-border)" strokeDasharray="4 4" />
-      <text x={padding.left - 8} y={zeroY + 4} textAnchor="end" fontSize="11" fill="var(--fqp-text-muted)">0</text>
-      <polyline points={points('meCumulativeProfitLoss')} fill="none" stroke="var(--fqp-accent, #2563eb)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-      <polyline points={points('agentCumulativeProfitLoss')} fill="none" stroke="var(--fqp-warning, #d97706)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-      {data.map((point, index) => (
-        <g key={point.date}>
-          <circle cx={x(index)} cy={y(point.meCumulativeProfitLoss)} r="3" fill="var(--fqp-accent, #2563eb)" />
-          <circle cx={x(index)} cy={y(point.agentCumulativeProfitLoss)} r="3" fill="var(--fqp-warning, #d97706)" />
-          <text x={x(index)} y={height - 12} textAnchor="middle" fontSize="11" fill="var(--fqp-text-muted)">{point.date.slice(5)}</text>
-        </g>
-      ))}
-    </svg>
   );
 }
 
@@ -215,19 +180,11 @@ export default function CompetitionPage() {
         ))}
       </div>
 
-      <div className="fqp-card" style={{ padding: 16, marginBottom: 16 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', marginBottom: 12 }}>
-          <div>
-            <div style={{ fontWeight: 700 }}>累计盈亏趋势</div>
-            <div style={{ fontSize: 12, color: 'var(--fqp-text-muted)', marginTop: 4 }}>
-              蓝线为我的累计盈亏，橙线为 Agent 累计盈亏
-            </div>
-          </div>
-          <div style={{ fontSize: 12, color: 'var(--fqp-text-muted)' }}>
-            更新 {results.updatedAt ? results.updatedAt.replace('T', ' ').slice(0, 16) : '-'}
-          </div>
-        </div>
-        <TrendChart results={results} />
+      <div style={{ marginBottom: 16 }}>
+        <ProfitLossTrendChart
+          data={results.trend}
+          updatedAt={results.updatedAt ? results.updatedAt.replace('T', ' ').slice(0, 16) : undefined}
+        />
       </div>
 
       <div className="fqp-card" style={{ padding: 16, marginBottom: 16 }}>

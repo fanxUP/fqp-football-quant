@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 
 import pytest
 from fastapi import HTTPException
@@ -361,6 +361,108 @@ def test_build_betting_results_splits_me_and_agent():
     assert result["owners"]["agent"]["profitLoss"] == -30
     assert result["leader"] == "me"
     assert result["trend"][-1]["agentCumulativeProfitLoss"] == -30
+
+
+def test_build_betting_results_fills_every_day_from_first_item_ticket():
+    result = betting._build_betting_results(
+        [
+            {
+                "ticketUid": "agent:1",
+                "owner": "agent",
+                "kind": "simulation",
+                "source": "agent_recommendation",
+                "status": "pending",
+                "date": "2026-07-04",
+                "itemCount": 2,
+                "stake": 20,
+            },
+            {
+                "ticketUid": "agent:2",
+                "owner": "agent",
+                "kind": "simulation",
+                "source": "agent_recommendation",
+                "status": "settled",
+                "date": "2026-07-05",
+                "settledAt": "2026-07-06T12:00:00",
+                "itemCount": 1,
+                "stake": 10,
+                "settledAmount": 25,
+                "profitLoss": 15,
+                "roi": 1.5,
+            },
+        ],
+        trend_start_date=date(2026, 7, 4),
+        today=date(2026, 7, 8),
+    )
+
+    assert [point["date"] for point in result["trend"]] == [
+        "2026-07-04",
+        "2026-07-05",
+        "2026-07-06",
+        "2026-07-07",
+        "2026-07-08",
+    ]
+    assert [point["agentDailyProfitLoss"] for point in result["trend"]] == [
+        0,
+        0,
+        15,
+        0,
+        0,
+    ]
+    assert [point["agentCumulativeProfitLoss"] for point in result["trend"]] == [
+        0,
+        0,
+        15,
+        15,
+        15,
+    ]
+
+
+def test_build_betting_results_ignores_empty_ticket_as_trend_start():
+    result = betting._build_betting_results(
+        [
+            {
+                "ticketUid": "agent:1",
+                "owner": "agent",
+                "kind": "simulation",
+                "source": "agent_recommendation",
+                "status": "pending",
+                "date": "2026-07-01",
+                "itemCount": 0,
+                "stake": 20,
+            }
+        ],
+        today=date(2026, 7, 8),
+    )
+
+    assert result["trend"] == []
+
+
+def test_build_betting_results_excludes_settlements_before_ticket_start():
+    result = betting._build_betting_results(
+        [
+            {
+                "ticketUid": "agent:legacy",
+                "owner": "agent",
+                "kind": "simulation",
+                "source": "agent_recommendation",
+                "status": "settled",
+                "date": "2026-07-01",
+                "settledAt": "2026-07-02T12:00:00",
+                "stake": 20,
+                "settledAmount": 0,
+                "profitLoss": -20,
+            }
+        ],
+        trend_start_date=date(2026, 7, 4),
+        today=date(2026, 7, 5),
+    )
+
+    assert [point["date"] for point in result["trend"]] == [
+        "2026-07-04",
+        "2026-07-05",
+    ]
+    assert result["trend"][-1]["agentCumulativeProfitLoss"] == 0
 
 
 def test_fetch_settled_betting_tickets_maps_all_historical_sources():

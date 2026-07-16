@@ -6,12 +6,13 @@ while giving the frontend one ticket ledger contract to render.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime, timedelta
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from apps.backend.src.db import get_db
+from scripts.business_time import business_today
 from scripts.competition_storage import ensure_current_round
 from scripts.real_ticket_storage import (
     create_real_ticket,
@@ -320,7 +321,7 @@ def _fetch_recent_settlements(conn, limit: int) -> list[tuple]:
 
 
 def _fetch_settled_betting_tickets(conn) -> list[dict]:
-    """Return the all-time realized ledger used by cumulative result metrics."""
+    """Return realized tickets that still have auditable betting items."""
     with conn.cursor() as cur:
         cur.execute(
             """
@@ -333,6 +334,20 @@ def _fetch_settled_betting_tickets(conn) -> list[dict]:
             LEFT JOIN real_tickets rt
               ON ts.ticket_source = 'real' AND rt.id = ts.ticket_id
             WHERE ts.ticket_source IN ('simulator', 'simulation', 'real')
+              AND (
+                  (ts.ticket_source = 'simulator' AND EXISTS (
+                      SELECT 1 FROM simulator_ticket_items sti
+                      WHERE sti.ticket_id = ts.ticket_id
+                  ))
+                  OR (ts.ticket_source = 'simulation' AND EXISTS (
+                      SELECT 1 FROM simulation_ticket_items sti
+                      WHERE sti.ticket_id = ts.ticket_id
+                  ))
+                  OR (ts.ticket_source = 'real' AND EXISTS (
+                      SELECT 1 FROM real_ticket_items rti
+                      WHERE rti.real_ticket_id = ts.ticket_id
+                  ))
+              )
             ORDER BY ts.settle_time, ts.id
             """
         )
@@ -367,6 +382,39 @@ def _fetch_settled_betting_tickets(conn) -> list[dict]:
             }
         )
     return tickets
+
+
+def _fetch_first_item_ticket_date(conn) -> date | None:
+    """Return the first local purchase date that has at least one betting item."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT MIN(ticket_date)
+            FROM (
+                SELECT (st.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Shanghai')::date
+                           AS ticket_date
+                FROM simulator_tickets st
+                WHERE EXISTS (
+                    SELECT 1 FROM simulator_ticket_items sti WHERE sti.ticket_id = st.id
+                )
+                UNION ALL
+                SELECT (st.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Shanghai')::date
+                FROM simulation_tickets st
+                WHERE EXISTS (
+                    SELECT 1 FROM simulation_ticket_items sti WHERE sti.ticket_id = st.id
+                )
+                UNION ALL
+                SELECT (COALESCE(rt.purchase_time, rt.created_at)
+                           AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Shanghai')::date
+                FROM real_tickets rt
+                WHERE EXISTS (
+                    SELECT 1 FROM real_ticket_items rti WHERE rti.real_ticket_id = rt.id
+                )
+            ) ticket_dates
+            """
+        )
+        row = cur.fetchone()
+    return row[0] if row and row[0] else None
 
 
 def _merge_result_tickets(current: list[dict], settled: list[dict]) -> list[dict]:
@@ -415,7 +463,19 @@ def _round_result_bucket(bucket: dict) -> dict:
     }
 
 
-def _build_betting_results(tickets: list[dict]) -> dict:
+def _valid_ticket_date(value: object) -> date | None:
+    try:
+        return date.fromisoformat(str(value)[:10])
+    except (TypeError, ValueError):
+        return None
+
+
+def _build_betting_results(
+    tickets: list[dict],
+    *,
+    trend_start_date: date | None = None,
+    today: date | None = None,
+) -> dict:
     owners = {"me": _empty_result_bucket(), "agent": _empty_result_bucket()}
     by_source: dict[str, dict] = {}
     daily: dict[str, dict] = {}
@@ -453,6 +513,63 @@ def _build_betting_results(tickets: list[dict]) -> dict:
         leader = "me"
     elif agent["profitLoss"] > me["profitLoss"]:
         leader = "agent"
+
+    if trend_start_date is None:
+        item_ticket_dates = [
+            parsed
+            for ticket in tickets
+            if int(ticket.get("itemCount") or 0) > 0
+            if (parsed := _valid_ticket_date(ticket.get("date"))) is not None
+        ]
+        if item_ticket_dates:
+            trend_start_date = min(item_ticket_dates)
+        else:
+            settled_dates = [
+                parsed
+                for ticket in tickets
+                if ticket.get("status") == "settled"
+                if (
+                    parsed := _valid_ticket_date(
+                        ticket.get("settledAt") or ticket.get("date")
+                    )
+                )
+                is not None
+            ]
+            trend_start_date = min(settled_dates) if settled_dates else None
+
+    if trend_start_date is not None:
+        valid_daily_dates = [
+            parsed
+            for day in daily
+            if (parsed := _valid_ticket_date(day)) is not None
+        ]
+        latest_data_date = max(valid_daily_dates, default=None)
+        trend_end_date = max(
+            today or business_today(),
+            latest_data_date or trend_start_date,
+            trend_start_date,
+        )
+        cursor = trend_start_date
+        while cursor <= trend_end_date:
+            day = cursor.isoformat()
+            daily.setdefault(
+                day,
+                {
+                    "date": day,
+                    "meStake": 0.0,
+                    "meProfitLoss": 0.0,
+                    "agentStake": 0.0,
+                    "agentProfitLoss": 0.0,
+                },
+            )
+            cursor += timedelta(days=1)
+
+        daily = {
+            day: row
+            for day, row in daily.items()
+            if (parsed := _valid_ticket_date(day)) is not None
+            and parsed >= trend_start_date
+        }
 
     trend = []
     cumulative = {
@@ -677,4 +794,8 @@ def get_betting_results(limit: int = Query(300, ge=1, le=500)):
     with get_db() as conn:
         current = _collect_betting_tickets(conn, limit)
         settled = _fetch_settled_betting_tickets(conn)
-    return _build_betting_results(_merge_result_tickets(current, settled))
+        trend_start_date = _fetch_first_item_ticket_date(conn)
+    return _build_betting_results(
+        _merge_result_tickets(current, settled),
+        trend_start_date=trend_start_date,
+    )

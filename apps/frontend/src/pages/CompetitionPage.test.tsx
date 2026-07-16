@@ -15,6 +15,10 @@ vi.mock('../core/apiClient', () => ({
   },
 }));
 
+vi.mock('../visualization/ProfitLossTrendChart', () => ({
+  default: () => <div>每日与累计盈亏趋势</div>,
+}));
+
 describe('CompetitionPage', () => {
   beforeEach(() => {
     apiMocks.results.mockResolvedValue({
@@ -38,6 +42,7 @@ describe('CompetitionPage', () => {
   it('shows the Agent daily buy-or-abstain decision', async () => {
     render(<CompetitionPage />);
 
+    expect(await screen.findByText('每日与累计盈亏趋势')).toBeInTheDocument();
     expect(await screen.findByText('Agent 每日决策')).toBeInTheDocument();
     expect(screen.getByText('已放弃')).toBeInTheDocument();
     expect(screen.getByText('数据完整度不足，今日不投注')).toBeInTheDocument();
