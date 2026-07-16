@@ -18,10 +18,46 @@ import re
 import time
 import urllib.request
 from datetime import datetime, timedelta
+from difflib import SequenceMatcher
 from typing import Any
 
 BASE_URL = "https://live.500.com/wanchang.php"
 REQUEST_TIMEOUT = 15
+
+
+def _normalize_team_name(value: str) -> str:
+    return re.sub(r"[\s·•\-_]", "", value or "").replace("足球俱乐部", "")
+
+
+def _team_similarity(left: str, right: str) -> float:
+    return SequenceMatcher(
+        None, _normalize_team_name(left), _normalize_team_name(right)
+    ).ratio()
+
+
+def _select_official_match(
+    home_team: str,
+    away_team: str,
+    candidates: list[tuple[int, str, str]],
+) -> int | None:
+    """Resolve a unique same-kickoff fixture without guessing through ambiguity."""
+    scored: list[tuple[float, int]] = []
+    for match_id, official_home, official_away in candidates:
+        home_score = _team_similarity(home_team, official_home)
+        away_score = _team_similarity(away_team, official_away)
+        one_exact = home_score == 1.0 or away_score == 1.0
+        translated_pair = max(home_score, away_score) >= 0.85 and min(
+            home_score, away_score
+        ) >= 0.40
+        if (one_exact and home_score + away_score >= 1.20) or translated_pair:
+            scored.append((home_score + away_score, match_id))
+
+    scored.sort(reverse=True)
+    if not scored:
+        return None
+    if len(scored) > 1 and scored[0][0] - scored[1][0] < 0.25:
+        return None
+    return scored[0][1]
 
 
 def _fetch_page(date_str: str) -> str:
@@ -260,28 +296,41 @@ def get_match_results(
     results: list[dict] = []
     with db_conn.cursor() as cur:
         for m in all_matches:
-            # Try matching by team names + approximate date
             home = m["home_team"]
             away = m["away_team"]
             match_date = m.get("match_date", "")
+            match_datetime = m.get("match_datetime", "")
 
-            # Query with ±1 day tolerance for date assignment differences
-            cur.execute(
-                """
-                SELECT id FROM official_matches
-                WHERE home_team_name = %s
-                  AND away_team_name = %s
-                  AND kickoff_time::date >= %s::date - INTERVAL '1 day'
-                  AND kickoff_time::date <= %s::date + INTERVAL '1 day'
-                ORDER BY kickoff_time
-                LIMIT 1
-                """,
-                (home, away, match_date, match_date),
-            )
-            row = cur.fetchone()
-            if row:
+            kickoff = None
+            try:
+                kickoff = datetime.strptime(
+                    f"{match_date[:4]}-{match_datetime}", "%Y-%m-%d %H:%M"
+                )
+            except (TypeError, ValueError):
+                pass
+
+            match_id = None
+            if kickoff is not None:
+                cur.execute(
+                    """
+                    SELECT id, home_team_name, away_team_name
+                    FROM official_matches
+                    WHERE kickoff_time BETWEEN %s - INTERVAL '15 minutes'
+                                           AND %s + INTERVAL '15 minutes'
+                    ORDER BY kickoff_time, id
+                    """,
+                    (kickoff, kickoff),
+                )
+                match_id = _select_official_match(home, away, list(cur.fetchall()))
+
+            if match_id is not None:
                 result = _to_result_dict(m)
-                result["match_id"] = row[0]
+                result["match_id"] = match_id
+                result["raw_json"]["official_match_resolution"] = {
+                    "method": "kickoff_and_team_similarity",
+                    "provider_home_team": home,
+                    "provider_away_team": away,
+                }
                 results.append(result)
 
     return results
