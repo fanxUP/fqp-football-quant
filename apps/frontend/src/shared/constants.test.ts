@@ -19,6 +19,7 @@ describe('modelNameLabel', () => {
 describe('彩票玩法中文标签', () => {
   it('将 mixed 和 single 转换为中文业务名称', () => {
     expect(playTypeLabel('mixed')).toBe('混合过关');
+    expect(playTypeLabel('single')).toBe('单关');
     expect(passTypeLabel('single')).toBe('单关');
   });
 });
