@@ -2,6 +2,7 @@
 services:
   postgres:
     image: postgres
+    init: true
     environment:
       POSTGRES_DB: fqp
       POSTGRES_USER: fqp

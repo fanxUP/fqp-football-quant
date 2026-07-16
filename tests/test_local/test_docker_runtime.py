@@ -41,6 +41,15 @@ def test_frontend_has_a_readiness_healthcheck() -> None:
     assert healthcheck["retries"] >= 5
 
 
+def test_postgres_uses_an_init_process_to_reap_docker_exec_children() -> None:
+    for compose_path in (
+        PROJECT_ROOT / "ops/local/docker-compose.local.yml",
+        PROJECT_ROOT / "ops/docker-compose.yml",
+    ):
+        compose = yaml.safe_load(compose_path.read_text(encoding="utf-8"))
+        assert compose["services"]["postgres"]["init"] is True
+
+
 def test_backend_and_scheduler_share_scheduler_heartbeat() -> None:
     compose = yaml.safe_load(
         (PROJECT_ROOT / "ops/local/docker-compose.local.yml").read_text(encoding="utf-8")
