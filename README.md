@@ -53,7 +53,7 @@ cp .env.local.example .env.local
 
 - 前端：http://127.0.0.1:8066
 - 后端：http://127.0.0.1:8006
-- 本机开发要求 Python 3.11+、Node.js 和 PostgreSQL。
+- 本机开发统一使用 Python 3.14、Node.js 和 PostgreSQL。
 - `.env.local` 只保存在本机，不提交 GitHub。
 
 切换到 Docker Desktop（自动检查工作区、推送 GitHub、重建容器并做健康检查）：

@@ -28,7 +28,7 @@
 
 脚本会校验：
 
-- 项目 `.venv/bin/python` 为 Python 3.11+
+- 项目 `.venv/bin/python` 为 Python 3.14
 - `.env.local` 存在且 `DATABASE_URL` 指向 `127.0.0.1`
 - 本机 PostgreSQL 可连接
 - APScheduler 已安装

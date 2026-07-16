@@ -20,8 +20,8 @@ set +a
 [[ -n "${DATABASE_URL:-}" ]] || fail "DATABASE_URL is not configured"
 [[ "$DATABASE_URL" != *"@postgres:"* ]] || fail "Docker hostname is not allowed; use 127.0.0.1"
 
-"$PYTHON_BIN" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)' \
-  || fail "Python 3.11+ is required"
+"$PYTHON_BIN" -c 'import sys; raise SystemExit(0 if sys.version_info[:2] == (3, 14) else 1)' \
+  || fail "Python 3.14 is required"
 "$PYTHON_BIN" -c 'import psycopg2, os; conn=psycopg2.connect(os.environ["DATABASE_URL"]); conn.close()' \
   || fail "Cannot connect to local PostgreSQL"
 "$PYTHON_BIN" -c 'import apscheduler' \

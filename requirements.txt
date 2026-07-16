@@ -20,7 +20,10 @@ loguru
 
 # Analysis (Batch 5 — feature importance + SHAP explainability)
 xgboost
-shap
+shap==0.52.0
+# Python 3.14 compatibility pair required by SHAP's native runtime.
+numba==0.66.0
+llvmlite==0.48.0
 
 # OCR (optional — uncomment to enable ticket image recognition)
 # Requires: brew install tesseract tesseract-lang (macOS) or apt install tesseract-ocr tesseract-ocr-chi-sim (Linux)

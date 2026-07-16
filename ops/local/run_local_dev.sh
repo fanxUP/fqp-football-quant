@@ -16,17 +16,17 @@ command -v npm >/dev/null 2>&1 || fail "npm is required."
 
 PYTHON_BIN="${FQP_PYTHON_BIN:-$PROJECT_ROOT/.venv/bin/python}"
 if [[ ! -x "$PYTHON_BIN" ]]; then
-    if command -v python3.11 >/dev/null 2>&1; then
-        PYTHON_BIN="$(command -v python3.11)"
+    if command -v python3.14 >/dev/null 2>&1; then
+        PYTHON_BIN="$(command -v python3.14)"
     elif command -v python3 >/dev/null 2>&1; then
         PYTHON_BIN="$(command -v python3)"
     else
-        fail "Python 3.11+ is required."
+        fail "Python 3.14 is required."
     fi
 fi
 PYTHON_VERSION="$("$PYTHON_BIN" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
-"$PYTHON_BIN" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)' \
-    || fail "Python 3.11+ is required; current runtime is $PYTHON_BIN ($PYTHON_VERSION)."
+"$PYTHON_BIN" -c 'import sys; raise SystemExit(0 if sys.version_info[:2] == (3, 14) else 1)' \
+    || fail "Python 3.14 is required; current runtime is $PYTHON_BIN ($PYTHON_VERSION)."
 
 if [[ ! -f "$ENV_FILE" ]]; then
     fail "Missing $ENV_FILE. Copy .env.local.example to .env.local and configure the host database."
