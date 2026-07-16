@@ -40,6 +40,13 @@ function sourceLabel(sourceKey: string): string {
   return `${ownerLabel}${kindLabel} · ${sourceMap[source] || source}`;
 }
 
+function ticketLabel(ticket: BettingTicket): string {
+  const ticketType = ticket.owner === 'agent'
+    ? 'Agent票'
+    : ticket.kind === 'real' ? '实票' : '投注票';
+  return `${ticketType} · ${ticket.ticketNumber}`;
+}
+
 function ownerCards(results: BettingResults) {
   const me = results.owners.me;
   const agent = results.owners.agent;
@@ -54,7 +61,7 @@ function ownerCards(results: BettingResults) {
 
 function ResultBucketTable({ rows }: { rows: Array<[string, BettingResultBucket]> }) {
   if (rows.length === 0) {
-    return <EmptyState icon="结果" title="暂无来源拆分" description="投注或结算后会自动生成来源统计" />;
+    return <EmptyState icon="彩票" title="暂无彩票汇总" description="投注或结算后会自动生成彩票统计" />;
   }
 
   return (
@@ -94,7 +101,7 @@ function ResultBucketTable({ rows }: { rows: Array<[string, BettingResultBucket]
 function TicketRow({ ticket }: { ticket: BettingTicket }) {
   return (
     <tr>
-      <td style={{ fontWeight: 600 }}>{ticket.title}</td>
+      <td className="fqp-mono" style={{ fontWeight: 600 }}>{ticketLabel(ticket)}</td>
       <td>{ticket.owner === 'agent' ? 'Agent' : '我的'}</td>
       <td>{ticket.kind === 'real' ? '彩票' : '投注票'}</td>
       <td className="fqp-mono">{ticket.date}</td>
@@ -196,13 +203,13 @@ export default function CompetitionPage() {
       </div>
 
       <div className="fqp-card" style={{ padding: 16, marginBottom: 16 }}>
-        <div style={{ fontWeight: 700, marginBottom: 12 }}>来源拆分</div>
+        <div style={{ fontWeight: 700, marginBottom: 12 }}>彩票汇总</div>
         <ResultBucketTable rows={sourceRows} />
       </div>
 
       <div className="fqp-card" style={{ padding: 16 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', marginBottom: 12 }}>
-          <div style={{ fontWeight: 700 }}>最近彩票与投注</div>
+          <div style={{ fontWeight: 700 }}>彩票投注列表</div>
           <button className="fqp-btn" onClick={() => navigate('/betting?tab=bet-slip')}>打开投注台</button>
         </div>
         {recentTickets.length > 0 ? (
