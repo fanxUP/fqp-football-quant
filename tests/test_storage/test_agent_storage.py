@@ -11,12 +11,14 @@ from scripts.agent_storage import (
     create_review_report,
     finish_job_run,
     get_agent,
+    get_agent_summary,
     get_agent_task,
     list_agent_tasks,
     list_agents,
     list_audit_logs,
     list_job_runs,
     list_review_gates,
+    list_stale_tasks,
     list_task_artifacts,
     resolve_review_gate,
     retry_job_run,
@@ -164,6 +166,58 @@ class TestTransitionTask:
             transition_task(mock_conn, "TASK-001", "not_a_status")
         except ValueError as exc:
             assert "Unsupported task status" in str(exc)
+        else:
+            raise AssertionError("expected ValueError")
+        mock_cur.execute.assert_not_called()
+
+
+class TestStaleAgentTasks:
+    def test_summary_counts_stale_tasks_separately_from_jobs(self):
+        mock_conn, mock_cur = _mock_conn()
+        mock_cur.fetchone.side_effect = [
+            [11], [2], [1], [3], [4], [0], [1],
+        ]
+
+        result = get_agent_summary(mock_conn)
+
+        assert result["stale_jobs"] == 3
+        assert result["stale_tasks"] == 4
+        stale_task_query = mock_cur.execute.call_args_list[4].args[0]
+        assert "FROM agent_tasks" in stale_task_query
+        assert "running" in stale_task_query
+        assert "in_progress" in stale_task_query
+
+    def test_lists_active_tasks_older_than_threshold(self):
+        started_at = MagicMock(isoformat=lambda: "2026-07-02T10:00:00")
+        updated_at = MagicMock(isoformat=lambda: "2026-07-02T10:05:00")
+        mock_conn, mock_cur = _mock_conn(fetchall=[
+            (7, "TEST-001", "Test task", "qa_agent", "in_progress",
+             started_at, updated_at, 20160.5),
+        ])
+
+        result = list_stale_tasks(mock_conn, threshold_minutes=60, limit=20)
+
+        assert result == [{
+            "id": 7,
+            "task_code": "TEST-001",
+            "task_title": "Test task",
+            "owner_agent": "qa_agent",
+            "status": "in_progress",
+            "started_at": "2026-07-02T10:00:00",
+            "updated_at": "2026-07-02T10:05:00",
+            "stale_minutes": 20160.5,
+        }]
+        query, params = mock_cur.execute.call_args.args
+        assert "COALESCE(updated_at, started_at, assigned_at, created_at)" in query
+        assert params == (60, 20)
+
+    def test_stale_task_threshold_must_be_positive(self):
+        mock_conn, mock_cur = _mock_conn()
+
+        try:
+            list_stale_tasks(mock_conn, threshold_minutes=0)
+        except ValueError as exc:
+            assert "threshold_minutes" in str(exc)
         else:
             raise AssertionError("expected ValueError")
         mock_cur.execute.assert_not_called()

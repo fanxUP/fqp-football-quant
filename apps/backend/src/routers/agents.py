@@ -30,6 +30,9 @@ from scripts.agent_storage import (
     list_stale_jobs as _list_stale_jobs,
 )
 from scripts.agent_storage import (
+    list_stale_tasks as _list_stale_tasks,
+)
+from scripts.agent_storage import (
     resolve_review_gate as _resolve_gate,
 )
 from scripts.agent_storage import (
@@ -153,3 +156,14 @@ def stale_agent_jobs(
     with get_db() as conn:
         jobs = _list_stale_jobs(conn, threshold_minutes=threshold_minutes, limit=limit)
     return {"jobs": jobs, "total": len(jobs), "threshold_minutes": threshold_minutes}
+
+
+@router.get("/api/agent-stale-tasks")
+def stale_agent_tasks(
+    threshold_minutes: int = Query(60, ge=1),
+    limit: int = Query(50, ge=1, le=200),
+):
+    """List active Agent tasks with no recent progress update."""
+    with get_db() as conn:
+        tasks = _list_stale_tasks(conn, threshold_minutes=threshold_minutes, limit=limit)
+    return {"tasks": tasks, "total": len(tasks), "threshold_minutes": threshold_minutes}

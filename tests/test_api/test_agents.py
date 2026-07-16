@@ -26,6 +26,7 @@ def test_agent_summary_endpoint_returns_counts(client):
         "open_tasks": 2,
         "running_jobs": 1,
         "stale_jobs": 0,
+        "stale_tasks": 1,
         "failed_jobs_24h": 0,
         "pending_review_gates": 1,
         "scheduler_running": True,
@@ -66,6 +67,16 @@ def test_stale_jobs_endpoint_returns_diagnostics(client):
         resp = client.get("/api/agent-stale-jobs?threshold_minutes=30")
     assert resp.status_code == 200
     assert resp.json() == {"jobs": jobs, "total": 1, "threshold_minutes": 30}
+
+
+def test_stale_tasks_endpoint_returns_diagnostics(client):
+    tasks = [{"id": 7, "task_code": "TEST-001", "stale_minutes": 20160.5}]
+    mock_conn = MagicMock()
+    with patch("apps.backend.src.routers.agents.get_db", return_value=mock_conn), \
+         patch("apps.backend.src.routers.agents._list_stale_tasks", return_value=tasks):
+        resp = client.get("/api/agent-stale-tasks?threshold_minutes=60")
+    assert resp.status_code == 200
+    assert resp.json() == {"tasks": tasks, "total": 1, "threshold_minutes": 60}
 
 
 def test_scheduler_status_endpoint_returns_diagnostics(client):

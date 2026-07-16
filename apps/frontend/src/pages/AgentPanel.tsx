@@ -8,7 +8,7 @@ import StatusBadge from '../shared/components/StatusBadge';
 import ErrorState from '../shared/components/ErrorState';
 import { statusLabel, riskLabel, actionLabel } from '../shared/constants';
 
-type TabKey = 'tasks' | 'jobs' | 'stale' | 'gates' | 'audit';
+type TabKey = 'tasks' | 'jobs' | 'stale' | 'staleTasks' | 'gates' | 'audit';
 
 // ---- Types for agent data ----
 interface AgentTask {
@@ -63,6 +63,7 @@ interface AgentSummary {
   open_tasks: number;
   running_jobs: number;
   stale_jobs: number;
+  stale_tasks: number;
   failed_jobs_24h: number;
   pending_review_gates: number;
   scheduler_running: boolean;
@@ -93,6 +94,17 @@ interface StaleJob {
   running_minutes: number;
 }
 
+interface StaleTask {
+  id: number;
+  task_code: string;
+  task_title: string;
+  owner_agent: string;
+  status: string;
+  started_at: string | null;
+  updated_at: string | null;
+  stale_minutes: number;
+}
+
 export default function AgentPanel() {
   const [activeTab, setActiveTab] = useState<TabKey>('tasks');
   const [summary, setSummary] = useState<AgentSummary | null>(null);
@@ -107,7 +119,7 @@ export default function AgentPanel() {
         fetch('/api/agents').then((r) => r.json()),
       ])
         .then(([summaryResponse, schedulerResponse, agentsResponse]) => {
-          setSummary(summaryResponse.summary || null);
+          setSummary(summaryResponse.summary ? { stale_tasks: 0, ...summaryResponse.summary } : null);
           setScheduler(schedulerResponse.scheduler || null);
           setAgents(agentsResponse.agents || []);
         })
@@ -145,7 +157,7 @@ export default function AgentPanel() {
           <Card className="fqp-stat-card"><div className="fqp-stat-label">活跃 Agent</div><div className="fqp-stat-value">{summary.active_agents}</div></Card>
           <Card className="fqp-stat-card"><div className="fqp-stat-label">未完成任务</div><div className="fqp-stat-value">{summary.open_tasks}</div></Card>
           <Card className="fqp-stat-card"><div className="fqp-stat-label">运行中 Job</div><div className="fqp-stat-value">{summary.running_jobs}</div></Card>
-          <Card className="fqp-stat-card"><div className="fqp-stat-label">疑似卡住</div><div className="fqp-stat-value" style={{ color: summary.stale_jobs ? 'var(--fqp-warning)' : undefined }}>{summary.stale_jobs}</div></Card>
+          <Card className="fqp-stat-card"><div className="fqp-stat-label">疑似卡住</div><div className="fqp-stat-value" style={{ color: summary.stale_jobs + summary.stale_tasks ? 'var(--fqp-warning)' : undefined }}>{summary.stale_jobs + summary.stale_tasks}</div><div className="fqp-stat-sub">{summary.stale_tasks} 个超时任务 · {summary.stale_jobs} 个超时 Job</div></Card>
           <Card className="fqp-stat-card"><div className="fqp-stat-label">待审核闸门</div><div className="fqp-stat-value" style={{ color: summary.pending_review_gates ? 'var(--fqp-warning)' : undefined }}>{summary.pending_review_gates}</div></Card>
           <Card className="fqp-stat-card"><div className="fqp-stat-label">24h 失败 Job</div><div className="fqp-stat-value" style={{ color: summary.failed_jobs_24h ? 'var(--fqp-red-neon)' : undefined }}>{summary.failed_jobs_24h}</div></Card>
           <Card className="fqp-stat-card"><div className="fqp-stat-label">Scheduler</div><div className="fqp-stat-value" style={{ color: summary.scheduler_running ? 'var(--fqp-green-neon)' : 'var(--fqp-red-neon)', fontSize: 24 }}>{summary.scheduler_running ? '在线' : '离线'}</div><div className="fqp-stat-sub">{scheduler?.heartbeat_at ? `心跳 ${scheduler.heartbeat_at.replace('T', ' ')}` : '请启动本机 Scheduler'}</div></Card>
@@ -156,6 +168,7 @@ export default function AgentPanel() {
           ['tasks', 'Agent 任务'],
           ['jobs', '任务执行'],
           ['stale', '超时 Job'],
+          ['staleTasks', '超时任务'],
           ['gates', '审核闸门'],
           ['audit', '审计日志'],
         ] as [TabKey, string][]).map(([key, label]) => (
@@ -173,11 +186,40 @@ export default function AgentPanel() {
         {activeTab === 'tasks' && <TasksTab />}
         {activeTab === 'jobs' && <JobsTab />}
         {activeTab === 'stale' && <StaleJobsTab />}
+        {activeTab === 'staleTasks' && <StaleTasksTab />}
         {activeTab === 'gates' && <GatesTab />}
         {activeTab === 'audit' && <AuditTab />}
       </div>
     </div>
   );
+}
+
+function StaleTasksTab() {
+  const [tasks, setTasks] = useState<StaleTask[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const fetchStaleTasks = () => {
+    setLoading(true); setError(null);
+    fetch('/api/agent-stale-tasks?threshold_minutes=60&limit=100')
+      .then((r) => r.json())
+      .then((d) => { setTasks(d.tasks || []); setLoading(false); })
+      .catch((e) => { setError(e.message); setLoading(false); });
+  };
+  useEffect(() => {
+    fetchStaleTasks();
+    const timer = window.setInterval(fetchStaleTasks, 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
+  const columns: Column<StaleTask>[] = [
+    { key: 'task_code', title: '任务编号' },
+    { key: 'task_title', title: '任务标题' },
+    { key: 'owner_agent', title: '负责 Agent' },
+    { key: 'status', title: '状态', render: (v) => <StatusBadge status="warning" label={statusLabel(String(v))} /> },
+    { key: 'stale_minutes', title: '未更新时长', render: (v) => `${Number(v).toFixed(1)} 分钟` },
+    { key: 'updated_at', title: '最后更新', render: (v) => v ? String(v).replace('T', ' ').slice(0, 19) : '—' },
+  ];
+  if (error) return <ErrorState message={error} onRetry={fetchStaleTasks} />;
+  return <Card style={{ padding: 0, overflow: 'hidden' }}><DataTable columns={columns} rows={tasks} loading={loading} emptyText="暂无超时 Agent 任务" rowKey={(r) => String(r.id)} /></Card>;
 }
 
 function StaleJobsTab() {

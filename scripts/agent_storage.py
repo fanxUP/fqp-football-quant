@@ -683,6 +683,10 @@ def get_agent_summary(conn: Any) -> dict[str, int | bool]:
         "running_jobs": "SELECT COUNT(*) FROM ai_job_runs WHERE status = 'running'",
         "stale_jobs": """SELECT COUNT(*) FROM ai_job_runs
                          WHERE status = 'running' AND started_at < now() - interval '30 minutes'""",
+        "stale_tasks": """SELECT COUNT(*) FROM agent_tasks
+                          WHERE status IN ('running', 'in_progress')
+                            AND COALESCE(updated_at, started_at, assigned_at, created_at)
+                                < now() - interval '60 minutes'""",
         "failed_jobs_24h": """SELECT COUNT(*) FROM ai_job_runs
                               WHERE status = 'failed' AND created_at >= now() - interval '24 hours'""",
         "pending_review_gates": """SELECT COUNT(*) FROM agent_human_review_gates
@@ -723,6 +727,45 @@ def list_stale_jobs(conn: Any, threshold_minutes: int = 30, limit: int = 50) -> 
             "started_at": r[4].isoformat() if hasattr(r[4], "isoformat") else str(r[4]),
             "running_minutes": round(float(r[5] or 0), 1),
             "input_refs": r[6],
+        }
+        for r in rows
+    ]
+
+
+def list_stale_tasks(conn: Any, threshold_minutes: int = 60, limit: int = 50) -> list[dict]:
+    """List active Agent tasks with no progress update before the timeout."""
+    if threshold_minutes < 1:
+        raise ValueError("threshold_minutes must be positive")
+    with conn.cursor() as cur:
+        cur.execute(
+            """SELECT id, task_code, task_title, owner_agent, status,
+                      started_at, updated_at,
+                      EXTRACT(EPOCH FROM (
+                          now() - COALESCE(updated_at, started_at, assigned_at, created_at)
+                      )) / 60
+               FROM agent_tasks
+               WHERE status IN ('running', 'in_progress')
+                 AND COALESCE(updated_at, started_at, assigned_at, created_at)
+                     < now() - (%s * interval '1 minute')
+               ORDER BY COALESCE(updated_at, started_at, assigned_at, created_at) ASC
+               LIMIT %s""",
+            (threshold_minutes, limit),
+        )
+        rows = cur.fetchall()
+
+    def ts(value: Any) -> str | None:
+        return value.isoformat() if hasattr(value, "isoformat") else (str(value) if value else None)
+
+    return [
+        {
+            "id": r[0],
+            "task_code": r[1],
+            "task_title": r[2],
+            "owner_agent": r[3],
+            "status": r[4],
+            "started_at": ts(r[5]),
+            "updated_at": ts(r[6]),
+            "stale_minutes": round(float(r[7] or 0), 1),
         }
         for r in rows
     ]
