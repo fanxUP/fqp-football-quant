@@ -1,5 +1,6 @@
-from pathlib import Path
+from __future__ import annotations
 
+from pathlib import Path
 
 MIGRATION = Path("sql/40_ticket_settlement_repairs.sql")
 
