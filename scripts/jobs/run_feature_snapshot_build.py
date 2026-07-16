@@ -17,6 +17,15 @@ from zoneinfo import ZoneInfo
 
 from apps.backend.src.db import get_db
 from scripts.agents.task_queue import finish_tracked_job, start_tracked_job
+from scripts.feature_quality import (
+    FEATURE_DIMENSIONS as _DIMENSIONS,
+)
+from scripts.feature_quality import (
+    compute_full_completeness,
+)
+from scripts.feature_quality import (
+    snapshot_job_result as _snapshot_job_result,
+)
 from scripts.feature_storage import store_match_feature_snapshot, store_team_season_profile
 from scripts.features.build_basic_features import (
     compute_odds_implied_probabilities,
@@ -116,93 +125,6 @@ def _resolve_match_stadium_id(
 def can_build_team_dependent_features(home_id: int | None, away_id: int | None) -> bool:
     """Return whether enrichment builders may safely use team foreign keys."""
     return home_id is not None and away_id is not None
-
-
-# ---------------------------------------------------------------------------
-# Upgraded data completeness — all 10 dimensions
-# ---------------------------------------------------------------------------
-
-_DIMENSIONS = [
-    "odds",
-    "team_mapping",
-    "team_profile",
-    "lineup",
-    "injury",
-    "rotation",
-    "travel",
-    "weather",
-    "motivation",
-    "tournament",
-]
-
-
-def compute_full_completeness(dimensions: dict[str, bool]) -> dict[str, Any]:
-    """Compute data completeness across all 10 feature dimensions.
-
-    Each dimension contributes 10% to the total score.
-    """
-    score = 0.0
-    for dim in _DIMENSIONS:
-        if dimensions.get(dim, False):
-            score += 10.0
-
-    completeness = round(score, 4)
-    missing = [d for d in _DIMENSIONS if not dimensions.get(d, False)]
-    uncertainty = round(100.0 - completeness, 4)
-
-    return {
-        "data_completeness_score": completeness,
-        "uncertainty_score": uncertainty,
-        "source_confidence_score": round(completeness / 100.0 * 0.95, 4),
-        "missing_dimensions": missing,
-    }
-
-
-def _snapshot_job_result(
-    *,
-    feature_version: str,
-    matches_processed: int,
-    snapshots_built: int,
-    profiles_updated: int,
-    dim_stats: dict[str, float],
-    failed_matches: list[dict[str, Any]],
-) -> dict[str, Any]:
-    """Build an auditable summary without reporting an all-match failure as success."""
-    execution_failed = matches_processed > 0 and snapshots_built == 0
-    dimension_rates = {
-        dimension: round(dim_stats.get(dimension, 0.0) / matches_processed, 4)
-        if matches_processed
-        else 0.0
-        for dimension in _DIMENSIONS
-    }
-    average_completeness = round(
-        sum(dimension_rates.values()) / len(_DIMENSIONS) * 100,
-        1,
-    )
-    quality_status = (
-        "failed"
-        if execution_failed
-        else "healthy"
-        if average_completeness >= 80
-        else "degraded"
-    )
-    return {
-        "status": "failed" if execution_failed else "ok",
-        "quality_status": quality_status,
-        "quality_note": f"平均特征完整度 {average_completeness:.1f}%",
-        "average_completeness": average_completeness,
-        "feature_version": feature_version,
-        "snapshots_built": snapshots_built,
-        "profiles_updated": profiles_updated,
-        "matches_processed": matches_processed,
-        "failed_count": len(failed_matches),
-        "failed_matches": failed_matches,
-        "dimensions_coverage": {
-            dimension: f"{dim_stats.get(dimension, 0.0):g}/{matches_processed}"
-            for dimension in _DIMENSIONS
-        },
-        "dimension_rates": dimension_rates,
-    }
 
 
 # ---------------------------------------------------------------------------
