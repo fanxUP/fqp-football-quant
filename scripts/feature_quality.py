@@ -17,11 +17,33 @@ FEATURE_DIMENSIONS = (
     "tournament",
 )
 
+# Prediction evidence is not equally valuable or equally available before a
+# match. Official odds, identity mapping, and both teams' pre-match form make
+# up the conservative 50-point minimum evidence chain. Enrichment dimensions
+# improve confidence above that floor without making late lineup/weather data
+# a prerequisite for every daily recommendation.
+FEATURE_WEIGHTS = {
+    "odds": 20.0,
+    "team_mapping": 10.0,
+    "team_profile": 20.0,
+    "lineup": 10.0,
+    "injury": 10.0,
+    "rotation": 5.0,
+    "travel": 5.0,
+    "weather": 5.0,
+    "motivation": 10.0,
+    "tournament": 5.0,
+}
+
 
 def compute_full_completeness(dimensions: dict[str, bool]) -> dict[str, Any]:
     """Score only dimensions backed by usable match-level data."""
     completeness = round(
-        sum(10.0 for dimension in FEATURE_DIMENSIONS if dimensions.get(dimension, False)),
+        sum(
+            FEATURE_WEIGHTS[dimension]
+            for dimension in FEATURE_DIMENSIONS
+            if dimensions.get(dimension, False)
+        ),
         4,
     )
     return {
@@ -54,7 +76,10 @@ def snapshot_job_result(
         for dimension in FEATURE_DIMENSIONS
     }
     average_completeness = round(
-        sum(dimension_rates.values()) / len(FEATURE_DIMENSIONS) * 100,
+        sum(
+            dimension_rates[dimension] * FEATURE_WEIGHTS[dimension]
+            for dimension in FEATURE_DIMENSIONS
+        ),
         1,
     )
     quality_status = (

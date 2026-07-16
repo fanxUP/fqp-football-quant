@@ -10,7 +10,9 @@ Idempotent — safe to run repeatedly. Uses INSERT ... ON CONFLICT DO NOTHING.
 
 from __future__ import annotations
 
+import hashlib
 import re
+from datetime import datetime
 from typing import Any
 
 from apps.backend.src.db import get_db
@@ -32,6 +34,107 @@ def _slugify(name: str) -> str:
     return slug[:6] if len(slug) >= 3 else slug
 
 
+def _competition_code(league_name: str) -> str:
+    """Build a stable code for official competitions without provider IDs."""
+    digest = hashlib.sha1(league_name.strip().encode("utf-8")).hexdigest()[:12]
+    return f"sporttery:{digest}"
+
+
+def _upsert_competition_season(
+    cur: Any,
+    *,
+    league_name: str,
+    kickoff_time: datetime,
+) -> dict[str, int]:
+    """Ensure an official league and its calendar-year season are resolvable."""
+    created = {"competitions_created": 0, "competition_seasons_created": 0}
+    cur.execute(
+        """
+        SELECT id
+        FROM competitions
+        WHERE competition_name_cn = %s
+        ORDER BY CASE WHEN LEFT(competition_code, 12) = 'apifootball:' THEN 0 ELSE 1 END, id
+        LIMIT 1
+        """,
+        (league_name,),
+    )
+    row = cur.fetchone()
+    if row:
+        competition_id = row[0]
+    else:
+        is_cup = any(
+            marker in league_name
+            for marker in ("杯", "冠军联赛", "欧罗巴", "解放者")
+        )
+        cur.execute(
+            """
+            INSERT INTO competitions (
+                competition_code, competition_name_cn, country,
+                competition_type, is_cup, is_league
+            )
+            VALUES (%s, %s, %s, %s, %s, %s)
+            ON CONFLICT (competition_code) DO UPDATE SET
+                competition_name_cn = EXCLUDED.competition_name_cn,
+                updated_at = now()
+            RETURNING id
+            """,
+            (
+                _competition_code(league_name),
+                league_name,
+                _infer_country("", league_name),
+                "cup" if is_cup else "league",
+                is_cup,
+                not is_cup,
+            ),
+        )
+        row = cur.fetchone()
+        if not row:
+            return created
+        competition_id = row[0]
+        created["competitions_created"] = 1
+
+    season_code = str(kickoff_time.year)
+    cur.execute("SELECT id FROM seasons WHERE season_code = %s LIMIT 1", (season_code,))
+    row = cur.fetchone()
+    if row:
+        season_id = row[0]
+    else:
+        cur.execute(
+            """
+            INSERT INTO seasons (
+                season_code, season_name, start_date, end_date, is_current
+            )
+            VALUES (%s, %s, %s, %s, %s)
+            ON CONFLICT (season_code) DO UPDATE SET updated_at = now()
+            RETURNING id
+            """,
+            (
+                season_code,
+                f"{season_code}赛季",
+                f"{season_code}-01-01",
+                f"{season_code}-12-31",
+                kickoff_time.year == datetime.now().year,
+            ),
+        )
+        row = cur.fetchone()
+        if not row:
+            return created
+        season_id = row[0]
+
+    cur.execute(
+        """
+        INSERT INTO competition_seasons (competition_id, season_id)
+        VALUES (%s, %s)
+        ON CONFLICT (competition_id, season_id) DO NOTHING
+        RETURNING id
+        """,
+        (competition_id, season_id),
+    )
+    if cur.fetchone():
+        created["competition_seasons_created"] = 1
+    return created
+
+
 def populate_all() -> dict[str, Any]:
     """Run all auto-population steps. Returns summary counts."""
     result: dict[str, Any] = {
@@ -48,15 +151,19 @@ def populate_all() -> dict[str, Any]:
             # 1. Extract unique teams from official_matches
             # -----------------------------------------------------------
             cur.execute(
-                "SELECT DISTINCT home_team_name, away_team_name, league_name FROM official_matches"
+                """
+                SELECT DISTINCT home_team_name, away_team_name, league_name, kickoff_time
+                FROM official_matches
+                """
             )
             rows = cur.fetchall()
 
             seen_teams: set[str] = set()
             league_set: set[str] = set()
+            league_seasons: dict[tuple[str, int], datetime] = {}
             team_league_map: dict[str, str] = {}
 
-            for home, away, league in rows:
+            for home, away, league, kickoff_time in rows:
                 if home:
                     seen_teams.add(home)
                     if league and home not in team_league_map:
@@ -67,6 +174,8 @@ def populate_all() -> dict[str, Any]:
                         team_league_map[away] = league
                 if league:
                     league_set.add(league)
+                    if isinstance(kickoff_time, datetime):
+                        league_seasons.setdefault((league, kickoff_time.year), kickoff_time)
 
             # -----------------------------------------------------------
             # 2. Insert teams
@@ -135,6 +244,20 @@ def populate_all() -> dict[str, Any]:
                 )
                 if cur.fetchone():
                     result["leagues_created"] += 1
+
+            # -----------------------------------------------------------
+            # 5. Insert competitions and season mappings
+            # -----------------------------------------------------------
+            for (league_name, _year), kickoff_time in sorted(league_seasons.items()):
+                created = _upsert_competition_season(
+                    cur,
+                    league_name=league_name,
+                    kickoff_time=kickoff_time,
+                )
+                result["competitions_created"] += created["competitions_created"]
+                result["competition_seasons_created"] += created[
+                    "competition_seasons_created"
+                ]
 
         conn.commit()
 

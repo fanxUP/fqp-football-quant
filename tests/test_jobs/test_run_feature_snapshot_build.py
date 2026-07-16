@@ -65,7 +65,7 @@ def test_snapshot_job_reports_degraded_quality_without_hiding_successful_writes(
     assert result["dimension_rates"]["odds"] == 1.0
     assert result["dimension_rates"]["injury"] == 0.25
     assert result["dimension_rates"]["weather"] == 0.0
-    assert result["average_completeness"] == 22.5
+    assert result["average_completeness"] == 32.5
 
 
 def test_completeness_only_counts_real_usable_dimensions():
@@ -76,10 +76,22 @@ def test_completeness_only_counts_real_usable_dimensions():
         "motivation": False,
     })
 
-    assert result["data_completeness_score"] == 20.0
-    assert result["source_confidence_score"] == 0.19
+    assert result["data_completeness_score"] == 30.0
+    assert result["source_confidence_score"] == 0.285
     assert "injury" in result["missing_dimensions"]
     assert "motivation" in result["missing_dimensions"]
+
+
+def test_core_official_evidence_reaches_quality_gate_without_optional_enrichment():
+    result = compute_full_completeness(
+        {
+            "odds": True,
+            "team_mapping": True,
+            "team_profile": True,
+        }
+    )
+
+    assert result["data_completeness_score"] == 50.0
 
 
 def test_feature_snapshot_clock_uses_shanghai_business_time(monkeypatch):
