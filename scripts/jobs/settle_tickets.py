@@ -53,6 +53,21 @@ def _normalize_result(play_type: str, value: Any) -> str | None:
     return raw
 
 
+def _derive_rqspf_result(
+    handicap: Any, full_home_goals: Any, full_away_goals: Any
+) -> str | None:
+    """Derive the ticket-specific handicap result from its locked handicap."""
+    if handicap is None or full_home_goals is None or full_away_goals is None:
+        return None
+    adjusted_home = float(full_home_goals) + float(handicap)
+    away = float(full_away_goals)
+    if adjusted_home > away:
+        return "3"
+    if adjusted_home == away:
+        return "1"
+    return "0"
+
+
 def _resolve_ticket_items(
     items: list[dict[str, Any]], full_result_map: dict[int, dict[str, Any]]
 ) -> list[dict[str, Any]] | None:
@@ -68,10 +83,21 @@ def _resolve_ticket_items(
         play_type = str(item["play_type"])
         result = full_result_map.get(match_id)
         column = result_column(play_type)
-        if result is None or not column or result.get(column) is None:
+        if result is None or not column:
             return None
 
-        actual_result = _normalize_result(play_type, result[column])
+        actual_result = None
+        if play_type == "rqspf":
+            actual_result = _derive_rqspf_result(
+                item.get("handicap"),
+                result.get("full_home_goals"),
+                result.get("full_away_goals"),
+            )
+        if actual_result is None:
+            actual_result = _normalize_result(play_type, result.get(column))
+        if actual_result is None:
+            return None
+
         option_code = str(item["option_code"])
         detail.append(
             {
@@ -79,6 +105,9 @@ def _resolve_ticket_items(
                 "play_type": play_type,
                 "option_code": option_code,
                 "sp_value": float(item.get("sp_value") or 0),
+                "handicap": (
+                    float(item["handicap"]) if item.get("handicap") is not None else None
+                ),
                 "is_dan": bool(item.get("is_dan", False)),
                 "actual_result": actual_result,
                 "is_won": option_code == actual_result,
@@ -140,6 +169,8 @@ def run(dry_run: bool = False) -> dict[str, Any]:
                 "total_goals_result": r[3],
                 "score_result": r[4],
                 "half_full_result": r[5],
+                "full_home_goals": r[6],
+                "full_away_goals": r[7],
             }
             match_info[r[0]] = {
                 "full_home_goals": r[6],
@@ -225,7 +256,12 @@ def run(dry_run: bool = False) -> dict[str, Any]:
                 # Get all match_ids for this ticket
                 with conn.cursor() as cur:
                     cur.execute(
-                        "SELECT match_id, option_code, sp_value, play_type FROM simulation_ticket_items WHERE ticket_id = %s",
+                        """SELECT sti.match_id, sti.option_code, sti.sp_value,
+                                  sti.play_type, odds.handicap
+                           FROM simulation_ticket_items sti
+                           LEFT JOIN official_odds_snapshots odds
+                             ON odds.id = sti.odds_snapshot_id
+                           WHERE sti.ticket_id = %s""",
                         (tid,),
                     )
                     all_items = cur.fetchall()
@@ -237,6 +273,7 @@ def run(dry_run: bool = False) -> dict[str, Any]:
                             "option_code": item[1],
                             "sp_value": item[2],
                             "play_type": item[3],
+                            "handicap": item[4],
                         }
                         for item in all_items
                     ],
@@ -372,7 +409,7 @@ def run(dry_run: bool = False) -> dict[str, Any]:
                 # Get ALL items for this ticket
                 with conn.cursor() as cur:
                     cur.execute(
-                        """SELECT match_id, option_code, sp_value, play_type, is_dan
+                        """SELECT match_id, option_code, sp_value, play_type, is_dan, handicap
                            FROM simulator_ticket_items WHERE ticket_id = %s""",
                         (tid,),
                     )
@@ -386,6 +423,7 @@ def run(dry_run: bool = False) -> dict[str, Any]:
                             "sp_value": item[2],
                             "play_type": item[3],
                             "is_dan": item[4],
+                            "handicap": item[5],
                         }
                         for item in all_sitems
                     ],
@@ -509,8 +547,20 @@ def run(dry_run: bool = False) -> dict[str, Any]:
                 # Get all items for this real ticket
                 with conn.cursor() as cur:
                     cur.execute(
-                        """SELECT match_id, option_code, sp_value, play_type
-                           FROM real_ticket_items WHERE real_ticket_id = %s""",
+                        """SELECT rti.match_id, rti.option_code, rti.sp_value,
+                                  rti.play_type, odds.handicap
+                           FROM real_ticket_items rti
+                           LEFT JOIN LATERAL (
+                               SELECT snapshot.handicap
+                               FROM official_odds_snapshots snapshot
+                               WHERE snapshot.match_id = rti.match_id
+                                 AND snapshot.play_type = rti.play_type
+                                 AND snapshot.handicap IS NOT NULL
+                                 AND snapshot.snapshot_time <= rti.created_at
+                               ORDER BY snapshot.snapshot_time DESC
+                               LIMIT 1
+                           ) odds ON TRUE
+                           WHERE rti.real_ticket_id = %s""",
                         (rtid,),
                     )
                     all_ritems = cur.fetchall()
@@ -522,6 +572,7 @@ def run(dry_run: bool = False) -> dict[str, Any]:
                             "option_code": item[1],
                             "sp_value": item[2],
                             "play_type": item[3],
+                            "handicap": item[4],
                         }
                         for item in all_ritems
                     ],

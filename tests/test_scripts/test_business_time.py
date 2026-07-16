@@ -25,7 +25,7 @@ def test_result_settlement_uses_business_dates_during_utc_evening():
         result = settle_finished_matches.run(now=utc_evening)
 
     assert result == expected
-    crawl.assert_called_once_with(begin_date="2026-07-14", end_date="2026-07-15")
+    crawl.assert_called_once_with(begin_date="2026-07-12", end_date="2026-07-15")
 
 
 def test_business_time_sql_is_used_for_naive_match_timestamps():

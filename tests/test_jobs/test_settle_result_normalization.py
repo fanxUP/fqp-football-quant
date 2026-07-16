@@ -47,6 +47,48 @@ def test_waits_when_selected_play_result_is_not_available():
     assert _resolve_ticket_items(items, {1: {"spf_result": "H", "rqspf_result": None}}) is None
 
 
+def test_derives_rqspf_result_from_ticket_handicap_and_final_score():
+    items = [
+        {
+            "match_id": 1,
+            "play_type": "rqspf",
+            "option_code": "0",
+            "sp_value": 1.58,
+            "handicap": -1,
+        },
+    ]
+    results = {
+        1: {
+            "spf_result": "0",
+            "rqspf_result": None,
+            "full_home_goals": 0,
+            "full_away_goals": 2,
+        }
+    }
+
+    detail = _resolve_ticket_items(items, results)
+
+    assert detail is not None
+    assert detail[0]["actual_result"] == "0"
+    assert detail[0]["is_won"] is True
+
+
+def test_waits_for_rqspf_when_ticket_handicap_is_missing():
+    items = [
+        {"match_id": 1, "play_type": "rqspf", "option_code": "0", "sp_value": 1.58},
+    ]
+    results = {
+        1: {
+            "spf_result": "0",
+            "rqspf_result": None,
+            "full_home_goals": 0,
+            "full_away_goals": 2,
+        }
+    }
+
+    assert _resolve_ticket_items(items, results) is None
+
+
 def test_agent_prize_scales_from_nominal_cost_to_committed_stake():
     detail = [
         {
