@@ -179,6 +179,7 @@ def _run_impl(match_id: int | None = None, dry_run: bool = False) -> dict[str, A
 
         snapshots_built = 0
         profiles_updated = 0
+        completeness_total = 0.0
         dim_stats = {d: 0.0 for d in _DIMENSIONS}
         failed_matches: list[dict[str, Any]] = []
 
@@ -226,7 +227,13 @@ def _run_impl(match_id: int | None = None, dry_run: bool = False) -> dict[str, A
                         (match_data["home_team_name"], home_id),
                         (match_data["away_team_name"], away_id),
                     ]:
-                        form = compute_team_form(tname, kickoff_str, last_n=10, conn=conn)
+                        form = compute_team_form(
+                            tname,
+                            kickoff_str,
+                            last_n=10,
+                            conn=conn,
+                            team_id=tid,
+                        )
                         if form["matches_played"] > 0:
                             profile = {
                                 "team_id": tid,
@@ -267,8 +274,12 @@ def _run_impl(match_id: int | None = None, dry_run: bool = False) -> dict[str, A
                 probs = compute_odds_implied_probabilities(odds_snaps) if has_odds else {}
 
                 # Basic features
-                home_rest = compute_rest_days(match_data["home_team_name"], kickoff_str, conn)
-                away_rest = compute_rest_days(match_data["away_team_name"], kickoff_str, conn)
+                home_rest = compute_rest_days(
+                    match_data["home_team_name"], kickoff_str, conn, team_id=home_id
+                )
+                away_rest = compute_rest_days(
+                    match_data["away_team_name"], kickoff_str, conn, team_id=away_id
+                )
                 rest_diff = (
                     (home_rest or 0) - (away_rest or 0)
                     if home_rest is not None and away_rest is not None
@@ -332,7 +343,9 @@ def _run_impl(match_id: int | None = None, dry_run: bool = False) -> dict[str, A
                         conn.rollback()
                         print(f"[snapshot] travel error match {mid}: {e}")
                 else:
-                    print(f"[snapshot] skip team-dependent enrichment for match {mid}: team mapping incomplete")
+                    print(
+                        f"[snapshot] skip team-dependent enrichment for match {mid}: team mapping incomplete"
+                    )
 
                 # ---------------------------------------------------
                 # 9. [NEW] Weather features
@@ -401,8 +414,7 @@ def _run_impl(match_id: int | None = None, dry_run: bool = False) -> dict[str, A
                         is_cup=False,
                     )
                     has_tournament = bool(
-                        tournament.get("has_tournament_incentive_data", False)
-                        and has_motivation
+                        tournament.get("has_tournament_incentive_data", False) and has_motivation
                     )
                 except Exception as e:
                     conn.rollback()
@@ -553,6 +565,7 @@ def _run_impl(match_id: int | None = None, dry_run: bool = False) -> dict[str, A
                 snap_id = store_match_feature_snapshot(conn, snapshot)
                 if snap_id:
                     snapshots_built += 1
+                    completeness_total += float(completeness["data_completeness_score"])
 
             except Exception as e:
                 conn.rollback()
@@ -565,6 +578,7 @@ def _run_impl(match_id: int | None = None, dry_run: bool = False) -> dict[str, A
         matches_processed=len(match_ids),
         snapshots_built=snapshots_built,
         profiles_updated=profiles_updated,
+        completeness_total=completeness_total,
         dim_stats=dim_stats,
         failed_matches=failed_matches,
     )
@@ -573,7 +587,9 @@ def _run_impl(match_id: int | None = None, dry_run: bool = False) -> dict[str, A
 def run(match_id: int | None = None, dry_run: bool = False) -> dict[str, Any]:
     """Build snapshots and persist its multi-agent execution record."""
     run_id = start_tracked_job(
-        "feature_snapshot_build", "feature_agent", {"dry_run": dry_run, "match_id": match_id},
+        "feature_snapshot_build",
+        "feature_agent",
+        {"dry_run": dry_run, "match_id": match_id},
         dependencies=[] if dry_run else ["official_odds_snapshot"],
     )
     try:

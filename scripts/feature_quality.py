@@ -51,9 +51,7 @@ def compute_full_completeness(dimensions: dict[str, bool]) -> dict[str, Any]:
         "uncertainty_score": round(100.0 - completeness, 4),
         "source_confidence_score": round(completeness / 100.0 * 0.95, 4),
         "missing_dimensions": [
-            dimension
-            for dimension in FEATURE_DIMENSIONS
-            if not dimensions.get(dimension, False)
+            dimension for dimension in FEATURE_DIMENSIONS if not dimensions.get(dimension, False)
         ],
     }
 
@@ -64,6 +62,7 @@ def snapshot_job_result(
     matches_processed: int,
     snapshots_built: int,
     profiles_updated: int,
+    completeness_total: float,
     dim_stats: dict[str, float],
     failed_matches: list[dict[str, Any]],
 ) -> dict[str, Any]:
@@ -76,18 +75,11 @@ def snapshot_job_result(
         for dimension in FEATURE_DIMENSIONS
     }
     average_completeness = round(
-        sum(
-            dimension_rates[dimension] * FEATURE_WEIGHTS[dimension]
-            for dimension in FEATURE_DIMENSIONS
-        ),
+        completeness_total / matches_processed if matches_processed else 0.0,
         1,
     )
     quality_status = (
-        "failed"
-        if execution_failed
-        else "healthy"
-        if average_completeness >= 80
-        else "degraded"
+        "failed" if execution_failed else "healthy" if average_completeness >= 80 else "degraded"
     )
     return {
         "status": "failed" if execution_failed else "ok",

@@ -21,9 +21,7 @@ def test_competition_season_resolution_uses_league_and_kickoff_date(mock_conn):
     conn, cur = mock_conn
     cur.fetchone.return_value = (5,)
 
-    season_id = _resolve_competition_season_id(
-        conn, "瑞典超级联赛", datetime(2026, 7, 14, 1, 0)
-    )
+    season_id = _resolve_competition_season_id(conn, "瑞典超级联赛", datetime(2026, 7, 14, 1, 0))
 
     assert season_id == 5
     params = cur.execute.call_args.args[1]
@@ -37,6 +35,7 @@ def test_snapshot_job_reports_failure_when_every_match_write_fails():
         matches_processed=3,
         snapshots_built=0,
         profiles_updated=0,
+        completeness_total=0,
         dim_stats={},
         failed_matches=[
             {"match_id": 1, "error": "missing column"},
@@ -56,6 +55,7 @@ def test_snapshot_job_reports_degraded_quality_without_hiding_successful_writes(
         matches_processed=4,
         snapshots_built=4,
         profiles_updated=0,
+        completeness_total=130,
         dim_stats={"odds": 4, "team_mapping": 4, "injury": 1},
         failed_matches=[],
     )
@@ -68,13 +68,30 @@ def test_snapshot_job_reports_degraded_quality_without_hiding_successful_writes(
     assert result["average_completeness"] == 32.5
 
 
+def test_snapshot_job_average_uses_real_match_scores_not_partial_entity_coverage():
+    result = _snapshot_job_result(
+        feature_version="v2_enriched",
+        matches_processed=2,
+        snapshots_built=2,
+        profiles_updated=3,
+        completeness_total=80,
+        dim_stats={"odds": 2, "team_mapping": 2, "team_profile": 1.5},
+        failed_matches=[],
+    )
+
+    assert result["dimensions_coverage"]["team_profile"] == "1.5/2"
+    assert result["average_completeness"] == 40.0
+
+
 def test_completeness_only_counts_real_usable_dimensions():
-    result = compute_full_completeness({
-        "odds": True,
-        "team_mapping": True,
-        "injury": False,
-        "motivation": False,
-    })
+    result = compute_full_completeness(
+        {
+            "odds": True,
+            "team_mapping": True,
+            "injury": False,
+            "motivation": False,
+        }
+    )
 
     assert result["data_completeness_score"] == 30.0
     assert result["source_confidence_score"] == 0.285
