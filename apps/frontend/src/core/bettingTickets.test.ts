@@ -17,6 +17,7 @@ import {
 function ticket(partial: Partial<BettingTicket>): BettingTicket {
   return {
     ticketUid: partial.ticketUid ?? 'simulator:1',
+    ticketNumber: partial.ticketNumber ?? '20260707001',
     legacyId: partial.legacyId ?? 1,
     owner: partial.owner ?? 'me',
     kind: partial.kind ?? 'simulation',

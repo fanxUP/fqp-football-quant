@@ -24,6 +24,7 @@ def test_map_simulator_ticket_uses_my_simulation_contract():
             "status": "pending",
             "created_at": "2026-07-07T10:00:00",
             "item_count": 2,
+            "ledger_ticket_no": "20260707001",
         }
     )
 
@@ -31,6 +32,7 @@ def test_map_simulator_ticket_uses_my_simulation_contract():
     assert ticket["owner"] == "me"
     assert ticket["kind"] == "simulation"
     assert ticket["date"] == "2026-07-07"
+    assert ticket["ticketNumber"] == "20260707001"
     assert ticket["stake"] == 12.0
     assert ticket["route"] == "/simulator/history/7"
 
@@ -51,6 +53,7 @@ def test_map_real_ticket_can_belong_to_agent_column():
             "item_count": 3,
             "confirm_status": "confirmed",
             "related_simulation_ticket_id": 99,
+            "ledger_ticket_no": "20260706001",
         }
     )
 
@@ -59,6 +62,7 @@ def test_map_real_ticket_can_belong_to_agent_column():
     assert ticket["kind"] == "real"
     assert ticket["source"] == "ocr"
     assert ticket["status"] == "settled"
+    assert ticket["ticketNumber"] == "20260706001"
     assert ticket["linkedSimulationId"] == 99
 
 
@@ -74,6 +78,9 @@ def test_map_agent_ticket_uses_agent_recommendation_source():
         "single",
         "single",
         1,
+        1,
+        1,
+        "20260707002",
     )
 
     ticket = betting._map_agent_ticket(row)
@@ -82,6 +89,7 @@ def test_map_agent_ticket_uses_agent_recommendation_source():
     assert ticket["owner"] == "agent"
     assert ticket["source"] == "agent_recommendation"
     assert ticket["date"] == "2026-07-07"
+    assert ticket["ticketNumber"] == "20260707002"
     assert ticket["expectedValue"] == 0.1234
 
 

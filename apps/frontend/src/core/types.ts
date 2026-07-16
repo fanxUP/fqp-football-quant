@@ -984,6 +984,7 @@ export interface BettingTicketItemSummary {
 
 export interface BettingTicket {
   ticketUid: string;
+  ticketNumber: string;
   legacyId: number;
   owner: BettingTicketOwner;
   kind: BettingTicketKind;

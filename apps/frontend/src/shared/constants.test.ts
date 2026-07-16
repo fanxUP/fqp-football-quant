@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { modelNameLabel } from './constants';
+import { modelNameLabel, passTypeLabel, playTypeLabel } from './constants';
 
 describe('modelNameLabel', () => {
   it.each([
@@ -13,5 +13,12 @@ describe('modelNameLabel', () => {
 
   it('保留未知模型名以避免丢失信息', () => {
     expect(modelNameLabel('new_model')).toBe('new_model');
+  });
+});
+
+describe('彩票玩法中文标签', () => {
+  it('将 mixed 和 single 转换为中文业务名称', () => {
+    expect(playTypeLabel('mixed')).toBe('混合过关');
+    expect(passTypeLabel('single')).toBe('单关');
   });
 });

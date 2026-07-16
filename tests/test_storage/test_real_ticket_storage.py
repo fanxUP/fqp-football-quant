@@ -104,7 +104,7 @@ class TestGetRealTicket:
         mock_conn, mock_cur = _mock_conn(fetchone=[
             1, 1, None, None, "T-001", now, "StoreA", 100.0, 1, "2串1",
             None, "manual_entry", "not_applicable", "confirmed", "pending",
-            now, now, 3,
+            now, now, "20250101001", 3,
         ])
 
         result = get_real_ticket(mock_conn, 1)
@@ -112,6 +112,7 @@ class TestGetRealTicket:
         assert result["id"] == 1
         assert result["ticket_no"] == "T-001"
         assert result["total_amount"] == 100.0
+        assert result["ledger_ticket_no"] == "20250101001"
         assert result["item_count"] == 3
 
     def test_returns_none_when_not_found(self):
@@ -126,12 +127,13 @@ class TestListRealTickets:
         now = MagicMock(isoformat=lambda: "2025-01-01T00:00:00")
         mock_conn, mock_cur = _mock_conn(fetchall=[
             (1, "单关", 50.0, 1, None, "manual_entry", "not_applicable",
-             "confirmed", "pending", now, now, None, 2),
+             "confirmed", "pending", now, now, None, 2, "20250101001"),
         ])
 
         result = list_real_tickets(mock_conn)
         assert len(result) == 1
         assert result[0]["pass_type"] == "单关"
+        assert result[0]["ledger_ticket_no"] == "20250101001"
 
     def test_filters_by_status(self):
         mock_conn, mock_cur = _mock_conn(fetchall=[])
@@ -149,7 +151,8 @@ class TestDeleteRealTicket:
         mock_cur = MagicMock()
         mock_cur.fetchone.return_value = [
             1, 1, None, None, "T-X", now, "S", 0, 1, "单关",
-            None, "manual_entry", "ok", "confirmed", "pending", now, now, 0,
+            None, "manual_entry", "ok", "confirmed", "pending", now, now,
+            "20250101001", 0,
         ]
         mock_cur.rowcount = 1
         mock_conn = MagicMock()

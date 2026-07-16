@@ -64,6 +64,7 @@ function TicketCard({ ticket, deleting, onDelete }: {
         <span className="lottery-ticket-top">
           <span>
             <span className="lottery-ticket-title">{playTypeLabel(ticket.playType)}</span>
+            <span className="lottery-ticket-meta">彩票编号 {ticket.ticketNumber}</span>
           </span>
         </span>
 
@@ -95,7 +96,7 @@ function TicketCard({ ticket, deleting, onDelete }: {
         <div className="lottery-detail-grid">
           <div>
             <span>彩票编号</span>
-            <strong>{ticket.ticketUid}</strong>
+            <strong>{ticket.ticketNumber}</strong>
           </div>
           <div>
             <span>购买日期</span>

@@ -139,7 +139,7 @@ def get_real_ticket(conn: Any, ticket_id: int) -> dict | None:
                rt.store_code, rt.total_amount, rt.multiple, rt.pass_type,
                rt.theoretical_max_prize, rt.source_type,
                rt.ocr_status, rt.confirm_status, rt.settlement_status,
-               rt.created_at, rt.updated_at,
+               rt.created_at, rt.updated_at, rt.ledger_ticket_no,
                COUNT(rti.id) AS item_count
         FROM real_tickets rt
         LEFT JOIN real_ticket_items rti ON rti.real_ticket_id = rt.id
@@ -181,7 +181,8 @@ def get_real_ticket(conn: Any, ticket_id: int) -> dict | None:
         else str(row[16])
         if row[16]
         else None,
-        "item_count": row[17],
+        "ledger_ticket_no": row[17],
+        "item_count": row[18],
     }
 
 
@@ -194,7 +195,7 @@ def list_real_tickets(conn: Any, status: str | None = None, limit: int = 20) -> 
                    rt.confirm_status, rt.settlement_status,
                    rt.purchase_time, rt.created_at,
                    rt.related_simulation_ticket_id,
-                   COUNT(rti.id) AS item_count
+                   COUNT(rti.id) AS item_count, rt.ledger_ticket_no
             FROM real_tickets rt
             LEFT JOIN real_ticket_items rti ON rti.real_ticket_id = rt.id
             WHERE rt.settlement_status = %(status)s
@@ -209,7 +210,7 @@ def list_real_tickets(conn: Any, status: str | None = None, limit: int = 20) -> 
                    rt.confirm_status, rt.settlement_status,
                    rt.purchase_time, rt.created_at,
                    rt.related_simulation_ticket_id,
-                   COUNT(rti.id) AS item_count
+                   COUNT(rti.id) AS item_count, rt.ledger_ticket_no
             FROM real_tickets rt
             LEFT JOIN real_ticket_items rti ON rti.real_ticket_id = rt.id
             GROUP BY rt.id
@@ -244,6 +245,7 @@ def list_real_tickets(conn: Any, status: str | None = None, limit: int = 20) -> 
             else None,
             "related_simulation_ticket_id": r[11],
             "item_count": r[12],
+            "ledger_ticket_no": r[13],
         }
         for r in rows
     ]

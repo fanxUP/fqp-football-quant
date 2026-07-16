@@ -22,6 +22,7 @@ export const PLAY_TYPE_LABELS: Record<string, string> = {
   bf: '比分',
   bqc: '半全场',
   hhgg: '混合过关',
+  mixed: '混合过关',
   // legacy aliases
   score: '比分',
   total_goals: '总进球数',

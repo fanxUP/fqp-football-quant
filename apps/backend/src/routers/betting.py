@@ -62,16 +62,29 @@ def _settlement_status(status: str | None) -> str:
     return "pending"
 
 
+def _ticket_number(value: str | None, purchase_date: str, legacy_id: int) -> str:
+    """Return the persistent ledger number, with a migration-safe fallback."""
+    if value:
+        return value
+    compact_date = purchase_date.replace("-", "") if purchase_date != "未归档" else "00000000"
+    return f"{compact_date}{legacy_id:03d}"
+
+
 def _map_simulator_ticket(ticket: dict) -> dict:
     stake = float(ticket.get("total_cost") or 0)
+    purchase_date = _date_key(ticket.get("created_at"))
+    legacy_id = int(ticket.get("id") or 0)
     return {
         "ticketUid": f"simulator:{ticket.get('id')}",
+        "ticketNumber": _ticket_number(
+            ticket.get("ledger_ticket_no"), purchase_date, legacy_id
+        ),
         "legacyId": ticket.get("id"),
         "owner": "me",
         "kind": "simulation",
         "source": "manual",
         "status": _settlement_status(ticket.get("status")),
-        "date": _date_key(ticket.get("created_at")),
+        "date": purchase_date,
         "createdAt": ticket.get("created_at"),
         "title": f"模拟票 #{ticket.get('id')}",
         "playType": ticket.get("play_type") or "spf",
@@ -93,14 +106,19 @@ def _map_real_ticket(ticket: dict) -> dict:
     source_type = ticket.get("source_type") or ""
     owner = "agent" if source_type in {"agent", "agent_real"} else "me"
     stake = float(ticket.get("total_amount") or 0)
+    purchase_date = _date_key(ticket.get("purchase_time") or ticket.get("created_at"))
+    legacy_id = int(ticket.get("id") or 0)
     return {
         "ticketUid": f"real:{ticket.get('id')}",
+        "ticketNumber": _ticket_number(
+            ticket.get("ledger_ticket_no"), purchase_date, legacy_id
+        ),
         "legacyId": ticket.get("id"),
         "owner": owner,
         "kind": "real",
         "source": "ocr" if ticket.get("ocr_status") == "recognized" else "manual",
         "status": _settlement_status(ticket.get("settlement_status")),
-        "date": _date_key(ticket.get("purchase_time") or ticket.get("created_at")),
+        "date": purchase_date,
         "createdAt": ticket.get("created_at"),
         "title": f"实票 #{ticket.get('id')}",
         "playType": "mixed",
@@ -123,14 +141,18 @@ def _map_real_ticket(ticket: dict) -> dict:
 def _map_agent_ticket(row: tuple) -> dict:
     ticket_id = row[0]
     stake = float(row[1] or 0)
+    purchase_date = _date_key(row[6].isoformat() if row[6] else None)
     return {
         "ticketUid": f"agent:{ticket_id}",
+        "ticketNumber": _ticket_number(
+            row[12] if len(row) > 12 else None, purchase_date, int(ticket_id)
+        ),
         "legacyId": ticket_id,
         "owner": "agent",
         "kind": "simulation",
         "source": "agent_recommendation",
         "status": _settlement_status(row[5]),
-        "date": _date_key(row[6].isoformat() if row[6] else None),
+        "date": purchase_date,
         "createdAt": row[6].isoformat() if row[6] else None,
         "title": f"Agent 票 #{ticket_id}",
         "playType": "hhgg" if (row[7] or "single") != "single" else (row[8] or "spf"),
@@ -538,7 +560,8 @@ def _collect_betting_tickets(conn, limit: int) -> list[dict]:
                 SELECT st.id, st.suggested_stake, st.expected_value,
                        st.strategy_pool, st.risk_level, st.ticket_status,
                        st.created_at, st.pass_type, st.ticket_type,
-                       COUNT(sti.id) AS item_count, st.multiple, st.bet_count
+                       COUNT(sti.id) AS item_count, st.multiple, st.bet_count,
+                       st.ledger_ticket_no
                 FROM simulation_tickets st
                 LEFT JOIN simulation_ticket_items sti ON sti.ticket_id = st.id
                 WHERE (st.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Shanghai')::date

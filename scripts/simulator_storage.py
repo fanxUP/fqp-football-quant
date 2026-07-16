@@ -60,6 +60,7 @@ def _ticket_row(trow: tuple, irows: list) -> dict:
         "notes": trow[9],
         "created_at": _iso(trow[10]),
         "updated_at": _iso(trow[11]),
+        "ledger_ticket_no": trow[12],
         "items": [_item_row(r) for r in irows],
     }
 
@@ -98,6 +99,7 @@ def _summary_row(r: tuple) -> dict:
         "created_at": _iso(r[10]),
         "updated_at": _iso(r[11]),
         "item_count": r[12],
+        "ledger_ticket_no": r[13],
     }
 
 
@@ -307,7 +309,8 @@ def get_simulator_ticket(conn: Any, ticket_id: int) -> dict | None:
     """Get a single simulator ticket with its items (joined with match info)."""
     sql_ticket = """
         SELECT id, play_type, pass_type, multiple, total_cost, bet_count,
-               max_prize, match_count, status, notes, created_at, updated_at
+               max_prize, match_count, status, notes, created_at, updated_at,
+               ledger_ticket_no
         FROM simulator_tickets WHERE id = %(id)s
     """
     sql_items = """
@@ -340,7 +343,7 @@ def list_simulator_tickets(
         SELECT st.id, st.play_type, st.pass_type, st.multiple, st.total_cost,
                st.bet_count, st.max_prize, st.match_count, st.status,
                st.notes, st.created_at, st.updated_at,
-               COUNT(sti.id) AS item_count
+               COUNT(sti.id) AS item_count, st.ledger_ticket_no
         FROM simulator_tickets st
         LEFT JOIN simulator_ticket_items sti ON sti.ticket_id = st.id
         {where}
