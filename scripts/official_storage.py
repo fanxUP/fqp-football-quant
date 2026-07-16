@@ -65,7 +65,8 @@ def store_matches(conn: Any, matches: list[dict]) -> dict[str, Any]:
 
     Unique key: (business_date, official_match_code)
     """
-    inserted, updated, errors = 0, 0, []
+    inserted, updated = 0, 0
+    errors: list[dict[str, Any]] = []
     valid_matches: list[dict] = []
     for match in matches:
         match_code = str(match.get("official_match_code") or "").strip()
@@ -146,26 +147,27 @@ def store_matches(conn: Any, matches: list[dict]) -> dict[str, Any]:
         for m in valid_matches:
             try:
                 raw = m.get("raw_json", {})
+                params: dict[str, Any] = {
+                    "sport_type": m.get("sport_type", "football"),
+                    "business_date": m["business_date"],
+                    "official_match_code": m["official_match_code"],
+                    "source_match_id": m.get("source_match_id")
+                    or str(raw.get("matchId") or "").strip()
+                    or None,
+                    "league_name": m["league_name"],
+                    "home_team_name": m["home_team_name"],
+                    "away_team_name": m["away_team_name"],
+                    "kickoff_time": m.get("kickoff_time"),
+                    "sale_stop_time": m.get("sale_stop_time"),
+                    "sale_status": m.get("sale_status", "unknown"),
+                    "match_status": m.get("match_status", "scheduled"),
+                    "source_url": m.get("source_url", ""),
+                    "raw_hash": _hash_raw(raw),
+                    "raw_json": json.dumps(raw, ensure_ascii=False),
+                }
                 cur.execute(
                     sql,
-                    {
-                        "sport_type": m.get("sport_type", "football"),
-                        "business_date": m["business_date"],
-                        "official_match_code": m["official_match_code"],
-                        "source_match_id": m.get("source_match_id")
-                        or str(raw.get("matchId") or "").strip()
-                        or None,
-                        "league_name": m["league_name"],
-                        "home_team_name": m["home_team_name"],
-                        "away_team_name": m["away_team_name"],
-                        "kickoff_time": m.get("kickoff_time"),
-                        "sale_stop_time": m.get("sale_stop_time"),
-                        "sale_status": m.get("sale_status", "unknown"),
-                        "match_status": m.get("match_status", "scheduled"),
-                        "source_url": m.get("source_url", ""),
-                        "raw_hash": _hash_raw(raw),
-                        "raw_json": json.dumps(raw, ensure_ascii=False),
-                    },
+                    params,
                 )
                 row = cur.fetchone()
                 if row and row[1]:

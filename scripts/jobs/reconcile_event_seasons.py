@@ -292,13 +292,13 @@ def resolve_targets(
             "evidence": evidence,
         }
 
-    for league_name, candidates in MANUAL_SEASON_CANDIDATES.items():
-        selected = select_season_window(list(candidates), today=today)
+    for league_name, manual_candidates in MANUAL_SEASON_CANDIDATES.items():
+        selected = select_season_window(list(manual_candidates), today=today)
         targets[league_name] = {
             **asdict(selected), "boundary_source": "competition_organiser",
             "source_url": MANUAL_SOURCE_URLS[league_name],
             "official_league_refs": [],
-            "evidence": [asdict(item) for item in candidates],
+            "evidence": [asdict(item) for item in manual_candidates],
         }
     return targets
 
