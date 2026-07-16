@@ -1,7 +1,88 @@
+import json
+
 from scripts.audit_official_history import (
+    load_uniform_artifact_rows,
+    select_in_scope_official_match_ids,
     summarize_official_artifact_coverage,
     summarize_official_history_rows,
 )
+
+
+def test_load_uniform_artifact_rows_keeps_response_rows_separate(tmp_path):
+    artifact = tmp_path / "page.json"
+    artifact.write_text(
+        json.dumps(
+            {
+                "response": {
+                    "value": {
+                        "matchResult": [
+                            {
+                                "matchId": 123,
+                                "matchNumStr": "周三001",
+                                "matchDate": "2026-07-15",
+                                "leagueAllName": "美国职业大联盟",
+                            }
+                        ]
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    pages, rows = load_uniform_artifact_rows(tmp_path)
+
+    assert pages == 1
+    assert rows == [
+        {
+            "match_id": "123",
+            "league_name": "美国职业大联盟",
+            "business_date": "2026-07-15",
+        }
+    ]
+
+
+def test_artifact_coverage_excludes_matches_outside_selected_event_seasons():
+    selected, excluded = select_in_scope_official_match_ids(
+        artifact_rows=[
+            {
+                "match_id": "old",
+                "league_name": "美国职业大联盟",
+                "business_date": "2025-07-01",
+            },
+            {
+                "match_id": "current",
+                "league_name": "美国职业大联盟",
+                "business_date": "2026-07-01",
+            },
+        ],
+        season_targets={
+            "美国职业大联盟": ("2026-02-21", "2026-12-24"),
+        },
+        start_date="2025-01-01",
+        end_date="2026-07-13",
+    )
+
+    assert selected == {"current"}
+    assert excluded == 1
+
+
+def test_artifact_coverage_keeps_requested_range_before_first_season_reconciliation():
+    selected, excluded = select_in_scope_official_match_ids(
+        artifact_rows=[
+            {
+                "match_id": "bootstrap",
+                "league_name": "美国职业大联盟",
+                "business_date": "2026-07-01",
+            }
+        ],
+        season_targets={},
+        start_date="2026-01-01",
+        end_date="2026-07-13",
+    )
+
+    assert selected == {"bootstrap"}
+    assert excluded == 0
 
 
 def test_audit_separates_identity_integrity_from_source_completeness():

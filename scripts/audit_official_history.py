@@ -9,11 +9,13 @@ from __future__ import annotations
 
 import argparse
 import json
+from datetime import date
 from pathlib import Path
 from typing import Any
 
 from apps.backend.src.db import get_db
 from scripts.official_history_importer import (
+    derive_business_date_from_match_date,
     normalize_official_match_code,
     official_match_identity_error,
 )
@@ -36,7 +38,10 @@ def summarize_official_history_rows(
         error = official_match_identity_error(business_date, normalized_code)
         if error == "missing or invalid official display match code":
             invalid_codes += 1
-        elif error in {"match code weekday does not match business_date", "invalid official business_date"}:
+        elif error in {
+            "match code weekday does not match business_date",
+            "invalid official business_date",
+        }:
             weekday_mismatches += 1
         if not row.get("home_team_name") or not row.get("away_team_name"):
             missing_team_names += 1
@@ -71,20 +76,90 @@ def summarize_official_history_rows(
     }
 
 
-def load_uniform_artifact_match_ids(artifact_dir: Path) -> tuple[int, set[str]]:
-    """Read Sporttery Uniform result artifacts produced by the backfill command."""
-    match_ids: set[str] = set()
+def load_uniform_artifact_rows(artifact_dir: Path) -> tuple[int, list[dict[str, str]]]:
+    """Read identities and season fields from retained Sporttery responses."""
+    artifact_rows: list[dict[str, str]] = []
     pages = 0
     for artifact_path in sorted(artifact_dir.glob("*.json")):
         if artifact_path.name == "run_summary.json":
             continue
         document = json.loads(artifact_path.read_text(encoding="utf-8"))
-        rows = ((document.get("response") or {}).get("value") or {}).get("matchResult")
-        if not isinstance(rows, list):
+        result_rows = ((document.get("response") or {}).get("value") or {}).get("matchResult")
+        if not isinstance(result_rows, list):
             continue
         pages += 1
-        match_ids.update(str(row["matchId"]) for row in rows if row.get("matchId") is not None)
-    return pages, match_ids
+        for row in result_rows:
+            if not isinstance(row, dict):
+                continue
+            match_id = row.get("matchId")
+            if match_id is None:
+                continue
+            match_code = normalize_official_match_code(str(row.get("matchNumStr") or ""))
+            artifact_rows.append(
+                {
+                    "match_id": str(match_id),
+                    "league_name": str(row.get("leagueAllName") or row.get("leagueName") or ""),
+                    "business_date": derive_business_date_from_match_date(
+                        str(row.get("matchDate") or ""), match_code
+                    ),
+                }
+            )
+    return pages, artifact_rows
+
+
+def load_uniform_artifact_match_ids(artifact_dir: Path) -> tuple[int, set[str]]:
+    """Backward-compatible identity-only view of retained official artifacts."""
+    pages, rows = load_uniform_artifact_rows(artifact_dir)
+    return pages, {row["match_id"] for row in rows}
+
+
+def select_in_scope_official_match_ids(
+    *,
+    artifact_rows: list[dict[str, str]],
+    season_targets: dict[str, tuple[date | str, date | str]],
+    start_date: str,
+    end_date: str,
+) -> tuple[set[str], int]:
+    """Keep only artifact identities allowed by the selected-season database."""
+    requested_start = date.fromisoformat(start_date)
+    requested_end = date.fromisoformat(end_date)
+    selected: set[str] = set()
+    excluded_ids: set[str] = set()
+    for row in artifact_rows:
+        match_id = row.get("match_id", "")
+        try:
+            business_date = date.fromisoformat(row["business_date"])
+        except KeyError, ValueError:
+            if match_id:
+                excluded_ids.add(match_id)
+            continue
+        raw_target = season_targets.get(row.get("league_name", ""))
+        if season_targets and raw_target is None:
+            if match_id:
+                excluded_ids.add(match_id)
+            continue
+        if not season_targets:
+            if requested_start <= business_date <= requested_end:
+                selected.add(match_id)
+            elif match_id:
+                excluded_ids.add(match_id)
+            continue
+        assert raw_target is not None
+        target_start = (
+            raw_target[0] if isinstance(raw_target[0], date) else date.fromisoformat(raw_target[0])
+        )
+        target_end = (
+            raw_target[1] if isinstance(raw_target[1], date) else date.fromisoformat(raw_target[1])
+        )
+        if (
+            requested_start <= business_date <= requested_end
+            and target_start <= business_date <= target_end
+        ):
+            selected.add(match_id)
+        else:
+            if match_id:
+                excluded_ids.add(match_id)
+    return selected, len(excluded_ids - selected)
 
 
 def summarize_official_artifact_coverage(
@@ -92,6 +167,7 @@ def summarize_official_artifact_coverage(
     official_match_ids: set[str],
     database_match_ids: set[str],
     artifact_pages: int,
+    excluded_match_ids: int | None = None,
 ) -> dict[str, Any]:
     """Summarize whether retained official response identities reached the DB."""
     missing = official_match_ids - database_match_ids
@@ -101,13 +177,16 @@ def summarize_official_artifact_coverage(
         status = "incomplete_against_official_artifacts"
     else:
         status = "verified_against_official_artifacts"
-    return {
+    result = {
         "official_artifact_pages": artifact_pages,
         "official_distinct_match_ids": len(official_match_ids),
         "database_match_ids_present": len(database_match_ids),
         "missing_database_match_ids": len(missing),
         "source_completeness": status,
     }
+    if excluded_match_ids is not None:
+        result["artifact_match_ids_outside_selected_seasons"] = excluded_match_ids
+    return result
 
 
 def audit_official_history(
@@ -115,11 +194,25 @@ def audit_official_history(
     end_date: str,
     artifact_dir: Path | None = None,
 ) -> dict[str, Any]:
-    artifact_pages, artifact_match_ids = (
-        load_uniform_artifact_match_ids(artifact_dir) if artifact_dir else (0, set())
+    artifact_pages, artifact_rows = (
+        load_uniform_artifact_rows(artifact_dir) if artifact_dir else (0, [])
     )
+    artifact_match_ids: set[str] = set()
+    excluded_match_ids = 0
     with get_db() as conn:
         with conn.cursor() as cur:
+            if artifact_rows:
+                cur.execute(
+                    "SELECT league_name, season_start_date, season_end_date "
+                    "FROM official_event_season_targets"
+                )
+                season_targets = {row[0]: (row[1], row[2]) for row in cur.fetchall()}
+                artifact_match_ids, excluded_match_ids = select_in_scope_official_match_ids(
+                    artifact_rows=artifact_rows,
+                    season_targets=season_targets,
+                    start_date=start_date,
+                    end_date=end_date,
+                )
             cur.execute(
                 """
                 SELECT m.business_date::text, m.official_match_code,
@@ -140,9 +233,7 @@ def audit_official_history(
                     "has_result": row[3],
                     "home_team_name": row[4],
                     "away_team_name": row[5],
-                    "kickoff_time": row[6].isoformat()
-                    if hasattr(row[6], "isoformat")
-                    else row[6],
+                    "kickoff_time": row[6].isoformat() if hasattr(row[6], "isoformat") else row[6],
                 }
                 for row in cur.fetchall()
             ]
@@ -161,6 +252,7 @@ def audit_official_history(
                 official_match_ids=artifact_match_ids,
                 database_match_ids=database_match_ids,
                 artifact_pages=artifact_pages,
+                excluded_match_ids=excluded_match_ids,
             )
         )
         summary["official_artifact_dir"] = str(artifact_dir)
