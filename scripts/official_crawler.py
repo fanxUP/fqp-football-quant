@@ -19,7 +19,6 @@ from typing import Any
 
 from apps.backend.src.db import get_db
 from scripts.business_time import business_now, business_today
-from scripts.five100_client import get_match_results as get_results_via_500
 from scripts.official_storage import (
     log_crawl,
     record_official_collection_status,
@@ -342,6 +341,22 @@ def parse_odds_snapshots_from_match(
     return snapshots
 
 
+def _derive_official_handicap_result(
+    home_goals: int | None, away_goals: int | None, handicap: Any
+) -> str | None:
+    if home_goals is None or away_goals is None or handicap in (None, ""):
+        return None
+    try:
+        adjusted_home = home_goals + float(handicap)
+    except (TypeError, ValueError):
+        return None
+    if adjusted_home > away_goals:
+        return "3"
+    if adjusted_home == away_goals:
+        return "1"
+    return "0"
+
+
 def parse_results_from_response(
     raw: dict[str, Any],
 ) -> list[dict[str, Any]]:
@@ -433,17 +448,26 @@ def parse_results_from_response(
 
         results.append(
             {
+                "_source_match_id": str(item.get("matchId") or ""),
                 "_match_code": match_code,
+                "_match_date": item.get("matchDate"),
                 "half_home_goals": hh,
                 "half_away_goals": ha,
                 "full_home_goals": fh,
                 "full_away_goals": fa,
                 "spf_result": spf,
-                "rqspf_result": None,  # requires handicap + score, computed later
+                "rqspf_result": _derive_official_handicap_result(
+                    fh, fa, item.get("goalLine")
+                ),
                 "total_goals_result": fh + fa if fh is not None and fa is not None else None,
                 "score_result": score,
                 "half_full_result": half_full,
-                "result_status": item.get("resultStatus") or item.get("poolStatus") or "confirmed",
+                "result_status": (
+                    "confirmed"
+                    if str(item.get("matchResultStatus") or "") == "2"
+                    or item.get("poolStatus") == "Payout"
+                    else item.get("resultStatus") or "pending"
+                ),
                 "official_publish_time": item.get("publishTime") or item.get("officialPublishTime"),
                 "raw_json": item,
             }
@@ -564,9 +588,8 @@ def crawl_official_odds_snapshot(business_date: str) -> dict[str, Any]:
 def crawl_official_results(begin_date: str, end_date: str) -> dict[str, Any]:
     """Fetch and store match results for a date range.
 
-    Sporttery defines the official match universe. If its result endpoint is
-    blocked, 500.com may supplement only results already matched to Sporttery
-    fixtures and must carry explicit source provenance.
+    Results come only from the China Sports Lottery result page's Uniform API.
+    A blocked official source is reported as an error and never replaced.
     """
     started = _now()
     client = SportteryClient()
@@ -574,7 +597,7 @@ def crawl_official_results(begin_date: str, end_date: str) -> dict[str, Any]:
     # ── Attempt 1: Sporttery API ──────────────────────────────────────
     try:
         t0 = time.monotonic()
-        raw = client.get_match_results(begin_date, end_date)
+        raw = client.get_uniform_match_results(begin_date, end_date)
         latency_ms = int((time.monotonic() - t0) * 1000)
 
         results = parse_results_from_response(raw)
@@ -590,24 +613,57 @@ def crawl_official_results(begin_date: str, end_date: str) -> dict[str, Any]:
                     started_at=started,
                 )
                 update_health(conn, "sporttery", "results", "ok", latency_ms)
-            return {"status": "ok", "results_found": 0, "results_stored": 0}
+            return {
+                "status": "ok",
+                "source": "sporttery",
+                "source_type": "official",
+                "results_found": 0,
+                "results_stored": 0,
+            }
 
         # Resolve match_code → match_id
         with get_db() as conn:
             resolved = 0
             for r in results:
+                source_match_id = r.pop("_source_match_id", "")
                 code = r.pop("_match_code", "")
+                match_date = r.pop("_match_date", None)
                 if not code:
                     continue
                 with conn.cursor() as cur:
                     cur.execute(
-                        "SELECT id FROM official_matches WHERE official_match_code = %s "
-                        "ORDER BY business_date DESC LIMIT 1",
-                        (code,),
+                        """SELECT id
+                           FROM official_matches
+                           WHERE (
+                                  %(source_match_id)s <> ''
+                                  AND source_match_id = %(source_match_id)s
+                              )
+                              OR (
+                                  official_match_code = %(match_code)s
+                                  AND kickoff_time::date = %(match_date)s::date
+                              )
+                           ORDER BY (source_match_id = %(source_match_id)s) DESC, id DESC
+                           LIMIT 1""",
+                        {
+                            "source_match_id": source_match_id,
+                            "match_code": code,
+                            "match_date": match_date,
+                        },
                     )
                     row = cur.fetchone()
                 if row:
                     r["match_id"] = row[0]
+                    raw_json = dict(r.get("raw_json") or {})
+                    raw_json.update(
+                        {
+                            "source_name": "sporttery",
+                            "source_type": "official",
+                            "source_url": (
+                                "https://www.lottery.gov.cn/jc/zqsgkj/"
+                            ),
+                        }
+                    )
+                    r["raw_json"] = raw_json
                     resolved += 1
                 # Results without a match_id are skipped (no match in DB yet)
 
@@ -632,6 +688,8 @@ def crawl_official_results(begin_date: str, end_date: str) -> dict[str, Any]:
         client.close()
         return {
             "status": "ok",
+            "source": "sporttery",
+            "source_type": "official",
             "results_found": len(results),
             "results_matched": resolved,
             "results_inserted": store_result["inserted"],
@@ -643,106 +701,40 @@ def crawl_official_results(begin_date: str, end_date: str) -> dict[str, Any]:
         client.close()
         error_msg = str(e)
 
-        if "403" in error_msg or "567" in error_msg or "blocked" in error_msg.lower():
-            print(
-                f"[official_crawler] Sporttery blocked ({error_msg[:80]}), "
-                "using 500.com only as a labeled supplement for existing official matches…"
-            )
-            with get_db() as conn:
-                record_official_collection_status(
-                    conn,
-                    business_date=begin_date,
-                    crawl_type="results",
-                    source_name="sporttery",
-                    status="blocked",
-                    source_url="https://webapi.sporttery.cn/gateway/jc/football/getMatchResultV1.qry",
-                    records_found=0,
-                    error_message=error_msg,
-                    raw_json={"begin_date": begin_date, "end_date": end_date},
-                )
-                log_crawl(
-                    conn,
-                    source_name="sporttery",
-                    crawl_type="results",
-                    status="blocked",
-                    error_message=error_msg,
-                    started_at=started,
-                )
-                update_health(conn, "sporttery", "results", "error", 0, error_msg)
-            return _crawl_results_via_500(begin_date, end_date, started)
-
         with get_db() as conn:
+            collection_status = (
+                "blocked"
+                if "403" in error_msg
+                or "567" in error_msg
+                or "blocked" in error_msg.lower()
+                else "error"
+            )
+            record_official_collection_status(
+                conn,
+                business_date=begin_date,
+                crawl_type="results",
+                source_name="sporttery",
+                status=collection_status,
+                source_url="https://www.lottery.gov.cn/jc/zqsgkj/",
+                records_found=0,
+                error_message=error_msg,
+                raw_json={"begin_date": begin_date, "end_date": end_date},
+            )
             log_crawl(
                 conn,
                 source_name="sporttery",
                 crawl_type="results",
-                status="error",
+                status=collection_status,
                 error_message=error_msg,
                 started_at=started,
             )
             update_health(conn, "sporttery", "results", "error", 0, error_msg)
-        return {"status": "error", "error": error_msg}
-
-
-def _crawl_results_via_500(begin_date: str, end_date: str, started: str) -> dict[str, Any]:
-    """Supplement results only for matches already verified by Sporttery."""
-    t0 = time.monotonic()
-
-    with get_db() as conn:
-        results = get_results_via_500(begin_date, end_date, db_conn=conn)
-        for result in results:
-            raw_json = dict(result.get("raw_json") or {})
-            raw_json.update(
-                {
-                    "source_name": "500.com",
-                    "source_type": "supplemental",
-                    "official_match_verified": True,
-                }
-            )
-            result["raw_json"] = raw_json
-
-        if not results:
-            latency_ms = int((time.monotonic() - t0) * 1000)
-            log_crawl(
-                conn,
-                source_name="500.com",
-                crawl_type="results",
-                status="ok",
-                records_found=0,
-                started_at=started,
-            )
-            update_health(conn, "500.com", "supplemental", "ok", latency_ms)
-            return {
-                "status": "ok",
-                "source": "500.com",
-                "source_type": "supplemental",
-                "results_found": 0,
-                "results_stored": 0,
-            }
-
-        store_result = store_results(conn, results)
-        latency_ms = int((time.monotonic() - t0) * 1000)
-        log_crawl(
-            conn,
-            source_name="500.com",
-            crawl_type="results",
-            status="ok",
-            records_found=len(results),
-            records_inserted=store_result["inserted"],
-            records_updated=store_result["updated"],
-            started_at=started,
-        )
-        update_health(conn, "500.com", "supplemental", "ok", latency_ms)
-
-    return {
-        "status": "ok",
-        "source": "500.com",
-        "source_type": "supplemental",
-        "results_found": len(results),
-        "results_inserted": store_result["inserted"],
-        "results_updated": store_result["updated"],
-        "latency_ms": latency_ms,
-    }
+        return {
+            "status": "error",
+            "source": "sporttery",
+            "source_type": "official",
+            "error": error_msg,
+        }
 
 
 # ---------------------------------------------------------------------------

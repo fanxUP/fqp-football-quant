@@ -5,7 +5,7 @@ Rate-limited to respect the server.
 
 Endpoints:
   - Uniform getMatchCalculatorV1.qry → current card + all five play-type odds
-  - getMatchResultV1.qry      → finished match results (may WAF)
+  - Uniform getUniformMatchResultV1.qry → finished match results
   - Uniform API (no WAF):     → match list + calculator + fixed bonus history
   - Traditional lottery:      → draw info / match pool (needs Playwright)
 """
@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import time
+from datetime import date, timedelta
 from typing import Any
 
 import httpx
@@ -150,6 +151,54 @@ class SportteryClient:
             ),
             endpoint,
         )
+
+    def get_uniform_match_results(
+        self, begin_date: str, end_date: str
+    ) -> dict[str, Any]:
+        """Fetch official result pages one day at a time via the Uniform API.
+
+        Official page: https://www.lottery.gov.cn/jc/zqsgkj/
+        The official result endpoint's WAF rejects wider date ranges on some
+        networks. Single-day requests use the same direct Uniform client path
+        as the official odds collector and preserve complete official rows.
+        """
+        start = date.fromisoformat(begin_date)
+        end = date.fromisoformat(end_date)
+        if start > end:
+            raise ValueError("begin_date must not be later than end_date")
+
+        endpoint = "getUniformMatchResultV1.qry"
+        match_results: list[dict[str, Any]] = []
+        current = start
+        while current <= end:
+            day = current.isoformat()
+            page_no, pages = 1, 1
+            while page_no <= pages:
+                params: dict[str, Any] = {
+                    "matchBeginDate": day,
+                    "matchEndDate": day,
+                    "leagueId": "",
+                    "pageSize": 100,
+                    "pageNo": page_no,
+                    "isFix": 0,
+                    "matchPage": 1,
+                    "pcOrWap": 1,
+                }
+                payload = self._require_success(
+                    self._request_url(
+                        self.UNIFORM_BASE_URL + endpoint,
+                        params,
+                        referer="https://www.lottery.gov.cn/jc/zqsgkj/",
+                    ),
+                    endpoint,
+                )
+                value = payload.get("value") or {}
+                match_results.extend(value.get("matchResult") or [])
+                pages = max(int(value.get("pages") or 1), 1)
+                page_no += 1
+            current += timedelta(days=1)
+
+        return {"errorCode": "0", "value": {"matchResult": match_results}}
 
     def get_uniform_match_calculator(self) -> dict[str, Any]:
         """Fetch all five current Sporttery play types and their full odds."""
@@ -295,79 +344,8 @@ class SportteryClient:
         Returns:
             Raw JSON response from the API.
         """
-        params = {
-            "matchBeginDate": begin_date,
-            "matchEndDate": end_date,
-            "matchPage": str(page),
-            "pcOrWap": "0",
-            "leagueId": "",
-        }
-        # Try direct API first; fall back to browser on 403
-        try:
-            return self._request("getMatchResultV1.qry", params=params)
-        except RuntimeError as e:
-            if "403" in str(e):
-                print("[sporttery] direct API blocked (403), falling back to browser…")
-                return self._fetch_results_via_browser(begin_date, end_date, page)
-            raise
-
-    def _fetch_results_via_browser(
-        self, begin_date: str, end_date: str, page: int = 1
-    ) -> dict[str, Any]:
-        """Use Playwright Chromium to fetch results when direct API is blocked.
-
-        Navigates to the sporttery.cn results JSON endpoint with a real browser
-        TLS fingerprint to bypass WAF protection.
-        """
-        self._rate_limit()
-        try:
-            from playwright.sync_api import sync_playwright
-        except ImportError as e:
-            raise RuntimeError(
-                "Playwright not available — cannot fetch results via browser. "
-                "Install with: pip install playwright && playwright install chromium"
-            ) from e
-
-        print(f"[sporttery:browser] launching Chromium for results {begin_date}→{end_date}…")
-        t0 = time.monotonic()
-
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            browser_page = browser.new_page()
-
-            url = (
-                f"{self.BASE_URL}getMatchResultV1.qry"
-                f"?matchBeginDate={begin_date}"
-                f"&matchEndDate={end_date}"
-                f"&matchPage={page}"
-                f"&pcOrWap=0"
-                f"&leagueId="
-            )
-
-            try:
-                resp = browser_page.goto(url, timeout=30000)
-                status = resp.status if resp else 0
-                print(f"[sporttery:browser] GET → {status}")
-
-                if status != 200:
-                    body_text = browser_page.evaluate("document.body.innerText") if resp else ""
-                    browser.close()
-                    raise RuntimeError(
-                        f"Browser request returned {status}: {body_text[:200]}"
-                    )
-
-                # Extract JSON from the page body (browser renders JSON as text)
-                body_text = browser_page.evaluate("document.body.innerText")
-                data = json.loads(body_text)
-                elapsed = int((time.monotonic() - t0) * 1000)
-                print(f"[sporttery:browser] OK ({elapsed}ms)")
-                browser.close()
-                self._last_request_time = time.monotonic()
-                return data
-
-            except Exception:
-                browser.close()
-                raise
+        del page
+        return self.get_uniform_match_results(begin_date, end_date)
 
     def _fetch_lottery_via_browser(self) -> dict[str, Any]:
         """Use Playwright Chromium to fetch traditional lottery draw data.

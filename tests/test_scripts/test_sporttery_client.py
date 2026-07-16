@@ -37,6 +37,35 @@ def test_uniform_match_list_uses_official_schedule_referer():
     )
 
 
+def test_uniform_match_results_reuses_odds_client_and_fetches_one_day_at_a_time():
+    client = SportteryClient(min_interval=0)
+    client._request_url = MagicMock(
+        side_effect=[
+            {
+                "errorCode": "0",
+                "value": {"pages": 1, "matchResult": [{"matchId": 101}]},
+            },
+            {
+                "errorCode": "0",
+                "value": {"pages": 1, "matchResult": [{"matchId": 102}]},
+            },
+        ]
+    )
+
+    try:
+        result = client.get_uniform_match_results("2026-07-14", "2026-07-15")
+    finally:
+        client.close()
+
+    assert [row["matchId"] for row in result["value"]["matchResult"]] == [101, 102]
+    assert client._request_url.call_count == 2
+    first_call = client._request_url.call_args_list[0]
+    assert first_call.args[0].endswith("getUniformMatchResultV1.qry")
+    assert first_call.args[1]["matchBeginDate"] == "2026-07-14"
+    assert first_call.args[1]["matchEndDate"] == "2026-07-14"
+    assert first_call.kwargs["referer"] == "https://www.lottery.gov.cn/jc/zqsgkj/"
+
+
 def test_uniform_league_catalog_uses_official_league_referer():
     client = SportteryClient(min_interval=0)
     client._request_url = MagicMock(return_value={"errorCode": "0", "value": {}})

@@ -200,11 +200,10 @@ def test_missing_pool_code_is_ignored_and_missing_permissions_fail_closed():
     assert all(snapshot["is_pass_allowed"] is False for snapshot in snapshots)
 
 
-def test_blocked_sporttery_results_use_labeled_500_supplement_for_existing_official_matches():
+def test_blocked_official_results_are_reported_without_third_party_fallback():
     client = MagicMock()
-    client.get_match_results.side_effect = RuntimeError("403 Forbidden")
+    client.get_uniform_match_results.side_effect = RuntimeError("403 Forbidden")
     connection = MagicMock()
-    supplemental_result = {"match_id": 12, "raw_json": {"provider_id": "500-match-1"}}
 
     with (
         patch("scripts.official_crawler.SportteryClient", return_value=client),
@@ -212,24 +211,43 @@ def test_blocked_sporttery_results_use_labeled_500_supplement_for_existing_offic
         patch("scripts.official_crawler.record_official_collection_status") as record_status,
         patch("scripts.official_crawler.log_crawl"),
         patch("scripts.official_crawler.update_health") as update_health,
-        patch("scripts.official_crawler.get_results_via_500", return_value=[supplemental_result]),
-        patch(
-            "scripts.official_crawler.store_results", return_value={"inserted": 1, "updated": 0}
-        ) as store_results,
     ):
         get_db.return_value.__enter__.return_value = connection
 
         result = crawl_official_results("2026-07-10", "2026-07-11")
 
-    assert result["status"] == "ok"
-    assert result["source"] == "500.com"
-    assert result["source_type"] == "supplemental"
-    assert supplemental_result["raw_json"]["source_name"] == "500.com"
-    assert supplemental_result["raw_json"]["official_match_verified"] is True
-    store_results.assert_called_once_with(connection, [supplemental_result])
+    assert result["status"] == "error"
+    assert result["source"] == "sporttery"
+    assert "403" in result["error"]
     record_status.assert_called_once()
-    update_health.assert_any_call(connection, "sporttery", "results", "error", 0, ANY)
-    update_health.assert_any_call(connection, "500.com", "supplemental", "ok", ANY)
+    update_health.assert_called_once()
+
+
+def test_parse_uniform_official_result_uses_source_id_and_confirmed_status():
+    raw = {
+        "value": {
+            "matchResult": [
+                {
+                    "matchId": 2040511,
+                    "matchNumStr": "周二201",
+                    "matchDate": "2026-07-15",
+                    "sectionsNo1": "1:1",
+                    "sectionsNo999": "2:2",
+                    "goalLine": "-1",
+                    "matchResultStatus": "2",
+                    "poolStatus": "Payout",
+                }
+            ]
+        }
+    }
+
+    result = parse_results_from_response(raw)[0]
+
+    assert result["_source_match_id"] == "2040511"
+    assert result["_match_date"] == "2026-07-15"
+    assert result["result_status"] == "confirmed"
+    assert result["spf_result"] == "1"
+    assert result["rqspf_result"] == "0"
 
 
 def test_parse_official_result_preserves_numeric_zero_scores():
