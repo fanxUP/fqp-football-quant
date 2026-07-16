@@ -35,8 +35,9 @@ export interface RuntimeModule {
 // ---- Base request ----
 
 const TIMEOUT_MS = 15_000;
+const inFlightGetRequests = new Map<string, Promise<unknown>>();
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+async function performRequest<T>(path: string, init?: RequestInit): Promise<T> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
@@ -63,6 +64,22 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   } finally {
     clearTimeout(timer);
   }
+}
+
+function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const method = (init?.method ?? 'GET').toUpperCase();
+  if (method !== 'GET') return performRequest<T>(path, init);
+
+  const existing = inFlightGetRequests.get(path) as Promise<T> | undefined;
+  if (existing) return existing;
+
+  const pending = performRequest<T>(path, init).finally(() => {
+    if (inFlightGetRequests.get(path) === pending) {
+      inFlightGetRequests.delete(path);
+    }
+  });
+  inFlightGetRequests.set(path, pending);
+  return pending;
 }
 
 async function uploadRequest<T>(path: string, formData: FormData): Promise<T> {

@@ -89,7 +89,6 @@ def get_live_recommendations(
                         m.league_name,
                         m.kickoff_time,
                         m.match_status,
-                        om.handicap,
                         m.official_match_code,
                         r.half_home_goals,
                         r.half_away_goals,
@@ -108,12 +107,6 @@ def get_live_recommendations(
                     JOIN model_versions mv ON mv.id = mp.model_version_id
                     JOIN official_matches m ON m.id = mp.match_id
                     LEFT JOIN official_results r ON r.match_id = m.id
-                    LEFT JOIN LATERAL (
-                        SELECT handicap FROM official_odds_snapshots
-                        WHERE match_id = mp.match_id AND play_type = mp.play_type
-                          AND handicap IS NOT NULL
-                        ORDER BY snapshot_time DESC LIMIT 1
-                    ) om ON true
                     WHERE mv.is_active = true
                       AND mp.odds_snapshot_id IS NOT NULL
                       AND mp.feature_snapshot_id IS NOT NULL
@@ -144,7 +137,7 @@ def get_live_recommendations(
                        model_probability, market_probability, fair_odds, ev,
                        confidence_score, predict_time, model_name,
                        home_team_name, away_team_name, league_name,
-                       kickoff_time, match_status, handicap,
+                       kickoff_time, match_status, om.handicap,
                        official_match_code,
                        half_home_goals, half_away_goals,
                        full_home_goals, full_away_goals,
@@ -153,6 +146,13 @@ def get_live_recommendations(
                        spf_result, rqspf_result, total_goals_result,
                        score_result, half_full_result
                 FROM best_by_option
+                LEFT JOIN LATERAL (
+                    SELECT handicap FROM official_odds_snapshots
+                    WHERE match_id = best_by_option.match_id
+                      AND play_type = best_by_option.play_type
+                      AND handicap IS NOT NULL
+                    ORDER BY snapshot_time DESC LIMIT 1
+                ) om ON true
                 ORDER BY ev DESC, confidence_score DESC
                 LIMIT %(limit)s
                 """,

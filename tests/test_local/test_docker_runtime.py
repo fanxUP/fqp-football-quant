@@ -125,6 +125,20 @@ def test_post_kickoff_derivative_migration_preserves_ticket_evidence() -> None:
     assert "simulation_ticket_items" in migration
 
 
+def test_live_recommendation_indexes_cover_latest_prediction_and_handicap_lookup() -> None:
+    migration = (PROJECT_ROOT / "sql/41_live_recommendation_query_indexes.sql").read_text(
+        encoding="utf-8"
+    )
+    normalized = " ".join(migration.split())
+
+    assert "idx_predictions_live_latest" in migration
+    assert "match_id, model_version_id, play_type, option_code" in normalized
+    assert "predict_time DESC, id DESC" in normalized
+    assert "idx_odds_handicap_latest" in migration
+    assert "match_id, play_type, snapshot_time DESC" in normalized
+    assert "WHERE handicap IS NOT NULL" in migration
+
+
 def test_all_python_services_probe_an_in_network_api_health_url() -> None:
     compose = (
         PROJECT_ROOT / "ops/local/docker-compose.local.yml"

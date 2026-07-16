@@ -30,9 +30,15 @@ class TestPredictionsEndpoint:
         assert "mv.is_active = true" in sql
         assert "official_markets" in sql
         normalized = " ".join(sql.split())
-        assert "DISTINCT ON (mp.match_id, mp.model_version_id, mp.play_type, mp.option_code)" in normalized
+        assert (
+            "DISTINCT ON (mp.match_id, mp.model_version_id, mp.play_type, mp.option_code)"
+            in normalized
+        )
         assert "best_by_option" in normalized
         assert normalized.index("best_by_option") < normalized.index("WHERE ev > %(min_ev)s")
+        latest_clause = normalized.split("), best_by_option AS", maxsplit=1)[0]
+        assert "LEFT JOIN LATERAL" not in latest_clause
+        assert normalized.index("FROM best_by_option") < normalized.index("LEFT JOIN LATERAL")
 
     def test_returns_empty_when_no_predictions(self, client):
         mock_conn = MagicMock()
