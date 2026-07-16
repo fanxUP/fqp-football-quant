@@ -356,8 +356,77 @@ def test_build_betting_results_splits_me_and_agent():
     assert result["owners"]["me"]["stake"] == 10
     assert result["owners"]["me"]["profitLoss"] == 15
     assert result["owners"]["me"]["roi"] == 1.5
-    assert result["owners"]["agent"]["stake"] == 50
+    assert result["owners"]["agent"]["stake"] == 30
     assert result["owners"]["agent"]["pending"] == 1
     assert result["owners"]["agent"]["profitLoss"] == -30
     assert result["leader"] == "me"
     assert result["trend"][-1]["agentCumulativeProfitLoss"] == -30
+
+
+def test_fetch_settled_betting_tickets_maps_all_historical_sources():
+    class Cursor:
+        def execute(self, sql):
+            self.sql = sql
+
+        def fetchall(self):
+            return [
+                (
+                    "simulation",
+                    39,
+                    datetime(2026, 7, 4, 10, 11, 45),
+                    False,
+                    20,
+                    0,
+                    -20,
+                    -1,
+                    None,
+                    None,
+                ),
+                (
+                    "real",
+                    12,
+                    datetime(2026, 7, 7, 22, 2, 0),
+                    True,
+                    20,
+                    48,
+                    28,
+                    1.4,
+                    "agent",
+                    "recognized",
+                ),
+            ]
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    class Conn:
+        def cursor(self):
+            return Cursor()
+
+    tickets = betting._fetch_settled_betting_tickets(Conn())
+
+    assert tickets[0]["ticketUid"] == "agent:39"
+    assert tickets[0]["owner"] == "agent"
+    assert tickets[0]["source"] == "agent_recommendation"
+    assert tickets[0]["profitLoss"] == -20.0
+    assert tickets[1]["ticketUid"] == "real:12"
+    assert tickets[1]["owner"] == "agent"
+    assert tickets[1]["source"] == "ocr"
+
+
+def test_result_ticket_merge_replaces_current_settled_rows_with_full_history():
+    current = [
+        {"ticketUid": "agent:52", "status": "pending"},
+        {"ticketUid": "agent:39", "status": "settled", "profitLoss": -20},
+    ]
+    settled = [
+        {"ticketUid": "agent:39", "status": "settled", "profitLoss": -20},
+        {"ticketUid": "agent:40", "status": "settled", "profitLoss": -20},
+    ]
+
+    merged = betting._merge_result_tickets(current, settled)
+
+    assert [ticket["ticketUid"] for ticket in merged] == ["agent:52", "agent:39", "agent:40"]

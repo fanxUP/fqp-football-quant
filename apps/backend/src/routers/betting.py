@@ -319,6 +319,61 @@ def _fetch_recent_settlements(conn, limit: int) -> list[tuple]:
         return list(cur.fetchall())
 
 
+def _fetch_settled_betting_tickets(conn) -> list[dict]:
+    """Return the all-time realized ledger used by cumulative result metrics."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT ts.ticket_source, ts.ticket_id,
+                   timezone('Asia/Shanghai', ts.settle_time AT TIME ZONE 'UTC') AS settle_time,
+                   ts.is_won,
+                   ts.stake_amount, ts.net_prize, ts.profit_loss, ts.roi,
+                   rt.source_type, rt.ocr_status
+            FROM ticket_settlements ts
+            LEFT JOIN real_tickets rt
+              ON ts.ticket_source = 'real' AND rt.id = ts.ticket_id
+            WHERE ts.ticket_source IN ('simulator', 'simulation', 'real')
+            ORDER BY ts.settle_time, ts.id
+            """
+        )
+        rows = cur.fetchall()
+
+    tickets: list[dict] = []
+    for row in rows:
+        ticket_source = str(row[0])
+        ticket_id = int(row[1])
+        is_real_agent = ticket_source == "real" and row[8] in {"agent", "agent_real"}
+        owner = "agent" if ticket_source == "simulation" or is_real_agent else "me"
+        source = "manual"
+        if ticket_source == "simulation":
+            source = "agent_recommendation"
+        elif ticket_source == "real" and row[9] == "recognized":
+            source = "ocr"
+        settled_at = _iso(row[2])
+        tickets.append(
+            {
+                "ticketUid": _settlement_ticket_uid(ticket_source, ticket_id),
+                "owner": owner,
+                "kind": "real" if ticket_source == "real" else "simulation",
+                "source": source,
+                "status": "settled",
+                "date": _date_key(settled_at),
+                "stake": _float(row[4]),
+                "settledAmount": _float(row[5]),
+                "profitLoss": _float(row[6]),
+                "roi": _float(row[7]),
+                "settledAt": settled_at,
+                "isWon": bool(row[3]),
+            }
+        )
+    return tickets
+
+
+def _merge_result_tickets(current: list[dict], settled: list[dict]) -> list[dict]:
+    """Combine current pending tickets with the authoritative settled history."""
+    return [ticket for ticket in current if ticket.get("status") != "settled"] + settled
+
+
 def _empty_result_bucket() -> dict:
     return {
         "ticketCount": 0,
@@ -333,19 +388,18 @@ def _empty_result_bucket() -> dict:
 
 
 def _add_result_bucket(bucket: dict, ticket: dict) -> None:
-    stake = _float(ticket.get("stake"))
-    profit_loss = _float(ticket.get("profitLoss")) if ticket.get("profitLoss") is not None else 0.0
-    settled_amount = (
-        _float(ticket.get("settledAmount")) if ticket.get("settledAmount") is not None else 0.0
-    )
     bucket["ticketCount"] += 1
+    if ticket.get("status") != "settled":
+        bucket["pending"] += 1
+        return
+
+    stake = _float(ticket.get("stake"))
+    profit_loss = _float(ticket.get("profitLoss"))
+    settled_amount = _float(ticket.get("settledAmount"))
     bucket["stake"] += stake
     bucket["settledAmount"] += settled_amount
     bucket["profitLoss"] += profit_loss
-    if ticket.get("status") == "settled":
-        bucket["settled"] += 1
-    else:
-        bucket["pending"] += 1
+    bucket["settled"] += 1
     if profit_loss > 0:
         bucket["hitCount"] += 1
     bucket["roi"] = bucket["profitLoss"] / bucket["stake"] if bucket["stake"] else 0.0
@@ -374,6 +428,9 @@ def _build_betting_results(tickets: list[dict]) -> dict:
         source_key = f"{ticket.get('owner')}:{ticket.get('kind')}:{ticket.get('source')}"
         by_source.setdefault(source_key, _empty_result_bucket())
         _add_result_bucket(by_source[source_key], ticket)
+
+        if ticket.get("status") != "settled":
+            continue
 
         day = str(ticket.get("settledAt") or ticket.get("date") or "未归档")[:10]
         if day not in daily:
@@ -618,6 +675,6 @@ def list_betting_tickets(
 def get_betting_results(limit: int = Query(300, ge=1, le=500)):
     """Return P&L, ROI, hit counts, and trend across unified betting sources."""
     with get_db() as conn:
-        tickets = _collect_betting_tickets(conn, limit)
-    tickets.sort(key=lambda ticket: ticket.get("createdAt") or "", reverse=True)
-    return _build_betting_results(tickets[:limit])
+        current = _collect_betting_tickets(conn, limit)
+        settled = _fetch_settled_betting_tickets(conn)
+    return _build_betting_results(_merge_result_tickets(current, settled))
