@@ -20,6 +20,7 @@ from scripts.agent_storage import (
     list_review_gates,
     list_stale_tasks,
     list_task_artifacts,
+    recover_interrupted_job_runs,
     resolve_review_gate,
     retry_job_run,
     seed_agent_registry,
@@ -356,6 +357,30 @@ class TestListAuditLogs:
 
 
 class TestJobRuns:
+    def test_recovers_interrupted_runs_for_owned_job_codes(self):
+        mock_conn, mock_cur = _mock_conn(rowcount=2)
+
+        recovered = recover_interrupted_job_runs(
+            mock_conn,
+            ["official_odds_snapshot"],
+            reason="worker restarted",
+        )
+
+        assert recovered == 2
+        query, params = mock_cur.execute.call_args.args
+        assert "status = 'failed'" in query
+        assert "job_code = ANY" in query
+        assert params == ("worker restarted", ["official_odds_snapshot"])
+        mock_conn.commit.assert_called_once()
+
+    def test_recovery_skips_database_work_without_owned_jobs(self):
+        mock_conn, mock_cur = _mock_conn()
+
+        assert recover_interrupted_job_runs(mock_conn, []) == 0
+
+        mock_cur.execute.assert_not_called()
+        mock_conn.commit.assert_not_called()
+
     def test_start_job_run_returns_id(self):
         mock_conn, mock_cur = _mock_conn(fetchone=[100])
 

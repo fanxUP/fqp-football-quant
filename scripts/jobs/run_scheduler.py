@@ -113,9 +113,20 @@ def _audited_job(
         run_id = None
         try:
             from apps.backend.src.db import get_db
-            from scripts.agent_storage import finish_job_run, start_job_run
+            from scripts.agent_storage import (
+                finish_job_run,
+                recover_interrupted_job_runs,
+                start_job_run,
+            )
 
             with get_db() as conn:
+                recover_interrupted_job_runs(
+                    conn,
+                    [job_code],
+                    reason=(
+                        "superseded by a new scheduler execution after process interruption"
+                    ),
+                )
                 run_id = start_job_run(
                     conn,
                     {

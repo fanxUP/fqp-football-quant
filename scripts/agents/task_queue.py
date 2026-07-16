@@ -10,7 +10,12 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from apps.backend.src.db import get_db
-from scripts.agent_storage import finish_job_run, retry_job_run, start_job_run
+from scripts.agent_storage import (
+    finish_job_run,
+    recover_interrupted_job_runs,
+    retry_job_run,
+    start_job_run,
+)
 
 
 @dataclass
@@ -79,6 +84,11 @@ def start_tracked_job(
     if dependency_list:
         tracked_input_refs["dependencies"] = dependency_list
     with get_db() as conn:
+        recover_interrupted_job_runs(
+            conn,
+            [job_code],
+            reason="superseded by a new execution after process interruption",
+        )
         return start_job_run(conn, {
             "job_code": job_code,
             "job_name": job_code,

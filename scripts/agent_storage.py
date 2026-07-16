@@ -497,6 +497,30 @@ def finish_job_run(
     return True
 
 
+def recover_interrupted_job_runs(
+    conn: Any,
+    job_codes: list[str],
+    reason: str = "owning process restarted before completion",
+) -> int:
+    """Fail unfinished runs that belong to a restarting single-owner process."""
+    owned_codes = list(dict.fromkeys(code for code in job_codes if code))
+    if not owned_codes:
+        return 0
+    with conn.cursor() as cur:
+        cur.execute(
+            """UPDATE ai_job_runs
+               SET status = 'failed', finished_at = now(),
+                   duration_ms = EXTRACT(EPOCH FROM (now() - started_at)) * 1000,
+                   error_message = %s
+               WHERE status = 'running' AND job_code = ANY(%s)
+               """,
+            (reason, owned_codes),
+        )
+        recovered = cur.rowcount
+    conn.commit()
+    return int(recovered or 0)
+
+
 def retry_job_run(conn: Any, run_id: int, max_retries: int = 2) -> bool:
     """Restart a failed job run when its retry budget has not been exhausted.
 

@@ -1,6 +1,7 @@
 import re
 from datetime import datetime, timedelta
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 from apps.backend.src.services.pipeline_status import JOB_DEFINITIONS
 from scripts.jobs.run_scheduler import (
@@ -38,6 +39,26 @@ def test_scheduler_uses_completed_status_for_successful_legacy_jobs():
     source = Path("scripts/jobs/run_scheduler.py").read_text()
     assert 'conn, run_id, "completed"' in source
     assert 'finish_job_run(conn, run_id, "success"' not in source
+
+
+def test_scheduler_recovers_interrupted_legacy_run_before_starting_next_one():
+    conn = MagicMock()
+    wrapped = _audited_job("settle_tickets", "票单结算", "settlement_agent", lambda: {})
+
+    with (
+        patch("apps.backend.src.db.get_db") as get_db,
+        patch("scripts.agent_storage.recover_interrupted_job_runs") as recover,
+        patch("scripts.agent_storage.start_job_run", return_value=21),
+        patch("scripts.agent_storage.finish_job_run"),
+    ):
+        get_db.return_value.__enter__.return_value = conn
+        wrapped()
+
+    recover.assert_called_once_with(
+        conn,
+        ["settle_tickets"],
+        reason="superseded by a new scheduler execution after process interruption",
+    )
 
 
 def test_scheduler_has_no_numberless_match_refresh_path():
