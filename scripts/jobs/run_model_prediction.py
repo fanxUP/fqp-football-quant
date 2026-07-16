@@ -17,6 +17,7 @@ from typing import Any
 from apps.backend.src.db import get_db
 from scripts.agents.task_queue import finish_tracked_job, start_tracked_job
 from scripts.business_time import business_now
+from scripts.derived_play_predictions import store_derived_play_predictions
 from scripts.dixon_coles_model import dixon_coles_matrix
 from scripts.elo_model import get_or_create_elo, run_elo_1x2_prediction
 from scripts.feature_adjustment import GoalRateAdjustment, adjust_goal_rates
@@ -30,7 +31,6 @@ from scripts.odds_conversion import (
 from scripts.poisson_model import (
     derive_1x2,
     derive_handicap,
-    derive_total_goals,
     estimate_lambdas_from_odds,
     score_matrix,
 )
@@ -47,22 +47,6 @@ OPTION_REVERSE = {"3": "h", "1": "d", "0": "a"}
 
 def _now() -> str:
     return business_now().replace(tzinfo=None).isoformat(timespec="seconds")
-
-
-def _latest_feature_snapshot_id(conn: Any, match_id: int) -> int | None:
-    """Return the newest feature snapshot for evidence-chain traceability."""
-    with conn.cursor() as cur:
-        cur.execute(
-            """
-            SELECT id FROM match_feature_snapshots
-            WHERE match_id = %s
-            ORDER BY snapshot_time DESC
-            LIMIT 1
-            """,
-            (match_id,),
-        )
-        row = cur.fetchone()
-    return row[0] if row else None
 
 
 def _latest_feature_snapshot(conn: Any, match_id: int) -> dict[str, Any] | None:
@@ -349,6 +333,7 @@ def _predict_match_play_type(
         poisson_probs = dict(market_probs)
         try:
             poisson_matrix = score_matrix(lam_h, lam_a)
+            raw_poisson_matrix = poisson_matrix
         except Exception:
             pass
 
@@ -368,18 +353,24 @@ def _predict_match_play_type(
     except Exception:
         raw_dc_probs = dict(raw_poisson_probs)
         dc_probs = dict(poisson_probs)
+        raw_dc_matrix = raw_poisson_matrix
+        dc_matrix = poisson_matrix
 
     # 5b. Derive BF/ZJQ/BQC from SPF score matrix
-    if play_type == "spf" and poisson_matrix:
-        _store_derived_play_types(
-            conn,
-            mid,
-            poisson_matrix,
-            dc_matrix or poisson_matrix,
-            active_models,
-            lam_h,
-            lam_a,
-            predict_time,
+    derived_predictions = 0
+    if play_type == "spf" and poisson_matrix and raw_poisson_matrix:
+        derived_predictions = store_derived_play_predictions(
+            conn=conn,
+            match_id=mid,
+            active_models=active_models,
+            raw_poisson_matrix=raw_poisson_matrix,
+            poisson_matrix=poisson_matrix,
+            raw_dc_matrix=raw_dc_matrix or raw_poisson_matrix,
+            dc_matrix=dc_matrix or poisson_matrix,
+            raw_lambdas=(raw_lam_h, raw_lam_a),
+            adjusted_lambdas=(lam_h, lam_a),
+            feature_snapshot_id=feature_snapshot_id,
+            predict_time=predict_time,
         )
 
     # 5. Elo model
@@ -408,7 +399,7 @@ def _predict_match_play_type(
         "elo_rating": (elo_1x2, elo_1x2),
     }
 
-    total_p = 0
+    total_p = derived_predictions
     total_v = 0
 
     for model_name, (raw_probs, probs) in model_results.items():
@@ -497,327 +488,6 @@ def _predict_match_play_type(
             total_v += 1
 
     return total_p, total_v
-
-
-def _store_derived_play_types(
-    conn: Any,
-    mid: int,
-    poisson_matrix: dict[str, float],
-    dc_matrix: dict[str, float],
-    active_models: dict[str, int],
-    lam_h: float,
-    lam_a: float,
-    predict_time: str,
-) -> int:
-    """Derive and store predictions for BF, ZJQ, BQC from Poisson/DC matrices.
-
-    Calls the sporttery uniform fixed-bonus API to get market odds for
-    these play types (not stored in DB yet). Uses SPF score matrices
-    to derive model probabilities without re-running models.
-
-    Returns:
-        Number of additional predictions stored.
-    """
-    from scripts.odds_conversion import expected_value
-    from scripts.sporttery_client import SportteryClient
-
-    feature_snapshot_id = _latest_feature_snapshot_id(conn, mid)
-    total = 0
-    poisson_mv = active_models.get("maher_poisson")
-    dc_mv = active_models.get("dixon_coles")
-    if not poisson_mv:
-        return 0
-
-    # Get sporttery matchId from raw_json
-    sporttery_mid = None
-    with conn.cursor() as cur:
-        cur.execute(
-            "SELECT raw_json->>'matchId' FROM official_matches WHERE id = %s",
-            (mid,),
-        )
-        row = cur.fetchone()
-        if row and row[0]:
-            sporttery_mid = row[0]
-
-    market: dict[str, dict[str, float]] = {}
-
-    if not sporttery_mid:
-        # Fallback: derive market odds from Poisson model probabilities
-        # Apply 8% margin so market_prob < model_prob, creating positive EV
-        MARGIN = 1.08
-        zjq_probs = derive_total_goals(poisson_matrix)
-        market["zjq"] = {k: round(MARGIN / v, 2) if v > 0 else 100.0 for k, v in zjq_probs.items()}
-
-        # BQC: derive from HT/FT lambdas (same heuristic as main code)
-        ht_lambda_h = lam_h * 0.45 if lam_h else 0.4
-        ht_lambda_a = lam_a * 0.45 if lam_a else 0.3
-        ft_lambda_h = lam_h if lam_h else 1.0
-        ft_lambda_a = lam_a if lam_a else 0.8
-        ht_matrix = score_matrix(ht_lambda_h, ht_lambda_a, max_goals=4)
-        ft_matrix = score_matrix(ft_lambda_h, ft_lambda_a, max_goals=4)
-        ht_1x2 = derive_1x2(ht_matrix)
-        ft_1x2 = derive_1x2(ft_matrix)
-        bqc_market: dict[str, float] = {}
-        for hc in ("3", "1", "0"):
-            for fc in ("3", "1", "0"):
-                opt = f"{hc}{fc}"
-                prob = ht_1x2.get(hc, 0) * ft_1x2.get(fc, 0)
-                if prob > 0.01:
-                    bqc_market[opt] = round(MARGIN / prob, 2)
-        if bqc_market:
-            market["bqc"] = bqc_market
-
-        market["bf"] = {
-            score: round(MARGIN / prob, 2) if prob > 0 else 100.0
-            for score, prob in poisson_matrix.items()
-            if prob >= 0.01
-        }
-    else:
-        # Fetch fixed-bonus odds from uniform API
-        try:
-            client = SportteryClient()
-            bonus = client.get_uniform_fixed_bonus(int(sporttery_mid))
-            client.close()
-        except Exception:
-            bonus = {}
-
-        odds_history = bonus.get("value", {}).get("oddsHistory", {})
-        if not odds_history:
-            odds_history = {}
-
-        # TTG → zjq (总进球数)
-        ttg = odds_history.get("ttgList")
-        if ttg:
-            market["zjq"] = {}
-            for entry in ttg:
-                for k, v in entry.items():
-                    if k.startswith("s") and k[1:].isdigit() and v:
-                        try:
-                            market["zjq"][k[1:]] = float(v)
-                        except (ValueError, TypeError):
-                            pass
-
-        # HAFU → bqc (半全场)
-        HAFU_MAP = {
-            "hh": "33",
-            "hd": "31",
-            "ha": "30",
-            "dh": "13",
-            "dd": "11",
-            "da": "10",
-            "ah": "03",
-            "ad": "01",
-            "aa": "00",
-        }
-        hafu = odds_history.get("hafuList")
-        if hafu:
-            market["bqc"] = {}
-            for entry in hafu:
-                for sk, internal_code in HAFU_MAP.items():
-                    v = entry.get(sk)
-                    if v:
-                        try:
-                            market["bqc"][internal_code] = float(v)
-                        except (ValueError, TypeError):
-                            pass
-
-        # CRS → bf (比分)
-        crs = odds_history.get("crsList")
-        if crs:
-            market["bf"] = {}
-            for entry in crs:
-                for k, v in entry.items():
-                    if k.startswith("s") and v:
-                        # Convert "s01s00" → "1:0"
-                        try:
-                            parts = k[1:].split("s")
-                            if len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit():
-                                score_key = f"{int(parts[0])}:{int(parts[1])}"
-                                market["bf"][score_key] = float(v)
-                            elif k == "s-1sh":
-                                market["bf"]["other_h"] = float(v)
-                            elif k == "s-1sd":
-                                market["bf"]["other_d"] = float(v)
-                            elif k == "s-1sa":
-                                market["bf"]["other_a"] = float(v)
-                        except (ValueError, TypeError):
-                            pass
-
-    # If official odds are unavailable, keep the training pipeline alive with
-    # model-derived fair-market odds. These are explicitly synthetic and are
-    # never treated as official Sporttery snapshots.
-    if not market:
-        margin = 1.08
-        zjq_probs = derive_total_goals(poisson_matrix)
-        market["zjq"] = {k: round(margin / v, 2) for k, v in zjq_probs.items() if v > 0}
-        market["bf"] = {
-            score: round(margin / prob, 2) for score, prob in poisson_matrix.items() if prob >= 0.01
-        }
-        ht_matrix = score_matrix(lam_h * 0.45, lam_a * 0.45, max_goals=4)
-        ht_1x2 = derive_1x2(ht_matrix)
-        ft_1x2 = derive_1x2(poisson_matrix)
-        market["bqc"] = {
-            f"{hc}{fc}": round(margin / max(ht_1x2.get(hc, 0) * ft_1x2.get(fc, 0), 1e-6), 2)
-            for hc in ("3", "1", "0")
-            for fc in ("3", "1", "0")
-        }
-
-    # ── 1. ZJQ (总进球数) ──
-    if "zjq" in market:
-        poisson_zjq = derive_total_goals(poisson_matrix)
-        dc_zjq = derive_total_goals(dc_matrix) if dc_matrix else poisson_zjq
-
-        for opt_code, market_sp in market["zjq"].items():
-            if market_sp <= 0:
-                continue
-            model_p = poisson_zjq.get(opt_code, 0)
-            if model_p <= 0.001:
-                continue
-            ev = expected_value(model_p, market_sp)
-            if ev < 0:
-                continue  # skip negative EV
-
-            # Average with DC if available
-            if dc_mv and poisson_mv:
-                dc_p = dc_zjq.get(opt_code, 0)
-                avg_p = (model_p + dc_p) / 2
-            else:
-                avg_p = model_p
-
-            # Store as Poisson prediction
-            for mv_id, _probs, _model_name in [
-                (poisson_mv, {opt_code: avg_p}, "maher_poisson"),
-            ]:
-                if not mv_id:
-                    continue
-                pred = {
-                    "match_id": mid,
-                    "model_version_id": mv_id,
-                    "odds_snapshot_id": None,
-                    "feature_snapshot_id": feature_snapshot_id,
-                    "predict_time": predict_time,
-                    "play_type": "zjq",
-                    "option_code": opt_code,
-                    "model_probability": round(avg_p, 6),
-                    "market_probability": round(1.0 / market_sp, 6),
-                    "fair_odds": round(1.0 / avg_p, 4) if avg_p > 0 else None,
-                    "ev": round(ev, 6),
-                    "confidence_score": round(min(1.0, avg_p * 3), 4),
-                    "risk_score": round(max(0, 1.0 - avg_p * 3), 4),
-                }
-                store_model_prediction(conn, pred)
-                total += 1
-
-    # ── 2. BF (比分 — only top high-probability scores) ──
-    if "bf" in market:
-        # Sort matrix entries by probability descending, take top 5
-        poisson_scores = sorted(poisson_matrix.items(), key=lambda x: -x[1])
-        dc_scores = sorted(dc_matrix.items(), key=lambda x: -x[1]) if dc_matrix else poisson_scores
-
-        count = 0
-        for poisson_entry, dc_entry in zip(poisson_scores, dc_scores, strict=False):
-            score_str = poisson_entry[0]
-            p_prob = poisson_entry[1]
-            d_prob = dc_entry[1] if dc_matrix else p_prob
-
-            # Only show meaningful scores
-            if p_prob < 0.03:
-                break
-
-            market_sp = market["bf"].get(score_str, 0)
-            if market_sp <= 0:
-                continue
-
-            avg_p = (p_prob + d_prob) / 2
-            ev = expected_value(avg_p, market_sp)
-            if ev < -0.3:
-                continue  # skip very negative EV (still show if near break-even)
-
-            for mv_id, _model_name in [
-                (poisson_mv, "maher_poisson"),
-            ]:
-                if not mv_id:
-                    continue
-                pred = {
-                    "match_id": mid,
-                    "model_version_id": mv_id,
-                    "odds_snapshot_id": None,
-                    "feature_snapshot_id": feature_snapshot_id,
-                    "predict_time": predict_time,
-                    "play_type": "bf",
-                    "option_code": score_str,
-                    "model_probability": round(avg_p, 6),
-                    "market_probability": round(1.0 / market_sp, 6),
-                    "fair_odds": round(1.0 / avg_p, 4) if avg_p > 0 else None,
-                    "ev": round(ev, 6),
-                    "confidence_score": round(min(1.0, avg_p * 3), 4),
-                    "risk_score": round(max(0, 1.0 - avg_p * 3), 4),
-                }
-                store_model_prediction(conn, pred)
-                total += 1
-                count += 1
-                if count >= 5:
-                    break
-
-    # ── 3. BQC (半全场 — simplified from score matrix) ──
-    if "bqc" in market and len(market["bqc"]) >= 3:
-        # Simple heuristic: HT goals ~ 45% of FT, using fraction of total lambda
-        ht_lambda_h = lam_h * 0.45 if lam_h else 0.4
-        ht_lambda_a = lam_a * 0.45 if lam_a else 0.3
-        ft_lambda_h = lam_h if lam_h else 1.0
-        ft_lambda_a = lam_a if lam_a else 0.8
-
-        # Compute HT and FT matrices
-        ht_matrix = score_matrix(ht_lambda_h, ht_lambda_a, max_goals=4)
-        ft_matrix = score_matrix(ft_lambda_h, ft_lambda_a, max_goals=4)
-
-        # Derive HT and FT 1x2
-        ht_1x2 = derive_1x2(ht_matrix)
-        ft_1x2 = derive_1x2(ft_matrix)
-
-        # BQC = HT result + FT result
-        bqc_opts: dict[str, float] = {}
-        ht_codes = [("3", "胜"), ("1", "平"), ("0", "负")]
-        ft_codes = [("3", "胜"), ("1", "平"), ("0", "负")]
-        for hc, _hl in ht_codes:
-            for fc, _fl in ft_codes:
-                opt = f"{hc}{fc}"  # e.g., "33" for HH, "31" for HD
-                prob = ht_1x2.get(hc, 0) * ft_1x2.get(fc, 0)
-                if prob > 0.01:
-                    bqc_opts[opt] = prob
-
-        for opt_code, model_p in bqc_opts.items():
-            market_sp = market["bqc"].get(opt_code, 0)
-            if market_sp <= 0:
-                continue
-            ev = expected_value(model_p, market_sp)
-            if ev < -0.5:
-                continue
-
-            for mv_id, _model_name in [
-                (poisson_mv, "maher_poisson"),
-            ]:
-                if not mv_id:
-                    continue
-                pred = {
-                    "match_id": mid,
-                    "model_version_id": mv_id,
-                    "odds_snapshot_id": None,
-                    "feature_snapshot_id": feature_snapshot_id,
-                    "predict_time": predict_time,
-                    "play_type": "bqc",
-                    "option_code": opt_code,
-                    "model_probability": round(model_p, 6),
-                    "market_probability": round(1.0 / market_sp, 6),
-                    "fair_odds": round(1.0 / model_p, 4) if model_p > 0 else None,
-                    "ev": round(ev, 6),
-                    "confidence_score": round(min(1.0, model_p * 3), 4),
-                    "risk_score": round(max(0, 1.0 - model_p * 3), 4),
-                }
-                store_model_prediction(conn, pred)
-                total += 1
-
-    return total
 
 
 def _model_std(values: list[float]) -> float:
