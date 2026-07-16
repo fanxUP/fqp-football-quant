@@ -1,38 +1,8 @@
-import { useEffect, useRef } from 'react';
-import { BarChart, HeatmapChart, LineChart, PieChart, RadarChart, ScatterChart } from 'echarts/charts';
-import {
-  AriaComponent,
-  DataZoomComponent,
-  GridComponent,
-  LegendComponent,
-  MarkLineComponent,
-  RadarComponent,
-  TooltipComponent,
-  VisualMapComponent,
-} from 'echarts/components';
-import { init, use, type ECharts } from 'echarts/core';
-import { CanvasRenderer } from 'echarts/renderers';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { ECharts } from 'echarts/core';
 import { useTheme } from '../../app/ThemeContext';
 import { getChartColors } from '../../theme/chartTokens';
 import ChartFrame from '../../visualization/core/ChartFrame';
-
-use([
-  BarChart,
-  HeatmapChart,
-  LineChart,
-  PieChart,
-  RadarChart,
-  ScatterChart,
-  AriaComponent,
-  DataZoomComponent,
-  GridComponent,
-  LegendComponent,
-  MarkLineComponent,
-  RadarComponent,
-  TooltipComponent,
-  VisualMapComponent,
-  CanvasRenderer,
-]);
 
 interface ChartCardProps {
   title: string;
@@ -44,6 +14,27 @@ interface ChartCardProps {
   emptyReason?: string;
   error?: string | null;
   updatedAt?: string;
+}
+
+interface RenderConfig {
+  option: Record<string, unknown>;
+  subtitle?: string;
+  title: string;
+}
+
+function applyChartOption(instance: ECharts, config: RenderConfig) {
+  const textColor = getChartColors().text;
+  instance.setOption({
+    backgroundColor: 'transparent',
+    textStyle: { color: textColor, fontSize: 14 },
+    legend: { textStyle: { color: textColor, fontSize: 14 } },
+    aria: { show: true, description: config.subtitle ? `${config.title}。${config.subtitle}` : config.title },
+    ...config.option,
+  }, {
+    notMerge: false,
+    lazyUpdate: true,
+    replaceMerge: ['series'],
+  });
 }
 
 export default function ChartCard({
@@ -59,47 +50,79 @@ export default function ChartCard({
 }: ChartCardProps) {
   const chartRef = useRef<HTMLDivElement>(null);
   const instanceRef = useRef<ECharts | null>(null);
+  const appliedConfigRef = useRef<RenderConfig | null>(null);
+  const [runtimeError, setRuntimeError] = useState<string | null>(null);
   const { theme } = useTheme();
-  const canRender = !loading && !empty && !error;
+  const effectiveError = error ?? runtimeError;
+  const canRender = !loading && !empty && !effectiveError;
+  const renderConfig = useMemo(
+    () => ({ option, subtitle, title }),
+    [option, subtitle, theme, title],
+  );
+  const latestConfigRef = useRef(renderConfig);
+  latestConfigRef.current = renderConfig;
 
   useEffect(() => {
     if (!canRender || !chartRef.current) return;
 
-    const instance = init(chartRef.current, undefined, { renderer: 'canvas' });
-    instanceRef.current = instance;
-    const resize = () => instance.resize();
-    const observer = typeof ResizeObserver === 'undefined'
-      ? null
-      : new ResizeObserver(resize);
+    let cancelled = false;
+    let observer: ResizeObserver | null = null;
+    let resize: (() => void) | null = null;
 
-    if (observer) observer.observe(chartRef.current);
-    else window.addEventListener('resize', resize);
+    void (async () => {
+      try {
+        const { ensureChartRuntime } = await import('./chartRuntime');
+        const runtime = await ensureChartRuntime(latestConfigRef.current.option);
+        if (cancelled || !chartRef.current) return;
+
+        const instance = runtime.init(chartRef.current, undefined, { renderer: 'canvas' });
+        instanceRef.current = instance;
+        resize = () => instance.resize();
+        observer = typeof ResizeObserver === 'undefined'
+          ? null
+          : new ResizeObserver(resize);
+
+        if (observer) observer.observe(chartRef.current);
+        else window.addEventListener('resize', resize);
+
+        applyChartOption(instance, latestConfigRef.current);
+        appliedConfigRef.current = latestConfigRef.current;
+      } catch {
+        if (!cancelled) setRuntimeError('图表组件加载失败，请刷新后重试');
+      }
+    })();
 
     return () => {
+      cancelled = true;
       observer?.disconnect();
-      if (!observer) window.removeEventListener('resize', resize);
-      instance.dispose();
+      if (!observer && resize) window.removeEventListener('resize', resize);
+      instanceRef.current?.dispose();
       instanceRef.current = null;
+      appliedConfigRef.current = null;
     };
   }, [canRender]);
 
   useEffect(() => {
-    const instance = instanceRef.current;
-    if (!instance || !canRender) return;
+    if (!canRender) return;
+    let cancelled = false;
 
-    const textColor = getChartColors().text;
-    instance.setOption({
-      backgroundColor: 'transparent',
-      textStyle: { color: textColor, fontSize: 14 },
-      legend: { textStyle: { color: textColor, fontSize: 14 } },
-      aria: { show: true, description: subtitle ? `${title}。${subtitle}` : title },
-      ...option,
-    }, {
-      notMerge: false,
-      lazyUpdate: true,
-      replaceMerge: ['series'],
-    });
-  }, [canRender, option, subtitle, theme, title]);
+    void (async () => {
+      try {
+        const { ensureChartRuntime } = await import('./chartRuntime');
+        await ensureChartRuntime(renderConfig.option);
+        const instance = instanceRef.current;
+        if (cancelled || !instance || appliedConfigRef.current === renderConfig) return;
+        applyChartOption(instance, renderConfig);
+        appliedConfigRef.current = renderConfig;
+      } catch {
+        if (!cancelled) setRuntimeError('图表组件加载失败，请刷新后重试');
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [canRender, renderConfig]);
 
   return (
     <ChartFrame
@@ -109,7 +132,7 @@ export default function ChartCard({
       loading={loading}
       empty={empty}
       emptyReason={emptyReason}
-      error={error}
+      error={effectiveError}
       height={height}
     >
       <div

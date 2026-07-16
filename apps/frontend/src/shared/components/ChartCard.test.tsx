@@ -1,24 +1,24 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import ChartCard from './ChartCard';
 
 // ----- Mock the tree-shakeable ECharts core entry ---------------------------
 
-const { mockInit, mockInstance } = vi.hoisted(() => {
+const { mockEnsureRuntime, mockInit, mockInstance } = vi.hoisted(() => {
   const inst = {
     setOption: vi.fn(),
     dispose: vi.fn(),
     resize: vi.fn(),
   };
   return {
+    mockEnsureRuntime: vi.fn(),
     mockInit: vi.fn(() => inst),
     mockInstance: inst,
   };
 });
 
-vi.mock('echarts/core', () => ({
-  init: mockInit,
-  use: vi.fn(),
+vi.mock('./chartRuntime', () => ({
+  ensureChartRuntime: mockEnsureRuntime,
 }));
 
 // ----- Mock ThemeContext (ChartCard reads theme for textColor) ---------------
@@ -41,6 +41,7 @@ vi.mock('./Card', () => ({
 describe('ChartCard', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockEnsureRuntime.mockResolvedValue({ init: mockInit });
     mockTheme = 'redline-quant';
     document.documentElement.removeAttribute('style');
     document.documentElement.style.setProperty('--fqp-chart-text', '#F5F5F7');
@@ -107,9 +108,17 @@ describe('ChartCard', () => {
   // Options / theme
   // ------------------------------------------------------------------
   describe('echarts integration', () => {
-    it('initialises echarts with the themed option', () => {
+    it('shows a readable error when the chart runtime cannot load', async () => {
+      mockEnsureRuntime.mockRejectedValueOnce(new Error('chunk unavailable'));
+      render(<ChartCard title="Broken Chart" option={baseOption} />);
+
+      expect(await screen.findByRole('alert')).toHaveTextContent('图表组件加载失败，请刷新后重试');
+      expect(mockInit).not.toHaveBeenCalled();
+    });
+
+    it('initialises echarts with the themed option', async () => {
       render(<ChartCard title="Theme Test" option={baseOption} />);
-      expect(mockInit).toHaveBeenCalledTimes(1);
+      await waitFor(() => expect(mockInit).toHaveBeenCalledTimes(1));
 
       const setOptCalls = mockInstance.setOption.mock.calls;
       expect(setOptCalls.length).toBeGreaterThanOrEqual(1);
@@ -119,16 +128,18 @@ describe('ChartCard', () => {
       expect(passedOption.textStyle).toEqual({ color: '#F5F5F7', fontSize: 14 });
     });
 
-    it('uses the active theme text token', () => {
+    it('uses the active theme text token', async () => {
       mockTheme = 'polar-lab';
       document.documentElement.style.setProperty('--fqp-chart-text', '#172033');
       render(<ChartCard title="Light Chart" option={baseOption} />);
+      await waitFor(() => expect(mockInstance.setOption).toHaveBeenCalled());
       const passedOption = mockInstance.setOption.mock.calls[0][0] as Record<string, unknown>;
       expect(passedOption.textStyle).toEqual({ color: '#172033', fontSize: 14 });
     });
 
-    it('更新数据时复用图表实例', () => {
+    it('更新数据时复用图表实例', async () => {
       const { rerender } = render(<ChartCard title="Trend" option={baseOption} />);
+      await waitFor(() => expect(mockInstance.setOption).toHaveBeenCalledTimes(1));
 
       rerender(
         <ChartCard
@@ -137,8 +148,8 @@ describe('ChartCard', () => {
         />,
       );
 
+      await waitFor(() => expect(mockInstance.setOption).toHaveBeenCalledTimes(2));
       expect(mockInit).toHaveBeenCalledTimes(1);
-      expect(mockInstance.setOption).toHaveBeenCalledTimes(2);
       expect(mockInstance.dispose).not.toHaveBeenCalled();
     });
   });
@@ -147,8 +158,9 @@ describe('ChartCard', () => {
   // Cleanup
   // ------------------------------------------------------------------
   describe('cleanup', () => {
-    it('disposes instance on unmount', () => {
+    it('disposes instance on unmount', async () => {
       const { unmount } = render(<ChartCard title="Cleanup" option={baseOption} />);
+      await waitFor(() => expect(mockInit).toHaveBeenCalledTimes(1));
       unmount();
       expect(mockInstance.dispose).toHaveBeenCalledTimes(1);
     });
