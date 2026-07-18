@@ -28,7 +28,7 @@ const { addSeries, applyOptions, createChart, fitContent, setData } = vi.hoisted
 vi.mock('lightweight-charts', () => ({
   ColorType: { Solid: 'solid' },
   CrosshairMode: { Normal: 0 },
-  LineStyle: { Solid: 0, Dotted: 1, Dashed: 2 },
+  LineStyle: { Solid: 0 },
   LineSeries: 'LineSeries',
   createChart,
 }));
@@ -69,15 +69,15 @@ describe('LightweightLineChart', () => {
     }));
   });
 
-  it('允许业务图表固定系列颜色和线型', () => {
+  it('业务图表只允许固定颜色并统一使用实线', () => {
     render(<LightweightLineChart
-      series={[{ ...series[0], color: '#123456', pattern: 'dashed' }]}
+      series={[{ ...series[0], color: '#123456' }]}
       ariaLabel="模型表现"
     />);
 
     expect(addSeries).toHaveBeenCalledWith('LineSeries', expect.objectContaining({
       color: '#123456',
-      lineStyle: 2,
+      lineStyle: 0,
     }));
   });
 

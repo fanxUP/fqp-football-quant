@@ -13,11 +13,30 @@ export const CHART_COLORS = Object.defineProperties(
   ),
 ) as ChartColors;
 
+function enforceSolidLineStyles<T>(value: T): T {
+  if (Array.isArray(value)) {
+    return value.map((item) => enforceSolidLineStyles(item)) as T;
+  }
+  if (value === null || typeof value !== 'object') return value;
+  if (Object.getPrototypeOf(value) !== Object.prototype) return value;
+
+  const normalized = Object.fromEntries(
+    Object.entries(value as Record<string, unknown>).map(([key, child]) => {
+      const normalizedChild = enforceSolidLineStyles(child);
+      if (key === 'lineStyle' && normalizedChild && typeof normalizedChild === 'object' && !Array.isArray(normalizedChild)) {
+        return [key, { ...normalizedChild, type: 'solid' }];
+      }
+      return [key, normalizedChild];
+    }),
+  );
+  return normalized as T;
+}
+
 /** Apply FQP red-black theme defaults to any ECharts option. */
 export function applyChartTheme(option: EChartsCoreOption): EChartsCoreOption {
   const colors = getChartColors();
   const palette = [colors.primary, colors.blue, colors.amber, colors.green, colors.purple, colors.cyan];
-  return {
+  return enforceSolidLineStyles({
     backgroundColor: 'transparent',
     color: palette,
     textStyle: {
@@ -61,10 +80,10 @@ export function applyChartTheme(option: EChartsCoreOption): EChartsCoreOption {
       splitLine: {
         lineStyle: {
           color: colors.gridLine,
-          type: 'dashed',
+          type: 'solid',
         },
       },
     },
     ...option,
-  };
+  });
 }

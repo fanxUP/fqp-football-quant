@@ -19,7 +19,6 @@ export interface LightweightLineSeries {
   name: string;
   data: LineData<Time>[];
   color?: string;
-  pattern?: 'solid' | 'dashed' | 'dotted';
 }
 
 interface LightweightLineChartProps {
@@ -130,14 +129,9 @@ export default function LightweightLineChart({
     series.forEach((item, index) => {
       let api = seriesRef.current.get(item.id);
       if (!api) {
-        const pattern = item.pattern === 'dashed'
-          ? LineStyle.Dashed
-          : item.pattern === 'dotted'
-            ? LineStyle.Dotted
-            : LineStyle.Solid;
         api = chart.addSeries(LineSeries, {
           color: item.color ?? palette[index % palette.length],
-          lineStyle: pattern,
+          lineStyle: LineStyle.Solid,
           lineWidth: 2,
           title: item.name,
           priceLineVisible: false,
@@ -197,7 +191,7 @@ export default function LightweightLineChart({
               onClick={() => toggleSeries(item.id)}
             >
               <span
-                className={`lightweight-line-legend-swatch is-${item.pattern ?? 'solid'}`}
+                className="lightweight-line-legend-swatch"
                 style={{ borderTopColor: item.color ?? palette[index % palette.length] }}
                 aria-hidden="true"
               />

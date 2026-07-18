@@ -91,7 +91,7 @@ export default function OddsMovementChart({
           data: probs.map((p) => p * 100),
           smooth: true,
           symbol: 'none',
-          lineStyle: { color: CHART_COLORS.amber, width: 1.5, type: 'dashed' },
+          lineStyle: { color: CHART_COLORS.amber, width: 1.5, type: 'solid' },
           itemStyle: { color: CHART_COLORS.amber },
         },
         ...(anomalyTimes.length > 0

@@ -53,4 +53,17 @@ describe('ProfitLossTrendChart', () => {
     expect(series[2].data).toEqual([-10, -10]);
     expect(series[3].data).toEqual([0, 25]);
   });
+
+  it('uses solid lines for both cumulative series and the zero reference', () => {
+    const option = buildProfitLossTrendOption(points);
+    const series = option.series as Array<{
+      type: string;
+      lineStyle?: { type?: string };
+      markLine?: { lineStyle?: { type?: string } };
+    }>;
+    const cumulativeSeries = series.filter((item) => item.type === 'line');
+
+    expect(cumulativeSeries.map((item) => item.lineStyle?.type)).toEqual(['solid', 'solid']);
+    expect(cumulativeSeries[0].markLine?.lineStyle?.type).toBe('solid');
+  });
 });

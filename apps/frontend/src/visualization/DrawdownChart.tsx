@@ -65,7 +65,7 @@ export default function DrawdownChart({
           markLine: {
             silent: true,
             data: [{ type: 'min', label: { formatter: '最大回撤: {c}%' } }],
-            lineStyle: { color: CHART_COLORS.primary, type: 'dashed' },
+            lineStyle: { color: CHART_COLORS.primary, type: 'solid' },
           },
         },
       ],

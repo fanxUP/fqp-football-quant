@@ -43,7 +43,7 @@ export default function BacktestMetricBarChart({
       min: metric === 'drawdown' ? 0 : undefined,
       splitNumber: 3,
       axisLabel: { formatter: (value: number) => `${value}%`, hideOverlap: true },
-      splitLine: { lineStyle: { color: CHART_COLORS.gridLine, type: 'dashed' } },
+      splitLine: { lineStyle: { color: CHART_COLORS.gridLine, type: 'solid' } },
     },
     yAxis: {
       type: 'category',

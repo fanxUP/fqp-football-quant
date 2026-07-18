@@ -21,4 +21,23 @@ describe('applyChartTheme', () => {
     expect(option.legend.textStyle.color).toBe('#657089');
     expect(option.tooltip.backgroundColor).toBe('#FFFFFF');
   });
+
+  it('forces every chart line style to solid', () => {
+    const values = new Float32Array([1, 2]);
+    const option = applyChartTheme({
+      series: [
+        {
+          type: 'line',
+          lineStyle: { type: 'dashed' },
+          markLine: { lineStyle: { type: 'dotted' } },
+        },
+        { type: 'line', data: values },
+      ],
+    }) as Record<string, any>;
+
+    expect(option.yAxis.splitLine.lineStyle.type).toBe('solid');
+    expect(option.series[0].lineStyle.type).toBe('solid');
+    expect(option.series[0].markLine.lineStyle.type).toBe('solid');
+    expect(option.series[1].data).toBe(values);
+  });
 });

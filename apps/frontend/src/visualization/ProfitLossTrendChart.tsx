@@ -106,7 +106,7 @@ export function buildProfitLossTrendOption(
         data: data.map((point) => point.agentCumulativeProfitLoss),
         symbol: 'emptyCircle',
         symbolSize: 6,
-        lineStyle: { color: CHART_COLORS.amber, width: 2.5, type: 'dashed' },
+        lineStyle: { color: CHART_COLORS.amber, width: 2.5, type: 'solid' },
         itemStyle: { color: CHART_COLORS.amber },
       },
     ],

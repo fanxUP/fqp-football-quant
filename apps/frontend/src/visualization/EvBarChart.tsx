@@ -64,7 +64,7 @@ export default function EvBarChart({
           markLine: {
             silent: true,
             data: [{ xAxis: 0 }],
-            lineStyle: { color: CHART_COLORS.zeroRef, type: 'dashed' },
+            lineStyle: { color: CHART_COLORS.zeroRef, type: 'solid' },
             label: { show: false },
           },
         },
