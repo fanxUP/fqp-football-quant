@@ -95,6 +95,21 @@ def test_scheduler_refreshes_official_schedule_metadata_every_30_minutes():
     assert "**OFFICIAL_SCHEDULE_CRON" in source
 
 
+def test_scheduler_collects_lineups_in_the_pre_match_window_every_30_minutes():
+    source = Path("scripts/jobs/run_scheduler.py").read_text()
+
+    assert 'id="collect_lineup_data"' in source
+    assert 'minute="12,42"' in source
+    assert 'hour="10,14"' not in source
+
+
+def test_scheduler_refreshes_features_after_lineup_collection_before_prediction():
+    source = Path("scripts/jobs/run_scheduler.py").read_text()
+
+    assert 'id="refresh_pre_match_features"' in source
+    assert 'minute="14,44"' in source
+
+
 def test_scheduler_runs_model_predictions_after_each_schedule_refresh():
     source = Path("scripts/jobs/run_scheduler.py").read_text()
 
@@ -182,6 +197,7 @@ def test_scheduler_waits_for_daily_recommendation_cutoff():
 def test_scheduler_replays_every_critical_startup_job_until_it_succeeds():
     assert STARTUP_RECOVERY_JOB_CODES == (
         "seed_agent_registry",
+        "seed_api_football_registry",
         "seed_stadium_registry",
         "settle_tickets",
         "build_feature_snapshots",

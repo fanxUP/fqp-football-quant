@@ -1,32 +1,44 @@
-"""Injury/suspension data collection job.
+"""当日比赛级伤停采集任务。
 
-Daily job (08:00) using ApiFootballClient.
-Fetches injury data for active competitions and stores in
-player_availability_snapshots.
-
-Rate limit: ~10 API calls/day of 100 limit (free tier).
+使用 API-Football fixture injury 接口，不再把免费套餐可查的
+2024 历史赛季伤停误用于当前比赛。查询成功但无伤停时，
+仍写入比赛级观测回执，以区分“零伤停”和“未获取”。
 """
 
 from __future__ import annotations
 
-from datetime import datetime
+import os
+from collections import Counter
+from datetime import date, datetime, time, timedelta
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from apps.backend.src.db import get_db
 from scripts.agents.task_queue import finish_tracked_job, start_tracked_job
 from scripts.api_football_client import ApiFootballClient
 from scripts.feature_storage import (
+    get_injury_observation_for_match,
     get_player_by_code,
     store_player,
     store_player_availability_snapshot,
+    store_team_squad_snapshot,
+)
+from scripts.features.api_football_fixture_matcher import (
+    find_matching_fixture,
+    load_api_aliases,
+    load_supported_matches,
 )
 
 
+def _business_now() -> datetime:
+    timezone_name = os.getenv("FQP_TIMEZONE", "Asia/Shanghai")
+    return datetime.now(ZoneInfo(timezone_name)).replace(tzinfo=None)
+
+
 def _now() -> str:
-    return datetime.now().isoformat(timespec="seconds")
+    return _business_now().isoformat(timespec="seconds")
 
 
-# Position importance defaults from injury_impact_weights.yaml
 POSITION_IMPORTANCE = {
     "GK": 0.95,
     "Goalkeeper": 0.95,
@@ -44,221 +56,287 @@ POSITION_IMPORTANCE = {
 
 
 def _position_importance(api_position: str) -> float:
-    """Map API-Football position names to importance scores."""
-    for key, val in POSITION_IMPORTANCE.items():
+    for key, value in POSITION_IMPORTANCE.items():
         if key.lower() in (api_position or "").lower():
-            return val
+            return value
     return 0.50
 
 
-def _get_or_create_player(conn: Any, player_data: dict) -> int | None:
-    """Find or create a player record, return player_id."""
+def _extract_injury_fields(injury: dict[str, Any]) -> tuple[str, str, str]:
+    """兼容当前 fixture 响应和旧 league 响应的伤停字段。"""
+    raw_player = injury.get("player")
+    raw_legacy = injury.get("injury")
+    player: dict[str, Any] = raw_player if isinstance(raw_player, dict) else {}
+    legacy: dict[str, Any] = raw_legacy if isinstance(raw_legacy, dict) else {}
+    injury_type = str(player.get("type") or legacy.get("type") or "")
+    reason = str(player.get("reason") or legacy.get("reason") or "")
+    combined = f"{injury_type} {reason}".lower()
+    status = "suspended" if "suspend" in combined else "injured"
+    return status, injury_type, reason
+
+
+def _safe_height(value: Any) -> float | None:
+    if value in (None, ""):
+        return None
+    try:
+        return float(str(value).replace(" cm", "").strip())
+    except ValueError:
+        return None
+
+
+def _get_or_create_player(conn: Any, player_data: dict[str, Any]) -> int | None:
     player_code = f"apifootball:{player_data.get('id')}"
     existing = get_player_by_code(conn, player_code)
     if existing:
-        return existing["id"]
-
+        return int(existing["id"])
     return store_player(
         conn,
         {
             "player_code": player_code,
             "player_name_en": player_data.get("name", ""),
             "player_name_cn": "",
-            "birth_date": player_data.get("birth", {}).get("date")
-            if isinstance(player_data.get("birth"), dict)
-            else None,
+            "birth_date": (
+                player_data.get("birth", {}).get("date")
+                if isinstance(player_data.get("birth"), dict)
+                else None
+            ),
             "nationality": player_data.get("nationality", ""),
             "primary_position": player_data.get("position", ""),
             "secondary_positions": [],
             "preferred_foot": "",
-            "height_cm": float(player_data.get("height", "").replace(" cm", ""))
-            if player_data.get("height")
-            else None,
+            "height_cm": _safe_height(player_data.get("height")),
         },
     )
 
 
-def _resolve_team_id(conn: Any, team_name: str) -> int | None:
-    """Map a team name to internal team_id via aliases."""
-    with conn.cursor() as cur:
-        cur.execute(
-            """
-            SELECT t.id FROM teams t
-            JOIN team_aliases ta ON ta.team_id = t.id
-            WHERE ta.alias_name = %(name)s
-            LIMIT 1
-            """,
-            {"name": team_name},
+def _store_team_observations(
+    conn: Any,
+    match: dict[str, Any],
+    api_fixture_id: int,
+    injuries: list[dict[str, Any]],
+    alias_to_team_id: dict[str, int],
+    snapshot_time: str,
+) -> int:
+    counts: dict[int, Counter[str]] = {
+        match["home_team_id"]: Counter(),
+        match["away_team_id"]: Counter(),
+    }
+    for injury in injuries:
+        api_team_name = str(injury.get("team", {}).get("name") or "")
+        team_id = alias_to_team_id.get(api_team_name)
+        if team_id not in counts:
+            continue
+        status, _, _ = _extract_injury_fields(injury)
+        counts[team_id][status] += 1
+
+    stored = 0
+    for team_id, status_counts in counts.items():
+        store_team_squad_snapshot(
+            conn,
+            {
+                "team_id": team_id,
+                "competition_season_id": match["competition_season_id"],
+                "snapshot_time": snapshot_time,
+                "injured_players_count": status_counts["injured"],
+                "suspended_players_count": status_counts["suspended"],
+                "doubtful_players_count": status_counts["doubtful"],
+                "key_absence_count": 0,
+                "squad_health_score": max(
+                    0.0,
+                    100.0
+                    - status_counts["injured"] * 8.0
+                    - status_counts["suspended"] * 10.0,
+                ),
+                "data_confidence": 0.90,
+                "raw_json": {
+                    "observation_type": "fixture_injuries",
+                    "official_match_id": match["id"],
+                    "api_fixture_id": api_fixture_id,
+                    "source_result_count": len(injuries),
+                },
+            },
         )
-        row = cur.fetchone()
-    return row[0] if row else None
+        stored += 1
+    return stored
 
 
-def _run_impl(dry_run: bool = False, season: int | None = None) -> dict[str, Any]:
-    """Collect injury data from API-Football for all active competitions.
-
-    Args:
-        dry_run: If True, fetch but don't store.
-        season: Season year to query. Defaults to 2024 (latest available on
-                free tier; 2025/2026 require paid plan).
-
-    Returns:
-        Summary dict.
-    """
-    import os
-
+def _run_impl(
+    dry_run: bool = False,
+    business_date: date | None = None,
+) -> dict[str, Any]:
     api_key = os.getenv("API_FOOTBALL_KEY", "")
     if not api_key:
         return {"status": "error", "message": "API_FOOTBALL_KEY not set"}
 
-    # Free tier only allows 2022-2024 seasons for injury data.
-    if season is None:
-        season = 2024
-
+    target_date = business_date or _business_now().date()
+    start_time = datetime.combine(target_date, time.min)
+    end_time = start_time + timedelta(days=1)
     client = ApiFootballClient(api_key=api_key)
+    matches_matched = 0
+    matches_unmatched = 0
+    matches_already_observed = 0
+    observations_stored = 0
     injuries_collected = 0
-    players_created = 0
-    leagues_processed = 0
-    errors = 0
+    provider_errors: list[dict[str, Any]] = []
+    processing_errors: list[str] = []
 
     try:
         with get_db() as conn:
-            # Get competitions with API-Football league IDs
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    SELECT cs.id, s.season_code, c.id as comp_id,
-                           c.competition_name_cn, c.competition_code
-                    FROM competition_seasons cs
-                    JOIN competitions c ON c.id = cs.competition_id
-                    JOIN seasons s ON s.id = cs.season_id
-                    LIMIT 10
-                    """
-                )
-                competitions = [(r[0], r[1], r[2], r[3], r[4]) for r in cur.fetchall()]
+            matches = load_supported_matches(
+                conn,
+                start_time=start_time,
+                end_time=end_time,
+            )
+            if not matches:
+                return {
+                    "status": "ok",
+                    "quality_status": "not_due",
+                    "note": "no supported selling matches for target date",
+                    "target_date": target_date.isoformat(),
+                    "api_calls_used": 0,
+                }
 
-            if not competitions:
-                return {"status": "ok", "note": "no competitions found"}
-            print(f"[collect_injury] using season={season}, {len(competitions)} competitions")
+            alias_to_team_id = load_api_aliases(conn)
+            fixtures = client.get_fixtures(date=target_date.isoformat())
+            fixture_errors = client.last_response_meta.get("errors") or {}
+            if fixture_errors:
+                provider_errors.append({"endpoint": "fixtures", "errors": fixture_errors})
 
-            for cs_id, _season_code, _comp_id, comp_name, comp_code in competitions:
+            snapshot_time = _now()
+            for match in matches:
+                if get_injury_observation_for_match(
+                    conn, match["id"], match["home_team_id"]
+                ) and get_injury_observation_for_match(
+                    conn, match["id"], match["away_team_id"]
+                ):
+                    matches_already_observed += 1
+                    continue
+                fixture = find_matching_fixture(match, fixtures, alias_to_team_id)
+                if fixture is None:
+                    matches_unmatched += 1
+                    continue
+                matches_matched += 1
+                fixture_id = int(fixture.get("fixture", {}).get("id") or 0)
+                if not fixture_id:
+                    matches_unmatched += 1
+                    matches_matched -= 1
+                    continue
                 try:
-                    # Extract API-Football league ID from competition_code
-                    # Format: "apifootball:113" → league_id = 113
-                    api_league_id: int | None = None
-                    if comp_code and comp_code.startswith("apifootball:"):
-                        try:
-                            api_league_id = int(comp_code.split(":")[1])
-                        except (ValueError, IndexError):
-                            pass
-
-                    if api_league_id is None:
-                        print(
-                            f"[collect_injury] cannot resolve API league ID "
-                            f"for {comp_name} (code={comp_code}), skipping"
+                    injuries = client.get_injuries(fixture=fixture_id)
+                    injury_errors = client.last_response_meta.get("errors") or {}
+                    if injury_errors:
+                        provider_errors.append(
+                            {
+                                "endpoint": "injuries",
+                                "official_match_id": match["id"],
+                                "api_fixture_id": fixture_id,
+                                "errors": injury_errors,
+                            }
                         )
                         continue
-
-                    # Try to get injuries for this league+season
-                    injuries = client.get_injuries(league=api_league_id, season=season)
-
-                    if not injuries:
+                    if dry_run:
                         continue
 
-                    leagues_processed += 1
-
-                    for inj in injuries:
-                        try:
-                            player_info = inj.get("player", {})
-                            team_info = inj.get("team", {})
-
-                            team_name = team_info.get("name", "")
-                            if not team_name:
-                                continue
-
-                            team_id = _resolve_team_id(conn, team_name)
-                            if not team_id:
-                                continue
-
-                            # Create/find player
-                            player_id = None
-                            if not dry_run:
-                                player_id = _get_or_create_player(conn, player_info)
-                                if player_id:
-                                    players_created += 1
-
-                            # Build availability snapshot
-                            availability_status = "injured"
-                            injury_type = (
-                                inj.get("injury", {}).get("type", "")
-                                if isinstance(inj.get("injury"), dict)
-                                else ""
-                            )
-                            (
-                                inj.get("injury", {}).get("reason", "")
-                                if isinstance(inj.get("injury"), dict)
-                                else ""
-                            )
-
-                            pos = player_info.get("position", "")
-                            pos_imp = _position_importance(pos)
-
-                            snapshot = {
-                                "player_id": player_id or 0,
+                    observations_stored += _store_team_observations(
+                        conn,
+                        match,
+                        fixture_id,
+                        injuries,
+                        alias_to_team_id,
+                        snapshot_time,
+                    )
+                    for injury in injuries:
+                        raw_player = injury.get("player")
+                        player_data: dict[str, Any] = (
+                            raw_player if isinstance(raw_player, dict) else {}
+                        )
+                        api_team_name = str(injury.get("team", {}).get("name") or "")
+                        team_id = alias_to_team_id.get(api_team_name)
+                        if team_id not in {
+                            match["home_team_id"],
+                            match["away_team_id"],
+                        }:
+                            continue
+                        player_id = _get_or_create_player(conn, player_data)
+                        if not player_id:
+                            continue
+                        status, injury_type, reason = _extract_injury_fields(injury)
+                        position_importance = _position_importance(
+                            str(player_data.get("position") or "")
+                        )
+                        store_player_availability_snapshot(
+                            conn,
+                            {
+                                "player_id": player_id,
                                 "team_id": team_id,
-                                "competition_season_id": cs_id,
-                                "snapshot_time": _now(),
-                                "availability_status": availability_status,
+                                "competition_season_id": match["competition_season_id"],
+                                "snapshot_time": snapshot_time,
+                                "availability_status": status,
                                 "injury_type": injury_type,
-                                "injury_body_part": "",
-                                "is_suspended": False,
-                                "suspension_reason": "",
-                                "expected_return_date": None,
+                                "injury_body_part": reason,
+                                "is_suspended": status == "suspended",
+                                "suspension_reason": reason if status == "suspended" else "",
                                 "source_name": "api-football",
-                                "source_url": "",
-                                "source_confidence": 0.85,
+                                "source_confidence": 0.90,
                                 "recent_minutes_share": 0.0,
                                 "team_market_value_share": 0.0,
-                                "position_importance_score": pos_imp,
+                                "position_importance_score": position_importance,
                                 "replacement_quality_score": 0.5,
-                                "absence_impact_score": pos_imp * 85.0,  # rough proxy
-                                "raw_json": inj,
-                            }
-
-                            if not dry_run and player_id:
-                                store_player_availability_snapshot(conn, snapshot)
-                                injuries_collected += 1
-
-                        except Exception as e:
-                            print(f"[collect_injury] error processing injury: {e}")
-                            errors += 1
-                            continue
-
-                except Exception as e:
-                    print(f"[collect_injury] error for league {comp_name}: {e}")
-                    errors += 1
-                    continue
+                                "absence_impact_score": position_importance * 85.0,
+                                "raw_json": {
+                                    **injury,
+                                    "official_match_id": match["id"],
+                                    "api_fixture_id": fixture_id,
+                                },
+                            },
+                        )
+                        injuries_collected += 1
+                except Exception as exc:
+                    processing_errors.append(f"match {match['id']}: {exc}")
 
     finally:
         client.close()
 
+    quality_status = (
+        "degraded"
+        if provider_errors or processing_errors or matches_unmatched
+        else "healthy"
+    )
     return {
-        "status": "ok" if not dry_run else "dry_run",
-        "leagues_processed": leagues_processed,
+        "status": "dry_run" if dry_run else "ok",
+        "quality_status": quality_status,
+        "target_date": target_date.isoformat(),
+        "matches_supported": (
+            matches_matched + matches_unmatched + matches_already_observed
+        ),
+        "matches_matched": matches_matched,
+        "matches_unmatched": matches_unmatched,
+        "matches_already_observed": matches_already_observed,
+        "observations_stored": observations_stored,
         "injuries_collected": injuries_collected,
-        "players_created": players_created,
-        "errors": errors,
+        "provider_errors": provider_errors,
+        "processing_errors": processing_errors,
         "api_calls_used": client.call_count_today,
     }
 
 
-def run(dry_run: bool = False, season: int | None = None) -> dict[str, Any]:
-    """Run injury collection and persist its multi-agent execution record."""
+def run(
+    dry_run: bool = False,
+    business_date: date | None = None,
+    season: int | None = None,
+) -> dict[str, Any]:
+    """采集当日比赛伤停；season 仅保留旧调用兼容，不再查历史赛季。"""
     run_id = start_tracked_job(
-        "injury_collection", "feature_agent", {"dry_run": dry_run, "season": season}
+        "injury_collection",
+        "feature_agent",
+        {
+            "dry_run": dry_run,
+            "business_date": business_date.isoformat() if business_date else None,
+            "ignored_legacy_season": season,
+        },
     )
     try:
-        result = _run_impl(dry_run=dry_run, season=season)
+        result = _run_impl(dry_run=dry_run, business_date=business_date)
         finish_tracked_job(run_id, result.get("status", "completed"), {"result": result})
         return result
     except Exception as exc:
@@ -270,9 +348,4 @@ if __name__ == "__main__":
     import sys
 
     dry = "--dry-run" in sys.argv
-    season = None
-    for arg in sys.argv:
-        if arg.startswith("--season="):
-            season = int(arg.split("=")[1])
-    result = run(dry_run=dry, season=season)
-    print(result)
+    print(run(dry_run=dry))

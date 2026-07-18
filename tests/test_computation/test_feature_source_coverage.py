@@ -7,9 +7,15 @@ from scripts.features.build_tournament_incentive import build_tournament_incenti
 
 
 def test_injury_coverage_requires_actual_source_rows_not_only_team_ids():
-    with patch(
-        "scripts.features.build_injury_impact.get_injuries_for_team",
-        side_effect=[[], []],
+    with (
+        patch(
+            "scripts.features.build_injury_impact.get_injuries_for_match",
+            side_effect=[[], []],
+        ),
+        patch(
+            "scripts.features.build_injury_impact.get_injury_observation_for_match",
+            side_effect=[None, None],
+        ),
     ):
         result = build_injury_features(MagicMock(), 7, 11, 12)
 
@@ -17,6 +23,26 @@ def test_injury_coverage_requires_actual_source_rows_not_only_team_ids():
     assert result["away_absence_impact_score"] is None
     assert result["has_injury_data"] is False
     assert result["covered_team_count"] == 0
+
+
+def test_injury_coverage_accepts_fresh_zero_absence_observations_for_both_teams():
+    with (
+        patch(
+            "scripts.features.build_injury_impact.get_injuries_for_match",
+            side_effect=[[], []],
+        ),
+        patch(
+            "scripts.features.build_injury_impact.get_injury_observation_for_match",
+            side_effect=[{"injured_players_count": 0}, {"injured_players_count": 0}],
+        ),
+    ):
+        result = build_injury_features(MagicMock(), 7, 11, 12)
+
+    assert result["home_absence_impact_score"] == 0
+    assert result["away_absence_impact_score"] == 0
+    assert result["absence_impact_diff"] == 0
+    assert result["has_injury_data"] is True
+    assert result["covered_team_count"] == 2
 
 
 def test_lineup_coverage_is_partial_until_both_teams_have_rows():

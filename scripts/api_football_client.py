@@ -52,6 +52,7 @@ class ApiFootballClient:
         self._max_retries = max_retries
         self._last_request_time = 0.0
         self._call_count_today = 0
+        self._last_response_meta: dict[str, Any] = {}
 
     # ------------------------------------------------------------------
     # Internal
@@ -91,6 +92,12 @@ class ApiFootballClient:
 
                 resp.raise_for_status()
                 data = resp.json()
+                self._last_response_meta = {
+                    "errors": data.get("errors") or {},
+                    "results": data.get("results"),
+                    "parameters": data.get("parameters") or {},
+                    "remaining": remaining,
+                }
 
                 # API-Football wraps responses in {get:, parameters:, errors:, results:}
                 if data.get("errors"):
@@ -358,6 +365,11 @@ class ApiFootballClient:
     @property
     def call_count_today(self) -> int:
         return self._call_count_today
+
+    @property
+    def last_response_meta(self) -> dict[str, Any]:
+        """返回最近一次 API 响应的可审计元数据，不包含密钥。"""
+        return dict(self._last_response_meta)
 
     def reset_call_count(self) -> None:
         """Reset daily counter (call at midnight)."""

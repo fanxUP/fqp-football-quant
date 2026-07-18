@@ -24,6 +24,7 @@ OFFICIAL_SCHEDULE_CRON = {"minute": "10,40"}
 MODEL_PREDICTION_CRON = {"minute": "15,45"}
 STARTUP_RECOVERY_JOB_CODES = (
     "seed_agent_registry",
+    "seed_api_football_registry",
     "seed_stadium_registry",
     "settle_tickets",
     "build_feature_snapshots",
@@ -198,6 +199,9 @@ def main() -> None:
         if _official_source_enabled():
             startup_tasks.update(
                 {
+                    "seed_api_football_registry": lambda: __import__(
+                        "scripts.jobs.seed_api_football_registry", fromlist=["run"]
+                    ).run(),
                     "seed_stadium_registry": lambda: __import__(
                         "scripts.jobs.seed_stadium_registry", fromlist=["run"]
                     ).run(),
@@ -310,6 +314,23 @@ def main() -> None:
                 id="populate_teams_leagues",
             )
 
+            # Daily after team population: refresh provider aliases used by
+            # match-level injury and lineup collection.
+            scheduler.add_job(
+                _audited_job(
+                    "seed_api_football_registry",
+                    "API-Football基础标识校准",
+                    "feature_agent",
+                    lambda: __import__(
+                        "scripts.jobs.seed_api_football_registry", fromlist=["run"]
+                    ).run(),
+                ),
+                "cron",
+                hour=2,
+                minute=3,
+                id="seed_api_football_registry_daily",
+            )
+
             # Daily after team population: map supported home teams to stadium coordinates.
             scheduler.add_job(
                 _audited_job(
@@ -356,7 +377,8 @@ def main() -> None:
                 id="collect_standings",
             )
 
-            # Daily at 08:00: collect injury data from API-Football
+            # Shortly after midnight: collect current fixture injuries before
+            # the day's early matches. Historical-season injuries are never used.
             scheduler.add_job(
                 _audited_job(
                     "collect_injury_data",
@@ -365,12 +387,13 @@ def main() -> None:
                     lambda: __import__("scripts.jobs.collect_injury_data", fromlist=["run"]).run(),
                 ),
                 "cron",
-                hour=8,
+                hour=0,
                 minute=7,
                 id="collect_injury_data",
             )
 
-            # Daily at 10:00 and 14:00: collect lineup data for upcoming matches
+            # Every 30 minutes after schedule refresh: query only the short
+            # pre-match window where confirmed lineups may be published.
             scheduler.add_job(
                 _audited_job(
                     "collect_lineup_data",
@@ -379,9 +402,24 @@ def main() -> None:
                     lambda: __import__("scripts.jobs.collect_lineup_data", fromlist=["run"]).run(),
                 ),
                 "cron",
-                hour="10,14",
-                minute=7,
+                minute="12,42",
                 id="collect_lineup_data",
+            )
+
+            # Rebuild feature snapshots after the lineup window and before
+            # model prediction at :15/:45, so late evidence reaches decisions.
+            scheduler.add_job(
+                _audited_job(
+                    "build_feature_snapshots",
+                    "临场特征快照刷新",
+                    "feature_agent",
+                    lambda: __import__(
+                        "scripts.jobs.run_feature_snapshot_build", fromlist=["run"]
+                    ).run(),
+                ),
+                "cron",
+                minute="14,44",
+                id="refresh_pre_match_features",
             )
 
             # Daily at 09:00 and 15:00: collect weather forecasts
