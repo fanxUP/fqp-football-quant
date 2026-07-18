@@ -182,6 +182,7 @@ def test_scheduler_waits_for_daily_recommendation_cutoff():
 def test_scheduler_replays_every_critical_startup_job_until_it_succeeds():
     assert STARTUP_RECOVERY_JOB_CODES == (
         "seed_agent_registry",
+        "seed_stadium_registry",
         "settle_tickets",
         "build_feature_snapshots",
         "run_recommendation_candidate",

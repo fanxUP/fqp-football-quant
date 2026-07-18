@@ -82,44 +82,14 @@ def _resolve_competition_season_id(
     return row[0] if row else None
 
 
-_VENUE_CITY_ALIASES = {
-    "英格尔伍德": "Inglewood",
-    "迈阿密加登斯": "Miami Gardens",
-    "堪萨斯城": "Kansas City",
-}
-
-_HOME_TEAM_STADIUM_CITY = {
-    "瓦萨": "Vaasa",
-    "塞伊奈约基": "Seinajoki",
-    "光州FC": "Gwangju",
-    "浦项制铁": "Pohang",
-    "金泉尚武": "Gimcheon",
-    "蔚山现代": "Ulsan",
-    "仁川联": "Incheon",
-    "济州SK": "Seogwipo",
-    "首尔FC": "Seoul",
-}
-
-
 def _resolve_match_stadium_id(
     conn: Any, raw_json: dict[str, Any] | None, home_team_name: str | None = None
 ) -> int | None:
-    """Resolve a match venue from official remarks or known home-team venues."""
-    remark = str((raw_json or {}).get("remark") or "")
-    city = next(
-        (city for source_city, city in _VENUE_CITY_ALIASES.items() if source_city in remark),
-        None,
-    )
-    city = city or _HOME_TEAM_STADIUM_CITY.get(home_team_name or "")
-    if city:
-        with conn.cursor() as cur:
-            cur.execute(
-                "SELECT id FROM stadiums WHERE city ILIKE %s ORDER BY id LIMIT 1",
-                (city,),
-            )
-            row = cur.fetchone()
-        return row[0] if row else None
-    return None
+    """Resolve through the shared official-venue/home-stadium policy."""
+    from scripts.features.stadium_resolver import resolve_match_stadium_location
+
+    location = resolve_match_stadium_location(conn, raw_json, home_team_name)
+    return location["stadium_id"] if location else None
 
 
 def can_build_team_dependent_features(home_id: int | None, away_id: int | None) -> bool:

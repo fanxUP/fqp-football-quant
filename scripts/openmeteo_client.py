@@ -99,10 +99,12 @@ class OpenMeteoClient:
         for attempt in range(1, self._max_retries + 1):
             try:
                 print(f"[openmeteo] GET {url} (attempt {attempt})")
-                resp = httpx.get(
+                # Reuse the long-lived client so batch collection keeps HTTP
+                # connections warm instead of paying a new TLS handshake for
+                # every match. A full URL also supports the archive host.
+                resp = self._client.get(
                     f"{base}{url}",
                     params=params,
-                    timeout=self._client.timeout,
                 )
                 self._last_request_time = time.monotonic()
 

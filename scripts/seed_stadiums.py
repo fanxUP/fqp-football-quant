@@ -1,4 +1,7 @@
-"""One-shot script to seed basic stadium data for weather/travel features."""
+"""Idempotently seed stadium coordinates for weather/travel features."""
+
+from typing import Any
+
 from apps.backend.src.db import get_db
 
 STADIUMS = [
@@ -6,6 +9,10 @@ STADIUMS = [
     ("SoFi Stadium", "Inglewood", "United States", 33.9535, -118.3392, 70240),
     ("Hard Rock Stadium", "Miami Gardens", "United States", 25.9580, -80.2389, 65326),
     ("Arrowhead Stadium", "Kansas City", "United States", 39.0489, -94.4839, 76416),
+    ("MetLife Stadium", "East Rutherford", "United States", 40.8128, -74.0742, 82500),
+    # Norway Eliteserien
+    ("Aker Stadion", "Molde", "Norway", 62.7334, 7.1481, 11249),
+    ("SR-Bank Arena", "Stavanger", "Norway", 58.9146, 5.7304, 15900),
     # Swedish Allsvenskan
     ("Studenternas IP", "Uppsala", "Sweden", 59.8400, 17.6500, 10000),
     ("Tele2 Arena", "Stockholm", "Sweden", 59.2900, 18.0850, 30000),
@@ -19,6 +26,7 @@ STADIUMS = [
     ("Behrn Arena", "Orebro", "Sweden", 59.2670, 15.2150, 12645),
     ("Bravida Arena", "Gothenburg", "Sweden", 57.7230, 11.9330, 6500),
     ("Olympia", "Helsingborg", "Sweden", 56.0480, 12.7000, 16500),
+    ("Orjans Vall", "Halmstad", "Sweden", 56.6745, 12.8569, 10873),
     # K League 1
     ("Jeonju World Cup Stadium", "Jeonju", "South Korea", 35.8680, 127.0650, 42477),
     ("Seoul World Cup Stadium", "Seoul", "South Korea", 37.5680, 126.8970, 66704),
@@ -42,6 +50,7 @@ STADIUMS = [
     ("Wiklof Holding Arena", "Mariehamn", "Finland", 60.1000, 19.9450, 4500),
     ("Hietalahti Stadium", "Vaasa", "Finland", 63.0950, 21.6170, 4600),
     ("Seinajoen Keskuskentta", "Seinajoki", "Finland", 62.7900, 22.8400, 5000),
+    ("Project Liv Arena", "Pietarsaari", "Finland", 63.6743, 22.7029, 5000),
     # International / World Cup
     ("Lusail Stadium", "Lusail", "Qatar", 25.4200, 51.4900, 88966),
     ("Al Bayt Stadium", "Al Khor", "Qatar", 25.6520, 51.4880, 68895),
@@ -59,6 +68,8 @@ STADIUMS = [
 ]
 
 TEAM_STADIUM_CITIES = {
+    "莫尔德": "Molde",
+    "维京": "Stavanger",
     "瓦萨": "Vaasa",
     "塞伊奈约基": "Seinajoki",
     "富川FC": "Bucheon",
@@ -73,9 +84,19 @@ TEAM_STADIUM_CITIES = {
     "济州SK": "Seogwipo",
     "首尔FC": "Seoul",
     "江原FC": "Gangneung",
+    "哈尔姆斯塔德": "Halmstad",
+    "哈马比": "Stockholm",
+    "埃尔夫斯堡": "Boras",
+    "雅罗": "Pietarsaari",
+    "TPS图尔库": "Turku",
+    "TPS土尔库": "Turku",
+    "玛丽港": "Mariehamn",
+    "卡尔马": "Kalmar",
+    "厄尔格里特": "Gothenburg",
 }
 
-def run():
+
+def run() -> dict[str, Any]:
     with get_db() as conn:
         with conn.cursor() as cur:
             cur.execute("SELECT COUNT(*) FROM stadiums")
@@ -86,9 +107,10 @@ def run():
                     cur.execute(
                         """
                         INSERT INTO stadiums (
-                            stadium_name, city, country, latitude, longitude, capacity, pitch_type
+                            stadium_name, city, country, latitude, longitude, capacity,
+                            pitch_type, data_source, data_confidence
                         )
-                        SELECT %s, %s, %s, %s, %s, %s, 'grass'
+                        SELECT %s, %s, %s, %s, %s, %s, 'grass', 'curated_reference', 0.9
                         WHERE NOT EXISTS (
                             SELECT 1 FROM stadiums
                             WHERE stadium_name = %s AND city = %s AND country = %s
@@ -135,8 +157,29 @@ def run():
                     (row[0], row[1], row[0], row[1]),
                 )
                 history_inserted += cur.rowcount
+                cur.execute(
+                    """
+                    UPDATE teams
+                    SET primary_stadium_id = COALESCE(primary_stadium_id, %s),
+                        updated_at = now()
+                    WHERE id = %s
+                    """,
+                    (row[1], row[0]),
+                )
             conn.commit()
             print(f"Team stadium mappings inserted: {history_inserted}")
+            cur.execute("SELECT COUNT(*) FROM team_stadium_history")
+            mappings_total = int(cur.fetchone()[0])
+
+    return {
+        "status": "ok" if mappings_total > 0 else "blocked",
+        "stadiums_before": before,
+        "stadiums_after": after,
+        "stadiums_inserted": inserted,
+        "mappings_inserted": history_inserted,
+        "mappings_total": mappings_total,
+        "message": None if mappings_total > 0 else "waiting for official team registry",
+    }
 
 if __name__ == "__main__":
     run()

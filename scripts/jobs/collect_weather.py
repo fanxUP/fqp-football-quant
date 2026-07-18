@@ -13,6 +13,7 @@ from typing import Any
 from apps.backend.src.db import get_db
 from scripts.agents.task_queue import finish_tracked_job, start_tracked_job
 from scripts.features.build_weather_features import build_weather_for_match
+from scripts.features.stadium_resolver import resolve_match_stadium_location
 from scripts.openmeteo_client import OpenMeteoClient
 
 
@@ -50,7 +51,7 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
         with conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT id, home_team_name, away_team_name, kickoff_time
+                SELECT id, home_team_name, away_team_name, kickoff_time, raw_json
                 FROM official_matches
                 WHERE sale_status = 'selling'
                   AND kickoff_time BETWEEN %(now)s AND %(cutoff)s
@@ -60,7 +61,14 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
                 {"now": now, "cutoff": cutoff},
             )
             matches = [
-                {"id": r[0], "home": r[1], "away": r[2], "kickoff": r[3]} for r in cur.fetchall()
+                {
+                    "id": r[0],
+                    "home": r[1],
+                    "away": r[2],
+                    "kickoff": r[3],
+                    "raw_json": r[4] or {},
+                }
+                for r in cur.fetchall()
             ]
 
         if not matches:
@@ -73,25 +81,13 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
 
         try:
             for match in matches:
-                # Try to resolve stadium from home team
-                with conn.cursor() as cur:
-                    cur.execute(
-                        """
-                        SELECT s.id, s.latitude, s.longitude FROM stadiums s
-                        JOIN team_stadium_history tsh ON tsh.stadium_id = s.id
-                        JOIN team_aliases ta ON ta.team_id = tsh.team_id
-                        WHERE ta.alias_name = %(name)s
-                        ORDER BY tsh.start_date DESC LIMIT 1
-                        """,
-                        {"name": match["home"]},
-                    )
-                    row = cur.fetchone()
-
-                lat = float(row[1]) if row and row[1] else None
-                lon = float(row[2]) if row and row[2] else None
-                stadium_id = row[0] if row else None
-
-                if lat is None or lon is None:
+                location = resolve_match_stadium_location(
+                    conn,
+                    match["raw_json"],
+                    match["home"],
+                )
+                if not location:
+                    print(f"[weather] unresolved stadium for match {match['id']}, skipping")
                     skipped += 1
                     continue
 
@@ -103,9 +99,9 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
                     conn=conn,
                     match_id=match["id"],
                     kickoff_time=match["kickoff"],
-                    stadium_lat=lat,
-                    stadium_lon=lon,
-                    stadium_id=stadium_id,
+                    stadium_lat=location["latitude"],
+                    stadium_lon=location["longitude"],
+                    stadium_id=location["stadium_id"],
                     client=client,
                 )
                 if result and result.get("has_weather"):

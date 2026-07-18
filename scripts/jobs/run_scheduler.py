@@ -24,6 +24,7 @@ OFFICIAL_SCHEDULE_CRON = {"minute": "10,40"}
 MODEL_PREDICTION_CRON = {"minute": "15,45"}
 STARTUP_RECOVERY_JOB_CODES = (
     "seed_agent_registry",
+    "seed_stadium_registry",
     "settle_tickets",
     "build_feature_snapshots",
     "run_recommendation_candidate",
@@ -197,6 +198,9 @@ def main() -> None:
         if _official_source_enabled():
             startup_tasks.update(
                 {
+                    "seed_stadium_registry": lambda: __import__(
+                        "scripts.jobs.seed_stadium_registry", fromlist=["run"]
+                    ).run(),
                     "settle_tickets": lambda: __import__(
                         "scripts.jobs.settle_tickets", fromlist=["run"]
                     ).run(),
@@ -304,6 +308,22 @@ def main() -> None:
                 hour=2,
                 minute=0,
                 id="populate_teams_leagues",
+            )
+
+            # Daily after team population: map supported home teams to stadium coordinates.
+            scheduler.add_job(
+                _audited_job(
+                    "seed_stadium_registry",
+                    "球场基础数据校准",
+                    "feature_agent",
+                    lambda: __import__(
+                        "scripts.jobs.seed_stadium_registry", fromlist=["run"]
+                    ).run(),
+                ),
+                "cron",
+                hour=2,
+                minute=5,
+                id="seed_stadium_registry_daily",
             )
 
             # Every 6 hours: build feature snapshots
