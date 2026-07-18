@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { api } from '../core/apiClient';
 import { navigate } from '../core/router';
 import type { AgentDailyDecision, BettingResultBucket, BettingResults, BettingTicket } from '../core/types';
@@ -9,6 +9,8 @@ import ErrorState from '../shared/components/ErrorState';
 import LoadingSpinner from '../shared/components/LoadingSpinner';
 import PageHeader from '../shared/components/PageHeader';
 import ProfitLossTrendChart from '../visualization/ProfitLossTrendChart';
+
+const RESULTS_REFRESH_INTERVAL_MS = 30_000;
 
 function money(value: number): string {
   return `¥${value.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -124,9 +126,11 @@ export default function CompetitionPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchResults = () => {
-    setLoading(true);
-    setError(null);
+  const fetchResults = useCallback((showLoading = true) => {
+    if (showLoading) {
+      setLoading(true);
+      setError(null);
+    }
     Promise.all([
       api.betting.results({ limit: 300 }),
       api.betting.tickets({ limit: 80 }),
@@ -136,15 +140,28 @@ export default function CompetitionPage() {
         setResults(resultRes);
         setTickets(ticketRes.tickets || []);
         setDecisions(decisionRes.decisions || []);
-        setLoading(false);
+        setError(null);
       })
       .catch((e) => {
-        setError(e instanceof ApiError ? e.message : '比赛结果加载失败');
-        setLoading(false);
+        if (showLoading) {
+          setError(e instanceof ApiError ? e.message : '比赛结果加载失败');
+        }
+      })
+      .finally(() => {
+        if (showLoading) setLoading(false);
       });
-  };
+  }, []);
 
-  useEffect(() => { fetchResults(); }, []);
+  useEffect(() => {
+    fetchResults();
+    const timer = window.setInterval(() => fetchResults(false), RESULTS_REFRESH_INTERVAL_MS);
+    const refreshOnFocus = () => fetchResults(false);
+    window.addEventListener('focus', refreshOnFocus);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener('focus', refreshOnFocus);
+    };
+  }, [fetchResults]);
 
   if (loading) return <LoadingSpinner text="加载比赛结果..." size="lg" />;
 
@@ -152,7 +169,7 @@ export default function CompetitionPage() {
     return (
       <div>
         <PageHeader title="比赛结果" />
-        <ErrorState message={error} onRetry={fetchResults} />
+        <ErrorState message={error} onRetry={() => fetchResults()} />
       </div>
     );
   }

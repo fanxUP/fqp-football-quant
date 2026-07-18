@@ -1,5 +1,5 @@
-import { render, screen } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, render, screen } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import CompetitionPage from './CompetitionPage';
 
 const apiMocks = vi.hoisted(() => ({
@@ -20,7 +20,12 @@ vi.mock('../visualization/ProfitLossTrendChart', () => ({
 }));
 
 describe('CompetitionPage', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   beforeEach(() => {
+    vi.clearAllMocks();
     apiMocks.results.mockResolvedValue({
       owners: {
         me: { ticketCount: 0, stake: 0, settledAmount: 0, profitLoss: 0, roi: 0, settled: 0, pending: 0, hitCount: 0 },
@@ -125,5 +130,26 @@ describe('CompetitionPage', () => {
     expect(screen.getByText('已购买')).toBeInTheDocument();
     expect(screen.getByText('已用 2 元生成 1 张高风险虚拟观察票')).toBeInTheDocument();
     expect(screen.getByText('¥498.00')).toBeInTheDocument();
+  });
+
+  it('refreshes lottery totals while the results page stays open', async () => {
+    vi.useFakeTimers();
+
+    render(<CompetitionPage />);
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(apiMocks.results).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      vi.advanceTimersByTime(30_000);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(apiMocks.results).toHaveBeenCalledTimes(2);
+    expect(apiMocks.tickets).toHaveBeenCalledTimes(2);
   });
 });

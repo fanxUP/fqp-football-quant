@@ -356,9 +356,11 @@ def test_build_betting_results_splits_me_and_agent():
     assert result["owners"]["me"]["stake"] == 10
     assert result["owners"]["me"]["profitLoss"] == 15
     assert result["owners"]["me"]["roi"] == 1.5
-    assert result["owners"]["agent"]["stake"] == 30
+    assert result["owners"]["agent"]["stake"] == 50
     assert result["owners"]["agent"]["pending"] == 1
     assert result["owners"]["agent"]["profitLoss"] == -30
+    assert result["owners"]["agent"]["roi"] == -0.6
+    assert result["bySource"]["agent:real:ocr"]["stake"] == 20
     assert result["leader"] == "me"
     assert result["trend"][-1]["agentCumulativeProfitLoss"] == -30
 

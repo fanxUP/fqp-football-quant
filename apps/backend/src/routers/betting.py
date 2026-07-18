@@ -437,29 +437,30 @@ def _empty_result_bucket() -> dict:
 
 def _add_result_bucket(bucket: dict, ticket: dict) -> None:
     bucket["ticketCount"] += 1
+    # 投入在出票时已经发生，不能等到结算后才进入彩票汇总。
+    bucket["stake"] += _float(ticket.get("stake"))
     if ticket.get("status") != "settled":
         bucket["pending"] += 1
         return
 
-    stake = _float(ticket.get("stake"))
     profit_loss = _float(ticket.get("profitLoss"))
     settled_amount = _float(ticket.get("settledAmount"))
-    bucket["stake"] += stake
     bucket["settledAmount"] += settled_amount
     bucket["profitLoss"] += profit_loss
     bucket["settled"] += 1
     if profit_loss > 0:
         bucket["hitCount"] += 1
-    bucket["roi"] = bucket["profitLoss"] / bucket["stake"] if bucket["stake"] else 0.0
 
 
 def _round_result_bucket(bucket: dict) -> dict:
+    stake = _float(bucket.get("stake"))
+    profit_loss = _float(bucket.get("profitLoss"))
     return {
         **bucket,
-        "stake": round(bucket["stake"], 2),
+        "stake": round(stake, 2),
         "settledAmount": round(bucket["settledAmount"], 2),
-        "profitLoss": round(bucket["profitLoss"], 2),
-        "roi": round(bucket["roi"], 4),
+        "profitLoss": round(profit_loss, 2),
+        "roi": round(profit_loss / stake, 4) if stake else 0.0,
     }
 
 
