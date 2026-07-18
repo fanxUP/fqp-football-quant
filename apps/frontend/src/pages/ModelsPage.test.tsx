@@ -57,9 +57,17 @@ describe('ModelsPage', () => {
           avg_logloss: 0.5,
           avg_rps: 0.1,
           avg_clv: null,
+          sample_status: 'monitoring',
+          is_publishable: false,
         },
       ],
-      overall: { total_evaluated: 10, overall_brier: 0.2, overall_logloss: 0.5 },
+      overall: {
+        total_evaluated: 10,
+        overall_brier: 0.2,
+        overall_logloss: 0.5,
+        publication_min_samples: 100,
+        publishable_models: 0,
+      },
     });
     apiMocks.performanceHistory.mockResolvedValue({
       status: 'ok',
@@ -83,5 +91,8 @@ describe('ModelsPage', () => {
     expect(screen.getByText('五种玩法模型曲线')).toBeInTheDocument();
     expect(screen.getByText('只统计胜平负玩法的赛前预测与已确认赛果')).toBeInTheDocument();
     expect(screen.getByText('CLV 尚无真实收盘数据，不会用 0 代替')).toBeInTheDocument();
+    expect(screen.getByText('尚无达标模型')).toBeInTheDocument();
+    expect(screen.getByText('仅观察')).toBeInTheDocument();
+    expect(screen.getByText(/少于 100 个独立已结算样本/)).toBeInTheDocument();
   });
 });

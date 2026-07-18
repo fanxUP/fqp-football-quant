@@ -619,6 +619,8 @@ export interface EvalModelSummary {
   avg_logloss: number;
   avg_rps: number;
   avg_clv: number | null;
+  sample_status: 'monitoring' | 'preliminary' | 'qualified';
+  is_publishable: boolean;
 }
 
 export interface EvaluationSummary {
@@ -628,6 +630,8 @@ export interface EvaluationSummary {
     total_evaluated: number;
     overall_brier: number;
     overall_logloss: number;
+    publication_min_samples: number;
+    publishable_models: number;
   };
 }
 

@@ -47,6 +47,17 @@ _LATEST_METRICS_CTE = """
     )
 """
 
+MODEL_PRELIMINARY_MIN_SAMPLES = 30
+MODEL_PUBLICATION_MIN_SAMPLES = 100
+
+
+def _model_sample_status(sample_count: int) -> str:
+    if sample_count >= MODEL_PUBLICATION_MIN_SAMPLES:
+        return "qualified"
+    if sample_count >= MODEL_PRELIMINARY_MIN_SAMPLES:
+        return "preliminary"
+    return "monitoring"
+
 _LATEST_PREDICTIONS_CTE = """
     WITH latest_predictions AS (
         SELECT DISTINCT ON (
@@ -700,14 +711,17 @@ def get_evaluation_summary(conn: Any) -> dict[str, Any]:
         models = []
         for row in cur.fetchall():
             d = dict(zip(columns, row, strict=False))
+            sample_count = int(d["n"])
             models.append(
                 {
                     "model_name": d["model_name"],
-                    "n": int(d["n"]),
+                    "n": sample_count,
                     "avg_brier": float(d["avg_brier"] or 0),
                     "avg_logloss": float(d["avg_logloss"] or 0),
                     "avg_rps": float(d["avg_rps"] or 0),
                     "avg_clv": float(d["avg_clv"]) if d["avg_clv"] is not None else None,
+                    "sample_status": _model_sample_status(sample_count),
+                    "is_publishable": sample_count >= MODEL_PUBLICATION_MIN_SAMPLES,
                 }
             )
 
@@ -725,6 +739,8 @@ def get_evaluation_summary(conn: Any) -> dict[str, Any]:
             "total_evaluated": int(overall_row[0] or 0),
             "overall_brier": float(overall_row[1] or 0),
             "overall_logloss": float(overall_row[2] or 0),
+            "publication_min_samples": MODEL_PUBLICATION_MIN_SAMPLES,
+            "publishable_models": sum(bool(model["is_publishable"]) for model in models),
         }
 
     return {"status": "ok", "models": models, "overall": overall}

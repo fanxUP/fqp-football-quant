@@ -252,6 +252,10 @@ def test_evaluation_summary_assigns_metrics_directly_to_their_model_version() ->
     assert "source_mem.play_type = 'spf'" in summary_query
     assert "source_result.result_status IN ('final', 'confirmed')" in summary_query
     assert result["models"][0]["avg_clv"] is None
+    assert result["models"][0]["sample_status"] == "monitoring"
+    assert result["models"][0]["is_publishable"] is False
+    assert result["overall"]["publication_min_samples"] == 100
+    assert result["overall"]["publishable_models"] == 0
 
 
 def test_latest_prediction_scope_excludes_post_match_predictions() -> None:
