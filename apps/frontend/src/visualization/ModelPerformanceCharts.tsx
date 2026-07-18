@@ -153,7 +153,7 @@ export default function ModelPerformanceCharts({
     <section aria-labelledby="model-performance-trend-title" className="model-performance-section">
       <header className="model-performance-heading">
         <h2 id="model-performance-trend-title">模型表现曲线</h2>
-        <p>按结算日期比较各模型滚动命中率；颜色和线型共同区分模型，点击图例可隐藏或显示曲线。</p>
+        <p>按结算日期比较各模型滚动命中率；不同颜色区分模型，点击图例可隐藏或显示曲线。</p>
       </header>
 
       <ModelSampleSufficiency samples={samples} modelNames={modelNames} days={days} />

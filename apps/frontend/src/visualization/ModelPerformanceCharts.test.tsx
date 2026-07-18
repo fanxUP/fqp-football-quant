@@ -31,6 +31,7 @@ describe('ModelPerformanceCharts', () => {
     );
 
     expect(screen.getByText('综合表现 · 模型对比')).toBeInTheDocument();
+    expect(screen.getByText('按结算日期比较各模型滚动命中率；不同颜色区分模型，点击图例可隐藏或显示曲线。')).toBeInTheDocument();
     expect(screen.getAllByText('Elo 实力评分')).toHaveLength(2);
     expect(screen.getByText('55.0%')).toBeInTheDocument();
     expect(screen.getAllByText('样本日期不足')).toHaveLength(2);
