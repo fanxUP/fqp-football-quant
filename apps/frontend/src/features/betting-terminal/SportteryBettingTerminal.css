@@ -1,7 +1,13 @@
+.betting-terminal {
+  --st-single-bg: #d63b49;
+  --st-pass-bg: #087a5b;
+  --st-handicap-positive: #d63b49;
+  --st-handicap-negative: #087a5b;
+}
+
 .sporttery-terminal {
   --st-teal: #00565c;
   --st-red: #ff5b60;
-  --st-green: #34b89a;
   --st-ink: #24282b;
   --st-muted: #8d9397;
   --st-line: #e5e6e7;
@@ -72,14 +78,14 @@
 .sporttery-market-stack,
 .sporttery-odds-stack { display: grid; gap: 8px; }
 .sporttery-goal-stack span { display: grid; place-items: center; min-height: 48px; border-radius: 22px 7px 7px 22px; color: #969b9e; background: linear-gradient(145deg, #fff, #ededed); box-shadow: inset 0 0 0 1px rgba(255,255,255,.85); font-size: 17px; }
-.sporttery-goal-stack span.is-positive { color: #f05265; background: linear-gradient(145deg, #fff, #fbe5eb); }
-.sporttery-goal-stack span.is-negative { color: #23aa8d; background: linear-gradient(145deg, #fff, #dff3ec); }
+.sporttery-terminal .sporttery-goal-stack span.is-positive { color: var(--st-handicap-positive); background: linear-gradient(145deg, #fff, #fbe5eb); }
+.sporttery-terminal .sporttery-goal-stack span.is-negative { color: var(--st-handicap-negative); background: linear-gradient(145deg, #fff, #dff3ec); }
 .sporttery-market-flags { display: grid; align-content: center; min-height: 48px; }
 .sporttery-market-flags span { display: grid; place-items: center; width: 28px; height: 22px; color: #fff; background: #d0d2d3; font-size: 12px; line-height: 1; }
 .sporttery-market-flags span:first-child { border-radius: 7px 3px 0 7px; }
 .sporttery-market-flags span:last-child { border-radius: 7px 3px 3px 7px; }
-.sporttery-market-flags span.is-single { background: var(--st-red); }
-.sporttery-market-flags span.is-pass { background: #aeb2b4; }
+.sporttery-market-flags span.is-single { background: var(--st-single-bg); }
+.sporttery-market-flags span.is-pass { background: var(--st-pass-bg); }
 .sporttery-odds-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
 .sporttery-odd,
 .sporttery-modal-odd { min-width: 0; min-height: 48px; border: 1px solid #e4e5e6; border-radius: 7px; background: linear-gradient(#fff, #f9f9f9); color: #555b5f; box-shadow: 0 2px 5px rgba(40, 50, 55, .05); }
@@ -145,10 +151,11 @@
 .sporttery-play-section h3 { display: flex; align-items: center; margin: 0 0 10px; border-left: 3px solid #4babc1; padding-left: 8px; color: var(--st-ink); font-size: 18px; font-weight: 500; }
 .sporttery-play-flags { display: flex; gap: 6px; margin-left: auto; }
 .sporttery-play-flags small { border-radius: 9px; padding: 2px 7px; color: #fff; font-size: 12px; font-weight: 500; }
-.sporttery-play-flags .is-single { background: var(--st-red); }
-.sporttery-play-flags .is-pass { background: #aeb2b4; }
+.sporttery-play-flags .is-single { background: var(--st-single-bg); }
+.sporttery-play-flags .is-pass { background: var(--st-pass-bg); }
 .sporttery-modal-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
-.sporttery-modal-grid.is-bf { grid-template-columns: repeat(5, 1fr); }
+.sporttery-score-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 7px; }
+.sporttery-score-grid .is-score-wide { grid-column: span 3; }
 .sporttery-modal-grid.is-zjq { grid-template-columns: repeat(4, 1fr); }
 .sporttery-modal-odd { min-height: 55px; padding: 6px 4px; }
 .sporttery-modal-odd span,
@@ -175,7 +182,8 @@
 .sporttery-widget-column { overflow: hidden; border: 0; background: transparent; }
 .sporttery-widget-column .sporttery-terminal {
   --st-red: var(--fqp-accent);
-  --st-green: var(--fqp-success);
+  --st-handicap-positive: #ff6b73;
+  --st-handicap-negative: #2fc39b;
   --st-ink: var(--fqp-text);
   --st-muted: var(--fqp-text-muted);
   --st-line: var(--fqp-border);
@@ -317,7 +325,7 @@
   .sporttery-quick-games { grid-template-columns: 42px 28px 1fr 50px; gap: 5px; }
   .sporttery-odds-row { gap: 5px; }
   .sporttery-odd { gap: 5px; }
-  .sporttery-modal-grid.is-bf { grid-template-columns: repeat(4, 1fr); }
+  .sporttery-score-grid { gap: 5px; }
   .sporttery-bet-slip { right: 10px; left: 10px; }
   .sporttery-slip-footer { padding-inline: 12px; }
   .sporttery-confirm-button { padding-inline: 18px; }

@@ -49,6 +49,16 @@ const completeOdds = {
   },
 };
 
+const scoreDisplayCodes = [
+  '1:0', '2:0', '2:1', '3:0', '3:1',
+  '3:2', '4:0', '4:1', '4:2', '5:0',
+  '5:1', '5:2', 'other_h',
+  '0:0', '1:1', '2:2', '3:3', 'other_d',
+  '0:1', '0:2', '1:2', '0:3', '1:3',
+  '2:3', '0:4', '1:4', '2:4', '0:5',
+  '1:5', '2:5', 'other_a',
+];
+
 const firstMatch: BettingMatch = {
   match_id: 901,
   business_date: '2026-07-12',
@@ -269,6 +279,84 @@ describe('BettingTerminalPage desktop workbench', () => {
     }
     expect(within(dialog).getAllByText('单场').length).toBeGreaterThan(0);
     expect(within(dialog).getAllByText('过关')).toHaveLength(5);
+  });
+
+  it('lays out score odds in the official five-column ticket order', async () => {
+    const scoreNames: Record<string, string> = {
+      other_h: '胜其他',
+      other_d: '平其他',
+      other_a: '负其他',
+    };
+    apiMocks.matches.mockResolvedValue({
+      matches: [{
+        ...firstMatch,
+        odds: {
+          ...completeOdds,
+          bf: {
+            ...completeOdds.bf,
+            options: [...scoreDisplayCodes].reverse().map((optionCode, index) => ({
+              option_code: optionCode,
+              option_name: scoreNames[optionCode] ?? optionCode,
+              sp_value: 10 + index,
+            })),
+          },
+        },
+      }],
+      total: 1,
+    });
+    render(<BettingTerminalPage />);
+
+    const matchCard = await screen.findByRole('article', { name: '周日203 首尔FC 对 江原FC' });
+    fireEvent.click(within(matchCard).getByRole('button', { name: '全部游戏' }));
+
+    const dialog = screen.getByRole('dialog', { name: '周日203 全部游戏' });
+    const scoreSection = within(dialog).getByRole('heading', { name: '比分' }).closest('section');
+    expect(scoreSection).not.toBeNull();
+    const scoreGrid = scoreSection?.querySelector('.sporttery-score-grid');
+    expect(scoreGrid).not.toBeNull();
+    expect(within(scoreGrid as HTMLElement).getAllByRole('button').map((button) => button.querySelector('span')?.textContent)).toEqual([
+      '1:0', '2:0', '2:1', '3:0', '3:1',
+      '3:2', '4:0', '4:1', '4:2', '5:0',
+      '5:1', '5:2', '胜其它',
+      '0:0', '1:1', '2:2', '3:3', '平其它',
+      '0:1', '0:2', '1:2', '0:3', '1:3',
+      '2:3', '0:4', '1:4', '2:4', '0:5',
+      '1:5', '2:5', '负其它',
+    ]);
+    expect(within(scoreGrid as HTMLElement).getByText('胜其它').closest('button')).toHaveClass('is-score-wide');
+    expect(within(scoreGrid as HTMLElement).getByText('平其它').closest('button')).not.toHaveClass('is-score-wide');
+    expect(within(scoreGrid as HTMLElement).getByText('负其它').closest('button')).toHaveClass('is-score-wide');
+
+    const oneNil = within(scoreGrid as HTMLElement).getByText('1:0').closest('button');
+    expect(oneNil).toHaveAttribute('aria-pressed', 'false');
+    fireEvent.click(oneNil as HTMLButtonElement);
+    await waitFor(() => expect(oneNil).toHaveAttribute('aria-pressed', 'true'));
+    const slip = await screen.findByRole('complementary', { name: '投注单' });
+    await waitFor(() => expect(within(slip).getByText((_, node) => node?.textContent === '共计: 1 注 2.00 元')).toBeInTheDocument());
+  });
+
+  it('marks single, pass, positive handicap, and negative handicap states semantically', async () => {
+    apiMocks.matches.mockResolvedValue({
+      matches: [
+        firstMatch,
+        {
+          ...secondMatch,
+          odds: {
+            ...secondMatch.odds,
+            rqspf: { ...secondMatch.odds.rqspf, handicap: 1 },
+          },
+        },
+      ],
+      total: 2,
+    });
+    render(<BettingTerminalPage />);
+
+    const first = await screen.findByRole('article', { name: '周日203 首尔FC 对 江原FC' });
+    const flags = within(first).getByLabelText('胜平负支持单场，支持过关');
+    expect(within(flags).getByText('单')).toHaveClass('is-single');
+    expect(within(flags).getByText('过')).toHaveClass('is-pass');
+    expect(within(first).getByText('-1')).toHaveClass('is-negative');
+    expect(within(screen.getByRole('article', { name: '周一201 马尔默 对 哥德堡' })).getByText('+1')).toHaveClass('is-positive');
   });
 
   it('expands same-match alternatives and links selection, pass, amount, and prize', async () => {

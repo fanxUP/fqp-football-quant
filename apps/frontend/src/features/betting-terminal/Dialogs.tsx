@@ -1,6 +1,7 @@
 import type { BetSlipItem, BettingMatch, BettingOddsOption } from '../../core/types';
 import type { SportteryPlayType } from '../../core/bettingRules';
 import { displayOption, formatPassTypes, optionAriaLabel, PLAY_LABELS, PLAY_TYPES, selectionKey } from './model';
+import ScoreOddsGrid from './ScoreOddsGrid';
 
 interface AllGamesDialogProps {
   match: BettingMatch;
@@ -29,25 +30,38 @@ export function AllGamesDialog({ match, selections, onToggle, onClose }: AllGame
                     {market.is_pass_allowed !== false && <small className="is-pass">过关</small>}
                   </span>
                 </h3>
-                <div className={`sporttery-modal-grid is-${playType}`}>
-                  {market.options.map((option) => {
-                    const selected = selections.some((item) => selectionKey(item.match_id, item.play_type, item.option_code) === selectionKey(match.match_id, playType, option.option_code));
-                    return (
-                      <button
-                        key={option.option_code}
-                        type="button"
-                        className={`sporttery-modal-odd ${selected ? 'is-selected' : ''}`}
-                        aria-label={optionAriaLabel(playType, option)}
-                        aria-pressed={selected}
-                        disabled={!selectable}
-                        onClick={() => onToggle(match, playType, option)}
-                      >
-                        <span>{displayOption(playType, option)}</span>
-                        <small>{option.sp_value.toFixed(2)}</small>
-                      </button>
-                    );
-                  })}
-                </div>
+                {playType === 'bf' ? (
+                  <ScoreOddsGrid
+                    options={market.options}
+                    selectedOptionCodes={new Set(
+                      selections
+                        .filter((item) => item.match_id === match.match_id && item.play_type === playType)
+                        .map((item) => item.option_code),
+                    )}
+                    selectable={selectable}
+                    onToggle={(option) => onToggle(match, playType, option)}
+                  />
+                ) : (
+                  <div className={`sporttery-modal-grid is-${playType}`}>
+                    {market.options.map((option) => {
+                      const selected = selections.some((item) => selectionKey(item.match_id, item.play_type, item.option_code) === selectionKey(match.match_id, playType, option.option_code));
+                      return (
+                        <button
+                          key={option.option_code}
+                          type="button"
+                          className={`sporttery-modal-odd ${selected ? 'is-selected' : ''}`}
+                          aria-label={optionAriaLabel(playType, option)}
+                          aria-pressed={selected}
+                          disabled={!selectable}
+                          onClick={() => onToggle(match, playType, option)}
+                        >
+                          <span>{displayOption(playType, option)}</span>
+                          <small>{option.sp_value.toFixed(2)}</small>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </section>
             );
           })}
