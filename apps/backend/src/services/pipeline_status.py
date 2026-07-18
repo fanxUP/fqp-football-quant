@@ -214,6 +214,47 @@ def _job_quality(output_refs: object) -> tuple[str | None, str | None]:
     return quality_status, quality_note
 
 
+def _canonical_source_rows(source_rows: list[tuple[Any, ...]]) -> list[tuple[Any, ...]]:
+    """Merge the uniform schedule source and its legacy fallback into one status."""
+    schedule_rows = [
+        row
+        for row in source_rows
+        if str(row[2]) == "schedule" and str(row[1]) in {"sporttery", "sporttery_v2"}
+    ]
+    if not schedule_rows:
+        return source_rows
+
+    def event_key(row: tuple[Any, ...]) -> tuple[datetime, int]:
+        timestamps = [_as_utc(row[4]), _as_utc(row[5])]
+        latest = max(
+            (value for value in timestamps if value is not None),
+            default=datetime.min.replace(tzinfo=UTC),
+        )
+        return latest, int(row[0])
+
+    selected_row = schedule_rows[0]
+    for candidate in schedule_rows[1:]:
+        if event_key(candidate) > event_key(selected_row):
+            selected_row = candidate
+    selected = list(selected_row)
+    selected[1] = "sporttery"
+    canonical_schedule = tuple(selected)
+
+    merged: list[tuple[Any, ...]] = []
+    schedule_inserted = False
+    for row in source_rows:
+        is_schedule_variant = str(row[2]) == "schedule" and str(row[1]) in {
+            "sporttery",
+            "sporttery_v2",
+        }
+        if not is_schedule_variant:
+            merged.append(row)
+        elif not schedule_inserted:
+            merged.append(canonical_schedule)
+            schedule_inserted = True
+    return merged
+
+
 def get_pipeline_snapshot(conn: Any) -> dict[str, list[dict[str, Any]]]:
     """Return only current scheduler jobs with stable names and UTC timestamps."""
     with conn.cursor() as cur:
@@ -224,7 +265,7 @@ def get_pipeline_snapshot(conn: Any) -> dict[str, list[dict[str, Any]]]:
                FROM data_source_health
                ORDER BY source_name, source_type, id DESC"""
         )
-        source_rows = cur.fetchall()
+        source_rows = _canonical_source_rows(cur.fetchall())
 
         active_codes = [
             code

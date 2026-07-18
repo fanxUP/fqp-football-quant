@@ -252,6 +252,56 @@ class TestOpsPipeline:
             }
         ]
 
+    def test_merges_primary_and_fallback_schedule_health_into_one_current_source(self, client):
+        mock_conn, mock_cur = _mock_db_conn()
+        mock_cur.fetchall.side_effect = [
+            [
+                (
+                    9,
+                    "sporttery",
+                    "schedule",
+                    "error",
+                    None,
+                    datetime(2026, 7, 15, 2, 10),
+                    1,
+                    0,
+                ),
+                (
+                    6,
+                    "sporttery_v2",
+                    "schedule",
+                    "ok",
+                    datetime(2026, 7, 15, 3, 10),
+                    None,
+                    0,
+                    206,
+                ),
+            ],
+            [],
+        ]
+
+        with (
+            patch("apps.backend.src.routers.ops.get_db", return_value=mock_conn),
+            patch(
+                "apps.backend.src.services.pipeline_status._utc_now",
+                return_value=datetime(2026, 7, 15, 3, 11, tzinfo=UTC),
+            ),
+        ):
+            response = client.get("/api/ops/pipeline")
+
+        assert response.status_code == 200
+        assert response.json()["sources"] == [
+            {
+                "name": "sporttery",
+                "source_type": "schedule",
+                "status": "ok",
+                "last_success": "2026-07-15T03:10:00Z",
+                "last_failure": None,
+                "failures": 0,
+                "latency_ms": 206,
+            }
+        ]
+
     def test_normalizes_active_jobs_sources_and_utc_timestamps(self, client):
         mock_conn, mock_cur = _mock_db_conn()
         mock_cur.fetchall.side_effect = [
@@ -272,7 +322,14 @@ class TestOpsPipeline:
                 (7, "500.com", "official", "ok", datetime(2026, 7, 10, 3, 8, 0), None, 0, 400),
             ],
             [
-                (101, "official_odds_snapshot", "completed", datetime(2026, 7, 15, 3, 8, 19), None, None),
+                (
+                    101,
+                    "official_odds_snapshot",
+                    "completed",
+                    datetime(2026, 7, 15, 3, 8, 19),
+                    None,
+                    None,
+                ),
                 (99, "crawl_official_odds", "success", datetime(2026, 7, 9, 23, 30), None, None),
                 (
                     88,
@@ -329,19 +386,21 @@ class TestOpsPipeline:
         mock_conn, mock_cur = _mock_db_conn()
         mock_cur.fetchall.side_effect = [
             [],
-            [(
-                102,
-                "feature_snapshot_build",
-                "ok",
-                datetime(2026, 7, 15, 3, 8, 19),
-                None,
-                {
-                    "result": {
-                        "quality_status": "degraded",
-                        "average_completeness": 22.5,
-                    }
-                },
-            )],
+            [
+                (
+                    102,
+                    "feature_snapshot_build",
+                    "ok",
+                    datetime(2026, 7, 15, 3, 8, 19),
+                    None,
+                    {
+                        "result": {
+                            "quality_status": "degraded",
+                            "average_completeness": 22.5,
+                        }
+                    },
+                )
+            ],
         ]
 
         with (
@@ -354,8 +413,7 @@ class TestOpsPipeline:
             response = client.get("/api/ops/pipeline")
 
         job = next(
-            item for item in response.json()["jobs"]
-            if item["code"] == "feature_snapshot_build"
+            item for item in response.json()["jobs"] if item["code"] == "feature_snapshot_build"
         )
         assert job["status"] == "degraded"
         assert job["detail"] == "平均特征完整度 22.5%"

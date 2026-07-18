@@ -210,7 +210,7 @@ export const api = {
 
   // Live recommendations
   liveRecommendations: (params?: { limit?: number; min_ev?: number; min_confidence?: number }) =>
-    request<{ status: string; recommendations: import('./types').LiveRecommendation[]; total: number }>(
+    request<{ status: string; recommendations: import('./types').LiveRecommendation[]; total: number; sales_window?: import('./types').SportterySalesWindow }>(
       `/api/recommendations/live${qs({ limit: params?.limit, min_ev: params?.min_ev, min_confidence: params?.min_confidence })}`,
     ),
 

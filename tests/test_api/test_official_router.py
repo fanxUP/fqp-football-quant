@@ -1,5 +1,5 @@
 from datetime import date
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 
 def test_list_official_matches_reads_sporttery_id_from_raw_json(client):
@@ -99,7 +99,14 @@ def test_list_odds_history_matches_returns_only_matches_with_official_snapshots(
 
 
 def test_odds_index_separates_current_open_matches_from_historical_dates(client):
-    with patch("apps.backend.src.routers.official.get_db") as get_db:
+    open_window = MagicMock(is_open=True)
+    open_window.as_dict.return_value = {"is_open": True}
+    with (
+        patch(
+            "apps.backend.src.routers.official.get_sporttery_sales_window", return_value=open_window
+        ),
+        patch("apps.backend.src.routers.official.get_db") as get_db,
+    ):
         connection = get_db.return_value.__enter__.return_value
         cursor = connection.cursor.return_value.__enter__.return_value
         cursor.fetchall.return_value = [
@@ -112,12 +119,51 @@ def test_odds_index_separates_current_open_matches_from_historical_dates(client)
 
     assert response.status_code == 200
     sql = cursor.execute.call_args.args[0]
+    params = cursor.execute.call_args.args[1]
     assert "timezone('Asia/Shanghai', NOW())" in sql
     assert "market.is_open = TRUE" in sql
+    assert params["sales_open"] is True
     assert response.json() == {
         "current": {"count": 4},
         "history": [
             {"business_date": "2026-07-13", "match_count": 6},
             {"business_date": "2026-07-12", "match_count": 8},
         ],
+        "sales_window": {"is_open": True},
+    }
+
+
+def test_odds_index_marks_current_scope_unavailable_during_official_rest_time(client):
+    closed_window = MagicMock(is_open=False)
+    closed_window.as_dict.return_value = {
+        "is_open": False,
+        "message": "官方竞彩休市中，今日 11:00 恢复开售",
+    }
+    with (
+        patch(
+            "apps.backend.src.routers.official.get_sporttery_sales_window",
+            return_value=closed_window,
+        ),
+        patch("apps.backend.src.routers.official.get_db") as get_db,
+    ):
+        connection = get_db.return_value.__enter__.return_value
+        cursor = connection.cursor.return_value.__enter__.return_value
+        cursor.fetchall.return_value = [
+            ("current", None, 0),
+            ("history", date(2026, 7, 13), 6),
+        ]
+
+        response = client.get("/api/official/odds-index")
+
+    assert response.status_code == 200
+    sql, params = cursor.execute.call_args.args
+    assert "%(sales_open)s" in sql
+    assert params["sales_open"] is False
+    assert response.json() == {
+        "current": {"count": 0},
+        "history": [{"business_date": "2026-07-13", "match_count": 6}],
+        "sales_window": {
+            "is_open": False,
+            "message": "官方竞彩休市中，今日 11:00 恢复开售",
+        },
     }

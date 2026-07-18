@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 from zoneinfo import ZoneInfo
 
 from apps.backend.src.db import get_db
+from scripts.sporttery_sales import get_sporttery_sales_window
 
 BUSINESS_TIMEZONE = ZoneInfo("Asia/Shanghai")
 PlayType = Literal["spf", "rqspf", "bf", "zjq", "bqc"]
@@ -125,6 +126,18 @@ def list_odds_movements(
     limit: int,
 ) -> dict:
     """Return all matches and selected-play series in a single bounded query."""
+    sales_window = get_sporttery_sales_window()
+    if scope == "current" and not sales_window.is_open:
+        return {
+            "scope": scope,
+            "business_date": business_date,
+            "play_type": play_type,
+            "resolution": resolution,
+            "matches": [],
+            "total": 0,
+            "sales_window": sales_window.as_dict(),
+        }
+
     params = {
         "business_date": business_date,
         "play_type": play_type,
@@ -190,7 +203,7 @@ def list_odds_movements(
                 }
             )
 
-    return {
+    response: dict[str, Any] = {
         "scope": scope,
         "business_date": business_date,
         "play_type": play_type,
@@ -198,3 +211,6 @@ def list_odds_movements(
         "matches": list(matches.values()),
         "total": len(matches),
     }
+    if scope == "current":
+        response["sales_window"] = sales_window.as_dict()
+    return response

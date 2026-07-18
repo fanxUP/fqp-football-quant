@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../core/apiClient';
 import { navigate } from '../core/router';
-import type { SimulationTicket, LiveRecommendation } from '../core/types';
+import type { SimulationTicket, LiveRecommendation, SportterySalesWindow } from '../core/types';
 import { ApiError } from '../core/types';
 import PageHeader from '../shared/components/PageHeader';
 import FilterBar from '../shared/components/FilterBar';
@@ -157,6 +157,7 @@ export function buildRecommendationInsightSummary(recommendations: LiveRecommend
 export default function RecommendationsPage({ embedded = false, onMatchSelect }: RecommendationsPageProps) {
   const [tickets, setTickets] = useState<SimulationTicket[]>([]);
   const [liveRecs, setLiveRecs] = useState<LiveRecommendation[]>([]);
+  const [salesWindow, setSalesWindow] = useState<SportterySalesWindow | null>(null);
   const [baselineOnly, setBaselineOnly] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -176,7 +177,8 @@ export default function RecommendationsPage({ embedded = false, onMatchSelect }:
         if (!cancelled) {
           let recommendations = recRes.recommendations || [];
           let baseline = false;
-          if (recommendations.length === 0) {
+          setSalesWindow(recRes.sales_window ?? null);
+          if (recommendations.length === 0 && recRes.sales_window?.is_open !== false) {
             const baselineRes = await api.liveRecommendations({ limit: 500, min_ev: -1, min_confidence: 0 });
             recommendations = baselineRes.recommendations || [];
             baseline = recommendations.length > 0;
@@ -589,6 +591,13 @@ export default function RecommendationsPage({ embedded = false, onMatchSelect }:
       )}
 
       {/* Live recommendations panel */}
+      {!loading && salesWindow?.is_open === false && (
+        <Card style={{ marginBottom: 16, borderColor: 'rgba(245,165,36,0.45)' }}>
+          <div style={{ color: 'var(--fqp-warning)', fontSize: 13 }}>
+            {salesWindow.message}
+          </div>
+        </Card>
+      )}
       {baselineOnly && (
         <Card style={{ marginBottom: 16, borderColor: 'rgba(245,165,36,0.45)' }}>
           <div style={{ color: 'var(--fqp-warning)', fontSize: 13 }}>

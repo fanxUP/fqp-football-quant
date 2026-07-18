@@ -74,6 +74,17 @@ export default function OddsMovementPage() {
   if (indexLoading) return <LoadingSpinner text="加载赔率日期索引..." size="lg" />;
   if (!index && error) return <ErrorState message={error} onRetry={() => window.location.reload()} />;
 
+  const isCurrentRestTime = scope === 'current' && index?.sales_window?.is_open === false;
+  let emptyTitle = '当前没有开盘比赛';
+  let emptyDescription = '赛程开盘后会自动出现在这里';
+  if (scope === 'history') {
+    emptyTitle = '该日期暂无赔率记录';
+    emptyDescription = '请选择其他历史日期';
+  } else if (isCurrentRestTime) {
+    emptyTitle = '当前为官方休市时间';
+    emptyDescription = index?.sales_window?.message ?? '官方竞彩休市中';
+  }
+
   return (
     <div>
       <PageHeader
@@ -118,8 +129,8 @@ export default function OddsMovementPage() {
       ) : matches.length === 0 ? (
         <EmptyState
           icon="📉"
-          title={scope === 'current' ? '当前没有开盘比赛' : '该日期暂无赔率记录'}
-          description={scope === 'current' ? '赛程开盘后会自动出现在这里' : '请选择其他历史日期'}
+          title={emptyTitle}
+          description={emptyDescription}
         />
       ) : (
         <div style={{ display: 'grid', gap: 16 }}>

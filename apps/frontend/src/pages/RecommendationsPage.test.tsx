@@ -1,10 +1,15 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import RecommendationsPage, {
   buildRecommendationInsightSummary,
   formatRecommendationOptionDisplay,
 } from './RecommendationsPage';
 import type { LiveRecommendation, SimulationTicket } from '../core/types';
+
+const { tickets, liveRecommendations } = vi.hoisted(() => ({
+  tickets: vi.fn(async () => ({ tickets: [] as SimulationTicket[], total: 0 })),
+  liveRecommendations: vi.fn(),
+}));
 
 const recommendation: LiveRecommendation = {
   prediction_id: 10,
@@ -44,12 +49,8 @@ const recommendation: LiveRecommendation = {
 
 vi.mock('../core/apiClient', () => ({
   api: {
-    tickets: vi.fn(async () => ({ tickets: [] as SimulationTicket[], total: 0 })),
-    liveRecommendations: vi.fn(async () => ({
-      status: 'ok',
-      recommendations: [recommendation],
-      total: 1,
-    })),
+    tickets,
+    liveRecommendations,
   },
 }));
 
@@ -64,6 +65,34 @@ vi.mock('../shared/components/TeamLogo', () => ({
 }));
 
 describe('RecommendationsPage', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    liveRecommendations.mockResolvedValue({
+      status: 'ok',
+      recommendations: [recommendation],
+      total: 1,
+      sales_window: { is_open: true },
+    });
+  });
+
+  it('休市时显示官方提示且不回退为模型基线推荐', async () => {
+    liveRecommendations.mockResolvedValue({
+      status: 'resting',
+      recommendations: [],
+      total: 0,
+      sales_window: {
+        is_open: false,
+        message: '官方竞彩休市中，今日 11:00 恢复开售',
+      },
+    });
+
+    render(<RecommendationsPage embedded />);
+
+    expect(await screen.findByText('官方竞彩休市中，今日 11:00 恢复开售')).toBeInTheDocument();
+    expect(liveRecommendations).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText(/模型基线分析/)).not.toBeInTheDocument();
+  });
+
   it('formats recommendation option rows with odds and settlement result', () => {
     expect(formatRecommendationOptionDisplay({ option_name: '让胜(+1)', fair_odds: 1.15 }, 'win')).toBe('主胜(+1)@1.15/胜利');
     expect(formatRecommendationOptionDisplay({ option_name: '让负(+1)', fair_odds: 4.32 }, 'lose')).toBe('主负(+1)@4.32/失败');

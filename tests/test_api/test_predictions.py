@@ -7,14 +7,50 @@ from unittest.mock import MagicMock, patch
 
 
 class TestPredictionsEndpoint:
+    def test_live_recommendations_are_unavailable_during_official_rest_time(self, client):
+        closed_window = MagicMock(is_open=False)
+        closed_window.as_dict.return_value = {
+            "is_open": False,
+            "message": "官方竞彩休市中，今日 11:00 恢复开售",
+        }
+
+        with (
+            patch(
+                "apps.backend.src.routers.predictions.get_sporttery_sales_window",
+                return_value=closed_window,
+            ),
+            patch("apps.backend.src.routers.predictions.get_db") as get_db,
+        ):
+            response = client.get("/api/recommendations/live")
+
+        assert response.status_code == 200
+        assert response.json() == {
+            "status": "resting",
+            "recommendations": [],
+            "total": 0,
+            "sales_window": {
+                "is_open": False,
+                "message": "官方竞彩休市中，今日 11:00 恢复开售",
+            },
+        }
+        get_db.assert_not_called()
+
     def test_live_recommendations_require_actionable_official_evidence(self, client):
+        open_window = MagicMock(is_open=True)
+        open_window.as_dict.return_value = {"is_open": True}
         mock_conn = MagicMock()
         mock_cur = MagicMock()
         mock_conn.__enter__.return_value = mock_conn
         mock_conn.cursor.return_value.__enter__.return_value = mock_cur
         mock_cur.fetchall.return_value = []
 
-        with patch("apps.backend.src.routers.predictions.get_db", return_value=mock_conn):
+        with (
+            patch(
+                "apps.backend.src.routers.predictions.get_sporttery_sales_window",
+                return_value=open_window,
+            ),
+            patch("apps.backend.src.routers.predictions.get_db", return_value=mock_conn),
+        ):
             resp = client.get("/api/recommendations/live")
 
         assert resp.status_code == 200

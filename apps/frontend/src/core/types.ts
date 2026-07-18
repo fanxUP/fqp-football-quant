@@ -126,6 +126,7 @@ export interface OfficialOddsHistoryMatch {
 export interface OfficialOddsIndex {
   current: { count: number };
   history: { business_date: string; match_count: number }[];
+  sales_window?: SportterySalesWindow;
 }
 
 export interface OddsMovementPoint {
@@ -166,6 +167,7 @@ export interface OddsMovementsResponse {
   resolution: 'raw' | 'hour';
   matches: OddsMovementMatch[];
   total: number;
+  sales_window?: SportterySalesWindow;
 }
 
 // ---- Match Detail (Events Center drawer) ----

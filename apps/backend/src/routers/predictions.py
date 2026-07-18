@@ -5,6 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Query
 
 from apps.backend.src.db import get_db
+from scripts.sporttery_sales import get_sporttery_sales_window
 
 router = APIRouter(tags=["predictions"])
 
@@ -66,6 +67,15 @@ def get_live_recommendations(
     Returns the best match+option combos with positive EV, sorted by EV descending.
     Each recommendation includes match info, odds, probabilities, edge, and suggested action.
     """
+    sales_window = get_sporttery_sales_window()
+    if not sales_window.is_open:
+        return {
+            "status": "resting",
+            "recommendations": [],
+            "total": 0,
+            "sales_window": sales_window.as_dict(),
+        }
+
     with get_db() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -226,7 +236,12 @@ def get_live_recommendations(
             }
         )
 
-    return {"status": "ok", "recommendations": recommendations, "total": len(recommendations)}
+    return {
+        "status": "ok",
+        "recommendations": recommendations,
+        "total": len(recommendations),
+        "sales_window": sales_window.as_dict(),
+    }
 
 
 @router.post("/api/models/predict/date/{date}")
