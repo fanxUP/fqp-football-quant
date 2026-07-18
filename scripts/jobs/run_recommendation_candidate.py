@@ -26,6 +26,7 @@ from scripts.competition_storage import AGENT_DAILY_BUDGET
 from scripts.daily_decision_storage import upsert_agent_daily_decision
 from scripts.model_storage import store_simulation_ticket
 from scripts.recommendation_prediction_loader import load_actionable_predictions
+from scripts.sporttery_sales import get_sporttery_sales_window
 
 
 def _now() -> str:
@@ -366,6 +367,16 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
     """Generate simulation ticket candidates for the competition agent."""
     if dry_run:
         return {"status": "dry_run", "message": "recommendation candidate (dry run)"}
+
+    sales_window = get_sporttery_sales_window()
+    if not sales_window.is_open:
+        return {
+            "status": "ok",
+            "tickets": 0,
+            "quality_status": "not_due",
+            "note": sales_window.message,
+            "sales_window": sales_window.as_dict(),
+        }
 
     with get_db() as conn:
         # ── 0. Ensure daily budget plan exists ──

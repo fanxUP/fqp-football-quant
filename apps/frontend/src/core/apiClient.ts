@@ -351,7 +351,7 @@ export const api = {
   // Betting terminal
   bettingTerminal: {
     matches: (params?: { date?: string; league_name?: string; limit?: number }) =>
-      request<{ matches: import('./types').BettingMatch[]; total: number }>(
+      request<{ matches: import('./types').BettingMatch[]; total: number; sales_window?: import('./types').SportterySalesWindow }>(
         `/api/simulator/matches${qs({ date: params?.date, league_name: params?.league_name, limit: params?.limit ?? 50 })}`,
       ),
 
@@ -365,7 +365,7 @@ export const api = {
   // Legacy endpoints kept for historical ticket detail and existing data screens.
   simulator: {
     matches: (params?: { date?: string; league_name?: string; limit?: number }) =>
-      request<{ matches: import('./types').BettingMatch[]; total: number }>(
+      request<{ matches: import('./types').BettingMatch[]; total: number; sales_window?: import('./types').SportterySalesWindow }>(
         `/api/simulator/matches${qs({ date: params?.date, league_name: params?.league_name, limit: params?.limit ?? 50 })}`,
       ),
 

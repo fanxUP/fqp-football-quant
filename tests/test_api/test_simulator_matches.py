@@ -1,6 +1,97 @@
+from datetime import datetime
 from unittest.mock import patch
+from zoneinfo import ZoneInfo
+
+import pytest
 
 from apps.backend.src.routers.simulator import _pool_capabilities
+from scripts.sporttery_sales import get_sporttery_sales_window
+
+REST_WINDOW = get_sporttery_sales_window(
+    datetime(2026, 7, 19, 2, 9, tzinfo=ZoneInfo("Asia/Shanghai"))
+)
+OPEN_WINDOW = get_sporttery_sales_window(
+    datetime(2026, 7, 18, 12, 0, tzinfo=ZoneInfo("Asia/Shanghai"))
+)
+
+
+@pytest.fixture(autouse=True)
+def open_official_sales_window():
+    with patch(
+        "apps.backend.src.routers.simulator.get_sporttery_sales_window",
+        return_value=OPEN_WINDOW,
+    ):
+        yield
+
+
+def test_simulator_matches_are_unavailable_during_official_rest_time(client):
+    with (
+        patch("apps.backend.src.routers.simulator.get_db") as get_db,
+        patch(
+            "apps.backend.src.routers.simulator.get_sporttery_sales_window",
+            return_value=REST_WINDOW,
+        ),
+    ):
+        response = client.get("/api/simulator/matches")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "matches": [],
+        "total": 0,
+        "sales_window": REST_WINDOW.as_dict(),
+    }
+    get_db.assert_not_called()
+
+
+def test_manual_ticket_submission_is_rejected_during_official_rest_time(client):
+    payload = {
+        "source": "real-user",
+        "play_type": "spf",
+        "pass_type": "single",
+        "multiple": 1,
+        "items": [
+            {
+                "match_id": 22057,
+                "play_type": "spf",
+                "option_code": "h",
+                "option_name": "主胜",
+                "sp_value": 1.68,
+            }
+        ],
+    }
+    with patch(
+        "apps.backend.src.routers.betting.get_sporttery_sales_window",
+        return_value=REST_WINDOW,
+    ):
+        response = client.post("/api/v1/betting/tickets", json=payload)
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == REST_WINDOW.message
+
+
+def test_simulator_ticket_submission_is_rejected_during_official_rest_time(client):
+    payload = {
+        "play_type": "spf",
+        "pass_type": "single",
+        "multiple": 1,
+        "items": [
+            {
+                "match_id": 22057,
+                "play_type": "spf",
+                "option_code": "h",
+                "option_name": "主胜",
+                "sp_value": 1.68,
+            }
+        ],
+    }
+    with patch(
+        "apps.backend.src.routers.simulator.get_sporttery_sales_window",
+        return_value=REST_WINDOW,
+    ):
+        response = client.post("/api/simulator/tickets", json=payload)
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == REST_WINDOW.message
 
 
 def test_simulator_matches_filters_to_future_sellable_statuses(client):

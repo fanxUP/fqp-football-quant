@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../core/apiClient';
 import { getAvailablePassTypes, getTicketPlayType, type SportteryPlayType } from '../core/bettingRules';
 import { navigate } from '../core/router';
-import type { BetSlipItem, BettingMatch, BettingOddsOption, CalculationResult, LiveRecommendation } from '../core/types';
+import type { BetSlipItem, BettingMatch, BettingOddsOption, CalculationResult, LiveRecommendation, SportterySalesWindow } from '../core/types';
 import { ApiError } from '../core/types';
 import BetSlip from '../features/betting-terminal/BetSlip';
 import {
@@ -49,6 +49,7 @@ export default function BettingTerminalPage() {
   const [matches, setMatches] = useState<BettingMatch[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
+  const [salesWindow, setSalesWindow] = useState<SportterySalesWindow | null>(null);
   const [recommendations, setRecommendations] = useState<LiveRecommendation[]>([]);
   const [recommendationsLoading, setRecommendationsLoading] = useState(true);
   const [recommendationsError, setRecommendationsError] = useState('');
@@ -85,12 +86,19 @@ export default function BettingTerminalPage() {
     setLoading(true);
     setLoadError('');
     api.bettingTerminal.matches({ limit: 100 })
-      .then((response) => setMatches(response.matches || []))
+      .then((response) => {
+        setMatches(response.matches || []);
+        setSalesWindow(response.sales_window ?? null);
+      })
       .catch((error) => setLoadError(errorMessage(error, '官方比赛加载失败')))
       .finally(() => setLoading(false));
   }, []);
 
   useEffect(() => { fetchMatches(); }, [fetchMatches]);
+
+  useEffect(() => {
+    if (salesWindow?.is_open === false) resetBetSlip();
+  }, [resetBetSlip, salesWindow?.is_open]);
 
   useEffect(() => {
     setRecommendationsLoading(true);
@@ -319,8 +327,11 @@ export default function BettingTerminalPage() {
         />
 
         {loading && <div className="sporttery-status" role="status">正在读取官方开售比赛…</div>}
-        {loadError && <div className="sporttery-status is-error" role="alert">{loadError}<button type="button" onClick={fetchMatches}>重试</button></div>}
-        {!loading && !loadError && filteredMatches.length === 0 && <div className="sporttery-status">当前筛选条件下没有开售比赛</div>}
+        {loadError && <div className="sporttery-status is-error" role="alert">{loadError}<button type="button" onClick={() => fetchMatches()}>重试</button></div>}
+        {!loading && !loadError && salesWindow?.is_open === false && (
+          <div className="sporttery-status" role="status">{salesWindow.message}</div>
+        )}
+        {!loading && !loadError && salesWindow?.is_open !== false && filteredMatches.length === 0 && <div className="sporttery-status">当前筛选条件下没有开售比赛</div>}
         {!loading && !loadError && matches.length > 0 && hasPublishedOdds && !hasSelectableOfficialMarket && (
           <div className="sporttery-status" role="status">官方赔率已发布，但当前未开放单关或过关，请稍后刷新。</div>
         )}

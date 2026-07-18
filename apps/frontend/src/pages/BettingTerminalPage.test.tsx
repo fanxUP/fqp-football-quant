@@ -547,4 +547,30 @@ describe('BettingTerminalPage desktop workbench', () => {
 
     expect(await screen.findByText('官方赔率已发布，但当前未开放单关或过关，请稍后刷新。')).toBeInTheDocument();
   });
+
+  it('shows the official rest-time message instead of treating the card as sellable', async () => {
+    apiMocks.matches.mockResolvedValue({
+      matches: [],
+      total: 0,
+      sales_window: {
+        is_open: false,
+        current_time: '2026-07-19T02:09:00+08:00',
+        opens_at: '2026-07-19T11:00:00+08:00',
+        closes_at: '2026-07-19T23:00:00+08:00',
+        next_opens_at: '2026-07-19T11:00:00+08:00',
+        message: '官方竞彩休市中，今日 11:00 恢复开售',
+        schedule: {
+          weekday: '11:00-22:00',
+          weekend: '11:00-23:00',
+          timezone: 'Asia/Shanghai',
+        },
+      },
+    });
+
+    render(<BettingTerminalPage />);
+
+    expect(await screen.findByText('官方竞彩休市中，今日 11:00 恢复开售')).toBeInTheDocument();
+    expect(screen.queryByText('当前筛选条件下没有开售比赛')).not.toBeInTheDocument();
+    expect(screen.queryByRole('article', { name: /周六103/ })).not.toBeInTheDocument();
+  });
 });

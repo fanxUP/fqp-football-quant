@@ -24,6 +24,7 @@ from scripts.simulator_storage import (
     list_simulator_tickets,
     reset_bankroll,
 )
+from scripts.sporttery_sales import get_sporttery_sales_window
 
 router = APIRouter(tags=["simulator"])
 
@@ -98,6 +99,10 @@ def list_matches(
     limit: int = Query(50, ge=1, le=200),
 ):
     """List sellable matches with odds for all 5 play types."""
+    sales_window = get_sporttery_sales_window()
+    if not sales_window.is_open:
+        return {"matches": [], "total": 0, "sales_window": sales_window.as_dict()}
+
     with get_db() as conn:
         with conn.cursor() as cur:
             # A stale selling flag must never expose a settled or already-started match.
@@ -134,7 +139,7 @@ def list_matches(
             match_rows = cur.fetchall()
 
             if not match_rows:
-                return {"matches": [], "total": 0}
+                return {"matches": [], "total": 0, "sales_window": sales_window.as_dict()}
 
             match_ids = [r[0] for r in match_rows]
 
@@ -290,7 +295,11 @@ def list_matches(
                 opts.sort(key=lambda o: order.get(o["option_code"], 99))
 
     result = sorted(matches_map.values(), key=lambda m: m["kickoff_time"])
-    return {"matches": result, "total": len(result)}
+    return {
+        "matches": result,
+        "total": len(result),
+        "sales_window": sales_window.as_dict(),
+    }
 
 
 # ---- Calculation ----
@@ -328,6 +337,10 @@ def calculate(req: CalculateRequest):
 @router.post("/api/simulator/tickets")
 def submit_ticket(req: SubmitTicketRequest):
     """Submit a simulated bet: validate, deduct bankroll, store ticket."""
+    sales_window = get_sporttery_sales_window()
+    if not sales_window.is_open:
+        raise HTTPException(status_code=409, detail=sales_window.message)
+
     items = [item.model_dump() for item in req.items]
 
     # Validate

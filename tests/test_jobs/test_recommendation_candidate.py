@@ -1,5 +1,6 @@
 from datetime import datetime
 from unittest.mock import MagicMock
+from zoneinfo import ZoneInfo
 
 from scripts.jobs import run_recommendation_candidate as recommendation
 from scripts.jobs.run_recommendation_candidate import (
@@ -13,6 +14,30 @@ from scripts.jobs.run_recommendation_candidate import (
     _ticket_generation_note,
 )
 from scripts.recommendation_prediction_loader import load_actionable_predictions
+from scripts.sporttery_sales import get_sporttery_sales_window
+
+
+def test_agent_does_not_buy_during_official_rest_time(monkeypatch):
+    rest_window = get_sporttery_sales_window(
+        datetime(2026, 7, 19, 2, 9, tzinfo=ZoneInfo("Asia/Shanghai"))
+    )
+    get_db = MagicMock()
+    monkeypatch.setattr(recommendation, "get_db", get_db)
+    monkeypatch.setattr(
+        recommendation,
+        "get_sporttery_sales_window",
+        lambda: rest_window,
+        raising=False,
+    )
+
+    assert recommendation._run_impl() == {
+        "status": "ok",
+        "tickets": 0,
+        "quality_status": "not_due",
+        "note": rest_window.message,
+        "sales_window": rest_window.as_dict(),
+    }
+    get_db.assert_not_called()
 
 
 def test_actionable_predictions_are_latest_per_match_model_play_and_option(mock_conn):

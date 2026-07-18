@@ -957,6 +957,20 @@ export type BettingMatch = SimulatorMatch;
 export type BettingTicketHistory = SimulatorTicket;
 export type BettingTicketHistoryDetail = SimulatorTicketDetail;
 
+export interface SportterySalesWindow {
+  is_open: boolean;
+  current_time: string;
+  opens_at: string;
+  closes_at: string;
+  next_opens_at: string;
+  message: string;
+  schedule: {
+    weekday: string;
+    weekend: string;
+    timezone: string;
+  };
+}
+
 export interface BankrollSummary {
   account_id: number;
   initial_balance: number;

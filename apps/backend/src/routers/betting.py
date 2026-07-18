@@ -24,6 +24,7 @@ from scripts.simulator_calculator import (
     validate_items,
 )
 from scripts.simulator_storage import list_simulator_tickets
+from scripts.sporttery_sales import get_sporttery_sales_window
 
 router = APIRouter(tags=["betting"])
 
@@ -706,6 +707,13 @@ def create_betting_ticket(req: CreateBettingTicketRequest):
         raise HTTPException(
             status_code=409, detail="模拟票请继续使用 /api/simulator/tickets 以完成虚拟余额扣款"
         )
+
+    # OCR-confirmed physical tickets are historical records and may be entered
+    # at any time. New manual and Agent decisions must respect official hours.
+    is_historical_record = bool(req.ticket_image_url) or req.ocr_status == "recognized"
+    sales_window = get_sporttery_sales_window()
+    if not is_historical_record and not sales_window.is_open:
+        raise HTTPException(status_code=409, detail=sales_window.message)
 
     with get_db() as conn:
         return _create_real_betting_ticket(conn, req)
