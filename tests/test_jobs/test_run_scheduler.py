@@ -7,6 +7,7 @@ from apps.backend.src.services.pipeline_status import JOB_DEFINITIONS
 from scripts.jobs.run_scheduler import (
     MODEL_PREDICTION_CRON,
     OFFICIAL_SCHEDULE_CRON,
+    STARTUP_RECOVERY_JOB_CODES,
     _audited_job,
     _business_now,
     _odds_dispatch_owner,
@@ -178,13 +179,18 @@ def test_scheduler_waits_for_daily_recommendation_cutoff():
     assert _should_run_recommendation_catchup(now, decision_status=None) is False
 
 
-def test_scheduler_registers_startup_recommendation_catchup():
-    from pathlib import Path
+def test_scheduler_replays_every_critical_startup_job_until_it_succeeds():
+    assert STARTUP_RECOVERY_JOB_CODES == (
+        "seed_agent_registry",
+        "settle_tickets",
+        "build_feature_snapshots",
+        "run_recommendation_candidate",
+    )
 
     source = Path("scripts/jobs/run_scheduler.py").read_text()
-    assert 'id="run_recommendation_candidate_startup_catchup"' in source
-    assert "run_date=_business_now(timezone_name)" in source
-    assert source.count("misfire_grace_time=30") >= 2
+    assert 'id="startup_recovery"' in source
+    assert 'id="seed_agent_registry"' not in source
+    assert 'id="run_recommendation_candidate_startup_catchup"' not in source
 
 
 def test_scheduler_refreshes_health_heartbeat_every_minute():

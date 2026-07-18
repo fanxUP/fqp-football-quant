@@ -22,6 +22,12 @@ OFFICIAL_SCHEDULE_CRON = {"minute": "10,40"}
 # Run five minutes after each schedule refresh so newly sellable matches have
 # official markets and odds available before the prediction snapshot is written.
 MODEL_PREDICTION_CRON = {"minute": "15,45"}
+STARTUP_RECOVERY_JOB_CODES = (
+    "seed_agent_registry",
+    "settle_tickets",
+    "build_feature_snapshots",
+    "run_recommendation_candidate",
+)
 
 
 def _scheduler_timezone_name() -> str:
@@ -180,23 +186,40 @@ def main() -> None:
         scheduler.add_job(test_heartbeat, "interval", minutes=1, id="test_heartbeat")
         test_heartbeat()
 
-        # ----- Stage 7: seed agent registry at startup -----
-        def job_seed_agents() -> None:
-            try:
-                from scripts.jobs.seed_agent_registry import run
+        # ----- Startup recovery: retry critical idempotent jobs until ready -----
+        from scripts.jobs.startup_recovery import StartupRecovery
 
-                result = run()
-                print(f"[scheduler] seed_agent_registry: {result}")
-            except Exception as e:
-                print(f"[scheduler] seed_agent_registry error: {e}")
+        startup_tasks: dict[str, Callable[[], Any]] = {
+            "seed_agent_registry": lambda: __import__(
+                "scripts.jobs.seed_agent_registry", fromlist=["run"]
+            ).run(),
+        }
+        if _official_source_enabled():
+            startup_tasks.update(
+                {
+                    "settle_tickets": lambda: __import__(
+                        "scripts.jobs.settle_tickets", fromlist=["run"]
+                    ).run(),
+                    "build_feature_snapshots": lambda: __import__(
+                        "scripts.jobs.run_feature_snapshot_build", fromlist=["run"]
+                    ).run(),
+                    "run_recommendation_candidate": _run_recommendation_catchup,
+                }
+            )
+        startup_recovery = StartupRecovery(startup_tasks)
 
-        # Run once at startup (no cron trigger — fires immediately)
+        def run_startup_recovery() -> None:
+            result = startup_recovery.run(_business_now(timezone_name))
+            print(f"[scheduler] startup recovery: {result}")
+            if not result["pending"]:
+                scheduler.remove_job("startup_recovery")
+
         scheduler.add_job(
-            job_seed_agents,
-            "date",
-            run_date=_business_now(timezone_name),
-            misfire_grace_time=30,
-            id="seed_agent_registry",
+            run_startup_recovery,
+            "interval",
+            minutes=1,
+            next_run_time=_business_now(timezone_name),
+            id="startup_recovery",
         )
 
         # ----- Stage 2: official data jobs -----
@@ -412,16 +435,6 @@ def main() -> None:
                 hour=16,
                 minute=0,
                 id="run_recommendation_candidate",
-            )
-
-            # If the service was offline at 16:00, recover today's decision on
-            # startup. The helper is idempotent against purchased/abstained days.
-            scheduler.add_job(
-                _run_recommendation_catchup,
-                "date",
-                run_date=_business_now(timezone_name),
-                misfire_grace_time=30,
-                id="run_recommendation_candidate_startup_catchup",
             )
 
             # ----- Stage 5: settlement and review jobs -----
@@ -657,7 +670,7 @@ def main() -> None:
             print(f"APScheduler started with {len(scheduler.get_jobs())} jobs: {job_ids}")
         else:
             print(
-                "APScheduler started with 2 jobs: test_heartbeat, seed_agent_registry. "
+                "APScheduler started with 2 jobs: test_heartbeat, startup_recovery. "
                 "Official data jobs disabled (OFFICIAL_SOURCE_ENABLED != true)."
             )
 
