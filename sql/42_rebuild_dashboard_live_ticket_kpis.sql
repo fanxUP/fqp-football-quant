@@ -72,8 +72,8 @@ SELECT
     (SELECT agent_stake FROM agent_ticket_stats) AS ai_stake_today,
     (SELECT agent_ticket_count FROM agent_ticket_stats) AS ai_ticket_count,
     (SELECT pending_ticket_count FROM agent_pending_stats) AS pending_settlement_count,
-    (SELECT ai_settled_stake_today FROM settlement_stats) AS ai_settled_stake_today,
     (SELECT ai_today_profit_loss FROM settlement_stats) AS ai_today_profit_loss,
     (SELECT real_today_profit_loss FROM settlement_stats) AS real_today_profit_loss,
     (SELECT round_label FROM current_round) AS current_round_label,
-    (SELECT id FROM current_round) AS current_round_id;
+    (SELECT id FROM current_round) AS current_round_id,
+    (SELECT ai_settled_stake_today FROM settlement_stats) AS ai_settled_stake_today;

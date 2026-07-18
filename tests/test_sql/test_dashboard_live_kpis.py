@@ -13,3 +13,8 @@ def test_dashboard_kpi_migration_uses_live_agent_ticket_contract():
     assert "SUM(st.total_cost)" not in migration
     assert "SUM(st.bet_count)" not in migration
     assert "ts.is_won IS NULL" not in migration
+
+    final_select = migration.rsplit("\nSELECT\n", maxsplit=1)[1]
+    assert final_select.index("AS ai_today_profit_loss") < final_select.index(
+        "AS ai_settled_stake_today"
+    )
