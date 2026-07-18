@@ -58,4 +58,25 @@ describe('TicketsPage', () => {
     expect(window.confirm).toHaveBeenLastCalledWith('删除后将退回该票金额，确认删除这张彩票吗？');
     await waitFor(() => expect(apiMocks.deleteSimulationTicket).toHaveBeenCalledWith(7));
   });
+
+  it('赢票使用红色、输票使用绿色，且卡片和大水印共用状态色', () => {
+    apiMocks.tickets.mockResolvedValueOnce({
+      tickets: [
+        { ...realTicket, ticketUid: 'real:13', ticketNumber: '20260714003', legacyId: 13, title: '赢票', status: 'settled', isWon: true },
+        { ...realTicket, ticketUid: 'real:14', ticketNumber: '20260714004', legacyId: 14, title: '输票', status: 'settled', isWon: false },
+      ],
+      total: 2,
+    });
+
+    const { container } = render(<TicketsPage />);
+    return waitFor(() => {
+      const wonCard = container.querySelector<HTMLElement>(".lottery-ticket-card[data-outcome='won']");
+      const lostCard = container.querySelector<HTMLElement>(".lottery-ticket-card[data-outcome='lost']");
+
+      expect(wonCard?.style.getPropertyValue('--lottery-outcome-color')).toBe('var(--fqp-danger, #ef4444)');
+      expect(lostCard?.style.getPropertyValue('--lottery-outcome-color')).toBe('var(--fqp-success, #16a34a)');
+      expect(wonCard?.querySelector('.lottery-ticket-watermark')).toHaveTextContent('赢');
+      expect(lostCard?.querySelector('.lottery-ticket-watermark')).toHaveTextContent('输');
+    });
+  });
 });

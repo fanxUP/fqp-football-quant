@@ -1847,6 +1847,7 @@
 }
 
 .lottery-ticket-card {
+  --lottery-outcome-color: var(--fqp-warning);
   position: relative;
   overflow: hidden;
   border: 1px solid var(--fqp-border);
@@ -1855,20 +1856,18 @@
   color: inherit;
 }
 
+.lottery-ticket-card[data-outcome='won'],
+.lottery-ticket-card[data-outcome='lost'] {
+  background: color-mix(in srgb, var(--lottery-outcome-color) 10%, var(--fqp-panel-2));
+  border-color: color-mix(in srgb, var(--lottery-outcome-color) 58%, var(--fqp-border));
+}
+
 .lottery-ticket-card::before {
   content: '';
   position: absolute;
   inset: 0 auto 0 0;
-  width: 4px;
-  background: var(--fqp-warning);
-}
-
-.lottery-ticket-card[data-outcome='won']::before {
-  background: var(--fqp-success);
-}
-
-.lottery-ticket-card[data-outcome='lost']::before {
-  background: var(--fqp-danger, #ef4444);
+  width: 5px;
+  background: var(--lottery-outcome-color);
 }
 
 .lottery-ticket-card:hover,
@@ -1877,9 +1876,18 @@
   outline: none;
 }
 
+.lottery-ticket-card[data-outcome='won']:hover,
+.lottery-ticket-card[data-outcome='won']:focus-within,
+.lottery-ticket-card[data-outcome='lost']:hover,
+.lottery-ticket-card[data-outcome='lost']:focus-within {
+  border-color: var(--lottery-outcome-color);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--lottery-outcome-color) 32%, transparent);
+}
+
 .lottery-ticket-summary {
   position: relative;
   z-index: 1;
+  isolation: isolate;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -1895,25 +1903,24 @@
 
 .lottery-ticket-watermark {
   position: absolute;
-  right: 10px;
-  bottom: 4px;
+  right: 12px;
+  bottom: 8px;
   z-index: -1;
   color: var(--fqp-text);
-  font-size: 26px;
+  font-size: clamp(42px, 5vw, 58px);
   font-weight: 900;
-  letter-spacing: 0;
+  letter-spacing: 0.06em;
   line-height: 1;
-  opacity: 0.06;
+  opacity: 0.16;
   pointer-events: none;
+  text-shadow: 0 1px 12px color-mix(in srgb, currentColor 28%, transparent);
   white-space: nowrap;
 }
 
-.lottery-ticket-card[data-outcome='won'] .lottery-ticket-watermark {
-  color: var(--fqp-success);
-}
-
+.lottery-ticket-card[data-outcome='won'] .lottery-ticket-watermark,
 .lottery-ticket-card[data-outcome='lost'] .lottery-ticket-watermark {
-  color: var(--fqp-danger, #ef4444);
+  color: var(--lottery-outcome-color);
+  opacity: 0.28;
 }
 
 .lottery-ticket-top,

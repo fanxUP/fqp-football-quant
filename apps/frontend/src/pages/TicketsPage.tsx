@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { api } from '../core/apiClient';
 import { navigate } from '../core/router';
 import type { BettingTicket } from '../core/types';
@@ -44,6 +44,12 @@ function canDeleteTicket(ticket: BettingTicket): boolean {
     || (ticket.kind === 'simulation' && ticket.owner === 'me' && ticket.source === 'manual' && ticket.status === 'pending');
 }
 
+function ticketOutcomeColor(outcome: ReturnType<typeof ticketOutcome>): string {
+  if (outcome === 'won') return 'var(--fqp-danger, #ef4444)';
+  if (outcome === 'lost') return 'var(--fqp-success, #16a34a)';
+  return 'var(--fqp-warning)';
+}
+
 function TicketCard({ ticket, deleting, onDelete }: {
   ticket: BettingTicket;
   deleting: boolean;
@@ -51,12 +57,15 @@ function TicketCard({ ticket, deleting, onDelete }: {
 }) {
   const pl = ticket.profitLoss;
   const outcome = ticketOutcome(ticket);
+  const outcomeStyle = {
+    '--lottery-outcome-color': ticketOutcomeColor(outcome),
+  } as CSSProperties;
   const plColor = pl === null || pl === undefined
     ? 'var(--fqp-text-muted)'
     : pl >= 0 ? 'var(--fqp-success)' : 'var(--fqp-danger, #ef4444)';
 
   return (
-    <details className="lottery-ticket-card" data-outcome={outcome}>
+    <details className="lottery-ticket-card" data-outcome={outcome} style={outcomeStyle}>
       <summary className="lottery-ticket-summary">
         <span className="lottery-ticket-watermark" aria-hidden="true">
           {ticketOutcomeWatermark(ticket)}
