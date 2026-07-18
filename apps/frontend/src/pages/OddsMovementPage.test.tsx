@@ -1,5 +1,5 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import OddsMovementPage from './OddsMovementPage';
 
 const { oddsIndex, oddsMovements } = vi.hoisted(() => ({
@@ -45,6 +45,14 @@ vi.mock('../visualization', () => ({
 }));
 
 describe('OddsMovementPage', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('按当前与历史日期批量展示全部比赛', async () => {
     render(<OddsMovementPage />);
 
@@ -61,5 +69,16 @@ describe('OddsMovementPage', () => {
     await waitFor(() => expect(oddsMovements).toHaveBeenLastCalledWith({
       scope: 'history', business_date: '2026-07-13', play_type: 'spf', resolution: 'hour', limit: 200,
     }));
+  });
+
+  it('定时同步当前开盘比赛的新赔率', async () => {
+    vi.useFakeTimers();
+    render(<OddsMovementPage />);
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+
+    expect(oddsMovements).toHaveBeenCalledTimes(1);
+    await act(async () => { vi.advanceTimersByTime(30_000); await Promise.resolve(); });
+    expect(oddsMovements).toHaveBeenCalledTimes(2);
+    expect(oddsIndex).toHaveBeenCalledTimes(2);
   });
 });

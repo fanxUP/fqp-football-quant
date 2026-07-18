@@ -8,9 +8,8 @@ import EmptyState from '../shared/components/EmptyState';
 import ErrorState from '../shared/components/ErrorState';
 import LoadingSpinner from '../shared/components/LoadingSpinner';
 import PageHeader from '../shared/components/PageHeader';
+import useBackgroundRefresh from '../shared/hooks/useBackgroundRefresh';
 import ProfitLossTrendChart from '../visualization/ProfitLossTrendChart';
-
-const RESULTS_REFRESH_INTERVAL_MS = 30_000;
 
 function money(value: number): string {
   return `¥${value.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -131,7 +130,7 @@ export default function CompetitionPage() {
       setLoading(true);
       setError(null);
     }
-    Promise.all([
+    return Promise.all([
       api.betting.results({ limit: 300 }),
       api.betting.tickets({ limit: 80 }),
       api.competition.decisions(14),
@@ -153,15 +152,9 @@ export default function CompetitionPage() {
   }, []);
 
   useEffect(() => {
-    fetchResults();
-    const timer = window.setInterval(() => fetchResults(false), RESULTS_REFRESH_INTERVAL_MS);
-    const refreshOnFocus = () => fetchResults(false);
-    window.addEventListener('focus', refreshOnFocus);
-    return () => {
-      window.clearInterval(timer);
-      window.removeEventListener('focus', refreshOnFocus);
-    };
+    void fetchResults();
   }, [fetchResults]);
+  useBackgroundRefresh(() => fetchResults(false));
 
   if (loading) return <LoadingSpinner text="加载比赛结果..." size="lg" />;
 

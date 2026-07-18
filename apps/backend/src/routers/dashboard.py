@@ -6,20 +6,21 @@ Empty data → {"empty": true, "empty_reason": "..."}  (never 500).
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Query
 
 from apps.backend.src.db import get_db
 from apps.backend.src.services.odds_movement import list_odds_movements
+from scripts.business_time import business_now
 
 router = APIRouter(tags=["dashboard"])
 
 
 def _meta(source: str) -> dict:
     return {
-        "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "updated_at": business_now().isoformat(timespec="seconds"),
         "source": source,
     }
 
@@ -87,6 +88,12 @@ def get_today_summary():
                     "key": "pending_settlement_count",
                     "label": "待开奖",
                     "value": data.get("pending_settlement_count", 0),
+                },
+                {
+                    "key": "ai_settled_stake_today",
+                    "label": "AI 当日结算本金",
+                    "value": float(data.get("ai_settled_stake_today", 0)),
+                    "prefix": "¥",
                 },
                 {
                     "key": "ai_today_profit_loss",

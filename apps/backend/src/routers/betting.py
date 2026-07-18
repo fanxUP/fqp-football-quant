@@ -6,14 +6,13 @@ while giving the frontend one ticket ledger contract to render.
 
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from apps.backend.src.db import get_db
-from scripts.business_time import business_today
-from scripts.competition_storage import ensure_current_round
+from scripts.business_time import business_now, business_today
 from scripts.real_ticket_storage import (
     create_real_ticket,
     create_real_ticket_items_batch,
@@ -23,6 +22,8 @@ from scripts.simulator_calculator import MAX_TICKET_COST, calculate_all, validat
 from scripts.simulator_storage import list_simulator_tickets
 
 router = APIRouter(tags=["betting"])
+
+BETTING_LEDGER_SCAN_LIMIT = 300
 
 
 class BettingTicketItemRequest(BaseModel):
@@ -419,7 +420,7 @@ def _fetch_first_item_ticket_date(conn) -> date | None:
 
 def _merge_result_tickets(current: list[dict], settled: list[dict]) -> list[dict]:
     """Combine current pending tickets with the authoritative settled history."""
-    return [ticket for ticket in current if ticket.get("status") != "settled"] + settled
+    return [ticket for ticket in current if ticket.get("status") == "pending"] + settled
 
 
 def _empty_result_bucket() -> dict:
@@ -610,7 +611,7 @@ def _build_betting_results(
         "leader": leader,
         "bySource": {key: _round_result_bucket(value) for key, value in by_source.items()},
         "trend": trend,
-        "updatedAt": _iso(datetime.now()),
+        "updatedAt": _iso(business_now()),
     }
 
 
@@ -726,32 +727,25 @@ def _collect_betting_tickets(conn, limit: int) -> list[dict]:
     simulator = [_map_simulator_ticket(t) for t in list_simulator_tickets(conn, limit=limit)]
     real = [_map_real_ticket(t) for t in list_real_tickets(conn, limit=limit)]
 
-    current = ensure_current_round(conn)
     agent: list[dict] = []
-    if current and current.get("round_start") and current.get("round_end"):
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT st.id, st.suggested_stake, st.expected_value,
-                       st.strategy_pool, st.risk_level, st.ticket_status,
-                       st.created_at, st.pass_type, st.ticket_type,
-                       COUNT(sti.id) AS item_count, st.multiple, st.bet_count,
-                       st.ledger_ticket_no
-                FROM simulation_tickets st
-                LEFT JOIN simulation_ticket_items sti ON sti.ticket_id = st.id
-                WHERE (st.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Shanghai')::date
-                      BETWEEN %(start)s AND %(end)s
-                GROUP BY st.id
-                ORDER BY st.created_at DESC
-                LIMIT %(limit)s
-                """,
-                {
-                    "start": current["round_start"],
-                    "end": current["round_end"],
-                    "limit": limit,
-                },
-            )
-            agent = [_map_agent_ticket(row) for row in cur.fetchall()]
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT st.id, st.suggested_stake, st.expected_value,
+                   st.strategy_pool, st.risk_level, st.ticket_status,
+                   st.created_at, st.pass_type, st.ticket_type,
+                   COUNT(sti.id) AS item_count, st.multiple, st.bet_count,
+                   st.ledger_ticket_no
+            FROM simulation_tickets st
+            JOIN simulation_ticket_items sti ON sti.ticket_id = st.id
+            WHERE st.ticket_status <> 'cancelled'
+            GROUP BY st.id
+            ORDER BY st.created_at DESC
+            LIMIT %(limit)s
+            """,
+            {"limit": limit},
+        )
+        agent = [_map_agent_ticket(row) for row in cur.fetchall()]
 
     tickets = [*simulator, *real, *agent]
     _apply_settlements(tickets, _fetch_recent_settlements(conn, limit))
@@ -768,7 +762,9 @@ def list_betting_tickets(
 ):
     """Return a unified ticket ledger for the betting center."""
     with get_db() as conn:
-        tickets = _collect_betting_tickets(conn, limit)
+        # ``limit`` controls the response page, not the aggregate totals. Scan
+        # the complete supported ledger window before filtering and slicing.
+        tickets = _collect_betting_tickets(conn, BETTING_LEDGER_SCAN_LIMIT)
 
     if owner:
         tickets = [ticket for ticket in tickets if ticket["owner"] == owner]

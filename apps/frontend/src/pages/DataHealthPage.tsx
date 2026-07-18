@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { api } from '../core/apiClient';
 import { ApiError, type OfficialCollectionStatus } from '../core/types';
 import PageHeader from '../shared/components/PageHeader';
@@ -7,6 +7,7 @@ import StatusBadge from '../shared/components/StatusBadge';
 import LoadingSpinner from '../shared/components/LoadingSpinner';
 import Skeleton from '../shared/components/Skeleton';
 import ErrorState from '../shared/components/ErrorState';
+import useBackgroundRefresh from '../shared/hooks/useBackgroundRefresh';
 import { buildDataHealthRows, formatPipelineTime, type PipelineStatus } from './dataHealthPresentation';
 
 interface HealthStatus {
@@ -60,18 +61,23 @@ export default function DataHealthPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    Promise.all([
-      api.health().catch(() => null),
-      api.ops.health().catch(() => null),
-      api.ops.pipeline().catch(() => null),
-      api.official.collectionStatus({ limit: 8 }).catch((collectionError) => {
-        setOfficialCollectionError(
-          collectionError instanceof ApiError ? collectionError.message : '官方采集记录暂时无法读取',
-        );
-        return null;
-      }),
-    ]).then(([basic, ops, pipe, collection]) => {
+  const fetchHealth = useCallback(async (showLoading = true) => {
+    if (showLoading) {
+      setLoading(true);
+      setError(null);
+    }
+    try {
+      const [basic, ops, pipe, collection] = await Promise.all([
+        api.health().catch(() => null),
+        api.ops.health().catch(() => null),
+        api.ops.pipeline().catch(() => null),
+        api.official.collectionStatus({ limit: 8 }).catch((collectionError) => {
+          setOfficialCollectionError(
+            collectionError instanceof ApiError ? collectionError.message : '官方采集记录暂时无法读取',
+          );
+          return null;
+        }),
+      ]);
       if (basic) {
         setHealth({
           service: basic.service || 'fqp',
@@ -93,13 +99,18 @@ export default function DataHealthPage() {
       }
       if (collection) {
         setOfficialCollection(collection.items);
+        setOfficialCollectionError(null);
       }
-      setLoading(false);
-    }).catch((e) => {
-      setError(e instanceof ApiError ? e.message : '检测失败');
-      setLoading(false);
-    });
+      setError(null);
+    } catch (e) {
+      if (showLoading) setError(e instanceof ApiError ? e.message : '检测失败');
+    } finally {
+      if (showLoading) setLoading(false);
+    }
   }, []);
+
+  useEffect(() => { void fetchHealth(); }, [fetchHealth]);
+  useBackgroundRefresh(() => fetchHealth(false));
 
   if (loading) return (
     <div>

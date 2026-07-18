@@ -365,6 +365,55 @@ def test_build_betting_results_splits_me_and_agent():
     assert result["trend"][-1]["agentCumulativeProfitLoss"] == -30
 
 
+def test_list_betting_tickets_calculates_total_before_page_limit(monkeypatch):
+    tickets = [
+        {
+            "ticketUid": f"real:{index}",
+            "owner": "me",
+            "status": "pending",
+            "date": "2026-07-18",
+            "createdAt": f"2026-07-18T10:{index:02d}:00",
+            "stake": 2,
+            "profitLoss": None,
+        }
+        for index in range(1, 24)
+    ]
+    requested_limits: list[int] = []
+
+    class DbContext:
+        def __enter__(self):
+            return object()
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    def collect(_conn, limit):
+        requested_limits.append(limit)
+        return tickets
+
+    monkeypatch.setattr(betting, "get_db", lambda: DbContext())
+    monkeypatch.setattr(betting, "_collect_betting_tickets", collect)
+
+    result = betting.list_betting_tickets(owner=None, date=None, status=None, limit=1)
+
+    assert requested_limits == [300]
+    assert result["total"] == 23
+    assert result["summary"]["stake"] == 46
+    assert len(result["tickets"]) == 1
+
+
+def test_betting_results_updated_at_uses_business_timezone(monkeypatch):
+    monkeypatch.setattr(
+        betting,
+        "business_now",
+        lambda: datetime.fromisoformat("2026-07-18T13:30:00+08:00"),
+    )
+
+    result = betting._build_betting_results([])
+
+    assert result["updatedAt"] == "2026-07-18T13:30:00+08:00"
+
+
 def test_build_betting_results_fills_every_day_from_first_item_ticket():
     result = betting._build_betting_results(
         [
@@ -525,6 +574,7 @@ def test_result_ticket_merge_replaces_current_settled_rows_with_full_history():
     current = [
         {"ticketUid": "agent:52", "status": "pending"},
         {"ticketUid": "agent:39", "status": "settled", "profitLoss": -20},
+        {"ticketUid": "agent:38", "status": "cancelled", "stake": 50},
     ]
     settled = [
         {"ticketUid": "agent:39", "status": "settled", "profitLoss": -20},
@@ -534,3 +584,38 @@ def test_result_ticket_merge_replaces_current_settled_rows_with_full_history():
     merged = betting._merge_result_tickets(current, settled)
 
     assert [ticket["ticketUid"] for ticket in merged] == ["agent:52", "agent:39", "agent:40"]
+
+
+def test_collect_betting_tickets_keeps_valid_agent_history_without_cancelled_rows(
+    monkeypatch,
+):
+    captured_sql: list[str] = []
+
+    class Cursor:
+        def execute(self, sql, params):
+            captured_sql.append(sql)
+
+        def fetchall(self):
+            return []
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    class Conn:
+        def cursor(self):
+            return Cursor()
+
+    monkeypatch.setattr(betting, "list_simulator_tickets", lambda conn, limit: [])
+    monkeypatch.setattr(betting, "list_real_tickets", lambda conn, limit: [])
+    monkeypatch.setattr(betting, "_fetch_recent_settlements", lambda conn, limit: [])
+    monkeypatch.setattr(betting, "_attach_ticket_items", lambda conn, tickets: None)
+
+    betting._collect_betting_tickets(Conn(), 300)
+
+    agent_sql = captured_sql[0]
+    assert "BETWEEN" not in agent_sql
+    assert "ticket_status <> 'cancelled'" in agent_sql
+    assert "JOIN simulation_ticket_items" in agent_sql

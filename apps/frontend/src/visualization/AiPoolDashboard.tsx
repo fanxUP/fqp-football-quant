@@ -44,6 +44,10 @@ const MODEL_LABELS: Record<string, string> = {
   maher_poisson: 'Poisson',
 };
 
+export function calculateSettledProfitRate(profitLoss: number, settledStake: number): number {
+  return settledStake > 0 ? profitLoss / settledStake : 0;
+}
+
 // ---- Props ----
 interface AiPoolDashboardProps {
   kpis: DashboardTodayKpi[];
@@ -176,8 +180,9 @@ export default function AiPoolDashboard({
       {/* ========== Profit / Loss panel ========== */}
       {(() => {
         const profitLoss = kpiVal('ai_today_profit_loss');
-        const stake = kpiVal('ai_stake_today');
-        const profitRate = stake > 0 ? (profitLoss / stake) : 0;
+        const committedStake = kpiVal('ai_stake_today');
+        const settledStake = kpiVal('ai_settled_stake_today');
+        const profitRate = calculateSettledProfitRate(profitLoss, settledStake);
         const isProfit = profitLoss > 0;
         const isLoss = profitLoss < 0;
         const color = isProfit ? 'var(--fqp-success)' : isLoss ? 'var(--fqp-red-neon)' : 'var(--fqp-text-muted)';
@@ -213,9 +218,9 @@ export default function AiPoolDashboard({
               </div>
             </div>
             <div style={{ textAlign: 'right' }}>
-              <div style={{ fontSize: 11, color: 'var(--fqp-text-muted)' }}>总投入</div>
+              <div style={{ fontSize: 11, color: 'var(--fqp-text-muted)' }}>今日投入</div>
               <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--fqp-text)' }} className="fqp-mono">
-                ¥<CountUp value={stake} />
+                ¥<CountUp value={committedStake} />
               </div>
             </div>
           </div>

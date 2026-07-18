@@ -1,5 +1,5 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import TicketsPage from './TicketsPage';
 
 const apiMocks = vi.hoisted(() => ({
@@ -29,6 +29,10 @@ const simulationTicket = {
 };
 
 describe('TicketsPage', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   beforeEach(() => {
     apiMocks.tickets.mockReset().mockResolvedValue({ tickets: [realTicket, simulationTicket], total: 2 });
     apiMocks.deleteTicket.mockReset().mockResolvedValue({ status: 'ok' });
@@ -78,5 +82,25 @@ describe('TicketsPage', () => {
       expect(wonCard?.querySelector('.lottery-ticket-watermark')).toHaveTextContent('赢');
       expect(lostCard?.querySelector('.lottery-ticket-watermark')).toHaveTextContent('输');
     });
+  });
+
+  it('页面保持打开时自动同步新增和结算的彩票', async () => {
+    vi.useFakeTimers();
+
+    render(<TicketsPage />);
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(apiMocks.tickets).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      vi.advanceTimersByTime(30_000);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(apiMocks.tickets).toHaveBeenCalledTimes(2);
   });
 });

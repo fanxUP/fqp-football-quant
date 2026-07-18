@@ -1,5 +1,5 @@
-import { render, screen, waitFor } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { act, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import MatchesPage from './MatchesPage';
 
 const { active } = vi.hoisted(() => ({ active: vi.fn() }));
@@ -21,6 +21,11 @@ active.mockResolvedValue({
 vi.mock('../core/apiClient', () => ({ api: { matches: { active } } }));
 
 describe('MatchesPage', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.clearAllMocks();
+  });
+
   it('lists every unfinished official match without requiring that it is still sellable', async () => {
     render(<MatchesPage />);
 
@@ -30,5 +35,15 @@ describe('MatchesPage', () => {
     expect(screen.getByText('上海海港')).toBeInTheDocument();
     expect(screen.getByText('成都蓉城')).toBeInTheDocument();
     expect(screen.getByText('等待赛果')).toBeInTheDocument();
+  });
+
+  it('定时同步未结束比赛的状态', async () => {
+    vi.useFakeTimers();
+    render(<MatchesPage />);
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+
+    expect(active).toHaveBeenCalledTimes(1);
+    await act(async () => { vi.advanceTimersByTime(30_000); await Promise.resolve(); });
+    expect(active).toHaveBeenCalledTimes(2);
   });
 });

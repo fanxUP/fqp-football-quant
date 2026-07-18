@@ -1,5 +1,5 @@
-import { render, screen } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, render, screen } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import DataHealthPage from './DataHealthPage';
 
 const { mockHealth, mockOpsHealth, mockPipeline, mockCollectionStatus } = vi.hoisted(() => ({
@@ -23,6 +23,10 @@ vi.mock('../core/apiClient', () => ({
 }));
 
 describe('DataHealthPage', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     mockHealth.mockResolvedValue({ status: 'ok', service: 'fqp' });
@@ -142,5 +146,26 @@ describe('DataHealthPage', () => {
 
     expect(await screen.findByText(/状态已过期/)).toBeInTheDocument();
     expect(screen.getByText(/尚未运行: 尚无记录/)).toBeInTheDocument();
+  });
+
+  it('页面保持打开时自动刷新监控状态', async () => {
+    vi.useFakeTimers();
+
+    render(<DataHealthPage />);
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(mockPipeline).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      vi.advanceTimersByTime(30_000);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(mockPipeline).toHaveBeenCalledTimes(2);
+    expect(mockCollectionStatus).toHaveBeenCalledTimes(2);
   });
 });

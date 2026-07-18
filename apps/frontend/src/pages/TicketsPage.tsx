@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { api } from '../core/apiClient';
 import { navigate } from '../core/router';
 import type { BettingTicket } from '../core/types';
@@ -16,6 +16,7 @@ import {
   ticketSourceLabel,
 } from '../core/bettingTickets';
 import PageHeader from '../shared/components/PageHeader';
+import useBackgroundRefresh from '../shared/hooks/useBackgroundRefresh';
 import ErrorState from '../shared/components/ErrorState';
 import LoadingSpinner from '../shared/components/LoadingSpinner';
 import EmptyState from '../shared/components/EmptyState';
@@ -255,22 +256,27 @@ export default function TicketsPage() {
   const [deletingTicketId, setDeletingTicketId] = useState<number | null>(null);
   const [dateFilter, setDateFilter] = useState<DateFilter>('all');
   const [statusFilter, setStatusFilter] = useState('');
+  const [lastUpdated, setLastUpdated] = useState('');
 
-  const fetchTickets = () => {
-    setLoading(true);
-    setError(null);
-    api.betting.tickets({ limit: 200 })
-      .then((res) => {
-        setTickets(res.tickets);
-        setLoading(false);
-      })
-      .catch((e) => {
-        setError(e instanceof ApiError ? e.message : '加载失败');
-        setLoading(false);
-      });
-  };
+  const fetchTickets = useCallback(async (showLoading = true) => {
+    if (showLoading) {
+      setLoading(true);
+      setError(null);
+    }
+    try {
+      const res = await api.betting.tickets({ limit: 200 });
+      setTickets(res.tickets);
+      setLastUpdated(new Date().toLocaleString('zh-CN', { hour12: false }));
+      setError(null);
+    } catch (e) {
+      if (showLoading) setError(e instanceof ApiError ? e.message : '加载失败');
+    } finally {
+      if (showLoading) setLoading(false);
+    }
+  }, []);
 
-  useEffect(() => { fetchTickets(); }, []);
+  useEffect(() => { void fetchTickets(); }, [fetchTickets]);
+  useBackgroundRefresh(() => fetchTickets(false));
 
   const deleteTicket = async (ticket: BettingTicket) => {
     const message = ticket.kind === 'simulation'
@@ -316,7 +322,7 @@ export default function TicketsPage() {
       <PageHeader
         title="彩票"
         subtitle="按日期归档我的彩票和 Agent 的彩票，统一展示票面、结算、盈亏和 ROI"
-        lastUpdated={new Date().toLocaleString('zh-CN', { hour12: false })}
+        lastUpdated={lastUpdated}
         actions={
           <button className="fqp-btn fqp-btn-primary" onClick={() => navigate('/betting?tab=bet-slip')}>
             去投注台
@@ -347,7 +353,7 @@ export default function TicketsPage() {
       {deleteError && <div className="lottery-delete-error" role="alert">{deleteError}</div>}
 
       {error ? (
-        <ErrorState message={error} onRetry={fetchTickets} />
+        <ErrorState message={error} onRetry={() => fetchTickets()} />
       ) : (
         <div className="lottery-ledger">
           <TicketColumn

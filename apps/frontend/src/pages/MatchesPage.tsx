@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { api } from '../core/apiClient';
 import { navigate } from '../core/router';
 import type { TodayMatch } from '../core/types';
@@ -10,6 +10,7 @@ import Card from '../shared/components/Card';
 import Skeleton from '../shared/components/Skeleton';
 import StatusBadge from '../shared/components/StatusBadge';
 import TeamName from '../shared/components/TeamName';
+import useBackgroundRefresh from '../shared/hooks/useBackgroundRefresh';
 import { statusLabel } from '../shared/constants';
 
 export default function MatchesPage() {
@@ -17,26 +18,36 @@ export default function MatchesPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [leagueFilter, setLeagueFilter] = useState('');
+  const [lastUpdated, setLastUpdated] = useState('');
 
-  const fetchMatches = () => {
-    setLoading(true);
-    setError(null);
-    api.matches.active({ limit: 500 })
-      .then((res) => setMatches(res.matches))
-      .catch((e) => setError(e instanceof ApiError ? e.message : '加载比赛失败'))
-      .finally(() => setLoading(false));
-  };
+  const fetchMatches = useCallback(async (showLoading = true) => {
+    if (showLoading) {
+      setLoading(true);
+      setError(null);
+    }
+    try {
+      const res = await api.matches.active({ limit: 500 });
+      setMatches(res.matches);
+      setLastUpdated(new Date().toLocaleString('zh-CN', { hour12: false }));
+      setError(null);
+    } catch (e) {
+      if (showLoading) setError(e instanceof ApiError ? e.message : '加载比赛失败');
+    } finally {
+      if (showLoading) setLoading(false);
+    }
+  }, []);
 
-  useEffect(() => { fetchMatches(); }, []);
+  useEffect(() => { void fetchMatches(); }, [fetchMatches]);
+  useBackgroundRefresh(() => fetchMatches(false));
 
   const leagues = [...new Set(matches.map((match) => match.league_name))].sort();
   const visibleMatches = leagueFilter ? matches.filter((match) => match.league_name === leagueFilter) : matches;
 
-  if (error) return <div><PageHeader title="比赛中心" /><ErrorState message={error} onRetry={fetchMatches} /></div>;
+  if (error) return <div><PageHeader title="比赛中心" /><ErrorState message={error} onRetry={() => fetchMatches()} /></div>;
 
   return (
     <div>
-      <PageHeader title="比赛中心" subtitle="体彩官方未结束比赛" lastUpdated={new Date().toLocaleString('zh-CN', { hour12: false })} />
+      <PageHeader title="比赛中心" subtitle="体彩官方未结束比赛" lastUpdated={lastUpdated} />
       <FilterBar>
         <select className="fqp-select" value={leagueFilter} onChange={(event) => setLeagueFilter(event.target.value)} style={{ minWidth: '160px' }}>
           <option value="">全部联赛</option>

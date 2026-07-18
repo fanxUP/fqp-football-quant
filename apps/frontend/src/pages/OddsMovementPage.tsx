@@ -1,6 +1,6 @@
 /** Date-indexed official odds movements. One batch request renders every match. */
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { api } from '../core/apiClient';
 import type { OddsMovementMatch, OfficialOddsIndex } from '../core/types';
 import { ApiError } from '../core/types';
@@ -9,6 +9,7 @@ import EmptyState from '../shared/components/EmptyState';
 import ErrorState from '../shared/components/ErrorState';
 import LoadingSpinner from '../shared/components/LoadingSpinner';
 import PageHeader from '../shared/components/PageHeader';
+import useBackgroundRefresh from '../shared/hooks/useBackgroundRefresh';
 import OddsDateIndex from './odds/OddsDateIndex';
 import OddsMatchCard from './odds/OddsMatchCard';
 
@@ -30,27 +31,45 @@ export default function OddsMovementPage() {
   const [contentLoading, setContentLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    api.official.oddsIndex()
-      .then(setIndex)
-      .catch((reason) => setError(reason instanceof ApiError ? reason.message : '加载赔率日期索引失败'))
-      .finally(() => setIndexLoading(false));
+  const fetchIndex = useCallback(async (showLoading = true) => {
+    if (showLoading) setIndexLoading(true);
+    try {
+      setIndex(await api.official.oddsIndex());
+    } catch (reason) {
+      if (showLoading) setError(reason instanceof ApiError ? reason.message : '加载赔率日期索引失败');
+    } finally {
+      if (showLoading) setIndexLoading(false);
+    }
   }, []);
 
-  useEffect(() => {
-    setContentLoading(true);
-    setError(null);
-    api.dashboard.oddsMovements({
-      scope,
-      business_date: scope === 'history' ? businessDate : undefined,
-      play_type: activePlay,
-      resolution: scope === 'history' ? 'hour' : 'raw',
-      limit: 200,
-    })
-      .then((response) => setMatches(response.matches))
-      .catch((reason) => setError(reason instanceof ApiError ? reason.message : '加载赔率走势失败'))
-      .finally(() => setContentLoading(false));
+  const fetchMovements = useCallback(async (showLoading = true) => {
+    if (showLoading) {
+      setContentLoading(true);
+      setError(null);
+    }
+    try {
+      const response = await api.dashboard.oddsMovements({
+        scope,
+        business_date: scope === 'history' ? businessDate : undefined,
+        play_type: activePlay,
+        resolution: scope === 'history' ? 'hour' : 'raw',
+        limit: 200,
+      });
+      setMatches(response.matches);
+      setError(null);
+    } catch (reason) {
+      if (showLoading) setError(reason instanceof ApiError ? reason.message : '加载赔率走势失败');
+    } finally {
+      if (showLoading) setContentLoading(false);
+    }
   }, [activePlay, businessDate, scope]);
+
+  useEffect(() => { void fetchIndex(); }, [fetchIndex]);
+  useEffect(() => { void fetchMovements(); }, [fetchMovements]);
+  useBackgroundRefresh(async () => {
+    if (scope !== 'current') return;
+    await Promise.all([fetchIndex(false), fetchMovements(false)]);
+  });
 
   if (indexLoading) return <LoadingSpinner text="加载赔率日期索引..." size="lg" />;
   if (!index && error) return <ErrorState message={error} onRetry={() => window.location.reload()} />;
