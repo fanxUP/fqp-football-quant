@@ -250,6 +250,28 @@ def test_parse_uniform_official_result_uses_source_id_and_confirmed_status():
     assert result["rqspf_result"] == "0"
 
 
+def test_parse_official_refund_result_as_void_even_when_result_status_is_confirmed():
+    raw = {
+        "value": {
+            "matchResult": [
+                {
+                    "matchId": 2040512,
+                    "matchNumStr": "周四208",
+                    "matchDate": "2026-07-16",
+                    "sectionsNo999": "无效场次",
+                    "matchResultStatus": "2",
+                    "poolStatus": "Refund",
+                }
+            ]
+        }
+    }
+
+    result = parse_results_from_response(raw)[0]
+
+    assert result["result_status"] == "void"
+    assert result["spf_result"] is None
+
+
 def test_parse_official_result_preserves_numeric_zero_scores():
     raw = {
         "value": {

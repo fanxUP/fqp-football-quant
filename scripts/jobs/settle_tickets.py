@@ -18,6 +18,7 @@ from scripts.real_ticket_storage import (
     create_bankroll_transaction,
     create_settlement,
 )
+from scripts.result_status import is_void_official_result as _is_void_result
 from scripts.simulator_calculator import calculate_winning_prize
 from scripts.simulator_storage import update_ticket_status as update_sim_ticket_status
 
@@ -82,35 +83,42 @@ def _resolve_ticket_items(
         match_id = int(item["match_id"])
         play_type = str(item["play_type"])
         result = full_result_map.get(match_id)
+        if result is None:
+            return None
+
+        is_void = bool(result.get("is_void"))
         column = result_column(play_type)
-        if result is None or not column:
+        if not is_void and not column:
             return None
 
         actual_result = None
-        if play_type == "rqspf":
+        if not is_void and play_type == "rqspf":
             actual_result = _derive_rqspf_result(
                 item.get("handicap"),
                 result.get("full_home_goals"),
                 result.get("full_away_goals"),
             )
-        if actual_result is None:
+        if not is_void and actual_result is None:
             actual_result = _normalize_result(play_type, result.get(column))
-        if actual_result is None:
+        if not is_void and actual_result is None:
             return None
 
         option_code = str(item["option_code"])
+        original_sp_value = float(item.get("sp_value") or 0)
         detail.append(
             {
                 "match_id": match_id,
                 "play_type": play_type,
                 "option_code": option_code,
-                "sp_value": float(item.get("sp_value") or 0),
+                "sp_value": 1.0 if is_void else original_sp_value,
                 "handicap": (
                     float(item["handicap"]) if item.get("handicap") is not None else None
                 ),
                 "is_dan": bool(item.get("is_dan", False)),
-                "actual_result": actual_result,
-                "is_won": option_code == actual_result,
+                "actual_result": "void" if is_void else actual_result,
+                "is_won": True if is_void else option_code == actual_result,
+                "is_void": is_void,
+                **({"original_sp_value": original_sp_value} if is_void else {}),
             }
         )
     return detail
@@ -144,11 +152,11 @@ def run(dry_run: bool = False) -> dict[str, Any]:
                 SELECT r.match_id, r.spf_result, r.rqspf_result,
                        r.total_goals_result, r.score_result, r.half_full_result,
                        r.full_home_goals, r.full_away_goals,
-                       r.result_status, m.home_team_name, m.away_team_name
+                       r.result_status, r.raw_json,
+                       m.home_team_name, m.away_team_name
                 FROM official_results r
                 JOIN official_matches m ON m.id = r.match_id
-                WHERE r.result_status = 'confirmed'
-                  AND r.spf_result IS NOT NULL
+                WHERE r.result_status IN ('confirmed', 'void', 'refund', 'refunded')
                 ORDER BY r.match_id
                 """
             )
@@ -158,10 +166,13 @@ def run(dry_run: bool = False) -> dict[str, Any]:
             return {"status": "ok", "settled": 0, "note": "no confirmed results"}
 
         # Build result lookup: match_id -> full results
-        result_map: dict[int, str] = {}
+        result_map: dict[int, str | None] = {}
         full_result_map: dict[int, dict] = {}
         match_info: dict[int, dict] = {}
         for r in results:
+            is_void = _is_void_result(r[9], r[8])
+            if not is_void and not any(value is not None for value in r[1:8]):
+                continue
             result_map[r[0]] = r[1]  # match_id -> spf_result
             full_result_map[r[0]] = {
                 "spf_result": r[1],
@@ -171,13 +182,17 @@ def run(dry_run: bool = False) -> dict[str, Any]:
                 "half_full_result": r[5],
                 "full_home_goals": r[6],
                 "full_away_goals": r[7],
+                "is_void": is_void,
             }
             match_info[r[0]] = {
                 "full_home_goals": r[6],
                 "full_away_goals": r[7],
-                "home_team": r[9],
-                "away_team": r[10],
+                "home_team": r[10],
+                "away_team": r[11],
             }
+
+        if not result_map:
+            return {"status": "ok", "settled": 0, "note": "no actionable results"}
 
         total_settled = 0
         sim_settled = 0

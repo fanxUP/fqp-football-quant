@@ -36,6 +36,7 @@ from scripts.play_type_registry import (
 from scripts.play_type_registry import (
     SPORTTERY_POOL_MAP as POOL_CODE_MAP,
 )
+from scripts.result_status import is_void_official_result
 from scripts.sporttery_client import SportteryClient
 
 
@@ -417,7 +418,7 @@ def parse_results_from_response(
                 return None
             try:
                 return int(v)
-            except (ValueError, TypeError):
+            except ValueError, TypeError:
                 return None
 
         # Build win/draw/loss result codes from scores
@@ -463,10 +464,14 @@ def parse_results_from_response(
                 "score_result": score,
                 "half_full_result": half_full,
                 "result_status": (
-                    "confirmed"
-                    if str(item.get("matchResultStatus") or "") == "2"
-                    or item.get("poolStatus") == "Payout"
-                    else item.get("resultStatus") or "pending"
+                    "void"
+                    if is_void_official_result(item, item.get("resultStatus"))
+                    else (
+                        "confirmed"
+                        if str(item.get("matchResultStatus") or "") == "2"
+                        or item.get("poolStatus") == "Payout"
+                        else item.get("resultStatus") or "pending"
+                    )
                 ),
                 "official_publish_time": item.get("publishTime") or item.get("officialPublishTime"),
                 "raw_json": item,

@@ -47,6 +47,39 @@ def test_waits_when_selected_play_result_is_not_available():
     assert _resolve_ticket_items(items, {1: {"spf_result": "H", "rqspf_result": None}}) is None
 
 
+def test_void_match_refunds_every_selection_at_odds_one():
+    items = [
+        {"match_id": 1, "play_type": "spf", "option_code": "3", "sp_value": 2.4},
+        {"match_id": 1, "play_type": "spf", "option_code": "0", "sp_value": 3.1},
+    ]
+    results = {1: {"is_void": True, "spf_result": None}}
+
+    detail = _resolve_ticket_items(items, results)
+
+    assert detail is not None
+    assert [item["is_void"] for item in detail] == [True, True]
+    assert [item["is_won"] for item in detail] == [True, True]
+    assert [item["sp_value"] for item in detail] == [1.0, 1.0]
+    assert [item["original_sp_value"] for item in detail] == [2.4, 3.1]
+    assert calculate_winning_prize(detail, "single", multiple=1) == 4.0
+
+
+def test_void_match_is_removed_from_parlay_odds():
+    items = [
+        {"match_id": 1, "play_type": "spf", "option_code": "3", "sp_value": 2.4},
+        {"match_id": 2, "play_type": "spf", "option_code": "0", "sp_value": 1.8},
+    ]
+    results = {
+        1: {"is_void": True, "spf_result": None},
+        2: {"is_void": False, "spf_result": "0"},
+    }
+
+    detail = _resolve_ticket_items(items, results)
+
+    assert detail is not None
+    assert calculate_winning_prize(detail, "2x1", multiple=1) == 3.6
+
+
 def test_derives_rqspf_result_from_ticket_handicap_and_final_score():
     items = [
         {
