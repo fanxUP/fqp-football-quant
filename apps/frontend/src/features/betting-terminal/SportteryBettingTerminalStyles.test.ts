@@ -32,4 +32,9 @@ describe('SportteryBettingTerminal visual semantics', () => {
     expect(stylesheet).not.toMatch(/\.sporttery-score-grid\s*{[^}]*grid-template-columns:\s*repeat\(4,/);
     expect(stylesheet).toMatch(/\.sporttery-score-grid \.is-score-wide\s*{[^}]*grid-column:\s*span 3/);
   });
+
+  it('keeps betting dialogs fixed to the viewport inside the animated page container', () => {
+    expect(stylesheet).toMatch(/\.fqp-page-transition:has\(\.sporttery-dialog-backdrop\)\s*{[^}]*transform:\s*none !important/);
+    expect(stylesheet).toMatch(/\.fqp-page-transition:has\(\.sporttery-dialog-backdrop\)\s*{[^}]*animation:\s*none !important/);
+  });
 });

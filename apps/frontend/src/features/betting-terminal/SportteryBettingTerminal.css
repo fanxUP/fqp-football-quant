@@ -136,6 +136,10 @@
 .sporttery-confirm-button:disabled { opacity: .45; cursor: not-allowed; }
 .sporttery-warning { padding: 0 16px 9px; color: #ffd0a2; background: rgba(25, 44, 55, .55); font-size: 11px; }
 
+.fqp-page-transition:has(.sporttery-dialog-backdrop) {
+  transform: none !important;
+  animation: none !important;
+}
 .sporttery-dialog-backdrop { position: fixed; inset: 0; z-index: 80; display: grid; place-items: center; padding: 20px; background: rgba(0,0,0,.64); }
 .sporttery-dialog { overflow: hidden; width: min(92vw, 620px); max-height: 88vh; border-radius: 14px; background: #fff; color: var(--st-ink); box-shadow: 0 18px 50px rgba(0,0,0,.22); }
 .sporttery-dialog > header { display: flex; align-items: center; justify-content: space-between; padding: 16px 18px; border-bottom: 1px solid var(--st-line); }
