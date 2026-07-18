@@ -899,7 +899,13 @@ def parse_traditional_lottery_response(
                 }
             )
 
-        sale_stop = section.get("saleEndTime") or section.get("estimateDrawTime")
+        sale_start = section.get("saleStartTime") or section.get("lotterySaleBeginTime")
+        sale_stop = (
+            section.get("saleEndTime")
+            or section.get("lotterySaleEndtime")
+            or section.get("lotterySaleEndTime")
+            or section.get("estimateDrawTime")
+        )
         on_sale = section.get("onSale")
         if on_sale in (0, 1, True, False):
             official_status = "selling" if on_sale == 1 or on_sale is True else "closed"
@@ -923,7 +929,7 @@ def parse_traditional_lottery_response(
             {
                 "game_type": game_type,
                 "issue_no": issue_no,
-                "sale_start": section.get("saleStartTime"),
+                "sale_start": sale_start,
                 "sale_stop": sale_stop,
                 "total_matches": len(match_list),
                 "official_status": official_status,

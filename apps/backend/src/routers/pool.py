@@ -24,6 +24,9 @@ def run_pool_analysis(
     seed_match_id: Optional[int] = Query(  # noqa: UP045
         None, description="指定基准比赛ID（可选，用于筛选同期比赛）"
     ),
+    issue_id: Optional[str] = Query(  # noqa: UP045
+        None, description="指定官方期号或本地期次ID"
+    ),
 ):
     """对体彩官方当前胜负彩14场运行完整分析。
 
@@ -48,6 +51,7 @@ def run_pool_analysis(
             cur.execute(
                 """
                 SELECT i.id, i.issue_no, i.game_type, i.total_matches,
+                       i.official_status, i.sale_stop_time::text,
                        im.match_order, im.match_id,
                        COALESCE(im.home_team_name, m.home_team_name) AS home_team,
                        COALESCE(im.away_team_name, m.away_team_name) AS away_team,
@@ -85,28 +89,56 @@ def run_pool_analysis(
                     HAVING COUNT(DISTINCT model_version_id) > 0
                 ) latest ON true
                 WHERE i.game_type = 't14c'
-                  AND i.official_status = 'selling'
-                ORDER BY i.sale_stop_time DESC NULLS LAST, im.match_order
-                """
+                  AND (%s IS NULL OR i.id::text = %s OR i.issue_no = %s)
+                ORDER BY CASE WHEN i.official_status = 'selling' THEN 0 ELSE 1 END,
+                         i.sale_stop_time DESC NULLS LAST, i.updated_at DESC,
+                         im.match_order
+                """,
+                (issue_id, issue_id, issue_id),
             )
-            matches = cur.fetchall()
+            rows = cur.fetchall()
 
-            if not matches:
+            if not rows:
                 raise HTTPException(404, "暂无已采集的体彩官方14场彩池")
+
+            issues: dict[int, list[tuple]] = {}
+            for row in rows:
+                issues.setdefault(int(row[0]), []).append(row)
+
+            def ready_count(issue_rows: list[tuple]) -> int:
+                return sum(
+                    row[12] is not None and all(row[idx] is not None for idx in (14, 15, 16))
+                    for row in issue_rows
+                )
+
+            ordered_issues = list(issues.values())
+            first_issue = ordered_issues[0]
+            first_is_current = first_issue[0][4] == "selling"
+            if first_is_current or issue_id is not None:
+                matches = first_issue
+            else:
+                matches = next(
+                    (
+                        issue_rows
+                        for issue_rows in ordered_issues
+                        if issue_rows[0][3] == 14
+                        and len(issue_rows) == 14
+                        and ready_count(issue_rows) == 14
+                    ),
+                    first_issue,
+                )
+
             issue_no = matches[0][1]
             if matches[0][3] != 14 or len(matches) != 14:
                 raise HTTPException(
                     409,
                     f"官方14场彩池数据不完整：期号 {issue_no}，应为14场，当前 {len(matches)}场",
                 )
-            ready_count = sum(
-                row[10] is not None and all(row[idx] is not None for idx in (12, 13, 14))
-                for row in matches
-            )
-            if ready_count < 14:
+            predicted_count = ready_count(matches)
+            if predicted_count < 14:
                 raise HTTPException(
                     409,
-                    f"期号 {issue_no} 已完成 {ready_count}/14 场模型预测，待补齐 {14 - ready_count} 场后生成组合",
+                    f"期号 {issue_no} 已完成 {predicted_count}/14 场模型预测，待补齐 {14 - predicted_count} 场后生成组合",
                 )
 
             if len(matches) < 14:
@@ -119,14 +151,14 @@ def run_pool_analysis(
             pool_matches = []
             for row in matches:
                 pool_match = PoolMatch(
-                    match_id=row[5],
-                    home_team=row[6],
-                    away_team=row[7],
-                    league=row[8] or "",
-                    match_date=str(row[9]) if row[9] else "",
-                    prob_home=float(row[12] or 0),
-                    prob_draw=float(row[13] or 0),
-                    prob_away=float(row[14] or 0),
+                    match_id=row[12] or row[7] or row[6],
+                    home_team=row[8],
+                    away_team=row[9],
+                    league=row[10] or "",
+                    match_date=str(row[11]) if row[11] else "",
+                    prob_home=float(row[14] or 0),
+                    prob_draw=float(row[15] or 0),
+                    prob_away=float(row[16] or 0),
                     data_quality=1.0,
                 )
                 pool_matches.append(pool_match)
@@ -139,7 +171,17 @@ def run_pool_analysis(
         period_id=f"{issue_no}-t14c",
     )
 
-    return pool_analysis_to_dict(analysis)
+    result = pool_analysis_to_dict(analysis)
+    issue_status = str(matches[0][4] or "unknown")
+    result["analysis_mode"] = "current" if issue_status == "selling" else "historical"
+    result["issue"] = {
+        "id": matches[0][0],
+        "issue_no": issue_no,
+        "status": issue_status,
+        "sale_stop": matches[0][5],
+        "source": "sporttery",
+    }
+    return result
 
 
 @lru_cache(maxsize=1)
@@ -254,6 +296,11 @@ def generate_pool_issue_combinations(
     strategy: str = Query("balanced", description="策略：conservative | balanced | aggressive"),
 ):
     """Compatibility wrapper around the current pool analyzer."""
-    result = run_pool_analysis(budget=budget, strategy=strategy)
+    result = run_pool_analysis(
+        budget=budget,
+        strategy=strategy,
+        seed_match_id=None,
+        issue_id=issue_id,
+    )
     result["issue_id"] = issue_id
     return result

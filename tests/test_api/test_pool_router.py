@@ -40,3 +40,48 @@ def test_pool_analysis_uses_coherent_prematch_model_consensus(client):
     assert "mp.predict_time < m.kickoff_time" in query
     assert "DISTINCT ON (mp.model_version_id, mp.option_code)" in query
     assert "AVG(model_probability) FILTER" in query
+
+
+def test_pool_analysis_uses_latest_complete_official_issue_for_historical_review(client):
+    conn = MagicMock()
+    cur = MagicMock()
+    conn.__enter__.return_value = conn
+    conn.cursor.return_value.__enter__.return_value = cur
+    cur.fetchall.return_value = [
+        (
+            279,
+            "26092",
+            "t14c",
+            14,
+            "closed",
+            "2026-07-14 22:00:00",
+            order,
+            None,
+            f"主队{order}",
+            f"客队{order}",
+            "测试联赛",
+            "2026-07-15 02:00:00",
+            1000 + order,
+            "模型共识",
+            0.45,
+            0.30,
+            0.25,
+        )
+        for order in range(1, 15)
+    ]
+
+    with (
+        patch("apps.backend.src.routers.pool.get_db", return_value=conn),
+        patch("apps.backend.src.routers.pool.analyze_pool", return_value={"computed": True}),
+        patch(
+            "apps.backend.src.routers.pool.pool_analysis_to_dict",
+            return_value={"period_id": "26092-t14c"},
+        ),
+    ):
+        response = client.get("/api/pool/analyze")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["analysis_mode"] == "historical"
+    assert payload["issue"]["issue_no"] == "26092"
+    assert payload["issue"]["status"] == "closed"

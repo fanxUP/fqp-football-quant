@@ -580,6 +580,14 @@ export interface PoolMatchInfo {
 
 export interface PoolAnalysis {
   period_id: string;
+  analysis_mode: 'current' | 'historical';
+  issue: {
+    id: number;
+    issue_no: string;
+    status: string;
+    sale_stop: string | null;
+    source: 'sporttery';
+  };
   matches: PoolMatchInfo[];
   classification: {
     dan: string[];

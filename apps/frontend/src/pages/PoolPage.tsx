@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { api } from '../core/apiClient';
-import { ApiError } from '../core/types';
+import { ApiError, type PoolAnalysis } from '../core/types';
 import Card from '../shared/components/Card';
 import StatusBadge from '../shared/components/StatusBadge';
 import LoadingSpinner from '../shared/components/LoadingSpinner';
@@ -26,61 +26,6 @@ function useCountUp(target: number, duration = 800) {
     return () => cancelAnimationFrame(rafId);
   }, [target, duration]);
   return val;
-}
-
-interface PoolMatch {
-  index: number;
-  match_id: number | null;
-  home_team: string;
-  away_team: string;
-  league: string;
-  match_date: string;
-  prob_home: number;
-  prob_draw: number;
-  prob_away: number;
-  max_prob_option: string;
-  max_prob: number;
-  cold_gate_index: number;
-  uncertainty: number;
-  data_quality: number;
-  classification: string;
-  entropy: number;
-}
-
-interface PoolClassification {
-  dan: string[];
-  tuo: string[];
-  defense: string[];
-}
-
-interface PoolCombination {
-  selections: string[];
-  estimated_hit_prob: number;
-  cold_gate_coverage: number;
-}
-
-interface PoolAnalysis {
-  period_id: string;
-  matches: PoolMatch[];
-  classification: PoolClassification;
-  full_combinations: {
-    count: number;
-    total_cost: number;
-    combinations: PoolCombination[];
-  };
-  rx9: {
-    selected_matches: string[];
-    combinations_count: number;
-    total_cost: number;
-  };
-  monte_carlo: {
-    hit14_prob: number;
-    hit13_prob: number;
-    rx9_prob: number;
-    simulations: number;
-  };
-  warnings: string[];
-  generated_at: string;
 }
 
 const CLASS_LABELS: Record<string, string> = {
@@ -115,7 +60,7 @@ export default function PoolPage() {
     setError(null);
     try {
       const data = await api.pool.analyze({ budget, strategy });
-      setAnalysis(data as unknown as PoolAnalysis);
+      setAnalysis(data);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : '加载失败');
     } finally {
@@ -234,6 +179,38 @@ export default function PoolPage() {
 
       {analysis && !loading && (
         <>
+          <div
+            role="status"
+            style={{
+              padding: '14px 18px',
+              marginBottom: '20px',
+              background: analysis.analysis_mode === 'historical'
+                ? 'rgba(252, 186, 3, 0.08)'
+                : 'rgba(34, 197, 94, 0.08)',
+              border: `1px solid ${analysis.analysis_mode === 'historical'
+                ? 'rgba(252, 186, 3, 0.3)'
+                : 'rgba(34, 197, 94, 0.3)'}`,
+              borderRadius: '8px',
+            }}
+          >
+            <div
+              style={{
+                fontSize: '15px',
+                fontWeight: 700,
+                color: analysis.analysis_mode === 'historical'
+                  ? 'var(--fqp-warning)'
+                  : 'var(--fqp-success)',
+              }}
+            >
+              {analysis.analysis_mode === 'historical' ? '历史期次复盘' : '当前在售期次'}
+            </div>
+            <div style={{ marginTop: '5px', color: 'var(--fqp-text-muted)', fontSize: '13px', lineHeight: 1.6 }}>
+              {analysis.analysis_mode === 'historical'
+                ? `第 ${analysis.issue.issue_no} 期已停售，本页仅用于检验模型与组合逻辑，不是当前投注推荐。`
+                : `第 ${analysis.issue.issue_no} 期正在销售，方案基于当前官方期次数据生成。`}
+            </div>
+          </div>
+
           {/* Monte Carlo summary cards — staggered entrance */}
           <div className="fqp-grid-4" style={{ marginBottom: '20px' }}>
             <Card title="命中14场概率" entranceDelay={0}>

@@ -29,6 +29,26 @@ def test_traditional_lottery_sale_status_uses_shanghai_business_time():
     assert pools[0]["official_status"] == "closed"
 
 
+def test_traditional_lottery_reads_official_sale_window_field_names():
+    raw = {
+        "value": {
+            "sfcDetail": {
+                "lotteryDrawNum": "26093",
+                "lotterySaleBeginTime": "2026-07-18 20:00:00",
+                "lotterySaleEndtime": "2026-07-19 22:00:00",
+                "matchList": [{"matchId": "1", "homeTeam": "A", "awayTeam": "B"}],
+            }
+        }
+    }
+    now = datetime(2026, 7, 18, 21, 0, tzinfo=UTC)
+
+    pools = parse_traditional_lottery_response(raw, now=now)
+
+    assert pools[0]["sale_start"] == "2026-07-18 20:00:00"
+    assert pools[0]["sale_stop"] == "2026-07-19 22:00:00"
+    assert pools[0]["official_status"] == "selling"
+
+
 def test_parse_uniform_match_keeps_official_display_code_and_sale_status():
     raw = {
         "value": {

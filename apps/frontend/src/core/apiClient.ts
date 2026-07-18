@@ -468,7 +468,7 @@ export const api = {
   // Pool lottery (Phase 10)
   pool: {
     analyze: (params?: { budget?: number; strategy?: string }) =>
-      request<Record<string, unknown>>(
+      request<import('./types').PoolAnalysis>(
         `/api/pool/analyze${qs({ budget: params?.budget, strategy: params?.strategy })}`,
       ),
 
