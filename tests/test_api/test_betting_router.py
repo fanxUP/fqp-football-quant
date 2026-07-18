@@ -173,6 +173,34 @@ def test_create_real_betting_ticket_attaches_ocr_confirmation(monkeypatch):
     assert result["source"] == "ocr"
 
 
+def test_create_real_betting_ticket_persists_canonical_pass_type(monkeypatch):
+    created: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        betting,
+        "create_real_ticket",
+        lambda conn, ticket: created.update(ticket) or 90,
+    )
+    monkeypatch.setattr(betting, "create_real_ticket_items_batch", lambda *args: [1])
+
+    req = betting.CreateBettingTicketRequest(
+        source="real-user",
+        pass_type=" single, single ",
+        items=[
+            betting.BettingTicketItemRequest(
+                match_id=1003,
+                option_code="3",
+                option_name="胜",
+                sp_value=2.0,
+            )
+        ],
+    )
+
+    betting._create_real_betting_ticket(object(), req)
+
+    assert created["pass_type"] == "single"
+
+
 def test_multi_pass_ticket_rejects_combined_cost_over_twenty_thousand():
     items = [
         {
@@ -190,6 +218,35 @@ def test_multi_pass_ticket_rejects_combined_cost_over_twenty_thousand():
 
     with pytest.raises(HTTPException, match="单票金额不得超过20000元"):
         betting._calculate_multi_pass_ticket(items, "3x1,4x1", multiple=10)
+
+
+def test_multi_pass_ticket_normalizes_duplicate_pass_types():
+    items = [
+        {
+            "match_id": 1,
+            "play_type": "spf",
+            "option_code": "3",
+            "option_name": "主胜",
+            "sp_value": 2.0,
+            "is_single_allowed": True,
+            "is_pass_allowed": True,
+        },
+        {
+            "match_id": 2,
+            "play_type": "spf",
+            "option_code": "3",
+            "option_name": "主胜",
+            "sp_value": 2.0,
+            "is_single_allowed": True,
+            "is_pass_allowed": True,
+        },
+    ]
+
+    result = betting._calculate_multi_pass_ticket(items, " 2x1,2x1 ", multiple=1)
+
+    assert result["pass_type"] == "2x1"
+    assert result["bet_count"] == 1
+    assert result["total_cost"] == 2.0
 
 
 def test_apply_settlements_updates_ticket_financials():
