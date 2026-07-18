@@ -3,11 +3,35 @@ from zoneinfo import ZoneInfo
 
 from scripts.jobs.run_feature_snapshot_build import (
     _business_now_naive,
+    _load_collected_weather,
     _resolve_competition_season_id,
     _snapshot_job_result,
     can_build_team_dependent_features,
     compute_full_completeness,
 )
+
+
+def test_feature_snapshot_reuses_collected_weather_without_external_fetch(mock_conn):
+    conn, cur = mock_conn
+    cur.fetchone.return_value = (
+        22550,
+        50,
+        datetime(2026, 7, 18, 15, 0),
+        datetime(2026, 7, 19, 0, 0),
+        14.33,
+        0.0,
+        21.0,
+        18.5,
+        -0.0185,
+        "open-meteo",
+        0.85,
+    )
+
+    weather, has_weather = _load_collected_weather(conn, 22550)
+
+    assert has_weather is True
+    assert weather["temperature_2m"] == 14.33
+    assert weather["goal_expectation_weather_adjustment"] == -0.0185
 
 
 def test_team_enrichment_requires_both_internal_team_ids():

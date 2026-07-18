@@ -26,7 +26,11 @@ from scripts.feature_quality import (
 from scripts.feature_quality import (
     snapshot_job_result as _snapshot_job_result,
 )
-from scripts.feature_storage import store_match_feature_snapshot, store_team_season_profile
+from scripts.feature_storage import (
+    get_weather_for_match,
+    store_match_feature_snapshot,
+    store_team_season_profile,
+)
 from scripts.features.build_basic_features import (
     compute_odds_implied_probabilities,
     compute_rest_days,
@@ -90,6 +94,22 @@ def _resolve_match_stadium_id(
 
     location = resolve_match_stadium_location(conn, raw_json, home_team_name)
     return location["stadium_id"] if location else None
+
+
+def _load_collected_weather(conn: Any, match_id: int) -> tuple[dict[str, Any], bool]:
+    """Load weather already collected by the dedicated weather job."""
+    snapshot = get_weather_for_match(conn, match_id)
+    if not snapshot:
+        return {}, False
+    weather = {
+        **snapshot,
+        "goal_expectation_weather_adjustment": snapshot.get("goal_expectation_adjustment"),
+    }
+    has_weather = (
+        snapshot.get("temperature_2m") is not None
+        and snapshot.get("weather_impact_score") is not None
+    )
+    return weather, has_weather
 
 
 def can_build_team_dependent_features(home_id: int | None, away_id: int | None) -> bool:
@@ -320,29 +340,12 @@ def _run_impl(match_id: int | None = None, dry_run: bool = False) -> dict[str, A
                 # ---------------------------------------------------
                 # 9. [NEW] Weather features
                 # ---------------------------------------------------
-                weather = {}
-                has_weather = False
                 try:
-                    from scripts.features.build_weather_features import build_weather_for_match
-
-                    weather_result = build_weather_for_match(
-                        conn,
-                        mid,
-                        kt,
-                        stadium_id=travel.get("stadium_id")
-                        or _resolve_match_stadium_id(
-                            conn,
-                            match_data["raw_json"],
-                            match_data["home_team_name"],
-                        ),
-                        client=None,
-                    )
-                    if weather_result:
-                        weather = weather_result
-                        has_weather = weather_result.get("has_weather", False)
+                    weather, has_weather = _load_collected_weather(conn, mid)
                 except Exception as e:
                     conn.rollback()
                     print(f"[snapshot] weather error match {mid}: {e}")
+                    weather, has_weather = {}, False
 
                 # ---------------------------------------------------
                 # 10. [NEW] Motivation features
