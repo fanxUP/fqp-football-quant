@@ -13,11 +13,13 @@ from datetime import datetime
 from typing import Any
 
 from apps.backend.src.db import get_db
+from scripts.jobs.settlement_repairs import repair_legacy_real_settlements
 from scripts.play_type_registry import result_column
 from scripts.real_ticket_storage import (
     create_bankroll_transaction,
     create_settlement,
 )
+from scripts.result_codes import normalize_result as _normalize_result
 from scripts.result_status import is_void_official_result as _is_void_result
 from scripts.simulator_calculator import calculate_winning_prize
 from scripts.simulator_storage import update_ticket_status as update_sim_ticket_status
@@ -32,26 +34,6 @@ def _calculate_tax(prize: float) -> float:
     if prize > 10000:
         return (prize - 10000) * 0.20
     return 0.0
-
-
-def _normalize_result(play_type: str, value: Any) -> str | None:
-    """Normalize official H/D/A-style results to stored ticket codes."""
-    if value is None:
-        return None
-    raw = str(value).strip()
-    if play_type in {"spf", "rqspf"}:
-        return {"H": "3", "h": "3", "D": "1", "d": "1", "A": "0", "a": "0"}.get(raw, raw)
-    if play_type == "bqc" and len(raw) == 2:
-        return "".join({"H": "3", "h": "3", "D": "1", "d": "1", "A": "0", "a": "0"}.get(ch, ch) for ch in raw)
-    if play_type == "bqc":
-        compact = raw.replace("/", "").replace("-", "").replace(" ", "")
-        if len(compact) == 2:
-            return "".join({"H": "3", "h": "3", "D": "1", "d": "1", "A": "0", "a": "0"}.get(ch, ch) for ch in compact)
-    if play_type == "bf":
-        return raw.replace("-", ":").replace(" ", "")
-    if play_type == "zjq" and raw in {"7+", "7plus", "7以上"}:
-        return "7"
-    return raw
 
 
 def _derive_rqspf_result(
@@ -103,7 +85,8 @@ def _resolve_ticket_items(
         if not is_void and actual_result is None:
             return None
 
-        option_code = str(item["option_code"])
+        original_option_code = str(item["option_code"])
+        option_code = _normalize_result(play_type, original_option_code) or original_option_code
         original_sp_value = float(item.get("sp_value") or 0)
         detail.append(
             {
@@ -118,6 +101,11 @@ def _resolve_ticket_items(
                 "actual_result": "void" if is_void else actual_result,
                 "is_won": True if is_void else option_code == actual_result,
                 "is_void": is_void,
+                **(
+                    {"original_option_code": original_option_code}
+                    if option_code != original_option_code
+                    else {}
+                ),
                 **({"original_sp_value": original_sp_value} if is_void else {}),
             }
         )
@@ -145,6 +133,7 @@ def run(dry_run: bool = False) -> dict[str, Any]:
         return {"status": "dry_run", "message": "settle tickets (dry run)"}
 
     with get_db() as conn:
+        legacy_repairs = repair_legacy_real_settlements(conn)
         # 1. Find confirmed results
         with conn.cursor() as cur:
             cur.execute(
@@ -163,7 +152,12 @@ def run(dry_run: bool = False) -> dict[str, Any]:
             results = cur.fetchall()
 
         if not results:
-            return {"status": "ok", "settled": 0, "note": "no confirmed results"}
+            return {
+                "status": "ok",
+                "settled": 0,
+                "note": "no confirmed results",
+                "legacy_repairs": legacy_repairs,
+            }
 
         # Build result lookup: match_id -> full results
         result_map: dict[int, str | None] = {}
@@ -192,7 +186,12 @@ def run(dry_run: bool = False) -> dict[str, Any]:
             }
 
         if not result_map:
-            return {"status": "ok", "settled": 0, "note": "no actionable results"}
+            return {
+                "status": "ok",
+                "settled": 0,
+                "note": "no actionable results",
+                "legacy_repairs": legacy_repairs,
+            }
 
         total_settled = 0
         sim_settled = 0
@@ -665,6 +664,7 @@ def run(dry_run: bool = False) -> dict[str, Any]:
             "simulator_settled": simulator_settled,
             "real_settled": real_settled,
             "total_prize": round(total_prize, 2),
+            "legacy_repairs": legacy_repairs,
         }
 
 

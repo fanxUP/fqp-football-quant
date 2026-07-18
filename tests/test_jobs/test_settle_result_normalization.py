@@ -39,6 +39,19 @@ def test_resolves_mixed_play_results_and_same_match_alternatives():
     assert calculate_winning_prize(detail, "2x1", multiple=1) == 10.0
 
 
+def test_normalizes_legacy_ticket_option_before_comparing_result():
+    items = [
+        {"match_id": 1, "play_type": "spf", "option_code": "h", "sp_value": 2.0},
+    ]
+
+    detail = _resolve_ticket_items(items, {1: {"spf_result": "H"}})
+
+    assert detail is not None
+    assert detail[0]["option_code"] == "3"
+    assert detail[0]["original_option_code"] == "h"
+    assert detail[0]["is_won"] is True
+
+
 def test_waits_when_selected_play_result_is_not_available():
     items = [
         {"match_id": 1, "play_type": "rqspf", "option_code": "3", "sp_value": 2.0},

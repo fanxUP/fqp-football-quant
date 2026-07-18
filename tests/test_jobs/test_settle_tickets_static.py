@@ -52,3 +52,11 @@ def test_confirmed_void_results_are_not_filtered_out_before_settlement():
     assert "r.raw_json" in result_query
     assert "r.spf_result IS NOT NULL" not in result_query
     assert "_is_void_result" in source
+
+
+def test_legacy_real_settlements_are_repaired_before_new_settlement_work():
+    source = SETTLE_TICKETS.read_text(encoding="utf-8")
+
+    repair_call = "repair_legacy_real_settlements(conn)"
+    assert repair_call in source
+    assert source.index(repair_call) < source.index("# 1. Find confirmed results")
