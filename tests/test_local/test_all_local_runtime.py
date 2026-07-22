@@ -52,3 +52,4 @@ def test_local_manager_applies_migrations_before_launching_runtime() -> None:
     migration = manager.index('"$SCRIPT_DIR/apply_local_migrations.sh"')
     launch_agent = manager.index("scripts.local.local_stack_launch_agent")
     assert migration < launch_agent
+    assert '--max-time 10 "http://127.0.0.1:${BACKEND_PORT}/health"' in manager

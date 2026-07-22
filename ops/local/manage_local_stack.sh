@@ -19,8 +19,8 @@ is_registered() {
 }
 
 is_healthy() {
-    curl --fail --silent --max-time 2 "http://127.0.0.1:${BACKEND_PORT}/health" >/dev/null \
-        && curl --fail --silent --max-time 2 "http://127.0.0.1:${FRONTEND_PORT}/" >/dev/null \
+    curl --fail --silent --max-time 10 "http://127.0.0.1:${BACKEND_PORT}/health" >/dev/null \
+        && curl --fail --silent --max-time 5 "http://127.0.0.1:${FRONTEND_PORT}/" >/dev/null \
         && "$POSTGRES_BIN/pg_isready" -h 127.0.0.1 -p 5432 -d fqp -U fqp >/dev/null \
         && "$REDIS_BIN/redis-cli" -u redis://127.0.0.1:6379/0 ping 2>/dev/null | grep -q '^PONG$'
 }
