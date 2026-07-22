@@ -304,6 +304,25 @@ def _quality_risk_penalty(quality: float) -> float:
     return 1.0 if quality < MIN_QUALITY else 0.0
 
 
+def _load_prediction_feature_quality(
+    conn: Any, predictions: list[tuple[Any, ...]]
+) -> dict[int, float]:
+    """Load quality only for the immutable feature snapshots bound to predictions."""
+    snapshot_ids = sorted({int(row[11]) for row in predictions if row[11] is not None})
+    if not snapshot_ids:
+        return {}
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT id, data_completeness_score
+            FROM match_feature_snapshots
+            WHERE id = ANY(%s)
+            """,
+            (snapshot_ids,),
+        )
+        return {int(row[0]): float(row[1] or 0) for row in cur.fetchall()}
+
+
 def _preferred_direction_by_market(
     predictions: list[tuple[Any, ...]],
 ) -> dict[tuple[int, str], tuple[str, float]]:
@@ -397,9 +416,16 @@ def _load_reusable_ticket_summary(conn: Any) -> tuple[int, float]:
                   FROM simulation_ticket_items sti
                   JOIN model_predictions mp ON mp.id = sti.model_prediction_id
                   JOIN model_versions mv ON mv.id = mp.model_version_id
+                  JOIN match_feature_snapshots mfs
+                    ON mfs.id = COALESCE(sti.feature_snapshot_id, mp.feature_snapshot_id)
                   WHERE sti.ticket_id = st.id
                     AND mv.is_active = true
                     AND mp.validation_status = 'valid'
+                    AND mfs.data_completeness_score >= CASE
+                        WHEN st.ticket_type = 'training_observation'
+                            THEN %(min_observation_quality)s
+                        ELSE %(min_quality)s
+                    END
                     AND COALESCE(
                         (mp.uncertainty_reason->>'model_independent')::boolean,
                         false
@@ -410,11 +436,19 @@ def _load_reusable_ticket_summary(conn: Any) -> tuple[int, float]:
                   FROM simulation_ticket_items sti
                   LEFT JOIN model_predictions mp ON mp.id = sti.model_prediction_id
                   LEFT JOIN model_versions mv ON mv.id = mp.model_version_id
+                  LEFT JOIN match_feature_snapshots mfs
+                    ON mfs.id = COALESCE(sti.feature_snapshot_id, mp.feature_snapshot_id)
                   WHERE sti.ticket_id = st.id
                     AND (
                         mp.id IS NULL
                         OR mv.is_active IS NOT true
                         OR mp.validation_status <> 'valid'
+                        OR mfs.id IS NULL
+                        OR mfs.data_completeness_score < CASE
+                            WHEN st.ticket_type = 'training_observation'
+                                THEN %(min_observation_quality)s
+                            ELSE %(min_quality)s
+                        END
                         OR COALESCE(
                             (mp.uncertainty_reason->>'model_independent')::boolean,
                             false
@@ -422,6 +456,11 @@ def _load_reusable_ticket_summary(conn: Any) -> tuple[int, float]:
                     )
               )
             """
+            ,
+            {
+                "min_observation_quality": MIN_OBSERVATION_QUALITY,
+                "min_quality": MIN_QUALITY,
+            },
         )
         count, stake = cur.fetchone()
     return int(count or 0), float(stake or 0)
@@ -511,19 +550,10 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
         training_observation_mode = valid_match_count < MIN_MATCHES
 
         # ── 3. Data quality map ──
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT match_id, data_completeness_score
-                FROM match_feature_snapshots
-                WHERE (match_id, snapshot_time) IN (
-                    SELECT match_id, MAX(snapshot_time)
-                    FROM match_feature_snapshots
-                    GROUP BY match_id
-                )
-                """
-            )
-            quality_map = {row[0]: float(row[1] or 0) for row in cur.fetchall()}
+        # Qualification must use the immutable feature evidence bound to each
+        # prediction. A newer snapshot for the same match cannot upgrade an
+        # older prediction retroactively.
+        quality_map = _load_prediction_feature_quality(conn, predictions)
 
         # ── 4. Build draw-risk map (平局风险检测 §7.3) ──
         match_ids = {p[1] for p in predictions}
@@ -666,7 +696,7 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
                 p[17],
             )
 
-            quality = quality_map.get(match_id, 0)
+            quality = quality_map.get(int(feature_snapshot_id), 0) if feature_snapshot_id else 0
 
             # 硬门槛
             if quality < MIN_OBSERVATION_QUALITY:

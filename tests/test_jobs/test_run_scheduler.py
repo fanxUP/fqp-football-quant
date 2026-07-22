@@ -103,6 +103,11 @@ def test_scheduler_collects_lineups_in_the_pre_match_window_every_30_minutes():
     assert 'hour="10,14"' not in source
 
 
+def test_pipeline_schedule_labels_match_enrichment_cron():
+    assert JOB_DEFINITIONS["injury_collection"].schedule == "每日 00:07"
+    assert JOB_DEFINITIONS["lineup_collection"].schedule == "每30分钟（:12/:42）"
+
+
 def test_scheduler_refreshes_features_after_lineup_collection_before_prediction():
     source = Path("scripts/jobs/run_scheduler.py").read_text()
 

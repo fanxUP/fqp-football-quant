@@ -6,6 +6,7 @@ from scripts.jobs import run_recommendation_candidate as recommendation
 from scripts.jobs.run_recommendation_candidate import (
     _build_competition_observation_ticket,
     _buy_ticket,
+    _load_prediction_feature_quality,
     _load_reusable_ticket_summary,
     _market_allows_pass,
     _market_sp_quality,
@@ -72,6 +73,22 @@ def test_low_quality_prediction_is_forced_out_of_normal_staking_pools() -> None:
     assert _quality_risk_penalty(30) == 1.0
     assert _quality_risk_penalty(49.9) == 1.0
     assert _quality_risk_penalty(50) == 0.0
+
+
+def test_prediction_quality_uses_its_bound_feature_snapshot(mock_conn) -> None:
+    conn, cur = mock_conn
+    prediction = [None] * 18
+    prediction[1] = 7
+    prediction[11] = 101
+    cur.fetchall.return_value = [(101, 55.0)]
+
+    quality = _load_prediction_feature_quality(conn, [tuple(prediction)])
+
+    query, params = cur.execute.call_args.args
+    assert "SELECT id, data_completeness_score" in query
+    assert "WHERE id = ANY" in query
+    assert params == ([101],)
+    assert quality == {101: 55.0}
 
 
 def test_preferred_direction_never_compares_different_play_types() -> None:
@@ -155,6 +172,9 @@ def test_only_current_independent_model_tickets_are_reusable(mock_conn):
     assert "mv.is_active = true" in query
     assert "mp.validation_status = 'valid'" in query
     assert "model_independent" in query
+    assert "JOIN match_feature_snapshots mfs" in query
+    assert "st.ticket_type = 'training_observation'" in query
+    assert "mfs.data_completeness_score >=" in query
     assert "NOT EXISTS" in query
 
 

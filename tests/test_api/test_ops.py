@@ -220,6 +220,39 @@ class TestOpsHealth:
 
 
 class TestOpsPipeline:
+    def test_pipeline_excludes_dry_runs_and_surfaces_result_error_message(self, client):
+        mock_conn, mock_cur = _mock_db_conn()
+        mock_cur.fetchall.side_effect = [
+            [],
+            [
+                (
+                    14971,
+                    "lineup_collection",
+                    "error",
+                    datetime(2026, 7, 22, 11, 12),
+                    None,
+                    {"result": {"status": "error", "message": "API key not set"}},
+                )
+            ],
+        ]
+
+        with (
+            patch("apps.backend.src.routers.ops.get_db", return_value=mock_conn),
+            patch(
+                "apps.backend.src.services.pipeline_status._utc_now",
+                return_value=datetime(2026, 7, 22, 11, 13, tzinfo=UTC),
+            ),
+        ):
+            response = client.get("/api/ops/pipeline")
+
+        job_query = mock_cur.execute.call_args_list[1].args[0]
+        assert "input_snapshot_refs->>'dry_run'" in job_query
+        lineup = next(
+            item for item in response.json()["jobs"] if item["code"] == "lineup_collection"
+        )
+        assert lineup["status"] == "failed"
+        assert lineup["error"] == "API key not set"
+
     def test_hides_retired_source_health_rows(self, client):
         mock_conn, mock_cur = _mock_db_conn()
         mock_cur.fetchall.side_effect = [

@@ -51,11 +51,11 @@ JOB_DEFINITIONS: dict[str, JobDefinition] = {
         "联赛积分榜采集", "每日 03:07", "official", max_age=timedelta(hours=30)
     ),
     "injury_collection": JobDefinition(
-        "伤停数据采集", "每日 08:07", "official", ("collect_injury_data",), timedelta(hours=30)
+        "伤停数据采集", "每日 00:07", "official", ("collect_injury_data",), timedelta(hours=30)
     ),
     "lineup_collection": JobDefinition(
         "首发阵容采集",
-        "每日 10:07/14:07",
+        "每30分钟（:12/:42）",
         "official",
         ("collect_lineup_data",),
         timedelta(hours=22),
@@ -196,22 +196,36 @@ def _normalize_job_status(status: object) -> str:
     return "unknown"
 
 
-def _job_quality(output_refs: object) -> tuple[str | None, str | None]:
+def _job_result(output_refs: object) -> dict[str, Any] | None:
     if isinstance(output_refs, str):
         try:
             output_refs = json.loads(output_refs)
         except json.JSONDecodeError:
-            return None, None
+            return None
     if not isinstance(output_refs, dict):
-        return None, None
+        return None
     result = output_refs.get("result", output_refs)
     if not isinstance(result, dict):
+        return None
+    return result
+
+
+def _job_quality(output_refs: object) -> tuple[str | None, str | None]:
+    result = _job_result(output_refs)
+    if result is None:
         return None, None
     quality_status = str(result.get("quality_status") or "") or None
     quality_note = str(result.get("quality_note") or "") or None
     if not quality_note and result.get("average_completeness") is not None:
         quality_note = f"平均特征完整度 {float(result['average_completeness']):.1f}%"
     return quality_status, quality_note
+
+
+def _job_result_message(output_refs: object) -> str | None:
+    result = _job_result(output_refs)
+    if result is None:
+        return None
+    return str(result.get("message") or result.get("error") or "") or None
 
 
 def _canonical_source_rows(source_rows: list[tuple[Any, ...]]) -> list[tuple[Any, ...]]:
@@ -277,6 +291,7 @@ def get_pipeline_snapshot(conn: Any) -> dict[str, list[dict[str, Any]]]:
                       id, job_code, status, finished_at, error_message, output_refs
                FROM ai_job_runs
                WHERE job_code = ANY(%s)
+                 AND COALESCE((input_snapshot_refs->>'dry_run')::boolean, false) = false
                ORDER BY job_code, id DESC""",
             (active_codes,),
         )
@@ -336,6 +351,7 @@ def get_pipeline_snapshot(conn: Any) -> dict[str, list[dict[str, Any]]]:
         if status == "success" and _is_stale(latest[3], definition.max_age, now):
             status = "stale"
         quality_status, quality_note = _job_quality(latest[5])
+        error_message = latest[4] or _job_result_message(latest[5])
         if status == "success" and quality_status == "degraded":
             status = "degraded"
         jobs.append(
@@ -344,7 +360,7 @@ def get_pipeline_snapshot(conn: Any) -> dict[str, list[dict[str, Any]]]:
                 "name": definition.name,
                 "status": status,
                 "finished_at": utc_iso(latest[3]),
-                "error": latest[4],
+                "error": error_message,
                 "detail": quality_note,
                 "schedule": definition.schedule,
                 "category": definition.category,
