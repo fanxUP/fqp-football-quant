@@ -7,6 +7,7 @@ import DataTable, { type Column } from '../shared/components/DataTable';
 import StatusBadge from '../shared/components/StatusBadge';
 import ErrorState from '../shared/components/ErrorState';
 import { statusLabel, riskLabel, actionLabel } from '../shared/constants';
+import { formatTimestamp } from '../shared/utils';
 
 type TabKey = 'tasks' | 'jobs' | 'stale' | 'staleTasks' | 'gates' | 'audit';
 
@@ -160,7 +161,7 @@ export default function AgentPanel() {
           <Card className="fqp-stat-card"><div className="fqp-stat-label">疑似卡住</div><div className="fqp-stat-value" style={{ color: summary.stale_jobs + summary.stale_tasks ? 'var(--fqp-warning)' : undefined }}>{summary.stale_jobs + summary.stale_tasks}</div><div className="fqp-stat-sub">{summary.stale_tasks} 个超时任务 · {summary.stale_jobs} 个超时 Job</div></Card>
           <Card className="fqp-stat-card"><div className="fqp-stat-label">待审核闸门</div><div className="fqp-stat-value" style={{ color: summary.pending_review_gates ? 'var(--fqp-warning)' : undefined }}>{summary.pending_review_gates}</div></Card>
           <Card className="fqp-stat-card"><div className="fqp-stat-label">24h 失败 Job</div><div className="fqp-stat-value" style={{ color: summary.failed_jobs_24h ? 'var(--fqp-red-neon)' : undefined }}>{summary.failed_jobs_24h}</div></Card>
-          <Card className="fqp-stat-card"><div className="fqp-stat-label">Scheduler</div><div className="fqp-stat-value" style={{ color: summary.scheduler_running ? 'var(--fqp-green-neon)' : 'var(--fqp-red-neon)', fontSize: 24 }}>{summary.scheduler_running ? '在线' : '离线'}</div><div className="fqp-stat-sub">{scheduler?.heartbeat_at ? `心跳 ${scheduler.heartbeat_at.replace('T', ' ')}` : '请启动本机 Scheduler'}</div></Card>
+          <Card className="fqp-stat-card"><div className="fqp-stat-label">Scheduler</div><div className="fqp-stat-value" style={{ color: summary.scheduler_running ? 'var(--fqp-green-neon)' : 'var(--fqp-red-neon)', fontSize: 24 }}>{summary.scheduler_running ? '在线' : '离线'}</div><div className="fqp-stat-sub">{scheduler?.heartbeat_at ? `心跳 ${formatTimestamp(scheduler.heartbeat_at)}` : '请启动本机 Scheduler'}</div></Card>
         </div>
       )}
       <div className="fqp-tabs">
@@ -216,7 +217,7 @@ function StaleTasksTab() {
     { key: 'owner_agent', title: '负责 Agent' },
     { key: 'status', title: '状态', render: (v) => <StatusBadge status="warning" label={statusLabel(String(v))} /> },
     { key: 'stale_minutes', title: '未更新时长', render: (v) => `${Number(v).toFixed(1)} 分钟` },
-    { key: 'updated_at', title: '最后更新', render: (v) => v ? String(v).replace('T', ' ').slice(0, 19) : '—' },
+    { key: 'updated_at', title: '最后更新', render: (v) => formatTimestamp(v) },
   ];
   if (error) return <ErrorState message={error} onRetry={fetchStaleTasks} />;
   return <Card style={{ padding: 0, overflow: 'hidden' }}><DataTable columns={columns} rows={tasks} loading={loading} emptyText="暂无超时 Agent 任务" rowKey={(r) => String(r.id)} /></Card>;
@@ -243,7 +244,7 @@ function StaleJobsTab() {
     { key: 'job_name', title: '任务名称' },
     { key: 'owner_agent', title: '负责 Agent' },
     { key: 'running_minutes', title: '运行时长', render: (v) => `${Number(v).toFixed(1)} 分钟` },
-    { key: 'started_at', title: '开始时间', render: (v) => String(v).replace('T', ' ').slice(0, 19) },
+    { key: 'started_at', title: '开始时间', render: (v) => formatTimestamp(v) },
   ];
   if (error) return <ErrorState message={error} onRetry={fetchStaleJobs} />;
   return <Card style={{ padding: 0, overflow: 'hidden' }}><DataTable columns={columns} rows={jobs} loading={loading} emptyText="暂无超时 Job" rowKey={(r) => String(r.id)} /></Card>;
@@ -272,7 +273,7 @@ function GatesTab() {
     { key: 'reviewer', title: '审核人', render: (v) => typeof v === 'string' && v ? v : '待审核' },
     { key: 'review_status', title: '状态', render: (v) => <StatusBadge status={v === 'approved' ? 'ok' : v === 'rejected' ? 'error' : 'warning'} label={String(v)} /> },
     { key: 'id', title: '操作', render: (_v, row) => row.review_status === 'pending' ? <GateActions gateId={row.id} onResolved={fetchGates} /> : '—' },
-    { key: 'created_at', title: '创建时间', render: (v) => v ? String(v).replace('T', ' ').slice(0, 19) : '—' },
+    { key: 'created_at', title: '创建时间', render: (v) => formatTimestamp(v) },
   ];
   if (error) return <ErrorState message={error} onRetry={fetchGates} />;
   return <Card style={{ padding: 0, overflow: 'hidden' }}><DataTable columns={columns} rows={gates} loading={loading} emptyText="暂无人工审核闸门" rowKey={(r) => String(r.id)} /></Card>;
@@ -357,7 +358,7 @@ function TasksTab() {
     {
       key: 'created_at',
       title: '创建时间',
-      render: (v) => v ? String(v).replace('T', ' ').slice(0, 19) : '—',
+      render: (v) => formatTimestamp(v),
     },
   ];
 
@@ -430,7 +431,7 @@ function JobsTab() {
     {
       key: 'started_at',
       title: '开始时间',
-      render: (v) => v ? String(v).replace('T', ' ').slice(0, 19) : '—',
+      render: (v) => formatTimestamp(v),
     },
     {
       key: 'duration_ms',
@@ -498,7 +499,7 @@ function AuditTab() {
     {
       key: 'created_at',
       title: '时间',
-      render: (v) => v ? String(v).replace('T', ' ').slice(0, 19) : '—',
+      render: (v) => formatTimestamp(v),
     },
   ];
 

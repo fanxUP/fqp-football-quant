@@ -11,6 +11,7 @@ import { api } from '../core/apiClient';
 import type { BacktestRun, BacktestResult, DashboardBacktestEquityItem } from '../core/types';
 import { PageHeader, Card, DataTable, ErrorState, LoadingSpinner } from '../shared/components';
 import { modelNameLabel } from '../shared/constants';
+import { formatTimestamp } from '../shared/utils';
 import BacktestPerformanceCharts from '../visualization/backtest/BacktestPerformanceCharts';
 
 // —— 类型 ——
@@ -492,7 +493,7 @@ export default function BacktestPage() {
               },
               { key: 'created_at', title: '创建时间', width: '160px',
                 render: (_: unknown, row: BacktestRun) =>
-                  row.created_at ? new Date(row.created_at).toLocaleString('zh-CN') : '—',
+                  formatTimestamp(row.created_at),
               },
               {
                 key: 'actions', title: '操作', width: '80px',

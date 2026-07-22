@@ -13,6 +13,7 @@ import StatusBadge from '../shared/components/StatusBadge';
 import TeamLogo from '../shared/components/TeamLogo';
 import TeamName from '../shared/components/TeamName';
 import { normalizeWinDrawLossLabel, statusLabel, riskLabel } from '../shared/constants';
+import { formatTimestamp } from '../shared/utils';
 
 export interface RecommendationMatchSelection {
   matchId: number;
@@ -445,7 +446,7 @@ export default function RecommendationsPage({ embedded = false, onMatchSelect }:
     {
       key: 'created_at',
       title: '创建时间',
-      render: (v) => String(v).replace('T', ' ').slice(0, 19),
+      render: (v) => formatTimestamp(v),
     },
     {
       key: 'item_count',

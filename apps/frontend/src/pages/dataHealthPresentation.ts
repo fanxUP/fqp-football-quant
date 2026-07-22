@@ -1,3 +1,5 @@
+import { formatTimestamp } from '../shared/utils';
+
 export interface PipelineSource {
   name: string;
   source_type: string;
@@ -42,7 +44,7 @@ const SOURCE_NAMES: Record<string, string> = {
 
 export function formatPipelineTime(value: string | null): string {
   if (!value) return '尚无记录';
-  return new Date(value).toLocaleString('zh-CN', { hour12: false });
+  return formatTimestamp(value);
 }
 
 function sourceRow(source: PipelineSource): DataHealthRow {

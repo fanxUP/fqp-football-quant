@@ -10,6 +10,7 @@ import LoadingSpinner from '../shared/components/LoadingSpinner';
 import EmptyState from '../shared/components/EmptyState';
 import ErrorState from '../shared/components/ErrorState';
 import StatusBadge from '../shared/components/StatusBadge';
+import { formatTimestamp } from '../shared/utils';
 
 type TabKey = 'daily' | 'weekly' | 'monthly' | 'settlements' | 'errors';
 
@@ -363,7 +364,7 @@ function WeeklyReviewsTab() {
         return s.length > 80 ? s.slice(0, 80) + '...' : s;
       },
     },
-    { key: 'created_at', title: '生成时间', render: (v) => String(v).replace('T', ' ').slice(0, 19) },
+    { key: 'created_at', title: '生成时间', render: (v) => formatTimestamp(v) },
   ];
 
   if (error) return <ErrorState message={error} onRetry={() => window.location.reload()} />;
@@ -400,7 +401,7 @@ function MonthlyReviewsTab() {
         return s.length > 100 ? s.slice(0, 100) + '...' : s;
       },
     },
-    { key: 'created_at', title: '生成时间', render: (v) => String(v).replace('T', ' ').slice(0, 19) },
+    { key: 'created_at', title: '生成时间', render: (v) => formatTimestamp(v) },
   ];
 
   if (error) return <ErrorState message={error} onRetry={() => window.location.reload()} />;
@@ -451,7 +452,7 @@ function SettlementsTab() {
         return <span className="fqp-mono" style={{ color }}>{val >= 0 ? '+' : ''}{val.toFixed(2)}</span>;
       },
     },
-    { key: 'settle_time', title: '结算时间', render: (v) => String(v).replace('T', ' ').slice(0, 19) },
+    { key: 'settle_time', title: '结算时间', render: (v) => formatTimestamp(v) },
   ];
 
   if (error) return <ErrorState message={error} onRetry={() => window.location.reload()} />;
@@ -536,7 +537,7 @@ function ErrorAnalysisTab() {
     { key: 'error_level', title: '严重度', render: (v) => <StatusBadge status={v === 'high' ? 'error' : v === 'medium' ? 'warning' : 'info'} label={String(v)} /> },
     { key: 'root_cause', title: '根因', render: (v) => <span style={{ maxWidth: '300px', display: 'inline-block', overflow: 'hidden', textOverflow: 'ellipsis' }}>{String(v)}</span> },
     { key: 'actual_result', title: '实际赛果', width: '80px', render: (v) => <span className="fqp-mono">{String(v)}</span> },
-    { key: 'created_at', title: '时间', render: (v) => String(v).replace('T', ' ').slice(0, 19) },
+    { key: 'created_at', title: '时间', render: (v) => formatTimestamp(v) },
   ];
 
   if (err) return <ErrorState message={err} onRetry={() => window.location.reload()} />;

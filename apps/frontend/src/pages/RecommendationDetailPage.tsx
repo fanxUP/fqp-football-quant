@@ -9,6 +9,7 @@ import ErrorState from '../shared/components/ErrorState';
 import StatusBadge from '../shared/components/StatusBadge';
 import EmptyState from '../shared/components/EmptyState';
 import { passTypeLabel, statusLabel, riskLabel } from '../shared/constants';
+import { formatTimestamp } from '../shared/utils';
 
 interface RecommendationDetailPageProps {
   ticketId: number;
@@ -125,7 +126,7 @@ export default function RecommendationDetailPage({ ticketId }: RecommendationDet
       <Card entranceDelay={200}>
         <div style={{ fontSize: '13px', color: 'var(--fqp-text-muted)' }}>
           <div className="fqp-label">创建时间</div>
-          <div>{ticket.created_at.replace('T', ' ').slice(0, 19)}</div>
+          <div>{formatTimestamp(ticket.created_at)}</div>
           <div style={{ marginTop: '16px', padding: '12px', background: 'var(--fqp-panel)', borderRadius: 'var(--fqp-radius-sm)' }}>
             ⚠️ 明细项（各场次的具体选项与赔率）需要后端提供 <code>/api/tickets/{'{id}'}/items</code> 端点。
             当前后端仅有列表端点。联系 Codex Agent 补充该端点后即可显示完整明细。

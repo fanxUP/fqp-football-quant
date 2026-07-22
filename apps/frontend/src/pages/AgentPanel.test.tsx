@@ -17,7 +17,7 @@ function mockFetch() {
       return { json: async () => ({ gates: [{ id: 1, task_code: 'RISK-001', task_title: '推荐审核', reason: 'L4', reviewer: null, review_status: 'pending', created_at: '2026-07-10T10:00:00' }], total: 1 }) } as Response;
     }
     if (url.includes('/api/agent-scheduler-status')) {
-      return { json: async () => ({ scheduler: { running: true, heartbeat_at: '2026-07-10T10:00:00', pid: 123, pid_alive: true } }) } as Response;
+      return { json: async () => ({ scheduler: { running: true, heartbeat_at: '2026-07-10T10:00:00+08:00', pid: 123, pid_alive: true } }) } as Response;
     }
     if (url.includes('/api/agent-stale-tasks')) {
       return { json: async () => ({ tasks: [{ id: 7, task_code: 'TEST-001', task_title: 'Test task', owner_agent: 'qa_agent', status: 'in_progress', started_at: '2026-07-02T10:00:00', updated_at: '2026-07-02T10:05:00', stale_minutes: 20160.5 }], total: 1 }) } as Response;
