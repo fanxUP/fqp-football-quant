@@ -73,6 +73,8 @@ class TestPredictionsEndpoint:
         assert "current_odds.sp_value" in sql
         assert "AS market_probability" in sql
         assert "official_markets" in sql
+        assert "observation_fallback" in sql
+        assert "training_observation" in sql
         normalized = " ".join(sql.split())
         assert (
             "(st.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Shanghai')::date "
@@ -113,8 +115,8 @@ class TestPredictionsEndpoint:
                 6.30,
                 datetime(2026, 7, 22, 12, 20),
                 92.0,
-                "agent_competition_observation",
-                "high",
+                "agent_value",
+                "medium",
             )
         ]
 
@@ -135,8 +137,8 @@ class TestPredictionsEndpoint:
         assert recommendation["market_edge"] == 0.3714
         assert recommendation["data_completeness"] == 92.0
         assert recommendation["model_independent"] is True
-        assert recommendation["strategy_pool"] == "agent_competition_observation"
-        assert recommendation["risk_level"] == "high"
+        assert recommendation["strategy_pool"] == "agent_value"
+        assert recommendation["risk_level"] == "medium"
 
     def test_returns_empty_when_no_predictions(self, client):
         mock_conn = MagicMock()

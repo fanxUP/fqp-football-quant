@@ -20,7 +20,11 @@ import {
   selectionKey,
   toCalculateItems,
 } from '../features/betting-terminal/model';
-import { RecommendationPanel, TicketPreview } from '../features/betting-terminal/WorkbenchPanels';
+import {
+  RecommendationPanel,
+  TicketPreview,
+  isObservationOnlyRecommendation,
+} from '../features/betting-terminal/WorkbenchPanels';
 import { useToast } from '../shared/components/Toast';
 import '../features/betting-terminal/SportteryBettingTerminal.css';
 
@@ -211,6 +215,10 @@ export default function BettingTerminalPage() {
   };
 
   const addRecommendation = (recommendation: LiveRecommendation) => {
+    if (isObservationOnlyRecommendation(recommendation)) {
+      toast.warning('Agent 观察票仅用于竞赛与复盘，不能加入真实用户投注器。');
+      return;
+    }
     const playType = recommendation.play_type as SportteryPlayType;
     const match = matches.find((item) => item.match_id === recommendation.match_id);
     const market = PLAY_TYPES.includes(playType) ? match?.odds[playType] : undefined;

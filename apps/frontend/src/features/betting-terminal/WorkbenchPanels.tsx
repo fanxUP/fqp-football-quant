@@ -26,6 +26,11 @@ function percent(value: number): string {
   return `${(value * 100).toFixed(1)}%`;
 }
 
+export function isObservationOnlyRecommendation(recommendation: LiveRecommendation): boolean {
+  return recommendation.strategy_pool === 'agent_competition_observation'
+    || recommendation.strategy_pool?.startsWith('agent_training_') === true;
+}
+
 export function RecommendationPanel(props: RecommendationPanelProps) {
   return (
     <aside className="betting-recommendations" aria-label="推荐投注">
@@ -42,6 +47,12 @@ export function RecommendationPanel(props: RecommendationPanelProps) {
         <div className="betting-recommendation-list">
           {props.recommendations.map((recommendation) => {
             const available = props.availableRecommendationIds.has(recommendation.prediction_id);
+            const observationOnly = isObservationOnlyRecommendation(recommendation);
+            const actionTitle = observationOnly
+              ? '观察票不进入真实用户投注器'
+              : available
+                ? '使用当前官方固定奖金加入投注器'
+                : '当前官方投注器没有对应的可售选项';
             return (
               <article key={recommendation.prediction_id} className="betting-recommendation-card">
                 <div className="betting-recommendation-head">
@@ -52,7 +63,7 @@ export function RecommendationPanel(props: RecommendationPanelProps) {
                   <span>{recommendation.play_type_name}</span>
                   <strong>{recommendation.option_name} @{recommendation.sp_value.toFixed(2)}</strong>
                 </div>
-                {recommendation.strategy_pool === 'agent_competition_observation' && (
+                {observationOnly && (
                   <div className="betting-recommendation-alert">高风险观察票 · 仅用于 Agent 竞赛与复盘</div>
                 )}
                 <div className="betting-recommendation-metrics">
@@ -66,11 +77,11 @@ export function RecommendationPanel(props: RecommendationPanelProps) {
                 <button
                   type="button"
                   className="fqp-btn fqp-btn-primary"
-                  disabled={!available}
-                  title={available ? '使用当前官方固定奖金加入投注器' : '当前官方投注器没有对应的可售选项'}
+                  disabled={!available || observationOnly}
+                  title={actionTitle}
                   onClick={() => props.onAdd(recommendation)}
                 >
-                  {available ? `加入 ${recommendation.option_name}` : '当前不可投'}
+                  {observationOnly ? '仅供观察' : available ? `加入 ${recommendation.option_name}` : '当前不可投'}
                 </button>
               </article>
             );

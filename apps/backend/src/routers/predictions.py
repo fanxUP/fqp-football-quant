@@ -154,6 +154,13 @@ def get_live_recommendations(
                            AT TIME ZONE 'Asia/Shanghai')::date
                           = timezone('Asia/Shanghai', NOW())::date
                       AND st.ticket_status IN ('generated', 'activated', 'purchased')
+                      AND st.strategy_pool <> 'agent_competition_observation'
+                      AND st.strategy_pool NOT LIKE 'agent_training_%'
+                      AND COALESCE(st.ticket_type, '') <> 'training_observation'
+                      AND COALESCE(
+                          (st.rule_metadata->>'observation_fallback')::boolean,
+                          false
+                      ) = false
                       AND mp.odds_snapshot_id IS NOT NULL
                       AND mp.feature_snapshot_id IS NOT NULL
                       AND mp.validation_status = 'valid'

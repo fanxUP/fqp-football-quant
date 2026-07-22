@@ -123,8 +123,8 @@ const recommendation: LiveRecommendation = {
   data_completeness: 94,
   validation_status: 'valid',
   model_independent: true,
-  strategy_pool: 'agent_competition_observation',
-  risk_level: 'high',
+  strategy_pool: 'agent_value',
+  risk_level: 'medium',
   predict_time: '2026-07-12T09:00:00',
   model_name: 'xgb-main',
   home_team: firstMatch.home_team_name,
@@ -228,7 +228,6 @@ describe('BettingTerminalPage desktop workbench', () => {
     render(<BettingTerminalPage />);
 
     const recommendationPanel = await screen.findByLabelText('推荐投注');
-    expect(within(recommendationPanel).getByText('高风险观察票 · 仅用于 Agent 竞赛与复盘')).toBeInTheDocument();
     const widgetPanel = screen.getByLabelText('投注器');
     const previewPanel = screen.getByLabelText('票面预览');
     const terminal = within(widgetPanel).getByRole('region', { name: '竞彩足球模拟试玩投注器' });
@@ -257,6 +256,25 @@ describe('BettingTerminalPage desktop workbench', () => {
     const recommendationPanel = await screen.findByLabelText('推荐投注');
     expect(within(recommendationPanel).getByText('主胜 @2.04')).toBeInTheDocument();
     expect(within(recommendationPanel).queryByText('主胜 @1.61')).not.toBeInTheDocument();
+  });
+
+  it('never allows an Agent observation ticket to enter the real-user betting slip', async () => {
+    apiMocks.recommendations.mockResolvedValue({
+      recommendations: [{
+        ...recommendation,
+        strategy_pool: 'agent_competition_observation',
+        risk_level: 'high',
+      }],
+      total: 1,
+      status: 'ok',
+    });
+
+    render(<BettingTerminalPage />);
+
+    const recommendationPanel = await screen.findByLabelText('推荐投注');
+    expect(within(recommendationPanel).getByText('高风险观察票 · 仅用于 Agent 竞赛与复盘')).toBeInTheDocument();
+    expect(within(recommendationPanel).getByRole('button', { name: '仅供观察' })).toBeDisabled();
+    expect(screen.getByLabelText('票面预览')).toHaveTextContent('等待投注器生成票面');
   });
 
   it('matches model 3/1/0 recommendation codes to official h/d/a options', async () => {
