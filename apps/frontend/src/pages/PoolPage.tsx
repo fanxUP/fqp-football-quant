@@ -1,12 +1,12 @@
 import { useEffect, useState, useRef } from 'react';
 import { api } from '../core/apiClient';
-import { ApiError } from '../core/types';
+import { ApiError, type PoolAnalysis } from '../core/types';
 import Card from '../shared/components/Card';
 import StatusBadge from '../shared/components/StatusBadge';
 import LoadingSpinner from '../shared/components/LoadingSpinner';
 import ErrorState from '../shared/components/ErrorState';
 import PageHeader from '../shared/components/PageHeader';
-import DisclaimerBanner from '../shared/components/DisclaimerBanner';
+import TeamName from '../shared/components/TeamName';
 
 // Count-up animation hook
 function useCountUp(target: number, duration = 800) {
@@ -26,61 +26,6 @@ function useCountUp(target: number, duration = 800) {
     return () => cancelAnimationFrame(rafId);
   }, [target, duration]);
   return val;
-}
-
-interface PoolMatch {
-  index: number;
-  match_id: number | null;
-  home_team: string;
-  away_team: string;
-  league: string;
-  match_date: string;
-  prob_home: number;
-  prob_draw: number;
-  prob_away: number;
-  max_prob_option: string;
-  max_prob: number;
-  cold_gate_index: number;
-  uncertainty: number;
-  data_quality: number;
-  classification: string;
-  entropy: number;
-}
-
-interface PoolClassification {
-  dan: string[];
-  tuo: string[];
-  defense: string[];
-}
-
-interface PoolCombination {
-  selections: string[];
-  estimated_hit_prob: number;
-  cold_gate_coverage: number;
-}
-
-interface PoolAnalysis {
-  period_id: string;
-  matches: PoolMatch[];
-  classification: PoolClassification;
-  full_combinations: {
-    count: number;
-    total_cost: number;
-    combinations: PoolCombination[];
-  };
-  rx9: {
-    selected_matches: string[];
-    combinations_count: number;
-    total_cost: number;
-  };
-  monte_carlo: {
-    hit14_prob: number;
-    hit13_prob: number;
-    rx9_prob: number;
-    simulations: number;
-  };
-  warnings: string[];
-  generated_at: string;
 }
 
 const CLASS_LABELS: Record<string, string> = {
@@ -105,12 +50,17 @@ export default function PoolPage() {
   const [strategy, setStrategy] = useState<'balanced' | 'conservative' | 'aggressive'>('balanced');
   const [activeTab, setActiveTab] = useState<'14场' | '任九' | '分析'>('14场');
 
+  const isDataPending = error !== null && (error.includes('模型预测') || error.includes('官方14场彩池'));
+  const dataPendingMessage = error?.includes('模型预测')
+    ? `${error}。官方赔率和预测数据齐全后会自动生成方案。`
+    : '官方彩池已经更新，正在等待完整赔率和预测数据。数据齐全后会自动生成方案。';
+
   const loadAnalysis = async () => {
     setLoading(true);
     setError(null);
     try {
-      const data = await api.pool.sample();
-      setAnalysis(data as unknown as PoolAnalysis);
+      const data = await api.pool.analyze({ budget, strategy });
+      setAnalysis(data);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : '加载失败');
     } finally {
@@ -136,13 +86,7 @@ export default function PoolPage() {
     <div>
       <PageHeader
         title="传统足彩 14场/任九"
-        lastUpdated={analysis?.generated_at || '加载中...'}
-      />
-
-      {/* Compliance disclaimer */}
-      <DisclaimerBanner
-        text="本页为传统足彩概率模型研究工具，不构成投注建议。所有概率基于数学模型估计，不等于实际结果。请通过合法合规体彩实体店自行购买。"
-        type="page"
+        lastUpdated={loading ? '加载中…' : analysis?.generated_at || '暂无可用分析'}
       />
 
       {/* Controls */}
@@ -209,10 +153,64 @@ export default function PoolPage() {
       </Card>
 
       {loading && <LoadingSpinner text="正在运行蒙特卡洛模拟..." size="lg" />}
-      {error && <ErrorState message={error} onRetry={loadAnalysis} />}
+      {error && isDataPending && (
+        <div
+          role="status"
+          style={{
+            padding: '24px',
+            marginBottom: '20px',
+            background: 'rgba(252, 186, 3, 0.08)',
+            border: '1px solid rgba(252, 186, 3, 0.28)',
+            borderRadius: '8px',
+          }}
+        >
+          <div style={{ fontSize: '16px', fontWeight: 600, color: 'var(--fqp-warning)' }}>
+            推荐方案准备中
+          </div>
+          <div style={{ marginTop: '8px', color: 'var(--fqp-text-muted)', fontSize: '13px', lineHeight: 1.6 }}>
+            {dataPendingMessage}
+          </div>
+          <button className="fqp-btn fqp-btn-secondary" onClick={loadAnalysis} style={{ marginTop: '16px' }}>
+            刷新数据
+          </button>
+        </div>
+      )}
+      {error && !isDataPending && <ErrorState message={error} onRetry={loadAnalysis} />}
 
       {analysis && !loading && (
         <>
+          <div
+            role="status"
+            style={{
+              padding: '14px 18px',
+              marginBottom: '20px',
+              background: analysis.analysis_mode === 'historical'
+                ? 'rgba(252, 186, 3, 0.08)'
+                : 'rgba(34, 197, 94, 0.08)',
+              border: `1px solid ${analysis.analysis_mode === 'historical'
+                ? 'rgba(252, 186, 3, 0.3)'
+                : 'rgba(34, 197, 94, 0.3)'}`,
+              borderRadius: '8px',
+            }}
+          >
+            <div
+              style={{
+                fontSize: '15px',
+                fontWeight: 700,
+                color: analysis.analysis_mode === 'historical'
+                  ? 'var(--fqp-warning)'
+                  : 'var(--fqp-success)',
+              }}
+            >
+              {analysis.analysis_mode === 'historical' ? '历史期次复盘' : '当前在售期次'}
+            </div>
+            <div style={{ marginTop: '5px', color: 'var(--fqp-text-muted)', fontSize: '13px', lineHeight: 1.6 }}>
+              {analysis.analysis_mode === 'historical'
+                ? `第 ${analysis.issue.issue_no} 期已停售，本页仅用于检验模型与组合逻辑，不是当前投注推荐。`
+                : `第 ${analysis.issue.issue_no} 期正在销售，方案基于当前官方期次数据生成。`}
+            </div>
+          </div>
+
           {/* Monte Carlo summary cards — staggered entrance */}
           <div className="fqp-grid-4" style={{ marginBottom: '20px' }}>
             <Card title="命中14场概率" entranceDelay={0}>
@@ -300,7 +298,7 @@ export default function PoolPage() {
             ))}
           </div>
 
-          <Card style={{ borderTopLeftRadius: activeTab === '14场' ? '0' : undefined }}>
+          <Card style={activeTab === '14场' ? { borderTopLeftRadius: '0' } : undefined}>
             {/* Tab content with transition */}
             <div key={activeTab} className="fqp-anim-fadeIn">
             {/* 14场 tab */}
@@ -332,7 +330,7 @@ export default function PoolPage() {
                         <th style={{ padding: '10px 8px', textAlign: 'center', color: 'var(--fqp-text-muted)', fontWeight: 400, fontSize: '11px' }}>联赛</th>
                         <th style={{ padding: '10px 8px', textAlign: 'center', color: 'var(--fqp-text-muted)', fontWeight: 400, fontSize: '11px' }}>主胜</th>
                         <th style={{ padding: '10px 8px', textAlign: 'center', color: 'var(--fqp-text-muted)', fontWeight: 400, fontSize: '11px' }}>平局</th>
-                        <th style={{ padding: '10px 8px', textAlign: 'center', color: 'var(--fqp-text-muted)', fontWeight: 400, fontSize: '11px' }}>客胜</th>
+                        <th style={{ padding: '10px 8px', textAlign: 'center', color: 'var(--fqp-text-muted)', fontWeight: 400, fontSize: '11px' }}>主负</th>
                         <th style={{ padding: '10px 8px', textAlign: 'center', color: 'var(--fqp-text-muted)', fontWeight: 400, fontSize: '11px' }}>首选</th>
                         <th style={{ padding: '10px 8px', textAlign: 'center', color: 'var(--fqp-text-muted)', fontWeight: 400, fontSize: '11px' }}>冷门指数</th>
                         <th style={{ padding: '10px 8px', textAlign: 'center', color: 'var(--fqp-text-muted)', fontWeight: 400, fontSize: '11px' }}>分类</th>
@@ -344,8 +342,8 @@ export default function PoolPage() {
                           key={i}
                           className="fqp-anim-listItemEnter"
                           style={{
-                            borderBottom: '1px solid rgba(39,39,42,0.3)',
-                            background: i % 2 === 0 ? 'transparent' : 'rgba(39,39,42,0.2)',
+                            borderBottom: '1px solid var(--fqp-border-light)',
+                            background: i % 2 === 0 ? 'transparent' : 'var(--fqp-border-light)',
                             animationDelay: `${i * 40}ms`,
                           }}
                         >
@@ -353,8 +351,10 @@ export default function PoolPage() {
                             {i + 1}
                           </td>
                           <td style={{ padding: '10px 8px' }}>
-                            <div style={{ fontWeight: 600 }}>{m.home_team}</div>
-                            <div style={{ fontSize: '11px', color: 'var(--fqp-text-muted)' }}>vs {m.away_team}</div>
+                            <TeamName name={m.home_team} style={{ fontWeight: 600 }} />
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '11px', color: 'var(--fqp-text-muted)' }}>
+                              <span>vs</span><TeamName name={m.away_team} size={16} />
+                            </div>
                           </td>
                           <td style={{ padding: '10px 8px', textAlign: 'center', fontSize: '12px', color: 'var(--fqp-text-muted)' }}>
                             {m.league}
@@ -449,7 +449,7 @@ export default function PoolPage() {
                         </thead>
                         <tbody>
                           {analysis.full_combinations.combinations.slice(0, 10).map((c, i) => (
-                            <tr key={i} style={{ borderBottom: '1px solid rgba(39,39,42,0.2)' }}>
+                            <tr key={i} style={{ borderBottom: '1px solid var(--fqp-border-light)' }}>
                               <td style={{ padding: '8px', color: 'var(--fqp-text-muted)' }}>{i + 1}</td>
                               <td style={{ padding: '8px', fontFamily: 'monospace', letterSpacing: '4px' }}>
                                 {c.selections.join(' ')}

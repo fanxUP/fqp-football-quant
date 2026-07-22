@@ -6,6 +6,58 @@
 -- Safe to run on fresh databases (all statements use IF NOT EXISTS / IF EXISTS).
 
 -- -------------------------------------------------------------------
+-- Training ticket provenance and official-rule evidence.
+-- -------------------------------------------------------------------
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'simulation_tickets') THEN
+        ALTER TABLE simulation_tickets ADD COLUMN IF NOT EXISTS bet_count INT DEFAULT 1;
+        ALTER TABLE simulation_tickets ADD COLUMN IF NOT EXISTS rule_metadata JSONB DEFAULT '{}'::jsonb;
+    END IF;
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'simulation_ticket_items') THEN
+        ALTER TABLE simulation_ticket_items ADD COLUMN IF NOT EXISTS odds_source VARCHAR(32) DEFAULT 'official';
+    END IF;
+END $$;
+
+-- -------------------------------------------------------------------
+-- model_versions: API consumers use the explicit training-window names.
+-- Older local databases only have training_start_date/training_end_date.
+-- -------------------------------------------------------------------
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM information_schema.tables
+        WHERE table_name = 'model_versions'
+    ) THEN
+        ALTER TABLE model_versions ADD COLUMN IF NOT EXISTS training_window_start DATE;
+        ALTER TABLE model_versions ADD COLUMN IF NOT EXISTS training_window_end DATE;
+        UPDATE model_versions
+        SET training_window_start = training_start_date
+        WHERE training_window_start IS NULL;
+        UPDATE model_versions
+        SET training_window_end = training_end_date
+        WHERE training_window_end IS NULL;
+    END IF;
+END $$;
+
+-- -------------------------------------------------------------------
+-- football_pool_issues: crawler audit columns added after the original
+-- pool schema was deployed.  The collector stores an append-safe raw
+-- payload hash and JSON snapshot, so existing local databases need these
+-- columns before traditional pool collection can run.
+-- -------------------------------------------------------------------
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM information_schema.tables
+        WHERE table_name = 'football_pool_issues'
+    ) THEN
+        ALTER TABLE football_pool_issues ADD COLUMN IF NOT EXISTS raw_hash VARCHAR(128);
+        ALTER TABLE football_pool_issues ADD COLUMN IF NOT EXISTS raw_json JSONB;
+    END IF;
+END $$;
+
+-- -------------------------------------------------------------------
 -- teams: if 02's version exists (has name_cn instead of team_name_cn),
 -- migrate to 08's definition
 -- -------------------------------------------------------------------

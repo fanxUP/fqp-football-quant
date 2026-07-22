@@ -13,8 +13,11 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import datetime
+import re
+from datetime import UTC, date, datetime
 from typing import Any
+
+OFFICIAL_MATCH_CODE_RE = re.compile(r"^周[一二三四五六日]\d{3}$")
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -27,7 +30,25 @@ def _hash_raw(raw: Any) -> str:
 
 
 def _now() -> str:
-    return datetime.now().isoformat(timespec="seconds")
+    return datetime.now(UTC).replace(tzinfo=None).isoformat(timespec="seconds")
+
+
+def _event_season_targets(conn: Any) -> dict[str, tuple[date, date]]:
+    """Load the active event-center season gate; an empty table disables it."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT league_name, season_start_date, season_end_date
+            FROM official_event_season_targets
+            """
+        )
+        return {
+            str(row[0]): (
+                row[1] if isinstance(row[1], date) else date.fromisoformat(str(row[1])),
+                row[2] if isinstance(row[2], date) else date.fromisoformat(str(row[2])),
+            )
+            for row in cur.fetchall()
+        }
 
 
 # ---------------------------------------------------------------------------
@@ -44,18 +65,69 @@ def store_matches(conn: Any, matches: list[dict]) -> dict[str, Any]:
 
     Unique key: (business_date, official_match_code)
     """
-    inserted, updated, errors = 0, 0, []
+    inserted, updated = 0, 0
+    errors: list[dict[str, Any]] = []
+    valid_matches: list[dict] = []
+    for match in matches:
+        match_code = str(match.get("official_match_code") or "").strip()
+        raw = match.get("raw_json", {})
+        source_match_id = str(match.get("source_match_id") or raw.get("matchId") or "").strip()
+        if not OFFICIAL_MATCH_CODE_RE.fullmatch(match_code):
+            errors.append(
+                {
+                    "match_code": match_code,
+                    "error": "missing or invalid Sporttery match code",
+                }
+            )
+            continue
+        if not source_match_id:
+            errors.append(
+                {
+                    "match_code": match_code,
+                    "error": "missing Sporttery matchId",
+                }
+            )
+            continue
+        valid_matches.append(match)
+
+    if not valid_matches:
+        return {"inserted": 0, "updated": 0, "errors": errors}
+
+    season_targets = _event_season_targets(conn)
+    if season_targets:
+        season_valid: list[dict] = []
+        for match in valid_matches:
+            raw_date = match["business_date"]
+            business_date = (
+                raw_date if isinstance(raw_date, date) else date.fromisoformat(str(raw_date))
+            )
+            target = season_targets.get(str(match.get("league_name") or ""))
+            if target is None or not target[0] <= business_date <= target[1]:
+                errors.append(
+                    {
+                        "match_code": str(match["official_match_code"]),
+                        "error": "outside selected event season",
+                    }
+                )
+                continue
+            season_valid.append(match)
+        valid_matches = season_valid
+
+    if not valid_matches:
+        return {"inserted": 0, "updated": 0, "errors": errors}
+
     sql = """
         INSERT INTO official_matches (
-            sport_type, business_date, official_match_code, league_name,
+            sport_type, business_date, official_match_code, source_match_id, league_name,
             home_team_name, away_team_name, kickoff_time, sale_stop_time,
             sale_status, match_status, source_url, raw_hash, raw_json, updated_at
         ) VALUES (
-            %(sport_type)s, %(business_date)s, %(official_match_code)s, %(league_name)s,
+            %(sport_type)s, %(business_date)s, %(official_match_code)s, %(source_match_id)s, %(league_name)s,
             %(home_team_name)s, %(away_team_name)s, %(kickoff_time)s, %(sale_stop_time)s,
             %(sale_status)s, %(match_status)s, %(source_url)s, %(raw_hash)s, %(raw_json)s, now()
         )
         ON CONFLICT (business_date, official_match_code) DO UPDATE SET
+            source_match_id = COALESCE(EXCLUDED.source_match_id, official_matches.source_match_id),
             league_name = EXCLUDED.league_name,
             home_team_name = EXCLUDED.home_team_name,
             away_team_name = EXCLUDED.away_team_name,
@@ -70,26 +142,30 @@ def store_matches(conn: Any, matches: list[dict]) -> dict[str, Any]:
         RETURNING id, (xmax = 0) AS is_inserted
     """
     with conn.cursor() as cur:
-        for m in matches:
+        for m in valid_matches:
             try:
                 raw = m.get("raw_json", {})
+                params: dict[str, Any] = {
+                    "sport_type": m.get("sport_type", "football"),
+                    "business_date": m["business_date"],
+                    "official_match_code": m["official_match_code"],
+                    "source_match_id": m.get("source_match_id")
+                    or str(raw.get("matchId") or "").strip()
+                    or None,
+                    "league_name": m["league_name"],
+                    "home_team_name": m["home_team_name"],
+                    "away_team_name": m["away_team_name"],
+                    "kickoff_time": m.get("kickoff_time"),
+                    "sale_stop_time": m.get("sale_stop_time"),
+                    "sale_status": m.get("sale_status", "unknown"),
+                    "match_status": m.get("match_status", "scheduled"),
+                    "source_url": m.get("source_url", ""),
+                    "raw_hash": _hash_raw(raw),
+                    "raw_json": json.dumps(raw, ensure_ascii=False),
+                }
                 cur.execute(
                     sql,
-                    {
-                        "sport_type": m.get("sport_type", "football"),
-                        "business_date": m["business_date"],
-                        "official_match_code": m["official_match_code"],
-                        "league_name": m["league_name"],
-                        "home_team_name": m["home_team_name"],
-                        "away_team_name": m["away_team_name"],
-                        "kickoff_time": m.get("kickoff_time"),
-                        "sale_stop_time": m.get("sale_stop_time"),
-                        "sale_status": m.get("sale_status", "unknown"),
-                        "match_status": m.get("match_status", "scheduled"),
-                        "source_url": m.get("source_url", ""),
-                        "raw_hash": _hash_raw(raw),
-                        "raw_json": json.dumps(raw, ensure_ascii=False),
-                    },
+                    params,
                 )
                 row = cur.fetchone()
                 if row and row[1]:
@@ -303,8 +379,9 @@ def store_results(conn: Any, results: list[dict]) -> dict[str, Any]:
             cur.execute(
                 """
                 UPDATE official_matches
-                SET match_status = 'Settled', updated_at = now()
-                WHERE id = ANY(%s) AND match_status != 'Settled'
+                SET match_status = 'Settled', sale_status = 'closed', updated_at = now()
+                WHERE id = ANY(%s)
+                  AND (match_status != 'Settled' OR sale_status IS DISTINCT FROM 'closed')
                 """,
                 (settled_ids,),
             )
@@ -448,6 +525,79 @@ def update_health(
 
 
 # ---------------------------------------------------------------------------
+# official_collection_status
+# ---------------------------------------------------------------------------
+
+
+def record_official_collection_status(
+    conn: Any,
+    business_date: str,
+    crawl_type: str,
+    source_name: str,
+    status: str,
+    source_url: str | None = None,
+    source_artifact_path: str | None = None,
+    source_artifact_hash: str | None = None,
+    http_status: int | None = None,
+    records_found: int = 0,
+    records_inserted: int = 0,
+    records_updated: int = 0,
+    error_message: str | None = None,
+    raw_json: dict | None = None,
+) -> int:
+    """Record one official-source collection attempt or known gap."""
+    sql = """
+        INSERT INTO official_collection_status (
+            business_date, crawl_type, source_name, status,
+            source_url, source_artifact_path, source_artifact_hash, http_status,
+            records_found, records_inserted, records_updated,
+            error_message, raw_json, created_at, updated_at
+        ) VALUES (
+            %(business_date)s, %(crawl_type)s, %(source_name)s, %(status)s,
+            %(source_url)s, %(source_artifact_path)s, %(source_artifact_hash)s, %(http_status)s,
+            %(records_found)s, %(records_inserted)s, %(records_updated)s,
+            %(error_message)s, %(raw_json)s, now(), now()
+        )
+        ON CONFLICT (
+            business_date, crawl_type, source_name, COALESCE(source_artifact_hash, '')
+        ) DO UPDATE SET
+            status = EXCLUDED.status,
+            source_url = EXCLUDED.source_url,
+            source_artifact_path = EXCLUDED.source_artifact_path,
+            http_status = EXCLUDED.http_status,
+            records_found = EXCLUDED.records_found,
+            records_inserted = EXCLUDED.records_inserted,
+            records_updated = EXCLUDED.records_updated,
+            error_message = EXCLUDED.error_message,
+            raw_json = EXCLUDED.raw_json,
+            updated_at = now()
+        RETURNING id
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            sql,
+            {
+                "business_date": business_date,
+                "crawl_type": crawl_type,
+                "source_name": source_name,
+                "status": status,
+                "source_url": source_url,
+                "source_artifact_path": source_artifact_path,
+                "source_artifact_hash": source_artifact_hash,
+                "http_status": http_status,
+                "records_found": records_found,
+                "records_inserted": records_inserted,
+                "records_updated": records_updated,
+                "error_message": error_message,
+                "raw_json": json.dumps(raw_json or {}, ensure_ascii=False),
+            },
+        )
+        row = cur.fetchone()
+    conn.commit()
+    return row[0] if row else -1
+
+
+# ---------------------------------------------------------------------------
 # football_pool_issues + football_pool_issue_matches
 # ---------------------------------------------------------------------------
 
@@ -484,10 +634,16 @@ def store_pool_issue(
             RETURNING id
             """,
             (
-                issue_no, game_type, sale_start, sale_stop,
-                total_matches, official_status, raw_hash,
-                json.dumps(raw_json, ensure_ascii=False) if raw_json else '{}',
-                now_ts, now_ts,
+                issue_no,
+                game_type,
+                sale_start,
+                sale_stop,
+                total_matches,
+                official_status,
+                raw_hash,
+                json.dumps(raw_json, ensure_ascii=False) if raw_json else "{}",
+                now_ts,
+                now_ts,
             ),
         )
         row = cur.fetchone()
@@ -518,7 +674,22 @@ def store_pool_issue_matches(
                          home_win_prob, draw_prob, away_win_prob,
                          upset_score, public_heat_home, public_heat_draw,
                          public_heat_away, created_at)
-                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,now())
+                    VALUES (
+                        %s,%s,
+                        COALESCE(
+                            %s,
+                            (
+                                SELECT official.id
+                                FROM official_matches official
+                                WHERE official.home_team_name = %s
+                                  AND official.away_team_name = %s
+                                  AND official.kickoff_time::date = %s::timestamp::date
+                                ORDER BY official.id DESC
+                                LIMIT 1
+                            )
+                        ),
+                        %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,now()
+                    )
                     ON CONFLICT (issue_id, match_order) DO UPDATE SET
                         match_id = EXCLUDED.match_id,
                         league_name = EXCLUDED.league_name,
@@ -534,6 +705,9 @@ def store_pool_issue_matches(
                         issue_id,
                         m.get("match_order"),
                         m.get("match_id"),
+                        m.get("home_team_name"),
+                        m.get("away_team_name"),
+                        m.get("kickoff_time"),
                         m.get("league_name"),
                         m.get("home_team_name"),
                         m.get("away_team_name"),

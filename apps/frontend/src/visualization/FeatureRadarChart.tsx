@@ -1,9 +1,11 @@
 /** Multi-dimensional radar chart for match features / risk assessment. */
 
 import { useMemo } from 'react';
+import type { EChartsOption } from 'echarts';
 import ChartCard from '../shared/components/ChartCard';
 import { applyChartTheme, CHART_COLORS } from './chartTheme';
 import type { RadarDimension } from './chartTypes';
+import { useTheme } from '../app/ThemeContext';
 
 interface FeatureRadarChartProps {
   data: RadarDimension[];
@@ -24,6 +26,7 @@ export default function FeatureRadarChart({
   emptyReason,
   name = '当前比赛',
 }: FeatureRadarChartProps) {
+  const { theme } = useTheme();
   const option = useMemo(() => {
     if (!data.length) return null;
     const maxVal = Math.max(...data.map((d) => d.maxValue ?? 1), 1);
@@ -43,7 +46,7 @@ export default function FeatureRadarChart({
         },
         splitArea: {
           areaStyle: {
-            color: ['rgba(255,42,61,0.02)', 'rgba(255,42,61,0.04)'],
+            color: ['transparent', CHART_COLORS.areaDown],
           },
         },
         axisLine: {
@@ -60,15 +63,15 @@ export default function FeatureRadarChart({
             {
               value: data.map((d) => d.value),
               name,
-              areaStyle: { color: 'rgba(255,42,61,0.15)' },
+              areaStyle: { color: CHART_COLORS.areaDown },
               lineStyle: { color: CHART_COLORS.primary, width: 2 },
               itemStyle: { color: CHART_COLORS.primary },
             },
           ],
         },
       ],
-    } as echarts.EChartsOption);
-  }, [data, name]);
+    } as EChartsOption);
+  }, [data, name, theme]);
 
   return (
     <ChartCard

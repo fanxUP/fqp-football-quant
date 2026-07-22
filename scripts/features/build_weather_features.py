@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import os
 from datetime import datetime
 from typing import Any
 
@@ -124,7 +125,15 @@ def build_weather_for_match(
     try:
         if client is None:
             raise RuntimeError("OpenMeteoClient is not available")
-        weather_data = client.get_forecast(lat, lon, kickoff_str)
+        # official_matches.kickoff_time is stored as a naive business-time value.
+        # Ask Open-Meteo to return the hourly series in that same timezone so
+        # European/American venues are not sampled several hours off kickoff.
+        weather_data = client.get_forecast(
+            lat,
+            lon,
+            kickoff_str,
+            timezone=os.getenv("FQP_TIMEZONE", "Asia/Shanghai"),
+        )
     except Exception as e:
         print(f"[weather] OpenMeteo failed for match {match_id}: {e}")
         if own_client and client:

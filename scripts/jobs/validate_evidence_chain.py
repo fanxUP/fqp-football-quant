@@ -15,11 +15,26 @@ from datetime import datetime
 from typing import Any
 
 from apps.backend.src.db import get_db
+from scripts.agents.task_queue import finish_tracked_job, start_tracked_job
+from scripts.business_time import business_now, utc_now_iso
 from scripts.ops_storage import store_evidence_chain_audit
 
 
-def _now() -> str:
-    return datetime.now().isoformat(timespec="seconds")
+def _now(value: datetime | None = None) -> str:
+    return utc_now_iso(value)
+
+
+def _business_snapshot_age_seconds(
+    snapshot_time: datetime | str, now: datetime | None = None
+) -> int:
+    """Compare a business-local snapshot against the Asia/Shanghai clock."""
+    snapshot = (
+        datetime.fromisoformat(snapshot_time) if isinstance(snapshot_time, str) else snapshot_time
+    )
+    if snapshot.tzinfo is not None:
+        snapshot = business_now(snapshot).replace(tzinfo=None)
+    current = business_now(now).replace(tzinfo=None)
+    return int((current - snapshot).total_seconds())
 
 
 def _get_recent_ticket_items(conn: Any, days: int = 7) -> list[dict]:
@@ -42,7 +57,7 @@ def _get_recent_ticket_items(conn: Any, days: int = 7) -> list[dict]:
             (days,),
         )
         cols = ["ticket_id", "item_id", "odds_snapshot_id", "model_prediction_id", "budget_plan_id"]
-        return [dict(zip(cols, row)) for row in cur.fetchall()]
+        return [dict(zip(cols, row, strict=False)) for row in cur.fetchall()]
 
 
 def _get_prediction_chain(conn: Any, prediction_id: int) -> dict | None:
@@ -56,7 +71,8 @@ def _get_prediction_chain(conn: Any, prediction_id: int) -> dict | None:
                 mp.odds_snapshot_id AS pred_odds_snapshot_id,
                 mp.predict_time,
                 mv.model_name,
-                mv.version_number
+                mv.version,
+                mv.is_active
             FROM model_predictions mp
             LEFT JOIN model_versions mv ON mv.id = mp.model_version_id
             WHERE mp.id = %s
@@ -72,9 +88,13 @@ def _get_prediction_chain(conn: Any, prediction_id: int) -> dict | None:
         "pred_odds_snapshot_id",
         "predict_time",
         "model_name",
-        "version_number",
+        "version",
+        "model_version_is_active",
     ]
-    return dict(zip(cols, row))
+    result = dict(zip(cols, row, strict=False))
+    result["model_version_exists"] = bool(result.get("model_name") and result.get("version"))
+    result["model_version_is_active"] = bool(result.get("model_version_is_active"))
+    return result
 
 
 def _get_feature_snapshot_for_match(conn: Any, match_id: int, before_time: str) -> dict | None:
@@ -95,7 +115,7 @@ def _get_feature_snapshot_for_match(conn: Any, match_id: int, before_time: str) 
     if not row:
         return None
     cols = ["feature_snapshot_id", "feature_version", "snapshot_time", "completeness_score"]
-    return dict(zip(cols, row))
+    return dict(zip(cols, row, strict=False))
 
 
 def _get_match_id_from_odds_snapshot(conn: Any, odds_snapshot_id: int) -> int | None:
@@ -109,13 +129,13 @@ def _get_match_id_from_odds_snapshot(conn: Any, odds_snapshot_id: int) -> int | 
     return row[0] if row else None
 
 
-def run(dry_run: bool = False) -> dict[str, Any]:
+def _run_impl(dry_run: bool = False) -> dict[str, Any]:
     """Validate evidence chains for all recent recommendations.
 
     Checks each ticket item for:
       1. odds_snapshot_id → valid, not stale (>24h old)
       2. model_prediction_id → valid, has model_version
-      3. model_version → exists and is current
+      3. model_version → exists (historical inactive versions remain valid evidence)
       4. feature_snapshot → exists for the match before prediction time
 
     Returns:
@@ -163,8 +183,9 @@ def run(dry_run: bool = False) -> dict[str, Any]:
                     )
                     row = cur.fetchone()
                 if row and row[0]:
-                    age = (datetime.now() - row[0]).total_seconds()
-                    chain_details["odds_snapshot_age_seconds"] = int(age)
+                    chain_details["odds_snapshot_age_seconds"] = _business_snapshot_age_seconds(
+                        row[0]
+                    )
                 else:
                     broken_link = "odds_snapshot_invalid"
                     chain_ok = False
@@ -182,8 +203,10 @@ def run(dry_run: bool = False) -> dict[str, Any]:
                     chain_ok = False
                 else:
                     chain_details["model_version_id"] = pred_chain["model_version_id"]
-                    if not pred_chain["model_version_id"]:
-                        broken_link = broken_link or "model_version"
+                    chain_details["model_version_exists"] = pred_chain["model_version_exists"]
+                    chain_details["model_version_is_active"] = pred_chain["model_version_is_active"]
+                    if not pred_chain["model_version_id"] or not pred_chain["model_version_exists"]:
+                        broken_link = broken_link or "model_version_invalid"
                         chain_ok = False
 
                     # Link 3: feature_snapshot (find by match + time)
@@ -226,7 +249,9 @@ def run(dry_run: bool = False) -> dict[str, Any]:
                 "chain_details": chain_details,
                 "odds_snapshot_age_seconds": chain_details.get("odds_snapshot_age_seconds"),
                 "feature_snapshot_age_seconds": chain_details.get("feature_snapshot_age_seconds"),
-                "model_version_is_current": chain_details.get("model_version_id") is not None,
+                # Legacy column name: this means the referenced immutable model
+                # version still exists, not that it is the currently active one.
+                "model_version_is_current": chain_details.get("model_version_exists", False),
             }
 
             if not dry_run:
@@ -253,6 +278,18 @@ def run(dry_run: bool = False) -> dict[str, Any]:
         "completeness_rate": completeness,
         "broken_details": broken_details[:10],  # first 10 for summary
     }
+
+
+def run(dry_run: bool = False) -> dict[str, Any]:
+    """Validate evidence chains and persist its QA execution record."""
+    run_id = start_tracked_job("evidence_chain_validation", "qa_agent", {"dry_run": dry_run})
+    try:
+        result = _run_impl(dry_run=dry_run)
+        finish_tracked_job(run_id, result.get("status", "completed"), {"result": result})
+        return result
+    except Exception as exc:
+        finish_tracked_job(run_id, "failed", error=str(exc))
+        raise
 
 
 if __name__ == "__main__":

@@ -7,12 +7,27 @@ All functions accept conn: Any and call conn.commit() internally.
 from __future__ import annotations
 
 import json
-from datetime import datetime
 from typing import Any
 
+from scripts.business_time import utc_now_naive
 
-def _now() -> str:
-    return datetime.now().isoformat(timespec="seconds")
+TASK_STATUSES = {
+    "created",
+    "queued",
+    "assigned",
+    "running",
+    "in_progress",
+    "waiting_review",
+    "blocked",
+    "failed",
+    "passed_tests",
+    "approved",
+    "rejected",
+    "merged",
+    "closed",
+    "completed",
+    "cancelled",
+}
 
 
 # ---------------------------------------------------------------------------
@@ -138,7 +153,9 @@ def create_agent_task(conn: Any, task: dict) -> int | None:
 
 def transition_task(conn: Any, task_code: str, new_status: str, summary: str = "") -> bool:
     """Update task status and write audit log. Returns True on success."""
-    now_val = datetime.now()
+    if new_status not in TASK_STATUSES:
+        raise ValueError(f"Unsupported task status: {new_status}")
+    now_val = utc_now_naive()
     sql = """
         UPDATE agent_tasks
         SET status = %(new_status)s,
@@ -178,6 +195,59 @@ def transition_task(conn: Any, task_code: str, new_status: str, summary: str = "
 
     conn.commit()
     return True
+
+
+def add_task_artifact(conn: Any, artifact: dict) -> int | None:
+    """Register a task output with its path, digest, summary, and metadata."""
+    sql = """
+        INSERT INTO agent_task_artifacts (
+            task_id, artifact_type, artifact_path, artifact_summary,
+            artifact_hash, metadata, created_at
+        ) VALUES (%(task_id)s, %(artifact_type)s, %(artifact_path)s,
+                  %(artifact_summary)s, %(artifact_hash)s, %(metadata)s, now())
+        RETURNING id
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            sql,
+            {
+                "task_id": artifact["task_id"],
+                "artifact_type": artifact.get("artifact_type", "output"),
+                "artifact_path": artifact.get("artifact_path"),
+                "artifact_summary": artifact.get("artifact_summary", ""),
+                "artifact_hash": artifact.get("artifact_hash"),
+                "metadata": json.dumps(artifact.get("metadata", {}), ensure_ascii=False),
+            },
+        )
+        row = cur.fetchone()
+    conn.commit()
+    return row[0] if row else None
+
+
+def list_task_artifacts(conn: Any, task_id: int, limit: int = 100) -> list[dict]:
+    """List registered artifacts for one task."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """SELECT id, task_id, artifact_type, artifact_path, artifact_summary,
+                      artifact_hash, metadata, created_at
+               FROM agent_task_artifacts
+               WHERE task_id = %s ORDER BY created_at DESC LIMIT %s""",
+            (task_id, limit),
+        )
+        rows = cur.fetchall()
+    return [
+        {
+            "id": r[0],
+            "task_id": r[1],
+            "artifact_type": r[2],
+            "artifact_path": r[3],
+            "artifact_summary": r[4],
+            "artifact_hash": r[5],
+            "metadata": r[6],
+            "created_at": r[7].isoformat() if hasattr(r[7], "isoformat") else str(r[7]),
+        }
+        for r in rows
+    ]
 
 
 def list_agent_tasks(
@@ -442,6 +512,54 @@ def finish_job_run(
     return True
 
 
+def recover_interrupted_job_runs(
+    conn: Any,
+    job_codes: list[str],
+    reason: str = "owning process restarted before completion",
+) -> int:
+    """Fail unfinished runs that belong to a restarting single-owner process."""
+    owned_codes = list(dict.fromkeys(code for code in job_codes if code))
+    if not owned_codes:
+        return 0
+    with conn.cursor() as cur:
+        cur.execute(
+            """UPDATE ai_job_runs
+               SET status = 'failed', finished_at = now(),
+                   duration_ms = EXTRACT(EPOCH FROM (now() - started_at)) * 1000,
+                   error_message = %s
+               WHERE status = 'running' AND job_code = ANY(%s)
+               """,
+            (reason, owned_codes),
+        )
+        recovered = cur.rowcount
+    conn.commit()
+    return int(recovered or 0)
+
+
+def retry_job_run(conn: Any, run_id: int, max_retries: int = 2) -> bool:
+    """Restart a failed job run when its retry budget has not been exhausted.
+
+    Retries reuse the same run record so the execution history remains
+    append-only at the audit/job level while ``retry_count`` is explicit.
+    Only failed runs may be retried.
+    """
+    if max_retries < 0:
+        raise ValueError("max_retries must be non-negative")
+    with conn.cursor() as cur:
+        cur.execute(
+            """UPDATE ai_job_runs
+               SET status = 'running', retry_count = retry_count + 1,
+                   started_at = now(), finished_at = NULL,
+                   duration_ms = NULL, error_message = NULL
+               WHERE id = %s AND status = 'failed' AND retry_count < %s
+               RETURNING id""",
+            (run_id, max_retries),
+        )
+        row = cur.fetchone()
+    conn.commit()
+    return bool(row)
+
+
 def list_job_runs(
     conn: Any,
     status: str | None = None,
@@ -524,6 +642,179 @@ def create_review_gate(conn: Any, gate: dict) -> int | None:
         row = cur.fetchone()
     conn.commit()
     return row[0] if row else None
+
+
+def has_pending_review_gate(conn: Any, task_id: int) -> bool:
+    """Return whether a task still has an unresolved human-review gate."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """SELECT EXISTS(
+                   SELECT 1 FROM agent_human_review_gates
+                   WHERE task_id = %s AND review_status = 'pending'
+               )""",
+            (task_id,),
+        )
+        row = cur.fetchone()
+    return bool(row and row[0])
+
+
+def resolve_review_gate(
+    conn: Any, gate_id: int, reviewer: str, status: str, comment: str = ""
+) -> bool:
+    """Resolve a review gate with an explicit reviewer and decision."""
+    if status not in {"approved", "rejected"}:
+        raise ValueError("review status must be approved or rejected")
+    with conn.cursor() as cur:
+        cur.execute(
+            """UPDATE agent_human_review_gates
+               SET review_status = %s, reviewer = %s, review_comment = %s,
+                   reviewed_at = now()
+               WHERE id = %s AND review_status = 'pending'
+               RETURNING id""",
+            (status, reviewer, comment, gate_id),
+        )
+        row = cur.fetchone()
+    conn.commit()
+    return bool(row)
+
+
+def list_review_gates(conn: Any, review_status: str | None = None, limit: int = 50) -> list[dict]:
+    """List human-review gates with their owning task context."""
+    clause = "AND g.review_status = %(review_status)s" if review_status else ""
+    params: dict[str, Any] = {"limit": limit}
+    if review_status:
+        params["review_status"] = review_status
+    with conn.cursor() as cur:
+        cur.execute(
+            f"""SELECT g.id, g.task_id, t.task_code, t.task_title,
+                       g.gate_type, g.reason, g.reviewer, g.review_status,
+                       g.review_comment, g.reviewed_at, g.created_at
+                FROM agent_human_review_gates g
+                JOIN agent_tasks t ON t.id = g.task_id
+                WHERE TRUE {clause}
+                ORDER BY g.created_at DESC LIMIT %(limit)s""",
+            params,
+        )
+        rows = cur.fetchall()
+
+    def ts(value: Any) -> str | None:
+        return value.isoformat() if hasattr(value, "isoformat") else (str(value) if value else None)
+
+    return [
+        {
+            "id": r[0],
+            "task_id": r[1],
+            "task_code": r[2],
+            "task_title": r[3],
+            "gate_type": r[4],
+            "reason": r[5],
+            "reviewer": r[6],
+            "review_status": r[7],
+            "review_comment": r[8],
+            "reviewed_at": ts(r[9]),
+            "created_at": ts(r[10]),
+        }
+        for r in rows
+    ]
+
+
+def get_agent_summary(conn: Any) -> dict[str, int | bool]:
+    """Return compact counts for the local Agent operations overview."""
+    queries = {
+        "active_agents": "SELECT COUNT(*) FROM agent_registry WHERE is_active = true",
+        "open_tasks": """SELECT COUNT(*) FROM agent_tasks
+                          WHERE status NOT IN ('completed', 'closed', 'cancelled')""",
+        "running_jobs": "SELECT COUNT(*) FROM ai_job_runs WHERE status = 'running'",
+        "stale_jobs": """SELECT COUNT(*) FROM ai_job_runs
+                         WHERE status = 'running' AND started_at < now() - interval '30 minutes'""",
+        "stale_tasks": """SELECT COUNT(*) FROM agent_tasks
+                          WHERE status IN ('running', 'in_progress')
+                            AND COALESCE(updated_at, started_at, assigned_at, created_at)
+                                < now() - interval '60 minutes'""",
+        "failed_jobs_24h": """SELECT COUNT(*) FROM ai_job_runs
+                              WHERE status = 'failed' AND created_at >= now() - interval '24 hours'""",
+        "pending_review_gates": """SELECT COUNT(*) FROM agent_human_review_gates
+                                  WHERE review_status = 'pending'""",
+    }
+    result: dict[str, int] = {}
+    with conn.cursor() as cur:
+        for key, sql in queries.items():
+            cur.execute(sql)
+            row = cur.fetchone()
+            result[key] = int(row[0] or 0) if row else 0
+    from scripts.local.scheduler_heartbeat import is_scheduler_alive
+
+    result["scheduler_running"] = is_scheduler_alive()
+    return result
+
+
+def list_stale_jobs(conn: Any, threshold_minutes: int = 30, limit: int = 50) -> list[dict]:
+    """List running jobs older than the operational timeout threshold."""
+    if threshold_minutes < 1:
+        raise ValueError("threshold_minutes must be positive")
+    with conn.cursor() as cur:
+        cur.execute(
+            """SELECT id, job_code, job_name, owner_agent, started_at,
+                      EXTRACT(EPOCH FROM (now() - started_at)) / 60,
+                      input_snapshot_refs
+               FROM ai_job_runs
+               WHERE status = 'running'
+                 AND started_at < now() - (%s * interval '1 minute')
+               ORDER BY started_at ASC LIMIT %s""",
+            (threshold_minutes, limit),
+        )
+        rows = cur.fetchall()
+    return [
+        {
+            "id": r[0],
+            "job_code": r[1],
+            "job_name": r[2],
+            "owner_agent": r[3],
+            "started_at": r[4].isoformat() if hasattr(r[4], "isoformat") else str(r[4]),
+            "running_minutes": round(float(r[5] or 0), 1),
+            "input_refs": r[6],
+        }
+        for r in rows
+    ]
+
+
+def list_stale_tasks(conn: Any, threshold_minutes: int = 60, limit: int = 50) -> list[dict]:
+    """List active Agent tasks with no progress update before the timeout."""
+    if threshold_minutes < 1:
+        raise ValueError("threshold_minutes must be positive")
+    with conn.cursor() as cur:
+        cur.execute(
+            """SELECT id, task_code, task_title, owner_agent, status,
+                      started_at, updated_at,
+                      EXTRACT(EPOCH FROM (
+                          now() - COALESCE(updated_at, started_at, assigned_at, created_at)
+                      )) / 60
+               FROM agent_tasks
+               WHERE status IN ('running', 'in_progress')
+                 AND COALESCE(updated_at, started_at, assigned_at, created_at)
+                     < now() - (%s * interval '1 minute')
+               ORDER BY COALESCE(updated_at, started_at, assigned_at, created_at) ASC
+               LIMIT %s""",
+            (threshold_minutes, limit),
+        )
+        rows = cur.fetchall()
+
+    def ts(value: Any) -> str | None:
+        return value.isoformat() if hasattr(value, "isoformat") else (str(value) if value else None)
+
+    return [
+        {
+            "id": r[0],
+            "task_code": r[1],
+            "task_title": r[2],
+            "owner_agent": r[3],
+            "status": r[4],
+            "started_at": ts(r[5]),
+            "updated_at": ts(r[6]),
+            "stale_minutes": round(float(r[7] or 0), 1),
+        }
+        for r in rows
+    ]
 
 
 # ---------------------------------------------------------------------------

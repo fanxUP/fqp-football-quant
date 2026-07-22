@@ -7,13 +7,9 @@ All functions accept conn: Any and call conn.commit() internally.
 from __future__ import annotations
 
 import json
-from datetime import datetime
 from typing import Any
 
-
-def _now() -> str:
-    return datetime.now().isoformat(timespec="seconds")
-
+from scripts.business_time import utc_now_iso
 
 # ---------------------------------------------------------------------------
 # Audit log (shared utility)
@@ -83,7 +79,7 @@ def create_real_ticket(conn: Any, ticket: dict) -> int | None:
         "related_simulation_ticket_id": ticket.get("related_simulation_ticket_id"),
         "ticket_image_url": ticket.get("ticket_image_url"),
         "ticket_no": ticket.get("ticket_no"),
-        "purchase_time": ticket.get("purchase_time", _now()),
+        "purchase_time": ticket.get("purchase_time", utc_now_iso()),
         "store_code": ticket.get("store_code"),
         "total_amount": ticket.get("total_amount", 0),
         "multiple": ticket.get("multiple", 1),
@@ -139,7 +135,7 @@ def get_real_ticket(conn: Any, ticket_id: int) -> dict | None:
                rt.store_code, rt.total_amount, rt.multiple, rt.pass_type,
                rt.theoretical_max_prize, rt.source_type,
                rt.ocr_status, rt.confirm_status, rt.settlement_status,
-               rt.created_at, rt.updated_at,
+               rt.created_at, rt.updated_at, rt.ledger_ticket_no,
                COUNT(rti.id) AS item_count
         FROM real_tickets rt
         LEFT JOIN real_ticket_items rti ON rti.real_ticket_id = rt.id
@@ -181,7 +177,8 @@ def get_real_ticket(conn: Any, ticket_id: int) -> dict | None:
         else str(row[16])
         if row[16]
         else None,
-        "item_count": row[17],
+        "ledger_ticket_no": row[17],
+        "item_count": row[18],
     }
 
 
@@ -194,7 +191,7 @@ def list_real_tickets(conn: Any, status: str | None = None, limit: int = 20) -> 
                    rt.confirm_status, rt.settlement_status,
                    rt.purchase_time, rt.created_at,
                    rt.related_simulation_ticket_id,
-                   COUNT(rti.id) AS item_count
+                   COUNT(rti.id) AS item_count, rt.ledger_ticket_no
             FROM real_tickets rt
             LEFT JOIN real_ticket_items rti ON rti.real_ticket_id = rt.id
             WHERE rt.settlement_status = %(status)s
@@ -209,7 +206,7 @@ def list_real_tickets(conn: Any, status: str | None = None, limit: int = 20) -> 
                    rt.confirm_status, rt.settlement_status,
                    rt.purchase_time, rt.created_at,
                    rt.related_simulation_ticket_id,
-                   COUNT(rti.id) AS item_count
+                   COUNT(rti.id) AS item_count, rt.ledger_ticket_no
             FROM real_tickets rt
             LEFT JOIN real_ticket_items rti ON rti.real_ticket_id = rt.id
             GROUP BY rt.id
@@ -244,6 +241,7 @@ def list_real_tickets(conn: Any, status: str | None = None, limit: int = 20) -> 
             else None,
             "related_simulation_ticket_id": r[11],
             "item_count": r[12],
+            "ledger_ticket_no": r[13],
         }
         for r in rows
     ]
@@ -401,7 +399,7 @@ def create_settlement(conn: Any, settlement: dict) -> int | None:
         params = {
             "ticket_source": settlement["ticket_source"],
             "ticket_id": settlement["ticket_id"],
-            "settle_time": settlement.get("settle_time", _now()),
+            "settle_time": settlement.get("settle_time", utc_now_iso()),
             "is_won": settlement.get("is_won", False),
             "stake_amount": settlement.get("stake_amount", 0),
             "prize_amount": settlement.get("prize_amount", 0),
@@ -427,7 +425,8 @@ def get_settlements_by_date(conn: Any, date_str: str, source: str | None = None)
                    ts.is_won, ts.stake_amount, ts.prize_amount, ts.tax_amount,
                    ts.net_prize, ts.profit_loss, ts.roi, ts.settlement_detail_json
             FROM ticket_settlements ts
-            WHERE ts.settle_time::date = %(date)s AND ts.ticket_source = %(source)s
+            WHERE (ts.settle_time AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Shanghai')::date = %(date)s
+              AND ts.ticket_source = %(source)s
             ORDER BY ts.settle_time DESC
         """
         params = {"date": date_str, "source": source}
@@ -437,7 +436,7 @@ def get_settlements_by_date(conn: Any, date_str: str, source: str | None = None)
                    ts.is_won, ts.stake_amount, ts.prize_amount, ts.tax_amount,
                    ts.net_prize, ts.profit_loss, ts.roi, ts.settlement_detail_json
             FROM ticket_settlements ts
-            WHERE ts.settle_time::date = %(date)s
+            WHERE (ts.settle_time AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Shanghai')::date = %(date)s
             ORDER BY ts.settle_time DESC
         """
         params = {"date": date_str}
@@ -479,7 +478,7 @@ def get_settlement_summary(conn: Any, date_str: str) -> dict:
                SUM(profit_loss) AS total_pl,
                AVG(roi) AS avg_roi
         FROM ticket_settlements
-        WHERE settle_time::date = %(date)s
+        WHERE (settle_time AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Shanghai')::date = %(date)s
         GROUP BY ticket_source
     """
     with conn.cursor() as cur:
@@ -816,6 +815,7 @@ def create_error_analyses_batch(conn: Any, errors: list[dict]) -> int:
             %(root_cause)s, %(model_probability)s, %(market_probability)s,
             %(actual_result)s, %(suggested_fix)s, now()
         )
+        ON CONFLICT DO NOTHING
         RETURNING id
     """
     count = 0
@@ -903,12 +903,12 @@ def get_error_summary(conn: Any, days: int = 7) -> dict:
     sql = """
         SELECT error_type, error_level, COUNT(*) AS count
         FROM prediction_error_analysis
-        WHERE created_at >= now() - INTERVAL '%(days)s days'
+        WHERE created_at >= now() - (%(days)s * INTERVAL '1 day')
         GROUP BY error_type, error_level
         ORDER BY count DESC
     """
     with conn.cursor() as cur:
-        cur.execute(sql, {"days": str(days)})
+        cur.execute(sql, {"days": days})
         rows = cur.fetchall()
 
     error_types: dict[str, dict] = {}
@@ -986,7 +986,7 @@ def get_play_type_win_rate(conn: Any, days: int = 30) -> list[dict[str, Any]]:
     """
     sql = """
         SELECT
-            DATE(ts.settle_time)::text AS settle_date,
+            (ts.settle_time AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Shanghai')::date::text AS settle_date,
             rti.play_type,
             COUNT(*) AS total,
             SUM(CASE WHEN ts.is_won THEN 1 ELSE 0 END) AS wins,
@@ -999,8 +999,10 @@ def get_play_type_win_rate(conn: Any, days: int = 30) -> list[dict[str, Any]]:
             ON ts.ticket_id = rti.real_ticket_id
             AND ts.ticket_source = 'real'
         WHERE ts.is_won IS NOT NULL
-          AND ts.settle_time >= CURRENT_DATE - %(days)s::int
-        GROUP BY DATE(ts.settle_time), rti.play_type
+          AND (ts.settle_time AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Shanghai')::date
+              >= timezone('Asia/Shanghai', NOW())::date - %(days)s::int
+        GROUP BY (ts.settle_time AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Shanghai')::date,
+                 rti.play_type
         ORDER BY settle_date ASC, play_type
     """
     with conn.cursor() as cur:

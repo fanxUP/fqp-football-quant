@@ -37,3 +37,8 @@
 ### 传统足彩
 - GET /api/v1/pool/issues
 - POST /api/v1/pool/issues/{id}/generate-combinations
+
+### 运行时模块与面板
+- GET /api/v1/modules
+- PATCH /api/v1/modules/{module_code}/status
+- GET /api/v1/ui/panels

@@ -1,207 +1,30 @@
-# FQP 本地个人足球量化系统项目包 - 项目清单
+# FQP 项目清单
 
-本项目为本地个人使用的足球竞彩/足彩量化系统完整工程包。最终执行策略：Codex 开发、Docker Desktop 本地部署、模块化维护、红黑科技风 UI、依赖不锁版本、本机版本优先、缺失组件使用最新版。
+## 项目定位
 
-## 本次最终更新重点
+FQP 是单用户本地使用的足球竞彩与足彩量化研究系统：官方赛程、玩法、赔率快照和赛果构成正式比赛边界；第三方数据只补充赛前特征；系统只提供分析、模拟、记录和复盘，不提供线上售彩或代购。
 
-- 新增 Codex 开发 + Docker Desktop 部署 + 非锁版依赖最终规范。
-- requirements.txt 已取消固定版本。
-- Dockerfile.api 已取消固定 Python 基础镜像版本。
-- Docker Compose 已取消 PostgreSQL / Redis 固定 tag。
-- 新增环境检查脚本和 runtime_version_snapshot.json 机制。
-- 新增本地 smoke test。
+## 当前运行规则
 
-## 文件总数
+- 当前发布版本：`1.1.1`；根目录 `VERSION` 是版本事实来源。
+- 当前唯一工作区：`/Users/fan/Downloads/足球量化`；旧 iCloud 副本不得再用于开发或启动服务。
+- 源码仅在本机工作目录开发、测试、提交；Git 提交是唯一代码版本边界。
+- 本机长期运行：`./ops/local/manage_local_stack.sh start`。
+- 前端、后端、Worker、Scheduler、PostgreSQL 和 Redis 全部为 macOS 本机进程。
+- 本机 PostgreSQL `127.0.0.1:5432/fqp` 是唯一数据库；不再使用 Docker Desktop。
+- `data/` 是本机持久数据和备份，不提交 Git，不用删除目录替代恢复。
+- Worker 是赔率高频调度的唯一执行者；Scheduler 不重复轮询。
 
-188 个文件。
+## 文档与实现入口
 
-## 文件列表
+| 目的 | 入口 |
+| --- | --- |
+| 文档导航、优先级、历史边界 | `docs/README.md` |
+| 当前运行与切换规则 | `docs/54_本机运行与DockerDesktop弃用说明.md` |
+| 本机运行操作 | `ops/local/README_LOCAL_RUNTIME.md` |
+| 产品边界、架构与阶段计划 | `docs/00_项目总览与边界.md`、`docs/03_系统架构设计.md`、`docs/51_最终开发阶段计划与验收清单.md` |
+| 模块、页面与依赖事实来源 | `configs/final_module_registry.yaml`、`configs/final_panel_registry.yaml`、`configs/module_dependencies.yaml` |
+| API、数据结构与可验证行为 | `api/`、`sql/`、`tests/`、应用代码 |
+| 体彩官方历史回填与覆盖审计 | `docs/64_体彩官方历史比赛回填与审计.md` |
 
-- `PROJECT_MANIFEST.md`
-- `README.md`
-- `api/openapi.yaml`
-- `api/openapi_codex_agents.yaml`
-- `api/openapi_modules.yaml`
-- `apps/backend/src/module_contract.py`
-- `apps/frontend/Dockerfile`
-- `apps/frontend/package.json`
-- `apps/frontend/src/panelRegistry.ts`
-- `apps/frontend/src/theme/panel-layout-spec.md`
-- `apps/frontend/src/theme/red_black_tech_tokens.css`
-- `configs/agent_permissions.yaml`
-- `configs/agent_registry.yaml`
-- `configs/ai_scheduled_jobs.yaml`
-- `configs/bankroll_rules.yaml`
-- `configs/codex_agent_local_mode.yaml`
-- `configs/codex_workflows.yaml`
-- `configs/data_sources.yaml`
-- `configs/dependency_policy.yaml`
-- `configs/feature_source_confidence.yaml`
-- `configs/final_module_registry.yaml`
-- `configs/final_panel_registry.yaml`
-- `configs/injury_impact_weights.yaml`
-- `configs/jobs.yaml`
-- `configs/lineup_strength_weights.yaml`
-- `configs/local_personal_deployment.yaml`
-- `configs/menu_permissions.yaml`
-- `configs/model_registry.yaml`
-- `configs/module_dependencies.yaml`
-- `configs/module_registry.yaml`
-- `configs/motivation_rules.yaml`
-- `configs/panel_registry.yaml`
-- `configs/plugin_manifest.schema.yaml`
-- `configs/pool_rules.yaml`
-- `configs/recommendation_shutdown_rules.yaml`
-- `configs/tournament_incentive_rules.yaml`
-- `configs/ui_theme_red_black_tech.yaml`
-- `docs/00_项目总览与边界.md`
-- `docs/01_PRD_产品需求文档.md`
-- `docs/02_分阶段实施总计划.md`
-- `docs/03_系统架构设计.md`
-- `docs/04_官方数据采集与数据治理.md`
-- `docs/05_数据库详细设计.md`
-- `docs/06_API接口设计.md`
-- `docs/07_论文依据与模型白皮书.md`
-- `docs/08_模型复现实验计划.md`
-- `docs/09_推荐引擎与风控资金管理.md`
-- `docs/10_实票上传与复盘体系.md`
-- `docs/11_传统足彩胜负彩任选9方案.md`
-- `docs/12_回测中心与模型评估.md`
-- `docs/13_运维部署与长期个人运行.md`
-- `docs/14_测试验收清单.md`
-- `docs/15_开发任务拆解_里程碑.md`
-- `docs/16_不推荐熔断规则.md`
-- `docs/17_错因归因与迭代规范.md`
-- `docs/18_合规与责任博彩提示.md`
-- `docs/19_数据字典.md`
-- `docs/20_赛前多维情报预测系统总方案.md`
-- `docs/21_赛季与球队数据库设计.md`
-- `docs/22_球队球员身价与阵容数据库设计.md`
-- `docs/23_伤病停赛与首发快照数据库设计.md`
-- `docs/24_球场地理天气旅行数据库设计.md`
-- `docs/25_战意晋级避强队赛制博弈数据库设计.md`
-- `docs/26_比赛多维特征快照与模型接入方案.md`
-- `docs/27_多维预测增强开发阶段计划.md`
-- `docs/28_Codex多Agent总体架构.md`
-- `docs/29_Codex Agent角色权限与职责边界.md`
-- `docs/30_AI计算与定时数据采集任务编排.md`
-- `docs/31_Codex开发工作流与提示词模板.md`
-- `docs/32_多Agent数据库与任务队列设计.md`
-- `docs/33_自动测试代码审查与部署交付流程.md`
-- `docs/34_Codex运行环境安全审计与回滚方案.md`
-- `docs/35_Codex多Agent分阶段落地计划.md`
-- `docs/36_模块化架构与可升级边界.md`
-- `docs/37_后端模块拆分与接口契约.md`
-- `docs/38_前端功能面板与插件化扩展方案.md`
-- `docs/39_模块注册表_菜单权限与路由规范.md`
-- `docs/40_插件生命周期与版本升级规范.md`
-- `docs/41_模块化数据库迁移与兼容策略.md`
-- `docs/42_多Agent按模块协作与Codex任务分配.md`
-- `docs/43_功能面板扩展验收清单.md`
-- `docs/44_最终版架构逻辑体检与冲突修复报告.md`
-- `docs/45_本地个人部署与单用户模式最终方案.md`
-- `docs/46_模块化维护升级边界最终方案.md`
-- `docs/47_红黑科技风UI设计系统.md`
-- `docs/48_功能面板信息架构与页面衔接最终方案.md`
-- `docs/49_最终数据流任务流与状态机.md`
-- `docs/50_Codex多Agent本地开发执行规范.md`
-- `docs/51_最终开发阶段计划与验收清单.md`
-- `docs/52_Codex开发_DockerDesktop部署_依赖非锁版最终规范.md`
-- `docs/FQP_本地个人足球量化系统_完整项目总方案.docx`
-- `docs/FQP_本地个人足球量化系统_完整项目总方案.pdf`
-- `main.py`
-- `notebooks/01_odds_probability_conversion.ipynb`
-- `notebooks/02_maher_poisson_replication.ipynb`
-- `notebooks/03_dixon_coles_replication.ipynb`
-- `notebooks/04_market_efficiency_test.ipynb`
-- `notebooks/05_kelly_drawdown_simulation.ipynb`
-- `notebooks/06_pool_combination_optimization.ipynb`
-- `ops/.env.example`
-- `ops/Dockerfile.api`
-- `ops/backup_daily.sh`
-- `ops/codex/CODEX_SETUP.md`
-- `ops/cron.example`
-- `ops/docker-compose.yml`
-- `ops/local/.env.local.example`
-- `ops/local/README_Codex_Docker_Desktop.md`
-- `ops/local/docker-compose.local.yml`
-- `ops/local/run_local_stack.sh`
-- `ops/local/setup_local_latest_macos.sh`
-- `ops/local/setup_local_latest_windows.ps1`
-- `packages/shared/contracts/module_contract.md`
-- `personal_run/个人长期运行手册.md`
-- `requirements-dev.txt`
-- `requirements.txt`
-- `research/model_replication_plan.md`
-- `research/paper_to_model_mapping.md`
-- `research/papers.bib`
-- `scripts/agents/__pycache__/agent_registry.cpython-313.pyc`
-- `scripts/agents/__pycache__/human_review_gate.cpython-313.pyc`
-- `scripts/agents/__pycache__/orchestrator.cpython-313.pyc`
-- `scripts/agents/__pycache__/task_queue.cpython-313.pyc`
-- `scripts/agents/agent_registry.py`
-- `scripts/agents/human_review_gate.py`
-- `scripts/agents/orchestrator.py`
-- `scripts/agents/task_queue.py`
-- `scripts/bankroll.py`
-- `scripts/codex/__pycache__/create_codex_task.cpython-313.pyc`
-- `scripts/codex/create_codex_task.py`
-- `scripts/dixon_coles_model.py`
-- `scripts/features/build_injury_impact.py`
-- `scripts/features/build_lineup_strength.py`
-- `scripts/features/build_match_feature_snapshot.py`
-- `scripts/features/build_motivation_score.py`
-- `scripts/features/build_player_season_profile.py`
-- `scripts/features/build_team_season_profile.py`
-- `scripts/features/build_tournament_incentive.py`
-- `scripts/features/build_travel_weather_features.py`
-- `scripts/jobs/__pycache__/run_feature_snapshot_build.cpython-313.pyc`
-- `scripts/jobs/__pycache__/run_model_prediction.cpython-313.pyc`
-- `scripts/jobs/__pycache__/run_official_odds_snapshot.cpython-313.pyc`
-- `scripts/jobs/run_feature_snapshot_build.py`
-- `scripts/jobs/run_model_prediction.py`
-- `scripts/jobs/run_official_odds_snapshot.py`
-- `scripts/jobs/run_scheduler.py`
-- `scripts/local/check_local_environment.py`
-- `scripts/local/run_local_stack.sh`
-- `scripts/modules/migration_guard.py`
-- `scripts/modules/module_loader.py`
-- `scripts/modules/panel_registry.py`
-- `scripts/modules/plugin_validator.py`
-- `scripts/modules/remove_module_safe.py`
-- `scripts/odds_conversion.py`
-- `scripts/official_crawler_stub.py`
-- `scripts/poisson_model.py`
-- `scripts/pool_combination_optimizer.py`
-- `scripts/recommendation_shutdown.py`
-- `scripts/review_generator.py`
-- `spreadsheets/FQP_本地个人足球量化系统_项目排期_模块面板_逻辑体检.xlsx`
-- `sql/01_core_official_schema.sql`
-- `sql/02_governance_schema.sql`
-- `sql/03_model_research_schema.sql`
-- `sql/04_recommendation_ticket_schema.sql`
-- `sql/05_pool_reports_ops_schema.sql`
-- `sql/06_indexes_constraints.sql`
-- `sql/08_season_team_database.sql`
-- `sql/09_players_squad_lineup_database.sql`
-- `sql/10_injury_stadium_weather_database.sql`
-- `sql/11_tournament_incentive_database.sql`
-- `sql/12_match_feature_snapshots.sql`
-- `sql/13_multi_agent_codex_schema.sql`
-- `sql/14_modular_feature_panel_schema.sql`
-- `sql/15_local_single_user_and_ui_schema.sql`
-- `templates/codex/data_agent_prompt.md`
-- `templates/codex/general_task_prompt.md`
-- `templates/codex/model_agent_prompt.md`
-- `templates/codex/module_upgrade_prompt.md`
-- `templates/codex/qa_agent_prompt.md`
-- `templates/daily_review_template.md`
-- `templates/monthly_review_template.md`
-- `templates/plugin/module_manifest.yaml`
-- `templates/plugin/panel_manifest.yaml`
-- `templates/weekly_review_template.md`
-- `tests/acceptance_checklist.md`
-- `tests/agent_tests/test_agent_boundaries.md`
-- `tests/local_smoke_acceptance.md`
-- `tests/logic_coherence_acceptance.md`
-- `tests/test_cases.csv`
+完整文件列表由 Git 管理：使用 `git ls-files` 获取；不在本文件重复维护易过期的文件计数和逐项清单。

@@ -44,9 +44,9 @@
 Codex 修改前必须先读取：
 
 ```text
-module_registry.yaml
+configs/final_module_registry.yaml
 module_dependencies.yaml
-panel_registry.yaml
+configs/final_panel_registry.yaml
 openapi.yaml
 相关 SQL migration
 相关测试文件

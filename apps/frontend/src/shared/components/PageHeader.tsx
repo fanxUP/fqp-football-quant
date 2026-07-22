@@ -2,11 +2,12 @@ import { useEffect, useState, type ReactNode } from 'react';
 
 interface PageHeaderProps {
   title: string;
+  subtitle?: string;
   lastUpdated?: string;
   actions?: ReactNode;
 }
 
-export default function PageHeader({ title, lastUpdated, actions }: PageHeaderProps) {
+export default function PageHeader({ title, subtitle, lastUpdated, actions }: PageHeaderProps) {
   const [mounted, setMounted] = useState(false);
   useEffect(() => {
     requestAnimationFrame(() => setMounted(true));
@@ -25,7 +26,7 @@ export default function PageHeader({ title, lastUpdated, actions }: PageHeaderPr
         >
           {title}
         </h1>
-        {lastUpdated && (
+        {(subtitle || lastUpdated) && (
           <div
             className="fqp-page-subtitle"
             style={{
@@ -34,7 +35,9 @@ export default function PageHeader({ title, lastUpdated, actions }: PageHeaderPr
               transition: 'opacity 0.4s ease 0.1s, transform 0.4s ease 0.1s',
             }}
           >
-            最后更新: {lastUpdated}
+            {subtitle}
+            {subtitle && lastUpdated ? ' · ' : ''}
+            {lastUpdated ? `最后更新: ${lastUpdated}` : ''}
           </div>
         )}
       </div>

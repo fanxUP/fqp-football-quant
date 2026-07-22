@@ -1,9 +1,11 @@
 /** Odds movement line chart — SP values + implied probability on dual Y-axes. */
 
 import { useMemo } from 'react';
+import type { EChartsOption } from 'echarts';
 import ChartCard from '../shared/components/ChartCard';
 import { applyChartTheme, CHART_COLORS } from './chartTheme';
 import type { OddsPoint } from './chartTypes';
+import { useTheme } from '../app/ThemeContext';
 
 interface OddsMovementChartProps {
   data: OddsPoint[];
@@ -22,6 +24,7 @@ export default function OddsMovementChart({
   empty,
   emptyReason,
 }: OddsMovementChartProps) {
+  const { theme } = useTheme();
   const option = useMemo(() => {
     if (!data.length) return null;
     const times = data.map((d) => d.time);
@@ -57,7 +60,7 @@ export default function OddsMovementChart({
           type: 'value',
           name: 'SP',
           axisLabel: { formatter: (v: number) => v.toFixed(2) },
-          splitLine: { lineStyle: { color: 'rgba(255,255,255,0.04)' } },
+          splitLine: { lineStyle: { color: 'var(--fqp-border-subtle)' } },
         },
         {
           type: 'value',
@@ -88,7 +91,7 @@ export default function OddsMovementChart({
           data: probs.map((p) => p * 100),
           smooth: true,
           symbol: 'none',
-          lineStyle: { color: CHART_COLORS.amber, width: 1.5, type: 'dashed' },
+          lineStyle: { color: CHART_COLORS.amber, width: 1.5, type: 'solid' },
           itemStyle: { color: CHART_COLORS.amber },
         },
         ...(anomalyTimes.length > 0
@@ -108,8 +111,8 @@ export default function OddsMovementChart({
             }]
           : []),
       ],
-    } as echarts.EChartsOption);
-  }, [data]);
+    } as EChartsOption);
+  }, [data, theme]);
 
   return (
     <ChartCard

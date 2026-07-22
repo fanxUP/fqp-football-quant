@@ -1,39 +1,36 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import ChartCard from './ChartCard';
 
-// ----- Mock echarts entirely ------------------------------------------------
-// The source file imports:  import * as echarts from 'echarts'
-// and then calls echarts.init(...). So the mock must provide `init` as a
-// top-level named export.
+// ----- Mock the tree-shakeable ECharts core entry ---------------------------
 
-const { mockInit, mockInstance } = vi.hoisted(() => {
+const { mockEnsureRuntime, mockInit, mockInstance } = vi.hoisted(() => {
   const inst = {
     setOption: vi.fn(),
     dispose: vi.fn(),
     resize: vi.fn(),
   };
   return {
+    mockEnsureRuntime: vi.fn(),
     mockInit: vi.fn(() => inst),
     mockInstance: inst,
   };
 });
 
-vi.mock('echarts', () => ({
-  init: mockInit,
+vi.mock('./chartRuntime', () => ({
+  ensureChartRuntime: mockEnsureRuntime,
 }));
 
 // ----- Mock ThemeContext (ChartCard reads theme for textColor) ---------------
-let mockTheme = 'dark';
+let mockTheme = 'redline-quant';
 vi.mock('../../app/ThemeContext', () => ({
   useTheme: () => ({ theme: mockTheme, toggleTheme: vi.fn() }),
 }));
 
 // ----- Mock Card wrapper ----------------------------------------------------
 vi.mock('./Card', () => ({
-  default: ({ title, children }: { title: string; children: React.ReactNode }) => (
+  default: ({ children }: { children: React.ReactNode }) => (
     <div data-testid="card-wrapper">
-      <div data-testid="card-title">{title}</div>
       <div data-testid="card-body">{children}</div>
     </div>
   ),
@@ -44,7 +41,10 @@ vi.mock('./Card', () => ({
 describe('ChartCard', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockTheme = 'dark';
+    mockEnsureRuntime.mockResolvedValue({ init: mockInit });
+    mockTheme = 'redline-quant';
+    document.documentElement.removeAttribute('style');
+    document.documentElement.style.setProperty('--fqp-chart-text', '#F5F5F7');
   });
 
   const baseOption = {
@@ -59,7 +59,7 @@ describe('ChartCard', () => {
   describe('rendering', () => {
     it('renders the title via Card', () => {
       render(<ChartCard title="Test Chart" option={baseOption} />);
-      expect(screen.getByTestId('card-title').textContent).toBe('Test Chart');
+      expect(screen.getByRole('heading', { name: 'Test Chart' })).toBeTruthy();
     });
 
     it('renders a chart container div', () => {
@@ -91,16 +91,14 @@ describe('ChartCard', () => {
   describe('loading state', () => {
     it('shows loading message when loading=true', () => {
       render(<ChartCard title="Loading Chart" option={baseOption} loading={true} />);
-      expect(screen.getByText('加载图表...')).toBeTruthy();
+      expect(screen.getByRole('status', { name: '加载图表...' })).toBeTruthy();
     });
 
     it('does not render chart container when loading', () => {
       const { container } = render(
         <ChartCard title="Loading" option={baseOption} loading={true} />,
       );
-      // The loading state shows a message inside a div, not the chart ref div.
-      // Verify the loading text is present and the canvas is absent.
-      expect(screen.getByText('加载图表...')).toBeTruthy();
+      expect(screen.getByRole('status', { name: '加载图表...' })).toBeTruthy();
       // No canvas element should exist (echarts renders to canvas)
       expect(container.querySelector('canvas')).toBeFalsy();
     });
@@ -110,23 +108,49 @@ describe('ChartCard', () => {
   // Options / theme
   // ------------------------------------------------------------------
   describe('echarts integration', () => {
-    it('initialises echarts with the themed option', () => {
+    it('shows a readable error when the chart runtime cannot load', async () => {
+      mockEnsureRuntime.mockRejectedValueOnce(new Error('chunk unavailable'));
+      render(<ChartCard title="Broken Chart" option={baseOption} />);
+
+      expect(await screen.findByRole('alert')).toHaveTextContent('图表组件加载失败，请刷新后重试');
+      expect(mockInit).not.toHaveBeenCalled();
+    });
+
+    it('initialises echarts with the themed option', async () => {
       render(<ChartCard title="Theme Test" option={baseOption} />);
-      expect(mockInit).toHaveBeenCalledTimes(1);
+      await waitFor(() => expect(mockInit).toHaveBeenCalledTimes(1));
 
       const setOptCalls = mockInstance.setOption.mock.calls;
       expect(setOptCalls.length).toBeGreaterThanOrEqual(1);
 
       const passedOption = setOptCalls[0][0] as Record<string, unknown>;
       expect(passedOption.backgroundColor).toBe('transparent');
-      expect(passedOption.textStyle).toEqual({ color: '#C4C4CC', fontSize: 14 });
+      expect(passedOption.textStyle).toEqual({ color: '#F5F5F7', fontSize: 14 });
     });
 
-    it('uses light textColor when theme is light', () => {
-      mockTheme = 'light';
+    it('uses the active theme text token', async () => {
+      mockTheme = 'polar-lab';
+      document.documentElement.style.setProperty('--fqp-chart-text', '#172033');
       render(<ChartCard title="Light Chart" option={baseOption} />);
+      await waitFor(() => expect(mockInstance.setOption).toHaveBeenCalled());
       const passedOption = mockInstance.setOption.mock.calls[0][0] as Record<string, unknown>;
-      expect(passedOption.textStyle).toEqual({ color: '#4B5563', fontSize: 14 });
+      expect(passedOption.textStyle).toEqual({ color: '#172033', fontSize: 14 });
+    });
+
+    it('更新数据时复用图表实例', async () => {
+      const { rerender } = render(<ChartCard title="Trend" option={baseOption} />);
+      await waitFor(() => expect(mockInstance.setOption).toHaveBeenCalledTimes(1));
+
+      rerender(
+        <ChartCard
+          title="Trend"
+          option={{ ...baseOption, series: [{ type: 'bar', data: [2, 3, 4] }] }}
+        />,
+      );
+
+      await waitFor(() => expect(mockInstance.setOption).toHaveBeenCalledTimes(2));
+      expect(mockInit).toHaveBeenCalledTimes(1);
+      expect(mockInstance.dispose).not.toHaveBeenCalled();
     });
   });
 
@@ -134,8 +158,9 @@ describe('ChartCard', () => {
   // Cleanup
   // ------------------------------------------------------------------
   describe('cleanup', () => {
-    it('disposes instance on unmount', () => {
+    it('disposes instance on unmount', async () => {
       const { unmount } = render(<ChartCard title="Cleanup" option={baseOption} />);
+      await waitFor(() => expect(mockInit).toHaveBeenCalledTimes(1));
       unmount();
       expect(mockInstance.dispose).toHaveBeenCalledTimes(1);
     });

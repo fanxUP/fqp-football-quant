@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode, type MouseEvent } from 'react';
 
 interface CardProps {
   title?: string;
+  subtitle?: string;
   children: ReactNode;
   className?: string;
   action?: ReactNode;
@@ -11,7 +12,7 @@ interface CardProps {
   entranceDelay?: number;
 }
 
-export default function Card({ title, children, className = '', action, onClick, style, entranceDelay }: CardProps) {
+export default function Card({ title, subtitle, children, className = '', action, onClick, style, entranceDelay }: CardProps) {
   const [mounted, setMounted] = useState(false);
   useEffect(() => {
     const t = setTimeout(() => setMounted(true), entranceDelay ?? 0);
@@ -40,10 +41,19 @@ export default function Card({ title, children, className = '', action, onClick,
             marginBottom: title ? '12px' : 0,
           }}
         >
-          {title && (
-            <h3 style={{ color: 'var(--fqp-text)', fontSize: '16px', margin: 0, fontWeight: 600 }}>
-              {title}
-            </h3>
+          {(title || subtitle) && (
+            <div>
+              {title && (
+                <h3 style={{ color: 'var(--fqp-text)', fontSize: '16px', margin: 0, fontWeight: 600 }}>
+                  {title}
+                </h3>
+              )}
+              {subtitle && (
+                <div style={{ color: 'var(--fqp-text-muted)', fontSize: '12px', marginTop: 4 }}>
+                  {subtitle}
+                </div>
+              )}
+            </div>
           )}
           {action}
         </div>

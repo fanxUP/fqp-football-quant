@@ -1,6 +1,6 @@
 """Local scheduler entrypoint.
 
-Runs long-lived scheduled jobs in the Scheduler container.
+Runs long-lived scheduled jobs on the local host.
 Codex is used to develop, repair, test, and review this scheduler and its job modules.
 
 Stage 7: all jobs are wrapped with agent audit logging (ai_job_runs table).
@@ -11,12 +11,87 @@ from __future__ import annotations
 import os
 import time
 from collections.abc import Callable
-from datetime import datetime
+from datetime import date, datetime
+from datetime import time as clock_time
 from typing import Any
+from zoneinfo import ZoneInfo
+
+# Sporttery may add matches or change sale/pool permissions after midnight.
+# Refresh at :10 and :40 so the betting terminal never relies on a stale daily snapshot.
+OFFICIAL_SCHEDULE_CRON = {"minute": "10,40"}
+# Run five minutes after each schedule refresh so newly sellable matches have
+# official markets and odds available before the prediction snapshot is written.
+MODEL_PREDICTION_CRON = {"minute": "15,45"}
+STARTUP_RECOVERY_JOB_CODES = (
+    "seed_agent_registry",
+    "seed_api_football_registry",
+    "seed_stadium_registry",
+    "settle_tickets",
+    "build_feature_snapshots",
+    "run_recommendation_candidate",
+)
+
+
+def _scheduler_timezone_name() -> str:
+    """Return the business timezone used by every cron trigger."""
+    return os.getenv("FQP_TIMEZONE", "Asia/Shanghai")
+
+
+def _business_now(timezone_name: str | None = None) -> datetime:
+    """Return an aware wall-clock time for scheduler decisions."""
+    return datetime.now(ZoneInfo(timezone_name or _scheduler_timezone_name()))
+
+
+def _should_run_recommendation_catchup(
+    now: datetime,
+    decision_status: str | None,
+) -> bool:
+    """Catch up only after 16:00 when today's decision is not terminal."""
+    return now.timetz().replace(tzinfo=None) >= clock_time(hour=16) and decision_status not in {
+        "purchased",
+        "abstained",
+    }
+
+
+def _daily_decision_status(decision_date: date) -> str | None:
+    """Read the Agent's terminal decision state for one business date."""
+    from apps.backend.src.db import get_db
+
+    with get_db() as conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT status FROM daily_budget_plans WHERE plan_date = %s",
+            (decision_date,),
+        )
+        row = cur.fetchone()
+    return str(row[0]) if row and row[0] else None
+
+
+def _run_recommendation_catchup() -> dict[str, Any]:
+    """Recover a missed 16:00 recommendation after a scheduler restart."""
+    now = _business_now()
+    decision_status = _daily_decision_status(now.date())
+    if not _should_run_recommendation_catchup(now, decision_status):
+        result = {
+            "status": "skipped",
+            "reason": "before_cutoff" if now.hour < 16 else "decision_exists",
+        }
+        print(f"[scheduler] recommendation startup catch-up: {result}")
+        return result
+
+    from scripts.jobs.run_recommendation_candidate import run
+
+    result = run()
+    print(f"[scheduler] recommendation startup catch-up: {result}")
+    return result
 
 
 def _official_source_enabled() -> bool:
     return os.getenv("OFFICIAL_SOURCE_ENABLED", "true").lower() == "true"
+
+
+def _odds_dispatch_owner() -> str:
+    """Keep the Worker as the single high-frequency odds dispatcher."""
+    return os.getenv("FQP_ODDS_DISPATCH_OWNER", "scheduler").lower()
 
 
 def _audited_job(
@@ -24,13 +99,41 @@ def _audited_job(
 ) -> Callable[[], None]:
     """Wrap a job function with agent audit logging (start/finish in ai_job_runs)."""
 
+    # These entrypoints already call start_tracked_job/finish_tracked_job.
+    # Wrapping them again here would create duplicate runs and stale outer
+    # records with the wrong owner agent.
+    self_tracked = {
+        "build_feature_snapshots",
+        "collect_injury_data",
+        "collect_lineup_data",
+        "collect_upset_provider_evidence",
+        "collect_weather",
+        "run_model_prediction",
+        "run_recommendation_candidate",
+        "generate_daily_review",
+        "validate_evidence_chain",
+        "audit_data_contamination",
+        "run_backtest",
+    }
+    if job_code in self_tracked:
+        return fn
+
     def wrapper() -> None:
         run_id = None
         try:
             from apps.backend.src.db import get_db
-            from scripts.agent_storage import finish_job_run, start_job_run
+            from scripts.agent_storage import (
+                finish_job_run,
+                recover_interrupted_job_runs,
+                start_job_run,
+            )
 
             with get_db() as conn:
+                recover_interrupted_job_runs(
+                    conn,
+                    [job_code],
+                    reason=("superseded by a new scheduler execution after process interruption"),
+                )
                 run_id = start_job_run(
                     conn,
                     {
@@ -45,7 +148,7 @@ def _audited_job(
             if run_id:
                 with get_db() as conn:
                     finish_job_run(
-                        conn, run_id, "success", output_refs={"result": str(result)[:500]}
+                        conn, run_id, "completed", output_refs={"result": str(result)[:500]}
                     )
         except Exception as e:
             if run_id:
@@ -64,71 +167,105 @@ def _audited_job(
 
 def main() -> None:
     print("FQP local scheduler started.")
+    from scripts.local.scheduler_heartbeat import clear_scheduler_pid, write_scheduler_pid
+
+    scheduler_pid = write_scheduler_pid()
 
     try:
         from apscheduler.schedulers.background import BackgroundScheduler
 
-        scheduler = BackgroundScheduler()
+        timezone_name = _scheduler_timezone_name()
+        scheduler = BackgroundScheduler(timezone=timezone_name)
+        print(f"FQP scheduler timezone: {timezone_name}")
 
         # ----- health heartbeat (always on) -----
         def test_heartbeat() -> None:
-            print(f"scheduler heartbeat: {datetime.now().isoformat(timespec='seconds')}")
+            from scripts.local.scheduler_heartbeat import write_heartbeat
 
-        scheduler.add_job(test_heartbeat, "interval", hours=1, id="test_heartbeat")
+            print(f"scheduler heartbeat: {write_heartbeat()}")
 
-        # ----- Stage 7: seed agent registry at startup -----
-        def job_seed_agents() -> None:
-            try:
-                from scripts.jobs.seed_agent_registry import run
+        scheduler.add_job(test_heartbeat, "interval", minutes=1, id="test_heartbeat")
+        test_heartbeat()
 
-                result = run()
-                print(f"[scheduler] seed_agent_registry: {result}")
-            except Exception as e:
-                print(f"[scheduler] seed_agent_registry error: {e}")
+        # ----- Startup recovery: retry critical idempotent jobs until ready -----
+        from scripts.jobs.startup_recovery import StartupRecovery
 
-        # Run once at startup (no cron trigger — fires immediately)
+        startup_tasks: dict[str, Callable[[], Any]] = {
+            "seed_agent_registry": lambda: __import__(
+                "scripts.jobs.seed_agent_registry", fromlist=["run"]
+            ).run(),
+        }
+        if _official_source_enabled():
+            startup_tasks.update(
+                {
+                    "seed_api_football_registry": lambda: __import__(
+                        "scripts.jobs.seed_api_football_registry", fromlist=["run"]
+                    ).run(),
+                    "seed_stadium_registry": lambda: __import__(
+                        "scripts.jobs.seed_stadium_registry", fromlist=["run"]
+                    ).run(),
+                    "settle_tickets": lambda: __import__(
+                        "scripts.jobs.settle_tickets", fromlist=["run"]
+                    ).run(),
+                    "build_feature_snapshots": lambda: __import__(
+                        "scripts.jobs.run_feature_snapshot_build", fromlist=["run"]
+                    ).run(),
+                    "run_recommendation_candidate": _run_recommendation_catchup,
+                }
+            )
+        startup_recovery = StartupRecovery(startup_tasks)
+
+        def run_startup_recovery() -> None:
+            result = startup_recovery.run(_business_now(timezone_name))
+            print(f"[scheduler] startup recovery: {result}")
+            if not result["pending"]:
+                scheduler.remove_job("startup_recovery")
+
         scheduler.add_job(
-            job_seed_agents,
-            "date",
-            run_date=datetime.now(),
-            id="seed_agent_registry",
+            run_startup_recovery,
+            "interval",
+            minutes=1,
+            next_run_time=_business_now(timezone_name),
+            id="startup_recovery",
         )
 
         # ----- Stage 2: official data jobs -----
         if _official_source_enabled():
-            # Daily: crawl official schedule at 00:10
+            # Daily: select one valid season per event before accepting new matches.
             scheduler.add_job(
                 _audited_job(
-                    "crawl_official_schedule",
-                    "官方赛程采集",
+                    "reconcile_event_seasons",
+                    "赛事中心赛季校准",
                     "crawler_agent",
                     lambda: __import__(
-                        "scripts.jobs.crawl_official_schedule", fromlist=["run"]
+                        "scripts.jobs.reconcile_event_seasons", fromlist=["run"]
                     ).run(),
                 ),
                 "cron",
                 hour=0,
-                minute=10,
+                minute=5,
+                id="reconcile_event_seasons",
+            )
+
+            # Every 30 min: refresh official matches, sale states, and pool permissions.
+            scheduler.add_job(
+                lambda: __import__("scripts.jobs.crawl_official_schedule", fromlist=["run"]).run(),
+                "cron",
+                **OFFICIAL_SCHEDULE_CRON,
                 id="crawl_official_schedule",
             )
 
-            # Every 30 min between 06:00-23:59: snapshot odds
-            scheduler.add_job(
-                _audited_job(
-                    "crawl_official_odds",
-                    "赔率快照采集",
-                    "crawler_agent",
+            if _odds_dispatch_owner() == "scheduler":
+                scheduler.add_job(
                     lambda: __import__(
                         "scripts.jobs.run_official_odds_snapshot", fromlist=["run"]
                     ).run(),
-                ),
-                "cron",
-                minute="*/30",
-                hour="6-23",
-                id="crawl_official_odds",
-            )
+                    "interval",
+                    minutes=1,
+                    id="crawl_official_odds",
+                )
 
-            # Every 2 hours: traditional lottery (14场/任九) crawl
+            # Hourly from 06:07 through 23:07: traditional lottery crawl.
             scheduler.add_job(
                 _audited_job(
                     "crawl_traditional_lottery",
@@ -176,6 +313,39 @@ def main() -> None:
                 id="populate_teams_leagues",
             )
 
+            # Daily after team population: refresh provider aliases used by
+            # match-level injury and lineup collection.
+            scheduler.add_job(
+                _audited_job(
+                    "seed_api_football_registry",
+                    "API-Football基础标识校准",
+                    "feature_agent",
+                    lambda: __import__(
+                        "scripts.jobs.seed_api_football_registry", fromlist=["run"]
+                    ).run(),
+                ),
+                "cron",
+                hour=2,
+                minute=3,
+                id="seed_api_football_registry_daily",
+            )
+
+            # Daily after team population: map supported home teams to stadium coordinates.
+            scheduler.add_job(
+                _audited_job(
+                    "seed_stadium_registry",
+                    "球场基础数据校准",
+                    "feature_agent",
+                    lambda: __import__(
+                        "scripts.jobs.seed_stadium_registry", fromlist=["run"]
+                    ).run(),
+                ),
+                "cron",
+                hour=2,
+                minute=5,
+                id="seed_stadium_registry_daily",
+            )
+
             # Every 6 hours: build feature snapshots
             scheduler.add_job(
                 _audited_job(
@@ -192,11 +362,11 @@ def main() -> None:
             )
 
             # ----- Stage 3b: enrichment data collection jobs -----
-            # Daily at 03:00: collect league standings
+            # Daily at 03:00: collect verified current-season official standings.
             scheduler.add_job(
                 _audited_job(
                     "collect_standings",
-                    "联赛积分榜采集",
+                    "官方当季联赛积分榜采集",
                     "crawler_agent",
                     lambda: __import__("scripts.jobs.collect_standings", fromlist=["run"]).run(),
                 ),
@@ -206,7 +376,8 @@ def main() -> None:
                 id="collect_standings",
             )
 
-            # Daily at 08:00: collect injury data from API-Football
+            # Shortly after midnight: collect current fixture injuries before
+            # the day's early matches. Historical-season injuries are never used.
             scheduler.add_job(
                 _audited_job(
                     "collect_injury_data",
@@ -215,12 +386,13 @@ def main() -> None:
                     lambda: __import__("scripts.jobs.collect_injury_data", fromlist=["run"]).run(),
                 ),
                 "cron",
-                hour=8,
+                hour=0,
                 minute=7,
                 id="collect_injury_data",
             )
 
-            # Daily at 10:00 and 14:00: collect lineup data for upcoming matches
+            # Every 30 minutes after schedule refresh: query only the short
+            # pre-match window where confirmed lineups may be published.
             scheduler.add_job(
                 _audited_job(
                     "collect_lineup_data",
@@ -229,9 +401,24 @@ def main() -> None:
                     lambda: __import__("scripts.jobs.collect_lineup_data", fromlist=["run"]).run(),
                 ),
                 "cron",
-                hour="10,14",
-                minute=7,
+                minute="12,42",
                 id="collect_lineup_data",
+            )
+
+            # Rebuild feature snapshots after the lineup window and before
+            # model prediction at :15/:45, so late evidence reaches decisions.
+            scheduler.add_job(
+                _audited_job(
+                    "build_feature_snapshots",
+                    "临场特征快照刷新",
+                    "feature_agent",
+                    lambda: __import__(
+                        "scripts.jobs.run_feature_snapshot_build", fromlist=["run"]
+                    ).run(),
+                ),
+                "cron",
+                minute="14,44",
+                id="refresh_pre_match_features",
             )
 
             # Daily at 09:00 and 15:00: collect weather forecasts
@@ -278,7 +465,7 @@ def main() -> None:
                 id="update_elo_ratings",
             )
 
-            # Every 6 hours: run model predictions (offset from features)
+            # Every 30 minutes: persist a pre-match prediction history snapshot.
             scheduler.add_job(
                 _audited_job(
                     "run_model_prediction",
@@ -287,7 +474,7 @@ def main() -> None:
                     lambda: __import__("scripts.jobs.run_model_prediction", fromlist=["run"]).run(),
                 ),
                 "cron",
-                hour="1,7,13,19",
+                **MODEL_PREDICTION_CRON,
                 id="run_model_prediction",
             )
 
@@ -321,7 +508,63 @@ def main() -> None:
                 id="settle_tickets",
             )
 
-            # Daily at 23:30: generate daily review
+            # Twice hourly after official-result and ticket settlement windows:
+            # identify objective cold results from complete pre-match markets.
+            scheduler.add_job(
+                _audited_job(
+                    "detect_upsets",
+                    "冷门识别",
+                    "review_agent",
+                    lambda: __import__("scripts.jobs.detect_upsets", fromlist=["run"]).run(),
+                ),
+                "cron",
+                minute="20,50",
+                id="detect_upsets",
+            )
+
+            scheduler.add_job(
+                _audited_job(
+                    "collect_upset_provider_evidence",
+                    "冷门赛中事件与技术统计采集",
+                    "review_agent",
+                    lambda: __import__(
+                        "scripts.jobs.collect_upset_provider_evidence", fromlist=["run"]
+                    ).run(),
+                ),
+                "cron",
+                minute="21,51",
+                id="collect_upset_provider_evidence",
+            )
+
+            scheduler.add_job(
+                _audited_job(
+                    "collect_upset_evidence",
+                    "冷门证据采集",
+                    "review_agent",
+                    lambda: __import__(
+                        "scripts.jobs.collect_upset_evidence", fromlist=["run"]
+                    ).run(),
+                ),
+                "cron",
+                minute="22,52",
+                id="collect_upset_evidence",
+            )
+
+            scheduler.add_job(
+                _audited_job(
+                    "generate_upset_reviews",
+                    "冷门客观复盘",
+                    "review_agent",
+                    lambda: __import__(
+                        "scripts.jobs.generate_upset_reviews", fromlist=["run"]
+                    ).run(),
+                ),
+                "cron",
+                minute="25,55",
+                id="generate_upset_reviews",
+            )
+
+            # Daily at 08:00: generate review for the previous business day
             scheduler.add_job(
                 _audited_job(
                     "generate_daily_review",
@@ -332,9 +575,76 @@ def main() -> None:
                     ).run(),
                 ),
                 "cron",
-                hour=23,
-                minute=30,
+                hour=8,
+                minute=0,
                 id="generate_daily_review",
+            )
+
+            # Weekly at Monday 09:00: generate the previous week's review
+            scheduler.add_job(
+                _audited_job(
+                    "generate_weekly_review",
+                    "周报生成",
+                    "review_agent",
+                    lambda: __import__(
+                        "scripts.jobs.generate_periodic_reviews", fromlist=["run_weekly"]
+                    ).run_weekly(),
+                ),
+                "cron",
+                day_of_week="mon",
+                hour=9,
+                minute=0,
+                id="generate_weekly_review",
+            )
+
+            # Monthly at day 1 10:00: generate the previous month's review
+            scheduler.add_job(
+                _audited_job(
+                    "generate_monthly_review",
+                    "月报生成",
+                    "review_agent",
+                    lambda: __import__(
+                        "scripts.jobs.generate_periodic_reviews", fromlist=["run_monthly"]
+                    ).run_monthly(),
+                ),
+                "cron",
+                day=1,
+                hour=10,
+                minute=0,
+                id="generate_monthly_review",
+            )
+
+            # Daily after reports: refresh only time-bounded, source-linked knowledge.
+            scheduler.add_job(
+                _audited_job(
+                    "refresh_upset_knowledge",
+                    "冷门研究知识画像刷新",
+                    "research_agent",
+                    lambda: __import__(
+                        "scripts.jobs.refresh_upset_knowledge", fromlist=["run"]
+                    ).run(),
+                ),
+                "cron",
+                hour=11,
+                minute=0,
+                id="refresh_upset_knowledge",
+            )
+
+            # Extract only explicitly structured, evidence-backed hypotheses.
+            # Validation and feature promotion remain separate audited actions.
+            scheduler.add_job(
+                _audited_job(
+                    "sync_upset_hypotheses",
+                    "冷门研究假设同步",
+                    "research_agent",
+                    lambda: __import__(
+                        "scripts.jobs.sync_upset_hypotheses", fromlist=["run"]
+                    ).run(),
+                ),
+                "cron",
+                hour=11,
+                minute=5,
+                id="sync_upset_hypotheses",
             )
 
             # Daily at 23:45: analyze prediction errors
@@ -435,9 +745,7 @@ def main() -> None:
                     "tag_errors",
                     "错因标签",
                     "review_agent",
-                    lambda: __import__(
-                        "scripts.jobs.tag_errors", fromlist=["run"]
-                    ).run(),
+                    lambda: __import__("scripts.jobs.tag_errors", fromlist=["run"]).run(),
                 ),
                 "cron",
                 hour=23,
@@ -451,9 +759,7 @@ def main() -> None:
                     "snapshot_competition",
                     "竞赛快照",
                     "review_agent",
-                    lambda: __import__(
-                        "scripts.jobs.snapshot_competition", fromlist=["run"]
-                    ).run(),
+                    lambda: __import__("scripts.jobs.snapshot_competition", fromlist=["run"]).run(),
                 ),
                 "cron",
                 hour=23,
@@ -483,9 +789,7 @@ def main() -> None:
                     "reset_agent_budget",
                     "竞赛代理资金重置",
                     "review_agent",
-                    lambda: __import__(
-                        "scripts.jobs.reset_agent_budget", fromlist=["run"]
-                    ).run(),
+                    lambda: __import__("scripts.jobs.reset_agent_budget", fromlist=["run"]).run(),
                 ),
                 "cron",
                 hour=23,
@@ -508,19 +812,11 @@ def main() -> None:
                 id="snapshot_runtime",
             )
 
-            print(
-                "APScheduler started with 25 jobs: "
-                "test_heartbeat, seed_agent_registry, crawl_official_schedule, crawl_official_odds, "
-                "settle_finished_matches, populate_teams_leagues, build_feature_snapshots, "
-                "collect_standings, collect_injury_data, collect_lineup_data, collect_weather, "
-                "mle_train_models, update_elo_ratings, run_model_prediction, run_recommendation_candidate, "
-                "settle_tickets, generate_daily_review, analyze_prediction_errors, tag_errors, compute_evaluation_metrics, "
-                "verify_backup, validate_evidence_chain, audit_data_contamination, "
-                "collect_health_metrics, snapshot_runtime, run_backtest"
-            )
+            job_ids = ", ".join(job.id for job in scheduler.get_jobs())
+            print(f"APScheduler started with {len(scheduler.get_jobs())} jobs: {job_ids}")
         else:
             print(
-                "APScheduler started with 2 jobs: test_heartbeat, seed_agent_registry. "
+                "APScheduler started with 2 jobs: test_heartbeat, startup_recovery. "
                 "Official data jobs disabled (OFFICIAL_SOURCE_ENABLED != true)."
             )
 
@@ -532,8 +828,10 @@ def main() -> None:
     except ImportError:
         print("APScheduler not available; falling back to basic sleep loop.")
         while True:
-            print(f"scheduler heartbeat: {datetime.now().isoformat(timespec='seconds')}")
+            print(f"scheduler heartbeat: {_business_now().isoformat(timespec='seconds')}")
             time.sleep(3600)
+    finally:
+        clear_scheduler_pid(scheduler_pid)
 
 
 if __name__ == "__main__":

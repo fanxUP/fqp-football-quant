@@ -27,9 +27,9 @@ class ModuleLoader:
         data = yaml.safe_load(self.registry_path.read_text(encoding="utf-8"))
         for item in data.get("modules", []):
             info = ModuleInfo(
-                module_code=item["module_code"],
-                module_name=item["module_name"],
-                status=item.get("status", "disabled"),
+                module_code=item["module_code"] if "module_code" in item else item["module_id"],
+                module_name=item["module_name"] if "module_name" in item else item["name"],
+                status=item.get("status", "active"),
                 version=item.get("version", "0.0.0"),
                 depends_on=item.get("depends_on", []),
             )
@@ -49,7 +49,7 @@ class ModuleLoader:
 
 
 if __name__ == "__main__":
-    loader = ModuleLoader("configs/module_registry.yaml")
+    loader = ModuleLoader("configs/final_module_registry.yaml")
     loader.load()
     errs = loader.validate_dependencies()
     if errs:

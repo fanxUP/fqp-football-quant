@@ -31,7 +31,9 @@ if _PROJECT_ROOT not in sys.path:
     sys.path.insert(0, _PROJECT_ROOT)
 
 import numpy as np  # noqa: E402
+from psycopg2.extras import Json  # noqa: E402
 
+from scripts.business_time import business_now  # noqa: E402
 from scripts.poisson_model import poisson_pmf  # noqa: E402
 
 # —— 负对数似然函数 ——
@@ -56,45 +58,78 @@ def _nll_maher(
 
     Constraints: sum(attack) = 0, sum(defense) = 0
     """
+    value, _ = _nll_maher_with_gradient(
+        params,
+        team_ids,
+        home_idx,
+        away_idx,
+        home_goals,
+        away_goals,
+        n_teams,
+    )
+    return value
+
+
+def _nll_maher_with_gradient(
+    params: np.ndarray,
+    team_ids: list[int],
+    home_idx: list[int],
+    away_idx: list[int],
+    home_goals: list[int],
+    away_goals: list[int],
+    n_teams: int,
+) -> tuple[float, np.ndarray]:
+    """Vectorized Maher objective and analytic gradient.
+
+    The previous Python loop made a weekly fit unnecessarily slow and often
+    hit the iteration ceiling. A small ridge penalty stabilizes sparse teams;
+    mean penalties keep attack and defence identifiable.
+    """
+    del team_ids  # retained in the public objective signature for compatibility
     attack = params[:n_teams]
     defense = params[n_teams : 2 * n_teams]
-    home_adv = params[-2]
-    league_intercept = params[-1]
+    home_adv = float(params[-2])
+    league_intercept = float(params[-1])
+    home = np.asarray(home_idx, dtype=np.int64)
+    away = np.asarray(away_idx, dtype=np.int64)
+    hg = np.asarray(home_goals, dtype=float)
+    ag = np.asarray(away_goals, dtype=float)
 
-    # 软约束：惩罚 attack/defense 均值偏离 0
-    penalty = float(np.mean(attack) ** 2 + np.mean(defense) ** 2) * 1000.0
+    log_lam_h = attack[home] + defense[away] + home_adv + league_intercept
+    log_lam_a = attack[away] + defense[home] + league_intercept
+    lam_h = np.exp(np.clip(log_lam_h, -8.0, 8.0))
+    lam_a = np.exp(np.clip(log_lam_a, -8.0, 8.0))
 
-    nll = penalty
-    for i in range(len(home_goals)):
-        tid_h = home_idx[i]
-        tid_a = away_idx[i]
-        hg = home_goals[i]
-        ag = away_goals[i]
+    ridge_strength = 0.10
+    mean_strength = 1000.0
+    mean_attack = float(np.mean(attack))
+    mean_defense = float(np.mean(defense))
+    penalty = ridge_strength * float(
+        np.dot(attack, attack) + np.dot(defense, defense)
+    ) + mean_strength * (mean_attack**2 + mean_defense**2)
+    nll = float(np.sum(lam_h - hg * log_lam_h) + np.sum(lam_a - ag * log_lam_a))
+    nll += penalty
 
-        # log(lambda_home) = attack_home + defense_away + home_adv + league_intercept
-        log_lam_h = attack[tid_h] + defense[tid_a] + home_adv + league_intercept
-        lam_h = math.exp(log_lam_h)
-
-        # log(lambda_away) = attack_away + defense_home + league_intercept
-        log_lam_a = attack[tid_a] + defense[tid_h] + league_intercept
-        lam_a = math.exp(log_lam_a)
-
-        # Poisson log-likelihood: -λ + k*log(λ) - log(k!)
-        # 用 poisson_pmf 并取 log
-        p_h = poisson_pmf(hg, lam_h)
-        p_a = poisson_pmf(ag, lam_a)
-
-        if p_h > 0:
-            nll -= math.log(p_h)
-        else:
-            nll -= -lam_h + hg * log_lam_h  # 忽略 log(k!) 常数
-
-        if p_a > 0:
-            nll -= math.log(p_a)
-        else:
-            nll -= -lam_a + ag * log_lam_a
-
-    return nll
+    residual_h = lam_h - hg
+    residual_a = lam_a - ag
+    grad_attack = np.zeros(n_teams, dtype=float)
+    grad_defense = np.zeros(n_teams, dtype=float)
+    np.add.at(grad_attack, home, residual_h)
+    np.add.at(grad_attack, away, residual_a)
+    np.add.at(grad_defense, away, residual_h)
+    np.add.at(grad_defense, home, residual_a)
+    grad_attack += 2.0 * ridge_strength * attack
+    grad_defense += 2.0 * ridge_strength * defense
+    grad_attack += 2.0 * mean_strength * mean_attack / n_teams
+    grad_defense += 2.0 * mean_strength * mean_defense / n_teams
+    gradient = np.concatenate(
+        [
+            grad_attack,
+            grad_defense,
+            [float(np.sum(residual_h)), float(np.sum(residual_h + residual_a))],
+        ]
+    )
+    return nll, gradient
 
 
 def _nll_dixon_coles_rho(
@@ -171,19 +206,50 @@ def _load_match_data(
     """
     cur = conn.cursor()
 
-    where = "m.match_status = 'Settled'"
-    params: tuple = ()
+    where = "LOWER(m.match_status) = 'settled'"
+    params: tuple = (min_matches,)
     # league_id filter not available (no competition_id on official_matches)
 
     cur.execute(
         f"""
-        SELECT COALESCE(t1.id, 0), COALESCE(t2.id, 0), r.full_home_goals, r.full_away_goals
-        FROM official_matches m
-        JOIN official_results r ON r.match_id = m.id
-        LEFT JOIN teams t1 ON t1.team_name_cn = m.home_team_name
-        LEFT JOIN teams t2 ON t2.team_name_cn = m.away_team_name
-        WHERE {where} AND r.full_home_goals IS NOT NULL AND r.full_away_goals IS NOT NULL
-        ORDER BY m.kickoff_time ASC
+        WITH settled AS (
+            SELECT m.kickoff_time, t1.id AS home_team_id, t2.id AS away_team_id,
+                   r.full_home_goals, r.full_away_goals
+            FROM official_matches m
+            JOIN official_results r ON r.match_id = m.id
+            JOIN LATERAL (
+                SELECT candidate.id
+                FROM teams candidate
+                WHERE candidate.team_name_cn = m.home_team_name
+                ORDER BY candidate.id
+                LIMIT 1
+            ) t1 ON true
+            JOIN LATERAL (
+                SELECT candidate.id
+                FROM teams candidate
+                WHERE candidate.team_name_cn = m.away_team_name
+                ORDER BY candidate.id
+                LIMIT 1
+            ) t2 ON true
+            WHERE {where}
+              AND r.full_home_goals IS NOT NULL
+              AND r.full_away_goals IS NOT NULL
+        ), eligible_teams AS (
+            SELECT team_id
+            FROM (
+                SELECT home_team_id AS team_id FROM settled
+                UNION ALL
+                SELECT away_team_id AS team_id FROM settled
+            ) appearances
+            GROUP BY team_id
+            HAVING COUNT(*) >= %s
+        )
+        SELECT s.home_team_id, s.away_team_id,
+               s.full_home_goals, s.full_away_goals
+        FROM settled s
+        JOIN eligible_teams home_eligible ON home_eligible.team_id = s.home_team_id
+        JOIN eligible_teams away_eligible ON away_eligible.team_id = s.away_team_id
+        ORDER BY s.kickoff_time ASC
     """,
         params,
     )
@@ -212,6 +278,53 @@ def _load_match_data(
     away_idx = [team_to_idx[t] for t in match_away]
 
     return team_ids, team_to_idx, home_idx, away_idx, match_hg, match_ag
+
+
+def _load_training_window(conn: Any, min_matches: int = 5) -> tuple[Any, Any]:
+    """Return the exact historical date range eligible for MLE training."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            WITH settled AS (
+                SELECT m.kickoff_time, t1.id AS home_team_id, t2.id AS away_team_id
+                FROM official_matches m
+                JOIN official_results r ON r.match_id = m.id
+                JOIN LATERAL (
+                    SELECT candidate.id
+                    FROM teams candidate
+                    WHERE candidate.team_name_cn = m.home_team_name
+                    ORDER BY candidate.id
+                    LIMIT 1
+                ) t1 ON true
+                JOIN LATERAL (
+                    SELECT candidate.id
+                    FROM teams candidate
+                    WHERE candidate.team_name_cn = m.away_team_name
+                    ORDER BY candidate.id
+                    LIMIT 1
+                ) t2 ON true
+                WHERE LOWER(m.match_status) = 'settled'
+                  AND r.full_home_goals IS NOT NULL
+                  AND r.full_away_goals IS NOT NULL
+            ), eligible_teams AS (
+                SELECT team_id
+                FROM (
+                    SELECT home_team_id AS team_id FROM settled
+                    UNION ALL
+                    SELECT away_team_id AS team_id FROM settled
+                ) appearances
+                GROUP BY team_id
+                HAVING COUNT(*) >= %s
+            )
+            SELECT MIN(s.kickoff_time)::date, MAX(s.kickoff_time)::date
+            FROM settled s
+            JOIN eligible_teams home_eligible ON home_eligible.team_id = s.home_team_id
+            JOIN eligible_teams away_eligible ON away_eligible.team_id = s.away_team_id
+            """,
+            (min_matches,),
+        )
+        row = cur.fetchone()
+    return (row[0], row[1]) if row else (None, None)
 
 
 # —— 主拟合函数 ——
@@ -265,36 +378,52 @@ def fit_maher_poisson(
         from scipy.optimize import minimize
 
         result = minimize(
-            _nll_maher,
+            _nll_maher_with_gradient,
             init,
             args=(team_ids, home_idx, away_idx, hg_vec, ag_vec, n_teams),
             method="L-BFGS-B",
-            options={"maxiter": 500, "ftol": 1e-8},
+            jac=True,
+            bounds=[(-2.5, 2.5)] * (n_teams * 2) + [(-1.0, 1.0), (-1.0, 2.0)],
+            options={"maxiter": 1000, "ftol": 1e-9, "gtol": 1e-6},
         )
 
-        converged = result.success
+        converged = bool(result.success)
         final_params = result.x
         nll = float(result.fun)
+        optimizer_message = str(result.message)
+        optimizer_iterations = int(result.nit)
+        optimizer_gradient_norm = float(np.linalg.norm(result.jac, ord=np.inf))
     except ImportError:
         # Fallback: simple method-of-moments estimation
         converged = False
         final_params = init
         nll = _nll_maher(init, team_ids, home_idx, away_idx, hg_vec, ag_vec, n_teams)
+        optimizer_message = "scipy is unavailable"
+        optimizer_iterations = 0
+        optimizer_gradient_norm = None
 
     attack = {team_ids[i]: round(float(final_params[i]), 4) for i in range(n_teams)}
     defense = {team_ids[i]: round(float(final_params[n_teams + i]), 4) for i in range(n_teams)}
+    team_match_counts = {team_id: 0 for team_id in team_ids}
+    for home_team_idx, away_team_idx in zip(home_idx, away_idx, strict=True):
+        team_match_counts[team_ids[home_team_idx]] += 1
+        team_match_counts[team_ids[away_team_idx]] += 1
     home_adv = round(float(final_params[-2]), 4)
     league_intercept = round(float(final_params[-1]), 4)
 
     return {
         "attack": attack,
         "defense": defense,
+        "team_match_counts": team_match_counts,
         "home_advantage": home_adv,
         "league_intercept": league_intercept,
         "n_matches": n_matches,
         "n_teams": n_teams,
         "nll": round(nll, 2),
         "converged": converged,
+        "optimizer_message": optimizer_message,
+        "optimizer_iterations": optimizer_iterations,
+        "optimizer_gradient_norm": optimizer_gradient_norm,
     }
 
 
@@ -389,6 +518,9 @@ def fit_all_models(
         return {"maher_poisson": maher, "dixon_coles_rho": {"error": "cascade"}}
 
     dc_rho = fit_dixon_coles_rho(conn, maher, league_id=league_id)
+    training_start_date, training_end_date = _load_training_window(conn)
+    maher["training_start_date"] = training_start_date
+    maher["training_end_date"] = training_end_date
     return {"maher_poisson": maher, "dixon_coles_rho": dc_rho}
 
 
@@ -411,25 +543,69 @@ def run(dry_run: bool = False) -> dict[str, Any]:
         maher = result["maher_poisson"]
         dc = result["dixon_coles_rho"]
 
-        # 存储到 DB
+        if not maher.get("converged", False):
+            return {
+                "status": "error",
+                "error": "Maher MLE did not converge",
+                "optimizer_message": maher.get("optimizer_message"),
+            }
+        if "error" in dc:
+            return {"status": "error", "error": f"Dixon-Coles fit failed: {dc['error']}"}
+
+        # Each training run creates immutable versions. Historical predictions
+        # keep pointing to their original parameters, while only the new pair
+        # becomes active for subsequent prediction runs.
         cur = conn.cursor()
-
-        # Update maher_poisson params
+        version = f"mle-{business_now().strftime('%Y%m%dT%H%M%S%f')}"
+        training_start_date = maher.get("training_start_date")
+        training_end_date = maher.get("training_end_date")
+        maher_params = dict(maher)
+        for field in ("training_start_date", "training_end_date"):
+            value = maher_params.get(field)
+            if value is not None and hasattr(value, "isoformat"):
+                maher_params[field] = value.isoformat()
         cur.execute(
             """UPDATE model_versions
-               SET parameters_json = %s, updated_at = NOW()
-               WHERE model_name = 'maher_poisson'""",
-            (maher,),
+               SET is_active = false
+               WHERE model_name IN ('maher_poisson', 'dixon_coles')"""
         )
-
-        # Update dixon_coles params (include rho)
-        dc_params = {"rho": dc.get("rho", -0.08), "nll": dc.get("nll")}
-        cur.execute(
-            """UPDATE model_versions
-               SET parameters_json = %s, updated_at = NOW()
-               WHERE model_name = 'dixon_coles'""",
-            (dc_params,),
+        dc_params = {
+            "rho": dc.get("rho", -0.08),
+            "nll": dc.get("nll"),
+            "n_matches": dc.get("n_total_matches", 0),
+            "maher_converged": maher.get("converged", False),
+        }
+        versions = (
+            (
+                "maher_poisson",
+                "score_distribution",
+                Json(maher_params),
+                "Maher Poisson parameters fitted from settled official match history.",
+            ),
+            (
+                "dixon_coles",
+                "low_score_adjustment",
+                Json(dc_params),
+                "Dixon-Coles low-score adjustment fitted from settled official match history.",
+            ),
         )
+        for model_name, model_type, parameters, description in versions:
+            cur.execute(
+                """INSERT INTO model_versions (
+                       model_name, model_type, version,
+                       training_start_date, training_end_date,
+                       parameters_json, description, is_active
+                   ) VALUES (%s, %s, %s, %s, %s, %s, %s, true)""",
+                (
+                    model_name,
+                    model_type,
+                    version,
+                    training_start_date,
+                    training_end_date,
+                    parameters,
+                    description,
+                ),
+            )
 
         conn.commit()
 
@@ -445,6 +621,9 @@ def run(dry_run: bool = False) -> dict[str, Any]:
                 "rho": dc.get("rho", -0.08),
                 "n_low_score_matches": dc.get("n_low_score_matches", 0),
             },
+            "model_version": version,
+            "training_start_date": str(training_start_date) if training_start_date else None,
+            "training_end_date": str(training_end_date) if training_end_date else None,
         }
 
 

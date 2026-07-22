@@ -1,0 +1,42 @@
+[data-theme='tactical-board'] {
+  color-scheme: dark;
+  --fqp-bg: #07120d;
+  --fqp-panel: #0d1d15;
+  --fqp-panel-2: #14281d;
+  --fqp-red: #2d8b57;
+  --fqp-red-neon: #74d680;
+  --fqp-red-dark: #185333;
+  --fqp-accent: #2d8b57;
+  --fqp-accent-strong: #74d680;
+  --fqp-accent-muted: rgba(116, 214, 128, 0.1);
+  --fqp-border: rgba(146, 169, 154, 0.17);
+  --fqp-border-light: rgba(146, 169, 154, 0.08);
+  --fqp-text: #eff8f1;
+  --fqp-text-muted: #92a99a;
+  --fqp-success: #74d680;
+  --fqp-warning: #c9f36b;
+  --fqp-info: #64b5a4;
+  --fqp-danger: #e15b64;
+  --fqp-hover-bg: rgba(116, 214, 128, 0.09);
+  --fqp-hover-subtle: rgba(239, 248, 241, 0.025);
+  --fqp-bg-glass: rgba(239, 248, 241, 0.018);
+  --fqp-shadow-red: 0 10px 28px rgba(0, 0, 0, 0.22);
+  --fqp-glow-red: 0 0 18px rgba(116, 214, 128, 0.2);
+  --fqp-chart-1: #74d680;
+  --fqp-chart-2: #c9f36b;
+  --fqp-chart-3: #e0aa4f;
+  --fqp-chart-4: #42ba86;
+  --fqp-chart-5: #a984d6;
+  --fqp-chart-6: #55b9c1;
+  --fqp-chart-text: #eff8f1;
+  --fqp-chart-text-muted: #92a99a;
+  --fqp-chart-grid: rgba(146, 169, 154, 0.13);
+  --fqp-chart-tooltip: rgba(7, 18, 13, 0.97);
+  --fqp-chart-tooltip-border: rgba(116, 214, 128, 0.23);
+}
+
+[data-theme='tactical-board'] body {
+  background-image: linear-gradient(rgba(116, 214, 128, 0.025) 1px, transparent 1px), linear-gradient(90deg, rgba(116, 214, 128, 0.025) 1px, transparent 1px);
+  background-color: var(--fqp-bg);
+  background-size: 72px 72px;
+}

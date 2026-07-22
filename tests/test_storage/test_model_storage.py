@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
+import pytest
+
 from scripts.model_storage import (
     store_committee_vote,
     store_model_prediction,
@@ -28,13 +30,25 @@ class TestStoreModelPrediction:
         pred = {
             "match_id": 101,
             "model_version_id": 5,
+            "odds_snapshot_id": 8,
+            "feature_snapshot_id": 9,
             "play_type": "SPF",
             "option_code": "胜",
             "model_probability": 0.45,
             "market_probability": 0.42,
+            "break_even_probability": 0.40,
+            "market_edge": 0.03,
+            "breakeven_edge": 0.05,
+            "ev": 0.125,
+            "validation_status": "valid",
+            "validation_errors": [],
+            "calculation_version": "market_metrics_v2",
         }
         result = store_model_prediction(mock_conn, pred)
         assert result == 42
+        call_args = mock_cur.execute.call_args[0][1]
+        assert call_args["feature_snapshot_id"] == 9
+        assert call_args["raw_model_probability"] == 0.45
         mock_cur.execute.assert_called_once()
         mock_conn.commit.assert_called_once()
 
@@ -47,6 +61,9 @@ class TestStoreModelPrediction:
             "play_type": "SPF",
             "option_code": "胜",
             "uncertainty_reason": {"missing_features": ["weather"]},
+            "validation_status": "invalid",
+            "validation_errors": ["TEST_INVALID"],
+            "calculation_version": "market_metrics_v2",
         }
         result = store_model_prediction(mock_conn, pred)
         assert result == 1
@@ -57,9 +74,45 @@ class TestStoreModelPrediction:
     def test_returns_none_when_no_row_returned(self):
         mock_conn, mock_cur = _mock_conn(fetchone=None)
 
-        pred = {"match_id": 101, "model_version_id": 5, "play_type": "SPF", "option_code": "胜"}
+        pred = {
+            "match_id": 101,
+            "model_version_id": 5,
+            "play_type": "SPF",
+            "option_code": "胜",
+            "validation_status": "invalid",
+            "validation_errors": ["TEST_INVALID"],
+            "calculation_version": "market_metrics_v2",
+        }
         result = store_model_prediction(mock_conn, pred)
         assert result is None
+
+    def test_rejects_implicit_or_legacy_validation(self):
+        mock_conn, _ = _mock_conn()
+        base = {"match_id": 101, "model_version_id": 5, "play_type": "SPF", "option_code": "胜"}
+
+        with pytest.raises(ValueError, match="必须显式声明"):
+            store_model_prediction(mock_conn, base)
+
+        with pytest.raises(ValueError, match="legacy"):
+            store_model_prediction(
+                mock_conn,
+                {**base, "validation_status": "invalid", "calculation_version": "legacy"},
+            )
+
+    def test_rejects_valid_prediction_without_evidence(self):
+        mock_conn, _ = _mock_conn()
+        with pytest.raises(ValueError, match="缺少必要证据"):
+            store_model_prediction(
+                mock_conn,
+                {
+                    "match_id": 101,
+                    "model_version_id": 5,
+                    "play_type": "SPF",
+                    "option_code": "胜",
+                    "validation_status": "valid",
+                    "calculation_version": "market_metrics_v2",
+                },
+            )
 
 
 class TestStoreCommitteeVote:
@@ -95,6 +148,15 @@ class TestStoreCommitteeVote:
 
 
 class TestStoreSimulationTicket:
+    def test_rejects_ticket_without_items_before_writing(self):
+        mock_conn, mock_cur = _mock_conn()
+
+        result = store_simulation_ticket(mock_conn, {"suggested_stake": 20.0}, [])
+
+        assert result is None
+        mock_cur.execute.assert_not_called()
+        mock_conn.rollback.assert_called_once()
+
     def test_creates_ticket_with_items(self):
         mock_cur = MagicMock()
         mock_cur.fetchone.side_effect = [[1], [100]]  # budget_plan_id, ticket_id
@@ -103,10 +165,18 @@ class TestStoreSimulationTicket:
 
         ticket = {"suggested_stake": 100.0, "strategy_pool": "main"}
         items = [
-            {"match_id": 101, "play_type": "SPF", "option_code": "胜", "sp_value": 2.10}
+            {
+                "match_id": 101,
+                "play_type": "SPF",
+                "option_code": "胜",
+                "sp_value": 2.10,
+                "feature_snapshot_id": 88,
+            }
         ]
         result = store_simulation_ticket(mock_conn, ticket, items)
         assert result == 100
+        item_call_args = mock_cur.execute.call_args_list[-1][0][1]
+        assert item_call_args["feature_snapshot_id"] == 88
         mock_conn.commit.assert_called_once()
         # Should have called execute 3 times: budget query, ticket insert, item insert
         assert mock_cur.execute.call_count == 3

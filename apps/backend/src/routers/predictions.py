@@ -5,6 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Query
 
 from apps.backend.src.db import get_db
+from scripts.sporttery_sales import get_sporttery_sales_window
 
 router = APIRouter(tags=["predictions"])
 
@@ -58,29 +59,34 @@ def _option_name(play_type: str, option_code: str, handicap: float | None = None
 @router.get("/api/recommendations/live")
 def get_live_recommendations(
     limit: int = Query(20),
-    min_ev: float = Query(0.02, description="最小EV阈值"),
-    min_confidence: float = Query(0.3, description="最小置信度"),
+    min_ev: float = Query(-1.0, description="最低展示EV，仅用于页面筛选"),
+    min_confidence: float = Query(0.0, description="最低展示置信度，仅用于页面筛选"),
 ):
-    """Generate live betting recommendations from latest model predictions.
+    """Return today's Agent virtual recommendations at the current official SP.
 
-    Returns the best match+option combos with positive EV, sorted by EV descending.
-    Each recommendation includes match info, odds, probabilities, edge, and suggested action.
+    Recommendations remain visible during official rest time; the betting
+    terminal separately enforces whether the user can currently place a bet.
     """
+    sales_window = get_sporttery_sales_window()
+
     with get_db() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 """
-                WITH latest AS (
-                    SELECT DISTINCT ON (mp.match_id, mp.play_type, mp.option_code)
-                        mp.id,
-                        mp.match_id,
-                        mp.play_type,
-                        mp.option_code,
-                        mp.model_probability,
-                        mp.market_probability,
-                        mp.fair_odds,
-                        mp.ev,
-                        mp.confidence_score,
+                WITH released_items AS (
+                    SELECT DISTINCT ON (sti.match_id, sti.play_type, sti.option_code)
+                        mp.id AS prediction_id,
+                        sti.match_id,
+                        sti.play_type,
+                        sti.option_code,
+                        sti.model_probability,
+                        (1.0 / current_odds.sp_value)
+                            / current_market.implied_probability_sum
+                            AS market_probability,
+                        CASE WHEN sti.model_probability > 0
+                             THEN 1.0 / sti.model_probability END AS fair_odds,
+                        sti.model_probability * current_odds.sp_value - 1 AS current_ev,
+                        sti.confidence_score,
                         mp.predict_time,
                         mv.model_name,
                         m.home_team_name,
@@ -88,24 +94,90 @@ def get_live_recommendations(
                         m.league_name,
                         m.kickoff_time,
                         m.match_status,
-                        om.handicap
-                    FROM model_predictions mp
+                        COALESCE(m.raw_json->>'matchNumStr', m.official_match_code::text)
+                            AS official_match_code,
+                        current_odds.sp_value,
+                        current_odds.handicap,
+                        current_odds.snapshot_time,
+                        fs.data_completeness_score,
+                        st.strategy_pool,
+                        st.risk_level
+                    FROM simulation_tickets st
+                    JOIN simulation_ticket_items sti ON sti.ticket_id = st.id
+                    JOIN model_predictions mp ON mp.id = sti.model_prediction_id
                     JOIN model_versions mv ON mv.id = mp.model_version_id
                     JOIN official_matches m ON m.id = mp.match_id
-                    LEFT JOIN LATERAL (
-                        SELECT handicap FROM official_odds_snapshots
-                        WHERE match_id = mp.match_id AND play_type = mp.play_type
-                          AND handicap IS NOT NULL
-                        ORDER BY snapshot_time DESC LIMIT 1
-                    ) om ON true
-                    WHERE mp.ev > %(min_ev)s
-                      AND mp.confidence_score >= %(min_confidence)s
-                      AND m.match_status NOT IN ('Settled', 'Cancelled')
-                    ORDER BY mp.match_id, mp.play_type, mp.option_code, mp.predict_time DESC
+                    LEFT JOIN match_feature_snapshots fs
+                           ON fs.id = mp.feature_snapshot_id
+                    JOIN LATERAL (
+                        SELECT os.sp_value, os.handicap, os.snapshot_time
+                        FROM official_odds_snapshots os
+                        WHERE os.match_id = sti.match_id
+                          AND os.play_type = sti.play_type
+                          AND os.option_code = CASE
+                              WHEN sti.play_type IN ('spf', 'rqspf') THEN CASE sti.option_code
+                                  WHEN '3' THEN 'h'
+                                  WHEN '1' THEN 'd'
+                                  WHEN '0' THEN 'a'
+                                  ELSE sti.option_code
+                              END
+                              ELSE sti.option_code
+                          END
+                          AND os.is_open = true
+                        ORDER BY os.snapshot_time DESC, os.id DESC
+                        LIMIT 1
+                    ) current_odds ON true
+                    JOIN LATERAL (
+                        SELECT SUM(1.0 / latest.sp_value)
+                                   AS implied_probability_sum
+                        FROM (
+                            SELECT DISTINCT ON (os.option_code)
+                                os.option_code, os.sp_value
+                            FROM official_odds_snapshots os
+                            WHERE os.match_id = sti.match_id
+                              AND os.play_type = sti.play_type
+                              AND os.is_open = true
+                              AND os.sp_value > 1
+                            ORDER BY os.option_code,
+                                     os.snapshot_time DESC, os.id DESC
+                        ) latest
+                    ) current_market ON current_market.implied_probability_sum > 0
+                    WHERE (st.created_at AT TIME ZONE 'UTC'
+                           AT TIME ZONE 'Asia/Shanghai')::date
+                          = timezone('Asia/Shanghai', NOW())::date
+                      AND st.ticket_status IN ('generated', 'activated', 'purchased')
+                      AND mp.odds_snapshot_id IS NOT NULL
+                      AND mp.feature_snapshot_id IS NOT NULL
+                      AND mp.validation_status = 'valid'
+                      AND COALESCE(
+                          (mp.uncertainty_reason->>'model_independent')::boolean,
+                          false
+                      ) = true
+                      AND LOWER(COALESCE(m.match_status, '')) IN ('scheduled', 'selling', 'not_started')
+                      AND m.kickoff_time > timezone('Asia/Shanghai', NOW())
+                      AND mp.predict_time < m.kickoff_time
+                      AND EXISTS (
+                          SELECT 1
+                          FROM official_markets market
+                          WHERE market.match_id = m.id
+                            AND market.play_type = mp.play_type
+                            AND market.is_open = true
+                      )
+                      AND sti.model_probability * current_odds.sp_value - 1 > %(min_ev)s
+                      AND sti.confidence_score >= %(min_confidence)s
+                    ORDER BY sti.match_id, sti.play_type, sti.option_code,
+                             st.created_at DESC, sti.id DESC
                 )
-                SELECT *
-                FROM latest
-                ORDER BY ev DESC, confidence_score DESC
+                SELECT prediction_id, match_id, play_type, option_code,
+                       model_probability, market_probability, fair_odds, current_ev,
+                       confidence_score, predict_time, model_name,
+                       home_team_name, away_team_name, league_name,
+                       kickoff_time, match_status, handicap,
+                       official_match_code, sp_value,
+                       snapshot_time, data_completeness_score,
+                       strategy_pool, risk_level
+                FROM released_items
+                ORDER BY current_ev DESC, confidence_score DESC
                 LIMIT %(limit)s
                 """,
                 {"min_ev": min_ev, "min_confidence": min_confidence, "limit": limit},
@@ -120,33 +192,91 @@ def get_live_recommendations(
         ev = float(r[7]) if r[7] else 0
         confidence = float(r[8]) if r[8] else 0
         edge = model_prob - market_prob if market_prob > 0 else 0
-        handicap = float(r[16]) if len(r) > 16 and r[16] is not None else None
+        handicap = float(r[16]) if r[16] is not None else None
+        official_match_code = r[17]
+        sp_value = float(r[18])
+        break_even_probability = 1.0 / sp_value
+        breakeven_edge = model_prob - break_even_probability
+        odds_snapshot_time = r[19]
+        data_completeness = float(r[20]) if r[20] is not None else None
 
-        recommendations.append({
-            "prediction_id": r[0],
-            "match_id": r[1],
-            "play_type": r[2],
-            "play_type_name": PLAY_TYPE_NAMES.get(r[2], r[2]),
-            "option_code": r[3],
-            "option_name": _option_name(r[2], r[3], handicap),
-            "model_probability": round(model_prob, 4),
-            "market_probability": round(market_prob, 4),
-            "fair_odds": round(fair_odds, 2),
-            "ev": round(ev, 4),
-            "edge": round(edge, 4),
-            "confidence": round(confidence, 4),
-            "predict_time": r[9].isoformat() if hasattr(r[9], "isoformat") else str(r[9]),
-            "model_name": r[10],
-            "home_team": r[11],
-            "away_team": r[12],
-            "league": r[13],
-            "kickoff_time": r[14].isoformat() if hasattr(r[14], "isoformat") else str(r[14]) if r[14] else None,
-            "match_status": r[15],
-        })
+        recommendations.append(
+            {
+                "prediction_id": r[0],
+                "match_id": r[1],
+                "play_type": r[2],
+                "play_type_name": PLAY_TYPE_NAMES.get(r[2], r[2]),
+                "option_code": r[3],
+                "option_name": _option_name(r[2], r[3], handicap),
+                "model_probability": round(model_prob, 4),
+                "market_probability": round(market_prob, 4),
+                "sp_value": round(sp_value, 2),
+                "fair_odds": round(fair_odds, 2),
+                "ev": round(ev, 4),
+                "edge": round(edge, 4),
+                "market_edge": round(edge, 4),
+                "break_even_probability": round(break_even_probability, 4),
+                "breakeven_edge": round(breakeven_edge, 4),
+                "confidence": round(confidence, 4),
+                "odds_snapshot_time": odds_snapshot_time.isoformat()
+                if hasattr(odds_snapshot_time, "isoformat")
+                else str(odds_snapshot_time),
+                "data_completeness": round(data_completeness, 1)
+                if data_completeness is not None
+                else None,
+                "validation_status": "valid",
+                "model_independent": True,
+                "strategy_pool": r[21],
+                "risk_level": r[22],
+                "predict_time": r[9].isoformat() if hasattr(r[9], "isoformat") else str(r[9]),
+                "model_name": r[10],
+                "home_team": r[11],
+                "away_team": r[12],
+                "league": r[13],
+                "kickoff_time": r[14].isoformat()
+                if hasattr(r[14], "isoformat")
+                else str(r[14])
+                if r[14]
+                else None,
+                "match_status": r[15],
+                "match_num_str": official_match_code,
+                "ht_home_goals": None,
+                "ht_away_goals": None,
+                "ft_home_goals": None,
+                "ft_away_goals": None,
+                "et_home_goals": None,
+                "et_away_goals": None,
+                "pk_home_goals": None,
+                "pk_away_goals": None,
+                "spf_result": None,
+                "rqspf_result": None,
+                "total_goals_result": None,
+                "score_result": None,
+                "half_full_result": None,
+            }
+        )
 
-    return {"status": "ok", "recommendations": recommendations, "total": len(recommendations)}
+    return {
+        "status": "ok",
+        "recommendations": recommendations,
+        "total": len(recommendations),
+        "sales_window": sales_window.as_dict(),
+    }
 
 
+@router.post("/api/models/predict/date/{date}")
+def predict_models_for_date(date: str, dry_run: bool = Query(True)):
+    """Compatibility endpoint for documented model prediction trigger."""
+    if dry_run:
+        return {"status": "dry_run", "date": date}
+    from scripts.jobs.run_model_prediction import run
+
+    result = run(dry_run=False)
+    result["date"] = date
+    return result
+
+
+@router.get("/api/models/predictions")
 @router.get("/api/predictions")
 def list_predictions(
     match_id: int | None = Query(None),
@@ -160,6 +290,7 @@ def list_predictions(
                     """
                     SELECT mp.id, mp.match_id, mp.predict_time,
                            mv.model_name, mp.play_type, mp.option_code,
+                           COALESCE(mp.raw_model_probability, mp.model_probability),
                            mp.model_probability, mp.market_probability,
                            mp.fair_odds, mp.ev, mp.confidence_score,
                            m.home_team_name, m.away_team_name
@@ -167,6 +298,8 @@ def list_predictions(
                     JOIN model_versions mv ON mv.id = mp.model_version_id
                     JOIN official_matches m ON m.id = mp.match_id
                     WHERE mp.match_id = %s
+                      AND mp.validation_status = 'valid'
+                      AND mp.predict_time < m.kickoff_time
                     ORDER BY mp.predict_time DESC, mp.ev DESC
                     LIMIT %s
                     """,
@@ -177,12 +310,15 @@ def list_predictions(
                     """
                     SELECT mp.id, mp.match_id, mp.predict_time,
                            mv.model_name, mp.play_type, mp.option_code,
+                           COALESCE(mp.raw_model_probability, mp.model_probability),
                            mp.model_probability, mp.market_probability,
                            mp.fair_odds, mp.ev, mp.confidence_score,
                            m.home_team_name, m.away_team_name
                     FROM model_predictions mp
                     JOIN model_versions mv ON mv.id = mp.model_version_id
                     JOIN official_matches m ON m.id = mp.match_id
+                    WHERE mp.validation_status = 'valid'
+                      AND mp.predict_time < m.kickoff_time
                     ORDER BY mp.predict_time DESC, mp.ev DESC
                     LIMIT %s
                     """,
@@ -198,18 +334,97 @@ def list_predictions(
                 "model_name": r[3],
                 "play_type": r[4],
                 "option_code": r[5],
-                "model_probability": float(r[6]) if r[6] else None,
-                "market_probability": float(r[7]) if r[7] else None,
-                "fair_odds": float(r[8]) if r[8] else None,
-                "ev": float(r[9]) if r[9] else None,
-                "confidence": float(r[10]) if r[10] else None,
-                "home_team": r[11],
-                "away_team": r[12],
+                "raw_model_probability": float(r[6]) if r[6] is not None else None,
+                "model_probability": float(r[7]) if r[7] is not None else None,
+                "feature_adjusted": (
+                    r[6] is not None and r[7] is not None and abs(float(r[7]) - float(r[6])) > 1e-9
+                ),
+                "market_probability": float(r[8]) if r[8] is not None else None,
+                "fair_odds": float(r[9]) if r[9] is not None else None,
+                "ev": float(r[10]) if r[10] is not None else None,
+                "confidence": float(r[11]) if r[11] is not None else None,
+                "home_team": r[12],
+                "away_team": r[13],
             }
             for r in rows
         ],
         "total": len(rows),
     }
+
+
+@router.get("/api/models/versions")
+def list_model_versions(limit: int = Query(50)):
+    """List model versions for API contract compatibility."""
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT id, model_name, version, parameters_json, training_start_date,
+                       training_end_date, is_active, created_at
+                FROM model_versions
+                ORDER BY created_at DESC
+                LIMIT %s
+                """,
+                (limit,),
+            )
+            rows = cur.fetchall()
+    return {
+        "versions": [
+            {
+                "id": row[0],
+                "model_name": row[1],
+                "version": row[2],
+                "parameters_json": row[3],
+                "training_start_date": str(row[4]) if row[4] else None,
+                "training_end_date": str(row[5]) if row[5] else None,
+                # Compatibility aliases retained for existing API consumers.
+                "training_window_start": str(row[4]) if row[4] else None,
+                "training_window_end": str(row[5]) if row[5] else None,
+                "is_active": row[6],
+                "created_at": row[7].isoformat() if hasattr(row[7], "isoformat") else str(row[7]),
+            }
+            for row in rows
+        ],
+        "total": len(rows),
+    }
+
+
+@router.post("/api/recommendations/generate")
+def generate_recommendations(date: str | None = Query(None), dry_run: bool = Query(True)):
+    """Compatibility endpoint for recommendation generation."""
+    if dry_run:
+        return {"status": "dry_run", "date": date}
+    from scripts.jobs.run_recommendation_candidate import run
+
+    result = run(dry_run=False)
+    result["date"] = date
+    return result
+
+
+@router.get("/api/recommendations/daily")
+def list_daily_recommendations(date: str | None = Query(None), limit: int = Query(20)):
+    """Compatibility endpoint for daily recommendation tickets."""
+    result = list_tickets(status=None, limit=limit)
+    result["date"] = date
+    return result
+
+
+@router.post("/api/recommendations/{ticket_id}/invalidate")
+def invalidate_recommendation(ticket_id: int):
+    """Mark a simulation ticket as invalidated."""
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE simulation_tickets
+                SET ticket_status = 'invalidated'
+                WHERE id = %s
+                """,
+                (ticket_id,),
+            )
+            ok = cur.rowcount > 0
+        conn.commit()
+    return {"status": "ok" if ok else "not_found", "ticket_id": ticket_id}
 
 
 @router.get("/api/tickets")

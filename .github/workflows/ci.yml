@@ -10,11 +10,12 @@ jobs:
   lint-and-typecheck:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
-          python-version: "3.11"
+          python-version: "3.14"
+          cache: pip
 
       - name: Install dependencies
         run: |
@@ -29,7 +30,21 @@ jobs:
         run: ruff format --check .
 
       - name: Mypy type check
-        run: mypy apps/ scripts/ --explicit-package-bases
+        run: mypy apps/backend/src scripts --explicit-package-bases
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: apps/frontend/package-lock.json
+
+      - name: Frontend quality gates
+        working-directory: apps/frontend
+        run: |
+          npm ci
+          npm run typecheck
+          npm test
+          npm run build
 
   test:
     runs-on: ubuntu-latest
@@ -51,11 +66,12 @@ jobs:
           --health-retries 5
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
-          python-version: "3.11"
+          python-version: "3.14"
+          cache: pip
 
       - name: Install dependencies
         run: |
@@ -65,8 +81,10 @@ jobs:
 
       - name: Initialize test database schema
         run: |
+          set -euo pipefail
           for f in sql/*.sql; do
-            PGPASSWORD=fqp_test_password psql -h localhost -U fqp -d fqp_test -f "$f"
+            PGPASSWORD=fqp_test_password psql -X -v ON_ERROR_STOP=1 \
+              -h localhost -U fqp -d fqp_test -f "$f"
           done
         env:
           PGPASSWORD: fqp_test_password
@@ -74,6 +92,6 @@ jobs:
       - name: Run tests with coverage
         run: |
           DATABASE_URL=postgresql://fqp:fqp_test_password@localhost:5432/fqp_test \
-          pytest --cov=. --cov-report=xml --cov-report=term -m "not slow"
+          pytest --cov=. --cov-report=xml --cov-report=term --cov-fail-under=50 -m "not slow"
         env:
           DATABASE_URL: postgresql://fqp:fqp_test_password@localhost:5432/fqp_test

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { getFlagUrl, getTeamGradient, getTeamInitials } from '../utils/teamLogo';
+import { getTeamGradient, getTeamLogoUrl } from '../utils/teamLogo';
 
 interface TeamLogoProps {
   /** Team name in Chinese (e.g. "巴塞罗那") */
@@ -10,6 +10,10 @@ interface TeamLogoProps {
   shortName?: string | null;
   /** Country (e.g. "Spain", "International") */
   country?: string | null;
+  /** Original crest URL from team data or a trusted registry. */
+  officialLogoUrl?: string | null;
+  /** Whether missing crests should fall back to initials. Default true. */
+  showFallbackInitials?: boolean;
   /** Logo size in px. Default 48. */
   size?: number;
 }
@@ -17,15 +21,17 @@ interface TeamLogoProps {
 /**
  * Team logo display component.
  *
- * - National teams → flag image from flagcdn.com, rounded circle
- * - Club teams    → colored gradient circle with initials
- * - Handles image load error → graceful fallback to initials
+ * - Local crest registry → bundled team image
+ * - Explicit logo URL / country flag → fallback for future unknown teams
+ * - Missing logo → square text fallback, never a circular avatar
  */
 export default function TeamLogo({
   nameCn,
   nameEn,
   shortName,
   country,
+  officialLogoUrl,
+  showFallbackInitials = true,
   size = 48,
 }: TeamLogoProps) {
   const [imgError, setImgError] = useState(false);
@@ -33,20 +39,18 @@ export default function TeamLogo({
   // Reset error state when team changes (new match)
   useEffect(() => {
     setImgError(false);
-  }, [nameCn, nameEn, shortName, country]);
+  }, [nameCn, nameEn, shortName, country, officialLogoUrl]);
 
-  const flagUrl = getFlagUrl(nameCn, nameEn, country);
-  const showFlag = !!flagUrl && !imgError;
+  const logoUrl = getTeamLogoUrl(nameCn, nameEn, country, officialLogoUrl);
+  const showLogo = !!logoUrl && !imgError;
 
   const label = nameCn || nameEn || shortName || 'FC';
-  const initials = getTeamInitials(nameCn, shortName, nameEn);
   const [c1, c2] = getTeamGradient(label);
-  const fontSize = Math.max(11, Math.round(size * 0.35));
 
   const wrapperStyle: React.CSSProperties = {
     width: size,
     height: size,
-    borderRadius: '50%',
+    borderRadius: 0,
     display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -54,48 +58,47 @@ export default function TeamLogo({
     flexShrink: 0,
     position: 'relative',
     animation: 'fqpPopIn 0.3s ease both',
-    transition: 'transform 0.2s ease',
+    background: 'transparent',
   };
 
-  if (showFlag) {
+  if (showLogo) {
     return (
       <div
         style={wrapperStyle}
-        onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.1) rotate(-3deg)'; }}
-        onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1) rotate(0deg)'; }}
       >
-        {/* Background gradient (visible while image loads) */}
-        <div style={{
-          position: 'absolute', inset: 0,
-          borderRadius: '50%',
-          background: `linear-gradient(135deg, ${c1}, ${c2})`,
-          opacity: 1,
-        }} />
         <img
-          src={flagUrl!}
+          src={logoUrl!}
           alt={label}
           style={{
             position: 'relative',
             width: '100%',
             height: '100%',
-            objectFit: 'cover',
-            borderRadius: '50%',
+            objectFit: 'contain',
+            borderRadius: 0,
             display: 'block',
           }}
           onError={() => setImgError(true)}
         />
-        {/* Subtle rim */}
-        <div style={{
-          position: 'absolute', inset: 0,
-          borderRadius: '50%',
-          border: '1px solid rgba(255,255,255,0.12)',
-          pointerEvents: 'none',
-        }} />
       </div>
     );
   }
 
-  // Club team or fallback: gradient circle with initials
+  if (!showFallbackInitials) {
+    return (
+      <div
+        style={{
+          ...wrapperStyle,
+          background: 'rgba(255,255,255,0.03)',
+          border: '1px dashed var(--fqp-border-medium)',
+          boxShadow: 'none',
+        }}
+        title={`${label} 暂未配置官方队徽`}
+        aria-label={`${label} 暂未配置官方队徽`}
+      />
+    );
+  }
+
+  // Missing crest fallback: reserve a non-circular icon slot without inventing a crest.
   return (
     <div
       style={{
@@ -104,27 +107,8 @@ export default function TeamLogo({
         boxShadow: `0 2px 8px ${c1}40`,
       }}
       title={label}
-      onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.1) rotate(-3deg)'; }}
-      onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1) rotate(0deg)'; }}
+      aria-label={`${label} 暂未配置队徽`}
     >
-      <span style={{
-        fontSize,
-        fontWeight: 700,
-        color: '#fff',
-        textShadow: '0 1px 3px rgba(0,0,0,0.3)',
-        lineHeight: 1,
-        letterSpacing: '0.02em',
-      }}>
-        {initials}
-      </span>
-      {/* Subtle inner highlight */}
-      <div style={{
-        position: 'absolute', top: '8%', left: '15%',
-        width: '40%', height: '30%',
-        borderRadius: '50%',
-        background: 'radial-gradient(ellipse, rgba(255,255,255,0.2) 0%, transparent 70%)',
-        pointerEvents: 'none',
-      }} />
     </div>
   );
 }

@@ -234,11 +234,12 @@ def build_motivation_features(
             standings = get_latest_standings(conn, competition_season_id)
         except Exception as e:
             print(f"[motivation] standings error: {e}")
+    standings_team_ids = {row.get("team_id") for row in standings}
 
     snapshot_time = __import__("datetime").datetime.now().isoformat(timespec="seconds")
 
     # Home team
-    if home_team_id:
+    if home_team_id and home_team_id in standings_team_ids:
         try:
             ctx = _compute_motivation_from_standings(
                 home_team_id, standings, total_teams, is_home=True, is_derby=is_derby
@@ -268,7 +269,7 @@ def build_motivation_features(
             print(f"[motivation] error home team {home_team_id}: {e}")
 
     # Away team
-    if away_team_id:
+    if away_team_id and away_team_id in standings_team_ids:
         try:
             ctx = _compute_motivation_from_standings(
                 away_team_id, standings, total_teams, is_home=False, is_derby=is_derby
@@ -296,7 +297,10 @@ def build_motivation_features(
         except Exception as e:
             print(f"[motivation] error away team {away_team_id}: {e}")
 
-    has_motivation = home_score is not None or away_score is not None
+    covered_team_count = int(home_team_id in standings_team_ids) + int(
+        away_team_id in standings_team_ids
+    )
+    has_motivation = home_score is not None and away_score is not None and covered_team_count == 2
 
     return {
         "home_motivation_score": home_score,
@@ -311,4 +315,6 @@ def build_motivation_features(
         "home_draw_enough": home_draw_enough,
         "away_draw_enough": away_draw_enough,
         "has_motivation_data": has_motivation,
+        "covered_team_count": covered_team_count,
+        "used_default_estimate": covered_team_count < 2,
     }

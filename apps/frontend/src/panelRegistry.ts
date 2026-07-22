@@ -1,6 +1,26 @@
 /** Panel & Module registry for FQP frontend. */
 
-export type PanelType = 'dashboard' | 'list' | 'detail' | 'analytics' | 'workflow' | 'admin' | 'agent';
+export type ModuleCategory =
+  | 'core_loop'
+  | 'research'
+  | 'strategy_lab'
+  | 'maintenance';
+
+export type PanelType =
+  | 'dashboard'
+  | 'list'
+  | 'detail'
+  | 'analytics'
+  | 'workflow'
+  | 'admin'
+  | 'agent'
+  | 'simulation';
+
+export interface NavigationGroup {
+  groupCode: string;
+  groupName: string;
+  order: number;
+}
 
 export interface PanelManifest {
   panelCode: string;
@@ -10,17 +30,26 @@ export interface PanelManifest {
   routePath: string;
   componentName: string;
   menuGroup: string;
+  icon: string;
   order: number;
   permissions: string[];
   featureFlags?: string[];
+  showInSidebar?: boolean;
 }
+
+export type SidebarPanel = Pick<
+  PanelManifest,
+  'panelCode' | 'moduleCode' | 'panelName' | 'menuGroup' | 'routePath' | 'icon' | 'order'
+>;
 
 export interface ModuleManifest {
   moduleCode: string;
   moduleName: string;
   description: string;
   version: string;
+  category: ModuleCategory;
   status: 'active' | 'inactive' | 'coming_soon';
+  required: boolean;
   panels: string[];
   dependencies: string[];
 }
@@ -39,7 +68,34 @@ export function filterVisiblePanels(
     .sort((a, b) => a.menuGroup.localeCompare(b.menuGroup) || a.order - b.order);
 }
 
-// ---- Static registries (mirrors configs/final_panel_registry.yaml) ----
+export function getSidebarPanels(
+  disabledModules: Set<string>,
+  userPermissions: Set<string> = new Set(),
+  enabledFlags: Set<string> = new Set(),
+): PanelManifest[] {
+  const permissions =
+    userPermissions.size > 0
+      ? userPermissions
+      : new Set(PANEL_REGISTRY.flatMap((panel) => panel.permissions));
+  const flags =
+    enabledFlags.size > 0
+      ? enabledFlags
+      : new Set(PANEL_REGISTRY.flatMap((panel) => panel.featureFlags ?? []));
+
+  return filterVisiblePanels(PANEL_REGISTRY, permissions, flags)
+    .filter((panel) => panel.showInSidebar !== false)
+    .filter((panel) => !disabledModules.has(panel.moduleCode))
+    .sort((a, b) => a.order - b.order);
+}
+
+// ---- Static registries (mirrors configs/final_module_registry.yaml / final_panel_registry.yaml) ----
+
+export const NAVIGATION_GROUPS: NavigationGroup[] = [
+  { groupCode: 'core_loop', groupName: '核心闭环', order: 10 },
+  { groupCode: 'research', groupName: '研究优化', order: 20 },
+  { groupCode: 'strategy_lab', groupName: '策略实验', order: 30 },
+  { groupCode: 'maintenance', groupName: '运维设置', order: 40 },
+];
 
 export const MODULE_REGISTRY: ModuleManifest[] = [
   {
@@ -47,52 +103,97 @@ export const MODULE_REGISTRY: ModuleManifest[] = [
     moduleName: '官方数据核心',
     description: '采集、存储、展示官方竞彩赛程赔率赛果',
     version: '2.0.0',
+    category: 'core_loop',
     status: 'active',
-    panels: ['today_dashboard', 'match_center', 'data_health'],
+    required: true,
+    panels: ['today_dashboard', 'match_center', 'event_center', 'odds_movement'],
     dependencies: [],
   },
   {
     moduleCode: 'recommendation_core',
-    moduleName: '推荐引擎',
-    description: '模型预测、推荐票单生成、风控熔断',
+    moduleName: '推荐与资金核心',
+    description: '模型预测、推荐票单生成、风控熔断、资金约束',
     version: '2.0.0',
+    category: 'core_loop',
     status: 'active',
-    panels: ['recommendation_center', 'model_lab'],
+    required: true,
+    panels: ['deep_analysis'],
     dependencies: ['official_data_core'],
   },
   {
-    moduleCode: 'real_ticket_module',
-    moduleName: '实票管理',
-    description: '手动录入、绑定推荐、结算、复盘',
+    moduleCode: 'betting_center_module',
+    moduleName: '投注中心',
+    description: '投注器、彩票台账、Agent 结果和赛后结算',
     version: '1.0.0',
+    category: 'core_loop',
     status: 'active',
-    panels: ['ticket_upload', 'review_center'],
+    required: true,
+    panels: ['betting_center'],
     dependencies: ['recommendation_core'],
   },
   {
     moduleCode: 'multidim_feature_module',
-    moduleName: '多维特征',
-    description: '球队身价、伤停、天气、战意等多维情报',
+    moduleName: '特征数据健康',
+    description: '检查球队身价、伤停、天气、战意等特征的覆盖率与完整度',
     version: '0.1.0',
-    status: 'coming_soon',
-    panels: ['match_intelligence'],
+    category: 'research',
+    status: 'active',
+    required: false,
+    panels: ['feature_snapshots'],
     dependencies: ['official_data_core'],
   },
   {
-    moduleCode: 'advanced_backtest_module',
-    moduleName: '回测中心',
-    description: '模型回测、Brier/LogLoss/ROI评估、Walk-forward验证',
+    moduleCode: 'model_research_module',
+    moduleName: '模型研究',
+    description: '模型版本、解释分析、回测评估与人工启用',
     version: '1.0.0',
+    category: 'research',
     status: 'active',
+    required: false,
     panels: ['model_lab', 'backtest_lab'],
-    dependencies: ['recommendation_core'],
+    dependencies: ['official_data_core', 'multidim_feature_module'],
+  },
+  {
+    moduleCode: 'upset_intelligence_module',
+    moduleName: '冷门研究',
+    description: '冷门识别、证据复盘、周期报告与决策知识沉淀',
+    version: '1.0.0',
+    category: 'research',
+    status: 'active',
+    required: false,
+    panels: ['upset_research'],
+    dependencies: ['official_data_core', 'betting_center_module', 'model_research_module'],
+  },
+  {
+    moduleCode: 'pool_lottery_module',
+    moduleName: '传统足彩',
+    description: '胜负彩、任选九与组合优化',
+    version: '1.0.0',
+    category: 'strategy_lab',
+    status: 'active',
+    required: false,
+    panels: ['pool_lottery'],
+    dependencies: ['official_data_core', 'model_research_module'],
+  },
+  {
+    moduleCode: 'codex_agent_module',
+    moduleName: 'Codex 多 Agent',
+    description: '本地 Agent 任务、协作边界与维护自动化',
+    version: '1.0.0',
+    category: 'maintenance',
+    status: 'active',
+    required: false,
+    panels: ['codex_console'],
+    dependencies: [],
   },
   {
     moduleCode: 'module_runtime_core',
     moduleName: '模块运行时',
     description: '模块启停、依赖检查、面板注册',
     version: '1.0.0',
+    category: 'maintenance',
     status: 'active',
+    required: false,
     panels: ['module_admin'],
     dependencies: [],
   },
@@ -101,9 +202,22 @@ export const MODULE_REGISTRY: ModuleManifest[] = [
     moduleName: '本地配置',
     description: '预算、风控、PIN、备份等本地设置',
     version: '1.0.0',
+    category: 'maintenance',
     status: 'active',
+    required: false,
     panels: ['settings'],
     dependencies: [],
+  },
+  {
+    moduleCode: 'ops_admin',
+    moduleName: '运维后台',
+    description: '系统监控、数据健康和运行状态',
+    version: '1.0.0',
+    category: 'maintenance',
+    status: 'active',
+    required: false,
+    panels: ['data_health'],
+    dependencies: ['official_data_core'],
   },
 ];
 
@@ -115,7 +229,8 @@ export const PANEL_REGISTRY: PanelManifest[] = [
     panelType: 'dashboard',
     routePath: '/',
     componentName: 'DashboardPage',
-    menuGroup: '首页总览',
+    menuGroup: '核心闭环',
+    icon: '📊',
     order: 10,
     permissions: [],
   },
@@ -126,108 +241,165 @@ export const PANEL_REGISTRY: PanelManifest[] = [
     panelType: 'list',
     routePath: '/matches',
     componentName: 'MatchesPage',
-    menuGroup: '官方数据',
+    menuGroup: '核心闭环',
+    icon: '⚽',
     order: 20,
     permissions: [],
   },
   {
-    panelCode: 'recommendation_center',
-    moduleCode: 'recommendation_core',
-    panelName: '推荐票单',
+    panelCode: 'event_center',
+    moduleCode: 'official_data_core',
+    panelName: '赛事中心',
     panelType: 'list',
-    routePath: '/recommendations',
-    componentName: 'RecommendationsPage',
-    menuGroup: '推荐资金',
+    routePath: '/events',
+    componentName: 'EventsPage',
+    menuGroup: '核心闭环',
+    icon: '🏆',
     order: 30,
     permissions: [],
   },
   {
-    panelCode: 'ticket_upload',
-    moduleCode: 'real_ticket_module',
-    panelName: '实票上传',
-    panelType: 'workflow',
-    routePath: '/tickets',
-    componentName: 'TicketsPage',
-    menuGroup: '实票管理',
-    order: 40,
-    permissions: [],
-  },
-  {
-    panelCode: 'review_center',
-    moduleCode: 'real_ticket_module',
-    panelName: '复盘中心',
+    panelCode: 'odds_movement',
+    moduleCode: 'official_data_core',
+    panelName: '赔率走势',
     panelType: 'analytics',
-    routePath: '/reviews',
-    componentName: 'ReviewsPage',
-    menuGroup: '实票管理',
+    routePath: '/odds',
+    componentName: 'OddsMovementPage',
+    menuGroup: '核心闭环',
+    icon: '📉',
     order: 50,
     permissions: [],
   },
   {
-    panelCode: 'model_lab',
-    moduleCode: 'recommendation_core',
-    panelName: '模型实验室',
-    panelType: 'analytics',
-    routePath: '/models',
-    componentName: 'ModelsPage',
-    menuGroup: '模型研究',
+    panelCode: 'betting_center',
+    moduleCode: 'betting_center_module',
+    panelName: '投注中心',
+    panelType: 'workflow',
+    routePath: '/betting',
+    componentName: 'BettingCenterPage',
+    menuGroup: '核心闭环',
+    icon: '🎫',
     order: 60,
     permissions: [],
   },
   {
+    panelCode: 'deep_analysis',
+    moduleCode: 'recommendation_core',
+    panelName: '今日决策分析',
+    panelType: 'analytics',
+    routePath: '/analysis',
+    componentName: 'AnalysisPage',
+    menuGroup: '核心闭环',
+    icon: '🔬',
+    order: 70,
+    permissions: [],
+  },
+  {
+    panelCode: 'model_lab',
+    moduleCode: 'model_research_module',
+    panelName: '模型表现',
+    panelType: 'analytics',
+    routePath: '/models',
+    componentName: 'ModelsPage',
+    menuGroup: '研究优化',
+    icon: '🧠',
+    order: 110,
+    permissions: [],
+  },
+  {
+    panelCode: 'feature_snapshots',
+    moduleCode: 'multidim_feature_module',
+    panelName: '特征数据健康',
+    panelType: 'analytics',
+    routePath: '/feature-snapshots',
+    componentName: 'AnalysisPage',
+    menuGroup: '研究优化',
+    icon: 'radar',
+    order: 105,
+    permissions: [],
+  },
+  {
+    panelCode: 'upset_research',
+    moduleCode: 'upset_intelligence_module',
+    panelName: '冷门研究',
+    panelType: 'analytics',
+    routePath: '/upsets',
+    componentName: 'UpsetsPage',
+    menuGroup: '研究优化',
+    icon: '🧊',
+    order: 120,
+    permissions: [],
+  },
+  {
     panelCode: 'backtest_lab',
-    moduleCode: 'advanced_backtest_module',
-    panelName: '回测实验室',
+    moduleCode: 'model_research_module',
+    panelName: '策略验证',
     panelType: 'analytics',
     routePath: '/backtest',
     componentName: 'BacktestPage',
-    menuGroup: '模型研究',
-    order: 65,
+    menuGroup: '研究优化',
+    icon: '⏪',
+    order: 130,
     permissions: [],
   },
   {
-    panelCode: 'match_intelligence',
-    moduleCode: 'multidim_feature_module',
-    panelName: '多维情报',
-    panelType: 'analytics',
-    routePath: '/intelligence',
-    componentName: 'MatchIntelligencePage',
-    menuGroup: '赛前情报',
-    order: 70,
+    panelCode: 'pool_lottery',
+    moduleCode: 'pool_lottery_module',
+    panelName: '足彩彩池',
+    panelType: 'workflow',
+    routePath: '/pool',
+    componentName: 'PoolPage',
+    menuGroup: '策略实验',
+    icon: '🎱',
+    order: 210,
     permissions: [],
-    featureFlags: ['multidim_feature_enabled'],
   },
   {
     panelCode: 'data_health',
-    moduleCode: 'official_data_core',
-    panelName: '数据源监控',
+    moduleCode: 'ops_admin',
+    panelName: '系统监控',
     panelType: 'admin',
     routePath: '/data-health',
     componentName: 'DataHealthPage',
-    menuGroup: '运维管理',
-    order: 80,
+    menuGroup: '运维设置',
+    icon: '🗄️',
+    order: 310,
     permissions: [],
   },
   {
     panelCode: 'module_admin',
     moduleCode: 'module_runtime_core',
-    panelName: '模块管理',
+    panelName: '功能模块',
     panelType: 'admin',
     routePath: '/modules',
     componentName: 'ModulesPage',
-    menuGroup: '运维管理',
-    order: 90,
+    menuGroup: '运维设置',
+    icon: '🧩',
+    order: 320,
     permissions: [],
   },
   {
     panelCode: 'settings',
     moduleCode: 'local_settings_core',
-    panelName: '本地设置',
+    panelName: '系统设置',
     panelType: 'admin',
     routePath: '/settings',
     componentName: 'SettingsPage',
-    menuGroup: '运维管理',
-    order: 100,
+    menuGroup: '运维设置',
+    icon: '⚙️',
+    order: 330,
+    permissions: [],
+  },
+  {
+    panelCode: 'codex_console',
+    moduleCode: 'codex_agent_module',
+    panelName: '智能代理',
+    panelType: 'agent',
+    routePath: '/agents',
+    componentName: 'AgentPanel',
+    menuGroup: '运维设置',
+    icon: '🤖',
+    order: 340,
     permissions: [],
   },
 ];

@@ -13,6 +13,7 @@ from typing import Any
 
 from apps.backend.src.db import get_db
 from scripts.elo_model import update_elo_ratings
+from scripts.team_registry import ensure_official_match_teams
 
 
 def run(dry_run: bool = False) -> dict[str, Any]:
@@ -21,6 +22,7 @@ def run(dry_run: bool = False) -> dict[str, Any]:
         return {"status": "dry_run", "message": "elo update (dry run)"}
 
     with get_db() as conn:
+        teams_created = ensure_official_match_teams(conn)
         # 查询需要处理的结果：
         # - official_results 中有比分
         # - official_matches 已结算
@@ -29,19 +31,31 @@ def run(dry_run: bool = False) -> dict[str, Any]:
         cur.execute("""
             SELECT
                 m.id AS match_id,
-                COALESCE(t1.id, 0) AS home_team_id,
-                COALESCE(t2.id, 0) AS away_team_id,
+                t1.id AS home_team_id,
+                t2.id AS away_team_id,
                 DATE(m.kickoff_time)::text AS match_date,
                 r.full_home_goals AS home_goals,
                 r.full_away_goals AS away_goals,
-                COALESCE(t1.team_name_cn, m.home_team_name) AS home_name,
-                COALESCE(t2.team_name_cn, m.away_team_name) AS away_name,
+                t1.team_name_cn AS home_name,
+                t2.team_name_cn AS away_name,
                 m.league_name AS season,
                 NULL AS league_tier
             FROM official_matches m
             JOIN official_results r ON r.match_id = m.id
-            LEFT JOIN teams t1 ON t1.team_name_cn = m.home_team_name
-            LEFT JOIN teams t2 ON t2.team_name_cn = m.away_team_name
+            JOIN LATERAL (
+                SELECT candidate.id, candidate.team_name_cn
+                FROM teams candidate
+                WHERE candidate.team_name_cn = m.home_team_name
+                ORDER BY candidate.id
+                LIMIT 1
+            ) t1 ON true
+            JOIN LATERAL (
+                SELECT candidate.id, candidate.team_name_cn
+                FROM teams candidate
+                WHERE candidate.team_name_cn = m.away_team_name
+                ORDER BY candidate.id
+                LIMIT 1
+            ) t2 ON true
             LEFT JOIN elo_update_logs el ON el.match_id = m.id
             WHERE r.full_home_goals IS NOT NULL
               AND r.full_away_goals IS NOT NULL
@@ -52,10 +66,16 @@ def run(dry_run: bool = False) -> dict[str, Any]:
         matches = cur.fetchall()
 
         if not matches:
-            return {"status": "ok", "updated": 0, "note": "no new settled matches"}
+            return {
+                "status": "ok",
+                "updated": 0,
+                "teams_created": teams_created,
+                "note": "no new settled matches",
+            }
 
         updated = 0
         errors = 0
+        error_samples: list[dict[str, Any]] = []
 
         for row in matches:
             (
@@ -85,12 +105,18 @@ def run(dry_run: bool = False) -> dict[str, Any]:
                 )
                 updated += 1
             except Exception as exc:
+                conn.rollback()
                 errors += 1
+                if len(error_samples) < 10:
+                    error_samples.append({"match_id": match_id, "error": str(exc)})
                 print(f"[elo] ERROR match_id={match_id}: {exc}", flush=True)
 
+        status = "ok" if errors == 0 else ("partial" if updated > 0 else "error")
         return {
-            "status": "ok",
+            "status": status,
             "updated": updated,
             "errors": errors,
+            "teams_created": teams_created,
             "total_matches_processed": len(matches),
+            "error_samples": error_samples,
         }

@@ -325,7 +325,6 @@ def get_or_create_elo(
            RETURNING elo_rating""",
         (team_id, team_name, season, init_elo, init_elo, league_tier or "other"),
     )
-    conn.commit()
     return (init_elo, True)
 
 

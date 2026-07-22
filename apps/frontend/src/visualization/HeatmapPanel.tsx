@@ -1,9 +1,11 @@
 /** Heatmap panel — winner calendar / round-by-round comparison. */
 
 import { useMemo } from 'react';
+import type { EChartsOption } from 'echarts';
 import ChartCard from '../shared/components/ChartCard';
 import { applyChartTheme, CHART_COLORS } from './chartTheme';
 import type { HeatmapData } from './chartTypes';
+import { useTheme } from '../app/ThemeContext';
 
 interface HeatmapPanelProps {
   data: HeatmapData;
@@ -22,6 +24,7 @@ export default function HeatmapPanel({
   empty,
   emptyReason,
 }: HeatmapPanelProps) {
+  const { theme } = useTheme();
   const option = useMemo(() => {
     if (!data.data.length || !data.rowLabels.length) return null;
 
@@ -63,7 +66,7 @@ export default function HeatmapPanel({
         left: 'center',
         bottom: 0,
         inRange: {
-          color: ['#27272A', CHART_COLORS.blue, CHART_COLORS.amber],
+          color: [CHART_COLORS.neutral, CHART_COLORS.blue, CHART_COLORS.amber],
         },
         text: ['平局', 'AI 胜', '用户胜'],
         textStyle: { color: CHART_COLORS.textMuted },
@@ -86,8 +89,8 @@ export default function HeatmapPanel({
           },
         },
       ],
-    } as echarts.EChartsOption);
-  }, [data]);
+    } as EChartsOption);
+  }, [data, theme]);
 
   return (
     <ChartCard

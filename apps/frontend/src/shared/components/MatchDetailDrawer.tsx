@@ -10,7 +10,7 @@ import type {
 } from '../../core/types';
 import { ApiError } from '../../core/types';
 import ErrorState from './ErrorState';
-import { statusLabel } from '../constants';
+import { optionLabel, statusLabel } from '../constants';
 import TeamLogo from './TeamLogo';
 
 interface MatchDetailDrawerProps {
@@ -43,7 +43,8 @@ function formColor(status: string | null): string {
 }
 
 const SPF_LABELS: Record<string, string> = {
-  '3': '主胜', '1': '平', '0': '客胜',
+  '3': '主胜', '1': '平', '0': '主负',
+  h: '主胜', d: '平', a: '主负',
 };
 
 // ── Sub-components ──────────────────────────────────────
@@ -58,7 +59,7 @@ function FormBadge({ status }: { status: string | null }) {
         ? (status === 'W' ? 'rgba(23,201,100,0.2)'
           : status === 'D' ? 'rgba(245,165,36,0.2)'
           : 'rgba(255,42,61,0.2)')
-        : 'rgba(255,255,255,0.05)',
+        : 'var(--fqp-border-subtle)',
       color: formColor(status),
     }}>
       {status || '—'}
@@ -78,7 +79,7 @@ function ProbBar({ label, value, color, delay = 0 }: { label: string; value: num
       <span style={{ width: '50px', fontSize: '12px', color: 'var(--fqp-text-muted)' }}>{label}</span>
       <div style={{
         flex: 1, height: '18px', borderRadius: '4px',
-        background: 'rgba(255,255,255,0.06)', overflow: 'hidden',
+        background: 'var(--fqp-hover-bg)', overflow: 'hidden',
         position: 'relative',
       }}>
         <div style={{
@@ -117,9 +118,9 @@ function Section({ title, children, icon, delay = 0 }: { title: string; children
         {title}
       </div>
       <div style={{
-        background: 'rgba(255,255,255,0.02)',
+        background: 'var(--fqp-bg-glass)',
         borderRadius: '8px',
-        border: '1px solid rgba(255,255,255,0.04)',
+        border: '1px solid var(--fqp-border-subtle)',
         padding: '12px',
       }}>
         {children}
@@ -226,7 +227,7 @@ export default function MatchDetailDrawer({ matchId, onClose }: MatchDetailDrawe
           <div key={i} style={{
             display: 'flex', alignItems: 'center', gap: '8px',
             fontSize: '12px', padding: '5px 0',
-            borderBottom: i < matches.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none',
+            borderBottom: i < matches.length - 1 ? '1px solid var(--fqp-border-subtle)' : 'none',
           }}>
             <span style={{ color: 'var(--fqp-text-muted)', width: '75px', flexShrink: 0, fontSize: '11px' }}>{fmtDate(m.date)}</span>
             <span style={{ flex: 1, textAlign: 'right', fontWeight: 500 }}>{m.home}</span>
@@ -253,7 +254,7 @@ export default function MatchDetailDrawer({ matchId, onClose }: MatchDetailDrawe
       <div style={{ overflowX: 'auto' }}>
         <table style={{ width: '100%', fontSize: '11px', borderCollapse: 'collapse' }}>
           <thead>
-            <tr style={{ color: 'var(--fqp-text-muted)', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+            <tr style={{ color: 'var(--fqp-text-muted)', borderBottom: '1px solid var(--fqp-border-medium)' }}>
               {['#', '球队', '赛', '胜', '平', '负', '进/失', '净胜', '积分'].map(h => (
                 <th key={h} style={{
                   padding: '5px 6px', textAlign: h === '#' || h === '球队' ? 'left' : 'center',
@@ -271,7 +272,7 @@ export default function MatchDetailDrawer({ matchId, onClose }: MatchDetailDrawe
               const isChampion = allCaps.length > 0 && s.rank === allCaps[0].rank;
               return (
                 <tr key={s.rank} style={{
-                  borderBottom: '1px solid rgba(255,255,255,0.03)',
+                  borderBottom: '1px solid var(--fqp-hover-subtle)',
                   background: isHome ? 'rgba(229,9,20,0.08)' : isAway ? 'rgba(59,130,246,0.08)' : 'transparent',
                   fontWeight: hl ? 700 : 400,
                   transition: 'background 0.15s',
@@ -313,7 +314,7 @@ export default function MatchDetailDrawer({ matchId, onClose }: MatchDetailDrawe
         <div style={{
           fontSize: '11px', fontWeight: 600, marginBottom: '8px',
           color: 'var(--fqp-text)',
-          background: 'rgba(255,255,255,0.04)', padding: '4px 8px', borderRadius: '4px',
+          background: 'var(--fqp-border-subtle)', padding: '4px 8px', borderRadius: '4px',
         }}>
           {label}
           {lineup.formation && <span style={{ marginLeft: '8px', color: 'var(--fqp-red)' }}>▸ {lineup.formation}</span>}
@@ -339,7 +340,7 @@ export default function MatchDetailDrawer({ matchId, onClose }: MatchDetailDrawe
         {subs.length > 0 && (
           <div style={{
             marginTop: '8px', paddingTop: '6px',
-            borderTop: '1px solid rgba(255,255,255,0.05)',
+            borderTop: '1px solid var(--fqp-border-subtle)',
             fontSize: '11px', color: 'var(--fqp-text-muted)',
             padding: '4px 8px',
           }}>
@@ -406,7 +407,7 @@ export default function MatchDetailDrawer({ matchId, onClose }: MatchDetailDrawe
     return (
       <div style={{
         textAlign: 'center', padding: '20px 0 18px',
-        borderBottom: '1px solid rgba(255,255,255,0.06)',
+        borderBottom: '1px solid var(--fqp-hover-bg)',
         marginBottom: '16px',
         position: 'relative',
       }}>
@@ -426,7 +427,7 @@ export default function MatchDetailDrawer({ matchId, onClose }: MatchDetailDrawe
           <span style={{
             padding: '2px 8px', borderRadius: '4px',
             fontWeight: 600, fontSize: '10px',
-            background: isSettled ? 'rgba(23,201,100,0.12)' : isSelling ? 'rgba(245,165,36,0.12)' : 'rgba(255,255,255,0.06)',
+            background: isSettled ? 'rgba(23,201,100,0.12)' : isSelling ? 'rgba(245,165,36,0.12)' : 'var(--fqp-hover-bg)',
             color: isSettled ? 'var(--fqp-success)' : isSelling ? 'var(--fqp-warning)' : 'var(--fqp-text-muted)',
           }}>
             {statusText || d.match.sale_status || '—'}
@@ -543,9 +544,9 @@ export default function MatchDetailDrawer({ matchId, onClose }: MatchDetailDrawe
     return (
       <div style={{
         display: 'flex', gap: '2px', marginBottom: '16px',
-        background: 'rgba(255,255,255,0.02)',
+        background: 'var(--fqp-bg-glass)',
         borderRadius: '8px', padding: '3px',
-        border: '1px solid rgba(255,255,255,0.04)',
+        border: '1px solid var(--fqp-border-subtle)',
       }}>
         {TABS.map(tab => {
           const isActive = activeTab === tab.key;
@@ -665,7 +666,7 @@ export default function MatchDetailDrawer({ matchId, onClose }: MatchDetailDrawe
                       {models.length > 0 && (
                         <div style={{
                           fontSize: '11px', color: 'var(--fqp-text-muted)', marginBottom: '10px',
-                          padding: '6px 8px', background: 'rgba(255,255,255,0.03)', borderRadius: '4px',
+                          padding: '6px 8px', background: 'var(--fqp-hover-subtle)', borderRadius: '4px',
                         }}>
                           模型: {models.join(' · ')}
                           {best && (
@@ -674,7 +675,7 @@ export default function MatchDetailDrawer({ matchId, onClose }: MatchDetailDrawe
                                 color: best.option_code === '3' ? 'var(--fqp-red)' : best.option_code === '1' ? 'var(--fqp-warning)' : 'var(--fqp-info)',
                                 fontWeight: 700,
                               }}>
-                                {best.option_code === '3' ? '主胜' : best.option_code === '1' ? '平局' : '客胜'}
+                                {optionLabel(best.play_type, best.option_code)}
                               </span>
                               {best.ev != null && (
                                 <span style={{ color: best.ev >= 0 ? 'var(--fqp-success)' : 'var(--fqp-red-neon)', marginLeft: '4px' }}>
@@ -688,7 +689,7 @@ export default function MatchDetailDrawer({ matchId, onClose }: MatchDetailDrawe
                       <div style={{ padding: '0 4px' }}>
                         {h && <ProbBar label="主胜" value={h.model_probability} color="var(--fqp-red)" delay={0} />}
                         {dr && <ProbBar label="平局" value={dr.model_probability} color="var(--fqp-warning)" delay={100} />}
-                        {a && <ProbBar label="客胜" value={a.model_probability} color="var(--fqp-info)" delay={200} />}
+                        {a && <ProbBar label="主负" value={a.model_probability} color="var(--fqp-info)" delay={200} />}
                       </div>
                     </div>
                   );
@@ -851,8 +852,8 @@ export default function MatchDetailDrawer({ matchId, onClose }: MatchDetailDrawe
             onClick={doClose}
             style={{
               width: '32px', height: '32px',
-              background: 'rgba(255,255,255,0.06)',
-              border: '1px solid rgba(255,255,255,0.08)',
+              background: 'var(--fqp-hover-bg)',
+              border: '1px solid var(--fqp-border-medium)',
               color: 'var(--fqp-text-muted)',
               cursor: 'pointer', fontSize: '16px', borderRadius: '8px',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -865,7 +866,7 @@ export default function MatchDetailDrawer({ matchId, onClose }: MatchDetailDrawe
               e.currentTarget.style.boxShadow = '0 0 12px rgba(229,9,20,0.3)';
             }}
             onMouseLeave={e => {
-              e.currentTarget.style.background = 'rgba(255,255,255,0.06)';
+              e.currentTarget.style.background = 'var(--fqp-hover-bg)';
               e.currentTarget.style.color = 'var(--fqp-text-muted)';
               e.currentTarget.style.transform = 'rotate(0deg)';
               e.currentTarget.style.boxShadow = 'none';
@@ -880,7 +881,7 @@ export default function MatchDetailDrawer({ matchId, onClose }: MatchDetailDrawe
           {loading && (
             <div style={{ paddingTop: '20px' }}>
               {/* Skeleton Scoreboard */}
-              <div style={{ textAlign: 'center', padding: '20px 0', borderBottom: '1px solid rgba(255,255,255,0.06)', marginBottom: '16px' }}>
+              <div style={{ textAlign: 'center', padding: '20px 0', borderBottom: '1px solid var(--fqp-hover-bg)', marginBottom: '16px' }}>
                 <div className="fqp-skeleton" style={{ width: '140px', height: '20px', margin: '0 auto 14px', borderRadius: '4px' }} />
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '16px' }}>
                   <div style={{ flex: 1, textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '8px' }}>
@@ -898,14 +899,14 @@ export default function MatchDetailDrawer({ matchId, onClose }: MatchDetailDrawe
                 <div className="fqp-skeleton" style={{ width: '160px', height: '12px', margin: '12px auto 0', borderRadius: '4px' }} />
               </div>
               {/* Skeleton tabs */}
-              <div style={{ display: 'flex', gap: '2px', marginBottom: '16px', padding: '3px', background: 'rgba(255,255,255,0.02)', borderRadius: '8px' }}>
+              <div style={{ display: 'flex', gap: '2px', marginBottom: '16px', padding: '3px', background: 'var(--fqp-bg-glass)', borderRadius: '8px' }}>
                 {[1,2,3,4].map(i => <div key={i} className="fqp-skeleton" style={{ flex: 1, height: '34px', borderRadius: '6px' }} />)}
               </div>
               {/* Skeleton sections */}
               {[1,2].map(i => (
                 <div key={i} style={{ marginBottom: '20px' }}>
                   <div className="fqp-skeleton" style={{ width: '100px', height: '14px', marginBottom: '10px', borderRadius: '4px' }} />
-                  <div style={{ background: 'rgba(255,255,255,0.02)', borderRadius: '8px', padding: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <div style={{ background: 'var(--fqp-bg-glass)', borderRadius: '8px', padding: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     <div className="fqp-skeleton" style={{ width: '100%', height: '12px', borderRadius: '4px' }} />
                     <div className="fqp-skeleton" style={{ width: '70%', height: '12px', borderRadius: '4px' }} />
                     <div className="fqp-skeleton" style={{ width: '85%', height: '12px', borderRadius: '4px' }} />

@@ -18,9 +18,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from scripts.business_time import utc_now_iso
 
-def _now() -> str:
-    return datetime.now().isoformat(timespec="seconds")
+
+def _now(value: datetime | None = None) -> str:
+    return utc_now_iso(value)
 
 
 def _check_command(cmd: list[str]) -> dict:
@@ -72,8 +74,8 @@ def run() -> dict[str, Any]:
     Returns the snapshot dict.
     """
     commands = {
-        "docker": ["docker", "--version"],
-        "docker_compose": ["docker", "compose", "version"],
+        "postgresql": ["/opt/homebrew/opt/postgresql@18/bin/psql", "--version"],
+        "redis": ["/opt/homebrew/opt/redis/bin/redis-server", "--version"],
         "git": ["git", "--version"],
         "python": ["python", "--version"],
         "python3": ["python3", "--version"],

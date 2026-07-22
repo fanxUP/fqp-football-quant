@@ -1,3 +1,9 @@
+# 历史设计参考：运行时不读取本文件。
+# 真实调度只以 scripts/jobs/run_scheduler.py 和 Worker 入口为准。
+metadata:
+  active_runtime_config: false
+  runtime_source: scripts/jobs/run_scheduler.py
+  timezone: Asia/Shanghai
 jobs:
   initialize_business_day: "05 00 * * *"
   crawl_official_schedule: "10 00 * * *"

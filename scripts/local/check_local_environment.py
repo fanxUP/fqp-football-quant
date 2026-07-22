@@ -1,31 +1,33 @@
-"""Check local toolchain without pinning versions.
-
-The project intentionally does not require specific component versions. This
-script records whatever versions are installed locally. Missing components are
-reported with latest-install guidance instead of silently pinning versions.
-"""
+"""Check the local toolchain and enforce the project's Python 3.14 runtime."""
 
 from __future__ import annotations
 
 import json
 import shutil
 import subprocess
+import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+
+from scripts.business_time import utc_now_iso
 
 ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / "data" / "runtime_version_snapshot.json"
 
 COMMANDS = {
-    "docker": ["docker", "--version"],
-    "docker_compose": ["docker", "compose", "version"],
     "git": ["git", "--version"],
-    "python": ["python", "--version"],
+    "python": [sys.executable, "--version"],
     "node": ["node", "--version"],
     "npm": ["npm", "--version"],
+    "postgresql": ["/opt/homebrew/opt/postgresql@18/bin/psql", "--version"],
+    "redis": ["/opt/homebrew/opt/redis/bin/redis-server", "--version"],
     "codex": ["codex", "--version"],
 }
+
+
+def _generated_at(value: datetime | None = None) -> str:
+    return utc_now_iso(value)
 
 
 def run(cmd: list[str]) -> dict:
@@ -44,7 +46,12 @@ def run(cmd: list[str]) -> dict:
 
 
 def main() -> None:
-    snapshot: dict[str, Any] = {"generated_at": datetime.now().isoformat(timespec="seconds"), "components": {}}
+    if sys.version_info[:2] != (3, 14):
+        raise SystemExit(
+            f"Python 3.14 is required; current runtime is {sys.version_info.major}.{sys.version_info.minor}."
+        )
+
+    snapshot: dict[str, Any] = {"generated_at": _generated_at(), "components": {}}
     for name, cmd in COMMANDS.items():
         snapshot["components"][name] = run(cmd)
     OUT.parent.mkdir(parents=True, exist_ok=True)
@@ -55,7 +62,7 @@ def main() -> None:
         print("Missing components:", ", ".join(missing))
         print("Install missing components from their official latest installation channels.")
     else:
-        print("All checked components are available. Versions were not pinned by this project.")
+        print("All checked components are available. Python runtime is 3.14.")
 
 
 if __name__ == "__main__":

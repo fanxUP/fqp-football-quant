@@ -35,6 +35,7 @@ CREATE TABLE IF NOT EXISTS simulation_ticket_items (
     match_id BIGINT NOT NULL REFERENCES official_matches(id),
     odds_snapshot_id BIGINT REFERENCES official_odds_snapshots(id),
     model_prediction_id BIGINT REFERENCES model_predictions(id),
+    feature_snapshot_id BIGINT,
     play_type VARCHAR(32) NOT NULL,
     option_code VARCHAR(64) NOT NULL,
     option_name VARCHAR(128) NOT NULL,

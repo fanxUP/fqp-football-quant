@@ -2,19 +2,28 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+from datetime import datetime
+from unittest.mock import MagicMock, patch
 
 from scripts.agent_storage import (
+    add_task_artifact,
     create_agent_task,
     create_review_gate,
     create_review_report,
     finish_job_run,
     get_agent,
+    get_agent_summary,
     get_agent_task,
     list_agent_tasks,
     list_agents,
     list_audit_logs,
     list_job_runs,
+    list_review_gates,
+    list_stale_tasks,
+    list_task_artifacts,
+    recover_interrupted_job_runs,
+    resolve_review_gate,
+    retry_job_run,
     seed_agent_registry,
     start_job_run,
     transition_task,
@@ -64,9 +73,19 @@ class TestSeedAgentRegistry:
 
 class TestListAgents:
     def test_returns_formatted_agent_list(self):
-        mock_conn, mock_cur = _mock_conn(fetchall=[
-            (1, "agent_a", "system", "desc a", "P1", True, MagicMock(isoformat=lambda: "2025-01-01T00:00:00")),
-        ])
+        mock_conn, mock_cur = _mock_conn(
+            fetchall=[
+                (
+                    1,
+                    "agent_a",
+                    "system",
+                    "desc a",
+                    "P1",
+                    True,
+                    MagicMock(isoformat=lambda: "2025-01-01T00:00:00"),
+                ),
+            ]
+        )
 
         result = list_agents(mock_conn)
         assert len(result) == 1
@@ -142,9 +161,15 @@ class TestTransitionTask:
         mock_conn = MagicMock()
         mock_conn.cursor.return_value.__enter__.return_value = mock_cur
 
-        result = transition_task(mock_conn, "TASK-001", "completed", "Done successfully")
+        audit_time = datetime(2026, 7, 22, 10, 30)
+        with patch(
+            "scripts.agent_storage.utc_now_naive",
+            return_value=audit_time,
+        ):
+            result = transition_task(mock_conn, "TASK-001", "completed", "Done successfully")
         assert result is True
         assert mock_cur.execute.call_count == 2  # UPDATE + audit INSERT
+        assert mock_cur.execute.call_args_list[0].args[1]["now"] == audit_time
         mock_conn.commit.assert_called()
 
     def test_returns_false_when_task_not_found(self):
@@ -153,14 +178,154 @@ class TestTransitionTask:
         result = transition_task(mock_conn, "UNKNOWN", "completed")
         assert result is False
 
+    def test_rejects_unknown_status(self):
+        mock_conn, mock_cur = _mock_conn(fetchone=[5])
+        try:
+            transition_task(mock_conn, "TASK-001", "not_a_status")
+        except ValueError as exc:
+            assert "Unsupported task status" in str(exc)
+        else:
+            raise AssertionError("expected ValueError")
+        mock_cur.execute.assert_not_called()
+
+
+class TestStaleAgentTasks:
+    def test_summary_counts_stale_tasks_separately_from_jobs(self):
+        mock_conn, mock_cur = _mock_conn()
+        mock_cur.fetchone.side_effect = [
+            [11],
+            [2],
+            [1],
+            [3],
+            [4],
+            [0],
+            [1],
+        ]
+
+        result = get_agent_summary(mock_conn)
+
+        assert result["stale_jobs"] == 3
+        assert result["stale_tasks"] == 4
+        stale_task_query = mock_cur.execute.call_args_list[4].args[0]
+        assert "FROM agent_tasks" in stale_task_query
+        assert "running" in stale_task_query
+        assert "in_progress" in stale_task_query
+
+    def test_lists_active_tasks_older_than_threshold(self):
+        started_at = MagicMock(isoformat=lambda: "2026-07-02T10:00:00")
+        updated_at = MagicMock(isoformat=lambda: "2026-07-02T10:05:00")
+        mock_conn, mock_cur = _mock_conn(
+            fetchall=[
+                (
+                    7,
+                    "TEST-001",
+                    "Test task",
+                    "qa_agent",
+                    "in_progress",
+                    started_at,
+                    updated_at,
+                    20160.5,
+                ),
+            ]
+        )
+
+        result = list_stale_tasks(mock_conn, threshold_minutes=60, limit=20)
+
+        assert result == [
+            {
+                "id": 7,
+                "task_code": "TEST-001",
+                "task_title": "Test task",
+                "owner_agent": "qa_agent",
+                "status": "in_progress",
+                "started_at": "2026-07-02T10:00:00",
+                "updated_at": "2026-07-02T10:05:00",
+                "stale_minutes": 20160.5,
+            }
+        ]
+        query, params = mock_cur.execute.call_args.args
+        assert "COALESCE(updated_at, started_at, assigned_at, created_at)" in query
+        assert params == (60, 20)
+
+    def test_stale_task_threshold_must_be_positive(self):
+        mock_conn, mock_cur = _mock_conn()
+
+        try:
+            list_stale_tasks(mock_conn, threshold_minutes=0)
+        except ValueError as exc:
+            assert "threshold_minutes" in str(exc)
+        else:
+            raise AssertionError("expected ValueError")
+        mock_cur.execute.assert_not_called()
+
+
+class TestRetryJobRun:
+    def test_retries_failed_job(self):
+        mock_conn, mock_cur = _mock_conn(fetchone=[7])
+        assert retry_job_run(mock_conn, 7, max_retries=2) is True
+        assert "status = 'running'" in mock_cur.execute.call_args[0][0]
+        mock_conn.commit.assert_called_once()
+
+    def test_rejects_negative_budget(self):
+        mock_conn, mock_cur = _mock_conn(fetchone=[7])
+        try:
+            retry_job_run(mock_conn, 7, max_retries=-1)
+        except ValueError as exc:
+            assert "max_retries" in str(exc)
+        else:
+            raise AssertionError("expected ValueError")
+        mock_cur.execute.assert_not_called()
+
+
+class TestTaskArtifacts:
+    def test_adds_artifact_with_metadata(self):
+        mock_conn, mock_cur = _mock_conn(fetchone=[9])
+        result = add_task_artifact(
+            mock_conn,
+            {
+                "task_id": 5,
+                "artifact_type": "test_report",
+                "artifact_path": "reports/test.txt",
+                "metadata": {"passed": 3},
+            },
+        )
+        assert result == 9
+        assert '"passed": 3' in mock_cur.execute.call_args[0][1]["metadata"]
+
+    def test_lists_artifacts(self):
+        now = MagicMock(isoformat=lambda: "2025-01-01T00:00:00")
+        mock_conn, mock_cur = _mock_conn(
+            fetchall=[(9, 5, "test_report", "x", "ok", "abc", {}, now)]
+        )
+        result = list_task_artifacts(mock_conn, 5)
+        assert result[0]["artifact_hash"] == "abc"
+
 
 class TestListAgentTasks:
     def test_returns_formatted_task_list(self):
         now = MagicMock(isoformat=lambda: "2025-01-01T00:00:00")
-        mock_conn, mock_cur = _mock_conn(fetchall=[
-            (1, "T-001", "Title", "general", "agent_x", "high", "L2", "created",
-             "scope", True, "codex", now, now, now, now, now),
-        ])
+        mock_conn, mock_cur = _mock_conn(
+            fetchall=[
+                (
+                    1,
+                    "T-001",
+                    "Title",
+                    "general",
+                    "agent_x",
+                    "high",
+                    "L2",
+                    "created",
+                    "scope",
+                    True,
+                    "codex",
+                    now,
+                    now,
+                    now,
+                    now,
+                    now,
+                ),
+            ]
+        )
 
         result = list_agent_tasks(mock_conn)
         assert len(result) == 1
@@ -180,11 +345,27 @@ class TestListAgentTasks:
 class TestGetAgentTask:
     def test_returns_full_task_details(self):
         now = MagicMock(isoformat=lambda: "2025-01-01T00:00:00")
-        mock_conn, mock_cur = _mock_conn(fetchone=[
-            1, "T-001", "Title", "general", "agent_x", "high", "L2", "created",
-            "scope", '{"key":"val"}', '["crit1","crit2"]', True, "codex",
-            now, now, now, now,
-        ])
+        mock_conn, mock_cur = _mock_conn(
+            fetchone=[
+                1,
+                "T-001",
+                "Title",
+                "general",
+                "agent_x",
+                "high",
+                "L2",
+                "created",
+                "scope",
+                '{"key":"val"}',
+                '["crit1","crit2"]',
+                True,
+                "codex",
+                now,
+                now,
+                now,
+                now,
+            ]
+        )
 
         result = get_agent_task(mock_conn, "T-001")
         assert result is not None
@@ -233,9 +414,11 @@ class TestWriteAuditLog:
 class TestListAuditLogs:
     def test_returns_formatted_list(self):
         now = MagicMock(isoformat=lambda: "2025-01-01T00:00:00")
-        mock_conn, mock_cur = _mock_conn(fetchall=[
-            (1, 5, "agent_x", "deploy", "cmd", "success", "All good", now),
-        ])
+        mock_conn, mock_cur = _mock_conn(
+            fetchall=[
+                (1, 5, "agent_x", "deploy", "cmd", "success", "All good", now),
+            ]
+        )
 
         result = list_audit_logs(mock_conn)
         assert len(result) == 1
@@ -252,6 +435,30 @@ class TestListAuditLogs:
 
 
 class TestJobRuns:
+    def test_recovers_interrupted_runs_for_owned_job_codes(self):
+        mock_conn, mock_cur = _mock_conn(rowcount=2)
+
+        recovered = recover_interrupted_job_runs(
+            mock_conn,
+            ["official_odds_snapshot"],
+            reason="worker restarted",
+        )
+
+        assert recovered == 2
+        query, params = mock_cur.execute.call_args.args
+        assert "status = 'failed'" in query
+        assert "job_code = ANY" in query
+        assert params == ("worker restarted", ["official_odds_snapshot"])
+        mock_conn.commit.assert_called_once()
+
+    def test_recovery_skips_database_work_without_owned_jobs(self):
+        mock_conn, mock_cur = _mock_conn()
+
+        assert recover_interrupted_job_runs(mock_conn, []) == 0
+
+        mock_cur.execute.assert_not_called()
+        mock_conn.commit.assert_not_called()
+
     def test_start_job_run_returns_id(self):
         mock_conn, mock_cur = _mock_conn(fetchone=[100])
 
@@ -277,10 +484,25 @@ class TestJobRuns:
 
     def test_list_job_runs_with_filters(self):
         now = MagicMock(isoformat=lambda: "2025-01-01T00:00:00")
-        mock_conn, mock_cur = _mock_conn(fetchall=[
-            (1, "J-001", "Job", "agent", "cron", "prod", "completed", 0,
-             now, now, 5000, None, now),
-        ])
+        mock_conn, mock_cur = _mock_conn(
+            fetchall=[
+                (
+                    1,
+                    "J-001",
+                    "Job",
+                    "agent",
+                    "cron",
+                    "prod",
+                    "completed",
+                    0,
+                    now,
+                    now,
+                    5000,
+                    None,
+                    now,
+                ),
+            ]
+        )
 
         result = list_job_runs(mock_conn, status="completed")
         assert len(result) == 1
@@ -301,6 +523,44 @@ class TestReviewGatesAndReports:
         gate = {"task_id": 5, "gate_type": "auto", "reason": "High risk"}
         result = create_review_gate(mock_conn, gate)
         assert result == 1
+
+    def test_resolve_review_gate_requires_valid_status(self):
+        mock_conn, mock_cur = _mock_conn(fetchone=[1])
+        assert resolve_review_gate(mock_conn, 5, "human", "approved", "ok") is True
+        assert mock_conn.commit.called
+
+    def test_lists_review_gates(self):
+        now = MagicMock(isoformat=lambda: "2025-01-01T00:00:00")
+        mock_conn, mock_cur = _mock_conn(
+            fetchall=[
+                (
+                    1,
+                    5,
+                    "T-005",
+                    "Risk review",
+                    "human_review",
+                    "L4",
+                    None,
+                    "pending",
+                    None,
+                    None,
+                    now,
+                )
+            ]
+        )
+        result = list_review_gates(mock_conn, review_status="pending")
+        assert result[0]["task_code"] == "T-005"
+        assert result[0]["review_status"] == "pending"
+
+    def test_resolve_review_gate_rejects_unknown_status(self):
+        mock_conn, mock_cur = _mock_conn(fetchone=[1])
+        try:
+            resolve_review_gate(mock_conn, 5, "human", "pending")
+        except ValueError as exc:
+            assert "approved or rejected" in str(exc)
+        else:
+            raise AssertionError("expected ValueError")
+        mock_cur.execute.assert_not_called()
 
     def test_create_review_report_returns_id(self):
         mock_conn, mock_cur = _mock_conn(fetchone=[1])

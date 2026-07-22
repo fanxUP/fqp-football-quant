@@ -1,5 +1,5 @@
 # FQP 任务计划示例
-# 注意：以下模块路径对应 scripts/jobs/ 目录，实际调度由 Scheduler 容器负责
+# 注意：以下模块路径对应 scripts/jobs/ 目录，实际调度由本机 cron/APScheduler 负责
 05 00 * * * python -m scripts.jobs.initialize_business_day
 10 00 * * * python -m scripts.jobs.crawl_official_schedule
 00 06 * * * python -m scripts.jobs.crawl_official_odds --label morning

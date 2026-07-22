@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../core/apiClient';
 import { ApiError } from '../core/types';
 import type { DailyReview, DashboardRoiDailyItem, DashboardTodayKpi, DashboardModelPerfItem } from '../core/types';
@@ -7,7 +7,7 @@ import ChartCard from '../shared/components/ChartCard';
 import StatusBadge from '../shared/components/StatusBadge';
 import Skeleton from '../shared/components/Skeleton';
 import PageHeader from '../shared/components/PageHeader';
-import DisclaimerBanner, { PAGE_DEFAULTS } from '../shared/components/DisclaimerBanner';
+import useBackgroundRefresh from '../shared/hooks/useBackgroundRefresh';
 import { RoiLineChart, EmptyChartState, AiPoolDashboard } from '../visualization';
 
 // ---- CountUp: animates a number from 0 to target ----
@@ -37,10 +37,11 @@ interface HealthInfo {
 interface DashboardData {
   health: HealthInfo | null;
   healthError: string | null;
+  matchCount: number;
   teamCount: number;
   predictionCount: number;
   activeTicketCount: number;
-  realTicketCount: number;
+  ticketLedgerCount: number;
   latestReview: string | null;
   loading: boolean;
   errors: Record<string, string>;
@@ -51,13 +52,16 @@ function fmtTime(): string {
 }
 
 export default function DashboardPage() {
+  const hasLoadedInitialData = useRef(false);
+  const isMounted = useRef(false);
   const [data, setData] = useState<DashboardData>({
     health: null,
     healthError: null,
+    matchCount: 0,
     teamCount: 0,
     predictionCount: 0,
     activeTicketCount: 0,
-    realTicketCount: 0,
+    ticketLedgerCount: 0,
     latestReview: null,
     loading: true,
     errors: {},
@@ -77,84 +81,121 @@ export default function DashboardPage() {
     business_date: '',
   });
 
-  useEffect(() => {
-    let cancelled = false;
+  const load = useCallback(async (showLoading = true) => {
+    const results: Partial<DashboardData> = { errors: {} };
 
-    async function load() {
-      const results: Partial<DashboardData> = { errors: {} };
-
-      const settle = <T,>(
-        key: string,
-        promise: Promise<T>,
-        onOk: (val: T) => void,
-      ) =>
-        promise
-          .then((val) => {
-            if (!cancelled) onOk(val);
-          })
-          .catch((e) => {
-            if (!cancelled) {
-              results.errors = {
-                ...results.errors,
-                [key]: e instanceof ApiError ? e.message : '请求失败',
-              };
-            }
-          });
-
-      await Promise.all([
-        settle('health', api.health(), (h) => (results.health = h)),
-        settle('teams', api.teams(), (t) => (results.teamCount = t.total)),
-        settle('predictions', api.predictions({ limit: 200 }), (p) => (results.predictionCount = p.total)),
-        settle('tickets', api.tickets({ status: 'generated', limit: 50 }), (t) => (results.activeTicketCount = t.total)),
-        settle('realTickets', api.realTickets.list({ limit: 50 }), (t) => (results.realTicketCount = t.total)),
-        settle('reviews', api.reviews.daily(30), (r) => {
-          if (r.reviews.length > 0) {
-            results.latestReview = r.reviews[0].review_date;
+    const settle = <T,>(
+      key: string,
+      promise: Promise<T>,
+      onOk: (val: T) => void,
+    ) =>
+      promise
+        .then((val) => {
+          if (isMounted.current) onOk(val);
+        })
+        .catch((e) => {
+          if (isMounted.current) {
+            results.errors = {
+              ...results.errors,
+              [key]: e instanceof ApiError ? e.message : '请求失败',
+            };
           }
-          if (!cancelled) setDailyReviews(r.reviews);
-        }),
-      ]);
+        });
 
-      // Dashboard API — independent from existing loads
-      if (!cancelled) {
-        setDashLoading(true);
-        try {
-          const [todayRes, roiRes, modelRes] = await Promise.all([
-            api.dashboard.today().catch(() => null),
-            api.dashboard.roiDaily({ days: 30 }).catch(() => null),
-            api.dashboard.modelPerformance().catch(() => null),
-          ]);
-          if (!cancelled) {
-            if (todayRes?.data?.kpis) setTodayKpis(todayRes.data.kpis);
-            if (todayRes?.data?.extras) setTodayExtras({
-              current_round_label: todayRes.data.extras.current_round_label,
-              business_date: todayRes.data.extras.business_date,
-            });
-            if (roiRes?.data?.series) setRoiDaily(roiRes.data.series as DashboardRoiDailyItem[]);
-            if (modelRes?.data?.series) setModelPerf(modelRes.data.series as DashboardModelPerfItem[]);
-          }
-        } catch {
-          if (!cancelled) setDashError('Dashboard API 异常');
-        } finally {
-          if (!cancelled) setDashLoading(false);
+    await Promise.all([
+      settle('health', api.health(), (h) => (results.health = h)),
+      settle('teams', api.teams(), (t) => (results.teamCount = t.total)),
+      settle('predictions', api.predictions({ limit: 200 }), (p) => (results.predictionCount = p.total)),
+      settle('tickets', api.tickets({ status: 'generated', limit: 50 }), (t) => (results.activeTicketCount = t.total)),
+      settle('bettingTickets', api.betting.tickets({ limit: 1 }), (t) => (results.ticketLedgerCount = t.total)),
+      settle('reviews', api.reviews.daily(30), (r) => {
+        if (r.reviews.length > 0) {
+          results.latestReview = r.reviews[0].review_date;
         }
-      }
+        if (isMounted.current) setDailyReviews(r.reviews);
+      }),
+    ]);
 
-      if (!cancelled) {
-        setData((prev) => ({
-          ...prev,
-          ...results,
-          loading: false,
-          errors: results.errors || {},
-        }));
+    // Dashboard API — independent from existing loads
+    if (isMounted.current) {
+      if (showLoading) setDashLoading(true);
+      try {
+        const [todayRes, roiRes, modelRes] = await Promise.all([
+          api.dashboard.today().catch(() => null),
+          api.dashboard.roiDaily({ days: 30 }).catch(() => null),
+          api.dashboard.modelPerformance().catch(() => null),
+        ]);
+        if (isMounted.current) {
+          if (todayRes?.data?.kpis) setTodayKpis(todayRes.data.kpis);
+          if (todayRes?.data?.extras) {
+            const extras = todayRes.data.extras;
+            setTodayExtras({
+              current_round_label: typeof extras.current_round_label === 'string' ? extras.current_round_label : null,
+              business_date: typeof extras.business_date === 'string' ? extras.business_date : '',
+            });
+          }
+          if (roiRes?.data?.series) setRoiDaily(roiRes.data.series as DashboardRoiDailyItem[]);
+          if (modelRes?.data?.series) setModelPerf(modelRes.data.series as DashboardModelPerfItem[]);
+        }
+      } catch {
+        if (isMounted.current && showLoading) setDashError('Dashboard API 异常');
+      } finally {
+        if (isMounted.current && showLoading) setDashLoading(false);
       }
     }
 
-    load();
-    return () => {
-      cancelled = true;
-    };
+    if (isMounted.current) {
+      setData((prev) => ({
+        ...prev,
+        ...results,
+        loading: showLoading ? false : prev.loading,
+        errors: results.errors || {},
+      }));
+    }
   }, []);
+
+  const refreshLive = useCallback(async () => {
+    const [health, ledger, today, roi, reviews] = await Promise.all([
+      api.health().catch(() => null),
+      api.betting.tickets({ limit: 1 }).catch(() => null),
+      api.dashboard.today().catch(() => null),
+      api.dashboard.roiDaily({ days: 30 }).catch(() => null),
+      api.reviews.daily(30).catch(() => null),
+    ]);
+    if (!isMounted.current) return;
+
+    setData((prev) => ({
+      ...prev,
+      health: health ?? prev.health,
+      ticketLedgerCount: ledger?.total ?? prev.ticketLedgerCount,
+      latestReview: reviews?.reviews[0]?.review_date ?? prev.latestReview,
+    }));
+    if (today?.data?.kpis) setTodayKpis(today.data.kpis);
+    if (today?.data?.extras) {
+      setTodayExtras({
+        current_round_label: typeof today.data.extras.current_round_label === 'string'
+          ? today.data.extras.current_round_label
+          : null,
+        business_date: typeof today.data.extras.business_date === 'string'
+          ? today.data.extras.business_date
+          : '',
+      });
+    }
+    if (roi?.data?.series) setRoiDaily(roi.data.series as DashboardRoiDailyItem[]);
+    if (reviews?.reviews) setDailyReviews(reviews.reviews);
+  }, []);
+
+  useEffect(() => {
+    isMounted.current = true;
+    if (!hasLoadedInitialData.current) {
+      hasLoadedInitialData.current = true;
+      void load();
+    }
+    return () => {
+      isMounted.current = false;
+    };
+  }, [load]);
+  useBackgroundRefresh(refreshLive);
 
   // ---- Chart options ----
 
@@ -201,7 +242,7 @@ export default function DashboardPage() {
           name: '日盈亏 (¥)',
           nameTextStyle: { fontSize: 11 },
           axisLabel: { fontSize: 11 },
-          splitLine: { lineStyle: { color: 'rgba(255,255,255,0.04)' } },
+          splitLine: { lineStyle: { color: 'var(--fqp-border-subtle)' } },
         },
         {
           type: 'value' as const,
@@ -244,11 +285,15 @@ export default function DashboardPage() {
     : data.healthError
       ? '后端异常'
       : '检测中...';
+  const kpiValue = (key: string) => todayKpis.find((kpi) => kpi.key === key)?.value ?? 0;
+  const agentStakeToday = kpiValue('ai_stake_today');
+  const agentTicketCount = kpiValue('ai_ticket_count');
+  const agentPendingCount = kpiValue('pending_settlement_count');
+  const budgetUsagePercent = Math.min((agentStakeToday / 500) * 100, 100);
 
   return (
     <div>
       <PageHeader title="今日驾驶舱" lastUpdated={fmtTime()} />
-      <DisclaimerBanner text={PAGE_DEFAULTS.dashboard} type="page" />
 
       {/* System status bar */}
       <Card style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '16px' }}>
@@ -295,11 +340,11 @@ export default function DashboardPage() {
           </div>
         </Card>
 
-        <Card title="实票记录" entranceDelay={240}>
+        <Card title="彩票记录" entranceDelay={240}>
           <div className="fqp-stat-card" style={{ padding: 0 }}>
-            <div className="fqp-stat-value"><CountUp value={data.realTicketCount} /></div>
+            <div className="fqp-stat-value"><CountUp value={data.ticketLedgerCount} /></div>
             <div className="fqp-stat-sub">
-              {data.realTicketCount > 0 ? '张实票已录入' : '暂无实票记录'}
+              {data.ticketLedgerCount > 0 ? '张彩票已归档' : '暂无彩票记录'}
             </div>
           </div>
         </Card>
@@ -307,27 +352,27 @@ export default function DashboardPage() {
 
       {/* AI资金池 + 盈亏趋势 */}
       <div className="fqp-grid-2" style={{ marginBottom: '24px' }}>
-        {/* AI 虚拟资金池仪表盘 — 取代数据完整度环状图 */}
-        <Card title="AI 虚拟资金池">
+        {/* Agent 资金池仪表盘 — 取代数据完整度环状图 */}
+        <Card title="Agent 资金池">
           <div style={{ padding: '8px 0' }}>
             {/* 大数字：已用 / 总额 */}
             <div style={{ textAlign: 'center', marginBottom: '16px' }}>
               <div style={{ fontSize: '36px', fontWeight: 700, color: 'var(--fqp-text)', fontFamily: "'JetBrains Mono', monospace" }}>
-                <CountUp value={data.activeTicketCount * 2} /> / 500
+                <CountUp value={agentStakeToday} /> / 500
               </div>
               <div style={{ fontSize: '13px', color: 'var(--fqp-text-muted)', marginTop: '4px' }}>
-                已使用 ¥{data.activeTicketCount * 2} / ¥500 （每日预算）
+                已使用 ¥{agentStakeToday} / ¥500 （每日预算）
               </div>
             </div>
 
             {/* 进度条 */}
             <div style={{
               width: '100%', height: '10px',
-              background: 'rgba(255,255,255,0.06)', borderRadius: '6px',
+              background: 'var(--fqp-hover-bg)', borderRadius: '6px',
               overflow: 'hidden', marginBottom: '16px',
             }}>
               <div style={{
-                width: `${Math.min((data.activeTicketCount * 2 / 500) * 100, 100)}%`,
+                width: `${budgetUsagePercent}%`,
                 height: '100%',
                 background: 'linear-gradient(90deg, #3B82F6, #FF2A3D)',
                 borderRadius: '6px',
@@ -337,19 +382,19 @@ export default function DashboardPage() {
 
             {/* 关键指标三列 */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
-              <div style={{ textAlign: 'center', padding: '8px', background: 'rgba(255,255,255,0.03)', borderRadius: '6px' }}>
+              <div style={{ textAlign: 'center', padding: '8px', background: 'var(--fqp-hover-subtle)', borderRadius: '6px' }}>
                 <div className="fqp-mono" style={{ fontSize: '18px', fontWeight: 700, color: '#3B82F6' }}>
-                  {data.activeTicketCount}
+                  {agentTicketCount}
                 </div>
                 <div style={{ fontSize: '11px', color: 'var(--fqp-text-muted)' }}>票单数</div>
               </div>
-              <div style={{ textAlign: 'center', padding: '8px', background: 'rgba(255,255,255,0.03)', borderRadius: '6px' }}>
+              <div style={{ textAlign: 'center', padding: '8px', background: 'var(--fqp-hover-subtle)', borderRadius: '6px' }}>
                 <div className="fqp-mono" style={{ fontSize: '18px', fontWeight: 700, color: '#F5A524' }}>
-                  <CountUp value={data.predictionCount} />
+                  <CountUp value={agentPendingCount} />
                 </div>
                 <div style={{ fontSize: '11px', color: 'var(--fqp-text-muted)' }}>待开奖</div>
               </div>
-              <div style={{ textAlign: 'center', padding: '8px', background: 'rgba(255,255,255,0.03)', borderRadius: '6px' }}>
+              <div style={{ textAlign: 'center', padding: '8px', background: 'var(--fqp-hover-subtle)', borderRadius: '6px' }}>
                 <div className="fqp-mono" style={{ fontSize: '18px', fontWeight: 700, color: '#22C55E' }}>
                   <CountUp value={todayKpis.find(k => k.key === 'predicted_match_count')?.value ?? 0} />
                 </div>
@@ -375,20 +420,20 @@ export default function DashboardPage() {
         <Card title="风控状态">
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '8px 0' }}>
             <StatusBadge
-              status={data.activeTicketCount > 0 ? 'warning' : 'ok'}
-              label={data.activeTicketCount > 0 ? 'R3 中风险' : 'R1 低风险'}
+              status={agentPendingCount > 0 ? 'warning' : 'ok'}
+              label={agentPendingCount > 0 ? 'R3 中风险' : 'R1 低风险'}
               dot
             />
             <span style={{ fontSize: '12px', color: 'var(--fqp-text-muted)' }}>
-              {data.activeTicketCount > 0
-                ? '存在活跃推荐，建议核实赔率有效性'
+              {agentPendingCount > 0
+                ? `存在 ${agentPendingCount} 张待开奖 Agent 票，请关注风险敞口`
                 : '系统空闲，无活跃风险敞口'}
             </span>
           </div>
           <div style={{ marginTop: '12px', padding: '10px 0' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', marginBottom: '4px' }}>
               <span style={{ color: 'var(--fqp-text-muted)' }}>每日预算使用</span>
-              <span className="fqp-mono" style={{ color: 'var(--fqp-text)' }}>¥0 / ¥500</span>
+              <span className="fqp-mono" style={{ color: 'var(--fqp-text)' }}>¥{agentStakeToday} / ¥500</span>
             </div>
             <div
               style={{
@@ -401,7 +446,7 @@ export default function DashboardPage() {
               <div
                 style={{
                   height: '100%',
-                  width: '0%',
+                  width: `${budgetUsagePercent}%`,
                   background: 'var(--fqp-success)',
                   borderRadius: '2px',
                   transition: 'width 0.5s ease',
@@ -450,8 +495,8 @@ export default function DashboardPage() {
           </Card>
         )}
 
-        {/* AI 虚拟池综合看板 — 多维度数据 */}
-        <Card title="AI 虚拟池概览" subtitle="当日模拟统计">
+        {/* Agent 资金池综合看板 — 多维度数据 */}
+        <Card title="Agent 资金池概览" subtitle="当日策略统计">
           <AiPoolDashboard
             kpis={todayKpis}
             models={modelPerf}
@@ -460,7 +505,7 @@ export default function DashboardPage() {
               matchCount: todayKpis.find(k => k.key === 'predicted_match_count')?.value ?? data.matchCount,
               predictionCount: data.predictionCount,
               activeTicketCount: data.activeTicketCount,
-              realTicketCount: data.realTicketCount,
+              ticketLedgerCount: data.ticketLedgerCount,
             }}
             loading={dashLoading}
             error={dashError}
@@ -519,7 +564,7 @@ export default function DashboardPage() {
                   alignItems: 'center',
                   justifyContent: 'space-between',
                   padding: '8px 0',
-                  borderBottom: '1px solid rgba(39,39,42,0.3)',
+                  borderBottom: '1px solid var(--fqp-border-light)',
                   animationDelay: `${i * 50}ms`,
                 }}
               >

@@ -90,5 +90,5 @@ Codex 可受控触发一次性任务，但不作为常驻生产进程。
 
 ---
 
-## 最终补充：Codex + Docker Desktop + 非锁版依赖策略
-本项目最终执行时以 `docs/52_Codex开发_DockerDesktop部署_依赖非锁版最终规范.md` 为准：项目使用 Codex 开发，Docker Desktop 本地部署；依赖不指定固定版本，优先使用本机已安装版本，缺失时使用当前最新版。所有长期任务由本地 Scheduler/Worker 运行，Codex 负责代码开发、维护、修复和受控触发。
+## 最终补充：Codex + 本机进程 + 非锁版依赖策略
+本项目以 `54_本机运行与DockerDesktop弃用说明.md` 为准：Codex 在唯一本机工作区开发；发布与长期运行也使用本机进程。Scheduler/Worker 只运行一套，Codex 负责代码开发、维护、修复和受控触发。

@@ -58,10 +58,12 @@ class TestScoreMatrix:
     def test_home_bias_when_higher_lambda(self):
         matrix = score_matrix(2.5, 0.8, max_goals=3)
         # Home win should be more likely than away win
-        home_win = sum(p for score, p in matrix.items()
-                       if int(score.split(":")[0]) > int(score.split(":")[1]))
-        away_win = sum(p for score, p in matrix.items()
-                       if int(score.split(":")[0]) < int(score.split(":")[1]))
+        home_win = sum(
+            p for score, p in matrix.items() if int(score.split(":")[0]) > int(score.split(":")[1])
+        )
+        away_win = sum(
+            p for score, p in matrix.items() if int(score.split(":")[0]) < int(score.split(":")[1])
+        )
         assert home_win > away_win
 
     def test_default_max_goals(self):

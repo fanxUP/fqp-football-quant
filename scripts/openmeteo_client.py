@@ -99,10 +99,12 @@ class OpenMeteoClient:
         for attempt in range(1, self._max_retries + 1):
             try:
                 print(f"[openmeteo] GET {url} (attempt {attempt})")
-                resp = httpx.get(
+                # Reuse the long-lived client so batch collection keeps HTTP
+                # connections warm instead of paying a new TLS handshake for
+                # every match. A full URL also supports the archive host.
+                resp = self._client.get(
                     f"{base}{url}",
                     params=params,
-                    timeout=self._client.timeout,
                 )
                 self._last_request_time = time.monotonic()
 
@@ -205,7 +207,7 @@ class OpenMeteoClient:
         # Determine the date range
         try:
             match_dt = datetime.fromisoformat(match_time.replace("Z", "+00:00"))
-        except (ValueError, AttributeError):
+        except ValueError, AttributeError:
             match_dt = datetime.now() + timedelta(days=1)
 
         start_date = (match_dt - timedelta(days=max(past_days, 1))).strftime("%Y-%m-%d")
@@ -267,7 +269,7 @@ class OpenMeteoClient:
         """
         try:
             match_dt = datetime.fromisoformat(match_time.replace("Z", "+00:00"))
-        except (ValueError, AttributeError):
+        except ValueError, AttributeError:
             match_dt = datetime.now() - timedelta(days=7)
 
         date_str = match_dt.strftime("%Y-%m-%d")

@@ -35,6 +35,8 @@ if _PROJECT_ROOT not in sys.path:
 
 # —— 数据结构 ——
 
+CURRENT_METHODOLOGY_VERSION = 4
+
 
 @dataclass
 class BacktestConfig:
@@ -70,6 +72,9 @@ class BacktestConfig:
 
     def to_dict(self) -> dict:
         return {
+            # v4 起按玩法匹配官方赛果；继续采用赛前最新预测与预测时点赔率。
+            # 版本由执行代码决定；旧配置重跑时自动升级，不能由请求覆盖。
+            "methodology_version": CURRENT_METHODOLOGY_VERSION,
             "name": self.name,
             "description": self.description,
             "time_start": self.time_start,
@@ -115,6 +120,7 @@ class BetRecord:
     profit: float  # 盈亏 (正=赢, 负=输)
     ev: float
     confidence: float
+    play_type: str = "spf"
 
 
 @dataclass
@@ -160,6 +166,7 @@ class BacktestEngine:
         JOIN: model_predictions → model_versions → official_matches → official_results → official_odds_snapshots
         """
         where = [
+            "mp.prediction_rank = 1",
             "m.match_status = 'Settled'",
             "r.full_home_goals IS NOT NULL",
             "r.full_away_goals IS NOT NULL",
@@ -198,23 +205,50 @@ class BacktestEngine:
         where_clause = " AND ".join(where)
 
         sql = f"""
+            WITH ranked_predictions AS (
+                SELECT
+                    source_mp.*,
+                    DENSE_RANK() OVER (
+                        PARTITION BY source_mp.match_id,
+                                     source_mp.model_version_id,
+                                     source_mp.play_type
+                        ORDER BY source_mp.predict_time DESC
+                    ) AS prediction_rank
+                FROM model_predictions source_mp
+                JOIN official_matches source_m ON source_m.id = source_mp.match_id
+                WHERE source_mp.predict_time < source_m.kickoff_time
+                  AND source_mp.validation_status = 'valid'
+                  AND COALESCE(
+                      (source_mp.uncertainty_reason->>'model_independent')::boolean,
+                      false
+                  ) = true
+            )
             SELECT
                 mp.match_id,
-                m.business_date,
+                m.business_date AS match_date,
                 mv.model_name,
+                mp.play_type,
                 mp.option_code,
                 mp.model_probability,
                 mp.market_probability,
                 mp.ev,
                 mp.confidence_score,
                 mp.predict_time,
-                COALESCE(r.spf_result,
-                    CASE
-                        WHEN r.full_home_goals > r.full_away_goals THEN '3'
-                        WHEN r.full_home_goals = r.full_away_goals THEN '1'
-                        ELSE '0'
-                    END
-                ) AS actual_result,
+                CASE
+                    WHEN mp.play_type = 'spf' THEN COALESCE(
+                        NULLIF(r.spf_result, ''),
+                        CASE
+                            WHEN r.full_home_goals > r.full_away_goals THEN '3'
+                            WHEN r.full_home_goals = r.full_away_goals THEN '1'
+                            ELSE '0'
+                        END
+                    )
+                    WHEN mp.play_type = 'rqspf' THEN NULLIF(r.rqspf_result, '')
+                    WHEN mp.play_type IN ('zjq', 'total_goals') THEN r.total_goals_result
+                    WHEN mp.play_type IN ('bf', 'score') THEN r.score_result
+                    WHEN mp.play_type IN ('bqc', 'half_full')
+                        THEN REPLACE(r.half_full_result, '-', '')
+                END AS actual_result,
                 -- Latest odds snapshot for this match before kickoff
                 -- Odds snapshots use h/d/a, model predictions use 3/1/0
                 COALESCE(
@@ -222,21 +256,26 @@ class BacktestEngine:
                      FROM official_odds_snapshots oos
                      WHERE oos.match_id = mp.match_id
                        AND oos.play_type = mp.play_type
-                       AND oos.option_code = CASE mp.option_code
-                           WHEN '3' THEN 'h'
-                           WHEN '1' THEN 'd'
-                           WHEN '0' THEN 'a'
+                       AND oos.snapshot_time <= mp.predict_time
+                       AND oos.option_code = CASE
+                           WHEN mp.play_type IN ('spf', 'rqspf') THEN CASE mp.option_code
+                               WHEN '3' THEN 'h'
+                               WHEN '1' THEN 'd'
+                               WHEN '0' THEN 'a'
+                               ELSE mp.option_code
+                           END
                            ELSE mp.option_code
                        END
                      ORDER BY oos.snapshot_time DESC
                      LIMIT 1),
                     0
                 ) AS sp_value
-            FROM model_predictions mp
+            FROM ranked_predictions mp
             JOIN model_versions mv ON mv.id = mp.model_version_id
             JOIN official_matches m ON m.id = mp.match_id
             JOIN official_results r ON r.match_id = mp.match_id
             WHERE {where_clause}
+              AND r.result_status IN ('final', 'confirmed')
             ORDER BY m.business_date ASC, mp.predict_time ASC
         """
 
@@ -248,7 +287,7 @@ class BacktestEngine:
         with self.conn.cursor() as cur:
             cur.execute(sql, params)
             columns = [desc[0] for desc in cur.description]
-            rows = [dict(zip(columns, row)) for row in cur.fetchall()]
+            rows = [dict(zip(columns, row, strict=False)) for row in cur.fetchall()]
         return rows
 
     # ------------------------------------------------------------------
@@ -379,7 +418,7 @@ class BacktestEngine:
         test_end: str,
     ) -> list[BetRecord]:
         """在测试窗口内模拟投注。"""
-        bets: list[BetRecord] = []
+        candidates: dict[tuple[int, str, str], list[dict]] = defaultdict(list)
 
         for row in rows:
             match_date = str(row["match_date"])[:10]
@@ -388,6 +427,27 @@ class BacktestEngine:
 
             if not self._should_bet(row):
                 continue
+
+            if not row.get("actual_result"):
+                continue
+
+            key = (
+                int(row["match_id"]),
+                str(row["model_name"]),
+                str(row.get("play_type") or "spf"),
+            )
+            candidates[key].append(row)
+
+        bets: list[BetRecord] = []
+        for candidate_rows in candidates.values():
+            row = max(
+                candidate_rows,
+                key=lambda item: (
+                    float(item.get("ev", 0)),
+                    float(item.get("model_probability", 0)),
+                ),
+            )
+            match_date = str(row["match_date"])[:10]
 
             sp = float(row.get("sp_value", 0))
             if sp <= 0:
@@ -417,6 +477,7 @@ class BacktestEngine:
                     profit=profit,
                     ev=float(row.get("ev", 0)),
                     confidence=float(row.get("confidence_score", 0)),
+                    play_type=str(row.get("play_type") or "spf"),
                 )
             )
 
@@ -481,17 +542,18 @@ class BacktestEngine:
 
         # 资金曲线 + 最大回撤 + 最长连亏
         equity_curve: list[dict] = []
-        bankroll = 0.0
-        peak = 0.0
+        initial_bankroll = 100.0
+        bankroll = initial_bankroll
+        peak = initial_bankroll
         max_drawdown = 0.0
         max_drawdown_pct = 0.0
         current_losing_streak = 0
         longest_losing_streak = 0
-        daily_returns: list[float] = []
-        prev_bankroll = 0.0
+        daily_profits: dict[str, float] = defaultdict(float)
 
         for b in bets:
             bankroll += b.profit
+            daily_profits[b.match_date] += b.profit
             if bankroll > peak:
                 peak = bankroll
             drawdown = peak - bankroll
@@ -508,10 +570,6 @@ class BacktestEngine:
             else:
                 current_losing_streak = 0
 
-            if prev_bankroll > 0:
-                daily_returns.append((bankroll - prev_bankroll) / prev_bankroll)
-            prev_bankroll = bankroll
-
             equity_curve.append(
                 {
                     "date": b.match_date,
@@ -520,7 +578,8 @@ class BacktestEngine:
                 }
             )
 
-        # Sharpe ratio (annualized, assuming 1 bet ≈ 1 "day")
+        # Sharpe ratio uses daily returns against a fixed starting bankroll.
+        daily_returns = [profit / initial_bankroll for profit in daily_profits.values()]
         sharpe = None
         if len(daily_returns) > 1:
             mean_ret = sum(daily_returns) / len(daily_returns)
@@ -590,11 +649,19 @@ class BacktestEngine:
 
         # 3. 逐窗口模拟
         window_results: list[WindowResult] = []
-        all_bets: list[BetRecord] = []
+        all_bets_by_key: dict[tuple[int, str, str, str], BetRecord] = {}
 
         for wcfg in windows_cfg:
             bets = self._simulate_bets(rows, wcfg["test_start"], wcfg["test_end"])
-            all_bets.extend(bets)
+            for bet in bets:
+                all_bets_by_key[
+                    (
+                        bet.match_id,
+                        bet.model_name,
+                        bet.play_type,
+                        bet.match_date,
+                    )
+                ] = bet
 
             # 按模型分组计算指标
             model_bets: dict[str, list[BetRecord]] = defaultdict(list)
@@ -609,11 +676,11 @@ class BacktestEngine:
             ts = wcfg["test_start"]
             te = wcfg["test_end"]
             n_train = (
-                sum(1 for r in rows if str(r["match_date"])[:10] < ts)
+                len({r["match_id"] for r in rows if str(r["match_date"])[:10] < ts})
                 if wcfg.get("train_start")
                 else 0
             )
-            n_test = sum(1 for r in rows if ts <= str(r["match_date"])[:10] <= te)
+            n_test = len({r["match_id"] for r in rows if ts <= str(r["match_date"])[:10] <= te})
 
             window_results.append(
                 WindowResult(
@@ -631,6 +698,7 @@ class BacktestEngine:
             )
 
         # 4. 聚合所有窗口
+        all_bets = list(all_bets_by_key.values())
         all_model_bets: dict[str, list[BetRecord]] = defaultdict(list)
         for b in all_bets:
             all_model_bets[b.model_name].append(b)
@@ -781,17 +849,17 @@ class BacktestEngine:
                 metrics.get("n_bets", 0),
                 metrics.get("n_wins", 0),
                 metrics.get("hit_rate"),
-                metrics.get("roi"),
-                metrics.get("total_profit", 0.0),
-                metrics.get("avg_odds"),
-                metrics.get("brier_score"),
-                metrics.get("log_loss"),
-                metrics.get("clv"),
-                metrics.get("max_drawdown", 0.0),
-                metrics.get("max_drawdown_pct", 0.0),
+                round(float(metrics.get("roi") or 0), 4),
+                round(float(metrics.get("total_profit", 0)), 2),
+                round(float(metrics.get("avg_odds") or 0), 2),
+                round(float(metrics.get("brier_score") or 0), 4),
+                round(float(metrics.get("log_loss") or 0), 4),
+                round(float(metrics.get("clv") or 0), 4),
+                round(float(metrics.get("max_drawdown", 0)), 2),
+                min(999.9999, round(float(metrics.get("max_drawdown_pct", 0)), 4)),
                 metrics.get("longest_losing_streak", 0),
-                metrics.get("sharpe_ratio"),
-                metrics.get("profit_factor"),
+                round(float(metrics.get("sharpe_ratio") or 0), 4),
+                round(float(metrics.get("profit_factor") or 0), 4),
                 json.dumps(metrics.get("equity_curve", []), ensure_ascii=False),
             ),
         )
@@ -834,9 +902,21 @@ def run_backtest_from_config(
                 run_id = row[0]
         conn.commit()
 
-    # 执行回测
+    # 执行回测。计算异常也必须收口运行状态，避免永久停在 running。
     engine = BacktestEngine(conn, config)
-    result = engine.run()
+    try:
+        result = engine.run()
+    except Exception as e:
+        if store and run_id:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """UPDATE backtest_runs
+                       SET status = 'failed', error_message = %s, finished_at = NOW()
+                       WHERE id = %s""",
+                    (str(e)[:1000], run_id),
+                )
+            conn.commit()
+        raise
 
     # 存储结果
     if store and run_id:

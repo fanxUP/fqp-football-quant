@@ -4,9 +4,8 @@
 
 ```text
 local-dev：本地开发，Codex CLI/IDE 可直接修改。
-dev：开发服务器，允许自动测试和非生产数据。
-staging：预发环境，连接脱敏或影子数据。
-prod：生产环境，只允许受控任务和人工审核。
+local-release：从已推送 GitHub 提交启动的本机发布栈，只允许受控任务和人工审核。
+future-staging：预发环境，连接脱敏或影子数据（预留，不作为当前环境）。
 ```
 
 ## 2. Secret 管理
@@ -14,9 +13,8 @@ prod：生产环境，只允许受控任务和人工审核。
 Codex 不应把密钥写入代码、日志或文档。所有密钥进入：
 
 ```text
-.env
-Secret Manager
-Docker secrets
+.env.local
+macOS Keychain 或受控 Secret Manager
 CI/CD encrypted variables
 ```
 
@@ -51,8 +49,8 @@ CI/CD encrypted variables
 
 ```text
 git revert <commit>
-重新部署上一个镜像 tag
-重启 worker
+git checkout 到已验证提交后重新执行 ./ops/local/manage_local_stack.sh restart
+按当前运行模式重启 scheduler/worker
 运行 smoke test
 ```
 
@@ -61,7 +59,7 @@ git revert <commit>
 ```text
 每个 migration 必须有 down SQL
 迁移前自动备份 schema
-高风险迁移先在 staging 验证
+高风险迁移先在脱敏或影子数据环境验证
 生产迁移必须人工确认
 ```
 
@@ -85,7 +83,7 @@ configs 使用版本号
 每次涉及生产时必须在任务里写明：
 
 ```text
-环境：prod/staging/dev
+环境：local-dev/local-release/future-staging
 是否写生产库：是/否
 是否影响推荐：是/否
 是否影响资金：是/否

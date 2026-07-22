@@ -11,16 +11,19 @@ Target: backup success rate = 100%.
 from __future__ import annotations
 
 import os
+import shutil
+import subprocess
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 from apps.backend.src.db import get_db
+from scripts.business_time import utc_now_iso
 from scripts.ops_storage import store_backup_log
 
 
-def _now() -> str:
-    return datetime.now().isoformat(timespec="seconds")
+def _now(value: datetime | None = None) -> str:
+    return utc_now_iso(value)
 
 
 def _get_backup_dir() -> str:
@@ -34,9 +37,9 @@ def _ensure_backup_dir(backup_dir: str) -> None:
 
 
 def _create_backup(backup_dir: str) -> tuple[str | None, int, str | None]:
-    """Create a SQL dump backup using Python + psycopg2.
+    """Create a complete SQL dump, with a psycopg2 data-export fallback.
 
-    Pure Python — no pg_dump dependency needed.
+    Prefer pg_dump because it includes schema and views as well as data.
     Returns (filepath, size_bytes, error_message).
     """
     _ensure_backup_dir(backup_dir)
@@ -45,13 +48,31 @@ def _create_backup(backup_dir: str) -> tuple[str | None, int, str | None]:
     filename = f"fqp_{timestamp}.sql"
     filepath = str(Path(backup_dir) / filename)
 
+    db_url = os.environ.get(
+        "DATABASE_URL",
+        "postgresql://fqp:fqp_local_password@127.0.0.1:5432/fqp",
+    )
+    pg_dump = shutil.which("pg_dump")
+    if pg_dump:
+        try:
+            with open(filepath, "wb") as output:
+                subprocess.run(
+                    [pg_dump, db_url],
+                    check=True,
+                    stdout=output,
+                    stderr=subprocess.PIPE,
+                )
+            size = Path(filepath).stat().st_size
+            if size == 0:
+                return None, 0, "pg_dump produced an empty file"
+            print("[verify_backup] created full pg_dump backup")
+            return filepath, size, None
+        except subprocess.CalledProcessError as e:
+            return None, 0, e.stderr.decode(errors="replace")[:1000]
+
     try:
         import psycopg2
         from psycopg2 import sql as psql
-
-        db_url = os.environ.get("DATABASE_URL", "")
-        if not db_url:
-            return None, 0, "DATABASE_URL not set"
 
         conn = psycopg2.connect(db_url)
         conn.set_session(autocommit=True)
@@ -66,6 +87,7 @@ def _create_backup(backup_dir: str) -> tuple[str | None, int, str | None]:
                 SELECT table_schema, table_name
                 FROM information_schema.tables
                 WHERE table_schema NOT IN ('pg_catalog', 'information_schema')
+                  AND table_type = 'BASE TABLE'
                 ORDER BY table_schema, table_name
             """)
             tables = cur.fetchall()
@@ -76,19 +98,19 @@ def _create_backup(backup_dir: str) -> tuple[str | None, int, str | None]:
                 f.write(f"-- Table: {fqn}\n")
 
                 # Count rows
-                cur.execute(psql.SQL("SELECT COUNT(*) FROM {}").format(psql.Identifier(schema, table)))
+                cur.execute(
+                    psql.SQL("SELECT COUNT(*) FROM {}").format(psql.Identifier(schema, table))
+                )
                 count = cur.fetchone()[0]
                 f.write(f"-- Rows: {count}\n")
 
                 if count > 0:
-                    # Dump data using COPY (binary-safe, efficient)
+                    # psycopg2 exposes COPY via copy_expert(), not the
+                    # psycopg3-style cursor.copy() API.
                     try:
-                        copy_sql = f"COPY {fqn} TO STDOUT"
-                        with cur.copy(copy_sql) as copy:
-                            f.write(f"COPY {fqn} FROM STDIN;\n")
-                            for chunk in copy:
-                                f.write(chunk)
-                            f.write("\\.\n\n")
+                        f.write(f"COPY {fqn} FROM STDIN;\n")
+                        cur.copy_expert(f"COPY {fqn} TO STDOUT", f)
+                        f.write("\\.\n\n")
                         row_count += count
                     except Exception as e:
                         f.write(f"-- COPY failed: {e}\n\n")
@@ -170,14 +192,15 @@ def _verify_backup_integrity(filepath: str) -> dict[str, str | int | bool | None
 
 
 def _test_restore(filepath: str) -> bool:
-    """Test that the backup file is readable and contains valid COPY data."""
+    """Check that essential data tables were exported without COPY failures."""
     try:
         with open(filepath) as f:
-            content = f.read(10000)  # Read first 10KB
-        # Check it has COPY statements and data
-        has_copy = "COPY " in content
-        has_data = len(content) > 500
-        return has_copy or has_data
+            content = f.read()
+        required_tables = ("official_matches",)
+        return "COPY failed:" not in content and all(
+            f"COPY public.{table} " in content or f'COPY "public"."{table}" ' in content
+            for table in required_tables
+        )
     except Exception:
         return False
 
@@ -219,7 +242,7 @@ def run(dry_run: bool = False) -> dict[str, Any]:
                     "integrity_check_passed": False,
                     "restore_test_passed": False,
                     "error_message": create_error,
-                    "backup_command": f"pg_dump → {backup_dir}",
+                    "backup_command": f"psycopg2 COPY → {backup_dir}",
                 },
             )
         return result
@@ -244,6 +267,7 @@ def run(dry_run: bool = False) -> dict[str, Any]:
         verify_result["exists"]
         and verify_result["size_ok"]
         and verify_result["integrity_ok"]
+        and (dry_run or restore_ok is True)
     )
 
     # Step 4: Log
@@ -260,7 +284,7 @@ def run(dry_run: bool = False) -> dict[str, Any]:
                 "integrity_check_passed": verify_result["integrity_ok"],
                 "restore_test_passed": restore_ok,
                 "error_message": verify_result.get("error"),
-                "backup_command": f"pg_dump → {filepath}",
+                "backup_command": f"psycopg2 COPY → {filepath}",
             },
         )
 

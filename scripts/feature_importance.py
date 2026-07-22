@@ -27,6 +27,65 @@ _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _PROJECT_ROOT not in sys.path:
     sys.path.insert(0, _PROJECT_ROOT)
 
+MIN_FEATURE_MODEL_MATCHES = 100
+
+_LATEST_METRICS_CTE = """
+    WITH latest_metrics AS (
+        SELECT DISTINCT ON (source_mem.match_id, source_mem.model_version_id)
+            source_mem.*
+        FROM market_efficiency_metrics source_mem
+        JOIN official_matches source_match ON source_match.id = source_mem.match_id
+        JOIN official_results source_result ON source_result.match_id = source_mem.match_id
+        WHERE source_mem.brier_score IS NOT NULL
+          AND source_mem.play_type = 'spf'
+          AND source_mem.snapshot_time < source_match.kickoff_time
+          AND source_result.result_status IN ('final', 'confirmed')
+        ORDER BY source_mem.match_id,
+                 source_mem.model_version_id,
+                 source_mem.snapshot_time DESC,
+                 source_mem.id DESC
+    )
+"""
+
+MODEL_PRELIMINARY_MIN_SAMPLES = 30
+MODEL_PUBLICATION_MIN_SAMPLES = 100
+
+
+def _model_sample_status(sample_count: int) -> str:
+    if sample_count >= MODEL_PUBLICATION_MIN_SAMPLES:
+        return "qualified"
+    if sample_count >= MODEL_PRELIMINARY_MIN_SAMPLES:
+        return "preliminary"
+    return "monitoring"
+
+
+_LATEST_PREDICTIONS_CTE = """
+    WITH latest_predictions AS (
+        SELECT DISTINCT ON (
+            source_mp.match_id,
+            source_mp.model_version_id,
+            source_mp.play_type,
+            source_mp.option_code
+        ) source_mp.*
+        FROM model_predictions source_mp
+        JOIN official_matches source_match ON source_match.id = source_mp.match_id
+        JOIN official_results source_result ON source_result.match_id = source_mp.match_id
+        WHERE source_mp.predict_time < source_match.kickoff_time
+          AND source_mp.validation_status = 'valid'
+          AND COALESCE(
+              (source_mp.uncertainty_reason->>'model_independent')::boolean,
+              false
+          ) = true
+          AND source_result.result_status IN ('final', 'confirmed')
+        ORDER BY source_mp.match_id,
+                 source_mp.model_version_id,
+                 source_mp.play_type,
+                 source_mp.option_code,
+                 source_mp.predict_time DESC,
+                 source_mp.id DESC
+    )
+"""
+
 # ---------------------------------------------------------------------------
 # Feature column definitions — must match match_feature_snapshots table
 # ---------------------------------------------------------------------------
@@ -151,7 +210,7 @@ def _label(name: str) -> str:
 
 def _load_training_data(
     conn: Any,
-    min_samples: int = 50,
+    min_samples: int = MIN_FEATURE_MODEL_MATCHES,
 ) -> tuple[np.ndarray, np.ndarray, list[int], list[str]] | None:
     """从 match_feature_snapshots + official_results 构建训练集。
 
@@ -163,19 +222,27 @@ def _load_training_data(
 
     with conn.cursor() as cur:
         cur.execute(f"""
+            WITH latest_feature_snapshots AS (
+                SELECT DISTINCT ON (fs.match_id) fs.*
+                FROM match_feature_snapshots fs
+                JOIN official_matches m ON m.id = fs.match_id
+                WHERE fs.feature_version IS NOT NULL
+                  AND fs.snapshot_time < m.kickoff_time
+                ORDER BY fs.match_id, fs.snapshot_time DESC
+            )
             SELECT
                 fs.match_id,
-                fs.league_name,
+                m.league_name,
                 {col_refs},
                 CASE
                     WHEN r.full_home_goals > r.full_away_goals THEN 2
                     WHEN r.full_home_goals = r.full_away_goals THEN 1
                     ELSE 0
                 END AS label
-            FROM match_feature_snapshots fs
+            FROM latest_feature_snapshots fs
+            JOIN official_matches m ON m.id = fs.match_id
             JOIN official_results r ON r.match_id = fs.match_id
-            WHERE fs.feature_version IS NOT NULL
-            ORDER BY fs.snapshot_time DESC
+            ORDER BY m.business_date DESC, fs.match_id
             LIMIT 5000
         """)
         rows = cur.fetchall()
@@ -219,6 +286,7 @@ def _load_training_data(
 # Module-level cache
 _trained_model: Any = None
 _trained_explainer: Any = None
+_explainer_initialized = False
 _feature_names_cache: list[str] = []
 _importance_cache: dict[str, Any] = {}
 _train_score: float = 0.0
@@ -231,7 +299,8 @@ def train_if_needed(conn: Any, force: bool = False) -> dict[str, Any]:
         {"status": "ok", "n_samples": int, "n_features": int,
          "train_accuracy": float, "feature_count": int}
     """
-    global _trained_model, _trained_explainer, _feature_names_cache, _importance_cache, _train_score
+    global _trained_model, _trained_explainer, _explainer_initialized
+    global _feature_names_cache, _importance_cache, _train_score
 
     if _trained_model is not None and not force:
         return {
@@ -249,7 +318,10 @@ def train_if_needed(conn: Any, force: bool = False) -> dict[str, Any]:
 
     data = _load_training_data(conn)
     if data is None:
-        return {"status": "error", "error": "训练数据不足（需要至少50条已结算的特征快照）"}
+        return {
+            "status": "error",
+            "error": f"训练数据不足（需要至少{MIN_FEATURE_MODEL_MATCHES}场独立已结算比赛）",
+        }
 
     X, y, _match_ids, feature_names = data
 
@@ -264,20 +336,17 @@ def train_if_needed(conn: Any, force: bool = False) -> dict[str, Any]:
         objective="multi:softprob",
         num_class=n_classes,
         eval_metric="mlogloss",
+        enable_categorical=False,
         random_state=42,
-        n_jobs=-1,
+        n_jobs=1,
     )
     model.fit(X, y)
 
     _trained_model = model
     _feature_names_cache = feature_names
     _train_score = float(model.score(X, y))
-
-    # Build SHAP explainer
-    try:
-        _trained_explainer = _build_shap_explainer(model, X)
-    except Exception:
-        _trained_explainer = None
+    _trained_explainer = None
+    _explainer_initialized = False
 
     # Compute permutation importance
     _importance_cache = _compute_permutation_importance(model, X, y, feature_names)
@@ -302,9 +371,7 @@ def _build_shap_explainer(model: Any, X: np.ndarray) -> Any:
     try:
         import shap
 
-        # Use a subset as background (max 100 samples for speed)
-        bg = X[np.random.RandomState(42).choice(len(X), min(100, len(X)), replace=False)]
-        explainer = shap.TreeExplainer(model, bg, feature_perturbation="interventional")
+        explainer = shap.TreeExplainer(model, feature_perturbation="tree_path_dependent")
         return explainer
     except Exception:
         return None
@@ -321,9 +388,7 @@ def _compute_permutation_importance(
     try:
         from sklearn.inspection import permutation_importance
 
-        r = permutation_importance(
-            model, X, y, n_repeats=n_repeats, random_state=42, n_jobs=-1
-        )
+        r = permutation_importance(model, X, y, n_repeats=n_repeats, random_state=42, n_jobs=1)
 
         rankings = []
         for i, name in enumerate(feature_names):
@@ -419,7 +484,7 @@ def explain_prediction(
         {"status": "ok", "match_id": int, "shap_values": [...],
          "base_value": float, "predicted_probs": [float, float, float]}
     """
-    global _trained_model, _trained_explainer, _feature_names_cache
+    global _trained_model, _trained_explainer, _explainer_initialized, _feature_names_cache
 
     # Ensure model is trained
     train_result = train_if_needed(conn)
@@ -430,17 +495,22 @@ def explain_prediction(
     col_refs = ", ".join(f"fs.{c}" for c in FEATURE_COLUMNS)
 
     with conn.cursor() as cur:
-        cur.execute(f"""
+        cur.execute(
+            f"""
             SELECT
                 fs.match_id,
-                fs.home_team_name,
-                fs.away_team_name,
+                m.home_team_name,
+                m.away_team_name,
                 {col_refs}
             FROM match_feature_snapshots fs
+            JOIN official_matches m ON m.id = fs.match_id
             WHERE fs.match_id = %s
+              AND fs.snapshot_time < m.kickoff_time
             ORDER BY fs.snapshot_time DESC
             LIMIT 1
-        """, (match_id,))
+        """,
+            (match_id,),
+        )
         row = cur.fetchone()
 
     if not row:
@@ -470,6 +540,13 @@ def explain_prediction(
     # SHAP values
     shap_data: list[dict[str, Any]] = []
     base_values: list[float] = [0.33, 0.34, 0.33]
+
+    if not _explainer_initialized:
+        try:
+            _trained_explainer = _build_shap_explainer(_trained_model, X_single)
+        except Exception:
+            _trained_explainer = None
+        _explainer_initialized = True
 
     if _trained_explainer is not None:
         try:
@@ -529,7 +606,8 @@ def get_model_comparison_data(conn: Any) -> dict[str, Any]:
 
     # 1. Evaluation metrics from market_efficiency_metrics
     with conn.cursor() as cur:
-        cur.execute("""
+        cur.execute(f"""
+            {_LATEST_METRICS_CTE}
             SELECT
                 mv.model_name,
                 COUNT(*) AS n_predictions,
@@ -538,16 +616,15 @@ def get_model_comparison_data(conn: Any) -> dict[str, Any]:
                 AVG(mem.rps) AS avg_rps,
                 AVG(mem.clv_score) AS avg_clv,
                 AVG(mem.favourite_longshot_score) AS avg_flb_score
-            FROM market_efficiency_metrics mem
-            JOIN model_predictions mp ON mp.match_id = mem.match_id AND mp.play_type = mem.play_type AND mp.option_code = mem.option_code
-            JOIN model_versions mv ON mv.id = mp.model_version_id
+            FROM latest_metrics mem
+            JOIN model_versions mv ON mv.id = mem.model_version_id
             WHERE mem.brier_score IS NOT NULL
             GROUP BY mv.model_name
             ORDER BY mv.model_name
         """)
         columns = [desc[0] for desc in cur.description]
         for row in cur.fetchall():
-            d = dict(zip(columns, row))
+            d = dict(zip(columns, row, strict=False))
             name = d["model_name"]
             models_data[name] = {
                 "name": name,
@@ -555,14 +632,16 @@ def get_model_comparison_data(conn: Any) -> dict[str, Any]:
                 "brier": round(float(d["avg_brier"] or 0), 4),
                 "log_loss": round(float(d["avg_log_loss"] or 0), 4),
                 "rps": round(float(d["avg_rps"] or 0), 4),
-                "clv": round(float(d["avg_clv"] or 0), 4),
-                "flb_score": round(float(d["avg_flb_score"] or 0), 4),
+                "clv": round(float(d["avg_clv"]), 4) if d["avg_clv"] is not None else None,
+                "flb_score": (
+                    round(float(d["avg_flb_score"]), 4) if d["avg_flb_score"] is not None else None
+                ),
             }
 
     # 2. Backtest performance (latest aggregate)
     with conn.cursor() as cur:
         cur.execute("""
-            SELECT
+            SELECT DISTINCT ON (brr.model_name)
                 brr.model_name,
                 brr.hit_rate,
                 brr.roi,
@@ -574,11 +653,11 @@ def get_model_comparison_data(conn: Any) -> dict[str, Any]:
             JOIN backtest_runs br ON br.id = brr.run_id
             WHERE brr.window_index IS NULL
               AND br.status = 'completed'
-            ORDER BY br.created_at DESC
+            ORDER BY brr.model_name, br.created_at DESC, br.id DESC
         """)
         columns = [desc[0] for desc in cur.description]
         for row in cur.fetchall():
-            d = dict(zip(columns, row))
+            d = dict(zip(columns, row, strict=False))
             name = d["model_name"]
             if name in models_data:
                 models_data[name].update(
@@ -618,7 +697,8 @@ def get_evaluation_summary(conn: Any) -> dict[str, Any]:
         {"status": "ok", "models": [...], "overall": {...}}
     """
     with conn.cursor() as cur:
-        cur.execute("""
+        cur.execute(f"""
+            {_LATEST_METRICS_CTE}
             SELECT
                 mv.model_name,
                 COUNT(*) AS n,
@@ -626,9 +706,8 @@ def get_evaluation_summary(conn: Any) -> dict[str, Any]:
                 ROUND(AVG(mem.log_loss)::numeric, 4) AS avg_logloss,
                 ROUND(AVG(mem.rps)::numeric, 4) AS avg_rps,
                 ROUND(AVG(mem.clv_score)::numeric, 4) AS avg_clv
-            FROM market_efficiency_metrics mem
-            JOIN model_predictions mp ON mp.match_id = mem.match_id AND mp.play_type = mem.play_type AND mp.option_code = mem.option_code
-            JOIN model_versions mv ON mv.id = mp.model_version_id
+            FROM latest_metrics mem
+            JOIN model_versions mv ON mv.id = mem.model_version_id
             WHERE mem.brier_score IS NOT NULL
             GROUP BY mv.model_name
             ORDER BY avg_brier ASC
@@ -636,32 +715,37 @@ def get_evaluation_summary(conn: Any) -> dict[str, Any]:
         columns = [desc[0] for desc in cur.description]
         models = []
         for row in cur.fetchall():
-            d = dict(zip(columns, row))
+            d = dict(zip(columns, row, strict=False))
+            sample_count = int(d["n"])
             models.append(
                 {
                     "model_name": d["model_name"],
-                    "n": int(d["n"]),
+                    "n": sample_count,
                     "avg_brier": float(d["avg_brier"] or 0),
                     "avg_logloss": float(d["avg_logloss"] or 0),
                     "avg_rps": float(d["avg_rps"] or 0),
-                    "avg_clv": float(d["avg_clv"] or 0),
+                    "avg_clv": float(d["avg_clv"]) if d["avg_clv"] is not None else None,
+                    "sample_status": _model_sample_status(sample_count),
+                    "is_publishable": sample_count >= MODEL_PUBLICATION_MIN_SAMPLES,
                 }
             )
 
         # Overall stats
-        cur.execute("""
+        cur.execute(f"""
+            {_LATEST_METRICS_CTE}
             SELECT
                 COUNT(*) AS total_evaluated,
                 ROUND(AVG(brier_score)::numeric, 4) AS overall_brier,
                 ROUND(AVG(log_loss)::numeric, 4) AS overall_logloss
-            FROM market_efficiency_metrics
-            WHERE brier_score IS NOT NULL
+            FROM latest_metrics
         """)
         overall_row = cur.fetchone()
         overall = {
             "total_evaluated": int(overall_row[0] or 0),
             "overall_brier": float(overall_row[1] or 0),
             "overall_logloss": float(overall_row[2] or 0),
+            "publication_min_samples": MODEL_PUBLICATION_MIN_SAMPLES,
+            "publishable_models": sum(bool(model["is_publishable"]) for model in models),
         }
 
     return {"status": "ok", "models": models, "overall": overall}
@@ -686,7 +770,9 @@ def get_calibration_data(
 
     with conn.cursor() as cur:
         if model_name:
-            cur.execute("""
+            cur.execute(
+                f"""
+                {_LATEST_PREDICTIONS_CTE}
                 SELECT
                     mp.model_probability,
                     CASE
@@ -695,7 +781,7 @@ def get_calibration_data(
                         WHEN r.full_home_goals < r.full_away_goals AND mp.option_code = '0' THEN 1
                         ELSE 0
                     END AS is_correct
-                FROM model_predictions mp
+                FROM latest_predictions mp
                 JOIN model_versions mv ON mv.id = mp.model_version_id
                 JOIN official_results r ON r.match_id = mp.match_id
                 WHERE mv.model_name = %s
@@ -703,9 +789,12 @@ def get_calibration_data(
                   AND mp.model_probability IS NOT NULL
                 ORDER BY mp.predict_time DESC
                 LIMIT 2000
-            """, (model_name,))
+            """,
+                (model_name,),
+            )
         else:
-            cur.execute("""
+            cur.execute(f"""
+                {_LATEST_PREDICTIONS_CTE}
                 SELECT
                     mp.model_probability,
                     CASE
@@ -714,7 +803,7 @@ def get_calibration_data(
                         WHEN r.full_home_goals < r.full_away_goals AND mp.option_code = '0' THEN 1
                         ELSE 0
                     END AS is_correct
-                FROM model_predictions mp
+                FROM latest_predictions mp
                 JOIN official_results r ON r.match_id = mp.match_id
                 WHERE mp.play_type = 'spf'
                   AND mp.model_probability IS NOT NULL
@@ -722,9 +811,7 @@ def get_calibration_data(
                 LIMIT 5000
             """)
 
-        predictions = [
-            (float(row[0]), int(row[1])) for row in cur.fetchall()
-        ]
+        predictions = [(float(row[0]), int(row[1])) for row in cur.fetchall()]
 
     if len(predictions) < n_bins:
         return {
@@ -764,16 +851,16 @@ def get_condition_performance(
     """
     if dimension == "league":
         with conn.cursor() as cur:
-            cur.execute("""
+            cur.execute(f"""
+                {_LATEST_METRICS_CTE}
                 SELECT
                     m.league_name,
                     mv.model_name,
                     COUNT(*) AS n,
                     ROUND(AVG(mem.brier_score)::numeric, 4) AS avg_brier,
                     ROUND(AVG(mem.log_loss)::numeric, 4) AS avg_logloss
-                FROM market_efficiency_metrics mem
-                JOIN model_predictions mp ON mp.match_id = mem.match_id AND mp.play_type = mem.play_type AND mp.option_code = mem.option_code
-            JOIN model_versions mv ON mv.id = mp.model_version_id
+                FROM latest_metrics mem
+                JOIN model_versions mv ON mv.id = mem.model_version_id
                 JOIN official_matches m ON m.id = mem.match_id
                 WHERE mem.brier_score IS NOT NULL
                   AND m.league_name IS NOT NULL
@@ -782,11 +869,12 @@ def get_condition_performance(
                 ORDER BY m.league_name, avg_brier ASC
             """)
             columns = [desc[0] for desc in cur.description]
-            segments = [dict(zip(columns, row)) for row in cur.fetchall()]
+            segments = [dict(zip(columns, row, strict=False)) for row in cur.fetchall()]
 
     elif dimension == "odds_range":
         with conn.cursor() as cur:
-            cur.execute("""
+            cur.execute(f"""
+                {_LATEST_METRICS_CTE}
                 SELECT
                     CASE
                         WHEN mp_home.market_probability < 0.30 THEN '低概率 (<30%)'
@@ -798,25 +886,25 @@ def get_condition_performance(
                     mv.model_name,
                     COUNT(*) AS n,
                     ROUND(AVG(mem.brier_score)::numeric, 4) AS avg_brier
-                FROM market_efficiency_metrics mem
-                JOIN model_predictions mp ON mp.match_id = mem.match_id
-                    AND mp.play_type = mem.play_type
-                    AND mp.option_code = mem.option_code
-                JOIN model_versions mv ON mv.id = mp.model_version_id
+                FROM latest_metrics mem
+                JOIN model_versions mv ON mv.id = mem.model_version_id
                 JOIN model_predictions mp_home ON mp_home.match_id = mem.match_id
+                    AND mp_home.model_version_id = mem.model_version_id
                     AND mp_home.play_type = mem.play_type
                     AND mp_home.option_code = '3'
+                    AND mp_home.predict_time = mem.snapshot_time
                 WHERE mem.brier_score IS NOT NULL
                 GROUP BY odds_range, mv.model_name
                 HAVING COUNT(*) >= 3
                 ORDER BY odds_range, avg_brier ASC
             """)
             columns = [desc[0] for desc in cur.description]
-            segments = [dict(zip(columns, row)) for row in cur.fetchall()]
+            segments = [dict(zip(columns, row, strict=False)) for row in cur.fetchall()]
 
     elif dimension == "confidence":
         with conn.cursor() as cur:
-            cur.execute("""
+            cur.execute(f"""
+                {_LATEST_METRICS_CTE}
                 SELECT
                     CASE
                         WHEN mp_home.confidence_score < 0.3 THEN '低信心 (<30%)'
@@ -827,21 +915,20 @@ def get_condition_performance(
                     mv.model_name,
                     COUNT(*) AS n,
                     ROUND(AVG(mem.brier_score)::numeric, 4) AS avg_brier
-                FROM market_efficiency_metrics mem
-                JOIN model_predictions mp ON mp.match_id = mem.match_id
-                    AND mp.play_type = mem.play_type
-                    AND mp.option_code = mem.option_code
-                JOIN model_versions mv ON mv.id = mp.model_version_id
+                FROM latest_metrics mem
+                JOIN model_versions mv ON mv.id = mem.model_version_id
                 JOIN model_predictions mp_home ON mp_home.match_id = mem.match_id
+                    AND mp_home.model_version_id = mem.model_version_id
                     AND mp_home.play_type = mem.play_type
                     AND mp_home.option_code = '3'
+                    AND mp_home.predict_time = mem.snapshot_time
                 WHERE mem.brier_score IS NOT NULL
                 GROUP BY confidence_range, mv.model_name
                 HAVING COUNT(*) >= 3
                 ORDER BY confidence_range, avg_brier ASC
             """)
             columns = [desc[0] for desc in cur.description]
-            segments = [dict(zip(columns, row)) for row in cur.fetchall()]
+            segments = [dict(zip(columns, row, strict=False)) for row in cur.fetchall()]
     else:
         return {"status": "error", "error": f"未知维度: {dimension}"}
 
@@ -862,7 +949,8 @@ def recommend_best_combos(conn: Any, min_samples: int = 5, top_n: int = 15) -> l
     Handles per-play-type result column mapping (spf/rqspf/total_goals/score/half_full).
     Only includes combos with ≥ min_samples settled predictions.
     """
-    sql = """
+    sql = f"""
+        {_LATEST_PREDICTIONS_CTE}
         SELECT
             mv.model_name,
             mp.play_type,
@@ -889,7 +977,7 @@ def recommend_best_combos(conn: Any, min_samples: int = 5, top_n: int = 15) -> l
                     END
                 )::numeric / NULLIF(COUNT(*), 0)::numeric, 4
             ) AS hit_rate
-        FROM model_predictions mp
+        FROM latest_predictions mp
         JOIN model_versions mv ON mv.id = mp.model_version_id
         JOIN official_results r ON r.match_id = mp.match_id
         WHERE r.result_status = 'final'

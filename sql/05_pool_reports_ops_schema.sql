@@ -8,6 +8,8 @@ CREATE TABLE IF NOT EXISTS football_pool_issues (
     total_matches INT,
     official_status VARCHAR(32),
     prize_pool_estimate NUMERIC(14,2),
+    raw_hash VARCHAR(128),
+    raw_json JSONB,
     created_at TIMESTAMP DEFAULT now(),
     updated_at TIMESTAMP DEFAULT now()
 );

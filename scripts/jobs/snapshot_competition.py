@@ -5,17 +5,17 @@ collect_health_metrics at 23:55).
 
 1. Ensures current week round exists (creates on Monday)
 2. Aggregates Agent pool stats from ticket_settlements (simulation)
-3. Aggregates User pool stats from real_tickets + ticket_settlements
+3. Aggregates User pool stats from real/simulator tickets and settlements
 4. Writes competition_daily_snapshots
 5. Finalizes round on Sunday
 """
 
 from __future__ import annotations
 
-from datetime import date, timedelta
 from typing import Any
 
 from apps.backend.src.db import get_db
+from scripts.business_time import business_today
 from scripts.competition_storage import (
     compute_agent_daily_stats,
     compute_user_daily_stats,
@@ -35,7 +35,8 @@ def _get_settled_agent_stake(conn, round_id: int) -> float:
             FROM ticket_settlements ts
             JOIN competition_rounds cr ON cr.id = %(round_id)s
             WHERE ts.ticket_source = 'simulation'
-              AND ts.created_at::date BETWEEN cr.round_start AND cr.round_end
+              AND (ts.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Shanghai')::date
+                  BETWEEN cr.round_start AND cr.round_end
             """,
             {"round_id": round_id},
         )
@@ -50,8 +51,9 @@ def _get_settled_user_stake(conn, round_id: int) -> float:
             SELECT COALESCE(SUM(ts.stake_amount), 0)
             FROM ticket_settlements ts
             JOIN competition_rounds cr ON cr.id = %(round_id)s
-            WHERE ts.ticket_source = 'real'
-              AND ts.created_at::date BETWEEN cr.round_start AND cr.round_end
+            WHERE ts.ticket_source IN ('real', 'simulator')
+              AND (ts.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Shanghai')::date
+                  BETWEEN cr.round_start AND cr.round_end
             """,
             {"round_id": round_id},
         )
@@ -60,7 +62,7 @@ def _get_settled_user_stake(conn, round_id: int) -> float:
 
 def run(dry_run: bool = False) -> dict[str, Any]:
     """Snapshot today's competition data for both pools."""
-    today = date.today()
+    today = business_today()
     snapshot_date = today
 
     if dry_run:
@@ -85,7 +87,9 @@ def run(dry_run: bool = False) -> dict[str, Any]:
         # 3. Compute cumulative values from PREVIOUS snapshots
         #    (exclude today's snapshot if it already exists, to avoid double-counting)
         previous_snapshots = get_trend_data(conn, round_id)
-        previous_snapshots = [s for s in previous_snapshots if s.get("snapshot_date") != str(snapshot_date)]
+        previous_snapshots = [
+            s for s in previous_snapshots if s.get("snapshot_date") != str(snapshot_date)
+        ]
 
         # Previous cumulative values (from the last snapshot, if any)
         prev_agent_stake = 0.0

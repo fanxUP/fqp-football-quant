@@ -1,923 +1,552 @@
-"""Recommendation candidate job — competition agent edition.
+"""Generate the Agent's daily virtual recommendation portfolio.
 
-依据「足彩推荐依据框架」重构：
-  1. 只选正 EV 方向（模型概率 > 市场隐含概率）
-  2. 每场只选 1 个最优方向
-  3. 四池分层：主策略池 / 防守池 / 价值池 / 小额进攻池
-  4. 2串1 优先，3串1 小额（框架 §8.5）
-  5. 平局风险检测降权（框架 §7.3）
-  6. 不强花 ¥500 — 没好机会少买或不买
+The Agent recommends; the user decides whether to place a real bet.  The
+¥500 bankroll in this module is virtual competition capital, so risk and EV
+are displayed as evidence instead of being used as extra veto layers.
 
-Daily budget: ¥500 max, unused portion resets at 23:59.
+Only three hard boundaries remain:
+1. the prediction has independent, valid model evidence;
+2. the bound feature snapshot reaches the minimum evidence score;
+3. the option has valid official odds and a currently open betting route.
 """
 
 from __future__ import annotations
 
-from itertools import combinations
+import os
 from datetime import datetime
+from math import floor
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from apps.backend.src.db import get_db
+from scripts.agents.task_queue import finish_tracked_job, start_tracked_job
 from scripts.competition_storage import AGENT_DAILY_BUDGET
-from scripts.simulator_storage import (
-    create_simulator_ticket,
-    create_simulator_items_batch,
-    ensure_simulator_bankroll,
-)
-from scripts.real_ticket_storage import create_bankroll_transaction
-
-
-def _now() -> str:
-    return datetime.now().isoformat(timespec="seconds")
-
-
-# ── Selection config ──
+from scripts.daily_decision_storage import upsert_agent_daily_decision
+from scripts.model_storage import store_simulation_ticket
+from scripts.recommendation_prediction_loader import load_actionable_predictions
+from scripts.sporttery_sales import get_sporttery_sales_window
 
 ALL_MODELS = ["market_baseline", "elo_rating", "dixon_coles", "maher_poisson"]
-
-MIN_QUALITY = 50
-MIN_CONFIDENCE = 0.20
-MIN_STAKE = 2.0
+MIN_EVIDENCE_QUALITY = 30
 STAKE_UNIT = 2.0
-
-# ── 四池分层配置（框架 §9.1） ──
-POOL_CONFIG: list[dict[str, Any]] = [
-    {
-        "name": "main",
-        "label": "主策略池",
-        "budget": 180.0,
-        "max_per_ticket": 60.0,
-        "risk_max": 0.08,
-        "min_confidence": 0.40,
-        "min_ev": 0.03,
-    },
-    {
-        "name": "defense",
-        "label": "防守池",
-        "budget": 100.0,
-        "max_per_ticket": 50.0,
-        "risk_max": 0.15,
-        "min_confidence": 0.30,
-        "min_ev": 0.01,
-    },
-    {
-        "name": "value",
-        "label": "价值池",
-        "budget": 70.0,
-        "max_per_ticket": 35.0,
-        "risk_max": 0.25,
-        "min_confidence": 0.25,
-        "min_ev": 0.03,
-    },
-    {
-        "name": "attack",
-        "label": "小额进攻池",
-        "budget": 40.0,
-        "max_per_ticket": 20.0,
-        "risk_max": 0.50,
-        "min_confidence": 0.20,
-        "min_ev": 0.05,
-    },
-]
-
-# ── 串关配置（框架 §8.5） ──
-#   - 2串1 优先
-#   - 3串1 小额（最多 ¥30）
-#   - 不建议多场热门硬串（单场 SP < 1.30 的不参与串关）
-#   - 不建议全部选深盘让胜
-
-PARLAY_BUDGET = 80.0         # 串关总预算
-PARLAY_2X1_MAX_STAKE = 40.0  # 2串1 单票上限
-PARLAY_3X1_MAX_STAKE = 20.0  # 3串1 单票上限
-PARLAY_3X1_TOTAL_MAX = 30.0  # 3串1 总预算上限
-PARLAY_MIN_COMBO_EV = 0.03   # 组合最低正EV
-PARLAY_MIN_SP = 1.30         # 单场最低SP（防过热）
-PARLAY_MAX_COMBO_SP = 15.0   # 组合SP上限
-PARLAY_MIN_QUALITY = 60      # 串关数据质量要求更高
-
-# ── 平局风险检测（框架 §7.3） ──
-DRAW_ODDS_THRESHOLD = 3.50
-DRAW_PROB_GAP_THRESHOLD = 0.15
-
-# ── 赔率结构风险（框架 §7.1 + §7.2） ──
-# §7.2 热门过热：SP < 1.30 → 热门过热，风险上浮
-OVERHEAT_SP = 1.30
-DEEP_OVERHEAT_SP = 1.20
-OVERHEAT_PENALTY = 0.05
-DEEP_OVERHEAT_PENALTY = 0.08
-# §7.1 SPF vs 让球矛盾：主胜很低但让胜很高 → "赢不穿"风险
-ODDS_GAP_HOME_SP_MAX = 1.50   # SPF主胜低于此值才触发检查
-ODDS_GAP_RQSPF_H_MIN = 2.20   # 让球主胜高于此值 = 让球深
-ODDS_GAP_PENALTY = 0.05
-
-# ── 联赛分级（框架 §4 + §10） ──
-# Tier 1: 顶级联赛 → 数据充分、不确定性低
-# Tier 2: 次级联赛 → 正常
-# Tier 3: 小型联赛 → 数据不完整、冷门风险高
-LEAGUE_TIERS: dict[str, int] = {
-    # Tier 1: 五大联赛 + 欧冠 + 欧联
-    "英超": 1, "English Premier League": 1,
-    "西甲": 1, "Spanish La Liga": 1,
-    "德甲": 1, "German Bundesliga": 1,
-    "意甲": 1, "Italian Serie A": 1,
-    "法甲": 1, "French Ligue 1": 1,
-    "欧冠": 1, "UEFA Champions League": 1,
-    "欧联": 1, "UEFA Europa League": 1,
-    # Tier 2: 五大次级 + 荷葡巴日韩
-    "英冠": 2, "English Championship": 2,
-    "德乙": 2, "German 2. Bundesliga": 2,
-    "西乙": 2, "Spanish Segunda Division": 2,
-    "意乙": 2, "Italian Serie B": 2,
-    "法乙": 2, "French Ligue 2": 2,
-    "荷甲": 2, "Dutch Eredivisie": 2,
-    "葡超": 2, "Portuguese Liga": 2,
-    "巴甲": 2, "Brazilian Serie A": 2,
-    "日职": 2, "Japanese J1 League": 2,
-    "韩职": 2, "Korean K League 1": 2,
-    "美职": 2, "American MLS": 2,
-}
-# Default tier if league not found → Tier 3 (highest risk)
-LEAGUE_TIER_RISK = {1: -0.02, 2: 0.0, 3: 0.03}
-
-TOTAL_MAX_BUDGET = sum(p["budget"] for p in POOL_CONFIG)
+MAX_OFFICIAL_MULTIPLE = 99
+MAX_TICKET_STAKE = STAKE_UNIT * MAX_OFFICIAL_MULTIPLE
+MAX_DAILY_SELECTIONS = 5
 
 
-def run(dry_run: bool = False) -> dict[str, Any]:
-    """Generate simulation ticket candidates for the competition agent."""
+def _business_today():
+    timezone_name = os.getenv("FQP_TIMEZONE", "Asia/Shanghai")
+    return datetime.now(ZoneInfo(timezone_name)).date()
+
+
+def _record_daily_decision(
+    result: dict[str, Any] | None = None,
+    error: str | None = None,
+) -> None:
+    tickets = int((result or {}).get("tickets") or 0)
+    total_stake = float((result or {}).get("total_stake") or 0)
+    if error:
+        status = "failed"
+        reason = f"推荐任务执行失败：{error}"
+    elif tickets > 0:
+        status = "purchased"
+        reason = (result or {}).get("note") or f"已生成 {tickets} 张 Agent 虚拟推荐票"
+    else:
+        status = "abstained"
+        reason = (result or {}).get("note") or "暂无可信模型与官方赔率组合"
+    with get_db() as conn:
+        upsert_agent_daily_decision(
+            conn,
+            decision_date=_business_today(),
+            status=status,
+            total_stake=total_stake,
+            reason=reason,
+        )
+
+
+def _official_stake(value: float) -> float:
+    """Round virtual stake down to the official two-yuan unit."""
+    return float(floor(max(0.0, value) / STAKE_UNIT) * STAKE_UNIT)
+
+
+def _payout_cap(match_count: int) -> float:
+    if match_count <= 1:
+        return 100_000.0
+    if match_count <= 3:
+        return 200_000.0
+    if match_count <= 5:
+        return 500_000.0
+    return 1_000_000.0
+
+
+def _prediction_sp_value(prediction_row: tuple[Any, ...]) -> float:
+    """Read SP from the fixed actionable-prediction query layout."""
+    value = prediction_row[16]
+    return float(value or 0) if value else 0.0
+
+
+def _market_sp_quality(
+    predictions: list[tuple[Any, ...]],
+) -> tuple[dict[tuple[int, str], bool], int]:
+    """Reject missing or obviously duplicated odds within one market."""
+    market_values: dict[tuple[int, str], dict[str, float]] = {}
+    for prediction in predictions:
+        market_key = (prediction[1], prediction[3])
+        market_values.setdefault(market_key, {})[prediction[4]] = _prediction_sp_value(prediction)
+
+    quality: dict[tuple[int, str], bool] = {}
+    for market_key, option_values in market_values.items():
+        values = list(option_values.values())
+        quality[market_key] = not (
+            any(value <= 0 for value in values) or (len(values) >= 2 and len(set(values)) == 1)
+        )
+    valid_match_count = len(
+        {match_id for (match_id, _play_type), is_valid in quality.items() if is_valid}
+    )
+    return quality, valid_match_count
+
+
+def _load_prediction_feature_quality(
+    conn: Any,
+    predictions: list[tuple[Any, ...]],
+) -> dict[int, float]:
+    """Load only the immutable feature snapshots bound to predictions."""
+    snapshot_ids = sorted({int(row[11]) for row in predictions if row[11] is not None})
+    if not snapshot_ids:
+        return {}
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT id, data_completeness_score
+            FROM match_feature_snapshots
+            WHERE id = ANY(%s)
+            """,
+            (snapshot_ids,),
+        )
+        return {int(row[0]): float(row[1] or 0) for row in cur.fetchall()}
+
+
+def _preferred_direction_by_market(
+    predictions: list[tuple[Any, ...]],
+) -> dict[tuple[int, str], tuple[str, float]]:
+    """Return the model's strongest direction inside each play type."""
+    preferred: dict[tuple[int, str], tuple[str, float]] = {}
+    for prediction in predictions:
+        key = (prediction[1], prediction[3])
+        probability = float(prediction[5] or 0)
+        if key not in preferred or probability > preferred[key][1]:
+            preferred[key] = (prediction[4], probability)
+    return preferred
+
+
+def _select_daily_candidates(candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Choose one transparent model recommendation per match.
+
+    First retain the highest model probability within each play type, then use
+    EV only to rank the remaining play types for that match. Negative EV is
+    preserved instead of hidden; it is evidence for the user's own decision.
+    """
+    by_market: dict[tuple[int, str], dict[str, Any]] = {}
+    for candidate in candidates:
+        key = (candidate["match_id"], candidate["play_type"])
+        current = by_market.get(key)
+        if current is None or candidate["model_probability"] > current["model_probability"]:
+            by_market[key] = candidate
+
+    by_match: dict[int, dict[str, Any]] = {}
+    for candidate in by_market.values():
+        match_id = candidate["match_id"]
+        current = by_match.get(match_id)
+        candidate_rank = (candidate["ev"], candidate["model_probability"])
+        current_rank = (
+            (current["ev"], current["model_probability"])
+            if current is not None
+            else (float("-inf"), float("-inf"))
+        )
+        if candidate_rank > current_rank:
+            by_match[match_id] = candidate
+    return sorted(
+        by_match.values(),
+        key=lambda item: (item["ev"], item["model_probability"]),
+        reverse=True,
+    )
+
+
+def _market_allows_pass(raw_json: dict[str, Any] | None) -> bool:
+    pool = (raw_json or {}).get("_pool") or {}
+    for field in ("allUp", "bettingAllup", "cbtAllUp", "intAllUp"):
+        value = pool.get(field)
+        if value is True or value == 1 or value == "1":
+            return True
+    return False
+
+
+def _split_budget(total: float, count: int) -> list[float]:
+    if count <= 0:
+        return []
+    total_units = int(_official_stake(total) / STAKE_UNIT)
+    base_units, remainder = divmod(total_units, count)
+    return [
+        float((base_units + (1 if index < remainder else 0)) * STAKE_UNIT) for index in range(count)
+    ]
+
+
+def _stake_chunks(stake: float) -> list[float]:
+    chunks: list[float] = []
+    remaining = _official_stake(stake)
+    while remaining > 0:
+        chunk = min(remaining, MAX_TICKET_STAKE)
+        chunks.append(chunk)
+        remaining = round(remaining - chunk, 2)
+    return chunks
+
+
+def _combined_metrics(items: list[dict[str, Any]]) -> tuple[float, float]:
+    combined_sp = 1.0
+    combined_ev = 1.0
+    for item in items:
+        combined_sp *= float(item.get("sp_value") or 0)
+        combined_ev *= float(item.get("ev") or 0) + 1
+    return combined_sp, combined_ev - 1
+
+
+def _ticket_entry(
+    items: list[dict[str, Any]],
+    *,
+    pass_type: str,
+    stake: float,
+) -> dict[str, Any]:
+    combined_sp, combined_ev = _combined_metrics(items)
+    match_count = len(items)
+    return {
+        "ticket": {
+            "strategy_pool": "agent_virtual_recommendation",
+            "ticket_type": "virtual_recommendation",
+            "pass_type": pass_type,
+            "suggested_stake": stake,
+            "multiple": int(stake / STAKE_UNIT),
+            "bet_count": 1,
+            "estimated_return": round(min(stake * combined_sp, _payout_cap(match_count)), 2),
+            "max_return": round(min(stake * combined_sp, _payout_cap(match_count)), 2),
+            "expected_value": round(combined_ev, 4),
+            "risk_level": "reference",
+            "ticket_status": "generated",
+            "rule_metadata": {
+                "source": "sporttery_rules",
+                "virtual_competition": True,
+                "user_decides_real_purchase": True,
+            },
+        },
+        "items": items,
+    }
+
+
+def _build_virtual_recommendation_tickets(
+    candidates: list[dict[str, Any]],
+    *,
+    single_allowed: set[tuple[int, str]],
+    pass_allowed: set[tuple[int, str]],
+    daily_budget: float = AGENT_DAILY_BUDGET,
+) -> list[dict[str, Any]]:
+    """Allocate the full virtual bankroll without risk-based vetoes."""
+    eligible = [candidate for candidate in candidates if float(candidate.get("sp_value") or 0) > 0]
+    singles = [
+        candidate
+        for candidate in eligible
+        if (candidate["match_id"], candidate["play_type"]) in single_allowed
+    ][:MAX_DAILY_SELECTIONS]
+
+    planned: list[dict[str, Any]] = []
+    if singles:
+        for candidate, allocated in zip(
+            singles, _split_budget(daily_budget, len(singles)), strict=True
+        ):
+            for chunk in _stake_chunks(allocated):
+                planned.append(_ticket_entry([candidate], pass_type="single", stake=chunk))
+        return planned
+
+    pass_candidates: list[dict[str, Any]] = []
+    seen_matches: set[int] = set()
+    for candidate in eligible:
+        key = (candidate["match_id"], candidate["play_type"])
+        if key not in pass_allowed or candidate["match_id"] in seen_matches:
+            continue
+        pass_candidates.append(candidate)
+        seen_matches.add(candidate["match_id"])
+        if len(pass_candidates) == 2:
+            break
+    if len(pass_candidates) != 2:
+        return []
+    for chunk in _stake_chunks(daily_budget):
+        planned.append(_ticket_entry(pass_candidates, pass_type="2x1", stake=chunk))
+    return planned
+
+
+def _option_label(code: str, play_type: str = "spf") -> str:
+    if play_type == "bqc" and len(code) == 2:
+        labels = {"3": "胜", "1": "平", "0": "负"}
+        return f"{labels.get(code[0], code[0])}{labels.get(code[1], code[1])}"
+    if play_type == "zjq":
+        return "7+球" if code in {"7", "7+"} else f"{code}球"
+    if play_type == "bf":
+        return code.replace("_h", "其他胜").replace("_d", "其他平").replace("_a", "其他负")
+    if play_type == "rqspf":
+        return {"3": "让胜", "1": "让平", "0": "让负"}.get(code, code)
+    return {"3": "主胜", "1": "平", "0": "客胜"}.get(code, code)
+
+
+def _make_item(candidate: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "match_id": candidate["match_id"],
+        "odds_snapshot_id": candidate["odds_snapshot_id"],
+        "model_prediction_id": candidate["prediction_id"],
+        "feature_snapshot_id": candidate.get("feature_snapshot_id"),
+        "play_type": candidate["play_type"],
+        "option_code": candidate["option_code"],
+        "option_name": candidate["option_name"],
+        "sp_value": candidate["sp_value"],
+        "model_probability": candidate["model_probability"],
+        "market_probability": candidate["market_probability"],
+        "ev": candidate["ev"],
+        "confidence_score": candidate["confidence_score"],
+        "risk_score": candidate["risk_score"],
+        "odds_source": "official",
+    }
+
+
+def _load_reusable_ticket_summary(conn: Any) -> tuple[int, float]:
+    """Reuse only today's tickets whose evidence is still independently valid."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT COUNT(*), COALESCE(SUM(st.suggested_stake), 0)
+            FROM simulation_tickets st
+            JOIN daily_budget_plans bp ON bp.id = st.budget_plan_id
+            WHERE bp.plan_date = timezone('Asia/Shanghai', NOW())::date
+              AND st.ticket_status <> 'invalid'
+              AND EXISTS (
+                  SELECT 1
+                  FROM simulation_ticket_items sti
+                  WHERE sti.ticket_id = st.id
+              )
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM simulation_ticket_items sti
+                  JOIN model_predictions mp ON mp.id = sti.model_prediction_id
+                  JOIN model_versions mv ON mv.id = mp.model_version_id
+                  JOIN match_feature_snapshots mfs
+                    ON mfs.id = COALESCE(sti.feature_snapshot_id, mp.feature_snapshot_id)
+                  WHERE sti.ticket_id = st.id
+                    AND (
+                        mv.is_active IS NOT true
+                        OR mp.validation_status <> 'valid'
+                        OR mfs.data_completeness_score < %(min_quality)s
+                        OR COALESCE(
+                            (mp.uncertainty_reason->>'model_independent')::boolean,
+                            false
+                        ) IS NOT true
+                    )
+              )
+            """,
+            {"min_quality": MIN_EVIDENCE_QUALITY},
+        )
+        count, stake = cur.fetchone()
+    return int(count or 0), float(stake or 0)
+
+
+def _parse_candidates(
+    predictions: list[tuple[Any, ...]],
+    quality_map: dict[int, float],
+    market_quality: dict[tuple[int, str], bool],
+) -> list[dict[str, Any]]:
+    candidates: list[dict[str, Any]] = []
+    for prediction in predictions:
+        feature_snapshot_id = prediction[11]
+        quality = quality_map.get(int(feature_snapshot_id), 0) if feature_snapshot_id else 0
+        match_id = prediction[1]
+        play_type = prediction[3]
+        if quality < MIN_EVIDENCE_QUALITY or not market_quality.get((match_id, play_type), False):
+            continue
+        candidates.append(
+            {
+                "prediction_id": prediction[0],
+                "match_id": match_id,
+                "play_type": play_type,
+                "option_code": prediction[4],
+                "option_name": _option_label(prediction[4], play_type),
+                "model_probability": float(prediction[5] or 0),
+                "market_probability": float(prediction[6] or 0),
+                "ev": float(prediction[7] or 0),
+                "confidence_score": float(prediction[8] or 0),
+                "risk_score": float(prediction[9] or 0),
+                "odds_snapshot_id": prediction[10],
+                "feature_snapshot_id": feature_snapshot_id,
+                "home_team": prediction[12],
+                "away_team": prediction[13],
+                "league": prediction[14],
+                "sp_value": _prediction_sp_value(prediction),
+                "model_name": prediction[17],
+                "data_quality": quality,
+            }
+        )
+    return candidates
+
+
+def _buy_ticket(conn: Any, ticket: dict, items: list[dict]) -> int | None:
+    if ticket.get("suggested_stake", 0) <= 0:
+        return None
+    try:
+        return store_simulation_ticket(conn, ticket, items)
+    except Exception as exc:
+        conn.rollback()
+        print(f"[_buy_ticket] error creating ticket: {exc}")
+        return None
+
+
+def _run_impl(dry_run: bool = False) -> dict[str, Any]:
     if dry_run:
         return {"status": "dry_run", "message": "recommendation candidate (dry run)"}
 
+    sales_window = get_sporttery_sales_window()
+    if not sales_window.is_open:
+        return {
+            "status": "ok",
+            "tickets": 0,
+            "quality_status": "not_due",
+            "note": sales_window.message,
+            "sales_window": sales_window.as_dict(),
+        }
+
     with get_db() as conn:
-        # ── 0. Ensure daily budget plan exists ──
         with conn.cursor() as cur:
             cur.execute(
                 """
-                INSERT INTO daily_budget_plans (plan_date, total_budget, suggested_stake,
-                                                 unused_budget, risk_mode, status)
-                VALUES (CURRENT_DATE, %s, 0.00, %s, 'balanced', 'active')
-                ON CONFLICT (plan_date) DO NOTHING
+                INSERT INTO daily_budget_plans (
+                    plan_date, total_budget, suggested_stake,
+                    unused_budget, risk_mode, status
+                ) VALUES (
+                    timezone('Asia/Shanghai', NOW())::date,
+                    %s, 0.00, %s, 'virtual', 'active'
+                ) ON CONFLICT (plan_date) DO NOTHING
                 """,
                 (AGENT_DAILY_BUDGET, AGENT_DAILY_BUDGET),
             )
         conn.commit()
 
-        # ── 0b. Idempotency ──
-        with conn.cursor() as cur:
-            cur.execute(
-                "SELECT COUNT(*) FROM simulation_tickets WHERE created_at::date = CURRENT_DATE"
-            )
-            already = cur.fetchone()[0]
-        if already > 0:
+        existing_count, existing_stake = _load_reusable_ticket_summary(conn)
+        if existing_count > 0:
             return {
                 "status": "ok",
-                "tickets": 0,
-                "note": f"skipped: {already} tickets already exist for today",
+                "tickets": existing_count,
+                "total_stake": existing_stake,
+                "reused": True,
+                "note": f"今日已存在 {existing_count} 张 Agent 虚拟推荐票，本次不重复创建",
             }
 
-        # ── 1. Latest prediction run ──
-        with conn.cursor() as cur:
-            cur.execute("SELECT MAX(predict_time) FROM model_predictions")
-            row = cur.fetchone()
-        if not row or not row[0]:
-            return {"status": "ok", "tickets": 0, "note": "no predictions available"}
-        latest_time = row[0]
-
-        # ── 2. Load predictions with correct odds per option ──
-        # Bug fix: mp.odds_snapshot_id points to a single snapshot row (one
-        # option_code), so joining on os.id = mp.odds_snapshot_id gave every
-        # prediction for a match the same SP value.
-        # Fix: join via LATERAL on (match_id, play_type, mapped option_code).
-        # NOTE: official_odds_snapshots uses 'h'/'d'/'a' while
-        #       model_predictions uses '3'/'1'/'0' — must map.
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT
-                    mp.id, mp.match_id, mp.model_version_id,
-                    mp.play_type, mp.option_code,
-                    mp.model_probability, mp.market_probability,
-                    mp.ev, mp.confidence_score, mp.risk_score,
-                    mp.odds_snapshot_id,
-                    m.home_team_name, m.away_team_name, m.league_name,
-                    m.kickoff_time,
-                    COALESCE(latest_os.sp_value, 0) AS sp_value,
-                    mv.model_name
-                FROM model_predictions mp
-                JOIN official_matches m ON m.id = mp.match_id
-                JOIN model_versions mv ON mv.id = mp.model_version_id
-                LEFT JOIN LATERAL (
-                    SELECT os.sp_value
-                    FROM official_odds_snapshots os
-                    WHERE os.match_id = mp.match_id
-                      AND os.play_type = mp.play_type
-                      AND os.option_code = CASE mp.option_code
-                          WHEN '3' THEN 'h'
-                          WHEN '1' THEN 'd'
-                          WHEN '0' THEN 'a'
-                          ELSE mp.option_code
-                      END
-                    ORDER BY os.snapshot_time DESC
-                    LIMIT 1
-                ) latest_os ON true
-                WHERE mp.predict_time = %s
-                  AND mp.play_type IN ('spf', 'rqspf')
-                  AND mv.model_name = ANY(%s)
-                  AND m.kickoff_time > NOW()
-                ORDER BY mp.ev DESC
-                """,
-                (latest_time, ALL_MODELS),
-            )
-            predictions = cur.fetchall()
-
+        predictions = load_actionable_predictions(conn, ALL_MODELS)
         if not predictions:
-            return {"status": "ok", "tickets": 0, "note": "no predictions from models"}
+            return {"status": "ok", "tickets": 0, "note": "暂无可用模型预测"}
 
-        # ── 2c. Filter by available markets (official_markets) ──
-        # Only consider predictions for play types that are actually open for betting
+        match_ids = sorted({prediction[1] for prediction in predictions})
         with conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT match_id, play_type FROM official_markets
+                SELECT match_id, play_type, is_single_allowed, raw_json
+                FROM official_markets
                 WHERE match_id = ANY(%s) AND is_open = true
                 """,
-                (list({p[1] for p in predictions}),),
+                (match_ids,),
             )
-            open_markets = {(row[0], row[1]) for row in cur.fetchall()}
-
+            market_permissions = cur.fetchall()
+        open_markets = {(row[0], row[1]) for row in market_permissions}
         predictions = [
-            p for p in predictions
-            if (p[1], p[3]) in open_markets
+            prediction
+            for prediction in predictions
+            if (prediction[1], prediction[3]) in open_markets
         ]
         if not predictions:
-            return {"status": "ok", "tickets": 0, "note": "no predictions with open markets"}
+            return {"status": "ok", "tickets": 0, "note": "暂无官方在售推荐选项"}
 
-        # ── 2b. SP 数据质量校验 ──
-        # 检测每个 match 的 sp_value 异常:
-        #   - NULL sp (无赔率数据)
-        #   - 同一场三个方向 SP 完全相等 (数据损坏信号)
-        match_ids_set = {p[1] for p in predictions}
-        match_sp_quality: dict[int, bool] = {}  # True = ok
-        match_sp_values: dict[int, dict[str, float]] = {}
-
-        for p in predictions:
-            mid = p[1]
-            opt = p[4]
-            sp = float(p[15] or 0) if p[15] else 0
-            if mid not in match_sp_values:
-                match_sp_values[mid] = {}
-            match_sp_values[mid][opt] = sp
-
-        for mid, sps in match_sp_values.items():
-            values = list(sps.values())
-            if any(v == 0 for v in values):
-                match_sp_quality[mid] = False  # NULL sp_value detected
-            elif len(values) >= 2 and len(set(values)) == 1:
-                match_sp_quality[mid] = False  # all SPs identical → data damage
-            else:
-                match_sp_quality[mid] = True
-
-        bad_sp_matches = [mid for mid, ok in match_sp_quality.items() if not ok]
-        if bad_sp_matches:
-            # 不阻止所有推荐，但标记劣质场次
-            pass
-
-        # ── 2c. 最低比赛数检查 ──
-        # 按框架 §9, 四池分散需要至少 4 场有效比赛
-        MIN_MATCHES = 4
-        valid_match_count = sum(1 for v in match_sp_quality.values() if v)
-        if valid_match_count < MIN_MATCHES:
+        market_quality, _valid_match_count = _market_sp_quality(predictions)
+        quality_map = _load_prediction_feature_quality(conn, predictions)
+        parsed = _parse_candidates(predictions, quality_map, market_quality)
+        candidates = _select_daily_candidates(parsed)
+        if not candidates:
             return {
                 "status": "ok",
                 "tickets": 0,
-                "total_predictions": len(predictions),
-                "valid_matches": valid_match_count,
-                "note": f"有效比赛仅 {valid_match_count} 场 (<{MIN_MATCHES})，风险分散不足，今日不投注",
+                "note": f"模型证据完整度未达到 {MIN_EVIDENCE_QUALITY} 分，暂不生成推荐",
             }
 
-        # ── 3. Data quality map ──
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT match_id, data_completeness_score
-                FROM match_feature_snapshots
-                WHERE (match_id, snapshot_time) IN (
-                    SELECT match_id, MAX(snapshot_time)
-                    FROM match_feature_snapshots
-                    GROUP BY match_id
-                )
-                """
-            )
-            quality_map = {row[0]: float(row[1] or 0) for row in cur.fetchall()}
+        single_allowed = {(row[0], row[1]) for row in market_permissions if row[2]}
+        pass_allowed = {
+            (row[0], row[1]) for row in market_permissions if _market_allows_pass(row[3])
+        }
+        planned = _build_virtual_recommendation_tickets(
+            candidates,
+            single_allowed=single_allowed,
+            pass_allowed=pass_allowed,
+        )
+        if not planned:
+            return {"status": "ok", "tickets": 0, "note": "推荐方向当前没有可用单关或过关路径"}
 
-        # ── 4. Build draw-risk map (平局风险检测 §7.3) ──
-        match_ids = {p[1] for p in predictions}
-        match_spf: dict[int, dict[str, float]] = {}
-
-        for p in predictions:
-            mid = p[1]
-            opt_code = p[4]
-            market_prob = float(p[6] or 0)
-            if mid not in match_spf:
-                match_spf[mid] = {}
-            match_spf[mid][opt_code] = market_prob
-
-        draw_risk_map: dict[int, float] = {}
-        for mid, probs in match_spf.items():
-            draw_penalty = 0.0
-            home_prob = probs.get("3", 0)
-            draw_prob = probs.get("1", 0)
-            away_prob = probs.get("0", 0)
-
-            if draw_prob >= 0.30:
-                draw_penalty += 0.05
-            if abs(home_prob - away_prob) < DRAW_PROB_GAP_THRESHOLD:
-                draw_penalty += 0.03
-
-            if draw_penalty > 0:
-                draw_risk_map[mid] = min(draw_penalty, 0.08)
-
-        # ── 4b. Build odds-structure risk map (§7.1 + §7.2) ──
-        # Load RQSPF home odds for SPF-vs-handicap consistency check
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT DISTINCT ON (os.match_id)
-                    os.match_id, os.sp_value, os.handicap
-                FROM official_odds_snapshots os
-                WHERE os.play_type = 'rqspf'
-                  AND os.option_code = 'h'
-                  AND os.match_id = ANY(%s)
-                ORDER BY os.match_id, os.snapshot_time DESC
-                """,
-                (list(match_ids),),
-            )
-            rqspf_map = {
-                row[0]: {
-                    "rqspf_home_sp": float(row[1]) if row[1] else 0,
-                    "handicap": float(row[2]) if row[2] else 0,
-                }
-                for row in cur.fetchall()
-            }
-
-        # Build per-match odds risk penalties
-        odds_risk_map: dict[int, float] = {}
-
-        for p in predictions:
-            mid = p[1]
-            opt_code = p[4]
-            sp_value = float(p[15] or 0) if p[15] else 0
-
-            if mid in odds_risk_map:
-                continue  # already computed
-
-            penalty = 0.0
-            flags: list[str] = []
-
-            # §7.2 热门过热
-            if sp_value < DEEP_OVERHEAT_SP:
-                penalty += DEEP_OVERHEAT_PENALTY
-                flags.append(f"极端热门 SP={sp_value:.2f}")
-            elif sp_value < OVERHEAT_SP:
-                penalty += OVERHEAT_PENALTY
-                flags.append(f"过热 SP={sp_value:.2f}")
-
-            # §7.1 SPF vs RQSPF 矛盾检测
-            # 只检测我们可能投注的主胜方向
-            rq_data = rqspf_map.get(mid)
-            if rq_data and rq_data["rqspf_home_sp"] > 0:
-                rq_home_sp = rq_data["rqspf_home_sp"]
-                handicap = rq_data["handicap"]
-                # 主胜 SP 很低，但让球后主胜 SP 较高 → 矛盾
-                if sp_value < ODDS_GAP_HOME_SP_MAX and rq_home_sp > ODDS_GAP_RQSPF_H_MIN:
-                    penalty += ODDS_GAP_PENALTY
-                    flags.append(
-                        f"SPF-让球矛盾: 主胜{sp_value:.2f} vs 让{handicap:+g}胜{rq_home_sp:.2f}"
-                    )
-
-            if penalty > 0:
-                odds_risk_map[mid] = min(penalty, 0.10)
-
-        # ── 4c. Compute per-match model-preferred direction from ALL predictions
-        #        (before EV pre-filter, so strong model signals are not lost)
-        match_best_direction: dict[int, str] = {}
-        match_best_prob: dict[int, float] = {}
-        for p in predictions:
-            mid = p[1]
-            opt_code = p[4]
-            prob = float(p[5] or 0)
-            if mid not in match_best_prob or prob > match_best_prob[mid]:
-                match_best_prob[mid] = prob
-                match_best_direction[mid] = opt_code
-
-        # ── 5. Parse & pre-filter ──
-        parsed: list[dict] = []
-
-        for p in predictions:
-            (
-                pred_id, match_id, _mv_id, play_type, opt_code,
-                model_prob, market_prob, ev, confidence, risk,
-                snap_id, home, away, league, kickoff_time, sp_value, model_name,
-            ) = (
-                p[0], p[1], p[2], p[3], p[4],
-                float(p[5] or 0), float(p[6] or 0), float(p[7] or 0),
-                float(p[8] or 0), float(p[9] or 0),
-                p[10], p[11], p[12], p[13], p[14],
-                float(p[15] or 0) if p[15] else 0,
-                p[16],
-            )
-
-            quality = quality_map.get(match_id, 0)
-
-            # 硬门槛
-            if quality < MIN_QUALITY:
-                continue
-            if confidence < MIN_CONFIDENCE:
-                continue
-            if ev <= 0:
-                continue
-
-            # SP 数据质量：跳过 sp_value 异常的场次
-            if not match_sp_quality.get(match_id, True):
-                continue
-
-            # 模型-市场偏差过大时降级 confidence (模型盲区检测)
-            deviation = abs(model_prob - market_prob)
-            MODEL_MARKET_DEVIATION_WARN = 0.30
-            if deviation > MODEL_MARKET_DEVIATION_WARN:
-                confidence -= 0.10  # 大幅偏离降低置信度
-                if confidence < MIN_CONFIDENCE:
-                    continue
-
-            # 多维风险综合（框架 §10）：
-            # 原始模型风险 + 平局风险 + 赔率结构风险 + 联赛级别风险
-            league_tier = LEAGUE_TIERS.get(league, 3)
-            league_risk = LEAGUE_TIER_RISK.get(league_tier, 0.03)
-            effective_risk = (
-                risk
-                + draw_risk_map.get(match_id, 0)
-                + odds_risk_map.get(match_id, 0)
-                + league_risk
-            )
-
-            parsed.append({
-                "prediction_id": pred_id,
-                "match_id": match_id,
-                "play_type": play_type,
-                "option_code": opt_code,
-                "option_name": _option_label(opt_code),
-                "model_probability": model_prob,
-                "market_probability": market_prob,
-                "ev": ev,
-                "confidence_score": confidence,
-                "risk_score": effective_risk,
-                "raw_risk_score": risk,
-                "odds_snapshot_id": snap_id,
-                "sp_value": sp_value,
-                "home_team": home,
-                "away_team": away,
-                "league": league,
-                "model_name": model_name,
-                "data_quality": quality,
-                "draw_risk": draw_risk_map.get(match_id, 0),
-                "odds_risk": odds_risk_map.get(match_id, 0),
-                "league_tier": league_tier,
-            })
-
-        if not parsed:
-            return {
-                "status": "ok",
-                "tickets": 0,
-                "total_predictions": len(predictions),
-                "note": "no positive-EV candidates — 今日不投注，未使用额度日终清空",
-            }
-
-        # ── 6. Per-match: pick single best direction ──
-        #    match_best_direction / match_best_prob were computed in step 4c
-        #    from ALL predictions (before EV pre-filter).
-        # 6a. Pick best EV candidate, but respect strong model signals
-        STRONG_MODEL_THRESHOLD = 0.50  # model says >50%, don't bet against it
-        by_match: dict[int, dict] = {}
-        direction_conflicts: list[dict] = []
-
-        for c in parsed:
-            mid = c["match_id"]
-            best_dir = match_best_direction.get(mid, "")
-            best_prob = match_best_prob.get(mid, 0)
-
-            # If model strongly favors one direction, only allow that direction
-            if best_prob >= STRONG_MODEL_THRESHOLD and c["option_code"] != best_dir:
-                direction_conflicts.append({
-                    "match_id": mid,
-                    "home": c["home_team"],
-                    "away": c["away_team"],
-                    "rejected_direction": c["option_code"],
-                    "rejected_ev": round(c["ev"], 4),
-                    "model_direction": best_dir,
-                    "model_probability": round(best_prob, 4),
-                })
-                continue
-
-            if mid not in by_match or c["ev"] > by_match[mid]["ev"]:
-                by_match[mid] = c
-
-        candidates = sorted(by_match.values(), key=lambda c: c["ev"], reverse=True)
-
-        # ── 7. Assign singles to pools ──
-        pools: dict[str, list] = {p["name"]: [] for p in POOL_CONFIG}
-        assigned: set[int] = set()
-
-        for pool_cfg in POOL_CONFIG:
-            for c in candidates:
-                if c["match_id"] in assigned:
-                    continue
-                if (
-                    c["risk_score"] <= pool_cfg["risk_max"]
-                    and c["confidence_score"] >= pool_cfg["min_confidence"]
-                    and c["ev"] >= pool_cfg["min_ev"]
-                ):
-                    pools[pool_cfg["name"]].append(c)
-                    assigned.add(c["match_id"])
-
-        # ── 8. Create single tickets per pool ──
         tickets_created = 0
         total_stake = 0.0
-        pool_usage: dict[str, dict] = {}
-        all_candidates_for_parlay: list[dict] = []  # collect for 串关 step
+        for entry in planned:
+            ticket = entry["ticket"]
+            items = [_make_item(candidate) for candidate in entry["items"]]
+            if _buy_ticket(conn, ticket, items):
+                tickets_created += 1
+                total_stake += float(ticket["suggested_stake"])
 
-        for pool_cfg in POOL_CONFIG:
-            pool_name = pool_cfg["name"]
-            pool_budget = pool_cfg["budget"]
-            candidates_in_pool = pools[pool_name]
-            pool_stake = 0.0
-            pool_tickets = 0
-
-            if not candidates_in_pool:
-                pool_usage[pool_name] = {
-                    "label": pool_cfg["label"],
-                    "budget": pool_budget,
-                    "used": 0,
-                    "tickets": 0,
-                    "note": "无符合条件的候选",
-                }
-                continue
-
-            n = len(candidates_in_pool)
-            raw_stake = min(pool_budget / n, pool_cfg["max_per_ticket"])
-
-            for i, c in enumerate(candidates_in_pool):
-                remaining = pool_budget - pool_stake
-                if remaining < MIN_STAKE:
-                    break
-
-                if i == n - 1:
-                    stake = round(remaining, 2)
-                else:
-                    stake = min(raw_stake, remaining)
-
-                stake = round(stake / STAKE_UNIT) * STAKE_UNIT
-                if stake < MIN_STAKE:
-                    continue
-                stake = min(stake, pool_cfg["max_per_ticket"])
-
-                est_return = stake * c["sp_value"]
-                risk_level = _risk_label(c["risk_score"])
-
-                ticket = {
-                    "strategy_pool": f"agent_{pool_name}",
-                    "ticket_type": "single",
-                    "pass_type": "single",
-                    "suggested_stake": round(stake, 2),
-                    "multiple": 1,
-                    "estimated_return": round(est_return, 2),
-                    "max_return": round(est_return, 2),
-                    "expected_value": round(c["ev"], 4),
-                    "risk_level": risk_level,
-                    "ticket_status": "generated",
-                }
-
-                items = [_make_item(c)]
-
-                # 实际购买：创建 simulator_ticket + 扣款
-                tid = _buy_ticket(conn, ticket, items, c)
-                if tid:
-                    tickets_created += 1
-                    pool_stake += stake
-                    pool_tickets += 1
-                    all_candidates_for_parlay.append(c)
-
-            total_stake += pool_stake
-            pool_usage[pool_name] = {
-                "label": pool_cfg["label"],
-                "budget": pool_budget,
-                "used": round(pool_stake, 2),
-                "tickets": pool_tickets,
-            }
-
-        # ── 9. 串关组合（框架 §8.5） ──
-        # 2串1 优先、3串1 小额
-        parlay_tickets = 0
-        parlay_stake = 0.0
-
-        # Filter candidates eligible for parlays (stricter quality, exclude hot favorites)
-        parlay_candidates = [
-            c for c in candidates
-            if c["sp_value"] >= PARLAY_MIN_SP
-            and c["data_quality"] >= PARLAY_MIN_QUALITY
-            and c["ev"] > 0
-        ]
-
-        if len(parlay_candidates) >= 2:
-            # ── 2串1 ──
-            combos_2x1 = _build_parlays(parlay_candidates, 2)
-
-            remaining_parlay = PARLAY_BUDGET - parlay_stake
-            n_2x1 = min(len(combos_2x1), 5)  # top 5 at most
-            if n_2x1 > 0:
-                stake_per_2x1 = min(
-                    PARLAY_2X1_MAX_STAKE,
-                    remaining_parlay / n_2x1,
-                )
-                for combo in combos_2x1[:n_2x1]:
-                    if remaining_parlay < MIN_STAKE:
-                        break
-                    stake = round(stake_per_2x1 / STAKE_UNIT) * STAKE_UNIT
-                    stake = min(stake, remaining_parlay)
-                    if stake < MIN_STAKE:
-                        continue
-
-                    combined_sp = combo["combined_sp"]
-                    combined_ev = combo["combined_ev"]
-                    est_return = stake * combined_sp
-
-                    ticket = {
-                        "strategy_pool": "agent_parlay_2x1",
-                        "ticket_type": "parlay",
-                        "pass_type": "2x1",
-                        "suggested_stake": round(stake, 2),
-                        "multiple": 1,
-                        "estimated_return": round(est_return, 2),
-                        "max_return": round(est_return, 2),
-                        "expected_value": round(combined_ev, 4),
-                        "risk_level": "medium-high",
-                        "ticket_status": "generated",
-                    }
-
-                    items = [_make_item(c) for c in combo["candidates"]]
-                    tid = _buy_ticket(conn, ticket, items, combo["candidates"][0])
-                    if tid:
-                        tickets_created += 1
-                        parlay_tickets += 1
-                        parlay_stake += stake
-                        remaining_parlay -= stake
-
-            # ── 3串1（小额，框架 §8.5: "3串1小额"） ──
-            if len(parlay_candidates) >= 3:
-                combos_3x1 = _build_parlays(parlay_candidates, 3)
-
-                remaining_3x1 = min(PARLAY_3X1_TOTAL_MAX, PARLAY_BUDGET - parlay_stake)
-                n_3x1 = min(len(combos_3x1), 2)  # at most 2
-                if n_3x1 > 0 and remaining_3x1 >= MIN_STAKE:
-                    stake_per_3x1 = min(
-                        PARLAY_3X1_MAX_STAKE,
-                        remaining_3x1 / n_3x1,
-                    )
-                    for combo in combos_3x1[:n_3x1]:
-                        if remaining_3x1 < MIN_STAKE:
-                            break
-                        stake = round(stake_per_3x1 / STAKE_UNIT) * STAKE_UNIT
-                        stake = min(stake, remaining_3x1)
-                        if stake < MIN_STAKE:
-                            continue
-
-                        combined_sp = combo["combined_sp"]
-                        combined_ev = combo["combined_ev"]
-                        est_return = stake * combined_sp
-
-                        ticket = {
-                            "strategy_pool": "agent_parlay_3x1",
-                            "ticket_type": "parlay",
-                            "pass_type": "3x1",
-                            "suggested_stake": round(stake, 2),
-                            "multiple": 1,
-                            "estimated_return": round(est_return, 2),
-                            "max_return": round(est_return, 2),
-                            "expected_value": round(combined_ev, 4),
-                            "risk_level": "high",
-                            "ticket_status": "generated",
-                        }
-
-                        items = [_make_item(c) for c in combo["candidates"]]
-                        tid = _buy_ticket(conn, ticket, items, combo["candidates"][0])
-                        if tid:
-                            tickets_created += 1
-                            parlay_tickets += 1
-                            parlay_stake += stake
-                            remaining_3x1 -= stake
-
-        total_stake += parlay_stake
-        parlay_usage = {
-            "budget": PARLAY_BUDGET,
-            "used": round(parlay_stake, 2),
-            "tickets": parlay_tickets,
-        }
-
-        # ── 10. Risk-flag summaries ──
-        draw_flagged = [
-            {
-                "match_id": mid,
-                "home": by_match[mid]["home_team"],
-                "away": by_match[mid]["away_team"],
-                "penalty": round(draw_risk_map[mid], 3),
-            }
-            for mid in draw_risk_map
-            if mid in by_match
-        ]
-        odds_flagged = [
-            {
-                "match_id": mid,
-                "home": by_match[mid]["home_team"],
-                "away": by_match[mid]["away_team"],
-                "penalty": round(odds_risk_map[mid], 3),
-            }
-            for mid in odds_risk_map
-            if mid in by_match
-        ]
-
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE daily_budget_plans
+                SET suggested_stake = %(stake)s,
+                    unused_budget = GREATEST(total_budget - %(stake)s, 0),
+                    updated_at = now()
+                WHERE plan_date = timezone('Asia/Shanghai', NOW())::date
+                """,
+                {"stake": total_stake},
+            )
+        conn.commit()
         return {
             "status": "ok",
             "tickets": tickets_created,
             "total_stake": round(total_stake, 2),
             "total_budget": AGENT_DAILY_BUDGET,
             "unused": round(AGENT_DAILY_BUDGET - total_stake, 2),
-            "positive_ev_candidates": len(candidates),
-            "total_predictions": len(predictions),
-            "top_ev": round(candidates[0]["ev"], 6) if candidates else None,
-            "pool_usage": pool_usage,
-            "parlay_usage": parlay_usage,
-            "draw_risk_flags": draw_flagged,
-            "odds_risk_flags": odds_flagged,
-            "direction_conflicts": direction_conflicts,
+            "candidate_count": len(candidates),
+            "note": (
+                f"已用 {total_stake:.0f} 元虚拟资金生成 {tickets_created} 张 Agent 推荐票；"
+                "是否真实购买由用户自行决定"
+            ),
         }
 
 
-# ── Helpers ──
-
-def _option_label(code: str) -> str:
-    return {"3": "主胜", "1": "平", "0": "客胜"}.get(code, code)
-
-
-def _risk_label(risk_score: float) -> str:
-    if risk_score < 0.07:
-        return "low"
-    elif risk_score < 0.15:
-        return "medium"
-    elif risk_score < 0.25:
-        return "medium-high"
-    return "high"
-
-
-def _make_item(c: dict) -> dict:
-    """Build a ticket item dict from a candidate."""
-    return {
-        "match_id": c["match_id"],
-        "odds_snapshot_id": c["odds_snapshot_id"],
-        "model_prediction_id": c["prediction_id"],
-        "play_type": c["play_type"],
-        "option_code": c["option_code"],
-        "option_name": c["option_name"],
-        "sp_value": c["sp_value"],
-        "model_probability": c["model_probability"],
-        "market_probability": c["market_probability"],
-        "ev": c["ev"],
-        "confidence_score": c["confidence_score"],
-        "risk_score": c["risk_score"],
-    }
-
-
-def _build_parlays(
-    candidates: list[dict], size: int
-) -> list[dict]:
-    """Generate and rank parlays of given size.
-
-    Returns list of {candidates, combined_sp, combined_ev} sorted by EV desc.
-    """
-    result: list[dict] = []
-    seen_sets: set[frozenset] = set()
-
-    for combo in combinations(candidates, size):
-        # No duplicate matches
-        match_ids = {c["match_id"] for c in combo}
-        if len(match_ids) < size:
-            continue
-
-        # Dedup by match set
-        key = frozenset(match_ids)
-        if key in seen_sets:
-            continue
-        seen_sets.add(key)
-
-        # Combined SP = product of individual SPs
-        combined_sp = 1.0
-        for c in combo:
-            combined_sp *= c["sp_value"]
-
-        if combined_sp > PARLAY_MAX_COMBO_SP:
-            continue
-
-        # Combined EV = ∏(EV_i + 1) - 1
-        combined_ev = 1.0
-        for c in combo:
-            combined_ev *= (c["ev"] + 1)
-        combined_ev -= 1
-
-        if combined_ev < PARLAY_MIN_COMBO_EV:
-            continue
-
-        result.append({
-            "candidates": list(combo),
-            "combined_sp": round(combined_sp, 3),
-            "combined_ev": round(combined_ev, 4),
-        })
-
-    result.sort(key=lambda x: x["combined_ev"], reverse=True)
-    return result
-
-
-def _buy_ticket(conn: Any, ticket: dict, items: list[dict], candidate: dict) -> int | None:
-    """Create a real simulator ticket with bankroll deduction.
-
-    Instead of just creating a "recommendation" (simulation_tickets),
-    this creates an actual purchased ticket (simulator_tickets) and
-    deducts the stake from the bankroll.
-
-    Args:
-        conn: DB connection
-        ticket: Ticket dict with suggested_stake, pass_type, multiple, etc.
-        items: List of item dicts (match selections)
-        candidate: First candidate (for field mapping)
-
-    Returns:
-        New ticket ID, or None on failure.
-    """
-    stake = ticket.get("suggested_stake", 0)
-    if stake <= 0:
-        return None
-
+def run(dry_run: bool = False) -> dict[str, Any]:
+    run_id = None
     try:
-        # 1. Ensure bankroll account exists
-        ensure_simulator_bankroll(conn)
-
-        # 2. Map fields for simulator_tickets table
-        sim_ticket = {
-            "play_type": candidate.get("play_type", "spf"),
-            "pass_type": ticket.get("pass_type", "single"),
-            "multiple": ticket.get("multiple", 1),
-            "total_cost": stake,
-            "bet_count": 1,
-            "max_prize": ticket.get("estimated_return", 0),
-            "match_count": len(items),
-            "status": "active",
-        }
-
-        # 3. Create ticket
-        ticket_id = create_simulator_ticket(conn, sim_ticket)
-        if not ticket_id:
-            return None
-
-        # 4. Create items
-        item_records = []
-        for it in items:
-            item_records.append({
-                "match_id": it.get("match_id"),
-                "play_type": it.get("play_type", candidate.get("play_type", "spf")),
-                "option_code": it.get("option_code"),
-                "option_name": it.get("option_name", ""),
-                "sp_value": it.get("sp_value", 0),
-                "handicap": it.get("handicap"),
-                "is_dan": it.get("is_dan", False),
-            })
-        create_simulator_items_batch(conn, ticket_id, item_records)
-
-        # 5. Deduct from bankroll
-        pool_label = ticket.get("strategy_pool", "agent")
-        create_bankroll_transaction(conn, {
-            "account_type": "simulator",
-            "transaction_type": "stake",
-            "amount": -stake,
-            "related_ticket_id": ticket_id,
-            "remark": f"AI推荐购买 #{ticket_id} ({pool_label} ¥{stake:.0f})",
-        })
-
-        return ticket_id
-
-    except Exception as e:
-        print(f"[_buy_ticket] error creating ticket: {e}")
-        return None
+        run_id = start_tracked_job(
+            "recommendation_candidate",
+            "recommendation_agent",
+            {"dry_run": dry_run},
+            dependencies=[] if dry_run else ["official_odds_snapshot", "model_prediction"],
+        )
+        result = _run_impl(dry_run=dry_run)
+        finish_tracked_job(run_id, result.get("status", "completed"), {"result": result})
+        if not dry_run:
+            _record_daily_decision(result=result)
+        return result
+    except Exception as exc:
+        finish_tracked_job(run_id, "failed", error=str(exc))
+        if not dry_run:
+            _record_daily_decision(error=str(exc))
+        raise
 
 
 if __name__ == "__main__":
     import sys
 
-    dry = "--dry-run" in sys.argv
-    result = run(dry_run=dry)
-    print(result)
+    print(run(dry_run="--dry-run" in sys.argv))

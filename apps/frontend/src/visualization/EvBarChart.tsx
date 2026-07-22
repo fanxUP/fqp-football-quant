@@ -1,9 +1,11 @@
 /** Expected Value (EV) horizontal bar chart. */
 
 import { useMemo } from 'react';
+import type { EChartsOption } from 'echarts';
 import ChartCard from '../shared/components/ChartCard';
 import { applyChartTheme, CHART_COLORS } from './chartTheme';
 import type { EvBarItem } from './chartTypes';
+import { useTheme } from '../app/ThemeContext';
 
 interface EvBarChartProps {
   data: EvBarItem[];
@@ -22,6 +24,7 @@ export default function EvBarChart({
   empty,
   emptyReason,
 }: EvBarChartProps) {
+  const { theme } = useTheme();
   const option = useMemo(() => {
     if (!data.length) return null;
     // Sort descending by EV
@@ -40,7 +43,7 @@ export default function EvBarChart({
         type: 'value',
         name: 'EV',
         axisLabel: { formatter: (v: number) => v.toFixed(2) },
-        splitLine: { lineStyle: { color: 'rgba(255,255,255,0.04)' } },
+        splitLine: { lineStyle: { color: 'var(--fqp-border-subtle)' } },
       },
       yAxis: {
         type: 'category',
@@ -61,13 +64,13 @@ export default function EvBarChart({
           markLine: {
             silent: true,
             data: [{ xAxis: 0 }],
-            lineStyle: { color: CHART_COLORS.zeroRef, type: 'dashed' },
+            lineStyle: { color: CHART_COLORS.zeroRef, type: 'solid' },
             label: { show: false },
           },
         },
       ],
-    } as echarts.EChartsOption);
-  }, [data]);
+    } as EChartsOption);
+  }, [data, theme]);
 
   return (
     <ChartCard

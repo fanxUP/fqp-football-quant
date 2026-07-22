@@ -1,7 +1,7 @@
 -- 22_competition_schema.sql
--- 双资金池对抗竞赛：Agent（虚拟¥500/天）vs 用户（实票金额），按ROI判定胜负
+-- 双资金池对抗竞赛：Agent（虚拟¥500/天）vs 用户（实票+手动模拟票），按ROI判定胜负
 -- 复用 bankroll_accounts（account_type = 'competition_agent'）
--- 复用 ticket_settlements（ticket_source = 'simulation' / 'real'）
+-- 复用 ticket_settlements（Agent='simulation'；用户='real'/'simulator'）
 
 CREATE TABLE IF NOT EXISTS competition_rounds (
     id BIGSERIAL PRIMARY KEY,
@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS competition_rounds (
     agent_total_prize NUMERIC(12,2) NOT NULL DEFAULT 0,
     agent_profit_loss NUMERIC(12,2) NOT NULL DEFAULT 0,
     agent_roi NUMERIC(10,6) NOT NULL DEFAULT 0,
-    -- User pool (real_tickets → ticket_settlements where ticket_source='real')
+    -- User pool (real_tickets + simulator_tickets)
     user_total_stake NUMERIC(12,2) NOT NULL DEFAULT 0,
     user_total_prize NUMERIC(12,2) NOT NULL DEFAULT 0,
     user_profit_loss NUMERIC(12,2) NOT NULL DEFAULT 0,
@@ -40,7 +40,7 @@ CREATE TABLE IF NOT EXISTS competition_daily_snapshots (
     agent_cumulative_roi NUMERIC(10,6) NOT NULL DEFAULT 0,
     agent_budget_usage_rate NUMERIC(10,4) NOT NULL DEFAULT 0,   -- % of ¥500 used
     agent_ticket_count INT NOT NULL DEFAULT 0,
-    -- User pool (real tickets)
+    -- User pool (real tickets + user simulator tickets)
     user_daily_stake NUMERIC(12,2) NOT NULL DEFAULT 0,
     user_daily_prize NUMERIC(12,2) NOT NULL DEFAULT 0,
     user_daily_profit_loss NUMERIC(12,2) NOT NULL DEFAULT 0,

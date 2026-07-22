@@ -41,7 +41,7 @@ http://localhost:3001
 
 如需更细粒度的指标监控，后期可加入 Prometheus：
 
-1. 在 `docker-compose.local.yml` 新增 `prometheus` 服务
+1. 通过 Homebrew 安装并启动本机 `prometheus` 服务
 2. 在 API 中暴露 `/metrics` 端点（使用 `prometheus_client`）
 3. Grafana 添加 Prometheus 数据源
 
@@ -82,7 +82,7 @@ http://localhost:3001
 ## 注意事项
 
 1. Grafana 不使用固定版本 tag（`grafana/grafana` = latest）
-2. 端口 3001，不与前端 3000 冲突
+2. 端口 3001，不与前端 8066 冲突
 3. 不在 Grafana 中实现投注推荐页面
 4. 不在 Grafana 中展示核心模型逻辑
 5. 数据卷 `grafana_data` 持久化配置和 Dashboard

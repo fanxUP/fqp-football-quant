@@ -39,6 +39,15 @@ third_party:
       - 全球主要联赛（覆盖较 football-data.org 更广）
     source_confidence: B
     note: 免费计划，每天100次请求。伤停和首发数据可用但有限。
+  sportmonks:
+    enabled: true
+    api_key_env: SPORTMONKS_API_TOKEN
+    base_url: https://api.sportmonks.com/v3/football
+    usage:
+      - 当前赛季联赛积分榜
+      - 赛事赛季与球队排名补充
+    source_confidence: B
+    note: 仅作为积分榜补充源，不得替代体彩官方赛程。
   theodds:
     enabled: true
     api_key_env: THEODDS_API_KEY
@@ -57,6 +66,30 @@ third_party:
       - 含加时赛/点球赔率（部分博彩公司）
     source_confidence: B
     note: 免费计划，每月500次请求。历史赔率数据受限。关键价值：多博彩公司赔率共识 vs 竞彩官方SP。
+  leisu:
+    enabled: true
+    base_url: https://www.leisu.com/
+    usage:
+      - 当前联赛积分榜和近期赛果补充
+      - 球队名称映射校验
+      - 官方页面不可访问时的状态交叉校验
+    source_confidence: C
+    note: 仅作补充来源，不得替代 Sporttery 官方赛程、编号、销售状态和 SP。
+  five_hundred:
+    enabled: true
+    base_url: https://live.500.com/
+    usage:
+      - 历史赛果和赛事信息补充
+      - 赛果采集降级校验
+    source_confidence: C
+    note: 仅作补充来源，不得替代 Sporttery 官方口径。
+    storage:
+      match_table: supplemental_matches
+      standings_source_name: 500com_derived
+      refresh_schedule: daily_03_40_local
+      never_write_tables:
+        - official_matches
+      result_policy: 已由体彩官方赛程确认的 match_id 可补充赛果，必须在 raw_json 标记 source_name=500.com、source_type=supplemental，且不得新增官方比赛或伪装为体彩赛果。
 health_check:
   max_failure_count: 3
   max_latency_ms: 8000

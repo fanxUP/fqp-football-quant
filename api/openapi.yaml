@@ -1,11 +1,35 @@
 openapi: 3.0.3
 info:
   title: FQP From Scratch API
-  version: 1.0.0
+  version: 1.1.1
   description: 官方足彩/竞彩足球量化研究与长期运行系统 API 草案。系统只提供数据分析、模拟与复盘接口，不提供购彩、代购、出票、收款接口。
 servers:
-  - url: http://localhost:8000
+  - url: http://localhost:8006
 paths:
+  /api/official/odds-index:
+    get:
+      summary: 查询当前在售比赛与历史赔率日期索引
+      responses:
+        '200': { description: 当前数量与历史业务日列表 }
+  /api/dashboard/odds/movements:
+    get:
+      summary: 批量查询指定范围内全部比赛的赔率走势
+      parameters:
+        - name: scope
+          in: query
+          schema: { type: string, enum: [current, history], default: current }
+        - name: business_date
+          in: query
+          schema: { type: string, format: date }
+        - name: play_type
+          in: query
+          schema: { type: string, enum: [spf, rqspf, bf, zjq, bqc], default: spf }
+        - name: resolution
+          in: query
+          schema: { type: string, enum: [raw, hour], default: raw }
+      responses:
+        '200': { description: 按比赛分组的赔率时间序列 }
+        '422': { description: 历史范围缺少日期或参数无效 }
   /api/v1/official/matches:
     get:
       summary: 查询官方赛程
@@ -47,6 +71,39 @@ paths:
           schema: { type: string, format: date }
       responses:
         '202': { description: 预测任务已提交 }
+  /api/v1/models/predictions:
+    get:
+      summary: 查询模型预测结果
+      parameters:
+        - name: match_id
+          in: query
+          required: false
+          schema: { type: integer }
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, default: 20 }
+      responses:
+        '200': { description: 模型预测列表 }
+  /api/v1/models/versions:
+    get:
+      summary: 查询模型版本
+      responses:
+        '200': { description: 模型版本列表 }
+  /api/v1/predictions:
+    get:
+      summary: 查询当前实现的模型预测列表
+      parameters:
+        - name: match_id
+          in: query
+          required: false
+          schema: { type: integer }
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, default: 20 }
+      responses:
+        '200': { description: 模型预测列表 }
   /api/v1/recommendations/generate:
     post:
       summary: 生成每日推荐模拟票单
@@ -67,9 +124,63 @@ paths:
           schema: { type: string, format: date }
       responses:
         '200': { description: 每日推荐票单 }
+  /api/v1/recommendations/live:
+    get:
+      summary: 查询当前正 EV 推荐候选
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, default: 20 }
+        - name: min_ev
+          in: query
+          required: false
+          schema: { type: number, default: 0.02 }
+        - name: min_confidence
+          in: query
+          required: false
+          schema: { type: number, default: 0.3 }
+      responses:
+        '200': { description: 推荐候选列表 }
+  /api/v1/recommendations/{ticket_id}/invalidate:
+    post:
+      summary: 作废推荐票单
+      parameters:
+        - name: ticket_id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '200': { description: 已作废或返回不可作废原因 }
+  /api/v1/tickets:
+    get:
+      summary: 查询模拟推荐票单
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, default: 20 }
+      responses:
+        '200': { description: 模拟推荐票单列表 }
+  /api/v1/tickets/ocr:
+    post:
+      summary: 上传实票照片并进行 OCR 识别
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200': { description: OCR 识别结果，包含 ticket_image_url 原图地址 }
   /api/v1/real-tickets/upload:
     post:
-      summary: 上传线下自购彩票照片并创建实票记录
+      summary: 上传线下自购彩票照片并进行 OCR 识别
       requestBody:
         required: true
         content:
@@ -85,7 +196,38 @@ paths:
                 total_amount:
                   type: number
       responses:
-        '200': { description: 实票上传结果 }
+        '200': { description: OCR 识别结果，确认后通过 /api/v1/real-tickets 创建实票记录 }
+  /api/v1/real-tickets:
+    get:
+      summary: 查询实票列表
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema: { type: string }
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, default: 20 }
+      responses:
+        '200': { description: 实票列表 }
+    post:
+      summary: 手动创建已确认的线下自购实票记录
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ticket, items]
+              properties:
+                ticket:
+                  type: object
+                items:
+                  type: array
+                  items: { type: object }
+      responses:
+        '200': { description: 实票创建结果 }
   /api/v1/real-tickets/{id}/confirm:
     post:
       summary: 用户确认/校对票据信息
@@ -96,6 +238,49 @@ paths:
           schema: { type: integer }
       responses:
         '200': { description: 已确认 }
+  /api/v1/real-tickets/{ticket_id}:
+    get:
+      summary: 查询单张实票及投注项
+      parameters:
+        - name: ticket_id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '200': { description: 实票详情 }
+    put:
+      summary: 更新实票校对信息、状态或绑定关系
+      parameters:
+        - name: ticket_id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        '200': { description: 更新结果 }
+    delete:
+      summary: 删除实票记录
+      parameters:
+        - name: ticket_id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '200': { description: 删除结果 }
+  /api/v1/real-tickets/{id}/settle:
+    post:
+      summary: 触发单张实票结算
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '200': { description: 结算结果 }
   /api/v1/reviews/daily:
     get:
       summary: 查询日报
@@ -106,11 +291,98 @@ paths:
           schema: { type: string, format: date }
       responses:
         '200': { description: 日复盘 }
+  /api/v1/reviews/weekly:
+    get:
+      summary: 查询周复盘
+      parameters:
+        - name: week_start
+          in: query
+          required: false
+          schema: { type: string, format: date }
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, default: 12 }
+      responses:
+        '200': { description: 周复盘列表 }
+  /api/v1/reviews/monthly:
+    get:
+      summary: 查询月复盘
+      parameters:
+        - name: month
+          in: query
+          required: false
+          schema: { type: string, pattern: '^\d{4}-\d{2}$' }
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, default: 12 }
+      responses:
+        '200': { description: 月复盘列表 }
   /api/v1/backtests:
+    get:
+      summary: 查询回测任务列表
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, default: 20 }
+        - name: offset
+          in: query
+          required: false
+          schema: { type: integer, default: 0 }
+      responses:
+        '200': { description: 回测任务列表 }
     post:
       summary: 创建回测任务
       responses:
         '202': { description: 回测任务已提交 }
+  /api/v1/backtests/{id}:
+    get:
+      summary: 查询回测任务详情
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '200': { description: 回测详情 }
+  /api/v1/backtests/{id}/equity-curve:
+    get:
+      summary: 查询回测资金曲线
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: model_name
+          in: query
+          required: false
+          schema: { type: string }
+      responses:
+        '200': { description: 回测资金曲线 }
+  /api/v1/pool/issues:
+    get:
+      summary: 查询传统足彩期次或当前候选池
+      responses:
+        '200': { description: 传统足彩期次/候选池列表 }
+  /api/v1/pool/analyze:
+    get:
+      summary: 运行当前实现的传统足彩分析
+      parameters:
+        - name: budget
+          in: query
+          required: false
+          schema: { type: integer, default: 256 }
+        - name: strategy
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [conservative, balanced, aggressive]
+            default: balanced
+      responses:
+        '200': { description: 传统足彩分析结果 }
   /api/v1/pool/issues/{id}/generate-combinations:
     post:
       summary: 生成传统足彩组合覆盖方案
@@ -262,4 +534,44 @@ paths:
           schema: { type: integer }
       responses:
         '201': { description: Created }
-
+  /api/v1/modules:
+    get:
+      summary: 查询运行时模块注册表
+      tags: [ui]
+      responses:
+        '200': { description: 模块分层、依赖与面板映射 }
+  /api/v1/modules/{module_code}/status:
+    patch:
+      summary: 更新运行时模块启停状态
+      tags: [ui]
+      parameters:
+        - name: module_code
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [disabled]
+              properties:
+                disabled: { type: boolean }
+      responses:
+        '200': { description: 模块状态已更新 }
+        '404': { description: 模块不存在 }
+        '409': { description: 必需模块或依赖关系阻止更新 }
+  /api/v1/ui/panels:
+    get:
+      summary: 查询可见功能面板
+      tags: [ui]
+      parameters:
+        - name: disabledModules
+          in: query
+          required: false
+          schema:
+            type: array
+            items: { type: string }
+      responses:
+        '200': { description: 按功能顺序返回的面板注册表 }

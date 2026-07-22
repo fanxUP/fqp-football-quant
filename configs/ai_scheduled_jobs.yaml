@@ -1,3 +1,11 @@
+# 历史 Agent 编排设计：不参与当前运行时调度。
+# 当前任务、时间与所有者以 scripts/jobs/run_scheduler.py、
+# scripts/official_crawler_stub.py 和 /api/ops/pipeline 为准。
+metadata:
+  active_runtime_config: false
+  runtime_source: scripts/jobs/run_scheduler.py
+  worker_source: scripts/official_crawler_stub.py
+  timezone: Asia/Shanghai
 jobs:
   official_schedule_fetch:
     owner_agent: data_agent
@@ -22,7 +30,7 @@ jobs:
     on_failure: increase_uncertainty_and_notify
   model_prediction:
     owner_agent: model_agent
-    schedule: "stop_sale_minus_120m and stop_sale_minus_60m"
+    schedule: "every 30 minutes while official matches are selling"
     command: "python -m scripts.jobs.run_model_prediction"
     timeout_seconds: 1200
     retries: 2

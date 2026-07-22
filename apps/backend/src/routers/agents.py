@@ -9,6 +9,9 @@ from scripts.agent_storage import (
     create_agent_task as _create_task,
 )
 from scripts.agent_storage import (
+    get_agent_summary as _get_summary,
+)
+from scripts.agent_storage import (
     list_agent_tasks as _list_tasks,
 )
 from scripts.agent_storage import (
@@ -21,8 +24,21 @@ from scripts.agent_storage import (
     list_job_runs as _list_jobs,
 )
 from scripts.agent_storage import (
+    list_review_gates as _list_gates,
+)
+from scripts.agent_storage import (
+    list_stale_jobs as _list_stale_jobs,
+)
+from scripts.agent_storage import (
+    list_stale_tasks as _list_stale_tasks,
+)
+from scripts.agent_storage import (
+    resolve_review_gate as _resolve_gate,
+)
+from scripts.agent_storage import (
     transition_task as _transition,
 )
+from scripts.local.scheduler_heartbeat import get_scheduler_status
 
 router = APIRouter(tags=["agents"])
 
@@ -92,3 +108,62 @@ def list_agent_audit_logs(
     with get_db() as conn:
         logs = _list_logs(conn, task_id=task_id, agent_name=agent_name, limit=limit)
     return {"logs": logs, "total": len(logs)}
+
+
+@router.get("/api/agent-review-gates")
+def list_agent_review_gates(
+    review_status: str | None = Query(None),
+    limit: int = Query(50),
+):
+    """List human-review gates for Risk/QA monitoring."""
+    with get_db() as conn:
+        gates = _list_gates(conn, review_status=review_status, limit=limit)
+    return {"gates": gates, "total": len(gates)}
+
+
+@router.post("/api/agent-review-gates/{gate_id}/resolve")
+def resolve_agent_review_gate(gate_id: int, body: dict):
+    """Resolve a pending gate through an explicit human decision."""
+    reviewer = str(body.get("reviewer", "")).strip()
+    status = body.get("status")
+    if not reviewer or status not in {"approved", "rejected"}:
+        return {"status": "error", "error": "reviewer and approved/rejected status are required"}
+    with get_db() as conn:
+        updated = _resolve_gate(conn, gate_id, reviewer, status, body.get("comment", ""))
+    return {"status": "ok" if updated else "error", "gate_id": gate_id, "review_status": status}
+
+
+@router.get("/api/agent-summary")
+def agent_summary():
+    """Return counts for the Agent operations overview."""
+    with get_db() as conn:
+        summary = _get_summary(conn)
+    return {"summary": summary}
+
+
+@router.get("/api/agent-scheduler-status")
+def agent_scheduler_status():
+    """Return diagnostic information for the local Scheduler process."""
+    return {"scheduler": get_scheduler_status()}
+
+
+@router.get("/api/agent-stale-jobs")
+def stale_agent_jobs(
+    threshold_minutes: int = Query(30, ge=1),
+    limit: int = Query(50, ge=1, le=200),
+):
+    """List running jobs exceeding the operational timeout threshold."""
+    with get_db() as conn:
+        jobs = _list_stale_jobs(conn, threshold_minutes=threshold_minutes, limit=limit)
+    return {"jobs": jobs, "total": len(jobs), "threshold_minutes": threshold_minutes}
+
+
+@router.get("/api/agent-stale-tasks")
+def stale_agent_tasks(
+    threshold_minutes: int = Query(60, ge=1),
+    limit: int = Query(50, ge=1, le=200),
+):
+    """List active Agent tasks with no recent progress update."""
+    with get_db() as conn:
+        tasks = _list_stale_tasks(conn, threshold_minutes=threshold_minutes, limit=limit)
+    return {"tasks": tasks, "total": len(tasks), "threshold_minutes": threshold_minutes}

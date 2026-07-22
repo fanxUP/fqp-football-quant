@@ -1,53 +1,64 @@
 /** Red-black tech ECharts theme — shared defaults for all charts. */
 
-import * as echarts from 'echarts';
+import type { EChartsCoreOption } from 'echarts/core';
+import { getChartColors, type ChartColors } from '../theme/chartTokens';
 
-// Palette from the FQP red-black tech design system
-const PALETTE = ['#FF2A3D', '#3B82F6', '#F5A524', '#22C55E', '#8B5CF6', '#06B6D4'];
+export const CHART_COLORS = Object.defineProperties(
+  {},
+  Object.fromEntries(
+    (Object.keys(getChartColors()) as (keyof ChartColors)[]).map((key) => [
+      key,
+      { enumerable: true, get: () => getChartColors()[key] },
+    ]),
+  ),
+) as ChartColors;
 
-export const CHART_COLORS = {
-  primary: '#FF2A3D',
-  blue: '#3B82F6',
-  amber: '#F5A524',
-  green: '#22C55E',
-  purple: '#8B5CF6',
-  cyan: '#06B6D4',
-  text: '#F5F5F7',
-  textMuted: '#A1A1AA',
-  gridLine: 'rgba(255,255,255,0.06)',
-  zeroRef: 'rgba(255,255,255,0.15)',
-  areaAgent: 'rgba(59,130,246,0.12)',
-  areaUser: 'rgba(245,165,36,0.12)',
-  areaDown: 'rgba(255,42,61,0.08)',
-  tooltipBg: 'rgba(15,15,25,0.94)',
-  tooltipBorder: 'rgba(255,255,255,0.12)',
-};
+function enforceSolidLineStyles<T>(value: T): T {
+  if (Array.isArray(value)) {
+    return value.map((item) => enforceSolidLineStyles(item)) as T;
+  }
+  if (value === null || typeof value !== 'object') return value;
+  if (Object.getPrototypeOf(value) !== Object.prototype) return value;
+
+  const normalized = Object.fromEntries(
+    Object.entries(value as Record<string, unknown>).map(([key, child]) => {
+      const normalizedChild = enforceSolidLineStyles(child);
+      if (key === 'lineStyle' && normalizedChild && typeof normalizedChild === 'object' && !Array.isArray(normalizedChild)) {
+        return [key, { ...normalizedChild, type: 'solid' }];
+      }
+      return [key, normalizedChild];
+    }),
+  );
+  return normalized as T;
+}
 
 /** Apply FQP red-black theme defaults to any ECharts option. */
-export function applyChartTheme(option: echarts.EChartsOption): echarts.EChartsOption {
-  return {
+export function applyChartTheme(option: EChartsCoreOption): EChartsCoreOption {
+  const colors = getChartColors();
+  const palette = [colors.primary, colors.blue, colors.amber, colors.green, colors.purple, colors.cyan];
+  return enforceSolidLineStyles({
     backgroundColor: 'transparent',
-    color: PALETTE,
+    color: palette,
     textStyle: {
-      color: CHART_COLORS.text,
+      color: colors.text,
       fontSize: 13,
       fontFamily: "'JetBrains Mono', 'Noto Sans SC', monospace",
     },
     tooltip: {
       trigger: 'axis',
-      backgroundColor: CHART_COLORS.tooltipBg,
-      borderColor: CHART_COLORS.tooltipBorder,
+      backgroundColor: colors.tooltipBg,
+      borderColor: colors.tooltipBorder,
       borderWidth: 1,
-      textStyle: { color: CHART_COLORS.text, fontSize: 12 },
+      textStyle: { color: colors.text, fontSize: 12 },
       axisPointer: {
         type: 'cross',
-        crossStyle: { color: CHART_COLORS.gridLine },
-        lineStyle: { color: CHART_COLORS.gridLine },
+        crossStyle: { color: colors.gridLine },
+        lineStyle: { color: colors.gridLine },
       },
     },
     legend: {
-      textStyle: { color: CHART_COLORS.textMuted, fontSize: 12 },
-      pageTextStyle: { color: CHART_COLORS.textMuted },
+      textStyle: { color: colors.textMuted, fontSize: 12 },
+      pageTextStyle: { color: colors.textMuted },
     },
     grid: {
       left: '3%',
@@ -58,21 +69,21 @@ export function applyChartTheme(option: echarts.EChartsOption): echarts.EChartsO
     },
     xAxis: {
       type: 'category',
-      axisLine: { lineStyle: { color: CHART_COLORS.gridLine } },
-      axisLabel: { color: CHART_COLORS.textMuted, fontSize: 11 },
+      axisLine: { lineStyle: { color: colors.gridLine } },
+      axisLabel: { color: colors.textMuted, fontSize: 11 },
       splitLine: { show: false },
     },
     yAxis: {
       type: 'value',
       axisLine: { show: false },
-      axisLabel: { color: CHART_COLORS.textMuted, fontSize: 11 },
+      axisLabel: { color: colors.textMuted, fontSize: 11 },
       splitLine: {
         lineStyle: {
-          color: CHART_COLORS.gridLine,
-          type: 'dashed',
+          color: colors.gridLine,
+          type: 'solid',
         },
       },
     },
     ...option,
-  };
+  });
 }

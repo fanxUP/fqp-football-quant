@@ -18,7 +18,7 @@ from __future__ import annotations
 import json
 import os
 import sys
-from datetime import date, timedelta
+from datetime import timedelta
 from typing import Any
 
 # Ensure project root on sys.path
@@ -26,7 +26,9 @@ _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(
 if _PROJECT_ROOT not in sys.path:
     sys.path.insert(0, _PROJECT_ROOT)
 
+from scripts.agents.task_queue import finish_tracked_job, start_tracked_job  # noqa: E402
 from scripts.backtest_engine import BacktestConfig, run_backtest_from_config  # noqa: E402
+from scripts.business_time import business_today  # noqa: E402
 
 
 def _default_config(name: str, model_names: list[str] | None = None) -> BacktestConfig:
@@ -34,7 +36,7 @@ def _default_config(name: str, model_names: list[str] | None = None) -> Backtest
 
     默认：过去 2 年的数据，90 天 walk-forward 窗口，strong 信号。
     """
-    today = date.today()
+    today = business_today()
     two_years_ago = today - timedelta(days=730)
 
     return BacktestConfig(
@@ -44,13 +46,13 @@ def _default_config(name: str, model_names: list[str] | None = None) -> Backtest
         time_end=today.isoformat(),
         play_types=["spf"],
         model_names=model_names,
-        walk_forward=True,
+        walk_forward=False,
         train_window_days=365,
-        test_window_days=90,
-        step_days=90,
+        test_window_days=365,
+        step_days=30,
         stake_per_bet=1.0,
-        min_model_prob=0.35,
-        signal_strength="strong",
+        min_model_prob=0.01,
+        signal_strength="all",
     )
 
 
@@ -71,7 +73,7 @@ def run_full_backtest(conn: Any, dry_run: bool = False) -> dict[str, Any]:
         return {"status": "error", "error": "no active models found"}
 
     config = _default_config(
-        name=f"全量回测-{date.today().isoformat()}",
+        name=f"全量回测-{business_today().isoformat()}",
         model_names=model_names,
     )
 
@@ -99,7 +101,7 @@ def run_model_backtest(
         return {"status": "dry_run", "message": f"backtest for {model_name} (dry run)"}
 
     config = _default_config(
-        name=f"{model_name}-回测-{date.today().isoformat()}",
+        name=f"{model_name}-回测-{business_today().isoformat()}",
         model_names=[model_name],
     )
 
@@ -161,7 +163,7 @@ def run_parameter_sweep(
     best_result = None
 
     for combo in combinations:
-        param_dict = dict(zip(keys, combo))
+        param_dict = dict(zip(keys, combo, strict=False))
         cfg_dict = base_config.to_dict()
         cfg_dict.update(param_dict)
         cfg_dict["name"] = f"sweep-{'-'.join(f'{k}={v}' for k, v in param_dict.items())}"
@@ -205,7 +207,7 @@ def run_parameter_sweep(
 # —— Job entry point ——
 
 
-def run(
+def _run_impl(
     model_name: str | None = None,
     sweep: bool = False,
     dry_run: bool = False,
@@ -236,7 +238,27 @@ def run(
         if model_name:
             return run_model_backtest(conn, model_name)
 
-        return run_full_backtest(conn)
+    return run_full_backtest(conn)
+
+
+def run(
+    model_name: str | None = None,
+    sweep: bool = False,
+    dry_run: bool = False,
+) -> dict[str, Any]:
+    """Run backtest and persist its multi-agent execution record."""
+    run_id = start_tracked_job(
+        "backtest",
+        "backtest_agent",
+        {"model_name": model_name, "sweep": sweep, "dry_run": dry_run},
+    )
+    try:
+        result = _run_impl(model_name=model_name, sweep=sweep, dry_run=dry_run)
+        finish_tracked_job(run_id, result.get("status", "completed"), {"result": result})
+        return result
+    except Exception as exc:
+        finish_tracked_job(run_id, "failed", error=str(exc))
+        raise
 
 
 # —— CLI ——

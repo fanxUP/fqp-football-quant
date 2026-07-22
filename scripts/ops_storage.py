@@ -13,13 +13,10 @@ scripts/feature_storage.py.
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
-
-def _now() -> str:
-    return datetime.now().isoformat(timespec="seconds")
-
+from scripts.business_time import utc_now_iso
 
 # ---------------------------------------------------------------------------
 # operational_health_snapshots
@@ -41,7 +38,7 @@ def store_health_snapshot(conn: Any, snapshot: dict) -> int | None:
 
         common = {
             "snapshot_date": snapshot["snapshot_date"],
-            "snapshot_time": snapshot.get("snapshot_time", _now()),
+            "snapshot_time": snapshot.get("snapshot_time", utc_now_iso()),
             "continuous_uptime_days": snapshot.get("continuous_uptime_days"),
             "official_collection_success_rate": snapshot.get("official_collection_success_rate"),
             "odds_snapshot_missing_rate": snapshot.get("odds_snapshot_missing_rate"),
@@ -260,7 +257,7 @@ def store_backup_log(conn: Any, log_entry: dict) -> int:
                 "backup_type": log_entry.get("backup_type", "full"),
                 "backup_path": log_entry.get("backup_path"),
                 "backup_size_bytes": log_entry.get("backup_size_bytes"),
-                "started_at": log_entry.get("started_at", _now()),
+                "started_at": log_entry.get("started_at", utc_now_iso()),
                 "finished_at": log_entry.get("finished_at"),
                 "success": log_entry.get("success", False),
                 "integrity_check_passed": log_entry.get("integrity_check_passed"),
@@ -298,6 +295,29 @@ def get_latest_backup_log(conn: Any) -> dict | None:
             "created_at",
         ],
     )
+
+
+def is_latest_backup_healthy(latest: dict | None, *, max_age_hours: int = 36) -> bool:
+    """Judge current recoverability separately from the rolling success KPI."""
+    if not latest:
+        return False
+    if not all(
+        latest.get(field) is True
+        for field in ("success", "integrity_check_passed", "restore_test_passed")
+    ):
+        return False
+
+    started_at = latest.get("started_at")
+    if isinstance(started_at, str):
+        try:
+            started_at = datetime.fromisoformat(started_at.replace("Z", "+00:00"))
+        except ValueError:
+            return False
+    if not isinstance(started_at, datetime):
+        return False
+    if started_at.tzinfo is None:
+        started_at = started_at.replace(tzinfo=UTC)
+    return datetime.now(UTC) - started_at.astimezone(UTC) <= timedelta(hours=max_age_hours)
 
 
 def get_backup_success_rate(conn: Any, days: int = 30) -> dict:
@@ -350,7 +370,7 @@ def store_evidence_chain_audit(conn: Any, audit: dict) -> int:
             ) RETURNING id
             """,
             {
-                "audit_time": audit.get("audit_time", _now()),
+                "audit_time": audit.get("audit_time", utc_now_iso()),
                 "recommendation_id": audit.get("recommendation_id"),
                 "ticket_id": audit.get("ticket_id"),
                 "odds_snapshot_id": audit.get("odds_snapshot_id"),
@@ -391,8 +411,8 @@ def get_evidence_chain_stats(conn: Any, days: int = 30) -> dict:
         "total_audited": total,
         "complete_chains": complete,
         "unique_recommendations": row[2] or 0,
-        # If there's nothing to audit, the chain is complete (nothing broken).
-        "completeness_rate": round(complete / total, 4) if total > 0 else 1.0,
+        "has_data": total > 0,
+        "completeness_rate": round(complete / total, 4) if total > 0 else None,
     }
 
 
@@ -449,7 +469,7 @@ def store_contamination_audit(conn: Any, audit: dict) -> int:
             ) RETURNING id
             """,
             {
-                "audit_time": audit.get("audit_time", _now()),
+                "audit_time": audit.get("audit_time", utc_now_iso()),
                 "check_type": audit["check_type"],
                 "match_id": audit.get("match_id"),
                 "severity": audit.get("severity", "info"),
@@ -470,20 +490,30 @@ def get_contamination_stats(conn: Any, days: int = 30) -> dict:
     with conn.cursor() as cur:
         cur.execute(
             """
+            WITH latest_checks AS (
+                SELECT DISTINCT ON (check_type, COALESCE(match_id, -1))
+                       contamination_detected, severity, resolved
+                FROM data_contamination_audit_logs
+                WHERE audit_time >= CURRENT_DATE - INTERVAL '%s days'
+                ORDER BY check_type, COALESCE(match_id, -1), audit_time DESC, id DESC
+            )
             SELECT
                 COUNT(*) AS total_checks,
-                SUM(CASE WHEN contamination_detected THEN 1 ELSE 0 END) AS contamination_found,
-                SUM(CASE WHEN severity = 'critical' AND contamination_detected THEN 1 ELSE 0 END) AS critical_found
-            FROM data_contamination_audit_logs
-            WHERE audit_time >= CURRENT_DATE - INTERVAL '%s days'
+                SUM(CASE WHEN contamination_detected AND NOT resolved THEN 1 ELSE 0 END)
+                    AS contamination_found,
+                SUM(CASE WHEN severity = 'critical' AND contamination_detected AND NOT resolved
+                         THEN 1 ELSE 0 END) AS critical_found
+            FROM latest_checks
             """,
             (days,),
         )
         row = cur.fetchone()
+    total = row[0] or 0
     return {
-        "total_checks": row[0] or 0,
+        "total_checks": total,
         "contamination_found": row[1] or 0,
         "critical_found": row[2] or 0,
+        "has_data": total > 0,
     }
 
 
@@ -492,9 +522,13 @@ def get_recent_contamination_issues(conn: Any, limit: int = 50) -> list[dict]:
     with conn.cursor() as cur:
         cur.execute(
             """
-            SELECT * FROM data_contamination_audit_logs
-            WHERE contamination_detected = true
-            ORDER BY audit_time DESC
+            SELECT * FROM (
+                SELECT DISTINCT ON (check_type, COALESCE(match_id, -1)) *
+                FROM data_contamination_audit_logs
+                WHERE contamination_detected = true AND NOT resolved
+                ORDER BY check_type, COALESCE(match_id, -1), audit_time DESC, id DESC
+            ) latest_issues
+            ORDER BY audit_time DESC, id DESC
             LIMIT %s
             """,
             (limit,),

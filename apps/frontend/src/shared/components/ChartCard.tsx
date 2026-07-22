@@ -1,7 +1,8 @@
-import { useEffect, useRef } from 'react';
-import * as echarts from 'echarts';
-import Card from './Card';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { ECharts } from 'echarts/core';
 import { useTheme } from '../../app/ThemeContext';
+import { getChartColors } from '../../theme/chartTokens';
+import ChartFrame from '../../visualization/core/ChartFrame';
 
 interface ChartCardProps {
   title: string;
@@ -13,6 +14,27 @@ interface ChartCardProps {
   emptyReason?: string;
   error?: string | null;
   updatedAt?: string;
+}
+
+interface RenderConfig {
+  option: Record<string, unknown>;
+  subtitle?: string;
+  title: string;
+}
+
+function applyChartOption(instance: ECharts, config: RenderConfig) {
+  const textColor = getChartColors().text;
+  instance.setOption({
+    backgroundColor: 'transparent',
+    textStyle: { color: textColor, fontSize: 14 },
+    legend: { textStyle: { color: textColor, fontSize: 14 } },
+    aria: { show: true, description: config.subtitle ? `${config.title}。${config.subtitle}` : config.title },
+    ...config.option,
+  }, {
+    notMerge: false,
+    lazyUpdate: true,
+    replaceMerge: ['series'],
+  });
 }
 
 export default function ChartCard({
@@ -27,132 +49,99 @@ export default function ChartCard({
   updatedAt,
 }: ChartCardProps) {
   const chartRef = useRef<HTMLDivElement>(null);
-  const instanceRef = useRef<echarts.ECharts | null>(null);
+  const instanceRef = useRef<ECharts | null>(null);
+  const appliedConfigRef = useRef<RenderConfig | null>(null);
+  const [runtimeError, setRuntimeError] = useState<string | null>(null);
   const { theme } = useTheme();
+  const effectiveError = error ?? runtimeError;
+  const canRender = !loading && !empty && !effectiveError;
+  const renderConfig = useMemo(
+    () => ({ option, subtitle, title }),
+    [option, subtitle, theme, title],
+  );
+  const latestConfigRef = useRef(renderConfig);
+  latestConfigRef.current = renderConfig;
 
   useEffect(() => {
-    if (!chartRef.current) return;
+    if (!canRender || !chartRef.current) return;
 
-    const textColor = theme === 'dark' ? '#C4C4CC' : '#4B5563';
+    let cancelled = false;
+    let observer: ResizeObserver | null = null;
+    let resize: (() => void) | null = null;
 
-    const themedOption = {
-      backgroundColor: 'transparent',
-      textStyle: { color: textColor, fontSize: 14 },
-      legend: { textStyle: { color: textColor, fontSize: 14 } },
-      ...option,
-    };
+    void (async () => {
+      try {
+        const { ensureChartRuntime } = await import('./chartRuntime');
+        const runtime = await ensureChartRuntime(latestConfigRef.current.option);
+        if (cancelled || !chartRef.current) return;
 
-    const inst = echarts.init(chartRef.current, undefined, { renderer: 'canvas' });
-    inst.setOption(themedOption);
-    instanceRef.current = inst;
+        const instance = runtime.init(chartRef.current, undefined, { renderer: 'canvas' });
+        instanceRef.current = instance;
+        resize = () => instance.resize();
+        observer = typeof ResizeObserver === 'undefined'
+          ? null
+          : new ResizeObserver(resize);
 
-    const handleResize = () => inst.resize();
-    window.addEventListener('resize', handleResize);
+        if (observer) observer.observe(chartRef.current);
+        else window.addEventListener('resize', resize);
+
+        applyChartOption(instance, latestConfigRef.current);
+        appliedConfigRef.current = latestConfigRef.current;
+      } catch {
+        if (!cancelled) setRuntimeError('图表组件加载失败，请刷新后重试');
+      }
+    })();
 
     return () => {
-      window.removeEventListener('resize', handleResize);
-      inst.dispose();
+      cancelled = true;
+      observer?.disconnect();
+      if (!observer && resize) window.removeEventListener('resize', resize);
+      instanceRef.current?.dispose();
+      instanceRef.current = null;
+      appliedConfigRef.current = null;
     };
-  }, [option, theme]);
+  }, [canRender]);
 
-  // Determine what to render inside the card
-  const renderBody = () => {
-    if (loading) {
-      return (
-        <div
-          style={{
-            height,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: 'var(--fqp-text-muted)',
-          }}
-        >
-          <div
-            className="fqp-skeleton"
-            style={{ width: '90%', height: '70%', borderRadius: 'var(--fqp-radius-sm)' }}
-          />
-        </div>
-      );
-    }
-    if (error) {
-      return (
-        <div
-          style={{
-            height,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: 'var(--fqp-red-neon)',
-            gap: 8,
-          }}
-        >
-          <span style={{ fontSize: 28 }}>⚠️</span>
-          <span style={{ fontSize: 13 }}>{error}</span>
-        </div>
-      );
-    }
-    if (empty) {
-      return (
-        <div
-          style={{
-            height,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: 'var(--fqp-text-muted)',
-            gap: 8,
-          }}
-        >
-          <span style={{ fontSize: 28, opacity: 0.5 }}>📊</span>
-          <span style={{ fontSize: 13 }}>{emptyReason || '暂无数据'}</span>
-        </div>
-      );
-    }
-    return (
+  useEffect(() => {
+    if (!canRender) return;
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const { ensureChartRuntime } = await import('./chartRuntime');
+        await ensureChartRuntime(renderConfig.option);
+        const instance = instanceRef.current;
+        if (cancelled || !instance || appliedConfigRef.current === renderConfig) return;
+        applyChartOption(instance, renderConfig);
+        appliedConfigRef.current = renderConfig;
+      } catch {
+        if (!cancelled) setRuntimeError('图表组件加载失败，请刷新后重试');
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [canRender, renderConfig]);
+
+  return (
+    <ChartFrame
+      title={title}
+      subtitle={subtitle}
+      updatedAt={updatedAt}
+      loading={loading}
+      empty={empty}
+      emptyReason={emptyReason}
+      error={effectiveError}
+      height={height}
+    >
       <div
         ref={chartRef}
         className="fqp-anim-chartReveal"
+        role="img"
+        aria-label={subtitle ? `${title}。${subtitle}` : title}
         style={{ width: '100%', height }}
       />
-    );
-  };
-
-  return (
-    <Card>
-      {/* Header: title + subtitle + updatedAt */}
-      {(title || subtitle || updatedAt) && (
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'baseline',
-            justifyContent: 'space-between',
-            marginBottom: '12px',
-            gap: 8,
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-            {title && (
-              <h3 style={{ color: 'var(--fqp-text)', fontSize: '16px', margin: 0, fontWeight: 600 }}>
-                {title}
-              </h3>
-            )}
-            {subtitle && (
-              <span style={{ fontSize: '12px', color: 'var(--fqp-text-muted)' }}>
-                {subtitle}
-              </span>
-            )}
-          </div>
-          {updatedAt && (
-            <span style={{ fontSize: '11px', color: 'var(--fqp-text-muted)', whiteSpace: 'nowrap' }}>
-              更新: {updatedAt}
-            </span>
-          )}
-        </div>
-      )}
-      {renderBody()}
-    </Card>
+    </ChartFrame>
   );
 }

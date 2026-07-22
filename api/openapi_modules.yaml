@@ -23,6 +23,8 @@ paths:
       responses:
         '200':
           description: Updated module status
+        '409':
+          description: Module is required or has enabled dependents
   /api/v1/ui/panels:
     get:
       summary: Get visible panels for current user

@@ -260,15 +260,18 @@ def store_evaluation_metrics(
                 cur.execute(
                     """INSERT INTO market_efficiency_metrics
                        (match_id, model_version_id, snapshot_time,
+                        play_type, option_code,
                         probability_gap, clv_score, favourite_longshot_score,
                         market_signal_level,
                         brier_score, log_loss, rps,
                         created_at)
-                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())""",
+                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())""",
                     (
                         m.get("match_id"),
                         m.get("model_version_id"),
-                        m.get("predict_time"),  # stored as snapshot_time
+                        m.get("predict_time"),
+                        m.get("play_type", "spf"),
+                        m.get("option_code", "3"),
                         m.get("probability_gap"),
                         m.get("clv_score"),
                         m.get("favourite_longshot_score"),
@@ -326,6 +329,15 @@ def run(dry_run: bool = False) -> dict[str, Any]:
             JOIN official_matches m ON m.id = mp.match_id
             WHERE m.match_status = 'Settled'
               AND r.full_home_goals IS NOT NULL
+              AND r.result_status IN ('final', 'confirmed')
+              AND mp.play_type = 'spf'
+              AND mp.option_code IN ('3', '1', '0')
+              AND mp.predict_time < m.kickoff_time
+              AND mp.validation_status = 'valid'
+              AND COALESCE(
+                  (mp.uncertainty_reason->>'model_independent')::boolean,
+                  false
+              ) = true
               AND NOT EXISTS (
                   SELECT 1 FROM market_efficiency_metrics mem
                   WHERE mem.match_id = mp.match_id
@@ -376,6 +388,8 @@ def run(dry_run: bool = False) -> dict[str, Any]:
             m["match_id"] = g["match_id"]
             m["model_version_id"] = g["model_version_id"]
             m["predict_time"] = g["predict_time"]
+            m["play_type"] = "spf"
+            m["option_code"] = g.get("actual", "3")
 
             metrics_list.append(m)
 
@@ -396,9 +410,13 @@ def run(dry_run: bool = False) -> dict[str, Any]:
                 "avg_rps": round(sum(stats["rps"]) / n, 4) if n > 0 else None,
             }
 
+        # 存储到 DB
+        stored = store_evaluation_metrics(conn, metrics_list) if metrics_list else 0
+
         return {
             "status": "ok",
             "evaluated": len(metrics_list),
+            "stored": stored,
             "model_count": len(model_stats),
             "summary": summary,
         }

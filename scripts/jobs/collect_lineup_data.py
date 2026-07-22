@@ -1,18 +1,18 @@
-"""Lineup data collection job.
+"""临场首发阵容采集任务。
 
-Pre-match job (10:00, 14:00) using ApiFootballClient.
-Fetches lineups for matches within 24h and stores in
-match_lineup_snapshots + match_lineup_players.
-
-Rate limit: ~5-10 API calls/run of 100 daily limit (free tier).
+仅查询开赛前短窗口内的比赛，每 30 分钟运行时仍可控制
+API-Football 免费额度。API fixture 返回的 lineup 是临场已确认阵容。
 """
 
 from __future__ import annotations
 
+import os
 from datetime import datetime, timedelta
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from apps.backend.src.db import get_db
+from scripts.agents.task_queue import finish_tracked_job, start_tracked_job
 from scripts.api_football_client import ApiFootballClient
 from scripts.feature_storage import (
     get_player_by_code,
@@ -20,19 +20,36 @@ from scripts.feature_storage import (
     store_match_lineup_snapshot,
     store_player,
 )
+from scripts.features.api_football_fixture_matcher import (
+    find_matching_fixture,
+    load_api_aliases,
+    load_supported_matches,
+)
+
+
+def _business_now() -> datetime:
+    timezone_name = os.getenv("FQP_TIMEZONE", "Asia/Shanghai")
+    return datetime.now(ZoneInfo(timezone_name)).replace(tzinfo=None)
 
 
 def _now() -> str:
-    return datetime.now().isoformat(timespec="seconds")
+    return _business_now().isoformat(timespec="seconds")
 
 
-def _get_or_create_player(conn: Any, player_data: dict) -> int | None:
-    """Find or create player, return player_id."""
+def _safe_height(value: Any) -> float | None:
+    if value in (None, ""):
+        return None
+    try:
+        return float(str(value).replace(" cm", "").strip())
+    except ValueError:
+        return None
+
+
+def _get_or_create_player(conn: Any, player_data: dict[str, Any]) -> int | None:
     player_code = f"apifootball:{player_data.get('id')}"
     existing = get_player_by_code(conn, player_code)
     if existing:
-        return existing["id"]
-
+        return int(existing["id"])
     return store_player(
         conn,
         {
@@ -45,98 +62,60 @@ def _get_or_create_player(conn: Any, player_data: dict) -> int | None:
                 else None
             ),
             "nationality": player_data.get("nationality", ""),
-            "primary_position": player_data.get("position", ""),
+            "primary_position": player_data.get("pos") or player_data.get("position", ""),
             "secondary_positions": [],
             "preferred_foot": "",
-            "height_cm": (
-                float(player_data.get("height", "").replace(" cm", ""))
-                if player_data.get("height")
-                else None
-            ),
+            "height_cm": _safe_height(player_data.get("height")),
         },
     )
-
-
-def _resolve_team_id(conn: Any, team_name: str) -> int | None:
-    """Map team name to internal team_id via aliases."""
-    with conn.cursor() as cur:
-        cur.execute(
-            """
-            SELECT t.id FROM teams t
-            JOIN team_aliases ta ON ta.team_id = t.id
-            WHERE ta.alias_name = %(name)s
-            LIMIT 1
-            """,
-            {"name": team_name},
-        )
-        row = cur.fetchone()
-    return row[0] if row else None
 
 
 def _process_lineup(
     conn: Any,
     match_id: int,
-    team_data: dict,
+    team_data: dict[str, Any],
     team_id: int,
     snapshot_time: str,
 ) -> int | None:
-    """Process a single team's lineup from API-Football fixture data.
-
-    Stores the lineup snapshot and its players.
-
-    Returns lineup_snapshot_id or None.
-    """
-    # Extract formation info
-    formation = team_data.get("formation", "")
-    start_xi = team_data.get("startXI", [])
-    substitutes = team_data.get("substitutes", [])
-
-    # Compute aggregate stats
-    starting_values: list[float] = []
+    """保存 API 已公布的首发和替补名单。"""
+    formation = str(team_data.get("formation") or "")
+    start_xi = team_data.get("startXI") or []
+    substitutes = team_data.get("substitutes") or []
+    player_records: list[dict[str, Any]] = []
     key_count = 0
-    player_records = []
 
-    for p in start_xi:
-        player_info = p.get("player", {})
+    for entry in start_xi:
+        player_info = entry.get("player") or {}
         player_id = _get_or_create_player(conn, player_info)
         if not player_id:
             continue
-
-        pos = p.get("player", {}).get("position", "")
-        mv = None  # market value not directly in fixtures
-
+        position = str(player_info.get("pos") or player_info.get("position") or "")
         player_records.append(
             {
                 "player_id": player_id,
                 "is_starting": True,
                 "is_substitute": False,
-                "position": pos,
+                "position": position,
                 "tactical_role": "",
-                "market_value": mv,
+                "market_value": None,
                 "recent_minutes": None,
-                "key_player_score": 50.0 if pos in ("G", "D", "M", "F") else 30.0,
+                "key_player_score": 50.0 if position in ("G", "D", "M", "F") else 30.0,
             }
         )
-
-        if mv:
-            starting_values.append(mv)
-
-        # Count key players (rough heuristic)
-        if pos in ("G", "D"):
+        if position in ("G", "D"):
             key_count += 1
 
-    for p in substitutes:
-        player_info = p.get("player", {})
+    for entry in substitutes:
+        player_info = entry.get("player") or {}
         player_id = _get_or_create_player(conn, player_info)
         if not player_id:
             continue
-
         player_records.append(
             {
                 "player_id": player_id,
                 "is_starting": False,
                 "is_substitute": True,
-                "position": p.get("player", {}).get("position", ""),
+                "position": str(player_info.get("pos") or player_info.get("position") or ""),
                 "tactical_role": "",
                 "market_value": None,
                 "recent_minutes": None,
@@ -144,248 +123,198 @@ def _process_lineup(
             }
         )
 
-    total_value = sum(starting_values) if starting_values else None
-
-    # Store lineup snapshot
-    lineup_snapshot = {
-        "match_id": match_id,
-        "team_id": team_id,
-        "snapshot_time": snapshot_time,
-        "lineup_type": "predicted",
-        "source_name": "api-football",
-        "source_confidence": 0.85,
-        "formation": formation,
-        "formation_changed": False,
-        "goalkeeper_changed": False,
-        "center_back_pair_changed": False,
-        "starting_11_market_value": total_value,
-        "starting_11_avg_age": None,
-        "starting_11_recent_minutes": None,
-        "starting_11_key_player_count": key_count,
-        "bench_market_value": None,
-        "bench_strength_score": 50.0,
-        "lineup_strength_score": (
-            min(100.0, (total_value or 0) / 10_000_000 * 50) if total_value else 50.0
-        ),
-        "rotation_risk_score": 30.0,
-        "lineup_uncertainty_score": 50.0,  # predicted lineups are uncertain
-        "raw_json": team_data,
-    }
-
-    lineup_id = store_match_lineup_snapshot(conn, lineup_snapshot)
+    lineup_id = store_match_lineup_snapshot(
+        conn,
+        {
+            "match_id": match_id,
+            "team_id": team_id,
+            "snapshot_time": snapshot_time,
+            "lineup_type": "confirmed",
+            "source_name": "api-football",
+            "source_confidence": 0.95,
+            "formation": formation,
+            "formation_changed": False,
+            "goalkeeper_changed": False,
+            "center_back_pair_changed": False,
+            "starting_11_market_value": None,
+            "starting_11_avg_age": None,
+            "starting_11_recent_minutes": None,
+            "starting_11_key_player_count": key_count,
+            "bench_market_value": None,
+            "bench_strength_score": 50.0,
+            "lineup_strength_score": 50.0,
+            "rotation_risk_score": 5.0,
+            "lineup_uncertainty_score": 5.0,
+            "raw_json": team_data,
+        },
+    )
     if not lineup_id:
         return None
-
-    # Store players
-    for pr in player_records:
-        pr["lineup_snapshot_id"] = lineup_id
-        store_match_lineup_player(conn, pr)
-
+    for player_record in player_records:
+        player_record["lineup_snapshot_id"] = lineup_id
+        store_match_lineup_player(conn, player_record)
     return lineup_id
 
 
-def run(dry_run: bool = False) -> dict[str, Any]:
-    """Collect lineup data from API-Football for upcoming matches.
+def _has_complete_confirmed_lineup(conn: Any, match_id: int) -> bool:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT count(DISTINCT team_id)
+            FROM match_lineup_snapshots
+            WHERE match_id = %s AND lineup_type = 'confirmed'
+            """,
+            (match_id,),
+        )
+        row = cur.fetchone()
+    return bool(row and int(row[0]) >= 2)
 
-    Args:
-        dry_run: If True, fetch but don't store.
 
-    Returns:
-        Summary dict.
-    """
-    import os
-
+def _run_impl(
+    dry_run: bool = False,
+    *,
+    window_minutes: int | None = None,
+) -> dict[str, Any]:
     api_key = os.getenv("API_FOOTBALL_KEY", "")
     if not api_key:
         return {"status": "error", "message": "API_FOOTBALL_KEY not set"}
 
+    lookahead = window_minutes or int(os.getenv("LINEUP_LOOKAHEAD_MINUTES", "90"))
+    now = _business_now()
+    cutoff = now + timedelta(minutes=lookahead)
     client = ApiFootballClient(api_key=api_key)
+    matches_matched = 0
+    matches_unmatched = 0
+    matches_waiting = 0
+    matches_already_complete = 0
     lineups_collected = 0
-    matches_processed = 0
-    errors = 0
+    provider_errors: list[dict[str, Any]] = []
+    processing_errors: list[str] = []
 
     try:
         with get_db() as conn:
-            # Get matches within the next 24 hours
-            now = datetime.now()
-            cutoff = now + timedelta(hours=24)
-
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    SELECT id, home_team_name, away_team_name, kickoff_time
-                    FROM official_matches
-                    WHERE match_status = 'Selling'
-                      AND kickoff_time BETWEEN %(now)s AND %(cutoff)s
-                    ORDER BY kickoff_time
-                    LIMIT 20
-                    """,
-                    {"now": now, "cutoff": cutoff},
-                )
-                matches = [
-                    {
-                        "id": r[0],
-                        "home_team_name": r[1],
-                        "away_team_name": r[2],
-                        "kickoff_time": r[3],
-                    }
-                    for r in cur.fetchall()
-                ]
-
+            matches = load_supported_matches(conn, start_time=now, end_time=cutoff)
             if not matches:
-                return {"status": "ok", "note": "no upcoming matches in next 24h"}
+                return {
+                    "status": "ok",
+                    "quality_status": "not_due",
+                    "note": "no supported matches in pre-match window",
+                    "window_minutes": lookahead,
+                    "api_calls_used": 0,
+                }
 
-            snap_time = _now()
+            alias_to_team_id = load_api_aliases(conn)
+            match_dates: dict[str, list[dict[str, Any]]] = {}
+            for match in matches:
+                match_dates.setdefault(match["kickoff_time"].date().isoformat(), []).append(match)
 
-            # ── Build alias lookup: English API name → (team_id, Chinese name) ──
-            # This lets us match API-Football's English names to our internal teams.
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    SELECT ta.alias_name, ta.team_id, t.team_name_cn
-                    FROM team_aliases ta
-                    JOIN teams t ON t.id = ta.team_id
-                    WHERE ta.source_name = 'apifootball'
-                    """
-                )
-                en_to_team: dict[str, tuple[int, str]] = {}
-                for r in cur.fetchall():
-                    en_name = r[0]
-                    tid = r[1]
-                    cn_name = r[2] or ""
-                    # Only store the first mapping per English name
-                    if en_name not in en_to_team:
-                        en_to_team[en_name] = (tid, cn_name)
-
-            # Group matches by date to minimize API calls for fixture list
-            match_dates: dict[str, list[dict]] = {}
-            for m in matches:
-                match_date = (
-                    m["kickoff_time"].strftime("%Y-%m-%d")
-                    if isinstance(m["kickoff_time"], datetime)
-                    else str(m["kickoff_time"])[:10]
-                )
-                match_dates.setdefault(match_date, []).append(m)
-
+            snapshot_time = _now()
             for match_date, day_matches in match_dates.items():
-                # Fetch fixture list for this date (no lineups in list endpoint)
-                try:
-                    fixtures = client.get_fixtures(date=match_date)
-                except Exception as e:
-                    print(f"[collect_lineup] error fetching fixtures for {match_date}: {e}")
-                    errors += 1
+                fixtures = client.get_fixtures(date=match_date)
+                fixture_errors = client.last_response_meta.get("errors") or {}
+                if fixture_errors:
+                    provider_errors.append(
+                        {"endpoint": "fixtures", "date": match_date, "errors": fixture_errors}
+                    )
                     continue
-
-                if not fixtures:
-                    matches_processed += len(day_matches)
-                    continue
-
-                # Build lookup: API team name → (team_id, cn_name)
-                # for fixtures on this date
-                date_team_lookup: dict[str, tuple[int, str]] = {}
-                for fix in fixtures:
-                    for side in ("home", "away"):
-                        api_name = fix.get("teams", {}).get(side, {}).get("name", "")
-                        if api_name and api_name in en_to_team:
-                            date_team_lookup[api_name] = en_to_team[api_name]
-
-                # Map: (home_cn, away_cn) → fixture_id
-                fixture_lookup: dict[tuple[str, str], int] = {}
-                for fix in fixtures:
-                    fix_id = fix.get("fixture", {}).get("id")
-                    if not fix_id:
-                        continue
-                    api_home = fix.get("teams", {}).get("home", {}).get("name", "")
-                    api_away = fix.get("teams", {}).get("away", {}).get("name", "")
-                    cn_home = en_to_team.get(api_home, (0, api_home))[1]
-                    cn_away = en_to_team.get(api_away, (0, api_away))[1]
-                    fixture_lookup[(cn_home, cn_away)] = fix_id
 
                 for match in day_matches:
-                    try:
-                        home_name = match["home_team_name"]
-                        away_name = match["away_team_name"]
-
-                        # Try direct Chinese name match first, then fallback
-                        api_fix_id = fixture_lookup.get((home_name, away_name))
-                        if not api_fix_id:
-                            matches_processed += 1
-                            continue
-
-                        # Resolve team IDs
-                        home_id = _resolve_team_id(conn, home_name)
-                        away_id = _resolve_team_id(conn, away_name)
-
-                        if not home_id or not away_id:
-                            print(
-                                f"[collect_lineup] cannot resolve teams for match {match['id']}: "
-                                f"{home_name} vs {away_name}"
-                            )
-                            matches_processed += 1
-                            continue
-
-                        # Query individual fixture to get lineups
-                        try:
-                            detail = client.get_fixtures(fixture_id=api_fix_id)
-                        except Exception:
-                            matches_processed += 1
-                            continue
-
-                        if not detail:
-                            matches_processed += 1
-                            continue
-
-                        fix_detail = detail[0]
-                        lineups = fix_detail.get("lineups", [])
-
-                        if not lineups:
-                            matches_processed += 1
-                            continue
-
-                        if not dry_run:
-                            for team_lineup in lineups:
-                                api_team_name = team_lineup.get("team", {}).get("name", "")
-                                # Map API team name to our internal team ID
-                                mapped = en_to_team.get(api_team_name)
-                                cn_team_name = mapped[1] if mapped else api_team_name
-
-                                team_id = (
-                                    home_id
-                                    if cn_team_name == home_name
-                                    else away_id
-                                    if cn_team_name == away_name
-                                    else None
-                                )
-                                if team_id:
-                                    lid = _process_lineup(
-                                        conn, match["id"], team_lineup, team_id, snap_time
-                                    )
-                                    if lid:
-                                        lineups_collected += 1
-
-                        matches_processed += 1
-
-                    except Exception as e:
-                        print(f"[collect_lineup] error for match {match['id']}: {e}")
-                        errors += 1
-                        matches_processed += 1
+                    if _has_complete_confirmed_lineup(conn, match["id"]):
+                        matches_already_complete += 1
                         continue
-
+                    fixture = find_matching_fixture(match, fixtures, alias_to_team_id)
+                    if fixture is None:
+                        matches_unmatched += 1
+                        continue
+                    matches_matched += 1
+                    fixture_id = int(fixture.get("fixture", {}).get("id") or 0)
+                    if not fixture_id:
+                        matches_unmatched += 1
+                        matches_matched -= 1
+                        continue
+                    try:
+                        detail_rows = client.get_fixtures(fixture_id=fixture_id)
+                        detail_errors = client.last_response_meta.get("errors") or {}
+                        if detail_errors:
+                            provider_errors.append(
+                                {
+                                    "endpoint": "fixture_detail",
+                                    "official_match_id": match["id"],
+                                    "api_fixture_id": fixture_id,
+                                    "errors": detail_errors,
+                                }
+                            )
+                            continue
+                        lineups = detail_rows[0].get("lineups", []) if detail_rows else []
+                        if not lineups:
+                            matches_waiting += 1
+                            continue
+                        if dry_run:
+                            continue
+                        for team_lineup in lineups:
+                            api_team_name = str(team_lineup.get("team", {}).get("name") or "")
+                            team_id = alias_to_team_id.get(api_team_name)
+                            if team_id is None or team_id not in {
+                                match["home_team_id"],
+                                match["away_team_id"],
+                            }:
+                                continue
+                            if _process_lineup(
+                                conn,
+                                match["id"],
+                                team_lineup,
+                                team_id,
+                                snapshot_time,
+                            ):
+                                lineups_collected += 1
+                    except Exception as exc:
+                        processing_errors.append(f"match {match['id']}: {exc}")
     finally:
         client.close()
 
+    if provider_errors or processing_errors or matches_unmatched:
+        quality_status = "degraded"
+    elif matches_waiting and not lineups_collected:
+        quality_status = "waiting"
+    else:
+        quality_status = "healthy"
     return {
-        "status": "ok" if not dry_run else "dry_run",
-        "matches_processed": matches_processed,
+        "status": "dry_run" if dry_run else "ok",
+        "quality_status": quality_status,
+        "window_minutes": lookahead,
+        "matches_supported": (matches_matched + matches_unmatched + matches_already_complete),
+        "matches_matched": matches_matched,
+        "matches_unmatched": matches_unmatched,
+        "matches_waiting_lineup": matches_waiting,
+        "matches_already_complete": matches_already_complete,
         "lineups_collected": lineups_collected,
-        "errors": errors,
+        "provider_errors": provider_errors,
+        "processing_errors": processing_errors,
         "api_calls_used": client.call_count_today,
     }
+
+
+def run(
+    dry_run: bool = False,
+    *,
+    window_minutes: int | None = None,
+) -> dict[str, Any]:
+    run_id = start_tracked_job(
+        "lineup_collection",
+        "feature_agent",
+        {"dry_run": dry_run, "window_minutes": window_minutes},
+    )
+    try:
+        result = _run_impl(dry_run=dry_run, window_minutes=window_minutes)
+        finish_tracked_job(run_id, result.get("status", "completed"), {"result": result})
+        return result
+    except Exception as exc:
+        finish_tracked_job(run_id, "failed", error=str(exc))
+        raise
 
 
 if __name__ == "__main__":
     import sys
 
     dry = "--dry-run" in sys.argv
-    result = run(dry_run=dry)
-    print(result)
+    print(run(dry_run=dry))

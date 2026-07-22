@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
+
 from fastapi import APIRouter, Query
 
 from apps.backend.src.db import get_db
+from apps.backend.src.services.pipeline_status import get_pipeline_snapshot, utc_iso
+from scripts.local.service_health import get_live_service_status
 from scripts.ops_storage import (
     get_backup_success_rate,
     get_broken_chains,
@@ -14,6 +18,7 @@ from scripts.ops_storage import (
     get_latest_backup_log,
     get_latest_health_snapshot,
     get_recent_contamination_issues,
+    is_latest_backup_healthy,
 )
 
 router = APIRouter(tags=["ops"])
@@ -23,34 +28,7 @@ router = APIRouter(tags=["ops"])
 def get_pipeline_status():
     """Get data source health + latest job run statuses for the Data Health dashboard."""
     with get_db() as conn:
-        cur = conn.cursor()
-
-        # Data source health
-        cur.execute(
-            "SELECT source_name, status, last_success_time, last_failure_time, "
-            "failure_count, latency_ms FROM data_source_health ORDER BY source_name"
-        )
-        src_cols = ["name", "status", "last_success", "last_failure", "failures", "latency_ms"]
-        sources = []
-        for row in cur.fetchall():
-            d = dict(zip(src_cols, row))
-            d["last_success"] = str(d["last_success"]) if d["last_success"] else None
-            d["last_failure"] = str(d["last_failure"]) if d["last_failure"] else None
-            sources.append(d)
-
-        # Latest job runs
-        cur.execute(
-            "SELECT DISTINCT ON (job_name) job_name, status, finished_at "
-            "FROM ai_job_runs ORDER BY job_name, id DESC"
-        )
-        job_cols = ["name", "status", "finished_at"]
-        jobs = []
-        for row in cur.fetchall():
-            d = dict(zip(job_cols, row))
-            d["finished_at"] = str(d["finished_at"]) if d["finished_at"] else None
-            jobs.append(d)
-
-    return {"sources": sources, "jobs": jobs}
+        return get_pipeline_snapshot(conn)
 
 
 @router.get("/api/ops/health")
@@ -66,9 +44,40 @@ def get_operational_health():
             "metrics": {},
         }
 
+    live_services = get_live_service_status(api_responding=True, db_responding=True)
+    status = snapshot.get("overall_health_status", "unknown")
+    notes = str(snapshot.get("health_notes") or "")
+    offline_labels = [
+        label
+        for key, label in {
+            "scheduler_running": "Scheduler 心跳中断",
+            "worker_running": "Worker 心跳中断",
+            "api_responding": "API 不可用",
+            "db_responding": "数据库不可用",
+        }.items()
+        if not live_services[key]
+    ]
+    if offline_labels:
+        status = "critical"
+        notes = "; ".join(filter(None, [notes, *offline_labels]))
+
+    snapshot_time = utc_iso(snapshot.get("snapshot_time"))
+    parsed_snapshot = None
+    if snapshot_time:
+        try:
+            parsed_snapshot = datetime.fromisoformat(snapshot_time.replace("Z", "+00:00"))
+        except ValueError:
+            pass
+    if parsed_snapshot and datetime.now(UTC) - parsed_snapshot > timedelta(hours=30):
+        if status == "healthy":
+            status = "degraded"
+        notes = "; ".join(filter(None, [notes, "健康指标快照超过30小时未更新"]))
+
     return {
-        "status": snapshot.get("overall_health_status", "unknown"),
+        "status": status,
         "snapshot_date": snapshot.get("snapshot_date"),
+        "snapshot_time": snapshot_time,
+        "live_checked_at": utc_iso(datetime.now(UTC)),
         "metrics": {
             "uptime_days": snapshot.get("continuous_uptime_days"),
             "official_collection_rate": snapshot.get("official_collection_success_rate"),
@@ -79,13 +88,13 @@ def get_operational_health():
             "data_contamination_count": snapshot.get("data_contamination_count"),
         },
         "services": {
-            "scheduler": snapshot.get("scheduler_running"),
-            "worker": snapshot.get("worker_running"),
-            "api": snapshot.get("api_responding"),
-            "db": snapshot.get("db_responding"),
+            "scheduler": live_services["scheduler_running"],
+            "worker": live_services["worker_running"],
+            "api": live_services["api_responding"],
+            "db": live_services["db_responding"],
         },
         "disk_usage_pct": snapshot.get("disk_usage_pct"),
-        "notes": snapshot.get("health_notes"),
+        "notes": notes,
     }
 
 
@@ -127,10 +136,15 @@ def get_evidence_chain_audit(
         broken = get_broken_chains(conn, limit=50) if show_broken else []
 
     return {
+        "status": "ok" if stats["has_data"] else "no_data",
         "period_days": days,
         "stats": stats,
         "broken_chains": broken if show_broken else [],
-        "passes_stage8": stats["completeness_rate"] >= 1.0,
+        "passes_stage8": bool(
+            stats["has_data"]
+            and stats["completeness_rate"] is not None
+            and stats["completeness_rate"] >= 1.0
+        ),
     }
 
 
@@ -142,10 +156,11 @@ def get_contamination_audit(days: int = Query(30)):
         issues = get_recent_contamination_issues(conn, limit=50)
 
     return {
+        "status": "ok" if stats["has_data"] else "no_data",
         "period_days": days,
         "stats": stats,
         "issues": issues,
-        "passes_stage8": stats["contamination_found"] == 0,
+        "passes_stage8": bool(stats["has_data"] and stats["contamination_found"] == 0),
     }
 
 
@@ -160,5 +175,5 @@ def get_backup_status(days: int = Query(30)):
         "period_days": days,
         "success_rate": success_rate,
         "latest_backup": latest,
-        "passes_stage8": success_rate["success_rate"] >= 1.0,
+        "passes_stage8": is_latest_backup_healthy(latest),
     }

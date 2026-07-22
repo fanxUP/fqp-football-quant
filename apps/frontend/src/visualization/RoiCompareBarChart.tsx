@@ -1,9 +1,11 @@
 /** Daily ROI comparison bar chart (Agent vs User side-by-side). */
 
 import { useMemo } from 'react';
+import type { EChartsOption } from 'echarts';
 import ChartCard from '../shared/components/ChartCard';
 import { applyChartTheme, CHART_COLORS } from './chartTheme';
 import type { RoiBarPoint } from './chartTypes';
+import { useTheme } from '../app/ThemeContext';
 
 interface RoiCompareBarChartProps {
   data: RoiBarPoint[];
@@ -22,6 +24,7 @@ export default function RoiCompareBarChart({
   empty,
   emptyReason,
 }: RoiCompareBarChartProps) {
+  const { theme } = useTheme();
   const option = useMemo(() => {
     if (!data.length) return null;
     const dates = data.map((d) => d.date);
@@ -34,7 +37,7 @@ export default function RoiCompareBarChart({
         axisPointer: { type: 'shadow' },
         valueFormatter: (v: number) => `${(v * 100).toFixed(2)}%`,
       },
-      legend: { data: ['AI 虚拟池', '我的实票池'] },
+      legend: { data: ['Agent 资金池', '我的票池'] },
       xAxis: { type: 'category', data: dates },
       yAxis: {
         type: 'value',
@@ -43,7 +46,7 @@ export default function RoiCompareBarChart({
       },
       series: [
         {
-          name: 'AI 虚拟池',
+          name: 'Agent 资金池',
           type: 'bar',
           data: agent,
           barWidth: '30%',
@@ -55,7 +58,7 @@ export default function RoiCompareBarChart({
           },
         },
         {
-          name: '我的实票池',
+          name: '我的票池',
           type: 'bar',
           data: user,
           barWidth: '30%',
@@ -66,8 +69,8 @@ export default function RoiCompareBarChart({
           },
         },
       ],
-    } as echarts.EChartsOption);
-  }, [data]);
+    } as EChartsOption);
+  }, [data, theme]);
 
   return (
     <ChartCard

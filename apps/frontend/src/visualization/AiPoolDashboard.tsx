@@ -1,4 +1,4 @@
-/** AI 虚拟池综合看板 — 取代单一环形图，展示多维度模拟交易数据 */
+/** Agent 资金池综合看板 — 取代单一环形图，展示多维度策略数据 */
 
 import { useEffect, useState } from 'react';
 import type { DashboardTodayKpi, DashboardModelPerfItem } from '../core/types';
@@ -33,7 +33,7 @@ interface KpiMeta {
 
 const KPI_ITEMS: KpiMeta[] = [
   { key: 'predicted_match_count', icon: '🎯', color: '#3B82F6', unit: '场', label: '已预测' },
-  { key: 'ai_stake_today',        icon: '💰', color: '#F5A524', unit: '',    label: '模拟投入' },
+  { key: 'ai_stake_today',        icon: '💰', color: '#F5A524', unit: '',    label: '策略投入' },
   { key: 'ai_ticket_count',       icon: '📋', color: '#22C55E', unit: '张', label: '票单数' },
   { key: 'pending_settlement_count', icon: '⏳', color: '#FF2A3D', unit: '张', label: '待开奖' },
 ];
@@ -43,6 +43,10 @@ const MODEL_LABELS: Record<string, string> = {
   elo_rating: 'Elo',
   maher_poisson: 'Poisson',
 };
+
+export function calculateSettledProfitRate(profitLoss: number, settledStake: number): number {
+  return settledStake > 0 ? profitLoss / settledStake : 0;
+}
 
 // ---- Props ----
 interface AiPoolDashboardProps {
@@ -56,7 +60,7 @@ interface AiPoolDashboardProps {
     matchCount: number;
     predictionCount: number;
     activeTicketCount: number;
-    realTicketCount: number;
+    ticketLedgerCount: number;
   };
   loading?: boolean;
   error?: string | null;
@@ -117,7 +121,7 @@ export default function AiPoolDashboard({
           alignItems: 'center',
           justifyContent: 'space-between',
           padding: '6px 12px',
-          background: 'rgba(255,255,255,0.03)',
+          background: 'var(--fqp-hover-subtle)',
           borderRadius: 6,
           fontSize: 12,
         }}
@@ -176,8 +180,9 @@ export default function AiPoolDashboard({
       {/* ========== Profit / Loss panel ========== */}
       {(() => {
         const profitLoss = kpiVal('ai_today_profit_loss');
-        const stake = kpiVal('ai_stake_today');
-        const profitRate = stake > 0 ? (profitLoss / stake) : 0;
+        const committedStake = kpiVal('ai_stake_today');
+        const settledStake = kpiVal('ai_settled_stake_today');
+        const profitRate = calculateSettledProfitRate(profitLoss, settledStake);
         const isProfit = profitLoss > 0;
         const isLoss = profitLoss < 0;
         const color = isProfit ? 'var(--fqp-success)' : isLoss ? 'var(--fqp-red-neon)' : 'var(--fqp-text-muted)';
@@ -190,10 +195,10 @@ export default function AiPoolDashboard({
               alignItems: 'center',
               justifyContent: 'space-between',
               padding: '10px 14px',
-              background: isProfit ? 'rgba(34,197,94,0.06)' : isLoss ? 'rgba(239,68,68,0.06)' : 'rgba(255,255,255,0.02)',
+              background: isProfit ? 'rgba(34,197,94,0.06)' : isLoss ? 'rgba(239,68,68,0.06)' : 'var(--fqp-bg-glass)',
               borderRadius: 8,
               border: `1px solid ${
-                isProfit ? 'rgba(34,197,94,0.15)' : isLoss ? 'rgba(239,68,68,0.15)' : 'rgba(255,255,255,0.05)'
+                isProfit ? 'rgba(34,197,94,0.15)' : isLoss ? 'rgba(239,68,68,0.15)' : 'var(--fqp-border-subtle)'
               }`,
             }}
           >
@@ -213,9 +218,9 @@ export default function AiPoolDashboard({
               </div>
             </div>
             <div style={{ textAlign: 'right' }}>
-              <div style={{ fontSize: 11, color: 'var(--fqp-text-muted)' }}>总投入</div>
+              <div style={{ fontSize: 11, color: 'var(--fqp-text-muted)' }}>今日投入</div>
               <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--fqp-text)' }} className="fqp-mono">
-                ¥<CountUp value={stake} />
+                ¥<CountUp value={committedStake} />
               </div>
             </div>
           </div>
@@ -232,7 +237,7 @@ export default function AiPoolDashboard({
           <div
             style={{
               width: '100%', height: 8,
-              background: 'rgba(255,255,255,0.04)',
+              background: 'var(--fqp-border-subtle)',
               borderRadius: 4, overflow: 'hidden',
               display: 'flex',
             }}
@@ -265,7 +270,7 @@ export default function AiPoolDashboard({
       )}
 
       {/* ========== Divider ========== */}
-      <div style={{ height: 1, background: 'rgba(255,255,255,0.05)', margin: 0 }} />
+      <div style={{ height: 1, background: 'var(--fqp-border-subtle)', margin: 0 }} />
 
       {/* ========== Bottom: Model status + Quick stats ========== */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
@@ -283,7 +288,7 @@ export default function AiPoolDashboard({
                   key={m.model_version_id}
                   style={{
                     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    padding: '4px 8px', background: 'rgba(255,255,255,0.02)', borderRadius: 4, fontSize: 11,
+                    padding: '4px 8px', background: 'var(--fqp-bg-glass)', borderRadius: 4, fontSize: 11,
                   }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -318,7 +323,7 @@ export default function AiPoolDashboard({
               <>
                 <MiniStat label="可分析比赛" value={pageStats.matchCount} unit="场" color="#3B82F6" />
                 <MiniStat label="活跃推荐" value={pageStats.activeTicketCount} unit="张" color="#F5A524" />
-                <MiniStat label="实票记录" value={pageStats.realTicketCount} unit="张" color="#22C55E" />
+                <MiniStat label="彩票记录" value={pageStats.ticketLedgerCount} unit="张" color="#22C55E" />
               </>
             ) : (
               <div style={{ fontSize: 11, color: 'var(--fqp-text-muted)' }}>暂无数据</div>
@@ -337,7 +342,7 @@ function MiniStat({ label, value, unit, color }: { label: string; value: number;
       style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         padding: '3px 8px', borderRadius: 4, fontSize: 11,
-        background: 'rgba(255,255,255,0.02)',
+        background: 'var(--fqp-bg-glass)',
       }}
     >
       <span style={{ color: 'var(--fqp-text-muted)' }}>{label}</span>

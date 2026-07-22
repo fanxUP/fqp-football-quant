@@ -1,6 +1,19 @@
 /** Shared label maps — single source of truth for all code→Chinese mappings. */
 
-// ── Play types (canonical codes → Chinese) ──────────────────────
+// ── Model names (internal identifiers → readable business names) ──
+
+export const MODEL_NAME_LABELS: Record<string, string> = {
+  elo_rating: 'Elo 实力评分',
+  market_baseline: '市场赔率基准',
+  dixon_coles: '迪克森-科尔斯比分模型',
+  maher_poisson: '马赫泊松进球模型',
+};
+
+export function modelNameLabel(code: string): string {
+  return MODEL_NAME_LABELS[code] || code;
+}
+
+// ── Play types (canonical codes → Chinese) ──
 
 export const PLAY_TYPE_LABELS: Record<string, string> = {
   spf: '胜平负',
@@ -9,6 +22,8 @@ export const PLAY_TYPE_LABELS: Record<string, string> = {
   bf: '比分',
   bqc: '半全场',
   hhgg: '混合过关',
+  mixed: '混合过关',
+  single: '单关',
   // legacy aliases
   score: '比分',
   total_goals: '总进球数',
@@ -37,19 +52,28 @@ export const PASS_TYPE_LABELS: Record<string, string> = {
 };
 
 export function passTypeLabel(code: string): string {
+  if (code.includes(',')) {
+    return code.split(',').map((item) => PASS_TYPE_LABELS[item.trim()] || item.trim()).join(' + ');
+  }
   return PASS_TYPE_LABELS[code] || code;
 }
 
 // ── SPF/RQSPF option codes ──────────────────────────────────────
 
 export const SPF_OPTION_LABELS: Record<string, string> = {
-  '3': '主胜', '1': '平', '0': '客胜',
-  h: '主胜', d: '平', a: '客胜',
+  '3': '主胜', '1': '平', '0': '主负',
+  h: '主胜', d: '平', a: '主负',
 };
 
 export const RQSPF_OPTION_LABELS: Record<string, string> = {
-  '3': '让主胜', '1': '让平', '0': '让客胜',
-  h: '让主胜', d: '让平', a: '让客胜',
+  '3': '主胜', '1': '平', '0': '主负',
+  h: '主胜', d: '平', a: '主负',
+};
+
+export const BQC_OPTION_LABELS: Record<string, string> = {
+  '33': '胜胜', '31': '胜平', '30': '胜负',
+  '13': '平胜', '11': '平平', '10': '平负',
+  '03': '负胜', '01': '负平', '00': '负负',
 };
 
 /** Map a play_type + option_code to a Chinese label. */
@@ -57,8 +81,18 @@ export function optionLabel(playType: string, optionCode: string): string {
   const pt = PLAY_TYPE_LABELS[playType] ? playType : playType;
   if (pt === 'spf') return SPF_OPTION_LABELS[optionCode] || optionCode;
   if (pt === 'rqspf') return RQSPF_OPTION_LABELS[optionCode] || optionCode;
-  // bf / zjq / bqc — option_code IS the display value (e.g. "1:0", "3", "3-3")
+  if (pt === 'bqc') return BQC_OPTION_LABELS[optionCode] || optionCode;
+  if (pt === 'zjq') return optionCode === '7' || optionCode === '7+' ? '7+球' : `${optionCode}球`;
+  // bf keeps the official score notation (e.g. "1:0")
   return optionCode;
+}
+
+export function normalizeWinDrawLossLabel(label: string): string {
+  return label
+    .replace(/让球客胜|让客胜|让负/g, '主负')
+    .replace(/让球主胜|让主胜|让胜/g, '主胜')
+    .replace(/让球平|让平/g, '平')
+    .replace(/客胜/g, '主负');
 }
 
 // ── Status labels ───────────────────────────────────────────────
@@ -78,6 +112,7 @@ export const STATUS_LABELS: Record<string, string> = {
   Finished: '已结束',
   scheduled: '待开赛',
   Scheduled: '待开赛',
+  awaiting_result: '等待赛果',
   // job statuses
   success: '成功',
   failed: '失败',
@@ -97,8 +132,8 @@ export function statusLabel(code: string): string {
 
 export const SOURCE_TYPE_LABELS: Record<string, string> = {
   manual: '手动录入',
-  simulator: '模拟器',
-  simulation: '模拟推荐',
+  simulator: '投注器',
+  simulation: '投注推荐',
   agent: 'Agent',
 };
 

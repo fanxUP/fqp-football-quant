@@ -5,22 +5,25 @@ import { ApiError } from '../core/types';
 import PageHeader from '../shared/components/PageHeader';
 import Card from '../shared/components/Card';
 import ChartCard from '../shared/components/ChartCard';
-import DisclaimerBanner, { PAGE_DEFAULTS } from '../shared/components/DisclaimerBanner';
 import DataTable, { type Column } from '../shared/components/DataTable';
 import LoadingSpinner from '../shared/components/LoadingSpinner';
 import EmptyState from '../shared/components/EmptyState';
 import ErrorState from '../shared/components/ErrorState';
 import StatusBadge from '../shared/components/StatusBadge';
+import { formatTimestamp } from '../shared/utils';
 
 type TabKey = 'daily' | 'weekly' | 'monthly' | 'settlements' | 'errors';
 
-export default function ReviewsPage() {
+interface ReviewsPageProps {
+  embedded?: boolean;
+}
+
+export default function ReviewsPage({ embedded = false }: ReviewsPageProps) {
   const [activeTab, setActiveTab] = useState<TabKey>('daily');
 
   return (
     <div>
-      <PageHeader title="复盘中心" />
-      <DisclaimerBanner text={PAGE_DEFAULTS.reports} type="page" />
+      {!embedded && <PageHeader title="复盘中心" />}
       <div className="fqp-tabs">
         {([
           ['daily', '日报'],
@@ -75,8 +78,8 @@ function DailyReviewsTab() {
     { key: 'review_date', title: '日期' },
     { key: 'official_match_count', title: '官方场次', render: (v) => <span className="fqp-mono">{String(v)}</span> },
     { key: 'analyzable_match_count', title: '可分析', render: (v) => <span className="fqp-mono">{String(v)}</span> },
-    { key: 'simulation_ticket_count', title: '模拟票', render: (v) => <span className="fqp-mono">{String(v)}</span> },
-    { key: 'real_ticket_count', title: '实票', render: (v) => <span className="fqp-mono">{String(v)}</span> },
+    { key: 'simulation_ticket_count', title: '投注票', render: (v) => <span className="fqp-mono">{String(v)}</span> },
+    { key: 'real_ticket_count', title: '彩票', render: (v) => <span className="fqp-mono">{String(v)}</span> },
     {
       key: 'real_profit_loss',
       title: '实盘盈亏',
@@ -127,7 +130,7 @@ function DailyReviewsTab() {
           name: '日盈亏 (¥)',
           nameTextStyle: { fontSize: 11 },
           axisLabel: { fontSize: 11 },
-          splitLine: { lineStyle: { color: 'rgba(255,255,255,0.04)' } },
+          splitLine: { lineStyle: { color: 'var(--fqp-border-subtle)' } },
         },
         {
           type: 'value' as const,
@@ -268,7 +271,7 @@ function DailyReviewsTab() {
         axisLabel: { fontSize: 11, formatter: '{value}%' },
         min: 0,
         max: 100,
-        splitLine: { lineStyle: { color: 'rgba(255,255,255,0.04)' } },
+        splitLine: { lineStyle: { color: 'var(--fqp-border-subtle)' } },
       },
       series,
     };
@@ -361,7 +364,7 @@ function WeeklyReviewsTab() {
         return s.length > 80 ? s.slice(0, 80) + '...' : s;
       },
     },
-    { key: 'created_at', title: '生成时间', render: (v) => String(v).replace('T', ' ').slice(0, 19) },
+    { key: 'created_at', title: '生成时间', render: (v) => formatTimestamp(v) },
   ];
 
   if (error) return <ErrorState message={error} onRetry={() => window.location.reload()} />;
@@ -398,7 +401,7 @@ function MonthlyReviewsTab() {
         return s.length > 100 ? s.slice(0, 100) + '...' : s;
       },
     },
-    { key: 'created_at', title: '生成时间', render: (v) => String(v).replace('T', ' ').slice(0, 19) },
+    { key: 'created_at', title: '生成时间', render: (v) => formatTimestamp(v) },
   ];
 
   if (error) return <ErrorState message={error} onRetry={() => window.location.reload()} />;
@@ -449,7 +452,7 @@ function SettlementsTab() {
         return <span className="fqp-mono" style={{ color }}>{val >= 0 ? '+' : ''}{val.toFixed(2)}</span>;
       },
     },
-    { key: 'settle_time', title: '结算时间', render: (v) => String(v).replace('T', ' ').slice(0, 19) },
+    { key: 'settle_time', title: '结算时间', render: (v) => formatTimestamp(v) },
   ];
 
   if (error) return <ErrorState message={error} onRetry={() => window.location.reload()} />;
@@ -534,7 +537,7 @@ function ErrorAnalysisTab() {
     { key: 'error_level', title: '严重度', render: (v) => <StatusBadge status={v === 'high' ? 'error' : v === 'medium' ? 'warning' : 'info'} label={String(v)} /> },
     { key: 'root_cause', title: '根因', render: (v) => <span style={{ maxWidth: '300px', display: 'inline-block', overflow: 'hidden', textOverflow: 'ellipsis' }}>{String(v)}</span> },
     { key: 'actual_result', title: '实际赛果', width: '80px', render: (v) => <span className="fqp-mono">{String(v)}</span> },
-    { key: 'created_at', title: '时间', render: (v) => String(v).replace('T', ' ').slice(0, 19) },
+    { key: 'created_at', title: '时间', render: (v) => formatTimestamp(v) },
   ];
 
   if (err) return <ErrorState message={err} onRetry={() => window.location.reload()} />;

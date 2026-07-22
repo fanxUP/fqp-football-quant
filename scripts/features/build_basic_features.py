@@ -64,7 +64,12 @@ def compute_odds_implied_probabilities(
     return result
 
 
-def compute_rest_days(team_name: str, match_kickoff: str, conn: Any) -> int | None:
+def compute_rest_days(
+    team_name: str,
+    match_kickoff: str,
+    conn: Any,
+    team_id: int | None = None,
+) -> int | None:
     """Compute rest days since the team's previous match.
 
     Queries official_matches for the given team's most recent kickoff
@@ -81,12 +86,24 @@ def compute_rest_days(team_name: str, match_kickoff: str, conn: Any) -> int | No
     with conn.cursor() as cur:
         cur.execute(
             """
+            WITH target_names AS (
+                SELECT %(team)s::varchar AS name
+                UNION
+                SELECT alias_name
+                FROM team_aliases
+                WHERE team_id = %(team_id)s
+                  AND source_name = 'sporttery'
+                  AND confidence = 1.0
+            )
             SELECT kickoff_time FROM official_matches
-            WHERE (home_team_name = %(team)s OR away_team_name = %(team)s)
+            WHERE (
+                    home_team_name IN (SELECT name FROM target_names)
+                 OR away_team_name IN (SELECT name FROM target_names)
+            )
               AND kickoff_time < %(kickoff)s
             ORDER BY kickoff_time DESC LIMIT 1
             """,
-            {"team": team_name, "kickoff": match_kickoff},
+            {"team": team_name, "team_id": team_id, "kickoff": match_kickoff},
         )
         row = cur.fetchone()
     if not row or not row[0]:
@@ -99,7 +116,7 @@ def compute_rest_days(team_name: str, match_kickoff: str, conn: Any) -> int | No
         current = datetime.fromisoformat(match_kickoff.replace("Z", "+00:00"))
         delta = (current - prev_kickoff).days
         return delta
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         return None
 
 
@@ -151,7 +168,11 @@ def compute_data_completeness(
 
 
 def compute_team_form(
-    team_name: str, before_kickoff: str, last_n: int, conn: Any
+    team_name: str,
+    before_kickoff: str,
+    last_n: int,
+    conn: Any,
+    team_id: int | None = None,
 ) -> dict[str, Any]:
     """Compute recent form for a team from historical results.
 
@@ -164,19 +185,36 @@ def compute_team_form(
     with conn.cursor() as cur:
         cur.execute(
             """
+            WITH target_names AS (
+                SELECT %(team)s::varchar AS name
+                UNION
+                SELECT alias_name
+                FROM team_aliases
+                WHERE team_id = %(team_id)s
+                  AND source_name = 'sporttery'
+                  AND confidence = 1.0
+            )
             SELECT
-                m.home_team_name, m.away_team_name,
+                m.home_team_name IN (SELECT name FROM target_names) AS is_home,
                 r.full_home_goals, r.full_away_goals,
                 m.kickoff_time
             FROM official_matches m
             JOIN official_results r ON r.match_id = m.id
-            WHERE (m.home_team_name = %(team)s OR m.away_team_name = %(team)s)
+            WHERE (
+                    m.home_team_name IN (SELECT name FROM target_names)
+                 OR m.away_team_name IN (SELECT name FROM target_names)
+            )
               AND m.kickoff_time < %(kickoff)s
               AND r.full_home_goals IS NOT NULL
             ORDER BY m.kickoff_time DESC
             LIMIT %(limit)s
             """,
-            {"team": team_name, "kickoff": before_kickoff, "limit": last_n},
+            {
+                "team": team_name,
+                "team_id": team_id,
+                "kickoff": before_kickoff,
+                "limit": last_n,
+            },
         )
         rows = cur.fetchall()
 
@@ -184,8 +222,7 @@ def compute_team_form(
     goals_for, goals_against = 0, 0
     form_chars: list[str] = []
 
-    for home, _away, fh, fa, _ in rows:
-        is_home = home == team_name
+    for is_home, fh, fa, _ in rows:
         gf = fh if is_home else fa
         ga = fa if is_home else fh
         goals_for += gf or 0

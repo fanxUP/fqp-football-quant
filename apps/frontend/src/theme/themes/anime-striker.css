@@ -1,0 +1,42 @@
+[data-theme='anime-striker'] {
+  color-scheme: dark;
+  --fqp-bg: #10121c;
+  --fqp-panel: #181c2b;
+  --fqp-panel-2: #21263a;
+  --fqp-red: #5b8cff;
+  --fqp-red-neon: #7da5ff;
+  --fqp-red-dark: #3b5fae;
+  --fqp-accent: #5b8cff;
+  --fqp-accent-strong: #57e5e5;
+  --fqp-accent-muted: rgba(91, 140, 255, 0.12);
+  --fqp-border: rgba(155, 164, 192, 0.2);
+  --fqp-border-light: rgba(155, 164, 192, 0.09);
+  --fqp-text: #f5f7ff;
+  --fqp-text-muted: #9ba4c0;
+  --fqp-success: #5ed6a0;
+  --fqp-warning: #f2bf64;
+  --fqp-info: #57e5e5;
+  --fqp-danger: #ff7185;
+  --fqp-hover-bg: rgba(91, 140, 255, 0.11);
+  --fqp-hover-subtle: rgba(245, 247, 255, 0.03);
+  --fqp-bg-glass: rgba(24, 28, 43, 0.76);
+  --fqp-shadow-red: 0 12px 30px rgba(5, 7, 18, 0.24);
+  --fqp-glow-red: 0 0 20px rgba(91, 140, 255, 0.2);
+  --fqp-chart-1: #5b8cff;
+  --fqp-chart-2: #ff8fb8;
+  --fqp-chart-3: #f2bf64;
+  --fqp-chart-4: #5ed6a0;
+  --fqp-chart-5: #9a72ff;
+  --fqp-chart-6: #57e5e5;
+  --fqp-chart-text: #f5f7ff;
+  --fqp-chart-text-muted: #9ba4c0;
+  --fqp-chart-grid: rgba(155, 164, 192, 0.13);
+  --fqp-chart-tooltip: rgba(16, 18, 28, 0.97);
+  --fqp-chart-tooltip-border: rgba(87, 229, 229, 0.24);
+  --fqp-chart-area-1: rgba(91, 140, 255, 0.14);
+  --fqp-chart-area-2: rgba(255, 143, 184, 0.12);
+}
+
+[data-theme='anime-striker'] body {
+  background: radial-gradient(circle at 82% 2%, rgba(255, 143, 184, 0.1), transparent 24%), radial-gradient(circle at 18% 0%, rgba(91, 140, 255, 0.13), transparent 30%), var(--fqp-bg);
+}

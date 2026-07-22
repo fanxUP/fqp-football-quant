@@ -3,6 +3,9 @@ import type { ReactNode } from 'react';
 import LoadingSpinner from './LoadingSpinner';
 import EmptyState from './EmptyState';
 
+const ROW_ENTER_DELAY_STEP_MS = 30;
+const ROW_ENTER_MAX_DELAY_MS = 300;
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export interface Column<T = any> {
   key: string;
@@ -55,6 +58,11 @@ export default function DataTable<T = any>({
   return (
     <div style={{ overflowX: 'auto' }}>
       <table className="fqp-table">
+        <colgroup>
+          {columns.map((col) => (
+            <col key={col.key} style={{ width: col.width }} />
+          ))}
+        </colgroup>
         <thead>
           <tr>
             {columns.map((col) => (
@@ -68,6 +76,7 @@ export default function DataTable<T = any>({
           {rows.map((row, i) => {
             const key = rowKey ? rowKey(row) : i;
             const isSelected = selectedRowKey != null && String(key) === String(selectedRowKey);
+            const entranceDelay = Math.min(i * ROW_ENTER_DELAY_STEP_MS, ROW_ENTER_MAX_DELAY_MS);
             return (
               <tr
                 key={key}
@@ -78,7 +87,7 @@ export default function DataTable<T = any>({
                   animation: isSelected ? 'none' : undefined,
                   opacity: mounted ? 1 : 0,
                   transform: mounted ? 'translateX(0)' : 'translateX(-12px)',
-                  transition: `opacity 0.25s ease ${i * 30}ms, transform 0.25s ease ${i * 30}ms`,
+                  transition: `opacity 0.25s ease ${entranceDelay}ms, transform 0.25s ease ${entranceDelay}ms`,
                 }}
               >
                 {columns.map((col) => {

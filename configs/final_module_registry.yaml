@@ -1,43 +1,78 @@
 modules:
   - module_id: official_data_core
     name: 官方数据核心
-    category: core
+    category: core_loop
     required: true
     safe_disable: false
-    panels: [today_dashboard, match_center, data_health]
+    depends_on: []
+    panels: [today_dashboard, match_center, event_center, odds_movement]
   - module_id: recommendation_core
     name: 推荐与资金核心
-    category: core
+    category: core_loop
     required: true
     safe_disable: false
-    panels: [recommendation_center, bankroll_panel]
-  - module_id: real_ticket_module
-    name: 实票上传与复盘
-    category: core
+    depends_on: [official_data_core]
+    panels: [deep_analysis]
+  - module_id: betting_center_module
+    name: 投注中心
+    category: core_loop
     required: true
     safe_disable: false
-    panels: [ticket_upload, review_center]
+    depends_on: [recommendation_core]
+    panels: [betting_center]
   - module_id: multidim_feature_module
     name: 多维赛前情报
-    category: prediction_enhancement
+    category: research
     required: false
     safe_disable: true
-    panels: [match_intelligence]
+    depends_on: [official_data_core]
+    panels: [feature_snapshots]
+  - module_id: model_research_module
+    name: 模型研究与回测
+    category: research
+    required: false
+    safe_disable: true
+    depends_on: [official_data_core, multidim_feature_module]
+    panels: [model_lab, backtest_lab]
+  - module_id: upset_intelligence_module
+    name: 冷门研究与决策知识
+    category: research
+    required: false
+    safe_disable: true
+    depends_on: [official_data_core, betting_center_module, model_research_module]
+    panels: [upset_research]
   - module_id: pool_lottery_module
     name: 传统足彩胜负彩任选九
-    category: optional
+    category: strategy_lab
     required: false
     safe_disable: true
+    depends_on: [official_data_core, model_research_module]
     panels: [pool_lottery]
   - module_id: codex_agent_module
     name: Codex多Agent开发维护
     category: maintenance
     required: false
     safe_disable: true
+    depends_on: []
     panels: [codex_console]
-  - module_id: advanced_backtest_module
-    name: 高级回测实验
-    category: research
+  - module_id: module_runtime_core
+    name: 模块运行时
+    category: maintenance
     required: false
     safe_disable: true
-    panels: [backtest_lab]
+    depends_on: []
+    panels: [module_admin]
+  - module_id: local_settings_core
+    name: 本地配置
+    category: maintenance
+    required: false
+    safe_disable: true
+    depends_on: []
+    panels: [settings]
+  - module_id: ops_admin
+    name: 运维后台
+    category: maintenance
+    required: false
+    safe_disable: true
+    depends_on: [official_data_core]
+    panels: [data_health]

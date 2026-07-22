@@ -1,47 +1,48 @@
-"""Worker entrypoint — long-running odds polling loop.
+"""Worker entrypoint — single owner of high-frequency odds dispatch.
 
-Runs in the Worker container. Every 30 minutes, takes an odds snapshot
-for all today's active matches from sporttery.cn.
-
-In the future, this will be replaced by more sophisticated crawler tasks
-(orchestrated by the scheduler + Codex agents).
+The worker checks every minute; the durable capture policy decides whether an
+opening, 30-minute, retry, or exact-kickoff snapshot is actually due.
 """
 
 from __future__ import annotations
 
 import os
 import time
-from datetime import datetime
 
-POLL_INTERVAL_SECONDS = 30 * 60  # 30 minutes
+from scripts.local.worker_heartbeat import write_worker_heartbeat
+
+POLL_INTERVAL_SECONDS = 60
 
 
 def _official_source_enabled() -> bool:
     return os.getenv("OFFICIAL_SOURCE_ENABLED", "true").lower() == "true"
 
 
+def run_once() -> dict:
+    """Publish liveness and dispatch one idempotent odds-capture check."""
+    write_worker_heartbeat()
+    if os.getenv("FQP_ODDS_DISPATCH_OWNER", "scheduler").lower() != "worker":
+        return {"status": "skipped", "reason": "scheduler_owns_odds_dispatch"}
+    if not _official_source_enabled():
+        return {"status": "skipped", "reason": "official_source_disabled"}
+
+    from scripts.jobs.run_official_odds_snapshot import run
+
+    result = run()
+    write_worker_heartbeat()
+    return result
+
+
 def main() -> None:
     print("FQP worker started.")
-    if not _official_source_enabled():
-        print("Official source disabled (OFFICIAL_SOURCE_ENABLED != true). Worker idle.")
-        while True:
-            print(f"worker heartbeat: {datetime.now().isoformat(timespec='seconds')}")
-            time.sleep(3600)
-
-    print(f"Worker odds polling: every {POLL_INTERVAL_SECONDS // 60} minutes.")
+    print("Worker owns minute-level odds dispatch.")
 
     while True:
         try:
-            from scripts.official_crawler import crawl_official_odds_snapshot
-
-            today = datetime.now().strftime("%Y-%m-%d")
-            print(
-                f"\n[worker] polling odds for {today} at {datetime.now().isoformat(timespec='seconds')}"
-            )
-            result = crawl_official_odds_snapshot(today)
-            print(f"[worker] odds snapshot result: {result}")
+            result = run_once()
+            print(f"[worker] odds dispatch result: {result}")
         except Exception as e:
-            print(f"[worker] odds snapshot error: {e}")
+            print(f"[worker] odds dispatch error: {e}")
 
         time.sleep(POLL_INTERVAL_SECONDS)
 

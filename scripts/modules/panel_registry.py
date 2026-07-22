@@ -31,7 +31,7 @@ class PanelRegistry:
 
 
 if __name__ == "__main__":
-    registry = PanelRegistry("configs/panel_registry.yaml")
+    registry = PanelRegistry("configs/final_panel_registry.yaml")
     registry.load()
     panels = registry.visible_panels(
         {"dashboard.view", "official_data.view.schedule"}, {"dashboard_enabled"}

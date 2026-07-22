@@ -1,13 +1,12 @@
 /** Typed fetch wrapper for all FQP backend APIs. */
 
 import { ApiError } from './types';
+import type { ModuleCategory, SidebarPanel } from '../panelRegistry';
 import type {
   Team,
   FeatureSnapshot,
   Prediction,
   SimulationTicket,
-  RealTicket,
-  RealTicketItem,
   Settlement,
   SettlementSummary,
   DailyReview,
@@ -21,11 +20,43 @@ import type {
   BacktestResult,
 } from './types';
 
+export interface RuntimeModule {
+  moduleCode: string;
+  moduleName: string;
+  category: ModuleCategory;
+  required: boolean;
+  safeDisable: boolean;
+  status: 'active' | 'inactive' | 'coming_soon' | 'disabled';
+  disabled: boolean;
+  dependsOn: string[];
+  panels: string[];
+}
+
 // ---- Base request ----
 
 const TIMEOUT_MS = 15_000;
+const inFlightGetRequests = new Map<string, Promise<unknown>>();
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+async function readErrorMessage(res: Response): Promise<string> {
+  const body = await res.text().catch(() => '');
+  if (!body) return `HTTP ${res.status}`;
+
+  try {
+    const payload = JSON.parse(body) as { detail?: unknown; message?: unknown };
+    const message = payload.detail ?? payload.message;
+    if (typeof message === 'string' && message.trim()) return message;
+    if (Array.isArray(message)) {
+      return message
+        .map((item) => (typeof item === 'string' ? item : JSON.stringify(item)))
+        .join('；');
+    }
+  } catch {
+    // Non-JSON upstream errors remain readable as plain text.
+  }
+  return body;
+}
+
+async function performRequest<T>(path: string, init?: RequestInit): Promise<T> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
@@ -39,8 +70,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       },
     });
     if (!res.ok) {
-      const body = await res.text().catch(() => '');
-      throw new ApiError(res.status, body || `HTTP ${res.status}`);
+      throw new ApiError(res.status, await readErrorMessage(res));
     }
     return res.json();
   } catch (e) {
@@ -49,6 +79,47 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       throw new ApiError(0, '请求超时，请检查后端服务是否正常运行');
     }
     throw new ApiError(0, (e as Error).message || '网络请求失败');
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const method = (init?.method ?? 'GET').toUpperCase();
+  if (method !== 'GET') return performRequest<T>(path, init);
+
+  const existing = inFlightGetRequests.get(path) as Promise<T> | undefined;
+  if (existing) return existing;
+
+  const pending = performRequest<T>(path, init).finally(() => {
+    if (inFlightGetRequests.get(path) === pending) {
+      inFlightGetRequests.delete(path);
+    }
+  });
+  inFlightGetRequests.set(path, pending);
+  return pending;
+}
+
+async function uploadRequest<T>(path: string, formData: FormData): Promise<T> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 30_000);
+
+  try {
+    const res = await fetch(path, {
+      method: 'POST',
+      body: formData,
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      throw new ApiError(res.status, await readErrorMessage(res));
+    }
+    return res.json();
+  } catch (e) {
+    if (e instanceof ApiError) throw e;
+    if ((e as Error).name === 'AbortError') {
+      throw new ApiError(0, 'OCR 处理超时，请稍后重试');
+    }
+    throw new ApiError(0, (e as Error).message || '上传失败');
   } finally {
     clearTimeout(timer);
   }
@@ -67,19 +138,86 @@ export const api = {
   // Health
   health: () => request<{ status: string; service?: string }>('/health'),
 
+  // Runtime registry
+  ui: {
+    modules: () =>
+      request<{ modules: RuntimeModule[]; categories: ModuleCategory[]; total: number }>(
+        '/api/v1/modules',
+      ),
+    panels: (params?: { disabledModules?: string[] }) => {
+      const search = new URLSearchParams();
+      for (const moduleCode of params?.disabledModules ?? []) {
+        search.append('disabledModules', moduleCode);
+      }
+      const query = search.toString();
+      return request<{ panels: SidebarPanel[]; total: number }>(
+        `/api/v1/ui/panels${query ? `?${query}` : ''}`,
+      );
+    },
+    setModuleStatus: (moduleCode: string, payload: { disabled: boolean }) =>
+      request<{ module: RuntimeModule; disabledModules: string[] }>(
+        `/api/v1/modules/${encodeURIComponent(moduleCode)}/status`,
+        {
+          method: 'PATCH',
+          body: JSON.stringify(payload),
+        },
+      ),
+  },
+
   // Teams
   teams: () => request<{ teams: Team[]; total: number }>('/api/teams'),
+
+  // Cold-result research
+  upsets: {
+    summary: (params?: { start_date?: string; end_date?: string }) =>
+      request<import('../features/upsets/types').UpsetSummary>(
+        `/api/upsets/summary${qs({ start_date: params?.start_date, end_date: params?.end_date })}`,
+      ),
+    list: (params?: import('../features/upsets/types').UpsetFilters & { limit?: number; offset?: number }) =>
+      request<{ items: import('../features/upsets/types').UpsetListItem[]; total: number; limit: number; offset: number }>(
+        `/api/upsets${qs({
+          start_date: params?.start_date,
+          end_date: params?.end_date,
+          league_name: params?.league_name,
+          level: params?.level,
+          play_type: params?.play_type,
+          user_involved: params?.user_involved === undefined ? undefined : String(params.user_involved),
+          agent_involved: params?.agent_involved === undefined ? undefined : String(params.agent_involved),
+          review_status: params?.review_status,
+          limit: params?.limit ?? 50,
+          offset: params?.offset ?? 0,
+        })}`,
+      ),
+    leagues: (params?: { start_date?: string; end_date?: string }) =>
+      request<{ items: import('../features/upsets/types').UpsetLeagueOption[] }>(
+        `/api/upsets/leagues${qs({ start_date: params?.start_date, end_date: params?.end_date })}`,
+      ),
+    detail: (eventId: number) =>
+      request<import('../features/upsets/types').UpsetDetail>(`/api/upsets/${eventId}`),
+    reports: (limit = 12) =>
+      request<{ items: import('../features/upsets/types').UpsetReport[] }>(
+        `/api/upsets/reports?limit=${limit}`,
+      ),
+  },
 
   // Matches
   matches: {
     today: () =>
       request<{ matches: import('./types').TodayMatch[]; total: number }>('/api/matches/today'),
+    active: (params?: { limit?: number }) =>
+      request<{ matches: import('./types').TodayMatch[]; total: number }>(
+        `/api/matches/active${qs({ limit: params?.limit ?? 500 })}`,
+      ),
     detail: (matchId: number) =>
       request<import('./types').MatchDetail>(`/api/matches/${matchId}/detail`),
   },
 
   // Events (tournament center)
   events: {
+    catalog: (params?: { source?: 'official'; league_name?: string; start_date?: string; end_date?: string; limit?: number; offset?: number }) =>
+      request<{ source: string; matches: import('./types').EventCatalogMatch[]; total: number }>(
+        `/api/events/catalog${qs({ source: params?.source ?? 'official', league_name: params?.league_name, start_date: params?.start_date, end_date: params?.end_date, limit: params?.limit ?? 50, offset: params?.offset ?? 0 })}`,
+      ),
     list: () =>
       request<{ events: import('./types').EventSummary[]; total: number }>('/api/events'),
     matches: (leagueName: string) =>
@@ -88,6 +226,24 @@ export const api = {
       ),
     allMatches: () =>
       request<{ matches: import('./types').EventMatch[]; total: number }>('/api/events/all/matches'),
+  },
+
+  // Official Sporttery source tracking. Third-party sources are not returned here.
+  official: {
+    oddsIndex: () =>
+      request<import('./types').OfficialOddsIndex>('/api/official/odds-index'),
+    oddsHistoryMatches: (params?: { search?: string; limit?: number }) =>
+      request<{ matches: import('./types').OfficialOddsHistoryMatch[]; total: number }>(
+        `/api/official/odds-history/matches${qs({ search: params?.search, limit: params?.limit ?? 200 })}`,
+      ),
+    collectionStatus: (params?: { business_date?: string; status?: string; limit?: number }) =>
+      request<{ items: import('./types').OfficialCollectionStatus[]; total: number }>(
+        `/api/official/collection-status${qs({
+          business_date: params?.business_date,
+          status: params?.status,
+          limit: params?.limit ?? 100,
+        })}`,
+      ),
   },
 
   // Feature snapshots
@@ -104,41 +260,15 @@ export const api = {
 
   // Live recommendations
   liveRecommendations: (params?: { limit?: number; min_ev?: number; min_confidence?: number }) =>
-    request<{ status: string; recommendations: import('./types').LiveRecommendation[]; total: number }>(
+    request<{ status: string; recommendations: import('./types').LiveRecommendation[]; total: number; sales_window?: import('./types').SportterySalesWindow }>(
       `/api/recommendations/live${qs({ limit: params?.limit, min_ev: params?.min_ev, min_confidence: params?.min_confidence })}`,
     ),
 
-  // Simulation tickets
+  // Recommendation tickets
   tickets: (params?: { status?: string; limit?: number }) =>
     request<{ tickets: SimulationTicket[]; total: number }>(
       `/api/tickets${qs({ status: params?.status, limit: params?.limit ?? 50 })}`,
     ),
-
-  // Real tickets
-  realTickets: {
-    list: (params?: { status?: string; limit?: number }) =>
-      request<{ tickets: RealTicket[]; total: number }>(
-        `/api/real-tickets${qs({ status: params?.status, limit: params?.limit ?? 50 })}`,
-      ),
-
-    get: (id: number) =>
-      request<{ ticket: RealTicket; items: RealTicketItem[] }>(`/api/real-tickets/${id}`),
-
-    create: (body: { ticket: Record<string, unknown>; items: Record<string, unknown>[] }) =>
-      request<{ status: string; ticket_id: number; item_count: number }>('/api/real-tickets', {
-        method: 'POST',
-        body: JSON.stringify(body),
-      }),
-
-    update: (id: number, body: Record<string, unknown>) =>
-      request<{ status: string }>(`/api/real-tickets/${id}`, {
-        method: 'PUT',
-        body: JSON.stringify(body),
-      }),
-
-    delete: (id: number) =>
-      request<{ status: string }>(`/api/real-tickets/${id}`, { method: 'DELETE' }),
-  },
 
   // Settlements
   settlements: {
@@ -231,6 +361,11 @@ export const api = {
     evaluationSummary: () =>
       request<import('./types').EvaluationSummary>('/api/analysis/evaluation/summary'),
 
+    performanceHistory: (params?: { window?: number; days?: number }) =>
+      request<import('./types').ModelPerformanceHistory>(
+        `/api/analysis/evaluation/history${qs({ window: params?.window, days: params?.days })}`,
+      ),
+
     calibration: (params?: { model_name?: string; n_bins?: number }) =>
       request<import('./types').CalibrationData>(
         `/api/analysis/evaluation/calibration${qs({ model_name: params?.model_name, n_bins: params?.n_bins })}`,
@@ -263,10 +398,24 @@ export const api = {
       ),
   },
 
-  // Simulator (体彩模拟投注)
+  // Betting terminal
+  bettingTerminal: {
+    matches: (params?: { date?: string; league_name?: string; limit?: number }) =>
+      request<{ matches: import('./types').BettingMatch[]; total: number; sales_window?: import('./types').SportterySalesWindow }>(
+        `/api/simulator/matches${qs({ date: params?.date, league_name: params?.league_name, limit: params?.limit ?? 50 })}`,
+      ),
+
+    calculate: (body: { items: import('./types').CalculateItem[]; pass_type: string; multiple: number }) =>
+      request<import('./types').CalculationResult>('/api/simulator/calculate', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
+  },
+
+  // Legacy endpoints kept for historical ticket detail and existing data screens.
   simulator: {
     matches: (params?: { date?: string; league_name?: string; limit?: number }) =>
-      request<{ matches: import('./types').SimulatorMatch[]; total: number }>(
+      request<{ matches: import('./types').BettingMatch[]; total: number; sales_window?: import('./types').SportterySalesWindow }>(
         `/api/simulator/matches${qs({ date: params?.date, league_name: params?.league_name, limit: params?.limit ?? 50 })}`,
       ),
 
@@ -314,10 +463,62 @@ export const api = {
     },
   },
 
+  // Unified betting center
+  betting: {
+    tickets: (params?: { owner?: 'me' | 'agent'; date?: string; status?: string; limit?: number }) =>
+      request<{
+        tickets: import('./types').BettingTicket[];
+        total: number;
+        summary: import('./types').BettingTicketSummary;
+      }>(
+        `/api/v1/betting/tickets${qs({ owner: params?.owner, date: params?.date, status: params?.status, limit: params?.limit ?? 100 })}`,
+      ),
+    results: (params?: { limit?: number }) =>
+      request<import('./types').BettingResults>(
+        `/api/v1/betting/results${qs({ limit: params?.limit ?? 300 })}`,
+      ),
+    deleteTicket: (ticketId: number) =>
+      request<{ status: 'ok' | 'error' }>(`/api/v1/real-tickets/${ticketId}`, {
+        method: 'DELETE',
+      }),
+    createTicket: (body: {
+      source: 'simulator' | 'real-user' | 'real-agent';
+      play_type: string;
+      pass_type: string;
+      multiple: number;
+      items: import('./types').CalculateItem[];
+      notes?: string;
+      ticket_no?: string;
+      store_code?: string;
+      ticket_image_url?: string;
+      ocr_status?: string;
+    }) =>
+      request<{
+        status: string;
+        ticketUid: string;
+        legacyId: number;
+        owner: 'me' | 'agent';
+        kind: 'real' | 'simulation';
+        source: string;
+        stake: number;
+        maxPrize: number;
+        betCount: number;
+        route: string;
+      }>('/api/v1/betting/tickets', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
+    ocrUpload: (file: File) => {
+      const formData = new FormData();
+      formData.append('file', file);
+      return uploadRequest<import('./types').TicketOcrResult>('/api/tickets/ocr', formData);
+    },
+  },
+
   // Pool lottery (Phase 10)
   pool: {
     analyze: (params?: { budget?: number; strategy?: string }) =>
-      request<Record<string, unknown>>(
+      request<import('./types').PoolAnalysis>(
         `/api/pool/analyze${qs({ budget: params?.budget, strategy: params?.strategy })}`,
       ),
 
@@ -345,6 +546,11 @@ export const api = {
 
     summary: () =>
       request<import('./types').CompetitionSummary>('/api/competition/summary'),
+
+    decisions: (limit = 14) =>
+      request<{ decisions: import('./types').AgentDailyDecision[]; total: number }>(
+        `/api/competition/decisions${qs({ limit })}`,
+      ),
 
     currentTickets: () =>
       request<{
@@ -379,6 +585,11 @@ export const api = {
     oddsMovement: (params: { match_id: number; play_type?: string; option_code?: string }) =>
       request<import('./types').DashboardResponse<import('./types').DashboardOddsPoint>>(
         `/api/dashboard/odds/movement${qs({ match_id: params.match_id, play_type: params?.play_type, option_code: params?.option_code })}`,
+      ),
+
+    oddsMovements: (params: { scope: 'current' | 'history'; business_date?: string; play_type: string; resolution: 'raw' | 'hour'; limit?: number }) =>
+      request<import('./types').OddsMovementsResponse>(
+        `/api/dashboard/odds/movements${qs({ scope: params.scope, business_date: params.business_date, play_type: params.play_type, resolution: params.resolution, limit: params.limit ?? 200 })}`,
       ),
 
     modelPerformance: (params?: { model_name?: string }) =>

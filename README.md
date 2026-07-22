@@ -1,6 +1,8 @@
 # FQP 本地个人足球量化系统项目包
 
-这是一个从正式版整理出的全新项目包，不再使用任何版本编号作为项目身份。
+当前发布版本为 `1.1.1`，版本事实来源为根目录 `VERSION`；项目身份仍统一使用 FQP，不再以历史目录名中的版本编号区分项目。
+
+当前唯一开发与运行工作区是 `/Users/fan/Downloads/足球量化`。旧 iCloud 目录只保留为待删除历史副本，不得再用于启动服务或修改代码。
 
 ## 项目定位
 
@@ -31,10 +33,37 @@ FQP 是一套面向个人本地部署的足球竞彩/足彩量化研究与长期
 - `configs/`：本地部署、模块注册、面板注册、Agent、任务调度、红黑 UI 主题配置。
 - `scripts/`：采集、模型、特征、Agent、模块加载、部署辅助脚本骨架。
 - `apps/`：前端主题与应用骨架。
-- `ops/`：Docker、本地运行、备份恢复、Codex 环境说明。
+- `ops/`：本机运行、备份恢复、Codex 环境说明。
 - `tests/`：最终逻辑一致性与验收清单。
 - `personal_run/`：个人长期运行手册。
 
 ## 开发建议
 
 先按 `docs/51_最终开发阶段计划与验收清单.md` 拆阶段执行，再根据 `configs/final_module_registry.yaml` 和 `configs/final_panel_registry.yaml` 控制模块与功能面板上线顺序。
+
+## 运行方式：全本机原生运行
+
+前端、后端、Worker、Scheduler、PostgreSQL 和 Redis 全部在 macOS 本机运行，不需要 Docker Desktop。源码以 Git 提交为准，数据库以本机 `127.0.0.1:5432/fqp` 为唯一事实源。
+
+```bash
+cp .env.local.example .env.local
+./ops/local/setup_local_latest_macos.sh
+./ops/local/manage_local_stack.sh start
+```
+
+- 前端：http://127.0.0.1:8066
+- 后端：http://127.0.0.1:8006
+- PostgreSQL：`127.0.0.1:5432/fqp`
+- Redis：`127.0.0.1:6379`
+- 本机运行统一使用 Python 3.14 和 Node.js。
+- `.env.local` 只保存在本机，不提交 GitHub。
+
+查看、重启与停止：
+
+```bash
+./ops/local/manage_local_stack.sh status
+./ops/local/manage_local_stack.sh restart
+./ops/local/manage_local_stack.sh stop
+```
+
+唯一工作区、Git 同步和本机运行规则见 `docs/54_本机运行与DockerDesktop弃用说明.md`；日常命令见 `ops/local/README_LOCAL_RUNTIME.md`。

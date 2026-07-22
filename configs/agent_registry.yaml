@@ -38,7 +38,7 @@ agents:
   - name: devops_agent
     type: devops
     permission_level: P3_controlled
-    description: Docker、部署、备份、恢复、监控、告警。
+    description: 本机部署、备份、恢复、监控、告警；不使用 Docker Desktop。
   - name: doc_agent
     type: docs
     permission_level: P1

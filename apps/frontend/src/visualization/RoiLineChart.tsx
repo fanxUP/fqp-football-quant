@@ -1,9 +1,11 @@
 /** Cumulative ROI dual-line chart (Agent vs User). */
 
 import { useMemo } from 'react';
+import type { EChartsOption } from 'echarts';
 import ChartCard from '../shared/components/ChartCard';
 import { applyChartTheme, CHART_COLORS } from './chartTheme';
 import type { RoiPoint } from './chartTypes';
+import { useTheme } from '../app/ThemeContext';
 
 interface RoiLineChartProps {
   data: RoiPoint[];
@@ -23,9 +25,10 @@ export default function RoiLineChart({
   loading,
   empty,
   emptyReason,
-  agentLabel = 'AI 虚拟池',
-  userLabel = '我的实票池',
+  agentLabel = 'Agent 资金池',
+  userLabel = '我的票池',
 }: RoiLineChartProps) {
+  const { theme } = useTheme();
   const option = useMemo(() => {
     if (!data.length) return null;
     const dates = data.map((d) => d.date);
@@ -69,8 +72,8 @@ export default function RoiLineChart({
           areaStyle: { color: CHART_COLORS.areaUser },
         },
       ],
-    } as echarts.EChartsOption);
-  }, [data, agentLabel, userLabel]);
+    } as EChartsOption);
+  }, [data, agentLabel, theme, userLabel]);
 
   return (
     <ChartCard

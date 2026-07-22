@@ -1,0 +1,44 @@
+[data-theme='quantum-forecast'] {
+  color-scheme: dark;
+  --fqp-bg: #070817;
+  --fqp-panel: #101329;
+  --fqp-panel-2: #171b35;
+  --fqp-red: #3d7eff;
+  --fqp-red-neon: #6698ff;
+  --fqp-red-dark: #2854ad;
+  --fqp-accent: #3d7eff;
+  --fqp-accent-strong: #8b5cf6;
+  --fqp-accent-muted: rgba(61, 126, 255, 0.13);
+  --fqp-border: rgba(139, 145, 177, 0.18);
+  --fqp-border-light: rgba(139, 145, 177, 0.08);
+  --fqp-text: #f2f5ff;
+  --fqp-text-muted: #8891b1;
+  --fqp-success: #37d39a;
+  --fqp-warning: #e5b74c;
+  --fqp-info: #33d6c5;
+  --fqp-danger: #ff6475;
+  --fqp-hover-bg: rgba(61, 126, 255, 0.11);
+  --fqp-hover-subtle: rgba(242, 245, 255, 0.028);
+  --fqp-bg-glass: rgba(242, 245, 255, 0.02);
+  --fqp-shadow-red: 0 12px 32px rgba(0, 0, 0, 0.23);
+  --fqp-glow-red: 0 0 20px rgba(61, 126, 255, 0.26);
+  --fqp-chart-1: #3d7eff;
+  --fqp-chart-2: #8b5cf6;
+  --fqp-chart-3: #e5b74c;
+  --fqp-chart-4: #37d39a;
+  --fqp-chart-5: #c275ff;
+  --fqp-chart-6: #33d6c5;
+  --fqp-chart-text: #f2f5ff;
+  --fqp-chart-text-muted: #8891b1;
+  --fqp-chart-grid: rgba(139, 145, 177, 0.13);
+  --fqp-chart-tooltip: rgba(7, 8, 23, 0.97);
+  --fqp-chart-tooltip-border: rgba(139, 92, 246, 0.28);
+  --fqp-chart-area-1: rgba(61, 126, 255, 0.15);
+  --fqp-chart-area-2: rgba(139, 92, 246, 0.13);
+}
+
+[data-theme='quantum-forecast'] body {
+  background-image: linear-gradient(rgba(61, 126, 255, 0.025) 1px, transparent 1px), linear-gradient(90deg, rgba(61, 126, 255, 0.025) 1px, transparent 1px), radial-gradient(circle at 75% 0%, rgba(139, 92, 246, 0.13), transparent 32%);
+  background-color: var(--fqp-bg);
+  background-size: 48px 48px, 48px 48px, auto;
+}

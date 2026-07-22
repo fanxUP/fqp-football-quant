@@ -1,35 +1,16 @@
-import { createRouter, useRouter } from './core/router';
+import { createRouter, navigate as routerNavigate, useRouter } from './core/router';
 import { ThemeProvider } from './app/ThemeContext';
 import { ToastProvider } from './shared/components/Toast';
 import Layout from './app/layout/Layout';
 import LoadingSpinner from './shared/components/LoadingSpinner';
-import { useLocalSettings } from './shared/hooks/useLocalSettings';
 
 // Lazy-load all pages
 import { lazy, Suspense, useEffect } from 'react';
 
-// Wire animations setting to CSS
-function AnimationsSettingBridge() {
-  const { settings } = useLocalSettings();
-  useEffect(() => {
-    if (!settings.animationsEnabled) {
-      document.documentElement.setAttribute('data-animations', 'disabled');
-    } else {
-      document.documentElement.removeAttribute('data-animations');
-    }
-  }, [settings.animationsEnabled]);
-  return null;
-}
-
 const DashboardPage = lazy(() => import('./pages/DashboardPage'));
 const MatchesPage = lazy(() => import('./pages/MatchesPage'));
 const MatchDetailPage = lazy(() => import('./pages/MatchDetailPage'));
-const RecommendationsPage = lazy(() => import('./pages/RecommendationsPage'));
 const RecommendationDetailPage = lazy(() => import('./pages/RecommendationDetailPage'));
-const TicketsPage = lazy(() => import('./pages/TicketsPage'));
-const TicketNewPage = lazy(() => import('./pages/TicketNewPage'));
-const TicketDetailPage = lazy(() => import('./pages/TicketDetailPage'));
-const ReviewsPage = lazy(() => import('./pages/ReviewsPage'));
 const ModelsPage = lazy(() => import('./pages/ModelsPage'));
 const DataHealthPage = lazy(() => import('./pages/DataHealthPage'));
 const EventsPage = lazy(() => import('./pages/EventsPage'));
@@ -39,25 +20,29 @@ const AgentPanel = lazy(() => import('./pages/AgentPanel'));
 const BacktestPage = lazy(() => import('./pages/BacktestPage'));
 const PoolPage = lazy(() => import('./pages/PoolPage'));
 const AnalysisPage = lazy(() => import('./pages/AnalysisPage'));
-const SimulatorPage = lazy(() => import('./pages/SimulatorPage'));
-const SimulatorHistoryPage = lazy(() => import('./pages/SimulatorHistoryPage'));
-const SimulatorBankrollPage = lazy(() => import('./pages/SimulatorBankrollPage'));
-const SimulatorHistoryDetailPage = lazy(() => import('./pages/SimulatorHistoryDetailPage'));
-const CompetitionPage = lazy(() => import('./pages/CompetitionPage'));
-const CompetitionHistoryPage = lazy(() => import('./pages/CompetitionHistoryPage'));
+const BettingCenterPage = lazy(() => import('./pages/BettingCenterPage'));
 const OddsMovementPage = lazy(() => import('./pages/OddsMovementPage'));
+const UpsetsPage = lazy(() => import('./pages/UpsetsPage'));
+
+function RedirectTo({ path, text = '正在进入页面...' }: { path: string; text?: string }) {
+  useEffect(() => {
+    routerNavigate(path);
+  }, [path]);
+  return <LoadingSpinner text={text} size="lg" />;
+}
 
 // ---- Route table ----
 const routes = [
   { path: '/', render: () => <DashboardPage /> },
   { path: '/matches', render: () => <MatchesPage /> },
   { path: '/matches/:id', render: (p: Record<string, string>) => <MatchDetailPage matchId={Number(p.id)} /> },
-  { path: '/recommendations', render: () => <RecommendationsPage /> },
+  { path: '/recommendations', render: () => <RedirectTo path="/analysis?section=pre_match" /> },
   { path: '/recommendations/:id', render: (p: Record<string, string>) => <RecommendationDetailPage ticketId={Number(p.id)} /> },
-  { path: '/tickets', render: () => <TicketsPage /> },
-  { path: '/tickets/new', render: () => <TicketNewPage /> },
-  { path: '/tickets/:id', render: (p: Record<string, string>) => <TicketDetailPage ticketId={Number(p.id)} /> },
-  { path: '/reviews', render: () => <ReviewsPage /> },
+  { path: '/betting', render: () => <BettingCenterPage /> },
+  { path: '/tickets', render: () => <BettingCenterPage initialTab="tickets" /> },
+  { path: '/tickets/new', render: () => <RedirectTo path="/betting?tab=bet-slip" /> },
+  { path: '/tickets/:id', render: () => <RedirectTo path="/betting?tab=tickets" /> },
+  { path: '/reviews', render: () => <RedirectTo path="/analysis?section=reviews" /> },
   { path: '/models', render: () => <ModelsPage /> },
   { path: '/data-health', render: () => <DataHealthPage /> },
   { path: '/events', render: () => <EventsPage /> },
@@ -67,13 +52,15 @@ const routes = [
   { path: '/backtest', render: () => <BacktestPage /> },
   { path: '/pool', render: () => <PoolPage /> },
   { path: '/analysis', render: () => <AnalysisPage /> },
-  { path: '/simulator', render: () => <SimulatorPage /> },
-  { path: '/simulator/history/:id', render: (p: Record<string, string>) => <SimulatorHistoryDetailPage ticketId={Number(p.id)} /> },
-  { path: '/simulator/history', render: () => <SimulatorHistoryPage /> },
-  { path: '/simulator/bankroll', render: () => <SimulatorBankrollPage /> },
-  { path: '/competition', render: () => <CompetitionPage /> },
-  { path: '/competition/history', render: () => <CompetitionHistoryPage /> },
+  { path: '/feature-snapshots', render: () => <AnalysisPage standaloneSection="features" /> },
+  { path: '/simulator', render: () => <RedirectTo path="/betting?tab=bet-slip" text="正在进入投注中心..." /> },
+  { path: '/simulator/history/:id', render: () => <RedirectTo path="/betting?tab=tickets" text="正在进入投注中心..." /> },
+  { path: '/simulator/history', render: () => <RedirectTo path="/betting?tab=tickets" text="正在进入投注中心..." /> },
+  { path: '/simulator/bankroll', render: () => <RedirectTo path="/betting?tab=competition" text="正在进入投注中心..." /> },
+  { path: '/competition', render: () => <BettingCenterPage initialTab="competition" /> },
+  { path: '/competition/history', render: () => <RedirectTo path="/betting?tab=competition" text="正在进入投注中心..." /> },
   { path: '/odds', render: () => <OddsMovementPage /> },
+  { path: '/upsets', render: () => <UpsetsPage /> },
 ];
 
 createRouter(routes);
@@ -120,7 +107,6 @@ export default function App() {
   return (
     <ThemeProvider>
       <ToastProvider>
-        <AnimationsSettingBridge />
         <Layout>
           <PageOutlet />
         </Layout>

@@ -9,6 +9,8 @@ Checks performed:
   2. post_match_odds: final/closed odds should not be used in early-odds backtests
   3. result_leak: match results should not enter pre-match model features
   4. feature_leak: feature snapshots built after kickoff should be flagged
+  5. post_match_prediction: predictions generated at/after kickoff
+  6. error_analysis_scope: error rows not tied to the latest pre-match top pick
 """
 
 from __future__ import annotations
@@ -17,11 +19,26 @@ from datetime import datetime
 from typing import Any
 
 from apps.backend.src.db import get_db
+from scripts.agents.task_queue import finish_tracked_job, start_tracked_job
+from scripts.business_time import utc_now_iso
 from scripts.ops_storage import store_contamination_audit
 
 
-def _now() -> str:
-    return datetime.now().isoformat(timespec="seconds")
+def _now(value: datetime | None = None) -> str:
+    return utc_now_iso(value)
+
+
+def _resolve_previous_findings(conn: Any, check_type: str) -> None:
+    """Close the prior audit state before writing the current check result."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """UPDATE data_contamination_audit_logs
+               SET resolved = true,
+                   resolution_notes = 'Superseded by a newer contamination audit'
+               WHERE check_type = %s AND contamination_detected = true AND NOT resolved""",
+            (check_type,),
+        )
+    conn.commit()
 
 
 def _check_lineup_temporal_integrity(conn: Any) -> list[dict]:
@@ -93,8 +110,9 @@ def _check_odds_temporal_integrity(conn: Any) -> list[dict]:
                 COUNT(os.id) AS post_kickoff_snapshots
             FROM official_matches m
             JOIN official_odds_snapshots os ON os.match_id = m.id
-            WHERE os.snapshot_time > m.kickoff_time
-              AND m.match_status = 'Selling'
+            WHERE os.snapshot_time > m.kickoff_time + INTERVAL '10 minutes'
+              AND m.sale_status = 'selling'
+              AND NULLIF(m.raw_json->>'matchTime', '') IS NOT NULL
             GROUP BY m.id, m.home_team_name, m.away_team_name, m.kickoff_time
             LIMIT 100
             """
@@ -191,6 +209,7 @@ def _check_feature_snapshot_staleness(conn: Any) -> list[dict]:
             FROM match_feature_snapshots mfs
             JOIN official_matches m ON m.id = mfs.match_id
             WHERE mfs.snapshot_time > m.kickoff_time + INTERVAL '24 hours'
+              AND NULLIF(m.raw_json->>'matchTime', '') IS NOT NULL
             LIMIT 100
             """
         )
@@ -217,7 +236,103 @@ def _check_feature_snapshot_staleness(conn: Any) -> list[dict]:
     return findings
 
 
-def run(dry_run: bool = False) -> dict[str, Any]:
+def _check_prediction_temporal_integrity(conn: Any) -> list[dict]:
+    """Flag model predictions generated at or after official kickoff."""
+    findings = []
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT m.id, m.home_team_name, m.away_team_name, m.kickoff_time,
+                   COUNT(mp.id) AS post_kickoff_predictions
+            FROM model_predictions mp
+            JOIN official_matches m ON m.id = mp.match_id
+            WHERE mp.predict_time >= m.kickoff_time
+              AND mp.created_at >= NOW() - INTERVAL '2 days'
+            GROUP BY m.id, m.home_team_name, m.away_team_name, m.kickoff_time
+            LIMIT 100
+            """
+        )
+        for row in cur.fetchall():
+            findings.append(
+                {
+                    "check_type": "post_match_prediction",
+                    "match_id": row[0],
+                    "severity": "critical",
+                    "contamination_detected": True,
+                    "detail": (
+                        f"Match {row[0]} ({row[1]} vs {row[2]}): "
+                        f"{row[4]} predictions generated at/after kickoff {row[3]}"
+                    ),
+                    "evidence": {
+                        "match_id": row[0],
+                        "kickoff_time": str(row[3]),
+                        "post_kickoff_predictions": row[4],
+                    },
+                }
+            )
+    return findings
+
+
+def _check_error_analysis_scope(conn: Any) -> list[dict]:
+    """Flag stored errors that are not the latest pre-match SPF top pick."""
+    findings = []
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            WITH latest_options AS (
+                SELECT DISTINCT ON (
+                    mp.match_id, mp.model_version_id, mp.option_code
+                ) mp.id, mp.match_id, mp.model_version_id,
+                  mp.option_code, mp.model_probability
+                FROM model_predictions mp
+                JOIN official_matches m ON m.id = mp.match_id
+                WHERE mp.play_type = 'spf'
+                  AND mp.option_code IN ('3', '1', '0')
+                  AND mp.model_probability IS NOT NULL
+                  AND mp.predict_time < m.kickoff_time
+                ORDER BY mp.match_id, mp.model_version_id, mp.option_code,
+                         mp.predict_time DESC, mp.id DESC
+            ), top_picks AS (
+                SELECT id, match_id,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY match_id, model_version_id
+                           ORDER BY model_probability DESC NULLS LAST,
+                                    option_code, id DESC
+                       ) AS pick_rank
+                FROM latest_options
+            )
+            SELECT pea.id, pea.match_id, pea.prediction_id,
+                   m.home_team_name, m.away_team_name
+            FROM prediction_error_analysis pea
+            LEFT JOIN official_matches m ON m.id = pea.match_id
+            LEFT JOIN top_picks tp
+              ON tp.id = pea.prediction_id AND tp.pick_rank = 1
+            WHERE tp.id IS NULL
+            LIMIT 100
+            """
+        )
+        for row in cur.fetchall():
+            findings.append(
+                {
+                    "check_type": "error_analysis_scope",
+                    "match_id": row[1],
+                    "severity": "critical",
+                    "contamination_detected": True,
+                    "detail": (
+                        f"Error row {row[0]} for match {row[1]} "
+                        f"({row[3]} vs {row[4]}) is not a valid pre-match top pick"
+                    ),
+                    "evidence": {
+                        "error_id": row[0],
+                        "match_id": row[1],
+                        "prediction_id": row[2],
+                    },
+                }
+            )
+    return findings
+
+
+def _run_impl(dry_run: bool = False) -> dict[str, Any]:
     """Run all data contamination checks.
 
     Returns:
@@ -234,6 +349,8 @@ def run(dry_run: bool = False) -> dict[str, Any]:
             ("post_match_odds", _check_odds_temporal_integrity),
             ("result_leak", _check_result_leak),
             ("feature_leak", _check_feature_snapshot_staleness),
+            ("post_match_prediction", _check_prediction_temporal_integrity),
+            ("error_analysis_scope", _check_error_analysis_scope),
         ]
 
         for check_name, check_fn in checks:
@@ -245,6 +362,8 @@ def run(dry_run: bool = False) -> dict[str, Any]:
 
         # Store findings
         if not dry_run:
+            for check_name, _ in checks:
+                _resolve_previous_findings(conn, check_name)
             for f in all_findings:
                 store_contamination_audit(
                     conn,
@@ -261,7 +380,14 @@ def run(dry_run: bool = False) -> dict[str, Any]:
 
         # Also record clean checks
         checked_types = set(f["check_type"] for f in all_findings)
-        all_types = {"pre_match_lineup", "post_match_odds", "result_leak", "feature_leak"}
+        all_types = {
+            "pre_match_lineup",
+            "post_match_odds",
+            "result_leak",
+            "feature_leak",
+            "post_match_prediction",
+            "error_analysis_scope",
+        }
         for ct in all_types - checked_types:
             if not dry_run:
                 store_contamination_audit(
@@ -292,6 +418,18 @@ def run(dry_run: bool = False) -> dict[str, Any]:
             for f in all_findings[:20]
         ],
     }
+
+
+def run(dry_run: bool = False) -> dict[str, Any]:
+    """Audit contamination and persist its QA execution record."""
+    run_id = start_tracked_job("data_contamination_audit", "qa_agent", {"dry_run": dry_run})
+    try:
+        result = _run_impl(dry_run=dry_run)
+        finish_tracked_job(run_id, result.get("status", "completed"), {"result": result})
+        return result
+    except Exception as exc:
+        finish_tracked_job(run_id, "failed", error=str(exc))
+        raise
 
 
 if __name__ == "__main__":

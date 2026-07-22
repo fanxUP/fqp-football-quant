@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-from datetime import date as dt_date
-
 from fastapi import APIRouter, Query
 
 from apps.backend.src.db import get_db
 from scripts.backtest_engine import BacktestConfig, run_backtest_from_config
+from scripts.business_time import business_today
 
 router = APIRouter(tags=["backtests"])
 
@@ -29,7 +28,7 @@ def list_backtests(
                 (limit, offset),
             )
             columns = [desc[0] for desc in cur.description]
-            runs = [dict(zip(columns, row)) for row in cur.fetchall()]
+            runs = [dict(zip(columns, row, strict=False)) for row in cur.fetchall()]
 
             # Get total count
             cur.execute("SELECT COUNT(*) FROM backtest_runs")
@@ -61,7 +60,7 @@ def get_backtest_detail(run_id: int):
             if not row:
                 return {"error": "not found", "run_id": run_id}
 
-            run = dict(zip(columns, row))
+            run = dict(zip(columns, row, strict=False))
             for k in ("started_at", "finished_at", "created_at"):
                 if run.get(k):
                     run[k] = str(run[k])
@@ -79,7 +78,7 @@ def get_backtest_detail(run_id: int):
             wcols = [desc[0] for desc in cur.description]
             windows = []
             for wrow in cur.fetchall():
-                w = dict(zip(wcols, wrow))
+                w = dict(zip(wcols, wrow, strict=False))
                 for k in w:
                     if hasattr(w[k], "isoformat"):
                         w[k] = str(w[k])
@@ -100,7 +99,7 @@ def get_backtest_detail(run_id: int):
             rcols = [desc[0] for desc in cur.description]
             results = []
             for rrow in cur.fetchall():
-                r = dict(zip(rcols, rrow))
+                r = dict(zip(rcols, rrow, strict=False))
                 for k in r:
                     if hasattr(r[k], "isoformat"):
                         r[k] = str(r[k])
@@ -185,7 +184,7 @@ def create_backtest(body: dict):
     if not model_names:
         return {"status": "error", "error": "no models to test"}
 
-    today = dt_date.today()
+    today = business_today()
     name = body.get("name") or f"手动回测-{today.isoformat()}"
 
     config = BacktestConfig(

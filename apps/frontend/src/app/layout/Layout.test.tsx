@@ -18,11 +18,6 @@ vi.mock('./Sidebar', () => ({
   ),
 }));
 
-// DisclaimerBanner is not relevant for Layout tests.
-vi.mock('../../shared/components/DisclaimerBanner', () => ({
-  default: () => <div data-testid="disclaimer" />,
-}));
-
 // ---- Helper ---------------------------------------------------------------
 
 // jsdom matchMedia stub for any media-query logic
@@ -60,6 +55,16 @@ describe('Layout', () => {
       const btn = screen.getByRole('button', { name: '打开菜单' });
       expect(btn).toBeTruthy();
       expect(btn.querySelectorAll('span').length).toBe(3);
+    });
+
+    it('does not render the global disclaimer footer', () => {
+      render(<Layout><div /></Layout>);
+      const removedFooterPattern = new RegExp(
+        [['不', '提供'], ['代', '购'], ['出', '票'], ['收', '款']]
+          .map((parts) => parts.join(''))
+          .join('|'),
+      );
+      expect(screen.queryByText(removedFooterPattern)).toBeNull();
     });
   });
 

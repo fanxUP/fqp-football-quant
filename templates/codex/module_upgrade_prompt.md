@@ -12,9 +12,9 @@
 
 ## 必须读取
 
-1. configs/module_registry.yaml
+1. configs/final_module_registry.yaml
 2. configs/module_dependencies.yaml
-3. configs/panel_registry.yaml
+3. configs/final_panel_registry.yaml
 4. 对应模块 README.md
 5. 对应 OpenAPI 契约
 6. 对应 SQL migration

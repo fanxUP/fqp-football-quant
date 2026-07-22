@@ -24,87 +24,45 @@ def _now() -> str:
 
 
 def store_team_season_profile(conn: Any, profile: dict) -> int | None:
-    """Insert or update a team season profile.
+    """Upsert one canonical team-profile snapshot."""
+    competition_season_id = profile.get("competition_season_id")
+    if not competition_season_id:
+        return None
 
-    Required: team_id, competition_season_id
-    Unique key assumed: (team_id, competition_season_id) — if a unique
-    constraint exists. Otherwise does a SELECT-then-INSERT/UPDATE.
-
-    Returns the profile id.
-    """
+    params = {
+        "team_id": profile["team_id"],
+        "competition_season_id": competition_season_id,
+        "snapshot_time": profile.get("snapshot_time", _now()),
+        "attack_strength_score": profile.get("attack_strength_score"),
+        "defense_strength_score": profile.get("defense_strength_score"),
+        "data_source": profile.get("data_source", "computed_form"),
+        "data_confidence": profile.get("data_confidence"),
+        "raw_json": json.dumps(profile.get("raw_json", {}), ensure_ascii=False),
+    }
     with conn.cursor() as cur:
-        # Check for existing
         cur.execute(
-            "SELECT id FROM team_season_profiles "
-            "WHERE team_id = %(team_id)s AND competition_season_id = %(comp_season_id)s",
-            {
-                "team_id": profile["team_id"],
-                "comp_season_id": profile.get("competition_season_id"),
-            },
+            """
+            INSERT INTO team_season_profiles (
+                team_id, competition_season_id, snapshot_time,
+                attack_strength_score, defense_strength_score,
+                data_source, data_confidence, raw_json, created_at, updated_at
+            ) VALUES (
+                %(team_id)s, %(competition_season_id)s, %(snapshot_time)s,
+                %(attack_strength_score)s, %(defense_strength_score)s,
+                %(data_source)s, %(data_confidence)s, %(raw_json)s, now(), now()
+            )
+            ON CONFLICT (team_id, competition_season_id, snapshot_time) DO UPDATE SET
+                attack_strength_score = EXCLUDED.attack_strength_score,
+                defense_strength_score = EXCLUDED.defense_strength_score,
+                data_source = EXCLUDED.data_source,
+                data_confidence = EXCLUDED.data_confidence,
+                raw_json = EXCLUDED.raw_json,
+                updated_at = now()
+            RETURNING id
+            """,
+            params,
         )
         row = cur.fetchone()
-
-        common = {
-            "team_id": profile["team_id"],
-            "competition_season_id": profile.get("competition_season_id"),
-            "season_code": profile.get("season_code", ""),
-            "matches_played": profile.get("matches_played"),
-            "wins": profile.get("wins"),
-            "draws": profile.get("draws"),
-            "losses": profile.get("losses"),
-            "goals_for": profile.get("goals_for"),
-            "goals_against": profile.get("goals_against"),
-            "goal_diff": profile.get("goal_diff"),
-            "points": profile.get("points"),
-            "recent_form_5": profile.get("recent_form_5"),
-            "attack_strength_score": profile.get("attack_strength_score"),
-            "defense_strength_score": profile.get("defense_strength_score"),
-            "raw_json": json.dumps(profile.get("raw_json", {}), ensure_ascii=False),
-        }
-
-        if row:
-            cur.execute(
-                """
-                UPDATE team_season_profiles SET
-                    matches_played = %(matches_played)s,
-                    wins = %(wins)s,
-                    draws = %(draws)s,
-                    losses = %(losses)s,
-                    goals_for = %(goals_for)s,
-                    goals_against = %(goals_against)s,
-                    goal_diff = %(goal_diff)s,
-                    points = %(points)s,
-                    recent_form_5 = %(recent_form_5)s,
-                    attack_strength_score = %(attack_strength_score)s,
-                    defense_strength_score = %(defense_strength_score)s,
-                    raw_json = %(raw_json)s,
-                    updated_at = now()
-                WHERE id = %(id)s
-                """,
-                {**common, "id": row[0]},
-            )
-            return row[0]
-        else:
-            cur.execute(
-                """
-                INSERT INTO team_season_profiles (
-                    team_id, competition_season_id, season_code,
-                    matches_played, wins, draws, losses,
-                    goals_for, goals_against, goal_diff, points,
-                    recent_form_5, attack_strength_score, defense_strength_score,
-                    raw_json, created_at, updated_at
-                ) VALUES (
-                    %(team_id)s, %(competition_season_id)s, %(season_code)s,
-                    %(matches_played)s, %(wins)s, %(draws)s, %(losses)s,
-                    %(goals_for)s, %(goals_against)s, %(goal_diff)s, %(points)s,
-                    %(recent_form_5)s, %(attack_strength_score)s, %(defense_strength_score)s,
-                    %(raw_json)s, now(), now()
-                )
-                RETURNING id
-                """,
-                common,
-            )
-            row = cur.fetchone()
     conn.commit()
     return row[0] if row else None
 
@@ -730,16 +688,23 @@ def get_lineup_for_match(conn: Any, match_id: int, team_id: int) -> dict | None:
 def store_player_availability_snapshot(conn: Any, snap: dict) -> int | None:
     """Upsert a player availability snapshot.
 
-    Upsert by (player_id, match_id) if match_id provided, else (player_id, snapshot_time).
+    Upsert by (player_id, official_match_id) when the source observation is
+    match-specific. Historical league snapshots retain the legacy player rule.
     """
+    raw_json = snap.get("raw_json", {})
+    official_match_id = raw_json.get("official_match_id") if isinstance(raw_json, dict) else None
     with conn.cursor() as cur:
-        if snap.get("match_id"):
+        if official_match_id:
             cur.execute(
                 """
                 SELECT id FROM player_availability_snapshots
-                WHERE player_id = %(player_id)s AND match_id = %(match_id)s
+                WHERE player_id = %(player_id)s
+                  AND raw_json->>'official_match_id' = %(official_match_id)s
                 """,
-                {"player_id": snap["player_id"], "match_id": snap["match_id"]},
+                {
+                    "player_id": snap["player_id"],
+                    "official_match_id": str(official_match_id),
+                },
             )
         else:
             cur.execute(
@@ -773,6 +738,7 @@ def store_player_availability_snapshot(conn: Any, snap: dict) -> int | None:
             "raw_json": json.dumps(snap.get("raw_json", {}), ensure_ascii=False),
         }
         if row:
+            snapshot_id = row[0]
             cur.execute(
                 """
                 UPDATE player_availability_snapshots SET
@@ -791,9 +757,8 @@ def store_player_availability_snapshot(conn: Any, snap: dict) -> int | None:
                     raw_json = %(raw_json)s
                 WHERE id = %(id)s
                 """,
-                {**common, "id": row[0]},
+                {**common, "id": snapshot_id},
             )
-            return row[0]
         else:
             cur.execute(
                 """
@@ -819,8 +784,9 @@ def store_player_availability_snapshot(conn: Any, snap: dict) -> int | None:
                 common,
             )
             row = cur.fetchone()
+            snapshot_id = row[0] if row else None
     conn.commit()
-    return row[0] if row else None
+    return snapshot_id
 
 
 def get_injuries_for_team(
@@ -858,6 +824,73 @@ def get_injuries_for_team(
         }
         for r in rows
     ]
+
+
+def get_injuries_for_match(conn: Any, match_id: int, team_id: int) -> list[dict]:
+    """读取某场比赛某队的最新球员缺阵记录。"""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT DISTINCT ON (player_id)
+                player_id, team_id, availability_status, injury_type,
+                injury_body_part, is_suspended, expected_return_date,
+                absence_impact_score, position_importance_score,
+                source_name, source_confidence
+            FROM player_availability_snapshots
+            WHERE team_id = %(team_id)s
+              AND raw_json->>'official_match_id' = %(match_id)s
+              AND availability_status IN ('injured', 'suspended', 'doubtful')
+            ORDER BY player_id, snapshot_time DESC
+            """,
+            {"team_id": team_id, "match_id": str(match_id)},
+        )
+        rows = cur.fetchall()
+    return [
+        {
+            "player_id": row[0],
+            "team_id": row[1],
+            "availability_status": row[2],
+            "injury_type": row[3],
+            "injury_body_part": row[4],
+            "is_suspended": row[5],
+            "expected_return_date": row[6],
+            "absence_impact_score": row[7],
+            "position_importance_score": row[8],
+            "source_name": row[9],
+            "source_confidence": row[10],
+        }
+        for row in rows
+    ]
+
+
+def get_injury_observation_for_match(
+    conn: Any, match_id: int, team_id: int
+) -> dict[str, Any] | None:
+    """读取比赛级伤停查询回执，包括“已查询但为零伤停”。"""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT injured_players_count, suspended_players_count,
+                   doubtful_players_count, data_confidence, snapshot_time
+            FROM team_squad_snapshots
+            WHERE team_id = %(team_id)s
+              AND raw_json->>'official_match_id' = %(match_id)s
+              AND raw_json->>'observation_type' = 'fixture_injuries'
+            ORDER BY snapshot_time DESC
+            LIMIT 1
+            """,
+            {"team_id": team_id, "match_id": str(match_id)},
+        )
+        row = cur.fetchone()
+    if not row:
+        return None
+    return {
+        "injured_players_count": row[0],
+        "suspended_players_count": row[1],
+        "doubtful_players_count": row[2],
+        "data_confidence": row[3],
+        "snapshot_time": row[4],
+    }
 
 
 # ---------------------------------------------------------------------------

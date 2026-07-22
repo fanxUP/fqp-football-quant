@@ -1,19 +1,30 @@
 import { useEffect, useState } from 'react';
 import { api } from '../core/apiClient';
-import type { Prediction, EvalModelSummary } from '../core/types';
+import type { Prediction, EvalModelSummary, ModelPerformanceHistory } from '../core/types';
 import { ApiError } from '../core/types';
 import PageHeader from '../shared/components/PageHeader';
 import Card from '../shared/components/Card';
 import DataTable, { type Column } from '../shared/components/DataTable';
 import ErrorState from '../shared/components/ErrorState';
-import DisclaimerBanner from '../shared/components/DisclaimerBanner';
-import { playTypeLabel } from '../shared/constants';
+import { modelNameLabel, optionLabel, playTypeLabel } from '../shared/constants';
+import TeamName from '../shared/components/TeamName';
+import ModelPerformanceCharts from '../visualization/ModelPerformanceCharts';
 
 export default function ModelsPage() {
   const [predictions, setPredictions] = useState<Prediction[]>([]);
   const [evalModels, setEvalModels] = useState<EvalModelSummary[]>([]);
+  const [performanceHistory, setPerformanceHistory] = useState<ModelPerformanceHistory>({
+    status: 'ok',
+    metric: 'rolling_hit_rate',
+    window: 20,
+    days: 365,
+    points: [],
+    samples: [],
+  });
   const [loading, setLoading] = useState(true);
   const [evalLoading, setEvalLoading] = useState(true);
+  const [historyLoading, setHistoryLoading] = useState(true);
+  const [historyError, setHistoryError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -25,6 +36,18 @@ export default function ModelsPage() {
       .catch((e) => {
         setError(e instanceof ApiError ? e.message : '加载失败');
         setLoading(false);
+      });
+  }, []);
+
+  useEffect(() => {
+    api.analysis.performanceHistory({ window: 20, days: 365 })
+      .then((res) => {
+        setPerformanceHistory(res);
+        setHistoryLoading(false);
+      })
+      .catch((e) => {
+        setHistoryError(e instanceof ApiError ? e.message : '加载模型曲线失败');
+        setHistoryLoading(false);
       });
   }, []);
 
@@ -52,38 +75,57 @@ export default function ModelsPage() {
       ? predictions.reduce((s, p) => s + (p.confidence ?? 0), 0) / predictions.length
       : 0;
 
-  // Find best model by Brier
-  const bestBrier = evalModels.length > 0 ? evalModels[0] : null;
+  // Formal rankings only use models that passed the independent-sample gate.
+  const publishableModels = evalModels.filter((model) => model.is_publishable);
+  const bestBrier = publishableModels.length > 0 ? publishableModels[0] : null;
   const overallBrier =
-    evalModels.length > 0
-      ? evalModels.reduce((s, m) => s + m.avg_brier, 0) / evalModels.length
+    publishableModels.length > 0
+      ? publishableModels.reduce((s, m) => s + m.avg_brier, 0) / publishableModels.length
       : null;
 
   const columns: Column<Prediction>[] = [
-    { key: 'model_name', title: '模型' },
+    { key: 'model_name', title: '模型', render: (v) => modelNameLabel(String(v)) },
     {
       key: 'home_team',
       title: '主队',
       width: '120px',
+      render: (value) => <TeamName name={String(value)} />,
     },
     {
       key: 'away_team',
       title: '客队',
       width: '120px',
+      render: (value) => <TeamName name={String(value)} />,
     },
     { key: 'play_type', title: '玩法', width: '80px', render: (v) => playTypeLabel(String(v)) },
     {
       key: 'option_code',
       title: '选项',
       width: '60px',
-      render: (v) => <span className="fqp-mono">{String(v)}</span>,
+      render: (v, row) => optionLabel(row.play_type, String(v)),
+    },
+    {
+      key: 'raw_model_probability',
+      title: '原始概率',
+      render: (v) => {
+        const val = v as number | null;
+        return val != null ? `${(val * 100).toFixed(1)}%` : '—';
+      },
     },
     {
       key: 'model_probability',
-      title: '模型概率',
-      render: (v) => {
+      title: '最终概率',
+      render: (v, row) => {
         const val = v as number | null;
-        return val !== null ? `${(val * 100).toFixed(1)}%` : '—';
+        if (val == null) return '—';
+        return (
+          <span>
+            {(val * 100).toFixed(1)}%
+            {row.feature_adjusted && (
+              <small style={{ display: 'block', color: 'var(--fqp-success)' }}>特征已修正</small>
+            )}
+          </span>
+        );
       },
     },
     {
@@ -121,10 +163,9 @@ export default function ModelsPage() {
 
   return (
     <div>
-      <PageHeader title="模型实验室" />
-      <DisclaimerBanner
-        text="模型评估数据仅用于学术研究和自我复盘，不构成投注建议。"
-        type="page"
+      <PageHeader
+        title="模型表现"
+        subtitle="按独立比赛评估模型，并区分基础模型概率与特征修正后的最终概率"
       />
 
       {/* Stat cards — staggered entrance */}
@@ -138,7 +179,9 @@ export default function ModelsPage() {
         <Card title="模型版本" entranceDelay={80}>
           <div className="fqp-stat-card" style={{ padding: 0 }}>
             <div className="fqp-stat-value">{modelNames.length}</div>
-            <div className="fqp-stat-sub">{modelNames.join(', ') || '无'}</div>
+            <div className="fqp-stat-sub">
+              {modelNames.map(modelNameLabel).join('、') || '无'}
+            </div>
           </div>
         </Card>
         <Card title="正EV预测" entranceDelay={160}>
@@ -158,6 +201,16 @@ export default function ModelsPage() {
           </div>
         </Card>
       </div>
+
+      <ModelPerformanceCharts
+        points={performanceHistory.points}
+        samples={performanceHistory.samples}
+        days={performanceHistory.days}
+        modelNames={modelNames}
+        window={performanceHistory.window}
+        loading={historyLoading}
+        error={historyError}
+      />
 
       {/* Real evaluation metrics */}
       <Card title="评估指标" style={{ marginBottom: '20px' }}>
@@ -182,30 +235,35 @@ export default function ModelsPage() {
           </div>
         ) : (
           <>
+            <div style={{ marginBottom: '16px', fontSize: '12px', color: 'var(--fqp-text-muted)' }}>
+              <div>只统计胜平负玩法的赛前预测与已确认赛果</div>
+              <div>CLV 尚无真实收盘数据，不会用 0 代替</div>
+              <div>少于 100 个独立已结算样本的模型仅用于观察，不参与最佳模型排名或正式结论</div>
+            </div>
             <div style={{ display: 'flex', gap: '32px', flexWrap: 'wrap', marginBottom: '16px' }}>
               <div>
                 <div className="fqp-label">最佳 Brier Score</div>
                 <div className="fqp-mono" style={{ fontSize: '18px', fontWeight: 700, color: 'var(--fqp-success)' }}>
-                  {bestBrier?.avg_brier.toFixed(4)}
+                  {bestBrier ? bestBrier.avg_brier.toFixed(4) : '尚无达标模型'}
                 </div>
                 <div style={{ fontSize: '11px', color: 'var(--fqp-text-muted)' }}>
-                  {bestBrier?.model_name}（{bestBrier?.n} 条）
+                  {bestBrier ? `${modelNameLabel(bestBrier.model_name)}（${bestBrier.n} 场）` : '需要每个模型至少 100 场'}
                 </div>
               </div>
               <div>
                 <div className="fqp-label">平均 Brier Score</div>
                 <div className="fqp-mono" style={{ fontSize: '18px', fontWeight: 700 }}>
-                  {overallBrier?.toFixed(4)}
+                  {overallBrier?.toFixed(4) ?? '—'}
                 </div>
                 <div style={{ fontSize: '11px', color: 'var(--fqp-text-muted)' }}>
-                  {evalModels.length} 个模型
+                  {publishableModels.length} 个达标模型
                 </div>
               </div>
               <div>
                 <div className="fqp-label">Log Loss (最优)</div>
                 <div className="fqp-mono" style={{ fontSize: '18px', fontWeight: 700, color: 'var(--fqp-success)' }}>
-                  {evalModels.length > 0
-                    ? evalModels.reduce((best, m) => m.avg_logloss < best ? m.avg_logloss : best, Infinity).toFixed(4)
+                  {publishableModels.length > 0
+                    ? publishableModels.reduce((best, m) => m.avg_logloss < best ? m.avg_logloss : best, Infinity).toFixed(4)
                     : '—'}
                 </div>
                 <div style={{ fontSize: '11px', color: 'var(--fqp-text-muted)' }}>
@@ -213,12 +271,12 @@ export default function ModelsPage() {
                 </div>
               </div>
               <div>
-                <div className="fqp-label">有效评估数</div>
+                <div className="fqp-label">胜平负评估数</div>
                 <div className="fqp-mono" style={{ fontSize: '18px', fontWeight: 700 }}>
                   {evalModels.reduce((s, m) => s + m.n, 0)}
                 </div>
                 <div style={{ fontSize: '11px', color: 'var(--fqp-text-muted)' }}>
-                  已结算比赛 × 模型预测
+                  独立已结算比赛 × 模型（每组一次）
                 </div>
               </div>
             </div>
@@ -229,6 +287,7 @@ export default function ModelsPage() {
                 <tr style={{ borderBottom: '1px solid var(--fqp-border)' }}>
                   <th style={thStyle}>模型</th>
                   <th style={thStyle}>评估数</th>
+                  <th style={thStyle}>结论状态</th>
                   <th style={thStyle}>Brier ↓</th>
                   <th style={thStyle}>LogLoss ↓</th>
                   <th style={thStyle}>RPS ↓</th>
@@ -239,16 +298,23 @@ export default function ModelsPage() {
                 {evalModels.map((m) => (
                   <tr key={m.model_name} style={{ borderBottom: '1px solid var(--fqp-border-light)' }}>
                     <td style={tdStyle}>
-                      <strong>{m.model_name}</strong>
+                      <strong>{modelNameLabel(m.model_name)}</strong>
                     </td>
                     <td style={{ ...tdStyle, textAlign: 'center' }} className="fqp-mono">{m.n}</td>
+                    <td style={{ ...tdStyle, textAlign: 'center' }}>
+                      {m.is_publishable ? '已达门槛' : m.sample_status === 'preliminary' ? '初步观察' : '仅观察'}
+                    </td>
                     <td style={{ ...tdStyle, textAlign: 'right' }} className="fqp-mono">{m.avg_brier.toFixed(4)}</td>
                     <td style={{ ...tdStyle, textAlign: 'right' }} className="fqp-mono">{m.avg_logloss.toFixed(4)}</td>
                     <td style={{ ...tdStyle, textAlign: 'right' }} className="fqp-mono">{m.avg_rps.toFixed(4)}</td>
                     <td style={{ ...tdStyle, textAlign: 'right' }} className="fqp-mono">
-                      <span style={{ color: m.avg_clv > 0 ? 'var(--fqp-success)' : 'var(--fqp-red-neon)' }}>
-                        {m.avg_clv >= 0 ? '+' : ''}{m.avg_clv.toFixed(4)}
-                      </span>
+                      {m.avg_clv == null ? (
+                        <span style={{ color: 'var(--fqp-text-muted)' }}>—</span>
+                      ) : (
+                        <span style={{ color: m.avg_clv > 0 ? 'var(--fqp-success)' : 'var(--fqp-red-neon)' }}>
+                          {m.avg_clv >= 0 ? '+' : ''}{m.avg_clv.toFixed(4)}
+                        </span>
+                      )}
                     </td>
                   </tr>
                 ))}

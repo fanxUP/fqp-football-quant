@@ -2,8 +2,10 @@
  * Team logo / flag utilities.
  *
  * National teams → flag images from flagcdn.com
- * Club teams    → colored circle with initials
+ * Club teams    → explicit crest URL from the team crest registry
  */
+
+import { findTeamCrestUrl } from '../data/teamCrests';
 
 // ── National team detection ──────────────────────────────
 
@@ -91,7 +93,6 @@ const CN_COUNTRIES: Record<string, string> = {
   马拉维: 'mw',
   马来西亚: 'my',
   马里: 'ml',
-  北马其顿: 'mk',
   毛里求斯: 'mu',
   毛里塔尼亚: 'mr',
   美国: 'us',
@@ -290,6 +291,7 @@ export function getTeamLogoUrl(
   nameCn?: string | null,
   nameEn?: string | null,
   country?: string | null,
+  officialLogoUrl?: string | null,
 ): string | null {
-  return getFlagUrl(nameCn, nameEn, country);
+  return findTeamCrestUrl(nameCn, nameEn) || officialLogoUrl || getFlagUrl(nameCn, nameEn, country);
 }

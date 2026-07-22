@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from scripts.real_ticket_storage import (
     create_bankroll_transaction,
@@ -12,6 +12,7 @@ from scripts.real_ticket_storage import (
     create_settlement,
     delete_real_ticket,
     get_daily_review,
+    get_error_summary,
     get_real_ticket,
     get_settlement_summary,
     get_settlements_by_date,
@@ -49,9 +50,14 @@ class TestCreateRealTicket:
         mock_conn, mock_cur = _mock_conn(fetchone=[1])
 
         ticket = {}
-        result = create_real_ticket(mock_conn, ticket)
+        with patch(
+            "scripts.real_ticket_storage.utc_now_iso",
+            return_value="2026-07-22T10:30:00",
+        ):
+            result = create_real_ticket(mock_conn, ticket)
         assert result == 1
         call_args = mock_cur.execute.call_args[0][1]
+        assert call_args["purchase_time"] == "2026-07-22T10:30:00"
         assert call_args["pass_type"] == "single"
         assert call_args["total_amount"] == 0
         assert call_args["settlement_status"] == "pending"
@@ -100,17 +106,36 @@ class TestUpdateRealTicket:
 class TestGetRealTicket:
     def test_returns_formatted_ticket(self):
         now = MagicMock(isoformat=lambda: "2025-01-01T00:00:00")
-        mock_conn, mock_cur = _mock_conn(fetchone=[
-            1, 1, None, None, "T-001", now, "StoreA", 100.0, 1, "2串1",
-            None, "manual_entry", "not_applicable", "confirmed", "pending",
-            now, now, 3,
-        ])
+        mock_conn, mock_cur = _mock_conn(
+            fetchone=[
+                1,
+                1,
+                None,
+                None,
+                "T-001",
+                now,
+                "StoreA",
+                100.0,
+                1,
+                "2串1",
+                None,
+                "manual_entry",
+                "not_applicable",
+                "confirmed",
+                "pending",
+                now,
+                now,
+                "20250101001",
+                3,
+            ]
+        )
 
         result = get_real_ticket(mock_conn, 1)
         assert result is not None
         assert result["id"] == 1
         assert result["ticket_no"] == "T-001"
         assert result["total_amount"] == 100.0
+        assert result["ledger_ticket_no"] == "20250101001"
         assert result["item_count"] == 3
 
     def test_returns_none_when_not_found(self):
@@ -123,14 +148,31 @@ class TestGetRealTicket:
 class TestListRealTickets:
     def test_returns_formatted_list(self):
         now = MagicMock(isoformat=lambda: "2025-01-01T00:00:00")
-        mock_conn, mock_cur = _mock_conn(fetchall=[
-            (1, "单关", 50.0, 1, None, "manual_entry", "not_applicable",
-             "confirmed", "pending", now, now, None, 2),
-        ])
+        mock_conn, mock_cur = _mock_conn(
+            fetchall=[
+                (
+                    1,
+                    "单关",
+                    50.0,
+                    1,
+                    None,
+                    "manual_entry",
+                    "not_applicable",
+                    "confirmed",
+                    "pending",
+                    now,
+                    now,
+                    None,
+                    2,
+                    "20250101001",
+                ),
+            ]
+        )
 
         result = list_real_tickets(mock_conn)
         assert len(result) == 1
         assert result[0]["pass_type"] == "单关"
+        assert result[0]["ledger_ticket_no"] == "20250101001"
 
     def test_filters_by_status(self):
         mock_conn, mock_cur = _mock_conn(fetchall=[])
@@ -147,8 +189,25 @@ class TestDeleteRealTicket:
         now = MagicMock(isoformat=lambda: "2025-01-01T00:00:00")
         mock_cur = MagicMock()
         mock_cur.fetchone.return_value = [
-            1, 1, None, None, "T-X", now, "S", 0, 1, "单关",
-            None, "manual_entry", "ok", "confirmed", "pending", now, now, 0,
+            1,
+            1,
+            None,
+            None,
+            "T-X",
+            now,
+            "S",
+            0,
+            1,
+            "单关",
+            None,
+            "manual_entry",
+            "ok",
+            "confirmed",
+            "pending",
+            now,
+            now,
+            "20250101001",
+            0,
         ]
         mock_cur.rowcount = 1
         mock_conn = MagicMock()
@@ -192,9 +251,15 @@ class TestSettlements:
         mock_conn.cursor.return_value.__enter__.return_value = mock_cur
 
         settlement = {"ticket_source": "real", "ticket_id": 1, "stake_amount": 100}
-        result = create_settlement(mock_conn, settlement)
+        with patch(
+            "scripts.real_ticket_storage.utc_now_iso",
+            return_value="2026-07-22T10:30:00",
+        ):
+            result = create_settlement(mock_conn, settlement)
         assert result == 99
         assert mock_cur.execute.call_count == 2  # check + insert
+        insert_params = mock_cur.execute.call_args_list[1].args[1]
+        assert insert_params["settle_time"] == "2026-07-22T10:30:00"
 
     def test_create_settlement_skips_if_exists(self):
         """Returns existing id if settlement already exists."""
@@ -210,9 +275,11 @@ class TestSettlements:
         # 12 columns: id, ticket_source, ticket_id, settle_time, is_won,
         # stake_amount, prize_amount, tax_amount, net_prize, profit_loss, roi,
         # settlement_detail_json
-        mock_conn, mock_cur = _mock_conn(fetchall=[
-            (1, "real", 10, now, True, 100.0, 250.0, 0.0, 250.0, 150.0, 1.5, "{}"),
-        ])
+        mock_conn, mock_cur = _mock_conn(
+            fetchall=[
+                (1, "real", 10, now, True, 100.0, 250.0, 0.0, 250.0, 150.0, 1.5, "{}"),
+            ]
+        )
 
         result = get_settlements_by_date(mock_conn, "2025-01-01")
         assert len(result) == 1
@@ -245,8 +312,29 @@ class TestReviews:
         """_daily_review_row_to_dict needs 21 columns (index 0-20)."""
         now = MagicMock(isoformat=lambda: "2025-01-01")
         # Build a 21-element tuple matching daily_reviews columns
-        row = [1, now, 5, 5, 3, 2, 1, 500.0, 200.0, 0.0, 0.0, 0.0, 0.0,
-               0.0, 0.0, 0.0, 0.0, 0.0, "summary", None, now]
+        row = [
+            1,
+            now,
+            5,
+            5,
+            3,
+            2,
+            1,
+            500.0,
+            200.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            "summary",
+            None,
+            now,
+        ]
         mock_conn, mock_cur = _mock_conn(fetchone=tuple(row))
 
         result = get_daily_review(mock_conn, "2025-01-01")
@@ -262,8 +350,29 @@ class TestReviews:
 
     def test_list_daily_reviews(self):
         now = MagicMock(isoformat=lambda: "2025-01-01")
-        row = [1, now, 5, 5, 3, 2, 1, 500.0, 200.0, 0.0, 0.0, 0.0, 0.0,
-               0.0, 0.0, 0.0, 0.0, 0.0, "summary", None, now]
+        row = [
+            1,
+            now,
+            5,
+            5,
+            3,
+            2,
+            1,
+            500.0,
+            200.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            "summary",
+            None,
+            now,
+        ]
         mock_conn, mock_cur = _mock_conn(fetchall=[tuple(row)])
 
         result = list_daily_reviews(mock_conn)
@@ -307,14 +416,24 @@ class TestErrorAnalyses:
         result = list_error_analyses(mock_conn)
         assert result == []
 
+    def test_error_summary_parameterizes_interval_days(self):
+        mock_conn, mock_cur = _mock_conn(fetchall=[])
+
+        result = get_error_summary(mock_conn, days=7)
+
+        sql, params = mock_cur.execute.call_args.args
+        assert "%(days)s * INTERVAL '1 day'" in sql
+        assert params == {"days": 7}
+        assert result == {"total_errors": 0, "days": 7, "error_types": {}}
+
 
 class TestBankroll:
     def test_create_bankroll_transaction_returns_id(self):
         """SELECT account, INSERT txn, UPDATE balance."""
         mock_cur = MagicMock()
         mock_cur.fetchone.side_effect = [
-            [1, 5000.0],   # account SELECT: id, current_balance
-            [100],          # txn INSERT RETURNING id
+            [1, 5000.0],  # account SELECT: id, current_balance
+            [100],  # txn INSERT RETURNING id
         ]
         mock_conn = MagicMock()
         mock_conn.cursor.return_value.__enter__.return_value = mock_cur

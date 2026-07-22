@@ -12,30 +12,32 @@ Data quality rules (from docs/04):
 
 from __future__ import annotations
 
+import re
 import time
 from datetime import datetime
 from typing import Any
 
 from apps.backend.src.db import get_db
-from scripts.five100_client import get_match_results as get_results_via_500
+from scripts.business_time import business_now, business_today
 from scripts.official_storage import (
     log_crawl,
+    record_official_collection_status,
     store_markets,
     store_matches,
-    store_odds_snapshots,
     store_pool_issue,
     store_pool_issue_matches,
     store_results,
     update_health,
 )
-from scripts.sporttery_client import SportteryClient
-
 from scripts.play_type_registry import (
-    SPORTTERY_POOL_MAP as POOL_CODE_MAP,
     OPTION_LABELS,
     TRADITIONAL_GAME_TYPES,
-    TRADITIONAL_GAME_LABELS,
 )
+from scripts.play_type_registry import (
+    SPORTTERY_POOL_MAP as POOL_CODE_MAP,
+)
+from scripts.result_status import is_void_official_result
+from scripts.sporttery_client import SportteryClient
 
 
 def _now() -> str:
@@ -55,18 +57,70 @@ _SALE_STATUS_MAP: dict[int, str] = {
     4: "finished",
 }
 
+_DIRECT_ODDS_NODES: dict[str, str] = {
+    "HAD": "had",
+    "HHAD": "hhad",
+    "CRS": "crs",
+    "TTG": "ttg",
+    "HAFU": "hafu",
+}
+
+_HAFU_OPTIONS: dict[str, tuple[str, str]] = {
+    "hh": ("33", "胜胜"),
+    "hd": ("31", "胜平"),
+    "ha": ("30", "胜负"),
+    "dh": ("13", "平胜"),
+    "dd": ("11", "平平"),
+    "da": ("10", "平负"),
+    "ah": ("03", "负胜"),
+    "ad": ("01", "负平"),
+    "aa": ("00", "负负"),
+}
+
+
+def _pool_enabled(pool: dict[str, Any], *fields: str) -> bool:
+    return any(pool.get(field, 0) == 1 for field in fields)
+
+
+def _pool_is_open(pool: dict[str, Any] | None, has_odds: bool) -> bool:
+    if not pool or not pool.get("poolStatus"):
+        return has_odds
+    return str(pool["poolStatus"]).lower() == "selling"
+
+
+def _market_status(pool: dict[str, Any] | None, is_open: bool) -> str:
+    if is_open:
+        return "open"
+    status = str((pool or {}).get("poolStatus") or "closed").strip().lower()
+    return status or "closed"
+
+
+def _odds_by_pool(match_raw: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """Return odds nodes from either match-list or calculator payloads."""
+    odds_by_pool: dict[str, dict[str, Any]] = {}
+    for odds in match_raw.get("oddsList", []) or []:
+        pool_code = odds.get("poolCode", "")
+        if pool_code and pool_code not in odds_by_pool:
+            odds_by_pool[pool_code] = odds
+    for pool_code, node_name in _DIRECT_ODDS_NODES.items():
+        node = match_raw.get(node_name)
+        if isinstance(node, dict) and node:
+            odds_by_pool[pool_code] = node
+    return odds_by_pool
+
 
 def parse_matches_from_response(
     raw: dict[str, Any],
     business_date: str,
 ) -> list[dict[str, Any]]:
-    """Parse sporttery getMatchCalculatorV1 response into normalized match dicts.
+    """Parse Sporttery match-list or calculator responses into normalized matches.
 
     Real API structure (2026-07 observed):
       value.matchInfoList[].businessDate   — betting publish date
       value.matchInfoList[].subMatchList[] — array of matches
         matchDate + matchTime → kickoff_time
-        oddsList[] has HAD/HHAD (duplicated by poolId, dedup by poolCode)
+        oddsList[] has HAD/HHAD; calculator payloads additionally expose
+        had/hhad/crs/ttg/hafu nodes with complete current odds.
     """
     matches: list[dict] = []
     match_info_list = raw.get("value", {}).get("matchInfoList", [])
@@ -76,7 +130,10 @@ def parse_matches_from_response(
     for day_block in match_info_list:
         bdate = day_block.get("businessDate", business_date)
         for sub in day_block.get("subMatchList", []):
-            match_code = str(sub.get("matchNum", ""))
+            # Keep Sporttery's display code (e.g. 周五098) as the canonical
+            # official identifier. The numeric matchNum is only an internal
+            # Sporttery id and is not what users see on the ticket.
+            match_code = str(sub.get("matchNumStr") or sub.get("matchNum", ""))
             if not match_code:
                 continue
 
@@ -97,51 +154,64 @@ def parse_matches_from_response(
                 kickoff = match_date or match_time or None
 
             # saleStatus is a number in real API
-            sale_status_raw = sub.get("saleStatus")
-            if isinstance(sale_status_raw, int):
-                sale_status = _SALE_STATUS_MAP.get(sale_status_raw, "unknown")
+            sale_status_raw = sub.get("saleStatus", sub.get("sellStatus"))
+            if isinstance(sale_status_raw, int) or (
+                isinstance(sale_status_raw, str) and sale_status_raw.isdigit()
+            ):
+                sale_status = _SALE_STATUS_MAP.get(int(sale_status_raw), "unknown")
             else:
                 sale_status = str(sale_status_raw) if sale_status_raw else "unknown"
 
-            # Parse markets from oddsList, deduplicated by poolCode
+            # The match-list endpoint exposes HAD/HHAD in oddsList, while
+            # poolList is authoritative for all five available play types.
+            # The calculator endpoint additionally exposes direct had/hhad/
+            # crs/ttg/hafu nodes with the complete current odds.
             markets: list[dict] = []
-            seen_pool_codes: set[str] = set()
-            odds_list = sub.get("oddsList", [])
-            for odds in odds_list:
-                pool_code = odds.get("poolCode", "")
-                if pool_code in seen_pool_codes:
-                    continue  # oddsList has duplicate entries by poolId
-                seen_pool_codes.add(pool_code)
-
+            odds_by_pool = _odds_by_pool(sub)
+            pools_by_code = {
+                pool.get("poolCode", ""): pool
+                for pool in sub.get("poolList", []) or []
+                if pool.get("poolCode")
+            }
+            pool_codes = list(dict.fromkeys([*pools_by_code, *odds_by_pool]))
+            for pool_code in pool_codes:
+                odds = odds_by_pool.get(pool_code, {})
+                pool = pools_by_code.get(pool_code)
                 play_type = POOL_CODE_MAP.get(pool_code, pool_code.lower())
                 handicap = odds.get("goalLine")
                 if handicap is not None and handicap != "":
                     try:
                         handicap_val = float(handicap)
-                    except (ValueError, TypeError):
+                    except ValueError, TypeError:
                         handicap_val = None
                 else:
                     handicap_val = None
 
+                is_open = _pool_is_open(pool, bool(odds))
+                raw_market = {**odds, "_pool": pool or {}}
                 markets.append(
                     {
                         "play_type": play_type,
                         "handicap": handicap_val,
-                        "is_open": True,  # odds presence implies market is open
-                        "is_single_allowed": False,  # determined from poolList
-                        "raw_json": odds,
+                        "is_open": is_open,
+                        "is_single_allowed": is_open
+                        and _pool_enabled(
+                            pool or {}, "single", "bettingSingle", "cbtSingle", "intSingle"
+                        ),
+                        "is_pass_allowed": is_open
+                        and _pool_enabled(
+                            pool or {}, "allUp", "bettingAllup", "cbtAllUp", "intAllUp"
+                        ),
+                        "market_status": _market_status(pool, is_open),
+                        "raw_json": raw_market,
                     }
                 )
 
-            # Also check poolList for single-allowed status
-            pool_list = sub.get("poolList", [])
-            for pl in pool_list:
-                pl_code = pl.get("poolCode", "")
-                pl_play_type = POOL_CODE_MAP.get(pl_code, pl_code.lower())
-                pl_single = pl.get("single", 0) == 1 or pl.get("bettingSingle", 0) == 1
-                for mkt in markets:
-                    if mkt["play_type"] == pl_play_type:
-                        mkt["is_single_allowed"] = pl_single
+            source_endpoint = (
+                "getMatchCalculatorV1.qry"
+                if any(node in sub for node in _DIRECT_ODDS_NODES.values())
+                else "getMatchListV1.qry"
+            )
 
             matches.append(
                 {
@@ -154,8 +224,8 @@ def parse_matches_from_response(
                     "kickoff_time": kickoff,
                     "sale_stop_time": None,  # sporttery API doesn't expose this directly
                     "sale_status": sale_status,
-                    "match_status": sub.get("matchStatus", "scheduled"),
-                    "source_url": "https://webapi.sporttery.cn/gateway/jc/football/getMatchCalculatorV1.qry",
+                    "match_status": "scheduled",
+                    "source_url": f"https://webapi.sporttery.cn/gateway/uniform/football/{source_endpoint}",
                     "raw_json": sub,
                     "_markets": markets,
                 }
@@ -186,36 +256,68 @@ def parse_odds_snapshots_from_match(
                 stop_dt = datetime.fromisoformat(sale_stop.replace("Z", "+00:00"))
                 now_dt = datetime.fromisoformat(snap_time.replace("Z", "+00:00"))
                 minutes_before_stop = int((stop_dt - now_dt).total_seconds() / 60)
-        except (ValueError, TypeError):
+        except ValueError, TypeError:
             pass
 
-    odds_list = match_raw.get("oddsList", [])
-    seen_pool_codes: set[str] = set()
-    for odds in odds_list:
-        pool_code = odds.get("poolCode", "")
-        if pool_code in seen_pool_codes:
-            continue  # dedup by poolCode
-        seen_pool_codes.add(pool_code)
-
+    odds_by_pool = _odds_by_pool(match_raw)
+    pools_by_code = {
+        pool.get("poolCode", ""): pool
+        for pool in match_raw.get("poolList", []) or []
+        if pool.get("poolCode")
+    }
+    for pool_code, odds in odds_by_pool.items():
         play_type = POOL_CODE_MAP.get(pool_code, pool_code.lower())
+        pool = pools_by_code.get(pool_code)
+        is_open = _pool_is_open(pool, True)
+        if not is_open:
+            continue
+        is_single = _pool_enabled(pool or {}, "single", "bettingSingle", "cbtSingle", "intSingle")
+        is_pass = _pool_enabled(pool or {}, "allUp", "bettingAllup", "cbtAllUp", "intAllUp")
         handicap = odds.get("goalLine")
         if handicap is not None and handicap != "":
             try:
                 handicap_val = float(handicap)
-            except (ValueError, TypeError):
+            except ValueError, TypeError:
                 handicap_val = None
         else:
             handicap_val = None
 
-        labels = OPTION_LABELS.get(play_type, {"h": "胜", "d": "平", "a": "负"})
+        option_rows: list[tuple[str, str, Any]] = []
+        if pool_code in {"HAD", "HHAD"}:
+            labels = OPTION_LABELS[play_type]
+            option_rows = [(code, labels[code], odds.get(code)) for code in ("h", "d", "a")]
+        elif pool_code == "CRS":
+            other = {
+                "s1sh": ("other_h", "胜其他"),
+                "s1sd": ("other_d", "平其他"),
+                "s1sa": ("other_a", "负其他"),
+            }
+            for source_code, sp_value in odds.items():
+                if source_code.endswith("f"):
+                    continue
+                if source_code in other:
+                    option_code, option_name = other[source_code]
+                elif match := re.fullmatch(r"s(\d{1,2})s(\d{1,2})", source_code):
+                    option_code = f"{int(match.group(1))}:{int(match.group(2))}"
+                    option_name = option_code
+                else:
+                    continue
+                option_rows.append((option_code, option_name, sp_value))
+        elif pool_code == "TTG":
+            option_rows = [
+                (str(goals), "7+" if goals == 7 else f"{goals}球", odds.get(f"s{goals}"))
+                for goals in range(8)
+            ]
+        elif pool_code == "HAFU":
+            option_rows = [
+                (option_code, option_name, odds.get(source_code))
+                for source_code, (option_code, option_name) in _HAFU_OPTIONS.items()
+            ]
 
-        for option_code in ("h", "d", "a"):
-            sp_value = odds.get(option_code)
-            if sp_value is None:
-                continue
+        for option_code, option_name, sp_value in option_rows:
             try:
                 sp_val = float(sp_value)
-            except (ValueError, TypeError):
+            except ValueError, TypeError:
                 continue
             if sp_val <= 0:
                 continue  # rule: SP must be positive
@@ -227,16 +329,33 @@ def parse_odds_snapshots_from_match(
                     "minutes_before_stop": minutes_before_stop,
                     "play_type": play_type,
                     "option_code": option_code,
-                    "option_name": labels.get(option_code, option_code),
+                    "option_name": option_name,
                     "sp_value": sp_val,
                     "handicap": handicap_val,
-                    "is_open": odds.get("isOpen", True),
-                    "is_single_allowed": odds.get("isSingleAllowed", False),
-                    "raw_json": odds,
+                    "is_open": True,
+                    "is_single_allowed": is_single,
+                    "is_pass_allowed": is_pass,
+                    "raw_json": {**odds, "_pool": pool or {}},
                 }
             )
 
     return snapshots
+
+
+def _derive_official_handicap_result(
+    home_goals: int | None, away_goals: int | None, handicap: Any
+) -> str | None:
+    if home_goals is None or away_goals is None or handicap in (None, ""):
+        return None
+    try:
+        adjusted_home = home_goals + float(handicap)
+    except TypeError, ValueError:
+        return None
+    if adjusted_home > away_goals:
+        return "3"
+    if adjusted_home == away_goals:
+        return "1"
+    return "0"
 
 
 def parse_results_from_response(
@@ -252,20 +371,46 @@ def parse_results_from_response(
     if not result_list:
         result_list = raw.get("value", {}).get("matchInfoList", [])
     if not result_list:
+        result_list = raw.get("value", {}).get("matchResult", [])
+    if not result_list:
         result_list = raw.get("matchResultList", [])
     if not result_list:
         result_list = raw.get("matchInfoList", [])
+    if not result_list:
+        result_list = raw.get("matchResult", [])
 
     for item in result_list:
-        match_code = item.get("matchNum") or item.get("matchCode", "")
+        # ``matchNumStr`` is the ticket-visible identifier (for example
+        # 周五098). ``matchNum`` may be a numeric Sporttery internal value in
+        # some responses and must not replace the display code.
+        match_code = item.get("matchNumStr") or item.get("matchCode") or item.get("matchNum", "")
         if not match_code:
             continue
 
         # Goals
-        half_home = item.get("halfHomeGoals") or item.get("halfHomeScore")
-        half_away = item.get("halfAwayGoals") or item.get("halfAwayScore")
-        full_home = item.get("fullHomeGoals") or item.get("fullHomeScore") or item.get("homeGoals")
-        full_away = item.get("fullAwayGoals") or item.get("fullAwayScore") or item.get("awayGoals")
+        def _first_present(row: dict[str, Any], *keys: str) -> Any:
+            for key in keys:
+                value = row.get(key)
+                if value is not None and value != "":
+                    return value
+            return None
+
+        def _score_parts(value: Any) -> tuple[Any, Any]:
+            if not isinstance(value, str):
+                return None, None
+            parts = value.replace("：", ":").split(":", 1)
+            return (parts[0].strip(), parts[1].strip()) if len(parts) == 2 else (None, None)
+
+        section_half_home, section_half_away = _score_parts(item.get("sectionsNo1"))
+        section_full_home, section_full_away = _score_parts(item.get("sectionsNo999"))
+        half_home = _first_present(item, "halfHomeGoals", "halfHomeScore")
+        half_away = _first_present(item, "halfAwayGoals", "halfAwayScore")
+        full_home = _first_present(item, "fullHomeGoals", "fullHomeScore", "homeGoals")
+        full_away = _first_present(item, "fullAwayGoals", "fullAwayScore", "awayGoals")
+        half_home = section_half_home if half_home is None else half_home
+        half_away = section_half_away if half_away is None else half_away
+        full_home = section_full_home if full_home is None else full_home
+        full_away = section_full_away if full_away is None else full_away
 
         # Convert to int if present
         def _to_int(v: Any) -> int | None:
@@ -273,7 +418,7 @@ def parse_results_from_response(
                 return None
             try:
                 return int(v)
-            except (ValueError, TypeError):
+            except ValueError, TypeError:
                 return None
 
         # Build win/draw/loss result codes from scores
@@ -304,17 +449,28 @@ def parse_results_from_response(
 
         results.append(
             {
+                "_source_match_id": str(item.get("matchId") or ""),
                 "_match_code": match_code,
+                "_match_date": item.get("matchDate"),
                 "half_home_goals": hh,
                 "half_away_goals": ha,
                 "full_home_goals": fh,
                 "full_away_goals": fa,
                 "spf_result": spf,
-                "rqspf_result": None,  # requires handicap + score, computed later
+                "rqspf_result": _derive_official_handicap_result(fh, fa, item.get("goalLine")),
                 "total_goals_result": fh + fa if fh is not None and fa is not None else None,
                 "score_result": score,
                 "half_full_result": half_full,
-                "result_status": item.get("resultStatus", "confirmed"),
+                "result_status": (
+                    "void"
+                    if is_void_official_result(item, item.get("resultStatus"))
+                    else (
+                        "confirmed"
+                        if str(item.get("matchResultStatus") or "") == "2"
+                        or item.get("poolStatus") == "Payout"
+                        else item.get("resultStatus") or "pending"
+                    )
+                ),
                 "official_publish_time": item.get("publishTime") or item.get("officialPublishTime"),
                 "raw_json": item,
             }
@@ -354,7 +510,7 @@ def crawl_official_schedule(business_date: str) -> dict[str, Any]:
                     records_found=0,
                     started_at=started,
                 )
-                update_health(conn, "sporttery", "official", "ok", latency_ms)
+                update_health(conn, "sporttery", "schedule", "ok", latency_ms)
             return {
                 "status": "ok",
                 "matches_found": 0,
@@ -397,7 +553,7 @@ def crawl_official_schedule(business_date: str) -> dict[str, Any]:
                 records_updated=total_updated,
                 started_at=started,
             )
-            update_health(conn, "sporttery", "official", "ok", latency_ms)
+            update_health(conn, "sporttery", "schedule", "ok", latency_ms)
 
         client.close()
         return {
@@ -421,93 +577,22 @@ def crawl_official_schedule(business_date: str) -> dict[str, Any]:
                 error_message=str(e),
                 started_at=started,
             )
-            update_health(conn, "sporttery", "official", "error", latency_ms, str(e))
+            update_health(conn, "sporttery", "schedule", "error", latency_ms, str(e))
         return {"status": "error", "error": str(e)}
 
 
 def crawl_official_odds_snapshot(business_date: str) -> dict[str, Any]:
-    """Take an odds snapshot for all active matches on the given date.
+    """Compatibility wrapper around the durable due-capture dispatcher."""
+    from scripts.official_odds_capture import collect_due_official_odds
 
-    Called by the scheduler every 30 min and by the worker's polling loop.
-    """
-    started = _now()
-    client = SportteryClient()
-    try:
-        t0 = time.monotonic()
-        raw = client.get_daily_matches(business_date)
-        latency_ms = int((time.monotonic() - t0) * 1000)
-
-        matches = parse_matches_from_response(raw, business_date)
-        if not matches:
-            client.close()
-            return {"status": "ok", "matches_processed": 0, "snapshots_inserted": 0}
-
-        total_snapshots = 0
-        snap_time = _now()
-
-        with get_db() as conn:
-            for m in matches:
-                code = m["official_match_code"]
-                bdate = m["business_date"]
-                with conn.cursor() as cur:
-                    cur.execute(
-                        "SELECT id FROM official_matches "
-                        "WHERE official_match_code = %s AND business_date = %s",
-                        (code, bdate),
-                    )
-                    row = cur.fetchone()
-                if row is None:
-                    continue
-                match_id = row[0]
-
-                snapshots = parse_odds_snapshots_from_match(
-                    m.get("raw_json", {}), snapshot_time=snap_time
-                )
-                if snapshots:
-                    result = store_odds_snapshots(
-                        conn, match_id=match_id, market_id=None, snapshots=snapshots
-                    )
-                    total_snapshots += result["inserted"]
-
-            log_crawl(
-                conn,
-                source_name="sporttery",
-                crawl_type="odds_snapshot",
-                status="ok",
-                records_found=len(matches),
-                records_inserted=total_snapshots,
-                started_at=started,
-            )
-            update_health(conn, "sporttery", "official", "ok", latency_ms)
-
-        client.close()
-        return {
-            "status": "ok",
-            "matches_processed": len(matches),
-            "snapshots_inserted": total_snapshots,
-            "latency_ms": latency_ms,
-        }
-
-    except Exception as e:
-        client.close()
-        with get_db() as conn:
-            log_crawl(
-                conn,
-                source_name="sporttery",
-                crawl_type="odds_snapshot",
-                status="error",
-                error_message=str(e),
-                started_at=started,
-            )
-            update_health(conn, "sporttery", "official", "error", 0, str(e))
-        return {"status": "error", "error": str(e)}
+    return collect_due_official_odds()
 
 
 def crawl_official_results(begin_date: str, end_date: str) -> dict[str, Any]:
     """Fetch and store match results for a date range.
 
-    Tries Sporttery API first. Falls back to 500.com if Sporttery is blocked
-    (403 Forbidden / 567 Restricted Access).
+    Results come only from the China Sports Lottery result page's Uniform API.
+    A blocked official source is reported as an error and never replaced.
     """
     started = _now()
     client = SportteryClient()
@@ -515,7 +600,7 @@ def crawl_official_results(begin_date: str, end_date: str) -> dict[str, Any]:
     # ── Attempt 1: Sporttery API ──────────────────────────────────────
     try:
         t0 = time.monotonic()
-        raw = client.get_match_results(begin_date, end_date)
+        raw = client.get_uniform_match_results(begin_date, end_date)
         latency_ms = int((time.monotonic() - t0) * 1000)
 
         results = parse_results_from_response(raw)
@@ -530,24 +615,56 @@ def crawl_official_results(begin_date: str, end_date: str) -> dict[str, Any]:
                     records_found=0,
                     started_at=started,
                 )
-            return {"status": "ok", "results_found": 0, "results_stored": 0}
+                update_health(conn, "sporttery", "results", "ok", latency_ms)
+            return {
+                "status": "ok",
+                "source": "sporttery",
+                "source_type": "official",
+                "results_found": 0,
+                "results_stored": 0,
+            }
 
         # Resolve match_code → match_id
         with get_db() as conn:
             resolved = 0
             for r in results:
+                source_match_id = r.pop("_source_match_id", "")
                 code = r.pop("_match_code", "")
+                match_date = r.pop("_match_date", None)
                 if not code:
                     continue
                 with conn.cursor() as cur:
                     cur.execute(
-                        "SELECT id FROM official_matches WHERE official_match_code = %s "
-                        "ORDER BY business_date DESC LIMIT 1",
-                        (code,),
+                        """SELECT id
+                           FROM official_matches
+                           WHERE (
+                                  %(source_match_id)s <> ''
+                                  AND source_match_id = %(source_match_id)s
+                              )
+                              OR (
+                                  official_match_code = %(match_code)s
+                                  AND kickoff_time::date = %(match_date)s::date
+                              )
+                           ORDER BY (source_match_id = %(source_match_id)s) DESC, id DESC
+                           LIMIT 1""",
+                        {
+                            "source_match_id": source_match_id,
+                            "match_code": code,
+                            "match_date": match_date,
+                        },
                     )
                     row = cur.fetchone()
                 if row:
                     r["match_id"] = row[0]
+                    raw_json = dict(r.get("raw_json") or {})
+                    raw_json.update(
+                        {
+                            "source_name": "sporttery",
+                            "source_type": "official",
+                            "source_url": ("https://www.lottery.gov.cn/jc/zqsgkj/"),
+                        }
+                    )
+                    r["raw_json"] = raw_json
                     resolved += 1
                 # Results without a match_id are skipped (no match in DB yet)
 
@@ -567,11 +684,13 @@ def crawl_official_results(begin_date: str, end_date: str) -> dict[str, Any]:
                 records_updated=store_result["updated"],
                 started_at=started,
             )
-            update_health(conn, "sporttery", "official", "ok", latency_ms)
+            update_health(conn, "sporttery", "results", "ok", latency_ms)
 
         client.close()
         return {
             "status": "ok",
+            "source": "sporttery",
+            "source_type": "official",
             "results_found": len(results),
             "results_matched": resolved,
             "results_inserted": store_result["inserted"],
@@ -583,85 +702,38 @@ def crawl_official_results(begin_date: str, end_date: str) -> dict[str, Any]:
         client.close()
         error_msg = str(e)
 
-        # ── Attempt 2: 500.com fallback ────────────────────────────────
-        if "403" in error_msg or "567" in error_msg or "blocked" in error_msg.lower():
-            print(
-                f"[official_crawler] Sporttery blocked ({error_msg[:80]}), "
-                f"falling back to 500.com…"
-            )
-            try:
-                return _crawl_results_via_500(begin_date, end_date, started)
-            except Exception as fb_e:
-                print(f"[official_crawler] 500.com fallback also failed: {fb_e}")
-                error_msg = f"Sporttery: {error_msg}; 500.com: {fb_e}"
-
         with get_db() as conn:
+            collection_status = (
+                "blocked"
+                if "403" in error_msg or "567" in error_msg or "blocked" in error_msg.lower()
+                else "error"
+            )
+            record_official_collection_status(
+                conn,
+                business_date=begin_date,
+                crawl_type="results",
+                source_name="sporttery",
+                status=collection_status,
+                source_url="https://www.lottery.gov.cn/jc/zqsgkj/",
+                records_found=0,
+                error_message=error_msg,
+                raw_json={"begin_date": begin_date, "end_date": end_date},
+            )
             log_crawl(
                 conn,
                 source_name="sporttery",
                 crawl_type="results",
-                status="error",
+                status=collection_status,
                 error_message=error_msg,
                 started_at=started,
             )
-            update_health(conn, "sporttery", "official", "error", 0, error_msg)
-        return {"status": "error", "error": error_msg}
-
-
-def _crawl_results_via_500(
-    begin_date: str, end_date: str, started: str
-) -> dict[str, Any]:
-    """Crawl results from 500.com as a fallback when Sporttery is blocked.
-
-    Matches results to official_matches by team name + kickoff date.
-    """
-    t0 = time.monotonic()
-
-    with get_db() as conn:
-        results = get_results_via_500(begin_date, end_date, db_conn=conn)
-
-        if not results:
-            latency_ms = int((time.monotonic() - t0) * 1000)
-            log_crawl(
-                conn,
-                source_name="500.com",
-                crawl_type="results",
-                status="ok",
-                records_found=0,
-                started_at=started,
-            )
-            update_health(conn, "500.com", "official", "ok", latency_ms)
-            return {
-                "status": "ok",
-                "source": "500.com",
-                "results_found": 0,
-                "results_stored": 0,
-                "note": "no finished matches found on 500.com",
-            }
-
-        store_result = store_results(conn, results)
-
-        latency_ms = int((time.monotonic() - t0) * 1000)
-        log_crawl(
-            conn,
-            source_name="500.com",
-            crawl_type="results",
-            status="ok",
-            records_found=len(results),
-            records_inserted=store_result["inserted"],
-            records_updated=store_result["updated"],
-            started_at=started,
-        )
-        update_health(conn, "500.com", "official", "ok", latency_ms)
-
-    return {
-        "status": "ok",
-        "source": "500.com",
-        "results_found": len(results),
-        "results_inserted": store_result["inserted"],
-        "results_updated": store_result["updated"],
-        "latency_ms": latency_ms,
-    }
+            update_health(conn, "sporttery", "results", "error", 0, error_msg)
+        return {
+            "status": "error",
+            "source": "sporttery",
+            "source_type": "official",
+            "error": error_msg,
+        }
 
 
 # ---------------------------------------------------------------------------
@@ -670,11 +742,10 @@ def _crawl_results_via_500(
 
 
 def crawl_official_schedule_v2(business_date: str | None = None) -> dict[str, Any]:
-    """Fetch match schedule + odds using uniform API (WAF-free).
+    """Fetch match and market metadata using the uniform API (WAF-free).
 
-    Uses getMatchListV1.qry (all matches) and getFixedBonusV1.qry (per-match
-    odds history). Falls back to original crawl_official_schedule if uniform API
-    fails.
+    Odds snapshots are intentionally written only by the dedicated odds
+    collector, which prevents duplicate :10/:40 history rows.
     """
     started = _now()
     client = SportteryClient()
@@ -686,27 +757,30 @@ def crawl_official_schedule_v2(business_date: str | None = None) -> dict[str, An
         latency_ms = int((time.monotonic() - t0) * 1000)
 
         # 2. Parse using existing parsers (same JSON structure)
-        match_bdate = business_date or datetime.now().strftime("%Y-%m-%d")
+        match_bdate = business_date or business_today().isoformat()
         matches = parse_matches_from_response(raw, match_bdate)
         if not matches:
             client.close()
             with get_db() as conn:
                 log_crawl(
-                    conn, source_name="sporttery_v2", crawl_type="schedule",
-                    status="ok", records_found=0, started_at=started,
+                    conn,
+                    source_name="sporttery_v2",
+                    crawl_type="schedule",
+                    status="ok",
+                    records_found=0,
+                    started_at=started,
                 )
-                update_health(conn, "sporttery_v2", "official", "ok", latency_ms)
+                update_health(conn, "sporttery_v2", "schedule", "ok", latency_ms)
             return {"status": "ok", "matches_found": 0, "note": "no matches in response"}
 
         # 3. Store matches
         total_inserted, total_updated = 0, 0
-        snapshots_inserted = 0
         with get_db() as conn:
             match_result = store_matches(conn, matches)
             total_inserted = match_result.get("inserted", 0)
             total_updated = match_result.get("updated", 0)
 
-            # 4. Store markets + odds snapshots for each match
+            # 4. Store market availability and permissions for each match.
             for m in matches:
                 code = m["official_match_code"]
                 bdate = m["business_date"]
@@ -724,25 +798,18 @@ def crawl_official_schedule_v2(business_date: str | None = None) -> dict[str, An
                 # Store markets
                 store_markets(conn, match_id, m.get("_markets", []))
 
-                # Store odds snapshots (from raw_json oddsList)
-                snap_time = _now()
-                snapshots = parse_odds_snapshots_from_match(
-                    m.get("raw_json", {}), snapshot_time=snap_time
-                )
-                if snapshots:
-                    snap_result = store_odds_snapshots(
-                        conn, match_id=match_id, market_id=None, snapshots=snapshots
-                    )
-                    snapshots_inserted += snap_result.get("inserted", 0)
-
             # 5. Log
             log_crawl(
-                conn, source_name="sporttery_v2", crawl_type="schedule",
-                status="ok", records_found=len(matches),
-                records_inserted=total_inserted, records_updated=total_updated,
+                conn,
+                source_name="sporttery_v2",
+                crawl_type="schedule",
+                status="ok",
+                records_found=len(matches),
+                records_inserted=total_inserted,
+                records_updated=total_updated,
                 started_at=started,
             )
-            update_health(conn, "sporttery_v2", "official", "ok", latency_ms)
+            update_health(conn, "sporttery_v2", "schedule", "ok", latency_ms)
 
         client.close()
         return {
@@ -750,7 +817,7 @@ def crawl_official_schedule_v2(business_date: str | None = None) -> dict[str, An
             "matches_found": len(matches),
             "matches_inserted": total_inserted,
             "matches_updated": total_updated,
-            "snapshots_inserted": snapshots_inserted,
+            "snapshots_inserted": 0,
             "latency_ms": latency_ms,
         }
 
@@ -758,7 +825,7 @@ def crawl_official_schedule_v2(business_date: str | None = None) -> dict[str, An
         client.close()
         print(f"[crawl_official_schedule_v2] error: {e}, falling back to V1…")
         # Fallback to original crawler
-        return crawl_official_schedule(business_date or datetime.now().strftime("%Y-%m-%d"))
+        return crawl_official_schedule(business_date or business_today().isoformat())
 
 
 # ---------------------------------------------------------------------------
@@ -766,7 +833,9 @@ def crawl_official_schedule_v2(business_date: str | None = None) -> dict[str, An
 # ---------------------------------------------------------------------------
 
 
-def parse_traditional_lottery_response(raw: dict[str, Any]) -> list[dict[str, Any]]:
+def parse_traditional_lottery_response(
+    raw: dict[str, Any], now: datetime | None = None
+) -> list[dict[str, Any]]:
     """Parse traditional lottery draw response into normalized pool/issue dicts.
 
     The response from getFootBallDrawInfoV2.qry has separate sections for
@@ -779,10 +848,10 @@ def parse_traditional_lottery_response(raw: dict[str, Any]) -> list[dict[str, An
     value = raw.get("value", {})
     # Map game codes to sections in the response
     game_sections = {
-        "sfcDetail": 90,   # 胜负彩 → t14c
-        "rjDetail": 91,    # 任九
-        "bqcDetail": 98,   # 半全场
-        "jqcDetail": 99,   # 进球彩
+        "sfcDetail": 90,  # 胜负彩 → t14c
+        "rjDetail": 91,  # 任九
+        "bqcDetail": 98,  # 半全场
+        "jqcDetail": 99,  # 进球彩
     }
 
     results = []
@@ -802,32 +871,66 @@ def parse_traditional_lottery_response(raw: dict[str, Any]) -> list[dict[str, An
         match_list = section.get("matchList", [])
         matches = []
         for i, m in enumerate(match_list):
-            matches.append({
-                "match_order": i + 1,
-                "match_id": m.get("infohubMatchId") or m.get("matchId"),
-                "league_name": m.get("matchName", ""),
-                "home_team_name": m.get("masterTeamAllName") or m.get("masterTeamName") or m.get("homeTeam", ""),
-                "away_team_name": m.get("guestTeamAllName") or m.get("guestTeamName") or m.get("awayTeam", ""),
-                "kickoff_time": m.get("startTime", ""),
-                "home_win_prob": m.get("homeWinProb"),
-                "draw_prob": m.get("drawProb"),
-                "away_win_prob": m.get("awayWinProb"),
-                "upset_score": m.get("upsetScore"),
-                "public_heat_home": m.get("homeRate"),
-                "public_heat_draw": m.get("drawRate"),
-                "public_heat_away": m.get("awayRate"),
-            })
+            matches.append(
+                {
+                    "match_order": i + 1,
+                    "match_id": m.get("infohubMatchId") or m.get("matchId"),
+                    "league_name": m.get("matchName", ""),
+                    "home_team_name": m.get("masterTeamAllName")
+                    or m.get("masterTeamName")
+                    or m.get("homeTeam", ""),
+                    "away_team_name": m.get("guestTeamAllName")
+                    or m.get("guestTeamName")
+                    or m.get("awayTeam", ""),
+                    "kickoff_time": m.get("startTime", ""),
+                    "home_win_prob": m.get("homeWinProb"),
+                    "draw_prob": m.get("drawProb"),
+                    "away_win_prob": m.get("awayWinProb"),
+                    "upset_score": m.get("upsetScore"),
+                    "public_heat_home": m.get("homeRate"),
+                    "public_heat_draw": m.get("drawRate"),
+                    "public_heat_away": m.get("awayRate"),
+                }
+            )
 
-        results.append({
-            "game_type": game_type,
-            "issue_no": issue_no,
-            "sale_start": section.get("saleStartTime"),
-            "sale_stop": section.get("saleEndTime") or section.get("estimateDrawTime"),
-            "total_matches": len(match_list),
-            "official_status": "selling" if section.get("onSale") == 1 else "closed",
-            "matches": matches,
-            "raw_json": section,
-        })
+        sale_start = section.get("saleStartTime") or section.get("lotterySaleBeginTime")
+        sale_stop = (
+            section.get("saleEndTime")
+            or section.get("lotterySaleEndtime")
+            or section.get("lotterySaleEndTime")
+            or section.get("estimateDrawTime")
+        )
+        on_sale = section.get("onSale")
+        if on_sale in (0, 1, True, False):
+            official_status = "selling" if on_sale == 1 or on_sale is True else "closed"
+        else:
+            # Some current Sporttery responses omit onSale while still
+            # returning the official stop time. Do not treat a missing field
+            # as closed when the official sale window has not ended.
+            official_status = "closed"
+            if sale_stop:
+                try:
+                    stop_text = str(sale_stop).replace("Z", "+00:00")
+                    stop_dt = datetime.fromisoformat(stop_text)
+                    if stop_dt.tzinfo is not None:
+                        stop_dt = stop_dt.astimezone(business_now(now).tzinfo).replace(tzinfo=None)
+                    current = business_now(now).replace(tzinfo=None)
+                    official_status = "selling" if stop_dt > current else "closed"
+                except ValueError:
+                    pass
+
+        results.append(
+            {
+                "game_type": game_type,
+                "issue_no": issue_no,
+                "sale_start": sale_start,
+                "sale_stop": sale_stop,
+                "total_matches": len(match_list),
+                "official_status": official_status,
+                "matches": matches,
+                "raw_json": section,
+            }
+        )
 
     return results
 
@@ -851,8 +954,12 @@ def crawl_traditional_lottery() -> dict[str, Any]:
             client.close()
             with get_db() as conn:
                 log_crawl(
-                    conn, source_name="sporttery", crawl_type="traditional_lottery",
-                    status="ok", records_found=0, started_at=started,
+                    conn,
+                    source_name="sporttery",
+                    crawl_type="traditional_lottery",
+                    status="ok",
+                    records_found=0,
+                    started_at=started,
                 )
             return {"status": "ok", "pools_found": 0, "note": "no traditional lottery data"}
 
@@ -877,9 +984,13 @@ def crawl_traditional_lottery() -> dict[str, Any]:
                         total_matches += n
 
             log_crawl(
-                conn, source_name="sporttery", crawl_type="traditional_lottery",
-                status="ok", records_found=len(pools),
-                records_inserted=total_issues, started_at=started,
+                conn,
+                source_name="sporttery",
+                crawl_type="traditional_lottery",
+                status="ok",
+                records_found=len(pools),
+                records_inserted=total_issues,
+                started_at=started,
             )
             update_health(conn, "sporttery", "traditional_lottery", "ok", latency_ms)
 
@@ -897,8 +1008,12 @@ def crawl_traditional_lottery() -> dict[str, Any]:
         latency_ms = 0
         with get_db() as conn:
             log_crawl(
-                conn, source_name="sporttery", crawl_type="traditional_lottery",
-                status="error", error_message=str(e), started_at=started,
+                conn,
+                source_name="sporttery",
+                crawl_type="traditional_lottery",
+                status="error",
+                error_message=str(e),
+                started_at=started,
             )
             update_health(conn, "sporttery", "traditional_lottery", "error", 0, str(e))
         return {"status": "error", "error": str(e)}

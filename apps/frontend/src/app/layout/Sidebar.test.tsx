@@ -1,13 +1,17 @@
+import { StrictMode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import Sidebar from './Sidebar';
+import Sidebar, { normalizeSidebarIcon } from './Sidebar';
 
 // ---- Mocks ----------------------------------------------------------------
 
-let mockTheme = 'dark';
+let mockTheme = 'redline-quant';
 const mockToggleTheme = vi.fn();
 const mockNavigate = vi.fn();
+const { mockRuntimePanels } = vi.hoisted(() => ({
+  mockRuntimePanels: vi.fn(),
+}));
 let mockCurrentPath = '/';
 
 vi.mock('../../app/ThemeContext', () => ({
@@ -16,6 +20,14 @@ vi.mock('../../app/ThemeContext', () => ({
 
 vi.mock('../../core/router', () => ({
   useRouter: () => ({ currentPath: mockCurrentPath, navigate: mockNavigate, params: {} }),
+}));
+
+vi.mock('../../core/apiClient', () => ({
+  api: {
+    ui: {
+      panels: mockRuntimePanels,
+    },
+  },
 }));
 
 // ---- Helpers --------------------------------------------------------------
@@ -29,40 +41,160 @@ function renderSidebar(isOpen = false, onClose?: () => void) {
 describe('Sidebar', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockTheme = 'dark';
+    localStorage.clear();
+    mockTheme = 'redline-quant';
     mockCurrentPath = '/';
+    mockRuntimePanels.mockRejectedValue(new Error('backend unavailable'));
   });
 
   // ------------------------------------------------------------------
   // Static rendering
   // ------------------------------------------------------------------
   describe('rendering', () => {
+    it.each([
+      ['activity', '📊'],
+      ['upload', '📤'],
+      ['radar', '📡'],
+    ])('maps legacy runtime icon code %s to a display symbol', (icon, expected) => {
+      expect(normalizeSidebarIcon(icon)).toBe(expected);
+    });
+
     it('renders the brand logo', () => {
       renderSidebar();
       expect(screen.getByText('FQP')).toBeTruthy();
     });
 
-    it('renders all 13 navigation items', () => {
+    it('renders all navigation items from the panel registry', () => {
       renderSidebar();
-      expect(screen.getByText('今日')).toBeTruthy();
-      expect(screen.getByText('比赛')).toBeTruthy();
-      expect(screen.getByText('推荐')).toBeTruthy();
-      expect(screen.getByText('实票')).toBeTruthy();
-      expect(screen.getByText('复盘')).toBeTruthy();
-      expect(screen.getByText('模型')).toBeTruthy();
-      expect(screen.getByText('数据')).toBeTruthy();
-      expect(screen.getByText('模块')).toBeTruthy();
-      expect(screen.getByText('设置')).toBeTruthy();
-      expect(screen.getByText('Agent')).toBeTruthy();
-      expect(screen.getByText('回测')).toBeTruthy();
-      expect(screen.getByText('足彩')).toBeTruthy();
-      expect(screen.getByText('分析')).toBeTruthy();
+      const labels = [
+        '今日驾驶舱',
+        '比赛中心',
+        '赛事中心',
+        '赔率走势',
+        '投注中心',
+        '今日决策分析',
+        '模型表现',
+        '策略验证',
+        '足彩彩池',
+        '系统监控',
+        '功能模块',
+        '系统设置',
+        '智能代理',
+      ];
+
+      for (const label of labels) {
+        expect(screen.getByText(label)).toBeTruthy();
+      }
     });
 
     it('renders the theme toggle button', () => {
       renderSidebar();
-      // dark theme → shows "亮色模式"
-      expect(screen.getByText('亮色模式')).toBeTruthy();
+      expect(screen.getByText('切换极地浅色')).toBeTruthy();
+    });
+
+    it('hides menu items for disabled modules', () => {
+      localStorage.setItem(
+        'fqp-settings',
+        JSON.stringify({ disabledModules: ['betting_center_module'] }),
+      );
+
+      renderSidebar();
+
+      expect(screen.queryByText('投注中心')).toBeNull();
+      expect(screen.getByText('今日决策分析')).toBeTruthy();
+      expect(screen.getByText('功能模块')).toBeTruthy();
+    });
+
+    it('hides strategy lab items when their module is disabled', () => {
+      localStorage.setItem(
+        'fqp-settings',
+        JSON.stringify({ disabledModules: ['pool_lottery_module'] }),
+      );
+
+      renderSidebar();
+
+      expect(screen.queryByText('足彩彩池')).toBeNull();
+      expect(screen.getByText('投注中心')).toBeTruthy();
+    });
+
+    it('uses runtime panels from backend when available', async () => {
+      mockRuntimePanels.mockResolvedValue({
+        total: 1,
+        panels: [
+          {
+            panelCode: 'remote_panel',
+            moduleCode: 'module_runtime_core',
+            panelName: '远程入口',
+            routePath: '/remote',
+            icon: 'remote',
+            order: 1,
+          },
+        ],
+      });
+
+      renderSidebar();
+
+      await waitFor(() => expect(screen.getByText('远程入口')).toBeTruthy());
+      expect(screen.queryByText('今日驾驶舱')).toBeNull();
+    });
+
+    it('renders the runtime system monitor in the maintenance group', async () => {
+      mockRuntimePanels.mockResolvedValue({
+        total: 1,
+        panels: [
+          {
+            panelCode: 'data_health',
+            moduleCode: 'ops_admin',
+            panelName: '系统监控',
+            routePath: '/data-health',
+            menuGroup: '运维设置',
+            category: 'maintenance',
+            icon: 'database',
+            order: 310,
+          },
+        ],
+      });
+
+      renderSidebar();
+
+      expect(await screen.findByRole('button', { name: /系统监控/ })).toBeInTheDocument();
+      expect(screen.getByText('系统管理')).toBeInTheDocument();
+    });
+
+    it('uses semantic buttons for navigation and theme switching', () => {
+      renderSidebar();
+
+      expect(screen.getByRole('button', { name: /今日驾驶舱/ })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /切换极地浅色/ })).toBeInTheDocument();
+    });
+
+    it('loads runtime panels once in StrictMode', async () => {
+      render(<StrictMode><Sidebar /></StrictMode>);
+
+      await waitFor(() => expect(mockRuntimePanels).toHaveBeenCalledTimes(1));
+    });
+
+    it('maps runtime icon codes to display symbols', async () => {
+      mockRuntimePanels.mockResolvedValue({
+        total: 1,
+        panels: [
+          {
+            panelCode: 'runtime_ticket',
+            moduleCode: 'betting_center_module',
+            panelName: '彩票台账',
+            routePath: '/betting',
+            icon: 'ticket',
+            order: 1,
+          },
+        ],
+      });
+
+      const { container } = renderSidebar();
+
+      await waitFor(() => expect(screen.getByText('彩票台账')).toBeTruthy());
+      const navItem = screen.getByText('彩票台账').closest('.fqp-nav-item');
+      expect(navItem?.querySelector('.fqp-nav-icon')?.textContent).toBe('🎫');
+      expect(container.textContent).not.toContain('ticket彩票台账');
     });
   });
 
@@ -73,33 +205,32 @@ describe('Sidebar', () => {
     it('navigates when a nav item is clicked', async () => {
       const user = userEvent.setup();
       renderSidebar();
-      await user.click(screen.getByText('今日'));
+      await user.click(screen.getByText('今日驾驶舱'));
       expect(mockNavigate).toHaveBeenCalledWith('/');
     });
 
-    it('navigates to correct paths', async () => {
-      const user = userEvent.setup();
+    it('navigates to correct paths', () => {
       renderSidebar();
 
       const checks: [string, string][] = [
-        ['今日', '/'],
-        ['比赛', '/matches'],
-        ['推荐', '/recommendations'],
-        ['实票', '/tickets'],
-        ['复盘', '/reviews'],
-        ['模型', '/models'],
-        ['数据', '/data-health'],
-        ['模块', '/modules'],
-        ['设置', '/settings'],
-        ['Agent', '/agents'],
-        ['回测', '/backtest'],
-        ['足彩', '/pool'],
-        ['分析', '/analysis'],
+        ['今日驾驶舱', '/'],
+        ['比赛中心', '/matches'],
+        ['赛事中心', '/events'],
+        ['赔率走势', '/odds'],
+        ['投注中心', '/betting'],
+        ['今日决策分析', '/analysis'],
+        ['模型表现', '/models'],
+        ['策略验证', '/backtest'],
+        ['足彩彩池', '/pool'],
+        ['系统监控', '/data-health'],
+        ['功能模块', '/modules'],
+        ['系统设置', '/settings'],
+        ['智能代理', '/agents'],
       ];
 
       for (const [label, path] of checks) {
         mockNavigate.mockClear();
-        await user.click(screen.getByText(label));
+        fireEvent.click(screen.getByText(label));
         expect(mockNavigate).toHaveBeenCalledWith(path);
       }
     });
@@ -109,7 +240,7 @@ describe('Sidebar', () => {
       const user = userEvent.setup();
       renderSidebar(true, onClose);
 
-      await user.click(screen.getByText('今日'));
+      await user.click(screen.getByText('今日驾驶舱'));
       expect(mockNavigate).toHaveBeenCalledWith('/');
       expect(onClose).toHaveBeenCalledTimes(1);
     });
@@ -118,7 +249,7 @@ describe('Sidebar', () => {
       const user = userEvent.setup();
       renderSidebar(false);
       // Should not throw
-      await user.click(screen.getByText('今日'));
+      await user.click(screen.getByText('今日驾驶舱'));
     });
   });
 
@@ -129,22 +260,21 @@ describe('Sidebar', () => {
     it('marks current path as active', () => {
       mockCurrentPath = '/matches';
       renderSidebar();
-      // The "比赛" nav item should have the active class
-      const matchItem = screen.getByText('比赛').closest('.fqp-nav-item');
+      const matchItem = screen.getByText('比赛中心').closest('.fqp-nav-item');
       expect(matchItem?.classList.contains('active')).toBe(true);
     });
 
     it('does not mark inactive paths', () => {
       mockCurrentPath = '/matches';
       renderSidebar();
-      const otherItem = screen.getByText('推荐').closest('.fqp-nav-item');
+      const otherItem = screen.getByText('今日决策分析').closest('.fqp-nav-item');
       expect(otherItem?.classList.contains('active')).toBe(false);
     });
 
     it('handles root path exactly (not prefix-match everything)', () => {
       mockCurrentPath = '/matches';
       renderSidebar();
-      const rootItem = screen.getByText('今日').closest('.fqp-nav-item');
+      const rootItem = screen.getByText('今日驾驶舱').closest('.fqp-nav-item');
       // '/' should not be active when currentPath is '/matches'
       expect(rootItem?.classList.contains('active')).toBe(false);
     });
@@ -152,7 +282,7 @@ describe('Sidebar', () => {
     it('marks root active when currentPath is exactly /', () => {
       mockCurrentPath = '/';
       renderSidebar();
-      const rootItem = screen.getByText('今日').closest('.fqp-nav-item');
+      const rootItem = screen.getByText('今日驾驶舱').closest('.fqp-nav-item');
       expect(rootItem?.classList.contains('active')).toBe(true);
     });
   });
@@ -164,33 +294,33 @@ describe('Sidebar', () => {
     it('calls toggleTheme when clicked', async () => {
       const user = userEvent.setup();
       renderSidebar();
-      await user.click(screen.getByText('亮色模式'));
+      await user.click(screen.getByText('切换极地浅色'));
       expect(mockToggleTheme).toHaveBeenCalledTimes(1);
     });
 
-    it('shows correct label in dark mode', () => {
-      mockTheme = 'dark';
+    it('shows the light-theme target in a dark theme', () => {
+      mockTheme = 'redline-quant';
       renderSidebar();
-      expect(screen.getByText('亮色模式')).toBeTruthy();
+      expect(screen.getByText('切换极地浅色')).toBeTruthy();
     });
 
-    it('shows correct label in light mode', () => {
-      mockTheme = 'light';
+    it('shows the dark-theme target in the light theme', () => {
+      mockTheme = 'polar-lab';
       renderSidebar();
-      expect(screen.getByText('暗色模式')).toBeTruthy();
+      expect(screen.getByText('切换黑红主题')).toBeTruthy();
     });
 
     it('shows ☀️ in dark mode', () => {
-      mockTheme = 'dark';
+      mockTheme = 'redline-quant';
       renderSidebar();
-      const toggle = screen.getByText('亮色模式');
+      const toggle = screen.getByText('切换极地浅色');
       expect(toggle.parentElement?.textContent).toContain('☀️');
     });
 
     it('shows 🌙 in light mode', () => {
-      mockTheme = 'light';
+      mockTheme = 'polar-lab';
       renderSidebar();
-      const toggle = screen.getByText('暗色模式');
+      const toggle = screen.getByText('切换黑红主题');
       expect(toggle.parentElement?.textContent).toContain('🌙');
     });
   });

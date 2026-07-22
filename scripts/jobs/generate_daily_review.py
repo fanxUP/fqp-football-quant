@@ -6,23 +6,41 @@ Runs at 23:30 daily — reviews yesterday's data (today incomplete).
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime
 from typing import Any
 
 from apps.backend.src.db import get_db
+from scripts.agents.task_queue import finish_tracked_job, start_tracked_job
+from scripts.business_time import business_yesterday
 from scripts.real_ticket_storage import upsert_daily_review
 from scripts.review_generator import daily_summary
+from scripts.upset.reports import generate_report
 
 
-def _now() -> str:
-    return datetime.now().isoformat(timespec="seconds")
+def _yesterday(now: datetime | None = None) -> str:
+    return business_yesterday(now or datetime.now(UTC)).isoformat()
 
 
-def _yesterday() -> str:
-    return (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+def _settlement_totals(rows: list[tuple]) -> dict[str, dict[str, float]]:
+    """Aggregate settlement P&L using weighted ROI instead of averaging ticket ROI."""
+    totals = {
+        "simulation": {"prize": 0.0, "profit_loss": 0.0, "roi": 0.0},
+        "real": {"prize": 0.0, "profit_loss": 0.0, "roi": 0.0},
+    }
+    for source, stake, prize, profit_loss, _average_roi in rows:
+        if source not in totals:
+            continue
+        stake_value = float(stake or 0)
+        profit_value = float(profit_loss or 0)
+        totals[source] = {
+            "prize": float(prize or 0),
+            "profit_loss": profit_value,
+            "roi": profit_value / stake_value if stake_value > 0 else 0.0,
+        }
+    return totals
 
 
-def run(review_date: str | None = None, dry_run: bool = False) -> dict[str, Any]:
+def _run_impl(review_date: str | None = None, dry_run: bool = False) -> dict[str, Any]:
     """Generate daily review for the given date (default: yesterday)."""
     if dry_run:
         return {"status": "dry_run", "message": "generate daily review (dry run)"}
@@ -46,6 +64,7 @@ def run(review_date: str | None = None, dry_run: bool = False) -> dict[str, Any]
                 FROM match_feature_snapshots fs
                 JOIN official_matches m ON m.id = fs.match_id
                 WHERE m.business_date = %s
+                  AND fs.snapshot_time < m.kickoff_time
                 """,
                 (date,),
             )
@@ -59,6 +78,8 @@ def run(review_date: str | None = None, dry_run: bool = False) -> dict[str, Any]
                 FROM model_predictions mp
                 JOIN official_matches m ON m.id = mp.match_id
                 WHERE m.business_date = %s
+                  AND mp.predict_time < m.kickoff_time
+                  AND mp.validation_status = 'valid'
                 """,
                 (date,),
             )
@@ -67,7 +88,8 @@ def run(review_date: str | None = None, dry_run: bool = False) -> dict[str, Any]
         # 4. Count simulation tickets created on this date
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT COUNT(*) FROM simulation_tickets WHERE created_at::date = %s",
+                """SELECT COUNT(*) FROM simulation_tickets
+                   WHERE (created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Shanghai')::date = %s""",
                 (date,),
             )
             sim_ticket_count = cur.fetchone()[0] or 0
@@ -75,7 +97,8 @@ def run(review_date: str | None = None, dry_run: bool = False) -> dict[str, Any]
         # 5. Count real tickets purchased on this date
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT COUNT(*) FROM real_tickets WHERE purchase_time::date = %s",
+                """SELECT COUNT(*) FROM real_tickets
+                   WHERE (purchase_time AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Shanghai')::date = %s""",
                 (date,),
             )
             real_ticket_count = cur.fetchone()[0] or 0
@@ -83,7 +106,8 @@ def run(review_date: str | None = None, dry_run: bool = False) -> dict[str, Any]
         # 6. Get suggested stakes (sum of simulation tickets)
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT COALESCE(SUM(suggested_stake), 0) FROM simulation_tickets WHERE created_at::date = %s",
+                """SELECT COALESCE(SUM(suggested_stake), 0) FROM simulation_tickets
+                   WHERE (created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Shanghai')::date = %s""",
                 (date,),
             )
             suggested_stake = float(cur.fetchone()[0] or 0)
@@ -91,7 +115,8 @@ def run(review_date: str | None = None, dry_run: bool = False) -> dict[str, Any]
         # 7. Get actual stakes (sum of real tickets)
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT COALESCE(SUM(total_amount), 0) FROM real_tickets WHERE purchase_time::date = %s",
+                """SELECT COALESCE(SUM(total_amount), 0) FROM real_tickets
+                   WHERE (purchase_time AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Shanghai')::date = %s""",
                 (date,),
             )
             actual_stake = float(cur.fetchone()[0] or 0)
@@ -106,33 +131,22 @@ def run(review_date: str | None = None, dry_run: bool = False) -> dict[str, Any]
                        COALESCE(SUM(profit_loss), 0),
                        AVG(roi)
                 FROM ticket_settlements
-                WHERE settle_time::date = %s
+                WHERE (settle_time AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Shanghai')::date = %s
                 GROUP BY ticket_source
                 """,
                 (date,),
             )
             settlement_rows = cur.fetchall()
 
-        sim_prize = 0.0
-        sim_pl = 0.0
-        sim_roi = 0.0
-        real_prize = 0.0
-        real_pl = 0.0
-        real_roi = 0.0
-
-        for row in settlement_rows:
-            source = row[0]
-            prize = float(row[2] or 0)
-            pl = float(row[3] or 0)
-            roi = float(row[4] or 0)
-            if source == "simulation":
-                sim_prize = prize
-                sim_pl = pl
-                sim_roi = roi
-            elif source == "real":
-                real_prize = prize
-                real_pl = pl
-                real_roi = roi
+        settlement_totals = _settlement_totals(settlement_rows)
+        simulation = settlement_totals["simulation"]
+        real = settlement_totals["real"]
+        sim_prize = simulation["prize"]
+        sim_pl = simulation["profit_loss"]
+        sim_roi = simulation["roi"]
+        real_prize = real["prize"]
+        real_pl = real["profit_loss"]
+        real_roi = real["roi"]
 
         # 9. Budget usage rate (daily budget = 500)
         budget_usage_rate = actual_stake / 500.0 if actual_stake > 0 else 0.0
@@ -143,7 +157,7 @@ def run(review_date: str | None = None, dry_run: bool = False) -> dict[str, Any]
                 """
                 SELECT COALESCE(MIN(profit_loss), 0)
                 FROM ticket_settlements
-                WHERE settle_time::date = %s
+                WHERE (settle_time AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Shanghai')::date = %s
                 """,
                 (date,),
             )
@@ -160,8 +174,9 @@ def run(review_date: str | None = None, dry_run: bool = False) -> dict[str, Any]
             cur.execute(
                 """
                 SELECT error_type, COUNT(*) AS cnt
-                FROM prediction_error_analysis
-                WHERE created_at::date = %s
+                FROM prediction_error_analysis pea
+                JOIN official_matches m ON m.id = pea.match_id
+                WHERE m.business_date = %s
                 GROUP BY error_type
                 ORDER BY cnt DESC
                 LIMIT 3
@@ -217,16 +232,37 @@ def run(review_date: str | None = None, dry_run: bool = False) -> dict[str, Any]
                 "next_day_adjustment": "",
             },
         )
+        upset_report = generate_report(
+            conn,
+            report_type="daily",
+            start=date,
+            end=date,
+        )
 
-        return {
-            "status": "ok",
-            "review_id": review_id,
-            "review_date": date,
-            "official_match_count": official_count,
-            "simulation_ticket_count": sim_ticket_count,
-            "real_ticket_count": real_ticket_count,
-            "summary": summary,
-        }
+    return {
+        "status": "ok",
+        "review_id": review_id,
+        "review_date": date,
+        "official_match_count": official_count,
+        "simulation_ticket_count": sim_ticket_count,
+        "real_ticket_count": real_ticket_count,
+        "summary": summary,
+        "upset_report": upset_report,
+    }
+
+
+def run(review_date: str | None = None, dry_run: bool = False) -> dict[str, Any]:
+    """Generate review and persist its multi-agent execution record."""
+    run_id = start_tracked_job(
+        "daily_review", "review_agent", {"review_date": review_date, "dry_run": dry_run}
+    )
+    try:
+        result = _run_impl(review_date=review_date, dry_run=dry_run)
+        finish_tracked_job(run_id, result.get("status", "completed"), {"result": result})
+        return result
+    except Exception as exc:
+        finish_tracked_job(run_id, "failed", error=str(exc))
+        raise
 
 
 if __name__ == "__main__":

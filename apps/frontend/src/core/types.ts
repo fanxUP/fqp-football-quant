@@ -79,6 +79,97 @@ export interface EventMatch {
   ft_away_goals?: number | null;
 }
 
+export interface EventCatalogMatch {
+  source: 'official';
+  source_row_id: number;
+  source_match_code: string;
+  competition_season_id: number | null;
+  home_team_id: number | null;
+  away_team_id: number | null;
+  league_name: string;
+  home_team_name: string;
+  away_team_name: string;
+  kickoff_time: string;
+  match_status: string;
+  ft_home_goals: number | null;
+  ft_away_goals: number | null;
+}
+
+// ---- Official collection history ----
+
+export interface OfficialCollectionStatus {
+  id: number;
+  business_date: string;
+  crawl_type: string;
+  source_name: string;
+  status: 'ok' | 'partial' | 'blocked' | 'error' | string;
+  source_url: string | null;
+  source_artifact_path: string | null;
+  source_artifact_hash: string | null;
+  records_found: number;
+  records_inserted: number;
+  records_updated: number;
+  error_message: string | null;
+  updated_at: string;
+}
+
+export interface OfficialOddsHistoryMatch {
+  id: number;
+  official_match_code: string;
+  league_name: string;
+  home_team_name: string;
+  away_team_name: string;
+  kickoff_time: string;
+  play_types: string[];
+}
+
+export interface OfficialOddsIndex {
+  current: { count: number };
+  history: { business_date: string; match_count: number }[];
+  sales_window?: SportterySalesWindow;
+}
+
+export interface OddsMovementPoint {
+  snapshot_id: number;
+  snapshot_time: string;
+  play_type: string;
+  option_code: string;
+  option_name: string;
+  sp_value: number;
+  handicap: number | null;
+  implied_probability: number | null;
+  prev_sp_value: number | null;
+}
+
+export interface OddsCaptureStatus {
+  status: 'running' | 'complete' | 'partial' | 'not_offered' | 'failed';
+  capture_kind: 'opening' | 'periodic' | 'retry' | 'final';
+  failure_reason: string | null;
+}
+
+export interface OddsMovementMatch {
+  id: number;
+  official_match_code: string;
+  business_date: string;
+  league_name: string;
+  home_team_name: string;
+  away_team_name: string;
+  kickoff_time: string;
+  capture_status: OddsCaptureStatus | null;
+  series: OddsMovementPoint[];
+  anomalies: DashboardOddsAnomaly[];
+}
+
+export interface OddsMovementsResponse {
+  scope: 'current' | 'history';
+  business_date: string | null;
+  play_type: string;
+  resolution: 'raw' | 'hour';
+  matches: OddsMovementMatch[];
+  total: number;
+  sales_window?: SportterySalesWindow;
+}
+
 // ---- Match Detail (Events Center drawer) ----
 
 export interface MatchDetailTeam {
@@ -251,7 +342,9 @@ export interface Prediction {
   model_name: string;
   play_type: string;
   option_code: string;
+  raw_model_probability: number | null;
   model_probability: number | null;
+  feature_adjusted: boolean;
   market_probability: number | null;
   fair_odds: number | null;
   ev: number | null;
@@ -260,7 +353,7 @@ export interface Prediction {
   away_team: string;
 }
 
-// ---- Stage 4: Simulation Tickets ----
+// ---- Stage 4: Recommendation tickets ----
 
 export interface SimulationTicket {
   id: number;
@@ -275,37 +368,29 @@ export interface SimulationTicket {
   item_count: number;
 }
 
-// ---- Stage 5: Real Tickets ----
-
-export interface RealTicket {
-  id: number;
-  user_id: number;
-  source_type: string;
-  purchase_time: string;
-  total_amount: number;
-  pass_type: string;
-  multiple: number;
-  theoretical_max_prize: number | null;
-  confirm_status: string;
-  settlement_status: string;
-  linked_simulation_id: number | null;
-  ticket_image_url: string | null;
-  notes: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface RealTicketItem {
-  id: number;
-  real_ticket_id: number;
-  match_id: number | null;
-  play_type: string;
-  option_code: string;
-  option_name: string;
-  sp_value: number;
-  amount: number | null;
-  is_matched_to_model: boolean;
-  model_deviation_note: string | null;
+export interface TicketOcrResult {
+  success: boolean;
+  ticket_no?: string;
+  pass_type?: string;
+  multiple?: number;
+  total_amount?: number;
+  items: {
+    match_code?: string;
+    home_team?: string;
+    away_team?: string;
+    play_type?: string;
+    option_code?: string;
+    option_name?: string;
+    sp_value?: number;
+    handicap?: string;
+  }[];
+  raw_text?: string;
+  ocr_engine?: string;
+  confidence?: number;
+  warnings?: string[];
+  filename?: string;
+  size_bytes?: number;
+  ticket_image_url?: string;
 }
 
 // ---- Stage 5: Settlements ----
@@ -497,6 +582,14 @@ export interface PoolMatchInfo {
 
 export interface PoolAnalysis {
   period_id: string;
+  analysis_mode: 'current' | 'historical';
+  issue: {
+    id: number;
+    issue_no: string;
+    status: string;
+    sale_stop: string | null;
+    source: 'sporttery';
+  };
   matches: PoolMatchInfo[];
   classification: {
     dan: string[];
@@ -535,7 +628,9 @@ export interface EvalModelSummary {
   avg_brier: number;
   avg_logloss: number;
   avg_rps: number;
-  avg_clv: number;
+  avg_clv: number | null;
+  sample_status: 'monitoring' | 'preliminary' | 'qualified';
+  is_publishable: boolean;
 }
 
 export interface EvaluationSummary {
@@ -545,7 +640,35 @@ export interface EvaluationSummary {
     total_evaluated: number;
     overall_brier: number;
     overall_logloss: number;
+    publication_min_samples: number;
+    publishable_models: number;
   };
+}
+
+export interface ModelPerformancePoint {
+  date: string;
+  play_type: string;
+  model_name: string;
+  hit_rate: number;
+  sample_size: number;
+}
+
+export interface ModelPerformanceSample {
+  play_type: string;
+  model_name: string;
+  total_samples: number;
+  settled_dates: number;
+  first_date: string;
+  last_date: string;
+}
+
+export interface ModelPerformanceHistory {
+  status: string;
+  metric: 'rolling_hit_rate';
+  window: number;
+  days: number;
+  points: ModelPerformancePoint[];
+  samples: ModelPerformanceSample[];
 }
 
 export interface CalibrationBin {
@@ -593,8 +716,8 @@ export interface ModelCompareItem {
   brier: number;
   log_loss: number;
   rps: number;
-  clv: number;
-  flb_score: number;
+  clv: number | null;
+  flb_score: number | null;
   hit_rate?: number;
   roi?: number;
   sharpe?: number;
@@ -664,10 +787,20 @@ export interface LiveRecommendation {
   option_name: string;
   model_probability: number;
   market_probability: number;
+  sp_value: number;
   fair_odds: number;
   ev: number;
   edge: number;
+  market_edge: number;
+  break_even_probability: number;
+  breakeven_edge: number;
   confidence: number;
+  odds_snapshot_time: string;
+  data_completeness: number | null;
+  validation_status: 'valid' | 'invalid';
+  model_independent: boolean;
+  strategy_pool?: string;
+  risk_level?: string;
   predict_time: string;
   model_name: string;
   home_team: string;
@@ -675,6 +808,20 @@ export interface LiveRecommendation {
   league: string;
   kickoff_time: string | null;
   match_status: string;
+  match_num_str: string | null;
+  ht_home_goals: number | null;
+  ht_away_goals: number | null;
+  ft_home_goals: number | null;
+  ft_away_goals: number | null;
+  et_home_goals: number | null;
+  et_away_goals: number | null;
+  pk_home_goals: number | null;
+  pk_away_goals: number | null;
+  spf_result: string | null;
+  rqspf_result: string | null;
+  total_goals_result: string | null;
+  score_result: string | null;
+  half_full_result: string | null;
 }
 
 export interface ModelPlayTypeRecommendation {
@@ -688,7 +835,7 @@ export interface ModelPlayTypeRecommendation {
 
 // ---- Settings (localStorage) ----
 
-// ---- Simulator (体彩模拟投注) ----
+// ---- Betting terminal ----
 
 export interface SimulatorOddsOption {
   option_code: string;
@@ -699,6 +846,7 @@ export interface SimulatorOddsOption {
 export interface SimulatorOddsGroup {
   handicap?: number | null;
   is_single_allowed?: boolean;
+  is_pass_allowed?: boolean;
   options: SimulatorOddsOption[];
 }
 
@@ -734,7 +882,19 @@ export interface BetSlipItem {
   option_name: string;
   sp_value: number;
   handicap?: number | null;
+  is_single_allowed?: boolean;
+  is_pass_allowed?: boolean;
   is_dan: boolean;
+  basis?: {
+    source: 'manual' | 'ocr' | 'recommendation';
+    modelProbability?: number;
+    marketProbability?: number;
+    edge?: number;
+    ev?: number;
+    confidence?: number;
+    sentimentWeight?: number;
+    summary?: string;
+  };
 }
 
 export interface BetComboDetail {
@@ -743,7 +903,7 @@ export interface BetComboDetail {
   max_prize: number;
 }
 
-/** Subset of BetSlipItem sent to the /api/simulator/calculate and /api/simulator/tickets endpoints. */
+/** Subset of BetSlipItem sent to the betting calculation and ticket endpoints. */
 export interface CalculateItem {
   match_id: number;
   play_type: string;
@@ -752,6 +912,8 @@ export interface CalculateItem {
   sp_value: number;
   handicap?: number | null;
   is_dan: boolean;
+  is_single_allowed?: boolean;
+  is_pass_allowed?: boolean;
 }
 
 export interface CalculationResult {
@@ -761,6 +923,7 @@ export interface CalculationResult {
   total_cost: number;
   max_prize: number;
   match_count: number;
+  selection_count?: number;
   combinations: BetComboDetail[];
   available_pass_types: string[];
 }
@@ -801,6 +964,25 @@ export interface SimulatorTicketDetail extends SimulatorTicket {
   settlement?: Settlement;
 }
 
+export type BettingOddsOption = SimulatorOddsOption;
+export type BettingMatch = SimulatorMatch;
+export type BettingTicketHistory = SimulatorTicket;
+export type BettingTicketHistoryDetail = SimulatorTicketDetail;
+
+export interface SportterySalesWindow {
+  is_open: boolean;
+  current_time: string;
+  opens_at: string;
+  closes_at: string;
+  next_opens_at: string;
+  message: string;
+  schedule: {
+    weekday: string;
+    weekend: string;
+    timezone: string;
+  };
+}
+
 export interface BankrollSummary {
   account_id: number;
   initial_balance: number;
@@ -818,6 +1000,99 @@ export interface BankrollTransaction {
   balance_after: number;
   transaction_time: string;
   remark: string;
+}
+
+// ---- Unified betting center ----
+
+export type BettingTicketOwner = 'me' | 'agent';
+export type BettingTicketKind = 'simulation' | 'real';
+export type BettingTicketSource = 'manual' | 'ocr' | 'agent_recommendation';
+
+export interface BettingTicketItemSummary {
+  matchId: number | null;
+  matchCode: string;
+  homeTeam: string;
+  awayTeam: string;
+  playType: string;
+  optionCode: string;
+  optionName: string;
+  spValue: number | null;
+  oddsSource?: 'official' | 'synthetic_model' | string;
+}
+
+export interface BettingTicket {
+  ticketUid: string;
+  ticketNumber: string;
+  legacyId: number;
+  owner: BettingTicketOwner;
+  kind: BettingTicketKind;
+  source: BettingTicketSource;
+  status: string;
+  date: string;
+  createdAt: string | null;
+  title: string;
+  playType: string;
+  passType: string;
+  multiple: number;
+  betCount: number | null;
+  matchCount: number;
+  stake: number;
+  maxPrize: number | null;
+  settledAmount: number | null;
+  profitLoss: number | null;
+  roi: number | null;
+  settledAt?: string | null;
+  isWon?: boolean;
+  itemCount: number;
+  route: string;
+  confirmStatus?: string;
+  linkedSimulationId?: number | null;
+  expectedValue?: number;
+  strategyPool?: string;
+  riskLevel?: string;
+  items?: BettingTicketItemSummary[];
+}
+
+export interface BettingTicketSummary {
+  total: number;
+  stake: number;
+  settled: number;
+  pending: number;
+  profitLoss?: number;
+}
+
+export interface BettingResultBucket {
+  ticketCount: number;
+  stake: number;
+  settledAmount: number;
+  profitLoss: number;
+  roi: number;
+  settled: number;
+  pending: number;
+  hitCount: number;
+}
+
+export interface BettingResultTrendPoint {
+  date: string;
+  meDailyStake: number;
+  meDailyProfitLoss: number;
+  agentDailyStake: number;
+  agentDailyProfitLoss: number;
+  meCumulativeProfitLoss: number;
+  agentCumulativeProfitLoss: number;
+  meCumulativeRoi: number;
+  agentCumulativeRoi: number;
+}
+
+export interface BettingResults {
+  owners: {
+    me: BettingResultBucket;
+    agent: BettingResultBucket;
+  };
+  leader: 'me' | 'agent' | 'draw';
+  bySource: Record<string, BettingResultBucket>;
+  trend: BettingResultTrendPoint[];
+  updatedAt: string | null;
 }
 
 // ---- Competition (Agent vs User) ----
@@ -918,6 +1193,17 @@ export interface CompetitionTicket {
   pass_type: string;
   ticket_type: string;
   items: CompetitionTicketItem[];
+}
+
+export interface AgentDailyDecision {
+  decisionDate: string;
+  status: 'purchased' | 'abstained' | 'failed';
+  totalBudget: number;
+  totalStake: number;
+  unusedBudget: number;
+  reason: string;
+  updatedAt: string | null;
+  decisionType: 'formal' | 'observation' | 'none';
 }
 
 // ---- Settings (localStorage) ----

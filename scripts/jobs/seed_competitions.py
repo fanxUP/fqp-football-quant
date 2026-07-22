@@ -9,11 +9,96 @@ from __future__ import annotations
 from typing import Any
 
 from apps.backend.src.db import get_db
-from scripts.api_football_client import ApiFootballClient
-
 
 # ── API-Football league ID → internal mapping ──
 LEAGUE_MAP: list[dict[str, Any]] = [
+    {
+        "api_league_id": 71,
+        "competition_code": "apifootball:71",
+        "competition_name_cn": "巴西甲级联赛",
+        "competition_name_en": "Serie A",
+        "country": "Brazil",
+        "competition_type": "league",
+        "is_cup": False,
+        "is_league": True,
+        "season_code": "apifootball:71:2026",
+        "season_name": "2026赛季",
+        "start_date": "2026-01-01",
+        "end_date": "2026-12-31",
+        "is_current": True,
+        "total_teams": 20,
+        "stage_format": "double_round_robin",
+    },
+    {
+        "api_league_id": 2,
+        "competition_code": "apifootball:2",
+        "competition_name_cn": "欧洲冠军联赛",
+        "competition_name_en": "UEFA Champions League",
+        "country": "World",
+        "competition_type": "cup",
+        "is_cup": True,
+        "is_league": False,
+        "has_group_stage": True,
+        "has_knockout_stage": True,
+        "season_code": "apifootball:2:2026",
+        "season_name": "2026/27赛季",
+        "start_date": "2026-07-01",
+        "end_date": "2027-06-30",
+        "is_current": True,
+        "total_teams": 36,
+        "stage_format": "league_and_knockout",
+    },
+    {
+        "api_league_id": 253,
+        "competition_code": "apifootball:253",
+        "competition_name_cn": "美国职业大联盟",
+        "competition_name_en": "Major League Soccer",
+        "country": "USA",
+        "competition_type": "league",
+        "is_cup": False,
+        "is_league": True,
+        "season_code": "apifootball:253:2026",
+        "season_name": "2026赛季",
+        "start_date": "2026-01-01",
+        "end_date": "2026-12-31",
+        "is_current": True,
+        "total_teams": 30,
+        "stage_format": "regular_season_and_playoffs",
+    },
+    {
+        "api_league_id": 103,
+        "competition_code": "apifootball:103",
+        "competition_name_cn": "挪威超级联赛",
+        "competition_name_en": "Eliteserien",
+        "country": "Norway",
+        "competition_type": "league",
+        "is_cup": False,
+        "is_league": True,
+        "season_code": "apifootball:103:2026",
+        "season_name": "2026赛季",
+        "start_date": "2026-03-01",
+        "end_date": "2026-11-30",
+        "is_current": True,
+        "total_teams": 16,
+        "stage_format": "single_round_robin",
+    },
+    {
+        "api_league_id": 244,
+        "competition_code": "apifootball:244",
+        "competition_name_cn": "芬兰超级联赛",
+        "competition_name_en": "Veikkausliiga",
+        "country": "Finland",
+        "competition_type": "league",
+        "is_cup": False,
+        "is_league": True,
+        "season_code": "apifootball:244:2026",
+        "season_name": "2026赛季",
+        "start_date": "2026-03-01",
+        "end_date": "2026-11-30",
+        "is_current": True,
+        "total_teams": 12,
+        "stage_format": "double_round_robin",
+    },
     {
         "api_league_id": 113,
         "competition_code": "apifootball:113",
@@ -23,11 +108,13 @@ LEAGUE_MAP: list[dict[str, Any]] = [
         "competition_type": "league",
         "is_cup": False,
         "is_league": True,
-        "season_code": "2026",
+        "season_code": "apifootball:113:2026",
         "season_name": "2026赛季",
         "start_date": "2026-03-01",
         "end_date": "2026-11-30",
         "is_current": True,
+        "total_teams": 16,
+        "stage_format": "double_round_robin",
     },
     {
         "api_league_id": 292,
@@ -38,11 +125,13 @@ LEAGUE_MAP: list[dict[str, Any]] = [
         "competition_type": "league",
         "is_cup": False,
         "is_league": True,
-        "season_code": "2026",
+        "season_code": "apifootball:292:2026",
         "season_name": "2026赛季",
         "start_date": "2026-03-01",
         "end_date": "2026-11-30",
         "is_current": True,
+        "total_teams": 12,
+        "stage_format": "regular_season",
     },
     {
         "api_league_id": 1,
@@ -55,11 +144,13 @@ LEAGUE_MAP: list[dict[str, Any]] = [
         "is_league": False,
         "has_group_stage": True,
         "has_knockout_stage": True,
-        "season_code": "2026",
+        "season_code": "apifootball:1:2026",
         "season_name": "2026世界杯",
         "start_date": "2026-06-11",
         "end_date": "2026-07-19",
         "is_current": True,
+        "total_teams": 48,
+        "stage_format": "group_and_knockout",
     },
 ]
 
@@ -127,6 +218,7 @@ def run(dry_run: bool = False) -> dict[str, Any]:
                     )
                     ON CONFLICT (season_code) DO UPDATE SET
                         season_name = EXCLUDED.season_name,
+                        start_date = EXCLUDED.start_date,
                         end_date = EXCLUDED.end_date,
                         is_current = EXCLUDED.is_current,
                         updated_at = now()
@@ -150,17 +242,25 @@ def run(dry_run: bool = False) -> dict[str, Any]:
                 cur.execute(
                     """
                     INSERT INTO competition_seasons (
-                        competition_id, season_id
+                        competition_id, season_id, total_teams, stage_format
                     ) VALUES (
-                        %(comp_id)s, %(season_id)s
+                        %(comp_id)s, %(season_id)s, %(total_teams)s, %(stage_format)s
                     )
-                    ON CONFLICT (competition_id, season_id) DO NOTHING
-                    RETURNING id
+                    ON CONFLICT (competition_id, season_id) DO UPDATE SET
+                        total_teams = EXCLUDED.total_teams,
+                        stage_format = EXCLUDED.stage_format,
+                        updated_at = now()
+                    RETURNING id, (xmax = 0) AS is_insert
                     """,
-                    {"comp_id": comp_id, "season_id": season_id},
+                    {
+                        "comp_id": comp_id,
+                        "season_id": season_id,
+                        "total_teams": entry.get("total_teams"),
+                        "stage_format": entry.get("stage_format"),
+                    },
                 )
                 row = cur.fetchone()
-                if row:
+                if row and row[1]:
                     comp_seasons_created += 1
 
         if not dry_run:

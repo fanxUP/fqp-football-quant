@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from functools import lru_cache
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
@@ -23,10 +24,16 @@ def run_pool_analysis(
     seed_match_id: Optional[int] = Query(  # noqa: UP045
         None, description="指定基准比赛ID（可选，用于筛选同期比赛）"
     ),
+    issue_id: Optional[str] = Query(  # noqa: UP045
+        None, description="指定官方期号或本地期次ID"
+    ),
 ):
-    """对14场比赛运行完整的传统足彩分析。
+    """对体彩官方当前胜负彩14场运行完整分析。
 
-    从模型预测中选取14场比赛（按预测时间最新），运行：
+    只从已采集的官方彩池期号读取比赛，再关联本地模型预测。禁止把
+    竞彩足球在售比赛拼成传统足彩14场。
+
+    运行：
     1. 冷门指数计算
     2. 胆/拖/防守分类
     3. 胆拖组合优化
@@ -40,57 +47,124 @@ def run_pool_analysis(
 
     with get_db() as conn:
         with conn.cursor() as cur:
-            # 获取14场最新的模型预测（每场取最新的预测）
+            # 官方胜负彩彩池是唯一的14场来源。
             cur.execute(
                 """
-                SELECT DISTINCT ON (mp.match_id)
-                    mp.match_id,
-                    m.home_team_name AS home_team,
-                    m.away_team_name AS away_team,
-                    m.league_name AS league,
-                    m.kickoff_time::text AS match_date,
-                    mv.model_name
-                FROM model_predictions mp
-                JOIN official_matches m ON m.id = mp.match_id
-                JOIN model_versions mv ON mv.id = mp.model_version_id
-                WHERE m.match_status = 'Selling'
-                ORDER BY mp.match_id, mp.predict_time DESC
-                """
+                SELECT i.id, i.issue_no, i.game_type, i.total_matches,
+                       i.official_status, i.sale_stop_time::text,
+                       im.match_order, im.match_id,
+                       COALESCE(im.home_team_name, m.home_team_name) AS home_team,
+                       COALESCE(im.away_team_name, m.away_team_name) AS away_team,
+                       COALESCE(im.league_name, m.league_name) AS league,
+                       COALESCE(im.kickoff_time, m.kickoff_time)::text AS match_date,
+                       m.id AS official_match_id,
+                       latest.model_name,
+                       latest.prob_home, latest.prob_draw, latest.prob_away
+                FROM football_pool_issues i
+                JOIN football_pool_issue_matches im ON im.issue_id = i.id
+                LEFT JOIN official_matches m
+                  ON m.id = im.match_id
+                  OR (m.home_team_name = im.home_team_name
+                      AND m.away_team_name = im.away_team_name
+                      AND m.kickoff_time::date = im.kickoff_time::date)
+                LEFT JOIN LATERAL (
+                    WITH latest_model_options AS (
+                        SELECT DISTINCT ON (mp.model_version_id, mp.option_code)
+                               mp.model_version_id, mp.option_code, mp.model_probability
+                        FROM model_predictions mp
+                        JOIN model_versions mv ON mv.id = mp.model_version_id
+                        WHERE mp.match_id = m.id
+                          AND mp.play_type = 'spf'
+                          AND mp.predict_time < m.kickoff_time
+                          AND mp.validation_status = 'valid'
+                          AND COALESCE(
+                              (mp.uncertainty_reason->>'model_independent')::boolean,
+                              false
+                          ) = true
+                          AND mv.is_active = true
+                          AND mp.model_probability IS NOT NULL
+                        ORDER BY mp.model_version_id, mp.option_code,
+                                 mp.predict_time DESC, mp.id DESC
+                    )
+                    SELECT '模型共识' AS model_name,
+                           AVG(model_probability) FILTER (WHERE option_code = '3') AS prob_home,
+                           AVG(model_probability) FILTER (WHERE option_code = '1') AS prob_draw,
+                           AVG(model_probability) FILTER (WHERE option_code = '0') AS prob_away
+                    FROM latest_model_options
+                    HAVING COUNT(DISTINCT model_version_id) > 0
+                ) latest ON true
+                WHERE i.game_type = 't14c'
+                  AND (%s IS NULL OR i.id::text = %s OR i.issue_no = %s)
+                ORDER BY CASE WHEN i.official_status = 'selling' THEN 0 ELSE 1 END,
+                         i.sale_stop_time DESC NULLS LAST, i.updated_at DESC,
+                         im.match_order
+                """,
+                (issue_id, issue_id, issue_id),
             )
-            matches = cur.fetchall()
+            rows = cur.fetchall()
 
-            if len(matches) < 2:
+            if not rows:
+                raise HTTPException(404, "暂无已采集的体彩官方14场彩池")
+
+            issues: dict[int, list[tuple]] = {}
+            for row in rows:
+                issues.setdefault(int(row[0]), []).append(row)
+
+            def ready_count(issue_rows: list[tuple]) -> int:
+                return sum(
+                    row[12] is not None and all(row[idx] is not None for idx in (14, 15, 16))
+                    for row in issue_rows
+                )
+
+            ordered_issues = list(issues.values())
+            first_issue = ordered_issues[0]
+            first_is_current = first_issue[0][4] == "selling"
+            if first_is_current or issue_id is not None:
+                matches = first_issue
+            else:
+                matches = next(
+                    (
+                        issue_rows
+                        for issue_rows in ordered_issues
+                        if issue_rows[0][3] == 14
+                        and len(issue_rows) == 14
+                        and ready_count(issue_rows) == 14
+                    ),
+                    first_issue,
+                )
+
+            issue_no = matches[0][1]
+            if matches[0][3] != 14 or len(matches) != 14:
+                raise HTTPException(
+                    409,
+                    f"官方14场彩池数据不完整：期号 {issue_no}，应为14场，当前 {len(matches)}场",
+                )
+            predicted_count = ready_count(matches)
+            if predicted_count < 14:
+                raise HTTPException(
+                    409,
+                    f"期号 {issue_no} 已完成 {predicted_count}/14 场模型预测，待补齐 {14 - predicted_count} 场后生成组合",
+                )
+
+            if len(matches) < 14:
                 raise HTTPException(
                     400,
-                    f"当前只有 {len(matches)} 场比赛有模型预测，需要至少2场",
+                    f"当前只有 {len(matches)} 场官方比赛，需要14场",
                 )
 
-            # 对每场比赛获取完整的3/1/0概率
+            # 对每场官方比赛使用各活跃模型最新赛前概率的共识均值。
             pool_matches = []
             for row in matches:
-                match_id = row[0]
-                cur.execute(
-                    """
-                    SELECT option_code, model_probability
-                    FROM model_predictions
-                    WHERE match_id = %s AND play_type = 'spf'
-                    ORDER BY predict_time DESC
-                    LIMIT 3
-                    """,
-                    (match_id,),
-                )
-                probs = {r[0]: float(r[1] or 0) for r in cur.fetchall()}
-
                 pool_match = PoolMatch(
-                    match_id=match_id,
-                    home_team=row[1],
-                    away_team=row[2],
-                    league=row[3] or "",
-                    match_date=str(row[4]) if row[4] else "",
-                    prob_home=probs.get("3", 0.33),
-                    prob_draw=probs.get("1", 0.34),
-                    prob_away=probs.get("0", 0.33),
-                    data_quality=0.7,  # default, could be from feature snapshot
+                    match_id=row[12] or row[7] or row[6],
+                    home_team=row[8],
+                    away_team=row[9],
+                    league=row[10] or "",
+                    match_date=str(row[11]) if row[11] else "",
+                    prob_home=float(row[14] or 0),
+                    prob_draw=float(row[15] or 0),
+                    prob_away=float(row[16] or 0),
+                    data_quality=1.0,
                 )
                 pool_matches.append(pool_match)
 
@@ -99,20 +173,25 @@ def run_pool_analysis(
         pool_matches,
         budget=budget,
         strategy=strategy,
-        period_id=f"pool-{pool_matches[0].match_date}"
-        if pool_matches[0].match_date
-        else "pool-auto",
+        period_id=f"{issue_no}-t14c",
     )
 
-    return pool_analysis_to_dict(analysis)
+    result = pool_analysis_to_dict(analysis)
+    issue_status = str(matches[0][4] or "unknown")
+    result["analysis_mode"] = "current" if issue_status == "selling" else "historical"
+    result["issue"] = {
+        "id": matches[0][0],
+        "issue_no": issue_no,
+        "status": issue_status,
+        "sale_stop": matches[0][5],
+        "source": "sporttery",
+    }
+    return result
 
 
-@router.get("/api/pool/sample")
-def get_pool_sample():
-    """生成示例14场比赛数据并返回分析结果（用于前端演示/测试）。
-
-    使用合成数据，不访问数据库。
-    """
+@lru_cache(maxsize=1)
+def _build_pool_sample() -> dict:
+    """Build the deterministic demonstration pool once per process."""
     import random
 
     rng = random.Random(42)
@@ -167,7 +246,66 @@ def get_pool_sample():
         matches,
         budget=256,
         strategy="balanced",
+        n_mc_simulations=1_000,
         period_id="sample-2026-07-03",
     )
 
     return pool_analysis_to_dict(analysis)
+
+
+@router.get("/api/pool/sample")
+def get_pool_sample():
+    """返回固定种子的14场演示分析结果；使用合成数据，不访问数据库。"""
+    return _build_pool_sample()
+
+
+@router.get("/api/pool/issues")
+def list_pool_issues():
+    """List real official pool issues stored by the Sporttery collector."""
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT i.id, i.issue_no, i.game_type, i.official_status,
+                       i.total_matches, i.sale_start_time, i.sale_stop_time,
+                       COUNT(im.id) AS stored_matches
+                FROM football_pool_issues i
+                LEFT JOIN football_pool_issue_matches im ON im.issue_id = i.id
+                GROUP BY i.id
+                ORDER BY i.sale_stop_time DESC NULLS LAST, i.updated_at DESC
+                """
+            )
+            rows = cur.fetchall()
+
+    issues = [
+        {
+            "id": row[0],
+            "issue_no": row[1],
+            "game_type": row[2],
+            "status": row[3],
+            "total_matches": row[4],
+            "stored_matches": row[7],
+            "sale_start": row[5].isoformat() if row[5] else None,
+            "sale_stop": row[6].isoformat() if row[6] else None,
+            "source": "sporttery",
+        }
+        for row in rows
+    ]
+    return {"issues": issues, "total": len(issues)}
+
+
+@router.post("/api/pool/issues/{issue_id}/generate-combinations")
+def generate_pool_issue_combinations(
+    issue_id: str,
+    budget: int = Query(256, description="预算（元）"),
+    strategy: str = Query("balanced", description="策略：conservative | balanced | aggressive"),
+):
+    """Compatibility wrapper around the current pool analyzer."""
+    result = run_pool_analysis(
+        budget=budget,
+        strategy=strategy,
+        seed_match_id=None,
+        issue_id=issue_id,
+    )
+    result["issue_id"] = issue_id
+    return result

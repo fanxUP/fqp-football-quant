@@ -1,0 +1,45 @@
+[data-theme='polar-lab'] {
+  color-scheme: light;
+  --fqp-bg: #f5f7fa;
+  --fqp-panel: #ffffff;
+  --fqp-panel-2: #edf1f5;
+  --fqp-red: #2e7fc1;
+  --fqp-red-neon: #2472b2;
+  --fqp-red-dark: #173a5e;
+  --fqp-accent: #2e7fc1;
+  --fqp-accent-strong: #2472b2;
+  --fqp-accent-muted: rgba(46, 127, 193, 0.1);
+  --fqp-border: rgba(23, 58, 94, 0.15);
+  --fqp-border-light: rgba(23, 58, 94, 0.08);
+  --fqp-text: #15202b;
+  --fqp-text-muted: #66717e;
+  --fqp-success: #16856f;
+  --fqp-warning: #aa741d;
+  --fqp-info: #2e7fc1;
+  --fqp-danger: #c64747;
+  --fqp-hover-bg: rgba(46, 127, 193, 0.08);
+  --fqp-hover-subtle: rgba(23, 58, 94, 0.035);
+  --fqp-bg-glass: rgba(255, 255, 255, 0.78);
+  --fqp-shadow-red: 0 8px 24px rgba(23, 58, 94, 0.08);
+  --fqp-glow-red: 0 8px 24px rgba(46, 127, 193, 0.11);
+  --fqp-chart-1: #2e7fc1;
+  --fqp-chart-2: #173a5e;
+  --fqp-chart-3: #c28a2e;
+  --fqp-chart-4: #2aa7a0;
+  --fqp-chart-5: #8266ad;
+  --fqp-chart-6: #4f97a8;
+  --fqp-chart-text: #15202b;
+  --fqp-chart-text-muted: #66717e;
+  --fqp-chart-grid: rgba(23, 58, 94, 0.13);
+  --fqp-chart-tooltip: rgba(255, 255, 255, 0.98);
+  --fqp-chart-tooltip-border: rgba(23, 58, 94, 0.18);
+  --fqp-chart-area-1: rgba(46, 127, 193, 0.12);
+  --fqp-chart-area-2: rgba(194, 138, 46, 0.12);
+}
+
+[data-theme='polar-lab'] body {
+  background: linear-gradient(180deg, #f8fafc 0%, var(--fqp-bg) 36%);
+}
+
+[data-theme='polar-lab'] .fqp-sidebar { background: #ffffff; }
+[data-theme='polar-lab'] .fqp-card { box-shadow: var(--fqp-shadow-red); }

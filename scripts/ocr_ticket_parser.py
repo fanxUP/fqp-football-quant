@@ -15,6 +15,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
+from scripts.business_time import utc_now_iso
+
 
 @dataclass
 class TicketItem:
@@ -49,8 +51,8 @@ class TicketParseResult:
     parsed_at: str = ""
 
 
-def _now() -> str:
-    return datetime.now().isoformat(timespec="seconds")
+def _now(value: datetime | None = None) -> str:
+    return utc_now_iso(value)
 
 
 # ---------------------------------------------------------------------------
@@ -70,8 +72,8 @@ def ocr_with_pytesseract(image_path: str, lang: str = "chi_sim") -> tuple[str, f
 
         img = Image.open(image_path)
         # 预处理：转灰度、增强对比度
-        img = img.convert("L")  # type: ignore[assignment]  # Image.open→ImageFile, convert→Image
-        text = pytesseract.image_to_string(img, lang=lang)
+        grayscale_img = img.convert("L")
+        text = pytesseract.image_to_string(grayscale_img, lang=lang)
         # Tesseract 不直接返回每张图片的置信度，估计值
         confidence = 0.7 if len(text.strip()) > 20 else 0.3
         return text, confidence

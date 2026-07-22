@@ -4,9 +4,9 @@ Official Chinese sports lottery data source. No auth required.
 Rate-limited to respect the server.
 
 Endpoints:
-  - getMatchCalculatorV1.qry  → match schedule + odds (JC API, may WAF)
-  - getMatchResultV1.qry      → finished match results (may WAF)
-  - Uniform API (no WAF):     → match list + fixed bonus odds
+  - Uniform getMatchCalculatorV1.qry → current card + all five play-type odds
+  - Uniform getUniformMatchResultV1.qry → finished match results
+  - Uniform API (no WAF):     → match list + calculator + fixed bonus history
   - Traditional lottery:      → draw info / match pool (needs Playwright)
 """
 
@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import time
+from datetime import date, timedelta
 from typing import Any
 
 import httpx
@@ -74,9 +75,7 @@ class SportteryClient:
                 print(f"[sporttery] GET {path} error (attempt {attempt}): {e}")
                 # Don't retry on 403 (permanent block) — let caller fall back
                 if isinstance(e, httpx.HTTPStatusError) and e.response.status_code == 403:
-                    raise RuntimeError(
-                        f"SportteryClient: {path} returned 403 Forbidden"
-                    ) from e
+                    raise RuntimeError(f"SportteryClient: {path} returned 403 Forbidden") from e
                 if attempt < self._max_retries:
                     backoff = 2**attempt
                     print(f"[sporttery] retrying in {backoff}s...")
@@ -86,7 +85,11 @@ class SportteryClient:
         )
 
     def _request_url(
-        self, url: str, params: dict[str, Any] | None = None
+        self,
+        url: str,
+        params: dict[str, Any] | None = None,
+        *,
+        referer: str | None = None,
     ) -> dict[str, Any]:
         """Make a GET request to an arbitrary URL with retry and rate limiting."""
         self._rate_limit()
@@ -94,7 +97,8 @@ class SportteryClient:
         for attempt in range(1, self._max_retries + 1):
             try:
                 print(f"[sporttery] GET {url} params={params} (attempt {attempt})")
-                resp = self._client.get(url, params=params)
+                headers = {"Referer": referer} if referer else None
+                resp = self._client.get(url, params=params, headers=headers)
                 self._last_request_time = time.monotonic()
                 resp.raise_for_status()
                 data = resp.json()
@@ -104,9 +108,7 @@ class SportteryClient:
                 last_error = e
                 print(f"[sporttery] GET {url} error (attempt {attempt}): {e}")
                 if isinstance(e, httpx.HTTPStatusError) and e.response.status_code == 403:
-                    raise RuntimeError(
-                        f"SportteryClient: {url} returned 403 Forbidden"
-                    ) from e
+                    raise RuntimeError(f"SportteryClient: {url} returned 403 Forbidden") from e
                 if attempt < self._max_retries:
                     backoff = 2**attempt
                     print(f"[sporttery] retrying in {backoff}s...")
@@ -122,14 +124,124 @@ class SportteryClient:
     # Public API
     # ------------------------------------------------------------------
 
+    @staticmethod
+    def _require_success(data: dict[str, Any], endpoint: str) -> dict[str, Any]:
+        """Reject HTTP-200 API error payloads instead of treating them as empty data."""
+        error_code = data.get("errorCode")
+        if error_code is not None and str(error_code) != "0":
+            message = data.get("errorMessage") or data.get("message") or "unknown error"
+            raise RuntimeError(f"SportteryClient: {endpoint} error {error_code}: {message}")
+        return data
+
     def get_uniform_match_list(self) -> dict[str, Any]:
         """Fetch match list from uniform API (no WAF issues).
 
         Returns matches across multiple dates with oddsList + poolList.
         """
-        return self._request_url(
-            self.UNIFORM_BASE_URL + "getMatchListV1.qry",
-            {"clientCode": "3001"},
+        endpoint = "getMatchListV1.qry"
+        return self._require_success(
+            self._request_url(
+                self.UNIFORM_BASE_URL + endpoint,
+                {"clientCode": "3001"},
+                referer="https://www.sporttery.cn/jc/zqszsc/",
+            ),
+            endpoint,
+        )
+
+    def get_uniform_match_results(self, begin_date: str, end_date: str) -> dict[str, Any]:
+        """Fetch official result pages one day at a time via the Uniform API.
+
+        Official page: https://www.lottery.gov.cn/jc/zqsgkj/
+        The official result endpoint's WAF rejects wider date ranges on some
+        networks. Single-day requests use the same direct Uniform client path
+        as the official odds collector and preserve complete official rows.
+        """
+        start = date.fromisoformat(begin_date)
+        end = date.fromisoformat(end_date)
+        if start > end:
+            raise ValueError("begin_date must not be later than end_date")
+
+        endpoint = "getUniformMatchResultV1.qry"
+        match_results: list[dict[str, Any]] = []
+        current = start
+        while current <= end:
+            day = current.isoformat()
+            page_no, pages = 1, 1
+            while page_no <= pages:
+                params: dict[str, Any] = {
+                    "matchBeginDate": day,
+                    "matchEndDate": day,
+                    "leagueId": "",
+                    "pageSize": 100,
+                    "pageNo": page_no,
+                    "isFix": 0,
+                    "matchPage": 1,
+                    "pcOrWap": 1,
+                }
+                payload = self._require_success(
+                    self._request_url(
+                        self.UNIFORM_BASE_URL + endpoint,
+                        params,
+                        referer="https://www.lottery.gov.cn/jc/zqsgkj/",
+                    ),
+                    endpoint,
+                )
+                value = payload.get("value") or {}
+                match_results.extend(value.get("matchResult") or [])
+                pages = max(int(value.get("pages") or 1), 1)
+                page_no += 1
+            current += timedelta(days=1)
+
+        return {"errorCode": "0", "value": {"matchResult": match_results}}
+
+    def get_uniform_match_calculator(self) -> dict[str, Any]:
+        """Fetch all five current Sporttery play types and their full odds."""
+        endpoint = "getMatchCalculatorV1.qry"
+        return self._require_success(
+            self._request_url(
+                self.UNIFORM_BASE_URL + endpoint,
+                {"channel": "c"},
+                referer="https://www.sporttery.cn/jc/jsq/zqspf/",
+            ),
+            endpoint,
+        )
+
+    def get_uniform_league_list(self) -> dict[str, Any]:
+        """Fetch the official league catalog and its ordered season lists."""
+        endpoint = "league/getLeagueListV1.qry"
+        return self._require_success(
+            self._request_url(
+                self.UNIFORM_BASE_URL + endpoint,
+                referer="https://www.sporttery.cn/zqlszl/",
+            ),
+            endpoint,
+        )
+
+    def get_uniform_league_matches(
+        self,
+        *,
+        uniform_league_id: int,
+        season_id: int,
+        start_date: str | None = None,
+        end_date: str | None = None,
+    ) -> dict[str, Any]:
+        """Fetch one official league-season match-result window."""
+        endpoint = "league/getMatchResultV1.qry"
+        params: dict[str, Any] = {
+            "uniformLeagueId": uniform_league_id,
+            "seasonId": season_id,
+        }
+        if start_date is not None:
+            params["startDate"] = start_date
+        if end_date is not None:
+            params["endDate"] = end_date
+        return self._require_success(
+            self._request_url(
+                self.UNIFORM_BASE_URL + endpoint,
+                params,
+                referer="https://www.sporttery.cn/zqlszl/",
+            ),
+            endpoint,
         )
 
     def get_uniform_fixed_bonus(self, match_id: int) -> dict[str, Any]:
@@ -157,9 +269,7 @@ class SportteryClient:
         params = {"isVerify": "1", "param": "90,0;91,0;98,0;99,0"}
         # Attempt 1: direct API request with JSON fix
         try:
-            return self._request_url(
-                self.LOTTERY_BASE_URL + "getFootBallDrawInfoV2.qry", params
-            )
+            return self._request_url(self.LOTTERY_BASE_URL + "getFootBallDrawInfoV2.qry", params)
         except RuntimeError as e:
             msg = str(e)
             # Only fall back to browser on 403 (WAF block), not malformed JSON
@@ -185,12 +295,12 @@ class SportteryClient:
                     raise RuntimeError("403 Forbidden")
                 text = resp.text
                 # Fix sporttery's malformed JSON: "key":, → "key":null,
-                text = _re.sub(r'("[^"]+")\s*:\s*,', r'\1:null,', text)
+                text = _re.sub(r'("[^"]+")\s*:\s*,', r"\1:null,", text)
                 return json.loads(text)
             except (httpx.HTTPError, json.JSONDecodeError) as e:
                 print(f"[sporttery] lottery JSON fix attempt {attempt} failed: {e}")
                 if attempt < self._max_retries:
-                    time.sleep(2 ** attempt)
+                    time.sleep(2**attempt)
         raise RuntimeError(
             f"SportteryClient: failed to fetch lottery data after {self._max_retries} attempts"
         )
@@ -209,13 +319,11 @@ class SportteryClient:
             Raw JSON response from the API. The match list is at
             ``response["value"]["matchInfoList"]``.
         """
-        params = {
-            "poolCode": "hhad,had",
-            "channel": "c",
-        }
-        # The business_date is often inferred server-side from the current date,
-        # but we pass it for logging / future API changes.
-        return self._request("getMatchCalculatorV1.qry", params=params)
+        # The official calculator returns the current selling card across its
+        # business-date groups. ``business_date`` is retained for API
+        # compatibility; Sporttery infers the active card server-side.
+        del business_date
+        return self.get_uniform_match_calculator()
 
     def get_match_results(self, begin_date: str, end_date: str, page: int = 1) -> dict[str, Any]:
         """Fetch finished match results for a date range.
@@ -228,79 +336,8 @@ class SportteryClient:
         Returns:
             Raw JSON response from the API.
         """
-        params = {
-            "matchBeginDate": begin_date,
-            "matchEndDate": end_date,
-            "matchPage": str(page),
-            "pcOrWap": "0",
-            "leagueId": "",
-        }
-        # Try direct API first; fall back to browser on 403
-        try:
-            return self._request("getMatchResultV1.qry", params=params)
-        except RuntimeError as e:
-            if "403" in str(e):
-                print("[sporttery] direct API blocked (403), falling back to browser…")
-                return self._fetch_results_via_browser(begin_date, end_date, page)
-            raise
-
-    def _fetch_results_via_browser(
-        self, begin_date: str, end_date: str, page: int = 1
-    ) -> dict[str, Any]:
-        """Use Playwright Chromium to fetch results when direct API is blocked.
-
-        Navigates to the sporttery.cn results JSON endpoint with a real browser
-        TLS fingerprint to bypass WAF protection.
-        """
-        self._rate_limit()
-        try:
-            from playwright.sync_api import sync_playwright
-        except ImportError:
-            raise RuntimeError(
-                "Playwright not available — cannot fetch results via browser. "
-                "Install with: pip install playwright && playwright install chromium"
-            )
-
-        print(f"[sporttery:browser] launching Chromium for results {begin_date}→{end_date}…")
-        t0 = time.monotonic()
-
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            page = browser.new_page()
-
-            url = (
-                f"{self.BASE_URL}getMatchResultV1.qry"
-                f"?matchBeginDate={begin_date}"
-                f"&matchEndDate={end_date}"
-                f"&matchPage={page}"
-                f"&pcOrWap=0"
-                f"&leagueId="
-            )
-
-            try:
-                resp = page.goto(url, timeout=30000)
-                status = resp.status if resp else 0
-                print(f"[sporttery:browser] GET → {status}")
-
-                if status != 200:
-                    body_text = page.evaluate("document.body.innerText") if resp else ""
-                    browser.close()
-                    raise RuntimeError(
-                        f"Browser request returned {status}: {body_text[:200]}"
-                    )
-
-                # Extract JSON from the page body (browser renders JSON as text)
-                body_text = page.evaluate("document.body.innerText")
-                data = json.loads(body_text)
-                elapsed = int((time.monotonic() - t0) * 1000)
-                print(f"[sporttery:browser] OK ({elapsed}ms)")
-                browser.close()
-                self._last_request_time = time.monotonic()
-                return data
-
-            except Exception:
-                browser.close()
-                raise
+        del page
+        return self.get_uniform_match_results(begin_date, end_date)
 
     def _fetch_lottery_via_browser(self) -> dict[str, Any]:
         """Use Playwright Chromium to fetch traditional lottery draw data.
@@ -314,11 +351,11 @@ class SportteryClient:
         self._rate_limit()
         try:
             from playwright.sync_api import sync_playwright
-        except ImportError:
+        except ImportError as e:
             raise RuntimeError(
                 "Playwright not available — cannot fetch traditional lottery data. "
                 "Install with: pip install playwright && playwright install chromium"
-            )
+            ) from e
 
         print("[sporttery:browser] launching Chromium for traditional lottery data…")
         t0 = time.monotonic()
@@ -340,14 +377,12 @@ class SportteryClient:
                 if status != 200:
                     body_text = page.evaluate("document.body.innerText") if resp else ""
                     browser.close()
-                    raise RuntimeError(
-                        f"Browser request returned {status}: {body_text[:200]}"
-                    )
+                    raise RuntimeError(f"Browser request returned {status}: {body_text[:200]}")
 
                 body_text = page.evaluate("document.body.innerText")
 
                 # Fix sporttery API bug: malformed JSON like "key":,
-                body_text = _re.sub(r'("[^"]+")\s*:\s*,', r'\1:null,', body_text)
+                body_text = _re.sub(r'("[^"]+")\s*:\s*,', r"\1:null,", body_text)
 
                 data = json.loads(body_text)
                 elapsed = int((time.monotonic() - t0) * 1000)

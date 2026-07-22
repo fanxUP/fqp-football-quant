@@ -10,7 +10,9 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { api } from '../core/apiClient';
 import type { BacktestRun, BacktestResult, DashboardBacktestEquityItem } from '../core/types';
 import { PageHeader, Card, DataTable, ErrorState, LoadingSpinner } from '../shared/components';
-import { RoiLineChart, DrawdownChart } from '../visualization';
+import { modelNameLabel } from '../shared/constants';
+import { formatTimestamp } from '../shared/utils';
+import BacktestPerformanceCharts from '../visualization/backtest/BacktestPerformanceCharts';
 
 // —— 类型 ——
 
@@ -44,6 +46,13 @@ const DEFAULT_FORM: BacktestFormState = {
   success: null,
 };
 
+const CURRENT_METHODOLOGY_VERSION = 3;
+
+function methodologyVersion(config: Record<string, unknown> | null | undefined): number {
+  const version = config?.methodology_version;
+  return typeof version === 'number' ? version : 1;
+}
+
 // —— 组件 ——
 
 export default function BacktestPage() {
@@ -51,12 +60,13 @@ export default function BacktestPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedRun, setSelectedRun] = useState<number | null>(null);
+  const [selectedRunRecord, setSelectedRunRecord] = useState<BacktestRun | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [results, setResults] = useState<BacktestResult[]>([]);
   const [form, setForm] = useState<BacktestFormState>(DEFAULT_FORM);
   const [equityData, setEquityData] = useState<DashboardBacktestEquityItem[]>([]);
   const [equityLoading, setEquityLoading] = useState(false);
-  const [showChart, setShowChart] = useState(false);
+  const [equityError, setEquityError] = useState<string | null>(null);
 
   // —— 加载回测列表 ——
   const loadRuns = useCallback(async () => {
@@ -79,10 +89,13 @@ export default function BacktestPage() {
   // —— 加载回测详情 ——
   const loadDetail = useCallback(async (runId: number) => {
     setSelectedRun(runId);
+    setSelectedRunRecord(null);
     setDetailLoading(true);
-    setShowChart(false);
+    setEquityData([]);
+    setEquityError(null);
     try {
       const data = await api.backtests.get(runId);
+      setSelectedRunRecord(data.run);
       // 只显示聚合结果（window_index IS NULL）
       setResults(data.results.filter((r) => r.window_index === null));
 
@@ -93,7 +106,9 @@ export default function BacktestPage() {
           const series = res.data?.series || [];
           setEquityData(series as DashboardBacktestEquityItem[]);
         })
-        .catch(() => { /* equity data optional */ })
+        .catch((equityFailure) => {
+          setEquityError((equityFailure as Error).message || '窗口趋势数据加载失败');
+        })
         .finally(() => setEquityLoading(false));
     } catch (e) {
       setError((e as Error).message || '加载回测详情失败');
@@ -163,10 +178,16 @@ export default function BacktestPage() {
     return '';
   };
 
+  const selectedRunIsLegacy = selectedRunRecord != null
+    && methodologyVersion(selectedRunRecord.config) < CURRENT_METHODOLOGY_VERSION;
+
   // —— 渲染 ——
   return (
     <div>
-      <PageHeader title="回测中心" subtitle="Walk-forward 验证 · 资金曲线 · 模型对比" />
+      <PageHeader
+        title="策略验证"
+        subtitle="赛前时点赔率 · 每场单一决策 · 独立比赛口径"
+      />
 
       {error && <ErrorState message={error} onRetry={loadRuns} />}
 
@@ -295,8 +316,11 @@ export default function BacktestPage() {
                   checked={form.walkForward}
                   onChange={(e) => setForm((f) => ({ ...f, walkForward: e.target.checked }))}
                 />{' '}
-                Walk-Forward 验证
+                滚动时间窗（不重训模型）
               </label>
+              <div className="fqp-muted" style={{ marginTop: '6px', fontSize: '12px' }}>
+                仅验证已经落库的历史预测，不会在每个时间窗内重新训练模型。
+              </div>
             </div>
           </div>
 
@@ -318,10 +342,29 @@ export default function BacktestPage() {
             <p className="fqp-muted">暂无该回测的聚合结果</p>
           ) : (
             <div>
+              {selectedRunIsLegacy && (
+                <div
+                  role="alert"
+                  style={{
+                    marginBottom: 16,
+                    padding: '12px 14px',
+                    borderRadius: 8,
+                    color: 'var(--fqp-warning)',
+                    background: 'rgba(255,193,7,0.08)',
+                    border: '1px solid rgba(255,193,7,0.28)',
+                  }}
+                >
+                  旧口径结果仅供归档：可能包含赛后预测、旧资金曲线或未校准时区，不参与模型上线判断。请使用“当前 V{CURRENT_METHODOLOGY_VERSION}”口径重新回测。
+                </div>
+              )}
+
               {/* 指标表格 */}
               <DataTable
                 columns={[
-                  { key: 'model_name', title: '模型', width: '140px' },
+                  {
+                    key: 'model_name', title: '模型', width: '190px',
+                    render: (_: unknown, row: BacktestResult) => modelNameLabel(row.model_name),
+                  },
                   { key: 'n_bets', title: '投注数', width: '80px' },
                   { key: 'n_wins', title: '命中', width: '80px' },
                   {
@@ -369,7 +412,7 @@ export default function BacktestPage() {
               />
 
               {/* 模型上线门槛检查 — staggered reveal */}
-              {results.map((r, ri) => {
+              {!selectedRunIsLegacy && results.map((r, ri) => {
                 const checks = {
                   '样本量 ≥ 1000': r.n_bets >= 1000,
                   'ROI > 0': (r.roi ?? -1) > 0,
@@ -390,7 +433,7 @@ export default function BacktestPage() {
                       animationDelay: `${ri * 100}ms`,
                     }}
                   >
-                    <strong>{r.model_name}</strong>
+                    <strong>{modelNameLabel(r.model_name)}</strong>
                     {' — '}
                     <span style={{ color: allPass ? 'var(--fqp-success)' : 'var(--fqp-warning)' }}>
                       {allPass ? '✅ 满足上线门槛' : '⚠️ 未完全满足上线门槛'}
@@ -414,43 +457,12 @@ export default function BacktestPage() {
                 );
               })}
 
-              {/* Equity curve chart toggle */}
-              {equityData.length > 0 && (
-                <div style={{ marginTop: 20 }}>
-                  <button
-                    className="fqp-btn"
-                    style={{ fontSize: 12, padding: '4px 14px' }}
-                    onClick={() => setShowChart(!showChart)}
-                  >
-                    {showChart ? '隐藏图表' : '📈 查看资金曲线'}
-                  </button>
-                  {showChart && (
-                    <div style={{ marginTop: 12 }}>
-                      <RoiLineChart
-                        data={equityData.map((d) => ({
-                          date: `W${d.window_index}`,
-                          agentRoi: d.roi,
-                          userRoi: null,
-                        }))}
-                        title="窗口 ROI 曲线"
-                        agentLabel={equityData[0]?.model_name || '模型'}
-                        userLabel=""
-                        height={260}
-                      />
-                      <DrawdownChart
-                        data={equityData
-                          .filter((d) => d.max_drawdown_pct != null)
-                          .map((d) => ({
-                            date: `W${d.window_index}`,
-                            drawdownPct: -(d.max_drawdown_pct ?? 0),
-                          }))}
-                        title="窗口最大回撤"
-                        height={220}
-                      />
-                    </div>
-                  )}
-                </div>
-              )}
+              <BacktestPerformanceCharts
+                results={results}
+                windowRows={equityData}
+                loading={equityLoading}
+                error={equityError}
+              />
             </div>
           )}
         </Card>
@@ -466,6 +478,14 @@ export default function BacktestPage() {
               { key: 'id', title: 'ID', width: '60px' },
               { key: 'name', title: '名称', width: '200px' },
               {
+                key: 'methodology', title: '口径', width: '90px',
+                render: (_: unknown, row: BacktestRun) => (
+                  methodologyVersion(row.config) >= CURRENT_METHODOLOGY_VERSION
+                    ? <span className="fqp-status-ok">当前 V{CURRENT_METHODOLOGY_VERSION}</span>
+                    : <span className="fqp-status-warn">旧口径</span>
+                ),
+              },
+              {
                 key: 'status', title: '状态', width: '80px',
                 render: (_: unknown, row: BacktestRun) => (
                   <span className={statusClass(row.status)}>{statusLabel(row.status)}</span>
@@ -473,7 +493,7 @@ export default function BacktestPage() {
               },
               { key: 'created_at', title: '创建时间', width: '160px',
                 render: (_: unknown, row: BacktestRun) =>
-                  row.created_at ? new Date(row.created_at).toLocaleString('zh-CN') : '—',
+                  formatTimestamp(row.created_at),
               },
               {
                 key: 'actions', title: '操作', width: '80px',

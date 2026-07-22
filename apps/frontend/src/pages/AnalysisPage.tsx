@@ -10,25 +10,50 @@ import type {
   ConditionSegment,
   ConditionPerformanceData,
   FeatureModelInfo,
+  DailyReview,
+  EvaluationSummary,
+  LiveRecommendation,
 } from '../core/types';
 import PageHeader from '../shared/components/PageHeader';
 import Card from '../shared/components/Card';
 import ChartCard from '../shared/components/ChartCard';
 import ErrorState from '../shared/components/ErrorState';
-import DisclaimerBanner from '../shared/components/DisclaimerBanner';
+import RecommendationsPage, { type RecommendationMatchSelection } from './RecommendationsPage';
+import ReviewsPage from './ReviewsPage';
+import TeamName from '../shared/components/TeamName';
+import FeatureSnapshotPanel from '../features/analysis/FeatureSnapshotPanel';
 
 // ---------------------------------------------------------------------------
 // Tab definitions
 // ---------------------------------------------------------------------------
 
-type TabKey = 'compare' | 'importance' | 'shap' | 'condition';
+type ModelTabKey = 'compare' | 'importance' | 'shap' | 'condition';
+type AnalysisSectionKey = 'pre_match' | 'features' | 'explanations' | 'reviews';
 
-const TABS: { key: TabKey; label: string; icon: string }[] = [
+const MODEL_TABS: { key: ModelTabKey; label: string; icon: string }[] = [
   { key: 'compare', label: '模型对比', icon: '📊' },
   { key: 'importance', label: '特征重要性', icon: '🔍' },
   { key: 'shap', label: 'SHAP 解释', icon: '💧' },
   { key: 'condition', label: '条件表现', icon: '🎯' },
 ];
+
+const ANALYSIS_SECTIONS: { key: AnalysisSectionKey; label: string; shortLabel: string; metricLabel: string }[] = [
+  { key: 'pre_match', label: '赛前分析', shortLabel: '赛前', metricLabel: '分析' },
+  { key: 'features', label: '特征数据健康', shortLabel: '特征', metricLabel: '数据' },
+  { key: 'explanations', label: '推荐解释', shortLabel: '解释', metricLabel: '模型' },
+  { key: 'reviews', label: '复盘分析', shortLabel: '复盘', metricLabel: '结果' },
+];
+
+function readInitialSection(): AnalysisSectionKey {
+  const raw = window.location.hash.replace(/^#/, '');
+  const query = raw.split('?')[1] ?? '';
+  const value = new URLSearchParams(query).get('section');
+  if (value === 'recommendations') return 'pre_match';
+  if (value === 'models') return 'explanations';
+  return value === 'pre_match' || value === 'features' || value === 'explanations' || value === 'reviews'
+    ? value
+    : 'pre_match';
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -45,6 +70,281 @@ function normalizeForRadar(
   if (max === min) return 0.5;
   const norm = (value - min) / (max - min);
   return invert ? 1 - norm : norm;
+}
+
+function formatInt(value: number | null): string {
+  return value === null ? '—' : value.toLocaleString('zh-CN');
+}
+
+function formatRate(value: number | null): string {
+  return value === null ? '—' : value.toFixed(3);
+}
+
+interface AnalysisOverviewState {
+  liveRecommendationCount: number | null;
+  positiveEdgeCount: number | null;
+  highConfidenceCount: number | null;
+  conflictMatchCount: number | null;
+  modelCount: number | null;
+  evaluatedCount: number | null;
+  overallBrier: number | null;
+  latestReviewDate: string | null;
+  latestReviewedCount: number | null;
+}
+
+function directionOf(option: LiveRecommendation): 'home' | 'draw' | 'away' | 'other' {
+  if (option.option_code === '3' || option.option_name.includes('主胜')) return 'home';
+  if (option.option_code === '1' || option.option_name.includes('平')) return 'draw';
+  if (option.option_code === '0' || option.option_name.includes('客胜') || option.option_name.includes('主负')) return 'away';
+  return 'other';
+}
+
+function countConflictMatches(recommendations: LiveRecommendation[]): number {
+  const grouped = new Map<number, Set<string>>();
+  for (const rec of recommendations) {
+    const direction = directionOf(rec);
+    if (direction === 'other') continue;
+    if (!grouped.has(rec.match_id)) grouped.set(rec.match_id, new Set());
+    grouped.get(rec.match_id)!.add(direction);
+  }
+  return [...grouped.values()].filter((directions) => directions.size > 1).length;
+}
+
+function AnalysisOverview({
+  activeSection,
+  onSectionChange,
+}: {
+  activeSection: AnalysisSectionKey;
+  onSectionChange: (section: AnalysisSectionKey) => void;
+}) {
+  const [overview, setOverview] = useState<AnalysisOverviewState>({
+    liveRecommendationCount: null,
+    positiveEdgeCount: null,
+    highConfidenceCount: null,
+    conflictMatchCount: null,
+    modelCount: null,
+    evaluatedCount: null,
+    overallBrier: null,
+    latestReviewDate: null,
+    latestReviewedCount: null,
+  });
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    Promise.allSettled([
+      api.liveRecommendations({ limit: 200, min_ev: 0.01 }),
+      api.analysis.evaluationSummary(),
+      api.reviews.daily(1),
+    ])
+      .then(([recommendationRes, evaluationRes, reviewRes]) => {
+        if (cancelled) return;
+
+        const evaluation =
+          evaluationRes.status === 'fulfilled' && evaluationRes.value.status === 'ok'
+            ? (evaluationRes.value as EvaluationSummary)
+            : null;
+        const latestReview =
+          reviewRes.status === 'fulfilled'
+            ? ((reviewRes.value.reviews?.[0] ?? null) as DailyReview | null)
+            : null;
+        const recommendations =
+          recommendationRes.status === 'fulfilled'
+            ? recommendationRes.value.recommendations ?? []
+            : [];
+
+        setOverview({
+          liveRecommendationCount:
+            recommendationRes.status === 'fulfilled'
+              ? recommendationRes.value.total ?? recommendationRes.value.recommendations?.length ?? 0
+              : null,
+          positiveEdgeCount:
+            recommendationRes.status === 'fulfilled'
+              ? recommendations.filter((rec) => rec.edge > 0 && rec.ev > 0).length
+              : null,
+          highConfidenceCount:
+            recommendationRes.status === 'fulfilled'
+              ? recommendations.filter((rec) => rec.confidence >= 0.6 && rec.edge > 0).length
+              : null,
+          conflictMatchCount:
+            recommendationRes.status === 'fulfilled'
+              ? countConflictMatches(recommendations)
+              : null,
+          modelCount: evaluation?.models.length ?? null,
+          evaluatedCount: evaluation?.overall.total_evaluated ?? null,
+          overallBrier: evaluation?.overall.overall_brier ?? null,
+          latestReviewDate: latestReview?.review_date ?? null,
+          latestReviewedCount: latestReview?.recommended_match_count ?? null,
+        });
+        setLoading(false);
+      })
+      .catch(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => { cancelled = true; };
+  }, []);
+
+  const metrics = [
+    {
+      label: '可用推荐',
+      value: loading ? '...' : formatInt(overview.liveRecommendationCount),
+      tone: 'success',
+    },
+    {
+      label: '模型数',
+      value: loading ? '...' : formatInt(overview.modelCount),
+      tone: 'info',
+    },
+    {
+      label: '评估样本',
+      value: loading ? '...' : formatInt(overview.evaluatedCount),
+      tone: 'warning',
+    },
+    {
+      label: 'Brier',
+      value: loading ? '...' : formatRate(overview.overallBrier),
+      tone: 'danger',
+    },
+  ];
+
+  return (
+    <div className="analysis-command">
+      <div className="analysis-command-main">
+        <div className="analysis-stage-rail" aria-label="分析链路">
+          {ANALYSIS_SECTIONS.map((section, index) => (
+            <button
+              key={section.key}
+              type="button"
+              className={`analysis-stage${activeSection === section.key ? ' active' : ''}`}
+              onClick={() => onSectionChange(section.key)}
+            >
+              <span className="analysis-stage-index">{index + 1}</span>
+              <span>
+                <strong>{section.shortLabel}</strong>
+                <small>{section.metricLabel}</small>
+              </span>
+            </button>
+          ))}
+        </div>
+
+        <div className="analysis-focus">
+          <div className="analysis-focus-kicker">当前工作区</div>
+          <div className="analysis-focus-title">
+            {ANALYSIS_SECTIONS.find((section) => section.key === activeSection)?.label}
+          </div>
+          <div className="analysis-focus-meta">
+            最近复盘 {overview.latestReviewDate ?? '—'}
+          </div>
+        </div>
+      </div>
+
+      <div className="analysis-metrics">
+        {metrics.map((metric) => (
+          <div key={metric.label} className={`analysis-metric ${metric.tone}`}>
+            <span>{metric.label}</span>
+            <strong>{metric.value}</strong>
+          </div>
+        ))}
+      </div>
+
+      <div className="analysis-funnel" aria-label="推荐漏斗">
+        <div className="analysis-funnel-title">推荐漏斗</div>
+        <div className="analysis-funnel-track">
+          {[
+            ['候选', overview.liveRecommendationCount],
+            ['正Edge', overview.positiveEdgeCount],
+            ['高信心', overview.highConfidenceCount],
+            ['复盘', overview.latestReviewedCount],
+          ].map(([label, value]) => (
+            <div key={String(label)} className="analysis-funnel-step">
+              <span>{label}</span>
+              <strong>{loading ? '...' : formatInt(value as number | null)}</strong>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="analysis-conflict">
+        <span>信号冲突</span>
+        <strong>{loading ? '...' : formatInt(overview.conflictMatchCount)}</strong>
+        <small>同场胜平负方向不一致</small>
+      </div>
+    </div>
+  );
+}
+
+function AnalysisMatchDrawer({
+  selection,
+  onClose,
+  onExplain,
+}: {
+  selection: RecommendationMatchSelection;
+  onClose: () => void;
+  onExplain: () => void;
+}) {
+  const sortedOptions = [...selection.options].sort((a, b) => b.ev - a.ev);
+  const best = sortedOptions[0];
+  const directions = new Set(sortedOptions.map(directionOf).filter((direction) => direction !== 'other'));
+  const hasConflict = directions.size > 1;
+
+  return (
+    <aside className="analysis-match-drawer" aria-label="单场分析">
+      <div className="analysis-match-head">
+        <div>
+          <div className="analysis-match-meta">{selection.matchNum} · {selection.league}</div>
+          <h2 style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <TeamName name={selection.homeTeam} size={28} /><span>vs</span><TeamName name={selection.awayTeam} size={28} />
+          </h2>
+          <p>{selection.kickoffTime ? String(selection.kickoffTime).replace('T', ' ').slice(0, 16) : '—'} · {selection.scoreText ?? selection.matchStatus}</p>
+        </div>
+        <button type="button" className="fqp-btn fqp-btn-sm" onClick={onClose}>关闭</button>
+      </div>
+
+      <div className="analysis-match-signal">
+        <div>
+          <span>主信号</span>
+          <strong>{best.option_name}</strong>
+        </div>
+        <div>
+          <span>EV</span>
+          <strong>{best.ev >= 0 ? '+' : ''}{best.ev.toFixed(3)}</strong>
+        </div>
+        <div className={hasConflict ? 'warning' : 'ok'}>
+          <span>一致性</span>
+          <strong>{hasConflict ? '冲突' : '一致'}</strong>
+        </div>
+      </div>
+
+      <div className="analysis-match-options">
+        {sortedOptions.map((option) => {
+          const probabilityGap = Math.max(0, Math.min(100, (option.model_probability - option.market_probability) * 100));
+          return (
+            <div key={`${option.play_type}:${option.option_code}`} className="analysis-match-option">
+              <div className="analysis-match-option-row">
+                <span>{option.play_type_name} · {option.option_name}</span>
+                <strong>{(option.model_probability * 100).toFixed(1)}%</strong>
+              </div>
+              <div className="analysis-prob-bar">
+                <i style={{ width: `${Math.max(4, option.market_probability * 100)}%` }} />
+                <b style={{ width: `${Math.max(4, option.model_probability * 100)}%` }} />
+              </div>
+              <div className="analysis-match-option-foot">
+                <span>市场 {(option.market_probability * 100).toFixed(1)}%</span>
+                <span>Edge {option.edge >= 0 ? '+' : ''}{(option.edge * 100).toFixed(1)}%</span>
+                <span>差值 +{probabilityGap.toFixed(1)}%</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <button type="button" className="fqp-btn fqp-btn-primary analysis-match-action" onClick={onExplain}>
+        打开模型解释
+      </button>
+    </aside>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -238,7 +538,7 @@ function ModelCompareTab() {
 
 function buildRadarOption(models: ModelCompareItem[], dimensions: RadarDimension[]) {
   // Radar dimensions: brier (inv), log_loss (inv), roi, sharpe, hit_rate, profit_factor
-  const radarKeys = ['brier', 'log_loss', 'roi', 'sharpe', 'hit_rate', 'profit_factor'] as const;
+  const radarKeys = ['brier', 'log_loss', 'roi', 'sharpe', 'hit_rate', 'profit_factor'] as const satisfies readonly (keyof ModelCompareItem)[];
   const radarLabels = ['Brier ↓', 'LogLoss ↓', 'ROI', '夏普', '胜率', '盈利因子'];
   const invertFlags = [true, true, false, false, false, false];
 
@@ -247,7 +547,7 @@ function buildRadarOption(models: ModelCompareItem[], dimensions: RadarDimension
   for (let i = 0; i < radarKeys.length; i++) {
     const key = radarKeys[i];
     allValues[key] = models.map((m) => {
-      const v = (m as Record<string, unknown>)[key];
+      const v = m[key];
       return typeof v === 'number' ? v : 0;
     });
   }
@@ -260,7 +560,7 @@ function buildRadarOption(models: ModelCompareItem[], dimensions: RadarDimension
 
   const seriesData = models.map((m) => {
     const values = radarKeys.map((key, i) => {
-      const v = (m as Record<string, unknown>)[key];
+      const v = m[key];
       const val = typeof v === 'number' ? v : 0;
       return normalizeForRadar(val, allValues[key], invertFlags[i]);
     });
@@ -286,10 +586,10 @@ function buildRadarOption(models: ModelCompareItem[], dimensions: RadarDimension
       axisName: { color: '#C4C4CC', fontSize: 12 },
       shape: 'polygon',
       splitArea: {
-        areaStyle: { color: ['rgba(255,255,255,0.02)', 'rgba(255,255,255,0.04)'] },
+        areaStyle: { color: ['var(--fqp-bg-glass)', 'var(--fqp-border-subtle)'] },
       },
       axisLine: { lineStyle: { color: 'rgba(255,255,255,0.1)' } },
-      splitLine: { lineStyle: { color: 'rgba(255,255,255,0.08)' } },
+      splitLine: { lineStyle: { color: 'var(--fqp-border-medium)' } },
     },
     series: [
       {
@@ -441,7 +741,7 @@ function FeatureImportanceTab() {
                 <div>
                   <span style={{ color: 'var(--fqp-text-muted)' }}>类别分布：</span>
                   <span className="fqp-mono" style={{ fontSize: 12 }}>
-                    主胜 {modelInfo.class_distribution.home_win} / 平 {modelInfo.class_distribution.draw} / 客胜 {modelInfo.class_distribution.away_win}
+                    主胜 {modelInfo.class_distribution.home_win} / 平 {modelInfo.class_distribution.draw} / 主负 {modelInfo.class_distribution.away_win}
                   </span>
                 </div>
               )}
@@ -474,8 +774,8 @@ function FeatureImportanceTab() {
 // Tab: SHAP 解释
 // ---------------------------------------------------------------------------
 
-function ShapExplainTab() {
-  const [matchIdInput, setMatchIdInput] = useState('');
+function ShapExplainTab({ initialMatchId }: { initialMatchId?: number | null }) {
+  const [matchIdInput, setMatchIdInput] = useState(initialMatchId ? String(initialMatchId) : '');
   const [matchId, setMatchId] = useState<number | null>(null);
   const [shapEntries, setShapEntries] = useState<ShapEntry[]>([]);
   const [probs, setProbs] = useState<{ home: number; draw: number; away: number } | null>(null);
@@ -485,12 +785,7 @@ function ShapExplainTab() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchExplanation = useCallback(() => {
-    const id = parseInt(matchIdInput, 10);
-    if (!id || id <= 0) {
-      setError('请输入有效的比赛 ID');
-      return;
-    }
+  const loadExplanation = useCallback((id: number) => {
     setLoading(true);
     setError(null);
     api.analysis.shapExplanation(id, 15)
@@ -511,7 +806,22 @@ function ShapExplainTab() {
         setError(e instanceof ApiError ? e.message : '加载失败');
         setLoading(false);
       });
-  }, [matchIdInput]);
+  }, []);
+
+  const fetchExplanation = useCallback((nextMatchId?: number) => {
+    const id = nextMatchId ?? parseInt(matchIdInput, 10);
+    if (!id || id <= 0) {
+      setError('请输入有效的比赛 ID');
+      return;
+    }
+    loadExplanation(id);
+  }, [loadExplanation, matchIdInput]);
+
+  useEffect(() => {
+    if (!initialMatchId) return;
+    setMatchIdInput(String(initialMatchId));
+    loadExplanation(initialMatchId);
+  }, [initialMatchId, loadExplanation]);
 
   // Build waterfall chart
   const waterfallOption = shapEntries.length > 0
@@ -585,7 +895,7 @@ function ShapExplainTab() {
             }}
           />
           <button
-            onClick={fetchExplanation}
+            onClick={() => fetchExplanation()}
             disabled={loading}
             style={{
               padding: '8px 20px',
@@ -627,7 +937,7 @@ function ShapExplainTab() {
                 </div>
               </div>
               <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: 12, color: 'var(--fqp-text-muted)' }}>客胜概率</div>
+                <div style={{ fontSize: 12, color: 'var(--fqp-text-muted)' }}>主负概率</div>
                 <div style={{ fontSize: 24, fontWeight: 700, color: '#ef4444' }}>
                   {(probs.away * 100).toFixed(1)}%
                 </div>
@@ -646,6 +956,15 @@ function ShapExplainTab() {
           {/* Waterfall chart */}
           {shapEntries.length > 0 && (
             <ChartCard title="SHAP 特征贡献（主胜方向）" option={waterfallOption} height={480} />
+          )}
+
+          {shapEntries.length === 0 && (
+            <Card title="特征贡献明细" style={{ marginTop: 20 }}>
+              <div className="fqp-empty-state">
+                <div className="fqp-empty-title">暂无特征贡献明细</div>
+                <div className="fqp-empty-desc">该比赛已有预测概率，当前模型未返回可展示的 SHAP 明细</div>
+              </div>
+            </Card>
           )}
 
           {/* Feature table */}
@@ -874,47 +1193,86 @@ function pivotSegments(
 // Main page
 // ---------------------------------------------------------------------------
 
-export default function AnalysisPage() {
-  const [activeTab, setActiveTab] = useState<TabKey>('compare');
+export default function AnalysisPage({ standaloneSection }: { standaloneSection?: AnalysisSectionKey } = {}) {
+  const [activeSection, setActiveSection] = useState<AnalysisSectionKey>(() => standaloneSection ?? readInitialSection());
+  const [activeModelTab, setActiveModelTab] = useState<ModelTabKey>('compare');
+  const [selectedMatch, setSelectedMatch] = useState<RecommendationMatchSelection | null>(null);
+
+  useEffect(() => {
+    const syncSection = () => setActiveSection(readInitialSection());
+    window.addEventListener('hashchange', syncSection);
+    return () => window.removeEventListener('hashchange', syncSection);
+  }, []);
+
+  const updateSection = (section: AnalysisSectionKey) => {
+    if (standaloneSection) return;
+    setActiveSection(section);
+    window.history.replaceState(null, '', `#/analysis?section=${section}`);
+  };
+
+  if (standaloneSection === 'features') {
+    return (
+      <div>
+        <PageHeader title="特征数据健康" subtitle="检查比赛特征的覆盖率、完整度与不确定性" />
+        <FeatureSnapshotPanel />
+      </div>
+    );
+  }
 
   return (
     <div>
-      <PageHeader title="数据分析" />
-      <DisclaimerBanner
-        text="特征分析和模型对比仅用于学术研究。历史表现不代表未来结果。"
-        type="page"
-      />
+      <PageHeader title="今日决策分析" subtitle="模型对今日竞赛的赛前推荐、过程解释和赛后复盘" />
 
-      {/* Tab bar */}
-      <div style={{ display: 'flex', gap: 4, marginBottom: 24, borderBottom: '1px solid var(--fqp-border)', paddingBottom: 0 }}>
-        {TABS.map((tab) => (
-          <button
-            key={tab.key}
-            onClick={() => setActiveTab(tab.key)}
-            style={{
-              padding: '10px 20px',
-              border: 'none',
-              borderBottom: activeTab === tab.key ? '2px solid var(--fqp-accent)' : '2px solid transparent',
-              background: 'transparent',
-              color: activeTab === tab.key ? 'var(--fqp-accent)' : 'var(--fqp-text-muted)',
-              cursor: 'pointer',
-              fontWeight: activeTab === tab.key ? 600 : 400,
-              fontSize: 14,
-              marginBottom: -1,
-            }}
-          >
-            <span style={{ marginRight: 6 }}>{tab.icon}</span>
-            {tab.label}
-          </button>
-        ))}
-      </div>
+      <AnalysisOverview activeSection={activeSection} onSectionChange={updateSection} />
 
-      {/* Tab content */}
-      <div key={activeTab} className="fqp-anim-fadeIn">
-        {activeTab === 'compare' && <ModelCompareTab />}
-        {activeTab === 'importance' && <FeatureImportanceTab />}
-        {activeTab === 'shap' && <ShapExplainTab />}
-        {activeTab === 'condition' && <ConditionTab />}
+      {selectedMatch && (
+        <AnalysisMatchDrawer
+          selection={selectedMatch}
+          onClose={() => setSelectedMatch(null)}
+          onExplain={() => {
+            updateSection('explanations');
+            setActiveModelTab('shap');
+          }}
+        />
+      )}
+
+      <div key={activeSection} className="fqp-anim-fadeIn">
+        {activeSection === 'pre_match' && <RecommendationsPage embedded onMatchSelect={setSelectedMatch} />}
+        {activeSection === 'features' && <FeatureSnapshotPanel />}
+        {activeSection === 'reviews' && <ReviewsPage embedded />}
+        {activeSection === 'explanations' && (
+          <>
+            <div style={{ display: 'flex', gap: 4, marginBottom: 24, borderBottom: '1px solid var(--fqp-border)', paddingBottom: 0 }}>
+              {MODEL_TABS.map((tab) => (
+                <button
+                  key={tab.key}
+                  onClick={() => setActiveModelTab(tab.key)}
+                  style={{
+                    padding: '10px 20px',
+                    border: 'none',
+                    borderBottom: activeModelTab === tab.key ? '2px solid var(--fqp-accent)' : '2px solid transparent',
+                    background: 'transparent',
+                    color: activeModelTab === tab.key ? 'var(--fqp-accent)' : 'var(--fqp-text-muted)',
+                    cursor: 'pointer',
+                    fontWeight: activeModelTab === tab.key ? 600 : 400,
+                    fontSize: 14,
+                    marginBottom: -1,
+                  }}
+                >
+                  <span style={{ marginRight: 6 }}>{tab.icon}</span>
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            <div key={activeModelTab} className="fqp-anim-fadeIn">
+              {activeModelTab === 'compare' && <ModelCompareTab />}
+              {activeModelTab === 'importance' && <FeatureImportanceTab />}
+              {activeModelTab === 'shap' && <ShapExplainTab initialMatchId={selectedMatch?.matchId ?? null} />}
+              {activeModelTab === 'condition' && <ConditionTab />}
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

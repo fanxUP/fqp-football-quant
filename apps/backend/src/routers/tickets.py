@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import os
+import re
 import tempfile
 from datetime import datetime as _dt
+from pathlib import Path
 
 from fastapi import APIRouter, File, HTTPException, Query, UploadFile
 
@@ -55,6 +57,34 @@ from scripts.real_ticket_storage import (
 )
 
 router = APIRouter(tags=["tickets"])
+
+UPLOAD_ROOT = Path(os.getenv("FQP_UPLOAD_DIR", "data/uploads")).resolve()
+
+
+def _detected_image_type(contents: bytes) -> str | None:
+    if contents.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png"
+    if contents.startswith(b"\xff\xd8\xff"):
+        return "image/jpeg"
+    if len(contents) >= 12 and contents[:4] == b"RIFF" and contents[8:12] == b"WEBP":
+        return "image/webp"
+    return None
+
+
+def _safe_upload_name(filename: str | None) -> str:
+    stem = Path(filename or "ticket.jpg").stem
+    suffix = Path(filename or "ticket.jpg").suffix.lower() or ".jpg"
+    safe_stem = re.sub(r"[^A-Za-z0-9._-]+", "_", stem).strip("._") or "ticket"
+    timestamp = _dt.now().strftime("%Y%m%d%H%M%S%f")
+    return f"{timestamp}_{safe_stem}{suffix}"
+
+
+def _save_ticket_upload(filename: str | None, contents: bytes) -> tuple[Path, str]:
+    ticket_dir = UPLOAD_ROOT / "tickets"
+    ticket_dir.mkdir(parents=True, exist_ok=True)
+    path = ticket_dir / _safe_upload_name(filename)
+    path.write_bytes(contents)
+    return path, f"/uploads/tickets/{path.name}"
 
 
 @router.get("/api/real-tickets")
@@ -189,7 +219,7 @@ def list_error_analyses(
 
 
 @router.get("/api/error-analysis/summary")
-def error_analysis_summary(days: int = Query(7)):
+def error_analysis_summary(days: int = Query(7, ge=1, le=365)):
     """Get error type distribution for recent days."""
     with get_db() as conn:
         summary = get_error_summary(conn, days=days)
@@ -201,6 +231,7 @@ def error_analysis_summary(days: int = Query(7)):
 # ---------------------------------------------------------------------------
 
 
+@router.post("/api/real-tickets/upload")
 @router.post("/api/tickets/ocr")
 def ocr_ticket_image(file: UploadFile = File(...)):  # noqa: B008
     """上传实票照片，OCR 识别并返回结构化数据。
@@ -218,8 +249,14 @@ def ocr_ticket_image(file: UploadFile = File(...)):  # noqa: B008
     max_size = 10 * 1024 * 1024  # 10MB
     if len(contents) > max_size:
         raise HTTPException(400, f"文件过大 ({len(contents) / 1024 / 1024:.1f}MB)，最大 10MB")
+    detected_type = _detected_image_type(contents)
+    if detected_type is None:
+        raise HTTPException(400, "文件内容不是有效的 PNG、JPG 或 WEBP 图片")
+    if file.content_type and detected_type != file.content_type.replace("image/jpg", "image/jpeg"):
+        raise HTTPException(400, "文件内容与声明的图片类型不一致")
 
-    # 保存临时文件
+    _, ticket_image_url = _save_ticket_upload(file.filename, contents)
+
     suffix = os.path.splitext(file.filename or "ticket.jpg")[1] or ".jpg"
     with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
         tmp.write(contents)
@@ -230,6 +267,7 @@ def ocr_ticket_image(file: UploadFile = File(...)):  # noqa: B008
         response = result_to_dict(result)
         response["filename"] = file.filename
         response["size_bytes"] = len(contents)
+        response["ticket_image_url"] = ticket_image_url
         return response
     except RuntimeError as e:
         raise HTTPException(500, f"OCR 处理失败: {e}") from e
@@ -239,3 +277,23 @@ def ocr_ticket_image(file: UploadFile = File(...)):  # noqa: B008
             os.unlink(tmp_path)
         except OSError:
             pass
+
+
+@router.post("/api/real-tickets/{ticket_id}/confirm")
+def confirm_real_ticket(ticket_id: int, body: dict | None = None):
+    """Confirm a real ticket after OCR/manual correction."""
+    updates = {"confirm_status": "confirmed"}
+    if body:
+        updates.update(body)
+    with get_db() as conn:
+        ok = _update_ticket(conn, ticket_id, updates)
+    return {"status": "ok" if ok else "not_found", "ticket_id": ticket_id}
+
+
+@router.post("/api/real-tickets/{ticket_id}/settle")
+def settle_real_ticket(ticket_id: int, body: dict | None = None):
+    """Mark a real ticket settlement status from an external settlement job/manual review."""
+    status = (body or {}).get("settlement_status", "settled")
+    with get_db() as conn:
+        ok = _update_ticket(conn, ticket_id, {"settlement_status": status})
+    return {"status": "ok" if ok else "not_found", "ticket_id": ticket_id}

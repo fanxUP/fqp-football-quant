@@ -20,6 +20,7 @@ from scripts.feature_importance import (
     recommend_best_combos,
     train_if_needed,
 )
+from scripts.model_performance import get_model_performance_history
 
 router = APIRouter(tags=["analysis"])
 
@@ -33,10 +34,21 @@ router = APIRouter(tags=["analysis"])
 def evaluation_summary():
     """获取所有模型的评估指标摘要（Brier / LogLoss / RPS / CLV）。
 
-    数据来源：market_efficiency_metrics 表。
+    数据来源：market_efficiency_metrics 表中赛前的胜平负预测，
+    且只接受已确认赛果。
     """
     with get_db() as conn:
         return get_evaluation_summary(conn)
+
+
+@router.get("/api/analysis/evaluation/history")
+def evaluation_history(
+    window: int = Query(20, ge=3, le=100, description="滚动统计的最近比赛场数"),
+    days: int = Query(365, ge=30, le=1095, description="查询最近天数"),
+):
+    """按日期、玩法和模型返回滚动命中率。"""
+    with get_db() as conn:
+        return get_model_performance_history(conn, window=window, days=days)
 
 
 @router.get("/api/analysis/evaluation/calibration")

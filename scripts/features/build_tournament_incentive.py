@@ -148,7 +148,7 @@ def build_tournament_incentive_features(
     away_tanking = None
 
     # Home team
-    if home_team_id:
+    if home_team_id and home_team_id in mot_map:
         try:
             ctx = _build_context_from_motivation(mot_map.get(home_team_id), is_cup)
             home_avoid = round(compute_avoid_strong_opponent_score(ctx), 4)
@@ -177,7 +177,7 @@ def build_tournament_incentive_features(
             print(f"[tournament] error home team {home_team_id}: {e}")
 
     # Away team
-    if away_team_id:
+    if away_team_id and away_team_id in mot_map:
         try:
             ctx = _build_context_from_motivation(mot_map.get(away_team_id), is_cup)
             away_avoid = round(compute_avoid_strong_opponent_score(ctx), 4)
