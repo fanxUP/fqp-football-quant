@@ -122,6 +122,16 @@ def test_scheduler_runs_model_predictions_after_each_schedule_refresh():
     assert "**MODEL_PREDICTION_CRON" in source
 
 
+def test_scheduler_detects_upsets_after_results_and_ticket_settlement():
+    source = Path("scripts/jobs/run_scheduler.py").read_text()
+
+    assert 'id="detect_upsets"' in source
+    assert 'minute="20,50"' in source
+    assert source.index('id="settle_finished_matches"') < source.index('id="detect_upsets"')
+    assert source.index('id="settle_tickets"') < source.index('id="detect_upsets"')
+    assert source.index('id="detect_upsets"') < source.index('id="generate_daily_review"')
+
+
 def test_scheduler_dispatches_odds_by_default_for_host_runtime(monkeypatch):
     monkeypatch.delenv("FQP_ODDS_DISPATCH_OWNER", raising=False)
 

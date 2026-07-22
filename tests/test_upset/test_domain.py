@@ -37,6 +37,15 @@ def test_level_boundaries_are_stable(probability: float, expected: str | None):
     assert UpsetRule.default().classify(probability) == expected
 
 
+def test_high_cardinality_markets_use_stricter_probability_thresholds():
+    rule = UpsetRule.default()
+
+    assert rule.classify(0.10, "bf") is None
+    assert rule.classify(0.015, "bf") == "B"
+    assert rule.classify(0.05, "bqc") == "B"
+    assert rule.classify(0.08, "zjq") == "B"
+
+
 def test_normal_result_is_not_mislabeled_as_upset():
     signal = calculate_market_signal(
         play_type="spf",

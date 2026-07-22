@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Collection, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from scripts.odds_conversion import normalize_probabilities, overround
 from scripts.result_codes import normalize_result
@@ -33,6 +33,9 @@ class UpsetRule:
     general_max: float
     mild_max: float
     favourite_min: float
+    play_thresholds: Mapping[str, tuple[float, float, float, float]] = field(
+        default_factory=dict
+    )
 
     @classmethod
     def default(cls) -> UpsetRule:
@@ -43,16 +46,26 @@ class UpsetRule:
             general_max=0.30,
             mild_max=0.38,
             favourite_min=0.55,
+            play_thresholds={
+                "zjq": (0.04, 0.06, 0.09, 0.12),
+                "bqc": (0.025, 0.04, 0.06, 0.08),
+                "bf": (0.005, 0.01, 0.02, 0.03),
+            },
         )
 
-    def classify(self, probability: float) -> str | None:
-        if probability < self.extreme_max:
+    def classify(self, probability: float, play_type: str = "spf") -> str | None:
+        thresholds = self.play_thresholds.get(
+            play_type,
+            (self.extreme_max, self.major_max, self.general_max, self.mild_max),
+        )
+        extreme_max, major_max, general_max, mild_max = thresholds
+        if probability < extreme_max:
             return "S"
-        if probability < self.major_max:
+        if probability < major_max:
             return "A"
-        if probability < self.general_max:
+        if probability < general_max:
             return "B"
-        if probability < self.mild_max:
+        if probability < mild_max:
             return "C"
         return None
 
@@ -144,7 +157,7 @@ def calculate_market_signal(
         actual_option=actual_option,
         actual_probability=actual_probability,
         surprise_bits=-math.log2(actual_probability),
-        upset_level=rule.classify(actual_probability),
+        upset_level=rule.classify(actual_probability, play_type),
         market_favourite_option=favourite_option,
         market_favourite_probability=favourite_probability,
         favourite_failed=(

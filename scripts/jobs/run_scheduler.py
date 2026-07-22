@@ -509,6 +509,20 @@ def main() -> None:
                 id="settle_tickets",
             )
 
+            # Twice hourly after official-result and ticket settlement windows:
+            # identify objective cold results from complete pre-match markets.
+            scheduler.add_job(
+                _audited_job(
+                    "detect_upsets",
+                    "冷门识别",
+                    "review_agent",
+                    lambda: __import__("scripts.jobs.detect_upsets", fromlist=["run"]).run(),
+                ),
+                "cron",
+                minute="20,50",
+                id="detect_upsets",
+            )
+
             # Daily at 08:00: generate review for the previous business day
             scheduler.add_job(
                 _audited_job(
