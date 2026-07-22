@@ -31,10 +31,16 @@ HOST_REDIS_URL="${HOST_REDIS_URL/redis:6379/127.0.0.1:${REDIS_PORT}}"
 
 COMPOSE=(docker compose -f "$COMPOSE_FILE" -f "$HYBRID_FILE")
 
+SOURCE_REVISION="$(git -C "$PROJECT_ROOT" rev-parse HEAD)"
+if [[ -n "$(git -C "$PROJECT_ROOT" status --porcelain)" ]]; then
+    SOURCE_REVISION="${SOURCE_REVISION}-dirty"
+fi
+export FQP_DEPLOY_REVISION="${FQP_DEPLOY_REVISION:-$SOURCE_REVISION}"
+
 log "Stopping only the Docker frontend/backend to release ports 8066/8006..."
 docker compose -f "$COMPOSE_FILE" stop frontend backend >/dev/null
 
-log "Keeping PostgreSQL, Redis, Worker, Scheduler and Grafana in Docker..."
+log "Keeping PostgreSQL, Redis, Worker, Scheduler and Grafana in Docker (${FQP_DEPLOY_REVISION:0:18})..."
 "${COMPOSE[@]}" up --detach --no-build postgres redis worker scheduler grafana
 
 log "Starting host frontend/backend against Docker PostgreSQL on port ${POSTGRES_PORT}..."

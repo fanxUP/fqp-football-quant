@@ -68,7 +68,7 @@ case "${1:-status}" in
     status
     ;;
   stop)
-    if is_running; then
+    if is_registered; then
       launchctl bootout "$DOMAIN/$LABEL"
       rm -f "$PID_FILE"
       echo "[fqp-scheduler] stopped"

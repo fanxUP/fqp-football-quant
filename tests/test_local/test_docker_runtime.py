@@ -89,6 +89,8 @@ def test_incremental_migrations_track_applied_files() -> None:
     assert "local_schema_migrations" in script
     assert "ON_ERROR_STOP=1" in script
     assert "BASELINE_VERSION=32" in script
+    assert "SELECT filename FROM local_schema_migrations ORDER BY filename" in script
+    assert "SELECT 1 FROM local_schema_migrations WHERE filename" not in script
 
 
 def test_prediction_time_migration_normalizes_existing_rows_to_shanghai() -> None:
@@ -137,6 +139,20 @@ def test_live_recommendation_indexes_cover_latest_prediction_and_handicap_lookup
     assert "idx_odds_handicap_latest" in migration
     assert "match_id, play_type, snapshot_time DESC" in normalized
     assert "WHERE handicap IS NOT NULL" in migration
+
+
+def test_prediction_read_indexes_only_expose_valid_pre_kickoff_evidence() -> None:
+    migration = (
+        PROJECT_ROOT / "sql/47_prediction_read_path_indexes.sql"
+    ).read_text(encoding="utf-8")
+    normalized = " ".join(migration.split())
+
+    assert "idx_predictions_valid_recent" in migration
+    assert "predict_time DESC, ev DESC, id DESC" in normalized
+    assert "idx_predictions_valid_positive_ev" in migration
+    assert "ev DESC, id DESC" in normalized
+    assert "mp.validation_status = 'valid'" in migration
+    assert "mp.predict_time < m.kickoff_time" in migration
 
 
 def test_invalid_prediction_cleanup_blocks_future_agent_ticket_references() -> None:

@@ -14,26 +14,38 @@ psql_exec() {
         psql -X -U fqp -d fqp -v ON_ERROR_STOP=1 "$@"
 }
 
-psql_exec -q <<'SQL'
+# Register the legacy baseline in one database session. Starting a separate
+# `docker compose exec` for every old file made each deploy look stalled.
+{
+    cat <<'SQL'
+BEGIN;
 CREATE TABLE IF NOT EXISTS local_schema_migrations (
     filename TEXT PRIMARY KEY,
     applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 SQL
+    for migration in "$PROJECT_ROOT"/sql/*.sql; do
+        filename="$(basename "$migration")"
+        [[ "$filename" =~ ^([0-9]+)_.*\.sql$ ]] || continue
+        version=$((10#${BASH_REMATCH[1]}))
+        if (( version <= BASELINE_VERSION )); then
+            printf "INSERT INTO local_schema_migrations (filename) VALUES ('%s') ON CONFLICT DO NOTHING;\n" "$filename"
+        fi
+    done
+    printf 'COMMIT;\n'
+} | psql_exec -q
+
+applied_files="$(psql_exec -Atq -c 'SELECT filename FROM local_schema_migrations ORDER BY filename;')"
+applied_files=$'\n'"$applied_files"$'\n'
 
 for migration in "$PROJECT_ROOT"/sql/*.sql; do
     filename="$(basename "$migration")"
     [[ "$filename" =~ ^([0-9]+)_.*\.sql$ ]] || continue
     version=$((10#${BASH_REMATCH[1]}))
 
-    if (( version <= BASELINE_VERSION )); then
-        psql_exec -q -c \
-            "INSERT INTO local_schema_migrations (filename) VALUES ('$filename') ON CONFLICT DO NOTHING;"
-        continue
-    fi
+    (( version <= BASELINE_VERSION )) && continue
 
-    applied="$(psql_exec -Atq -c "SELECT 1 FROM local_schema_migrations WHERE filename = '$filename';")"
-    [[ "$applied" == "1" ]] && continue
+    [[ "$applied_files" == *$'\n'"$filename"$'\n'* ]] && continue
 
     echo "[fqp-db] applying $filename"
     {

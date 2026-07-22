@@ -85,3 +85,27 @@ def test_legacy_host_scheduler_fails_closed_by_default() -> None:
     environment_load = scheduler.index('source "$ENV_FILE"')
     assert guard < environment_load
     assert "Host Scheduler is retired" in scheduler
+
+
+def test_legacy_scheduler_stop_unregisters_even_without_a_live_heartbeat() -> None:
+    manager = (PROJECT_ROOT / "ops/local/manage_scheduler.sh").read_text(
+        encoding="utf-8"
+    )
+    stop_case = manager.split('  stop)\n', maxsplit=1)[1].split('    ;;', maxsplit=1)[0]
+
+    assert "if is_registered; then" in stop_case
+    assert "if is_running; then" not in stop_case
+
+
+def test_hybrid_runtime_tracks_and_mounts_the_current_source_revision() -> None:
+    hybrid = (PROJECT_ROOT / "ops/local/run_hybrid_dev.sh").read_text(
+        encoding="utf-8"
+    )
+    override = (PROJECT_ROOT / "ops/local/docker-compose.hybrid.yml").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'export FQP_DEPLOY_REVISION=' in hybrid
+    assert 'status --porcelain' in hybrid
+    assert override.count("../../apps/backend/src:/app/apps/backend/src:ro") == 2
+    assert override.count("../../scripts:/app/scripts:ro") == 2
