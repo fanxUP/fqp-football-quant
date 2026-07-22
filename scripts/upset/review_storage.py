@@ -16,6 +16,14 @@ def _json(value: Any) -> Json:
     return Json(value, dumps=lambda payload: json.dumps(payload, default=str, ensure_ascii=False))
 
 
+def normalized_fraction(value: Any) -> float | None:
+    """Normalize legacy 0-100 scores and current 0-1 scores to one fraction."""
+    if value is None:
+        return None
+    number = float(value)
+    return number / 100.0 if number > 1 else number
+
+
 def _events(conn: Any, limit: int) -> list[dict[str, Any]]:
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
@@ -119,7 +127,7 @@ def _feature_evidence(conn: Any, event: dict[str, Any]) -> dict[str, Any] | None
     if not row:
         return None
     feature = dict(row)
-    completeness = feature.get("data_completeness_score")
+    completeness = normalized_fraction(feature.get("data_completeness_score"))
     text = "赛前多维特征快照已绑定"
     if completeness is not None:
         text += f"，数据完整度为{float(completeness):.1%}"
@@ -134,7 +142,7 @@ def _feature_evidence(conn: Any, event: dict[str, Any]) -> dict[str, Any] | None
         observed_at=feature["snapshot_time"],
         available_at=feature["snapshot_time"],
         kickoff_time=event["kickoff_time"],
-        confidence=float(feature.get("source_confidence_score") or 0.5),
+        confidence=normalized_fraction(feature.get("source_confidence_score")) or 0.5,
     )
 
 
@@ -186,6 +194,17 @@ def _prediction_evidence(conn: Any, event: dict[str, Any]) -> dict[str, Any] | N
 
 def _insert_evidence(conn: Any, record: dict[str, Any]) -> bool:
     with conn.cursor() as cur:
+        cur.execute(
+            """
+            DELETE FROM upset_factor_evidence
+            WHERE upset_event_id=%(upset_event_id)s
+              AND factor_code=%(factor_code)s
+              AND source_type=%(source_type)s
+              AND source_reference IS NOT DISTINCT FROM %(source_reference)s
+              AND raw_payload_hash IS DISTINCT FROM %(raw_payload_hash)s
+            """,
+            record,
+        )
         cur.execute(
             """
             INSERT INTO upset_factor_evidence (

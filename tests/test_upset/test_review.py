@@ -3,6 +3,13 @@ from __future__ import annotations
 from datetime import datetime
 
 from scripts.upset.review import build_review_payload, validate_review_payload
+from scripts.upset.review_storage import normalized_fraction
+
+
+def test_feature_quality_normalizes_legacy_percentage_scale():
+    assert normalized_fraction(30) == 0.3
+    assert normalized_fraction(0.76) == 0.76
+    assert normalized_fraction(None) is None
 
 
 def test_review_keeps_facts_prematch_signals_and_inferences_separate():

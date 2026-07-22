@@ -61,7 +61,7 @@ panels:
     module_id: upset_intelligence_module
     order: 120
     visible: true
-    icon: snowflake
+    icon: 🧊
   - panel_id: backtest_lab
     name: 策略验证
     route: /backtest
