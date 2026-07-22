@@ -127,18 +127,19 @@ describe('UpsetsPage', () => {
     })));
   });
 
-  it('使用联赛下拉菜单导航冷门比赛', async () => {
+  it('使用联赛折叠菜单整理冷门比赛', async () => {
     render(<UpsetsPage />);
 
-    const leagueSelect = await screen.findByRole('combobox', { name: '联赛导航' });
-    expect(screen.getByRole('option', { name: '全部联赛（10场）' })).toBeInTheDocument();
-    expect(screen.getByRole('option', { name: '韩国职业联赛（9场）' })).toBeInTheDocument();
+    const leagueButton = await screen.findByRole('button', { name: '测试联赛，1场' });
+    expect(leagueButton).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByText('主队 1:2 客队')).toBeInTheDocument();
 
-    fireEvent.change(leagueSelect, { target: { value: '韩国职业联赛' } });
+    fireEvent.click(leagueButton);
+    expect(leagueButton).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByText('主队 1:2 客队')).not.toBeInTheDocument();
 
-    await waitFor(() => expect(list).toHaveBeenLastCalledWith(expect.objectContaining({
-      league_name: '韩国职业联赛',
-    })));
+    fireEvent.click(screen.getByRole('button', { name: '全部展开' }));
+    expect(leagueButton).toHaveAttribute('aria-expanded', 'true');
   });
 
   it('打开详情后展示完整赔率和彩票影响', async () => {
