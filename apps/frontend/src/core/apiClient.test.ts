@@ -35,4 +35,19 @@ describe('api client GET request coalescing', () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
+
+  it('extracts FastAPI detail instead of displaying raw JSON', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 409,
+        text: () => Promise.resolve('{"detail":"模型预测待补齐"}'),
+      }),
+    );
+
+    await expect(api.pool.analyze()).rejects.toEqual(
+      expect.objectContaining({ status: 409, message: '模型预测待补齐' }),
+    );
+  });
 });

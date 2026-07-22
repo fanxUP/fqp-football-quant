@@ -37,6 +37,25 @@ export interface RuntimeModule {
 const TIMEOUT_MS = 15_000;
 const inFlightGetRequests = new Map<string, Promise<unknown>>();
 
+async function readErrorMessage(res: Response): Promise<string> {
+  const body = await res.text().catch(() => '');
+  if (!body) return `HTTP ${res.status}`;
+
+  try {
+    const payload = JSON.parse(body) as { detail?: unknown; message?: unknown };
+    const message = payload.detail ?? payload.message;
+    if (typeof message === 'string' && message.trim()) return message;
+    if (Array.isArray(message)) {
+      return message
+        .map((item) => (typeof item === 'string' ? item : JSON.stringify(item)))
+        .join('；');
+    }
+  } catch {
+    // Non-JSON upstream errors remain readable as plain text.
+  }
+  return body;
+}
+
 async function performRequest<T>(path: string, init?: RequestInit): Promise<T> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
@@ -51,8 +70,7 @@ async function performRequest<T>(path: string, init?: RequestInit): Promise<T> {
       },
     });
     if (!res.ok) {
-      const body = await res.text().catch(() => '');
-      throw new ApiError(res.status, body || `HTTP ${res.status}`);
+      throw new ApiError(res.status, await readErrorMessage(res));
     }
     return res.json();
   } catch (e) {
@@ -93,8 +111,7 @@ async function uploadRequest<T>(path: string, formData: FormData): Promise<T> {
       signal: controller.signal,
     });
     if (!res.ok) {
-      const body = await res.text().catch(() => '');
-      throw new ApiError(res.status, body || `HTTP ${res.status}`);
+      throw new ApiError(res.status, await readErrorMessage(res));
     }
     return res.json();
   } catch (e) {

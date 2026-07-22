@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import PoolPage from './PoolPage';
+import { ApiError } from '../core/types';
 
 const apiMocks = vi.hoisted(() => ({
   analyze: vi.fn(),
@@ -48,5 +49,17 @@ describe('PoolPage', () => {
     expect(await screen.findByText('历史期次复盘')).toBeInTheDocument();
     expect(screen.getByText(/26092/)).toBeInTheDocument();
     expect(screen.getByText(/不是当前投注推荐/)).toBeInTheDocument();
+  });
+
+  it('缺少预测时显示可读进度且结束加载状态', async () => {
+    apiMocks.analyze.mockRejectedValue(
+      new ApiError(409, '期号 26094 已完成 1/14 场模型预测，待补齐 13 场后生成组合'),
+    );
+
+    render(<PoolPage />);
+
+    expect(await screen.findByText('推荐方案准备中')).toBeInTheDocument();
+    expect(screen.getByText(/1\/14/)).toBeInTheDocument();
+    expect(screen.getByText('最后更新: 暂无可用分析')).toBeInTheDocument();
   });
 });

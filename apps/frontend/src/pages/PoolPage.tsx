@@ -86,7 +86,7 @@ export default function PoolPage() {
     <div>
       <PageHeader
         title="传统足彩 14场/任九"
-        lastUpdated={analysis?.generated_at || '加载中...'}
+        lastUpdated={loading ? '加载中…' : analysis?.generated_at || '暂无可用分析'}
       />
 
       {/* Controls */}

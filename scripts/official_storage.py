@@ -674,7 +674,22 @@ def store_pool_issue_matches(
                          home_win_prob, draw_prob, away_win_prob,
                          upset_score, public_heat_home, public_heat_draw,
                          public_heat_away, created_at)
-                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,now())
+                    VALUES (
+                        %s,%s,
+                        COALESCE(
+                            %s,
+                            (
+                                SELECT official.id
+                                FROM official_matches official
+                                WHERE official.home_team_name = %s
+                                  AND official.away_team_name = %s
+                                  AND official.kickoff_time::date = %s::timestamp::date
+                                ORDER BY official.id DESC
+                                LIMIT 1
+                            )
+                        ),
+                        %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,now()
+                    )
                     ON CONFLICT (issue_id, match_order) DO UPDATE SET
                         match_id = EXCLUDED.match_id,
                         league_name = EXCLUDED.league_name,
@@ -690,6 +705,9 @@ def store_pool_issue_matches(
                         issue_id,
                         m.get("match_order"),
                         m.get("match_id"),
+                        m.get("home_team_name"),
+                        m.get("away_team_name"),
+                        m.get("kickoff_time"),
                         m.get("league_name"),
                         m.get("home_team_name"),
                         m.get("away_team_name"),
