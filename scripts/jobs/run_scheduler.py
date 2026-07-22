@@ -601,6 +601,22 @@ def main() -> None:
                 id="generate_monthly_review",
             )
 
+            # Daily after reports: refresh only time-bounded, source-linked knowledge.
+            scheduler.add_job(
+                _audited_job(
+                    "refresh_upset_knowledge",
+                    "冷门研究知识画像刷新",
+                    "research_agent",
+                    lambda: __import__(
+                        "scripts.jobs.refresh_upset_knowledge", fromlist=["run"]
+                    ).run(),
+                ),
+                "cron",
+                hour=11,
+                minute=0,
+                id="refresh_upset_knowledge",
+            )
+
             # Daily at 23:45: analyze prediction errors
             scheduler.add_job(
                 _audited_job(

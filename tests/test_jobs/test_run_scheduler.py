@@ -145,6 +145,14 @@ def test_scheduler_builds_upset_evidence_and_review_after_detection():
     )
 
 
+def test_scheduler_refreshes_upset_knowledge_daily():
+    source = Path("scripts/jobs/run_scheduler.py").read_text()
+
+    assert 'id="refresh_upset_knowledge"' in source
+    assert '"refresh_upset_knowledge"' in source
+    assert "hour=11" in source
+
+
 def test_scheduler_dispatches_odds_by_default_for_host_runtime(monkeypatch):
     monkeypatch.delenv("FQP_ODDS_DISPATCH_OWNER", raising=False)
 
