@@ -33,6 +33,7 @@ if _PROJECT_ROOT not in sys.path:
 import numpy as np  # noqa: E402
 from psycopg2.extras import Json  # noqa: E402
 
+from scripts.business_time import business_now  # noqa: E402
 from scripts.poisson_model import poisson_pmf  # noqa: E402
 
 # —— 负对数似然函数 ——
@@ -268,6 +269,41 @@ def _load_match_data(
     return team_ids, team_to_idx, home_idx, away_idx, match_hg, match_ag
 
 
+def _load_training_window(conn: Any, min_matches: int = 5) -> tuple[Any, Any]:
+    """Return the exact historical date range eligible for MLE training."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            WITH settled AS (
+                SELECT m.kickoff_time, t1.id AS home_team_id, t2.id AS away_team_id
+                FROM official_matches m
+                JOIN official_results r ON r.match_id = m.id
+                JOIN teams t1 ON t1.team_name_cn = m.home_team_name
+                JOIN teams t2 ON t2.team_name_cn = m.away_team_name
+                WHERE LOWER(m.match_status) = 'settled'
+                  AND r.full_home_goals IS NOT NULL
+                  AND r.full_away_goals IS NOT NULL
+            ), eligible_teams AS (
+                SELECT team_id
+                FROM (
+                    SELECT home_team_id AS team_id FROM settled
+                    UNION ALL
+                    SELECT away_team_id AS team_id FROM settled
+                ) appearances
+                GROUP BY team_id
+                HAVING COUNT(*) >= %s
+            )
+            SELECT MIN(s.kickoff_time)::date, MAX(s.kickoff_time)::date
+            FROM settled s
+            JOIN eligible_teams home_eligible ON home_eligible.team_id = s.home_team_id
+            JOIN eligible_teams away_eligible ON away_eligible.team_id = s.away_team_id
+            """,
+            (min_matches,),
+        )
+        row = cur.fetchone()
+    return (row[0], row[1]) if row else (None, None)
+
+
 # —— 主拟合函数 ——
 
 
@@ -450,6 +486,9 @@ def fit_all_models(
         return {"maher_poisson": maher, "dixon_coles_rho": {"error": "cascade"}}
 
     dc_rho = fit_dixon_coles_rho(conn, maher, league_id=league_id)
+    training_start_date, training_end_date = _load_training_window(conn)
+    maher["training_start_date"] = training_start_date
+    maher["training_end_date"] = training_end_date
     return {"maher_poisson": maher, "dixon_coles_rho": dc_rho}
 
 
@@ -472,30 +511,60 @@ def run(dry_run: bool = False) -> dict[str, Any]:
         maher = result["maher_poisson"]
         dc = result["dixon_coles_rho"]
 
-        # 存储到 DB
+        # Each training run creates immutable versions. Historical predictions
+        # keep pointing to their original parameters, while only the new pair
+        # becomes active for subsequent prediction runs.
         cur = conn.cursor()
-
-        # Update maher_poisson params
+        version = f"mle-{business_now().strftime('%Y%m%dT%H%M%S%f')}"
+        training_start_date = maher.get("training_start_date")
+        training_end_date = maher.get("training_end_date")
+        maher_params = dict(maher)
+        for field in ("training_start_date", "training_end_date"):
+            value = maher_params.get(field)
+            if value is not None and hasattr(value, "isoformat"):
+                maher_params[field] = value.isoformat()
         cur.execute(
             """UPDATE model_versions
-               SET parameters_json = %s
-               WHERE model_name = 'maher_poisson'""",
-            (Json(maher),),
+               SET is_active = false
+               WHERE model_name IN ('maher_poisson', 'dixon_coles')"""
         )
-
-        # Update dixon_coles params (include rho)
         dc_params = {
             "rho": dc.get("rho", -0.08),
             "nll": dc.get("nll"),
             "n_matches": dc.get("n_total_matches", 0),
             "maher_converged": maher.get("converged", False),
         }
-        cur.execute(
-            """UPDATE model_versions
-               SET parameters_json = %s
-               WHERE model_name = 'dixon_coles'""",
-            (Json(dc_params),),
+        versions = (
+            (
+                "maher_poisson",
+                "score_distribution",
+                Json(maher_params),
+                "Maher Poisson parameters fitted from settled official match history.",
+            ),
+            (
+                "dixon_coles",
+                "low_score_adjustment",
+                Json(dc_params),
+                "Dixon-Coles low-score adjustment fitted from settled official match history.",
+            ),
         )
+        for model_name, model_type, parameters, description in versions:
+            cur.execute(
+                """INSERT INTO model_versions (
+                       model_name, model_type, version,
+                       training_start_date, training_end_date,
+                       parameters_json, description, is_active
+                   ) VALUES (%s, %s, %s, %s, %s, %s, %s, true)""",
+                (
+                    model_name,
+                    model_type,
+                    version,
+                    training_start_date,
+                    training_end_date,
+                    parameters,
+                    description,
+                ),
+            )
 
         conn.commit()
 
@@ -511,6 +580,9 @@ def run(dry_run: bool = False) -> dict[str, Any]:
                 "rho": dc.get("rho", -0.08),
                 "n_low_score_matches": dc.get("n_low_score_matches", 0),
             },
+            "model_version": version,
+            "training_start_date": str(training_start_date) if training_start_date else None,
+            "training_end_date": str(training_end_date) if training_end_date else None,
         }
 
 
