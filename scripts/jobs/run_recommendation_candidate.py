@@ -382,6 +382,51 @@ LEAGUE_TIER_RISK = {1: -0.02, 2: 0.0, 3: 0.03}
 TOTAL_MAX_BUDGET = sum(p["budget"] for p in POOL_CONFIG)
 
 
+def _load_reusable_ticket_summary(conn: Any) -> tuple[int, float]:
+    """Count only today's tickets backed by current independent model evidence."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT COUNT(*), COALESCE(SUM(st.suggested_stake), 0)
+            FROM simulation_tickets st
+            JOIN daily_budget_plans bp ON bp.id = st.budget_plan_id
+            WHERE bp.plan_date = timezone('Asia/Shanghai', NOW())::date
+              AND st.ticket_status <> 'invalid'
+              AND EXISTS (
+                  SELECT 1
+                  FROM simulation_ticket_items sti
+                  JOIN model_predictions mp ON mp.id = sti.model_prediction_id
+                  JOIN model_versions mv ON mv.id = mp.model_version_id
+                  WHERE sti.ticket_id = st.id
+                    AND mv.is_active = true
+                    AND mp.validation_status = 'valid'
+                    AND COALESCE(
+                        (mp.uncertainty_reason->>'model_independent')::boolean,
+                        false
+                    ) = true
+              )
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM simulation_ticket_items sti
+                  LEFT JOIN model_predictions mp ON mp.id = sti.model_prediction_id
+                  LEFT JOIN model_versions mv ON mv.id = mp.model_version_id
+                  WHERE sti.ticket_id = st.id
+                    AND (
+                        mp.id IS NULL
+                        OR mv.is_active IS NOT true
+                        OR mp.validation_status <> 'valid'
+                        OR COALESCE(
+                            (mp.uncertainty_reason->>'model_independent')::boolean,
+                            false
+                        ) IS NOT true
+                    )
+              )
+            """
+        )
+        count, stake = cur.fetchone()
+    return int(count or 0), float(stake or 0)
+
+
 def _run_impl(dry_run: bool = False) -> dict[str, Any]:
     """Generate simulation ticket candidates for the competition agent."""
     if dry_run:
@@ -412,14 +457,7 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
         conn.commit()
 
         # ── 0b. Idempotency ──
-        with conn.cursor() as cur:
-            cur.execute(
-                """SELECT COUNT(*), COALESCE(SUM(suggested_stake), 0)
-                   FROM simulation_tickets
-                   WHERE (created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Shanghai')::date
-                         = timezone('Asia/Shanghai', NOW())::date"""
-            )
-            already, existing_stake = cur.fetchone()
+        already, existing_stake = _load_reusable_ticket_summary(conn)
         if already > 0:
             return {
                 "status": "ok",

@@ -28,6 +28,19 @@ def test_incremental_migrations_track_applied_files() -> None:
     assert "docker compose" not in script
 
 
+def test_native_database_sessions_store_utc_timestamps() -> None:
+    init_script = (PROJECT_ROOT / "ops/local/init_local_database.sh").read_text(
+        encoding="utf-8"
+    )
+    migration_script = (
+        PROJECT_ROOT / "ops/local/apply_local_migrations.sh"
+    ).read_text(encoding="utf-8")
+
+    assert "ALTER DATABASE %I SET timezone TO %L" in init_script
+    assert "ALTER DATABASE %I SET timezone TO %L" in migration_script
+    assert "SET timezone TO 'UTC'" in migration_script
+
+
 def test_prediction_time_migration_normalizes_existing_rows_to_shanghai() -> None:
     migration = (
         PROJECT_ROOT / "sql/36_normalize_prediction_business_time.sql"

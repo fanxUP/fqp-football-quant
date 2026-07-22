@@ -6,6 +6,7 @@ from scripts.jobs import run_recommendation_candidate as recommendation
 from scripts.jobs.run_recommendation_candidate import (
     _build_competition_observation_ticket,
     _buy_ticket,
+    _load_reusable_ticket_summary,
     _market_allows_pass,
     _market_sp_quality,
     _no_candidate_note,
@@ -139,6 +140,22 @@ def test_agent_purchase_rolls_back_failed_ticket_write(monkeypatch):
 
     assert _buy_ticket(conn, {"suggested_stake": 20}, [{"match_id": 7}]) is None
     conn.rollback.assert_called_once()
+
+
+def test_only_current_independent_model_tickets_are_reusable(mock_conn):
+    conn, cur = mock_conn
+    cur.fetchone.return_value = (0, 0)
+
+    assert _load_reusable_ticket_summary(conn) == (0, 0.0)
+
+    query = " ".join(cur.execute.call_args.args[0].split())
+    assert "JOIN daily_budget_plans bp ON bp.id = st.budget_plan_id" in query
+    assert "bp.plan_date = timezone('Asia/Shanghai', NOW())::date" in query
+    assert "st.ticket_status <> 'invalid'" in query
+    assert "mv.is_active = true" in query
+    assert "mp.validation_status = 'valid'" in query
+    assert "model_independent" in query
+    assert "NOT EXISTS" in query
 
 
 def test_no_candidate_note_exposes_data_quality_rejections():

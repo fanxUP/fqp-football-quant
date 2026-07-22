@@ -22,6 +22,14 @@ set +a
 [[ "$DATABASE_URL" == *"@127.0.0.1:5432/fqp" ]] \
     || { echo "[fqp-db] native DATABASE_URL is required" >&2; exit 1; }
 
+# All timestamp-without-time-zone audit fields use UTC storage semantics.
+# Enforce the database default on every deployment, including migrated native
+# databases that inherited the host's Asia/Shanghai timezone.
+psql_exec -q <<'SQL'
+SELECT format('ALTER DATABASE %I SET timezone TO %L', current_database(), 'UTC') \gexec
+SET timezone TO 'UTC';
+SQL
+
 # Register the legacy baseline in one native database session.
 {
     cat <<'SQL'

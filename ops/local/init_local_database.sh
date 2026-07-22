@@ -46,6 +46,15 @@ if ! "$POSTGRES_BIN/psql" -h 127.0.0.1 -p "$PORT" -U "$ADMIN_USER" -d postgres \
   database_created=1
 fi
 
+# Timestamp columns are stored as UTC wall-clock values.  Keep the native
+# database aligned with the original runtime so Asia/Shanghai business-date
+# projections do not shift records twice.
+"$POSTGRES_BIN/psql" -h 127.0.0.1 -p "$PORT" -U "$ADMIN_USER" -d "$DATABASE_NAME" \
+  -v ON_ERROR_STOP=1 <<'SQL' >/dev/null
+SELECT format('ALTER DATABASE %I SET timezone TO %L', current_database(), 'UTC') \gexec
+SET timezone TO 'UTC';
+SQL
+
 if (( database_created == 1 )); then
   export PGPASSWORD="$DATABASE_PASSWORD"
   for migration in "$PROJECT_ROOT"/sql/*.sql; do
