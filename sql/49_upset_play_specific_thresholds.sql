@@ -24,4 +24,3 @@ INSERT INTO upset_rule_versions (
     true,
     now()
 );
-

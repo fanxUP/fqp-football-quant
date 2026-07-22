@@ -272,4 +272,3 @@ CREATE TABLE IF NOT EXISTS feature_promotion_audits (
 
 CREATE INDEX IF NOT EXISTS idx_hypothesis_validation_hypothesis
     ON hypothesis_validation_runs (hypothesis_id, validation_type, started_at DESC);
-
