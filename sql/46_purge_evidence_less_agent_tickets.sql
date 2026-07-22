@@ -1,6 +1,6 @@
 -- Tickets without any item have no match, odds or model evidence and cannot be
 -- audited. Remove these legacy rows and their derived settlement totals.
-CREATE TEMP TABLE evidence_less_agent_tickets ON COMMIT DROP AS
+CREATE TEMP TABLE evidence_less_agent_tickets AS
 SELECT ticket.id, ticket.budget_plan_id
 FROM simulation_tickets ticket
 WHERE NOT EXISTS (
@@ -191,3 +191,5 @@ END;
 $$;
 
 SELECT refresh_agent_statistics_after_cleanup();
+
+DROP TABLE evidence_less_agent_tickets;

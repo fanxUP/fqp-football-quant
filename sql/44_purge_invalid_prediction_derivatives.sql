@@ -1,19 +1,22 @@
 -- Remove decisions and analytical derivatives built from predictions that
 -- failed the metric-integrity gate. Real tickets and official data are not in
 -- scope. The temporary key tables make the cleanup deterministic and keep all
--- dependent deletes inside the migration transaction.
-CREATE TEMP TABLE invalid_prediction_cleanup ON COMMIT DROP AS
+-- dependent deletes inside the migration session. The local migration runner
+-- wraps this file in a transaction, while CI executes one file per session, so
+-- the temporary tables are dropped explicitly at the end instead of relying
+-- on ON COMMIT DROP.
+CREATE TEMP TABLE invalid_prediction_cleanup AS
 SELECT id, match_id, model_version_id, play_type, option_code,
        predict_time, model_probability
 FROM model_predictions
 WHERE validation_status = 'invalid';
 
-CREATE TEMP TABLE invalid_ticket_cleanup ON COMMIT DROP AS
+CREATE TEMP TABLE invalid_ticket_cleanup AS
 SELECT DISTINCT item.ticket_id
 FROM simulation_ticket_items item
 JOIN invalid_prediction_cleanup bad ON bad.id = item.model_prediction_id;
 
-CREATE TEMP TABLE invalid_budget_cleanup ON COMMIT DROP AS
+CREATE TEMP TABLE invalid_budget_cleanup AS
 SELECT DISTINCT ticket.budget_plan_id
 FROM simulation_tickets ticket
 JOIN invalid_ticket_cleanup bad ON bad.ticket_id = ticket.id
@@ -256,3 +259,7 @@ CREATE TRIGGER trg_simulation_ticket_prediction_valid
 BEFORE INSERT OR UPDATE OF model_prediction_id ON simulation_ticket_items
 FOR EACH ROW
 EXECUTE FUNCTION enforce_valid_model_prediction_reference();
+
+DROP TABLE invalid_budget_cleanup;
+DROP TABLE invalid_ticket_cleanup;
+DROP TABLE invalid_prediction_cleanup;

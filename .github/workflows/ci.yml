@@ -81,8 +81,10 @@ jobs:
 
       - name: Initialize test database schema
         run: |
+          set -euo pipefail
           for f in sql/*.sql; do
-            PGPASSWORD=fqp_test_password psql -h localhost -U fqp -d fqp_test -f "$f"
+            PGPASSWORD=fqp_test_password psql -X -v ON_ERROR_STOP=1 \
+              -h localhost -U fqp -d fqp_test -f "$f"
           done
         env:
           PGPASSWORD: fqp_test_password
