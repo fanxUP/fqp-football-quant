@@ -4,7 +4,7 @@
 
 唯一工作区为 `/Users/fan/Downloads/足球量化`，前端访问端口为 `8066`，后端访问端口为 `8006`。完整的 Git 防分岔规则见 `docs/54_本机运行与DockerDesktop弃用说明.md`。
 
-是否启动 Docker 由任务需要决定，不要求用户另行给出特定口令。快速开发和单元测试适合本机环境；完整服务栈、长期任务、发布验收和环境复现适合 Docker。无论采用哪种方式，都必须避免本机与容器中的 Scheduler/Worker 同时运行。
+是否启动 Docker 由任务需要决定，不要求用户另行给出特定口令。快速开发和单元测试适合本机环境；完整服务栈、长期任务、发布验收和环境复现适合 Docker。当前推荐使用混合开发：前后端在本机热更新，PostgreSQL、Redis、Worker、Scheduler 留在 Docker。无论采用哪种方式，都必须避免本机与容器中的 Scheduler/Worker 同时运行。
 
 ## 运行原则
 
@@ -18,6 +18,7 @@
 ## 调度与监控边界
 
 - Docker 模式下 Scheduler 负责定时任务，Worker 是赔率高频调度的唯一执行者；`FQP_ODDS_DISPATCH_OWNER=worker` 防止双重轮询。
+- 混合开发模式同样只保留 Docker Worker/Scheduler；容器通过 `host.docker.internal:8006` 检查本机后端健康状态。
 - 本机热开发模式没有独立 Worker，Scheduler 默认接管赔率调度，保证业务完整。
 - Scheduler 与 Worker 分别写入 `.runtime/scheduler_heartbeat.json` 和 `.runtime/worker_heartbeat.json`；数据监控页使用实时心跳，不使用固定“正常”值。
 - 容器和 PostgreSQL 使用 UTC，赛程、开赛、停售、竞赛和日报统一以 `Asia/Shanghai` 业务日期计算。
@@ -25,7 +26,10 @@
 ## 日常命令
 
 ```bash
-# 本机热开发（不启动 Docker）
+# 推荐：本机前后端 + Docker 数据和定时任务
+./ops/local/run_hybrid_dev.sh
+
+# 仅启动本机前后端（仍连接 Docker PostgreSQL，数据容器需已运行）
 ./ops/local/run_local_dev.sh
 
 # 推送并同步 Docker Desktop

@@ -24,8 +24,10 @@
 
 ```bash
 cp .env.local.example .env.local
-./ops/local/run_local_dev.sh
+./ops/local/run_hybrid_dev.sh
 ```
+
+该模式在本机运行前端和后端，但只使用 Docker 中的 PostgreSQL、Redis、Worker 与 Scheduler。Docker PostgreSQL `127.0.0.1:5433/fqp` 是本项目唯一数据库；不得在宿主机 `5432` 再创建同名数据库。容器中的前后端会自动停止并释放 `8066/8006`，定时任务仍只有一套。
 
 ## Docker Desktop 部署
 

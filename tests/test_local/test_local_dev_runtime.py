@@ -40,3 +40,24 @@ def test_python_runtime_is_pinned_to_314_across_project_and_docker() -> None:
     assert "Python 3.14 is required" in scheduler
     assert "brew install python@3.14" in setup
     assert "sys.version_info[:2] != (3, 14)" in environment_check
+
+
+def test_hybrid_runtime_uses_the_single_docker_database_and_scheduler() -> None:
+    hybrid = (PROJECT_ROOT / "ops/local/run_hybrid_dev.sh").read_text(
+        encoding="utf-8"
+    )
+    override = (PROJECT_ROOT / "ops/local/docker-compose.hybrid.yml").read_text(
+        encoding="utf-8"
+    )
+    env_example = (PROJECT_ROOT / ".env.local.example").read_text(encoding="utf-8")
+    dev = (PROJECT_ROOT / "ops/local/run_local_dev.sh").read_text(encoding="utf-8")
+
+    assert "127.0.0.1:5433/fqp" in env_example
+    assert "127.0.0.1:5432/fqp" not in env_example
+    assert "stop frontend backend" in hybrid
+    assert "postgres redis worker scheduler grafana" in hybrid
+    assert "run_local_scheduler" not in hybrid
+    assert "FQP_DATABASE_URL_OVERRIDE" in hybrid
+    assert "FQP_DATABASE_URL_OVERRIDE" in dev
+    assert "profiles: [docker-app]" in override
+    assert override.count("http://host.docker.internal:8006/health") == 2

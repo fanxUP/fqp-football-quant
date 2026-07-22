@@ -43,17 +43,16 @@ FQP 是一套面向个人本地部署的足球竞彩/足彩量化研究与长期
 
 ## 运行方式：本机开发与 Docker 运行自动选择
 
-日常代码修改和快速验证使用本机开发环境；需要完整服务栈、长期 Scheduler/Worker、发布验收或环境复现时，可以直接切换到 Docker Desktop，不再要求用户额外明确下达“启动 Docker”指令。运行方式由当前任务和验收目标决定。源码以 Git 提交为准，容器仅是可重建的运行环境；`data/` 中的数据库和备份不提交 Git。
+日常代码修改和快速验证使用本机前后端；PostgreSQL 只保留 Docker Desktop 中的一套，Redis、Worker 与 Scheduler 也由 Docker 长期运行。源码以 Git 提交为准，容器仅是可重建的运行环境；`data/` 中的数据库和备份不提交 Git。
 
 ```bash
 cp .env.local.example .env.local
-# 配置并启动本机 PostgreSQL 后：
-./ops/local/run_local_dev.sh
+./ops/local/run_hybrid_dev.sh
 ```
 
 - 前端：http://127.0.0.1:8066
 - 后端：http://127.0.0.1:8006
-- 本机开发统一使用 Python 3.14、Node.js 和 PostgreSQL。
+- 本机开发统一使用 Python 3.14 和 Node.js，并连接 Docker PostgreSQL `127.0.0.1:5433/fqp`。
 - `.env.local` 只保存在本机，不提交 GitHub。
 
 切换到 Docker Desktop（自动检查工作区、推送 GitHub、重建容器并做健康检查）：

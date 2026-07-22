@@ -29,7 +29,7 @@ PYTHON_VERSION="$("$PYTHON_BIN" -c 'import sys; print(f"{sys.version_info.major}
     || fail "Python 3.14 is required; current runtime is $PYTHON_BIN ($PYTHON_VERSION)."
 
 if [[ ! -f "$ENV_FILE" ]]; then
-    fail "Missing $ENV_FILE. Copy .env.local.example to .env.local and configure the host database."
+    fail "Missing $ENV_FILE. Copy .env.local.example to .env.local and configure the Docker database port."
 fi
 
 set -a
@@ -37,13 +37,20 @@ set -a
 source "$ENV_FILE"
 set +a
 
+# Hybrid development keeps PostgreSQL/Redis in Docker while running the UI and
+# API on macOS. Explicit overrides prevent .env.local from silently selecting a
+# different host database.
+DATABASE_URL="${FQP_DATABASE_URL_OVERRIDE:-${DATABASE_URL:-}}"
+REDIS_URL="${FQP_REDIS_URL_OVERRIDE:-${REDIS_URL:-}}"
+export DATABASE_URL REDIS_URL
+
 [[ -n "${DATABASE_URL:-}" ]] || fail "DATABASE_URL is not configured in .env.local."
 if [[ "$DATABASE_URL" == *"@postgres:"* ]]; then
     fail "DATABASE_URL still uses Docker hostname 'postgres'. Use 127.0.0.1 for local development."
 fi
 
 "$PYTHON_BIN" -c 'import psycopg2, os; conn=psycopg2.connect(os.environ["DATABASE_URL"]); conn.close()' \
-    || fail "Cannot connect to the local PostgreSQL database configured by DATABASE_URL."
+    || fail "Cannot connect to the Docker PostgreSQL database configured by DATABASE_URL."
 
 if [[ ! -d "$FRONTEND_DIR/node_modules" ]]; then
     log "Installing frontend dependencies..."

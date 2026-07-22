@@ -1,0 +1,23 @@
+services:
+  backend:
+    profiles: [docker-app]
+
+  frontend:
+    profiles: [docker-app]
+
+  worker:
+    environment:
+      FQP_API_HEALTH_URL: http://host.docker.internal:8006/health
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  scheduler:
+    environment:
+      FQP_API_HEALTH_URL: http://host.docker.internal:8006/health
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on: !override
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
