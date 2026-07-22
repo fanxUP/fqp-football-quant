@@ -38,6 +38,7 @@ def test_derived_history_stores_every_official_option_for_each_capable_model():
             adjusted_lambdas=(1.6, 0.9),
             feature_snapshot_id=88,
             predict_time="2026-07-16T14:00:00",
+            model_independence={"maher_poisson": True, "dixon_coles": True},
         )
 
     stored = [call.args[1] for call in store.call_args_list]
@@ -51,6 +52,11 @@ def test_derived_history_stores_every_official_option_for_each_capable_model():
     assert all(row["odds_snapshot_id"] is not None for row in stored)
     assert all(row["feature_snapshot_id"] == 88 for row in stored)
     assert all(row["uncertainty_reason"]["recommendation_filtered"] is False for row in stored)
+    assert all(
+        row["uncertainty_reason"]["model_independent"] is True
+        for row in stored
+        if row["model_version_id"] in {2, 3}
+    )
     zjq_seven = [
         row for row in stored
         if row["play_type"] == "zjq" and row["option_code"] == "7"

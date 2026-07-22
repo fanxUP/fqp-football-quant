@@ -799,6 +799,8 @@ export interface LiveRecommendation {
   data_completeness: number | null;
   validation_status: 'valid' | 'invalid';
   model_independent: boolean;
+  strategy_pool?: string;
+  risk_level?: string;
   predict_time: string;
   model_name: string;
   home_team: string;

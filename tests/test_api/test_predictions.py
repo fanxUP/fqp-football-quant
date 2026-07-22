@@ -74,6 +74,7 @@ class TestPredictionsEndpoint:
         normalized = " ".join(sql.split())
         assert "st.created_at::date = timezone('Asia/Shanghai', NOW())::date" in normalized
         assert "st.ticket_status IN ('generated', 'activated', 'purchased')" in normalized
+        assert "CASE WHEN sti.play_type IN ('spf', 'rqspf') THEN CASE sti.option_code" in normalized
 
     def test_live_recommendation_exposes_current_official_sp_separately_from_fair_odds(
         self, client
@@ -107,6 +108,8 @@ class TestPredictionsEndpoint:
                 6.30,
                 datetime(2026, 7, 22, 12, 20),
                 92.0,
+                "agent_competition_observation",
+                "high",
             )
         ]
 
@@ -127,6 +130,8 @@ class TestPredictionsEndpoint:
         assert recommendation["market_edge"] == 0.3714
         assert recommendation["data_completeness"] == 92.0
         assert recommendation["model_independent"] is True
+        assert recommendation["strategy_pool"] == "agent_competition_observation"
+        assert recommendation["risk_level"] == "high"
 
     def test_returns_empty_when_no_predictions(self, client):
         mock_conn = MagicMock()

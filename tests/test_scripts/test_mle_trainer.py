@@ -2,7 +2,7 @@ from unittest.mock import MagicMock, patch
 
 from psycopg2.extras import Json
 
-from scripts.mle_trainer import run
+from scripts.mle_trainer import _load_match_data, run
 
 
 def test_mle_run_adapts_parameter_dicts_for_jsonb_without_missing_updated_at_column():
@@ -38,3 +38,27 @@ def test_mle_run_adapts_parameter_dicts_for_jsonb_without_missing_updated_at_col
         assert "updated_at" not in query
         assert isinstance(params[0], Json)
     conn.commit.assert_called_once()
+
+
+def test_training_data_excludes_unmapped_teams_and_applies_minimum_history() -> None:
+    conn = MagicMock()
+    cur = conn.cursor.return_value
+    cur.fetchall.return_value = [(10, 20, 2, 1), (20, 10, 0, 0)]
+
+    team_ids, _, home_idx, away_idx, home_goals, away_goals = _load_match_data(
+        conn,
+        min_matches=2,
+    )
+
+    query, params = cur.execute.call_args.args
+    normalized = " ".join(query.split())
+    assert "JOIN teams t1" in normalized
+    assert "JOIN teams t2" in normalized
+    assert "COALESCE(t1.id, 0)" not in normalized
+    assert "HAVING COUNT(*) >= %s" in normalized
+    assert params == (2,)
+    assert team_ids == [10, 20]
+    assert home_idx == [0, 1]
+    assert away_idx == [1, 0]
+    assert home_goals == [2, 0]
+    assert away_goals == [1, 0]

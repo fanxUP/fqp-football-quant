@@ -36,6 +36,7 @@ def test_backtest_query_uses_latest_prediction_run_and_asof_odds() -> None:
     assert "prediction_rank = 1" in normalized
     assert "oos.snapshot_time <= mp.predict_time" in normalized
     assert "source_mp.validation_status = 'valid'" in normalized
+    assert "CASE WHEN mp.play_type IN ('spf', 'rqspf') THEN CASE mp.option_code" in normalized
 
 
 def test_backtest_query_maps_each_play_type_to_its_own_result() -> None:

@@ -52,6 +52,9 @@ export function RecommendationPanel(props: RecommendationPanelProps) {
                   <span>{recommendation.play_type_name}</span>
                   <strong>{recommendation.option_name} @{recommendation.sp_value.toFixed(2)}</strong>
                 </div>
+                {recommendation.strategy_pool === 'agent_competition_observation' && (
+                  <div className="betting-recommendation-alert">高风险观察票 · 仅用于 Agent 竞赛与复盘</div>
+                )}
                 <div className="betting-recommendation-metrics">
                   <span>模型 {percent(recommendation.model_probability)}</span>
                   <span>市场 {percent(recommendation.market_probability)}</span>

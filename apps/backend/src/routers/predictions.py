@@ -107,7 +107,9 @@ def get_live_recommendations(
                         current_odds.sp_value,
                         current_odds.handicap,
                         current_odds.snapshot_time,
-                        fs.data_completeness_score
+                        fs.data_completeness_score,
+                        st.strategy_pool,
+                        st.risk_level
                     FROM simulation_tickets st
                     JOIN simulation_ticket_items sti ON sti.ticket_id = st.id
                     JOIN model_predictions mp ON mp.id = sti.model_prediction_id
@@ -120,10 +122,13 @@ def get_live_recommendations(
                         FROM official_odds_snapshots os
                         WHERE os.match_id = sti.match_id
                           AND os.play_type = sti.play_type
-                          AND os.option_code = CASE sti.option_code
-                              WHEN '3' THEN 'h'
-                              WHEN '1' THEN 'd'
-                              WHEN '0' THEN 'a'
+                          AND os.option_code = CASE
+                              WHEN sti.play_type IN ('spf', 'rqspf') THEN CASE sti.option_code
+                                  WHEN '3' THEN 'h'
+                                  WHEN '1' THEN 'd'
+                                  WHEN '0' THEN 'a'
+                                  ELSE sti.option_code
+                              END
                               ELSE sti.option_code
                           END
                           AND os.is_open = true
@@ -178,7 +183,8 @@ def get_live_recommendations(
                        home_team_name, away_team_name, league_name,
                        kickoff_time, match_status, handicap,
                        official_match_code, sp_value,
-                       snapshot_time, data_completeness_score
+                       snapshot_time, data_completeness_score,
+                       strategy_pool, risk_level
                 FROM released_items
                 ORDER BY current_ev DESC, confidence_score DESC
                 LIMIT %(limit)s
@@ -229,6 +235,8 @@ def get_live_recommendations(
                 else None,
                 "validation_status": "valid",
                 "model_independent": True,
+                "strategy_pool": r[21],
+                "risk_level": r[22],
                 "predict_time": r[9].isoformat() if hasattr(r[9], "isoformat") else str(r[9]),
                 "model_name": r[10],
                 "home_team": r[11],

@@ -123,6 +123,8 @@ const recommendation: LiveRecommendation = {
   data_completeness: 94,
   validation_status: 'valid',
   model_independent: true,
+  strategy_pool: 'agent_competition_observation',
+  risk_level: 'high',
   predict_time: '2026-07-12T09:00:00',
   model_name: 'xgb-main',
   home_team: firstMatch.home_team_name,
@@ -226,6 +228,7 @@ describe('BettingTerminalPage desktop workbench', () => {
     render(<BettingTerminalPage />);
 
     const recommendationPanel = await screen.findByLabelText('推荐投注');
+    expect(within(recommendationPanel).getByText('高风险观察票 · 仅用于 Agent 竞赛与复盘')).toBeInTheDocument();
     const widgetPanel = screen.getByLabelText('投注器');
     const previewPanel = screen.getByLabelText('票面预览');
     const terminal = within(widgetPanel).getByRole('region', { name: '竞彩足球模拟试玩投注器' });

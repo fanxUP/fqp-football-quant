@@ -12,6 +12,8 @@ Odds processing chain:
 
 from __future__ import annotations
 
+import math
+from dataclasses import dataclass
 from typing import Any
 
 from apps.backend.src.db import get_db
@@ -40,10 +42,65 @@ from scripts.poisson_model import (
 # independent Poisson predicts.
 DEFAULT_RHO = -0.08
 MIN_ELO_MATCHES = 5
+MIN_MAHER_MATCHES = 5
 
 # Option code mapping: odds_conversion uses "3"/"1"/"0", snapshots use "h"/"d"/"a"
 OPTION_MAP = {"h": "3", "d": "1", "a": "0"}
 OPTION_REVERSE = {"3": "h", "1": "d", "0": "a"}
+
+
+@dataclass(frozen=True)
+class TrainedGoalRates:
+    home_lambda: float
+    away_lambda: float
+    minimum_team_matches: int
+    training_matches: int
+
+
+def _load_trained_goal_rates(
+    model_parameters: dict[str, dict[str, Any]],
+    feature_snapshot: dict[str, Any] | None,
+) -> TrainedGoalRates | None:
+    """Build independent goal rates from a converged historical Maher fit."""
+    parameters = model_parameters.get("maher_poisson")
+    if not parameters or parameters.get("converged") is not True or not feature_snapshot:
+        return None
+    home_team_id = feature_snapshot.get("home_team_id")
+    away_team_id = feature_snapshot.get("away_team_id")
+    if not home_team_id or not away_team_id:
+        return None
+
+    home_key = str(home_team_id)
+    away_key = str(away_team_id)
+    attack = parameters.get("attack") or {}
+    defense = parameters.get("defense") or {}
+    match_counts = parameters.get("team_match_counts") or {}
+    required_keys = (home_key, away_key)
+    if any(key not in attack or key not in defense or key not in match_counts for key in required_keys):
+        return None
+    minimum_team_matches = min(int(match_counts[home_key]), int(match_counts[away_key]))
+    if minimum_team_matches < MIN_MAHER_MATCHES:
+        return None
+
+    home_lambda = math.exp(
+        float(attack[home_key])
+        + float(defense[away_key])
+        + float(parameters.get("home_advantage", 0.0))
+        + float(parameters.get("league_intercept", 0.0))
+    )
+    away_lambda = math.exp(
+        float(attack[away_key])
+        + float(defense[home_key])
+        + float(parameters.get("league_intercept", 0.0))
+    )
+    if not all(math.isfinite(value) and 0.05 <= value <= 8.0 for value in (home_lambda, away_lambda)):
+        return None
+    return TrainedGoalRates(
+        home_lambda=home_lambda,
+        away_lambda=away_lambda,
+        minimum_team_matches=minimum_team_matches,
+        training_matches=int(parameters.get("n_matches") or 0),
+    )
 
 
 def _now() -> str:
@@ -131,8 +188,17 @@ def _run_impl(match_id: int | None = None, dry_run: bool = False) -> dict[str, A
     with get_db() as conn:
         # 1. Get active model version IDs
         with conn.cursor() as cur:
-            cur.execute("SELECT id, model_name FROM model_versions WHERE is_active = true")
-            active_models = {row[1]: row[0] for row in cur.fetchall()}
+            cur.execute(
+                "SELECT id, model_name, parameters_json "
+                "FROM model_versions WHERE is_active = true"
+            )
+            model_rows = cur.fetchall()
+            active_models = {row[1]: row[0] for row in model_rows}
+            model_parameters = {
+                row[1]: row[2]
+                for row in model_rows
+                if len(row) > 2 and isinstance(row[2], dict)
+            }
 
         if not active_models:
             with conn.cursor() as cur:
@@ -246,6 +312,7 @@ def _run_impl(match_id: int | None = None, dry_run: bool = False) -> dict[str, A
                     rho,
                     mle_rho,
                     predict_time,
+                    model_parameters,
                 )
                 total_predictions += p
                 total_votes += v
@@ -285,6 +352,7 @@ def _predict_match_play_type(
     rho: float,
     mle_rho: float | None,
     predict_time: str,
+    model_parameters: dict[str, dict[str, Any]] | None = None,
 ) -> tuple[int, int]:
     """Run prediction pipeline for a single match + play type.
 
@@ -296,6 +364,7 @@ def _predict_match_play_type(
     """
     feature_snapshot = _latest_feature_snapshot(conn, mid)
     feature_snapshot_id = feature_snapshot.get("id") if feature_snapshot else None
+    model_parameters = model_parameters or {}
 
     # 1. Load latest odds for this play type
     with conn.cursor() as cur:
@@ -352,10 +421,15 @@ def _predict_match_play_type(
     dc_matrix = None
     raw_dc_matrix = None
     feature_adjustment = GoalRateAdjustment(1.3, 1.1, False, 0.0, 1.0, [])
+    trained_goal_rates = _load_trained_goal_rates(model_parameters, feature_snapshot)
     try:
-        raw_lam_h, raw_lam_a = estimate_lambdas_from_odds(
-            shin_flb_probs["3"], shin_flb_probs["1"], shin_flb_probs["0"]
-        )
+        if trained_goal_rates:
+            raw_lam_h = trained_goal_rates.home_lambda
+            raw_lam_a = trained_goal_rates.away_lambda
+        else:
+            raw_lam_h, raw_lam_a = estimate_lambdas_from_odds(
+                shin_flb_probs["3"], shin_flb_probs["1"], shin_flb_probs["0"]
+            )
         raw_poisson_matrix = score_matrix(raw_lam_h, raw_lam_a)
         raw_poisson_probs = (
             derive_handicap(raw_poisson_matrix, handicap)
@@ -415,6 +489,11 @@ def _predict_match_play_type(
             adjusted_lambdas=(lam_h, lam_a),
             feature_snapshot_id=feature_snapshot_id,
             predict_time=predict_time,
+            model_independence={
+                "market_baseline": False,
+                "maher_poisson": trained_goal_rates is not None,
+                "dixon_coles": trained_goal_rates is not None and mle_rho is not None,
+            },
         )
 
     # 5. Elo model. Cold-start ratings are placeholders and must not become
@@ -436,8 +515,8 @@ def _predict_match_play_type(
     }
     model_independence = {
         "market_baseline": False,
-        "maher_poisson": False,
-        "dixon_coles": False,
+        "maher_poisson": trained_goal_rates is not None,
+        "dixon_coles": trained_goal_rates is not None and mle_rho is not None,
         "elo_rating": elo_is_independent,
     }
 
@@ -510,9 +589,24 @@ def _predict_match_play_type(
                     "rho_source": "mle"
                     if (model_name == "dixon_coles" and mle_rho is not None)
                     else "default",
-                    "margin_removal": "shin_flb"
+                    "margin_removal": (
+                        "not_applicable"
+                        if model_name in ("maher_poisson", "dixon_coles")
+                        and trained_goal_rates is not None
+                        else "shin_flb"
+                        if model_name in ("maher_poisson", "dixon_coles")
+                        else "proportional"
+                    ),
+                    "goal_rate_source": "trained_maher"
                     if model_name in ("maher_poisson", "dixon_coles")
-                    else "proportional",
+                    and trained_goal_rates is not None
+                    else "official_market",
+                    "training_matches": trained_goal_rates.training_matches
+                    if trained_goal_rates is not None
+                    else None,
+                    "minimum_team_matches": trained_goal_rates.minimum_team_matches
+                    if trained_goal_rates is not None
+                    else None,
                     "elo_based": model_name == "elo_rating",
                     "model_independent": model_independence[model_name],
                     "feature_adjustment": {

@@ -11,6 +11,8 @@ from scripts.jobs.run_recommendation_candidate import (
     _no_candidate_note,
     _option_label,
     _prediction_sp_value,
+    _preferred_direction_by_market,
+    _quality_risk_penalty,
     _ticket_generation_note,
 )
 from scripts.recommendation_prediction_loader import load_actionable_predictions
@@ -56,12 +58,31 @@ def test_actionable_predictions_are_latest_per_match_model_play_and_option(mock_
     assert "SELECT MAX(predict_time)" not in query
     assert "mp.model_probability * latest_os.sp_value - 1" in query
     assert "latest_os.id" in query
+    assert "CASE WHEN mp.play_type IN ('spf', 'rqspf') THEN CASE mp.option_code" in query
 
 
 def test_prediction_sp_value_does_not_treat_kickoff_as_sp():
     row = tuple(range(15)) + (datetime(2026, 7, 11, 3), 1.46, "market_baseline")
 
     assert _prediction_sp_value(row) == 1.46
+
+
+def test_low_quality_prediction_is_forced_out_of_normal_staking_pools() -> None:
+    assert _quality_risk_penalty(30) == 1.0
+    assert _quality_risk_penalty(49.9) == 1.0
+    assert _quality_risk_penalty(50) == 0.0
+
+
+def test_preferred_direction_never_compares_different_play_types() -> None:
+    spf_home = [None] * 18
+    spf_home[1], spf_home[3], spf_home[4], spf_home[5] = 7, "spf", "3", 0.55
+    total_zero = [None] * 18
+    total_zero[1], total_zero[3], total_zero[4], total_zero[5] = 7, "zjq", "0", 0.70
+
+    preferred = _preferred_direction_by_market([tuple(spf_home), tuple(total_zero)])
+
+    assert preferred[(7, "spf")] == ("3", 0.55)
+    assert preferred[(7, "zjq")] == ("0", 0.70)
 
 
 def test_rqspf_option_label_explains_handicap_outcome():

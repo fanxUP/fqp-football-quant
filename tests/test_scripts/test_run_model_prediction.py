@@ -9,11 +9,57 @@ from zoneinfo import ZoneInfo
 from scripts.feature_adjustment import GoalRateAdjustment
 from scripts.jobs.run_model_prediction import (
     _load_trained_elo_probabilities,
+    _load_trained_goal_rates,
     _now,
     _predict_match_play_type,
     _run_impl,
     run,
 )
+
+
+def test_trained_maher_parameters_produce_independent_team_goal_rates() -> None:
+    parameters = {
+        "maher_poisson": {
+            "attack": {"10": 0.35, "20": -0.15},
+            "defense": {"10": -0.10, "20": 0.20},
+            "team_match_counts": {"10": 12, "20": 9},
+            "home_advantage": 0.25,
+            "league_intercept": 0.10,
+            "n_matches": 100,
+            "converged": True,
+        }
+    }
+
+    result = _load_trained_goal_rates(
+        parameters,
+        {"home_team_id": 10, "away_team_id": 20},
+    )
+
+    assert result is not None
+    assert result.home_lambda > result.away_lambda
+    assert result.minimum_team_matches == 9
+
+
+def test_non_converged_maher_parameters_are_not_actionable() -> None:
+    parameters = {
+        "maher_poisson": {
+            "attack": {"10": 0.35, "20": -0.15},
+            "defense": {"10": -0.10, "20": 0.20},
+            "team_match_counts": {"10": 12, "20": 9},
+            "home_advantage": 0.25,
+            "league_intercept": 0.10,
+            "n_matches": 100,
+            "converged": False,
+        }
+    }
+
+    assert (
+        _load_trained_goal_rates(
+            parameters,
+            {"home_team_id": 10, "away_team_id": 20},
+        )
+        is None
+    )
 
 
 def test_prediction_timestamp_uses_naive_business_wall_clock() -> None:
@@ -183,6 +229,54 @@ def test_poisson_prediction_persists_raw_and_feature_adjusted_probabilities():
     assert any(item["raw_model_probability"] != item["model_probability"] for item in stored)
     assert all(item["feature_snapshot_id"] == 88 for item in stored)
     assert all(item["uncertainty_reason"]["feature_adjustment"]["applied"] for item in stored)
+
+
+def test_converged_historical_maher_model_is_persisted_as_independent() -> None:
+    conn = MagicMock()
+    cursor = conn.cursor.return_value.__enter__.return_value
+    cursor.fetchall.side_effect = [
+        [(11, "h", 2.1), (12, "d", 3.2), (13, "a", 3.6)],
+        [],
+    ]
+    parameters = {
+        "maher_poisson": {
+            "attack": {"10": 0.35, "20": -0.15},
+            "defense": {"10": -0.10, "20": 0.20},
+            "team_match_counts": {"10": 12, "20": 9},
+            "home_advantage": 0.25,
+            "league_intercept": 0.10,
+            "n_matches": 100,
+            "converged": True,
+        }
+    }
+
+    with (
+        patch(
+            "scripts.jobs.run_model_prediction._latest_feature_snapshot",
+            return_value={"id": 88, "home_team_id": 10, "away_team_id": 20},
+        ),
+        patch("scripts.jobs.run_model_prediction.store_derived_play_predictions", return_value=0),
+        patch("scripts.jobs.run_model_prediction.store_model_prediction") as store_prediction,
+        patch("scripts.jobs.run_model_prediction.store_committee_vote"),
+    ):
+        _predict_match_play_type(
+            conn=conn,
+            mid=101,
+            home_team_name="主队",
+            away_team_name="客队",
+            play_type="spf",
+            active_models={"maher_poisson": 1},
+            rho=-0.05,
+            mle_rho=-0.05,
+            predict_time="2026-07-16T14:00:00",
+            model_parameters=parameters,
+        )
+
+    stored = [call.args[1] for call in store_prediction.call_args_list]
+    assert len(stored) == 3
+    assert all(item["uncertainty_reason"]["model_independent"] is True for item in stored)
+    assert all(item["uncertainty_reason"]["goal_rate_source"] == "trained_maher" for item in stored)
+    assert any(item["model_probability"] != item["market_probability"] for item in stored)
 
 
 def test_spf_prediction_includes_complete_derived_history_in_count():

@@ -80,6 +80,7 @@ def _payout_cap(match_count: int) -> float:
 ALL_MODELS = ["market_baseline", "elo_rating", "dixon_coles", "maher_poisson"]
 
 MIN_QUALITY = 50
+MIN_OBSERVATION_QUALITY = 30
 MIN_CONFIDENCE = 0.20
 MIN_STAKE = 2.0
 STAKE_UNIT = 2.0
@@ -298,6 +299,24 @@ def _market_sp_quality(
     return quality, valid_match_count
 
 
+def _quality_risk_penalty(quality: float) -> float:
+    """Keep sub-threshold evidence out of normal pools but available for a ¥2 observation."""
+    return 1.0 if quality < MIN_QUALITY else 0.0
+
+
+def _preferred_direction_by_market(
+    predictions: list[tuple[Any, ...]],
+) -> dict[tuple[int, str], tuple[str, float]]:
+    """Select the strongest direction within one play type, never across play semantics."""
+    preferred: dict[tuple[int, str], tuple[str, float]] = {}
+    for prediction in predictions:
+        key = (prediction[1], prediction[3])
+        probability = float(prediction[5] or 0)
+        if key not in preferred or probability > preferred[key][1]:
+            preferred[key] = (prediction[4], probability)
+    return preferred
+
+
 # ── 平局风险检测（框架 §7.3） ──
 DRAW_ODDS_THRESHOLD = 3.50
 DRAW_PROB_GAP_THRESHOLD = 0.15
@@ -473,6 +492,8 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
         match_spf: dict[int, dict[str, float]] = {}
 
         for p in predictions:
+            if p[3] != "spf":
+                continue
             mid = p[1]
             opt_code = p[4]
             market_prob = float(p[6] or 0)
@@ -521,13 +542,12 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
         # Build per-match odds risk penalties
         odds_risk_map: dict[int, float] = {}
 
-        for p in predictions:
-            mid = p[1]
-            opt_code = p[4]
-            sp_value = _prediction_sp_value(p)
+        spf_home_sp: dict[int, float] = {}
+        for prediction in predictions:
+            if prediction[3] == "spf" and prediction[4] == "3":
+                spf_home_sp[prediction[1]] = _prediction_sp_value(prediction)
 
-            if mid in odds_risk_map:
-                continue  # already computed
+        for mid, sp_value in spf_home_sp.items():
 
             penalty = 0.0
             flags: list[str] = []
@@ -556,17 +576,9 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
             if penalty > 0:
                 odds_risk_map[mid] = min(penalty, 0.10)
 
-        # ── 4c. Compute per-match model-preferred direction from ALL predictions
-        #        (before EV pre-filter, so strong model signals are not lost)
-        match_best_direction: dict[int, str] = {}
-        match_best_prob: dict[int, float] = {}
-        for p in predictions:
-            mid = p[1]
-            opt_code = p[4]
-            prob = float(p[5] or 0)
-            if mid not in match_best_prob or prob > match_best_prob[mid]:
-                match_best_prob[mid] = prob
-                match_best_direction[mid] = opt_code
+        # ── 4c. Compute each market's preferred direction from ALL predictions
+        #        (before EV pre-filter, so play-type semantics never cross-contaminate)
+        preferred_by_market = _preferred_direction_by_market(predictions)
 
         # ── 5. Parse & pre-filter ──
         parsed: list[dict] = []
@@ -619,7 +631,7 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
             quality = quality_map.get(match_id, 0)
 
             # 硬门槛
-            if quality < MIN_QUALITY:
+            if quality < MIN_OBSERVATION_QUALITY:
                 reject("data_quality")
                 continue
             if confidence < MIN_CONFIDENCE:
@@ -648,7 +660,11 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
             league_tier = LEAGUE_TIERS.get(league, 3)
             league_risk = LEAGUE_TIER_RISK.get(league_tier, 0.03)
             effective_risk = (
-                risk + draw_risk_map.get(match_id, 0) + odds_risk_map.get(match_id, 0) + league_risk
+                risk
+                + draw_risk_map.get(match_id, 0)
+                + odds_risk_map.get(match_id, 0)
+                + league_risk
+                + _quality_risk_penalty(quality)
             )
 
             parsed.append(
@@ -692,8 +708,7 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
             }
 
         # ── 6. Per-match: pick single best direction ──
-        #    match_best_direction / match_best_prob were computed in step 4c
-        #    from ALL predictions (before EV pre-filter).
+        #    Preferred directions were computed per match + play type in step 4c.
         # 6a. Pick best EV candidate, but respect strong model signals
         STRONG_MODEL_THRESHOLD = 0.50  # model says >50%, don't bet against it
         by_match: dict[int, dict] = {}
@@ -701,8 +716,10 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
 
         for c in parsed:
             mid = c["match_id"]
-            best_dir = match_best_direction.get(mid, "")
-            best_prob = match_best_prob.get(mid, 0)
+            best_dir, best_prob = preferred_by_market.get(
+                (mid, c["play_type"]),
+                ("", 0.0),
+            )
 
             # If model strongly favors one direction, only allow that direction
             if best_prob >= STRONG_MODEL_THRESHOLD and c["option_code"] != best_dir:

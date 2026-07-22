@@ -60,10 +60,13 @@ def load_actionable_predictions(conn: Any, model_names: list[str]) -> list[tuple
                 FROM official_odds_snapshots os
                 WHERE os.match_id = mp.match_id
                   AND os.play_type = mp.play_type
-                  AND os.option_code = CASE mp.option_code
-                      WHEN '3' THEN 'h'
-                      WHEN '1' THEN 'd'
-                      WHEN '0' THEN 'a'
+                  AND os.option_code = CASE
+                      WHEN mp.play_type IN ('spf', 'rqspf') THEN CASE mp.option_code
+                          WHEN '3' THEN 'h'
+                          WHEN '1' THEN 'd'
+                          WHEN '0' THEN 'a'
+                          ELSE mp.option_code
+                      END
                       ELSE mp.option_code
                   END
                   AND os.snapshot_time < m.kickoff_time

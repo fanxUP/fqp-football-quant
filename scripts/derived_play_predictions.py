@@ -145,9 +145,11 @@ def store_derived_play_predictions(
     adjusted_lambdas: tuple[float, float],
     feature_snapshot_id: int | None,
     predict_time: str,
+    model_independence: dict[str, bool] | None = None,
 ) -> int:
     """Store unfiltered model history for every open official derived option."""
     official_odds = _latest_official_odds(conn, match_id, predict_time)
+    model_independence = model_independence or {}
     stored = 0
 
     for play_type, option_odds in official_odds.items():
@@ -254,7 +256,7 @@ def store_derived_play_predictions(
                             if model_name == "market_baseline"
                             else "score_matrix",
                             "model_capability": play_type,
-                            "model_independent": False,
+                            "model_independent": model_independence.get(model_name, False),
                             "recommendation_filtered": False,
                             "feature_adjustment": {
                                 "applied": abs(raw_probability - model_probability) > 1e-9,
