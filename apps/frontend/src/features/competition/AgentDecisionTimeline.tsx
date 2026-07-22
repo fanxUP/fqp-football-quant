@@ -2,13 +2,13 @@ import type { AgentDailyDecision } from '../../core/types';
 import EmptyState from '../../shared/components/EmptyState';
 
 const STATUS_META = {
-  purchased: { label: '正式推荐已购买', color: 'var(--fqp-success, #16a34a)' },
+  purchased: { label: 'Agent 虚拟推荐', color: 'var(--fqp-success, #16a34a)' },
   abstained: { label: '已放弃', color: 'var(--fqp-warning, #d97706)' },
   failed: { label: '执行失败', color: 'var(--fqp-danger, #dc2626)' },
 };
 
 const OBSERVATION_META = {
-  label: '竞赛观察票',
+  label: 'Agent 虚拟推荐',
   color: 'var(--fqp-warning, #d97706)',
 };
 

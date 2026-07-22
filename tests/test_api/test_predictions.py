@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 
 class TestPredictionsEndpoint:
-    def test_live_recommendations_are_unavailable_during_official_rest_time(self, client):
+    def test_live_recommendations_remain_visible_during_official_rest_time(self, client):
         closed_window = MagicMock(is_open=False)
         closed_window.as_dict.return_value = {
             "is_open": False,
@@ -21,11 +21,12 @@ class TestPredictionsEndpoint:
             ),
             patch("apps.backend.src.routers.predictions.get_db") as get_db,
         ):
+            get_db.return_value.__enter__.return_value.cursor.return_value.__enter__.return_value.fetchall.return_value = []
             response = client.get("/api/recommendations/live")
 
         assert response.status_code == 200
         assert response.json() == {
-            "status": "resting",
+            "status": "ok",
             "recommendations": [],
             "total": 0,
             "sales_window": {
@@ -33,7 +34,7 @@ class TestPredictionsEndpoint:
                 "message": "官方竞彩休市中，今日 11:00 恢复开售",
             },
         }
-        get_db.assert_not_called()
+        get_db.assert_called_once()
 
     def test_live_recommendations_require_actionable_official_evidence(self, client):
         open_window = MagicMock(is_open=True)
@@ -55,12 +56,10 @@ class TestPredictionsEndpoint:
 
         assert resp.status_code == 200
         sql = mock_cur.execute.call_args.args[0]
-        assert "m.sale_status = 'selling'" in sql
+        assert "m.sale_status = 'selling'" not in sql
         assert "m.kickoff_time > timezone('Asia/Shanghai', NOW())" in sql
         assert "mp.predict_time < m.kickoff_time" in sql
-        assert (
-            "m.sale_stop_time IS NULL OR m.sale_stop_time > timezone('Asia/Shanghai', NOW())" in sql
-        )
+        assert "m.sale_stop_time" not in sql
         assert "mp.odds_snapshot_id IS NOT NULL" in sql
         assert "mp.feature_snapshot_id IS NOT NULL" in sql
         assert "mp.validation_status = 'valid'" in sql
@@ -73,10 +72,9 @@ class TestPredictionsEndpoint:
         assert "current_odds.sp_value" in sql
         assert "AS market_probability" in sql
         assert "official_markets" in sql
-        assert "observation_fallback" in sql
-        assert "training_observation" in sql
-        assert "LEFT(COALESCE(st.strategy_pool, ''), 15) <> 'agent_training_'" in sql
-        assert "NOT LIKE 'agent_training_%'" not in sql
+        assert "observation_fallback" not in sql
+        assert "st.ticket_type = 'training_observation'" not in sql
+        assert "LEFT(COALESCE(st.strategy_pool, ''), 15)" not in sql
         normalized = " ".join(sql.split())
         assert (
             "(st.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Shanghai')::date "

@@ -128,7 +128,7 @@ describe('CompetitionPage', () => {
     render(<CompetitionPage />);
 
     expect(await screen.findByText('Agent票 · 20260714002')).toBeInTheDocument();
-    expect(screen.getByText('竞赛观察票')).toBeInTheDocument();
+    expect(screen.getByText('Agent 虚拟推荐')).toBeInTheDocument();
     expect(screen.queryByText('已购买')).not.toBeInTheDocument();
     expect(screen.getByText('已用 2 元生成 1 张高风险虚拟观察票')).toBeInTheDocument();
     expect(screen.getByText('¥498.00')).toBeInTheDocument();

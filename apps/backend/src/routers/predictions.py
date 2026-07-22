@@ -59,23 +59,15 @@ def _option_name(play_type: str, option_code: str, handicap: float | None = None
 @router.get("/api/recommendations/live")
 def get_live_recommendations(
     limit: int = Query(20),
-    min_ev: float = Query(0.02, description="最小EV阈值"),
-    min_confidence: float = Query(0.3, description="最小置信度"),
+    min_ev: float = Query(-1.0, description="最低展示EV，仅用于页面筛选"),
+    min_confidence: float = Query(0.0, description="最低展示置信度，仅用于页面筛选"),
 ):
-    """Return today's decision-agent releases at the current official SP.
+    """Return today's Agent virtual recommendations at the current official SP.
 
-    Raw model predictions are research evidence, not publishable betting advice.
-    Only items already written into a simulation ticket by the decision/risk
-    pipeline may cross this API boundary.
+    Recommendations remain visible during official rest time; the betting
+    terminal separately enforces whether the user can currently place a bet.
     """
     sales_window = get_sporttery_sales_window()
-    if not sales_window.is_open:
-        return {
-            "status": "resting",
-            "recommendations": [],
-            "total": 0,
-            "sales_window": sales_window.as_dict(),
-        }
 
     with get_db() as conn:
         with conn.cursor() as cur:
@@ -154,13 +146,6 @@ def get_live_recommendations(
                            AT TIME ZONE 'Asia/Shanghai')::date
                           = timezone('Asia/Shanghai', NOW())::date
                       AND st.ticket_status IN ('generated', 'activated', 'purchased')
-                      AND st.strategy_pool <> 'agent_competition_observation'
-                      AND LEFT(COALESCE(st.strategy_pool, ''), 15) <> 'agent_training_'
-                      AND COALESCE(st.ticket_type, '') <> 'training_observation'
-                      AND COALESCE(
-                          (st.rule_metadata->>'observation_fallback')::boolean,
-                          false
-                      ) = false
                       AND mp.odds_snapshot_id IS NOT NULL
                       AND mp.feature_snapshot_id IS NOT NULL
                       AND mp.validation_status = 'valid'
@@ -168,11 +153,9 @@ def get_live_recommendations(
                           (mp.uncertainty_reason->>'model_independent')::boolean,
                           false
                       ) = true
-                      AND m.sale_status = 'selling'
                       AND LOWER(COALESCE(m.match_status, '')) IN ('scheduled', 'selling', 'not_started')
                       AND m.kickoff_time > timezone('Asia/Shanghai', NOW())
                       AND mp.predict_time < m.kickoff_time
-                      AND (m.sale_stop_time IS NULL OR m.sale_stop_time > timezone('Asia/Shanghai', NOW()))
                       AND EXISTS (
                           SELECT 1
                           FROM official_markets market

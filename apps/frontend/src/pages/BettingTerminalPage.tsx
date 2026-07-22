@@ -23,7 +23,6 @@ import {
 import {
   RecommendationPanel,
   TicketPreview,
-  isObservationOnlyRecommendation,
 } from '../features/betting-terminal/WorkbenchPanels';
 import { useToast } from '../shared/components/Toast';
 import '../features/betting-terminal/SportteryBettingTerminal.css';
@@ -109,7 +108,7 @@ export default function BettingTerminalPage() {
   useEffect(() => {
     setRecommendationsLoading(true);
     setRecommendationsError('');
-    api.liveRecommendations({ limit: 12, min_ev: 0.02, min_confidence: 0.45 })
+    api.liveRecommendations({ limit: 12, min_ev: -1, min_confidence: 0 })
       .then((response) => setRecommendations(response.recommendations || []))
       .catch((error) => setRecommendationsError(errorMessage(error, '推荐投注加载失败')))
       .finally(() => setRecommendationsLoading(false));
@@ -215,10 +214,6 @@ export default function BettingTerminalPage() {
   };
 
   const addRecommendation = (recommendation: LiveRecommendation) => {
-    if (isObservationOnlyRecommendation(recommendation)) {
-      toast.warning('Agent 观察票仅用于竞赛与复盘，不能加入真实用户投注器。');
-      return;
-    }
     const playType = recommendation.play_type as SportteryPlayType;
     const match = matches.find((item) => item.match_id === recommendation.match_id);
     const market = PLAY_TYPES.includes(playType) ? match?.odds[playType] : undefined;

@@ -4,18 +4,16 @@ from zoneinfo import ZoneInfo
 
 from scripts.jobs import run_recommendation_candidate as recommendation
 from scripts.jobs.run_recommendation_candidate import (
-    _build_competition_observation_ticket,
+    _build_virtual_recommendation_tickets,
     _buy_ticket,
     _load_prediction_feature_quality,
     _load_reusable_ticket_summary,
     _market_allows_pass,
     _market_sp_quality,
-    _no_candidate_note,
     _option_label,
     _prediction_sp_value,
     _preferred_direction_by_market,
-    _quality_risk_penalty,
-    _ticket_generation_note,
+    _select_daily_candidates,
 )
 from scripts.recommendation_prediction_loader import load_actionable_predictions
 from scripts.sporttery_sales import get_sporttery_sales_window
@@ -69,10 +67,14 @@ def test_prediction_sp_value_does_not_treat_kickoff_as_sp():
     assert _prediction_sp_value(row) == 1.46
 
 
-def test_low_quality_prediction_is_forced_out_of_normal_staking_pools() -> None:
-    assert _quality_risk_penalty(30) == 1.0
-    assert _quality_risk_penalty(49.9) == 1.0
-    assert _quality_risk_penalty(50) == 0.0
+def test_daily_selection_uses_model_direction_without_ev_or_risk_rejection() -> None:
+    candidates = [
+        {"match_id": 7, "play_type": "spf", "option_code": "3", "model_probability": 0.52, "ev": -0.08},
+        {"match_id": 7, "play_type": "spf", "option_code": "1", "model_probability": 0.28, "ev": 0.15},
+        {"match_id": 7, "play_type": "rqspf", "option_code": "0", "model_probability": 0.48, "ev": 0.04},
+    ]
+
+    assert _select_daily_candidates(candidates) == [candidates[2]]
 
 
 def test_prediction_quality_uses_its_bound_feature_snapshot(mock_conn) -> None:
@@ -169,40 +171,20 @@ def test_only_current_independent_model_tickets_are_reusable(mock_conn):
     assert "JOIN daily_budget_plans bp ON bp.id = st.budget_plan_id" in query
     assert "bp.plan_date = timezone('Asia/Shanghai', NOW())::date" in query
     assert "st.ticket_status <> 'invalid'" in query
-    assert "mv.is_active = true" in query
-    assert "mp.validation_status = 'valid'" in query
+    assert "mv.is_active IS NOT true" in query
+    assert "mp.validation_status <> 'valid'" in query
     assert "model_independent" in query
     assert "JOIN match_feature_snapshots mfs" in query
-    assert "st.ticket_type = 'training_observation'" in query
-    assert "mfs.data_completeness_score >=" in query
+    assert "mfs.data_completeness_score <" in query
+    assert "CASE WHEN st.ticket_type" not in query
     assert "NOT EXISTS" in query
+    assert (
+        "AND EXISTS ( SELECT 1 FROM simulation_ticket_items sti "
+        "WHERE sti.ticket_id = st.id )"
+    ) in query
 
 
-def test_no_candidate_note_exposes_data_quality_rejections():
-    note = _no_candidate_note(
-        total_predictions=78,
-        rejection_counts={"data_quality": 78},
-        minimum_quality=50,
-    )
-
-    assert note == "数据完整度不足：78 条预测未达到 50 分门槛，今日不投注"
-
-
-def test_ticket_generation_note_exposes_pool_risk_rejections():
-    assert _ticket_generation_note(tickets_created=0, candidate_count=3) == (
-        "发现 3 个正 EV 候选，但均未通过资金池风险与置信度门槛，今日不投注"
-    )
-
-
-def test_ticket_generation_note_marks_minimum_competition_observation():
-    assert _ticket_generation_note(
-        tickets_created=1,
-        candidate_count=3,
-        observation_fallback=True,
-    ) == "常规资金池未放行，已用 2 元生成 1 张高风险虚拟观察票，用于 Agent 竞赛与复盘"
-
-
-def test_competition_observation_prefers_a_sellable_single():
+def test_virtual_recommendations_spend_the_full_daily_budget_on_sellable_singles():
     candidates = [
         {
             "match_id": 7,
@@ -220,21 +202,20 @@ def test_competition_observation_prefers_a_sellable_single():
         },
     ]
 
-    fallback = _build_competition_observation_ticket(
+    tickets = _build_virtual_recommendation_tickets(
         candidates,
         single_allowed={(7, "spf")},
         pass_allowed=set(),
     )
 
-    assert fallback is not None
-    ticket, selected = fallback
-    assert ticket["strategy_pool"] == "agent_competition_observation"
-    assert ticket["pass_type"] == "single"
-    assert ticket["suggested_stake"] == 2.0
-    assert selected == [candidates[0]]
+    assert sum(entry["ticket"]["suggested_stake"] for entry in tickets) == 500.0
+    assert all(entry["ticket"]["strategy_pool"] == "agent_virtual_recommendation" for entry in tickets)
+    assert all(entry["ticket"]["ticket_type"] == "virtual_recommendation" for entry in tickets)
+    assert all(entry["ticket"]["multiple"] <= 99 for entry in tickets)
+    assert all(entry["items"] == [candidates[0]] for entry in tickets)
 
 
-def test_competition_observation_uses_two_match_parlay_when_single_is_unavailable():
+def test_virtual_recommendations_use_two_match_pass_when_single_is_unavailable():
     candidates = [
         {
             "match_id": 7,
@@ -252,46 +233,44 @@ def test_competition_observation_uses_two_match_parlay_when_single_is_unavailabl
         },
     ]
 
-    fallback = _build_competition_observation_ticket(
+    tickets = _build_virtual_recommendation_tickets(
         candidates,
         single_allowed=set(),
         pass_allowed={(7, "spf"), (8, "rqspf")},
     )
 
-    assert fallback is not None
-    ticket, selected = fallback
-    assert ticket["pass_type"] == "2x1"
-    assert ticket["suggested_stake"] == 2.0
-    assert [item["match_id"] for item in selected] == [7, 8]
+    assert sum(entry["ticket"]["suggested_stake"] for entry in tickets) == 500.0
+    assert all(entry["ticket"]["pass_type"] == "2x1" for entry in tickets)
+    assert all([item["match_id"] for item in entry["items"]] == [7, 8] for entry in tickets)
 
 
-def test_competition_observation_abstains_without_an_official_bet_route():
+def test_virtual_recommendations_stop_only_without_an_official_bet_route():
     candidates = [
         {"match_id": 7, "play_type": "spf", "sp_value": 2.40, "ev": 0.20},
         {"match_id": 8, "play_type": "rqspf", "sp_value": 3.10, "ev": 0.18},
     ]
 
-    fallback = _build_competition_observation_ticket(
+    tickets = _build_virtual_recommendation_tickets(
         candidates,
         single_allowed=set(),
         pass_allowed={(7, "spf")},
     )
 
-    assert fallback is None
+    assert tickets == []
 
 
-def test_competition_observation_rejects_zero_sp_candidate():
+def test_virtual_recommendations_reject_zero_sp_candidate():
     candidates = [
         {"match_id": 7, "play_type": "zjq", "sp_value": 0, "ev": 0.20},
     ]
 
-    fallback = _build_competition_observation_ticket(
+    tickets = _build_virtual_recommendation_tickets(
         candidates,
         single_allowed={(7, "zjq")},
         pass_allowed={(7, "zjq")},
     )
 
-    assert fallback is None
+    assert tickets == []
 
 
 def test_market_allows_pass_reads_current_sporttery_capability_fields():

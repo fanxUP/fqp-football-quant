@@ -26,33 +26,25 @@ function percent(value: number): string {
   return `${(value * 100).toFixed(1)}%`;
 }
 
-export function isObservationOnlyRecommendation(recommendation: LiveRecommendation): boolean {
-  return recommendation.strategy_pool === 'agent_competition_observation'
-    || recommendation.strategy_pool?.startsWith('agent_training_') === true;
-}
-
 export function RecommendationPanel(props: RecommendationPanelProps) {
   return (
     <aside className="betting-recommendations" aria-label="推荐投注">
       <div className="betting-slip-head">
-        <div><h3>推荐投注</h3><span>今日决策分析产生的正 EV 方案</span></div>
+        <div><h3>Agent 每日推荐</h3><span>虚拟 500 元用于记录模型表现，是否购买由你决定</span></div>
       </div>
       {props.error ? (
         <div className="betting-slip-empty"><strong>推荐加载失败</strong><span>{props.error}</span></div>
       ) : props.loading ? (
         <div className="betting-slip-empty"><strong>正在读取推荐</strong><span>正在同步模型与官方在售赔率…</span></div>
       ) : props.recommendations.length === 0 ? (
-        <div className="betting-slip-empty"><strong>暂无推荐</strong><span>产生满足阈值的正 EV 信号后会显示在这里。</span></div>
+        <div className="betting-slip-empty"><strong>暂无推荐</strong><span>可信模型与官方赔率准备完成后会显示在这里。</span></div>
       ) : (
         <div className="betting-recommendation-list">
           {props.recommendations.map((recommendation) => {
             const available = props.availableRecommendationIds.has(recommendation.prediction_id);
-            const observationOnly = isObservationOnlyRecommendation(recommendation);
-            const actionTitle = observationOnly
-              ? '观察票不进入真实用户投注器'
-              : available
-                ? '使用当前官方固定奖金加入投注器'
-                : '当前官方投注器没有对应的可售选项';
+            const actionTitle = available
+              ? '使用当前官方固定奖金加入投注器'
+              : '当前官方投注器没有对应的可售选项';
             return (
               <article key={recommendation.prediction_id} className="betting-recommendation-card">
                 <div className="betting-recommendation-head">
@@ -63,9 +55,6 @@ export function RecommendationPanel(props: RecommendationPanelProps) {
                   <span>{recommendation.play_type_name}</span>
                   <strong>{recommendation.option_name} @{recommendation.sp_value.toFixed(2)}</strong>
                 </div>
-                {observationOnly && (
-                  <div className="betting-recommendation-alert">高风险观察票 · 仅用于 Agent 竞赛与复盘</div>
-                )}
                 <div className="betting-recommendation-metrics">
                   <span>模型 {percent(recommendation.model_probability)}</span>
                   <span>市场 {percent(recommendation.market_probability)}</span>
@@ -77,11 +66,11 @@ export function RecommendationPanel(props: RecommendationPanelProps) {
                 <button
                   type="button"
                   className="fqp-btn fqp-btn-primary"
-                  disabled={!available || observationOnly}
+                  disabled={!available}
                   title={actionTitle}
                   onClick={() => props.onAdd(recommendation)}
                 >
-                  {observationOnly ? '仅供观察' : available ? `加入 ${recommendation.option_name}` : '当前不可投'}
+                  {available ? `加入 ${recommendation.option_name}` : '当前不可投'}
                 </button>
               </article>
             );

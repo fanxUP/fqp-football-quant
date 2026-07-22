@@ -258,7 +258,7 @@ describe('BettingTerminalPage desktop workbench', () => {
     expect(within(recommendationPanel).queryByText('主胜 @1.61')).not.toBeInTheDocument();
   });
 
-  it('never allows an Agent observation ticket to enter the real-user betting slip', async () => {
+  it('lets the user decide whether to add an Agent virtual recommendation', async () => {
     apiMocks.recommendations.mockResolvedValue({
       recommendations: [{
         ...recommendation,
@@ -272,9 +272,11 @@ describe('BettingTerminalPage desktop workbench', () => {
     render(<BettingTerminalPage />);
 
     const recommendationPanel = await screen.findByLabelText('推荐投注');
-    expect(within(recommendationPanel).getByText('高风险观察票 · 仅用于 Agent 竞赛与复盘')).toBeInTheDocument();
-    expect(within(recommendationPanel).getByRole('button', { name: '仅供观察' })).toBeDisabled();
-    expect(screen.getByLabelText('票面预览')).toHaveTextContent('等待投注器生成票面');
+    expect(within(recommendationPanel).queryByText('高风险观察票 · 仅用于 Agent 竞赛与复盘')).not.toBeInTheDocument();
+    const addButton = within(recommendationPanel).getByRole('button', { name: '加入 主胜' });
+    expect(addButton).toBeEnabled();
+    fireEvent.click(addButton);
+    await waitFor(() => expect(screen.getByLabelText('票面预览')).toHaveTextContent('首尔FC vs 江原FC'));
   });
 
   it('matches model 3/1/0 recommendation codes to official h/d/a options', async () => {
