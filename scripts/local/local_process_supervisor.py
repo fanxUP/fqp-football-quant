@@ -39,7 +39,6 @@ def build_process_specs(
                 "127.0.0.1",
                 "--port",
                 str(backend_port),
-                "--reload",
             ),
             ROOT,
         ),

@@ -23,6 +23,7 @@ def test_local_supervisor_assigns_one_owner_per_runtime_process() -> None:
     assert len({spec.name for spec in specs}) == len(specs)
     assert "scripts.official_crawler_stub" in specs[2].command
     assert "scripts.jobs.run_scheduler" in specs[3].command
+    assert "--reload" not in specs[0].command
 
 
 def test_local_launch_agent_restarts_the_supervisor(tmp_path) -> None:
