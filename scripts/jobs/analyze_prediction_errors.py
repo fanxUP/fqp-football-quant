@@ -52,6 +52,11 @@ def run(dry_run: bool = False) -> dict[str, Any]:
                       AND mp.option_code IN ('3', '1', '0')
                       AND mp.model_probability IS NOT NULL
                       AND mp.predict_time < m.kickoff_time
+                      AND mp.validation_status = 'valid'
+                      AND COALESCE(
+                          (mp.uncertainty_reason->>'model_independent')::boolean,
+                          false
+                      ) = true
                       AND r.result_status IN ('final', 'confirmed')
                       AND r.spf_result IS NOT NULL
                     ORDER BY mp.match_id, mp.model_version_id, mp.option_code,

@@ -98,6 +98,15 @@ class TestStoreCommitteeVote:
 
 
 class TestStoreSimulationTicket:
+    def test_rejects_ticket_without_items_before_writing(self):
+        mock_conn, mock_cur = _mock_conn()
+
+        result = store_simulation_ticket(mock_conn, {"suggested_stake": 20.0}, [])
+
+        assert result is None
+        mock_cur.execute.assert_not_called()
+        mock_conn.rollback.assert_called_once()
+
     def test_creates_ticket_with_items(self):
         mock_cur = MagicMock()
         mock_cur.fetchone.side_effect = [[1], [100]]  # budget_plan_id, ticket_id

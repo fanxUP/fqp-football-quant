@@ -82,6 +82,7 @@ def _run_impl(review_date: str | None = None, dry_run: bool = False) -> dict[str
                 JOIN official_matches m ON m.id = mp.match_id
                 WHERE m.business_date = %s
                   AND mp.predict_time < m.kickoff_time
+                  AND mp.validation_status = 'valid'
                 """,
                 (date,),
             )

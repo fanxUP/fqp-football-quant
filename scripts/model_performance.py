@@ -26,6 +26,10 @@ _PERFORMANCE_HISTORY_SQL = """
         JOIN official_matches m ON m.id = source_mp.match_id
         WHERE source_mp.model_probability IS NOT NULL
           AND source_mp.validation_status = 'valid'
+          AND COALESCE(
+              (source_mp.uncertainty_reason->>'model_independent')::boolean,
+              false
+          ) = true
           AND source_mp.predict_time < m.kickoff_time
           AND m.business_date >= CURRENT_DATE - %(days)s
           AND source_mp.play_type IN (

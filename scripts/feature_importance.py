@@ -70,6 +70,11 @@ _LATEST_PREDICTIONS_CTE = """
         JOIN official_matches source_match ON source_match.id = source_mp.match_id
         JOIN official_results source_result ON source_result.match_id = source_mp.match_id
         WHERE source_mp.predict_time < source_match.kickoff_time
+          AND source_mp.validation_status = 'valid'
+          AND COALESCE(
+              (source_mp.uncertainty_reason->>'model_independent')::boolean,
+              false
+          ) = true
           AND source_result.result_status IN ('final', 'confirmed')
         ORDER BY source_mp.match_id,
                  source_mp.model_version_id,

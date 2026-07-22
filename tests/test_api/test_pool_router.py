@@ -38,6 +38,8 @@ def test_pool_analysis_uses_coherent_prematch_model_consensus(client):
     assert response.status_code == 404
     query = " ".join(cur.execute.call_args.args[0].split())
     assert "mp.predict_time < m.kickoff_time" in query
+    assert "mp.validation_status = 'valid'" in query
+    assert "model_independent" in query
     assert "DISTINCT ON (mp.model_version_id, mp.option_code)" in query
     assert "AVG(model_probability) FILTER" in query
 

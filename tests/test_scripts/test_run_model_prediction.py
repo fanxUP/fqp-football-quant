@@ -297,7 +297,7 @@ def test_spf_prediction_includes_complete_derived_history_in_count():
             return_value=18,
         ),
         patch("scripts.jobs.run_model_prediction.store_model_prediction"),
-        patch("scripts.jobs.run_model_prediction.store_committee_vote"),
+        patch("scripts.jobs.run_model_prediction.store_committee_vote") as store_vote,
     ):
         result = _predict_match_play_type(
             conn=conn,
@@ -311,7 +311,8 @@ def test_spf_prediction_includes_complete_derived_history_in_count():
             predict_time="2026-07-16T14:00:00",
         )
 
-    assert result == (21, 3)
+    assert result == (21, 0)
+    store_vote.assert_not_called()
 
 
 def test_each_prediction_binds_its_matching_official_option_snapshot():

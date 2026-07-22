@@ -179,4 +179,5 @@ def test_match_detail_uses_latest_prematch_features_and_all_option_predictions(c
     prediction_query = next(q for q in queries if "FROM model_predictions mp" in q)
     assert "snapshot_time <" in feature_query
     assert "mp.predict_time <" in prediction_query
+    assert "mp.validation_status = 'valid'" in prediction_query
     assert "DISTINCT ON (mv.model_name, mp.play_type, mp.option_code)" in prediction_query

@@ -333,6 +333,11 @@ def run(dry_run: bool = False) -> dict[str, Any]:
               AND mp.play_type = 'spf'
               AND mp.option_code IN ('3', '1', '0')
               AND mp.predict_time < m.kickoff_time
+              AND mp.validation_status = 'valid'
+              AND COALESCE(
+                  (mp.uncertainty_reason->>'model_independent')::boolean,
+                  false
+              ) = true
               AND NOT EXISTS (
                   SELECT 1 FROM market_efficiency_metrics mem
                   WHERE mem.match_id = mp.match_id

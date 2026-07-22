@@ -35,5 +35,6 @@ def test_daily_review_only_counts_prematch_features_and_predictions(mock_conn):
 
     assert "fs.snapshot_time < m.kickoff_time" in feature_query
     assert "mp.predict_time < m.kickoff_time" in prediction_query
+    assert "mp.validation_status = 'valid'" in prediction_query
     assert "JOIN official_matches m ON m.id =" in error_query
     assert "m.business_date = %s" in error_query

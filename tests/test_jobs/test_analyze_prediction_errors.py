@@ -14,6 +14,8 @@ def test_error_analysis_uses_one_latest_prematch_top_pick_per_model(mock_conn):
     query = " ".join(cur.execute.call_args.args[0].split())
     assert result["analyzed"] == 0
     assert "mp.predict_time < m.kickoff_time" in query
+    assert "mp.validation_status = 'valid'" in query
+    assert "model_independent" in query
     assert "r.result_status IN ('final', 'confirmed')" in query
     assert "DISTINCT ON (" in query
     assert "mp.match_id, mp.model_version_id, mp.option_code" in query

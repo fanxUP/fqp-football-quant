@@ -42,6 +42,8 @@ def test_evaluation_job_only_reads_pre_match_spf_predictions(monkeypatch) -> Non
 
     assert result["evaluated"] == 0
     assert "mp.predict_time < m.kickoff_time" in conn.cursor_instance.query
+    assert "mp.validation_status = 'valid'" in conn.cursor_instance.query
+    assert "model_independent" in conn.cursor_instance.query
     assert "mp.play_type = 'spf'" in conn.cursor_instance.query
     assert "mp.option_code IN ('3', '1', '0')" in conn.cursor_instance.query
     assert "r.result_status IN ('final', 'confirmed')" in conn.cursor_instance.query

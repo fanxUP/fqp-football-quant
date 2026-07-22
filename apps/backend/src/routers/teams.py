@@ -536,6 +536,7 @@ def get_match_detail(match_id: int):
                 JOIN model_versions mv ON mv.id = mp.model_version_id
                 WHERE mp.match_id = %s
                   AND mp.predict_time < %s
+                  AND mp.validation_status = 'valid'
                 ORDER BY mv.model_name, mp.play_type, mp.option_code,
                          mp.predict_time DESC, mp.id DESC
             """,

@@ -139,6 +139,49 @@ def test_live_recommendation_indexes_cover_latest_prediction_and_handicap_lookup
     assert "WHERE handicap IS NOT NULL" in migration
 
 
+def test_invalid_prediction_cleanup_blocks_future_agent_ticket_references() -> None:
+    migration = (
+        PROJECT_ROOT / "sql/44_purge_invalid_prediction_derivatives.sql"
+    ).read_text(encoding="utf-8")
+
+    assert "validation_status = 'invalid'" in migration
+    assert "DELETE FROM ticket_settlements" in migration
+    assert "DELETE FROM simulation_ticket_items" in migration
+    assert "DELETE FROM simulation_tickets" in migration
+    assert "DELETE FROM prediction_error_analysis" in migration
+    assert "DELETE FROM model_committee_votes" in migration
+    assert "DELETE FROM evidence_chain_audit_logs" in migration
+    assert "DELETE FROM model_predictions" in migration
+    assert "enforce_valid_model_prediction_reference" in migration
+    assert "validation_status = 'valid'" in migration
+
+
+def test_orphan_prediction_derivatives_are_removed_and_guarded() -> None:
+    migration = (
+        PROJECT_ROOT / "sql/45_purge_orphan_prediction_derivatives.sql"
+    ).read_text(encoding="utf-8")
+
+    assert "DELETE FROM model_committee_votes" in migration
+    assert "DELETE FROM market_efficiency_metrics" in migration
+    assert "DELETE FROM score_distribution_snapshots" in migration
+    assert "enforce_valid_committee_vote_reference" in migration
+    assert "prediction.validation_status = 'valid'" in migration
+
+
+def test_evidence_less_agent_tickets_are_purged_and_statistics_rebuilt() -> None:
+    migration = (
+        PROJECT_ROOT / "sql/46_purge_evidence_less_agent_tickets.sql"
+    ).read_text(encoding="utf-8")
+
+    assert "NOT EXISTS" in migration
+    assert "simulation_ticket_items" in migration
+    assert "DELETE FROM ticket_settlements" in migration
+    assert "DELETE FROM simulation_tickets" in migration
+    assert "refresh_agent_statistics_after_cleanup" in migration
+    assert "competition_daily_snapshots" in migration
+    assert "daily_reviews" in migration
+
+
 def test_all_python_services_probe_an_in_network_api_health_url() -> None:
     compose = (
         PROJECT_ROOT / "ops/local/docker-compose.local.yml"

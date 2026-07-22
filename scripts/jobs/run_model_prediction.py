@@ -623,7 +623,12 @@ def _predict_match_play_type(
             store_model_prediction(conn, pred)
             total_p += 1
 
-        # Committee votes
+        # Committee votes represent independent model opinions. Market-seeded
+        # fallbacks remain available as benchmark predictions but must never
+        # enter committee or recommendation decision paths.
+        if not model_independence[model_name]:
+            continue
+
         for opt_code in ("3", "1", "0"):
             p = probs.get(opt_code, 0)
             direction = "strong" if p > 0.40 else ("weak" if p > 0.30 else "against")

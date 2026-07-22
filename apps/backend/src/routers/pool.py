@@ -76,6 +76,11 @@ def run_pool_analysis(
                         WHERE mp.match_id = m.id
                           AND mp.play_type = 'spf'
                           AND mp.predict_time < m.kickoff_time
+                          AND mp.validation_status = 'valid'
+                          AND COALESCE(
+                              (mp.uncertainty_reason->>'model_independent')::boolean,
+                              false
+                          ) = true
                           AND mv.is_active = true
                           AND mp.model_probability IS NOT NULL
                         ORDER BY mp.model_version_id, mp.option_code,

@@ -140,6 +140,10 @@ def store_committee_vote(conn: Any, vote: dict) -> int | None:
 
 def store_simulation_ticket(conn: Any, ticket: dict, items: list[dict]) -> int | None:
     """Insert a simulation ticket with its items. Returns the ticket id."""
+    if not items:
+        conn.rollback()
+        return None
+
     with conn.cursor() as cur:
         # 1. Get today's budget plan
         cur.execute(

@@ -262,6 +262,8 @@ def test_latest_prediction_scope_excludes_post_match_predictions() -> None:
     query = " ".join(feature_importance._LATEST_PREDICTIONS_CTE.split())
 
     assert "source_mp.predict_time < source_match.kickoff_time" in query
+    assert "source_mp.validation_status = 'valid'" in query
+    assert "model_independent" in query
     assert "source_result.result_status IN ('final', 'confirmed')" in query
 
 
