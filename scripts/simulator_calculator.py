@@ -466,13 +466,20 @@ def validate_items(items: list[dict], pass_type: str) -> list[str]:
                     )
                     break
 
-    # Check per-play-type max matches
+    # A straight pass (Mx1) limits each generated combination to M matches;
+    # selecting more matches is valid and expands into C(selected, M) bets.
+    # Compound M串N types still require their exact M-match ticket shape.
     play_types: set[str] = {item.get("play_type", "spf") for item in items}
     strictest_play = min(play_types, key=lambda pt: PLAY_TYPE_MAX_MATCHES.get(pt, 8))
     strictest_max = PLAY_TYPE_MAX_MATCHES.get(strictest_play, 8)
-    if match_count > strictest_max:
+    required_pass_matches = (
+        int(pass_type.split("x")[0])
+        if pass_type.endswith("x1") and pass_type != "single"
+        else match_count
+    )
+    if required_pass_matches > strictest_max:
         errors.append(
-            f"玩法 '{PLAY_TYPE_LABELS.get(strictest_play, strictest_play)}' 最多选 {strictest_max} 场，当前选了 {match_count} 场"
+            f"玩法 '{PLAY_TYPE_LABELS.get(strictest_play, strictest_play)}' 每个组合最多 {strictest_max} 场，当前过关需要 {required_pass_matches} 场"
         )
 
     # Validate sp_value

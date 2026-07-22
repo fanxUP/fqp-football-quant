@@ -48,6 +48,24 @@ def test_available_pass_types_include_lower_straight_passes():
     assert "3x1" in available
 
 
+@pytest.mark.parametrize("play_type", ["bf", "bqc"])
+def test_four_pass_allows_more_selected_matches_for_score_limited_plays(play_type):
+    items = _items(5)
+    for item in items:
+        item["play_type"] = play_type
+        item["is_pass_allowed"] = True
+
+    assert validate_items(items, "4x1") == []
+    result = calculate_all(items, "4x1", multiple=1)
+
+    assert result["match_count"] == 5
+    assert result["bet_count"] == 5
+    assert result["total_cost"] == 10.0
+    assert {tuple(sorted(item["match_id"] for item in combo)) for combo in calculate_bet_combinations(items, "4x1")} == {
+        (1, 2, 3, 4), (1, 2, 3, 5), (1, 2, 4, 5), (1, 3, 4, 5), (2, 3, 4, 5)
+    }
+
+
 def test_single_requires_official_single_eligibility_when_present():
     item = _items(1)[0]
     item["is_single_allowed"] = False
