@@ -90,7 +90,7 @@ def get_live_recommendations(
                         sti.model_probability,
                         (1.0 / current_odds.sp_value)
                             / current_market.implied_probability_sum
-                            AS current_market_probability,
+                            AS market_probability,
                         CASE WHEN sti.model_probability > 0
                              THEN 1.0 / sti.model_probability END AS fair_odds,
                         sti.model_probability * current_odds.sp_value - 1 AS current_ev,

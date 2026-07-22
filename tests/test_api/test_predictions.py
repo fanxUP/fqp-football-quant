@@ -69,6 +69,7 @@ class TestPredictionsEndpoint:
         assert "simulation_tickets" in sql
         assert "simulation_ticket_items" in sql
         assert "current_odds.sp_value" in sql
+        assert "AS market_probability" in sql
         assert "official_markets" in sql
         normalized = " ".join(sql.split())
         assert "st.created_at::date = timezone('Asia/Shanghai', NOW())::date" in normalized
