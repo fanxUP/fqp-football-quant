@@ -8,9 +8,10 @@ interface AllGamesDialogProps {
   selections: BetSlipItem[];
   onToggle: (match: BettingMatch, playType: SportteryPlayType, option: BettingOddsOption) => void;
   onClose: () => void;
+  bettingClosed?: boolean;
 }
 
-export function AllGamesDialog({ match, selections, onToggle, onClose }: AllGamesDialogProps) {
+export function AllGamesDialog({ match, selections, onToggle, onClose, bettingClosed = false }: AllGamesDialogProps) {
   return (
     <div className="sporttery-dialog-backdrop" role="presentation" onClick={onClose}>
       <section className="sporttery-dialog sporttery-play-dialog" role="dialog" aria-modal="true" aria-label={`${match.match_num_str} 全部游戏`} onClick={(event) => event.stopPropagation()}>
@@ -38,7 +39,7 @@ export function AllGamesDialog({ match, selections, onToggle, onClose }: AllGame
                         .filter((item) => item.match_id === match.match_id && item.play_type === playType)
                         .map((item) => item.option_code),
                     )}
-                    selectable={selectable}
+                    selectable={selectable && !bettingClosed}
                     onToggle={(option) => onToggle(match, playType, option)}
                   />
                 ) : (
@@ -52,7 +53,7 @@ export function AllGamesDialog({ match, selections, onToggle, onClose }: AllGame
                           className={`sporttery-modal-odd ${selected ? 'is-selected' : ''}`}
                           aria-label={optionAriaLabel(playType, option)}
                           aria-pressed={selected}
-                          disabled={!selectable}
+                          disabled={!selectable || bettingClosed}
                           onClick={() => onToggle(match, playType, option)}
                         >
                           <span>{displayOption(playType, option)}</span>

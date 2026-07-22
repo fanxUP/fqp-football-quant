@@ -87,7 +87,9 @@ export default function BettingTerminalPage() {
     setLoadError('');
     api.bettingTerminal.matches({ limit: 100 })
       .then((response) => {
-        setMatches(response.matches || []);
+        // 休市接口会返回空的“当前可售”列表，但页面保留上一批已加载比赛，
+        // 让用户继续查看盘口；真正的下注能力由 bettingClosed 统一锁定。
+        if ((response.matches || []).length > 0) setMatches(response.matches);
         setSalesWindow(response.sales_window ?? null);
       })
       .catch((error) => setLoadError(errorMessage(error, '官方比赛加载失败')))
@@ -344,6 +346,7 @@ export default function BettingTerminalPage() {
               onToggle={toggleSelection}
               onAllGames={setActiveMatch}
               onAnalyse={(item) => navigate(`/matches/${item.match_id}`)}
+              bettingClosed={salesWindow?.is_open === false}
             />
           ))}
         </section>
@@ -370,7 +373,7 @@ export default function BettingTerminalPage() {
         />
       </div>
 
-      {activeMatch && <AllGamesDialog match={activeMatch} selections={selections} onToggle={toggleSelection} onClose={() => setActiveMatch(null)} />}
+      {activeMatch && <AllGamesDialog match={activeMatch} selections={selections} onToggle={toggleSelection} onClose={() => setActiveMatch(null)} bettingClosed={salesWindow?.is_open === false} />}
       {showRules && <RulesDialog onClose={() => setShowRules(false)} />}
       {showFilter && <FilterDialog leagues={leagues} league={league} singleOnly={singleOnly} onLeague={setLeague} onSingleOnly={setSingleOnly} onClose={() => setShowFilter(false)} />}
       {confirmation && <ConfirmationDialog selections={confirmation.selections} passTypes={confirmation.passTypes} multiple={confirmation.multiple} betCount={confirmation.calculation.bet_count} stake={confirmation.calculation.total_cost} prize={confirmation.calculation.max_prize} ticketUid={confirmation.ticketUid} onClose={completeConfirmation} />}

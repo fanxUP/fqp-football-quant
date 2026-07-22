@@ -18,6 +18,7 @@ interface MatchCardProps {
   onToggle: (match: BettingMatch, playType: SportteryPlayType, option: BettingOddsOption) => void;
   onAllGames: (match: BettingMatch) => void;
   onAnalyse: (match: BettingMatch) => void;
+  bettingClosed?: boolean;
 }
 
 function MarketFlags({ match, playType }: { match: BettingMatch; playType: 'spf' | 'rqspf' }) {
@@ -40,6 +41,7 @@ function OddsRow({
   playType,
   selections,
   onToggle,
+  bettingClosed = false,
 }: MatchCardProps & { playType: 'spf' | 'rqspf' }) {
   const options = match.odds[playType].options;
   const market = match.odds[playType];
@@ -57,7 +59,7 @@ function OddsRow({
             className={`sporttery-odd ${selected ? 'is-selected' : ''}`}
             aria-label={optionAriaLabel(playType, option)}
             aria-pressed={selected}
-            disabled={!selectable}
+            disabled={!selectable || bettingClosed}
             onClick={() => onToggle(match, playType, option)}
           >
             <span>{displayOption(playType, option)}</span>

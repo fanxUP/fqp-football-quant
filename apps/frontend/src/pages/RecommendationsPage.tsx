@@ -184,7 +184,10 @@ export default function RecommendationsPage({ embedded = false, onMatchSelect }:
             baseline = recommendations.length > 0;
           }
           setTickets(ticketRes.tickets);
-          setLiveRecs(recommendations);
+          // 休市响应为空时保留上一批推荐，避免休市后页面闪空；推荐仍会显示休市锁定提示。
+          if (recommendations.length > 0 || recRes.sales_window?.is_open !== false) {
+            setLiveRecs(recommendations);
+          }
           setBaselineOnly(baseline);
           setLoading(false);
         }

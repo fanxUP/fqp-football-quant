@@ -55,7 +55,8 @@ export default function OddsMovementPage() {
         resolution: scope === 'history' ? 'hour' : 'raw',
         limit: 200,
       });
-      setMatches(response.matches);
+      // 休市时后端只返回状态，不覆盖上一批已加载的走势数据。
+      if (response.matches.length > 0) setMatches(response.matches);
       setError(null);
     } catch (reason) {
       if (showLoading) setError(reason instanceof ApiError ? reason.message : '加载赔率走势失败');
@@ -80,7 +81,7 @@ export default function OddsMovementPage() {
   if (scope === 'history') {
     emptyTitle = '该日期暂无赔率记录';
     emptyDescription = '请选择其他历史日期';
-  } else if (isCurrentRestTime) {
+  } else if (isCurrentRestTime && matches.length === 0) {
     emptyTitle = '当前为官方休市时间';
     emptyDescription = index?.sales_window?.message ?? '官方竞彩休市中';
   }
