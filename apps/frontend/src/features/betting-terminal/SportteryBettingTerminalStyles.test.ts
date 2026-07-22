@@ -39,4 +39,8 @@ describe('SportteryBettingTerminal visual semantics', () => {
     expect(stylesheet).toMatch(/\.fqp-page-transition:has\(\.sporttery-dialog-backdrop\)\s*{[^}]*transform:\s*none !important/);
     expect(stylesheet).toMatch(/\.fqp-page-transition:has\(\.sporttery-dialog-backdrop\)\s*{[^}]*animation:\s*none !important/);
   });
+
+  it('keeps the retry button on the theme surface', () => {
+    expect(stylesheet).toMatch(/\.betting-desktop-workbench \.sporttery-status button[\s\S]*background:\s*var\(--fqp-panel-2\)/);
+  });
 });

@@ -302,11 +302,13 @@
 .betting-desktop-workbench .sporttery-widget-column { padding-bottom: 0; }
 .betting-desktop-workbench .sporttery-dialog,
 .betting-desktop-workbench .sporttery-dialog-close,
-.betting-desktop-workbench .sporttery-field-label select {
+.betting-desktop-workbench .sporttery-field-label select,
+.betting-desktop-workbench .sporttery-status button {
   border-color: var(--fqp-border);
-  background: var(--fqp-panel);
+  background: var(--fqp-panel-2);
   color: var(--fqp-text);
 }
+.betting-desktop-workbench .sporttery-dialog { background: var(--fqp-panel); }
 .betting-desktop-workbench .sporttery-dialog > header { border-bottom-color: var(--fqp-border); }
 .betting-desktop-workbench .sporttery-play-teams { background: var(--fqp-panel-2); color: var(--fqp-text); }
 
