@@ -155,7 +155,7 @@ def get_live_recommendations(
                           = timezone('Asia/Shanghai', NOW())::date
                       AND st.ticket_status IN ('generated', 'activated', 'purchased')
                       AND st.strategy_pool <> 'agent_competition_observation'
-                      AND st.strategy_pool NOT LIKE 'agent_training_%'
+                      AND LEFT(COALESCE(st.strategy_pool, ''), 15) <> 'agent_training_'
                       AND COALESCE(st.ticket_type, '') <> 'training_observation'
                       AND COALESCE(
                           (st.rule_metadata->>'observation_fallback')::boolean,

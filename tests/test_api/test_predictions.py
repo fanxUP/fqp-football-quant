@@ -75,6 +75,8 @@ class TestPredictionsEndpoint:
         assert "official_markets" in sql
         assert "observation_fallback" in sql
         assert "training_observation" in sql
+        assert "LEFT(COALESCE(st.strategy_pool, ''), 15) <> 'agent_training_'" in sql
+        assert "NOT LIKE 'agent_training_%'" not in sql
         normalized = " ".join(sql.split())
         assert (
             "(st.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Shanghai')::date "
