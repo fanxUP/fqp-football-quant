@@ -13,6 +13,15 @@ def test_current_competitions_have_verified_team_counts():
     }
 
 
+def test_api_football_competitions_use_independent_season_codes():
+    season_codes = [item["season_code"] for item in LEAGUE_MAP]
+
+    assert len(season_codes) == len(set(season_codes))
+    assert season_codes == [
+        f"apifootball:{item['api_league_id']}:2026" for item in LEAGUE_MAP
+    ]
+
+
 def test_current_selling_teams_have_api_football_aliases():
     required = {
         "英格兰",
@@ -35,3 +44,9 @@ def test_current_selling_teams_have_api_football_aliases():
     }
 
     assert required <= MANUAL_ALIASES.keys()
+
+
+def test_current_k_league_teams_have_provider_aliases():
+    assert "Gimcheon Sangmu FC" in MANUAL_ALIASES["金泉尚武"]
+    assert "Incheon United" in MANUAL_ALIASES["仁川联"]
+    assert "Jeju United FC" in MANUAL_ALIASES["济州SK"]

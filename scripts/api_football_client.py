@@ -21,6 +21,21 @@ from typing import Any
 import httpx
 
 
+class ApiFootballRateLimitError(RuntimeError):
+    """Raised when API-SPORTS refuses a request because quota is exhausted."""
+
+
+def _is_rate_limit_error(errors: Any) -> bool:
+    if isinstance(errors, dict):
+        return any(
+            "rate" in str(key).lower() or "rate limit" in str(value).lower()
+            for key, value in errors.items()
+        )
+    if isinstance(errors, list):
+        return any(_is_rate_limit_error(item) for item in errors)
+    return "rate limit" in str(errors).lower()
+
+
 class ApiFootballClient:
     """HTTP client for v3.football.api-sports.io."""
 
@@ -33,7 +48,7 @@ class ApiFootballClient:
         self,
         api_key: str | None = None,
         timeout: float = 30.0,
-        min_interval: float = 1.0,
+        min_interval: float | None = None,
         max_retries: int = 3,
     ) -> None:
         self._api_key = api_key or os.getenv("API_FOOTBALL_KEY", "")
@@ -48,7 +63,11 @@ class ApiFootballClient:
                 "Accept": "application/json",
             },
         )
-        self._min_interval = min_interval
+        self._min_interval = (
+            float(os.getenv("API_FOOTBALL_MIN_INTERVAL_SECONDS", "6.1"))
+            if min_interval is None
+            else min_interval
+        )
         self._max_retries = max_retries
         self._last_request_time = 0.0
         self._call_count_today = 0
@@ -83,6 +102,11 @@ class ApiFootballClient:
                 resp = self._client.get(path, params=params)
                 self._last_request_time = time.monotonic()
 
+                if resp.status_code == 429:
+                    raise ApiFootballRateLimitError(
+                        "API-Football rate limit reached; retry on the next scheduled run"
+                    )
+
                 # Handle rate limit headers
                 remaining = resp.headers.get("x-ratelimit-requests-remaining")
                 if remaining:
@@ -103,13 +127,10 @@ class ApiFootballClient:
                 if data.get("errors"):
                     error_msg = data["errors"]
                     print(f"[api-football] API errors: {error_msg}")
-                    # Some errors are non-fatal (e.g. empty results for a query)
-                    if isinstance(error_msg, list) and len(error_msg) > 0:
-                        if isinstance(error_msg[0], str) and "rate limit" in error_msg[0].lower():
-                            wait = 60
-                            print(f"[api-football] rate limited, waiting {wait}s...")
-                            time.sleep(wait)
-                            continue
+                    if _is_rate_limit_error(error_msg):
+                        raise ApiFootballRateLimitError(
+                            "API-Football rate limit reached; retry on the next scheduled run"
+                        )
 
                 print(
                     f"[api-football] GET {path} → {resp.status_code} "

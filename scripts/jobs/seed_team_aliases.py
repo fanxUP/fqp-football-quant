@@ -41,8 +41,11 @@ MANUAL_ALIASES: dict[str, list[str]] = {
     "全北现代": ["Jeonbuk Motors", "Jeonbuk Hyundai Motors"],
     "江原FC": ["Gangwon FC"],
     "光州FC": ["Gwangju FC"],
+    "金泉尚武": ["Gimcheon Sangmu FC"],
     "首尔FC": ["FC Seoul"],
     "蔚山现代": ["Ulsan Hyundai FC", "Ulsan HD FC"],
+    "仁川联": ["Incheon United"],
+    "济州SK": ["Jeju United FC"],
     # 世界杯 (World Cup) — national teams
     "澳大利亚": ["Australia"],
     "埃及": ["Egypt"],
