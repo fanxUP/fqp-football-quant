@@ -153,6 +153,14 @@ def test_scheduler_refreshes_upset_knowledge_daily():
     assert "hour=11" in source
 
 
+def test_scheduler_extracts_research_hypotheses_without_auto_promotion():
+    source = Path("scripts/jobs/run_scheduler.py").read_text()
+
+    assert 'id="sync_upset_hypotheses"' in source
+    assert '"scripts.jobs.sync_upset_hypotheses"' in source
+    assert "transition_hypothesis" not in source
+
+
 def test_scheduler_dispatches_odds_by_default_for_host_runtime(monkeypatch):
     monkeypatch.delenv("FQP_ODDS_DISPATCH_OWNER", raising=False)
 

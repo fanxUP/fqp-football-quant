@@ -617,6 +617,23 @@ def main() -> None:
                 id="refresh_upset_knowledge",
             )
 
+            # Extract only explicitly structured, evidence-backed hypotheses.
+            # Validation and feature promotion remain separate audited actions.
+            scheduler.add_job(
+                _audited_job(
+                    "sync_upset_hypotheses",
+                    "冷门研究假设同步",
+                    "research_agent",
+                    lambda: __import__(
+                        "scripts.jobs.sync_upset_hypotheses", fromlist=["run"]
+                    ).run(),
+                ),
+                "cron",
+                hour=11,
+                minute=5,
+                id="sync_upset_hypotheses",
+            )
+
             # Daily at 23:45: analyze prediction errors
             scheduler.add_job(
                 _audited_job(
