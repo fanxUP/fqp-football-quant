@@ -2,15 +2,16 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import UpsetsPage from './UpsetsPage';
 
-const { summary, list, detail, reports } = vi.hoisted(() => ({
+const { summary, list, leagues, detail, reports } = vi.hoisted(() => ({
   summary: vi.fn(),
   list: vi.fn(),
+  leagues: vi.fn(),
   detail: vi.fn(),
   reports: vi.fn(),
 }));
 
 vi.mock('../core/apiClient', () => ({
-  api: { upsets: { summary, list, detail, reports } },
+  api: { upsets: { summary, list, leagues, detail, reports } },
 }));
 
 describe('UpsetsPage', () => {
@@ -56,6 +57,10 @@ describe('UpsetsPage', () => {
       limit: 50,
       offset: 0,
     });
+    leagues.mockResolvedValue({ items: [
+      { league_name: '测试联赛', upset_count: 1 },
+      { league_name: '韩国职业联赛', upset_count: 9 },
+    ] });
     detail.mockResolvedValue({
       event: {
         id: 7,
@@ -119,6 +124,20 @@ describe('UpsetsPage', () => {
     await waitFor(() => expect(list).toHaveBeenLastCalledWith(expect.objectContaining({
       level: 'A',
       play_type: 'spf',
+    })));
+  });
+
+  it('使用联赛下拉菜单导航冷门比赛', async () => {
+    render(<UpsetsPage />);
+
+    const leagueSelect = await screen.findByRole('combobox', { name: '联赛导航' });
+    expect(screen.getByRole('option', { name: '全部联赛（10场）' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: '韩国职业联赛（9场）' })).toBeInTheDocument();
+
+    fireEvent.change(leagueSelect, { target: { value: '韩国职业联赛' } });
+
+    await waitFor(() => expect(list).toHaveBeenLastCalledWith(expect.objectContaining({
+      league_name: '韩国职业联赛',
     })));
   });
 

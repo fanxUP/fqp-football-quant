@@ -171,6 +171,10 @@ export const api = {
           offset: params?.offset ?? 0,
         })}`,
       ),
+    leagues: (params?: { start_date?: string; end_date?: string }) =>
+      request<{ items: import('../features/upsets/types').UpsetLeagueOption[] }>(
+        `/api/upsets/leagues${qs({ start_date: params?.start_date, end_date: params?.end_date })}`,
+      ),
     detail: (eventId: number) =>
       request<import('../features/upsets/types').UpsetDetail>(`/api/upsets/${eventId}`),
     reports: (limit = 12) =>

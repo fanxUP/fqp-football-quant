@@ -101,6 +101,11 @@ export interface UpsetFilters {
   review_status?: string;
 }
 
+export interface UpsetLeagueOption {
+  league_name: string;
+  upset_count: number;
+}
+
 export interface UpsetReport {
   id: number;
   report_type: 'daily' | 'weekly' | 'monthly';

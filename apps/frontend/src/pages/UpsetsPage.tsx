@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { api } from '../core/apiClient';
 import UpsetDetailDialog from '../features/upsets/UpsetDetailDialog';
 import { UpsetCard, UpsetMetrics } from '../features/upsets/UpsetOverview';
-import type { UpsetDetail, UpsetFilters, UpsetListItem, UpsetReport, UpsetSummary } from '../features/upsets/types';
+import type { UpsetDetail, UpsetFilters, UpsetLeagueOption, UpsetListItem, UpsetReport, UpsetSummary } from '../features/upsets/types';
 import EmptyState from '../shared/components/EmptyState';
 import ErrorState from '../shared/components/ErrorState';
 import LoadingSpinner from '../shared/components/LoadingSpinner';
@@ -13,6 +13,7 @@ export default function UpsetsPage() {
   const [filters, setFilters] = useState<UpsetFilters>({});
   const [summary, setSummary] = useState<UpsetSummary | null>(null);
   const [items, setItems] = useState<UpsetListItem[]>([]);
+  const [leagues, setLeagues] = useState<UpsetLeagueOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [detail, setDetail] = useState<UpsetDetail | null>(null);
@@ -23,13 +24,15 @@ export default function UpsetsPage() {
     setLoading(true);
     setError(null);
     try {
-      const [summaryResponse, listResponse, reportResponse] = await Promise.all([
+      const [summaryResponse, listResponse, leagueResponse, reportResponse] = await Promise.all([
         api.upsets.summary({ start_date: filters.start_date, end_date: filters.end_date }),
         api.upsets.list({ ...filters, limit: 50, offset: 0 }),
+        api.upsets.leagues({ start_date: filters.start_date, end_date: filters.end_date }),
         api.upsets.reports(6),
       ]);
       setSummary(summaryResponse);
       setItems(listResponse.items);
+      setLeagues(leagueResponse.items);
       setReports(reportResponse.items);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : '加载冷门研究数据失败');
@@ -51,6 +54,8 @@ export default function UpsetsPage() {
     setFilters((current) => ({ ...current, [name]: value || undefined }));
   };
 
+  const allLeagueCount = leagues.reduce((total, league) => total + league.upset_count, 0);
+
   return (
     <div className="upset-page">
       <PageHeader title="冷门研究" subtitle="依据开赛前最后官方赔率识别，复盘模型、用户实票与 Agent 虚拟票" />
@@ -58,7 +63,7 @@ export default function UpsetsPage() {
       <section className="upset-filters" aria-label="冷门筛选">
         <label>开始日期<input type="date" value={filters.start_date ?? ''} onChange={(event) => updateFilter('start_date', event.target.value)} /></label>
         <label>结束日期<input type="date" value={filters.end_date ?? ''} onChange={(event) => updateFilter('end_date', event.target.value)} /></label>
-        <label>联赛<input type="search" placeholder="输入官方联赛名称" value={filters.league_name ?? ''} onChange={(event) => updateFilter('league_name', event.target.value)} /></label>
+        <label className="upset-league-nav">联赛导航<select aria-label="联赛导航" value={filters.league_name ?? ''} onChange={(event) => updateFilter('league_name', event.target.value)}><option value="">全部联赛（{allLeagueCount}场）</option>{leagues.map((league) => <option key={league.league_name} value={league.league_name}>{league.league_name}（{league.upset_count}场）</option>)}</select></label>
         <label>冷门等级<select value={filters.level ?? ''} onChange={(event) => updateFilter('level', event.target.value)}><option value="">全部</option><option value="S">S级</option><option value="A">A级</option><option value="B">B级</option><option value="C">C级</option></select></label>
         <label>玩法<select value={filters.play_type ?? ''} onChange={(event) => updateFilter('play_type', event.target.value)}><option value="">全部</option><option value="spf">胜平负</option><option value="rqspf">让球胜平负</option><option value="bf">比分</option><option value="zjq">总进球</option><option value="bqc">半全场</option></select></label>
       </section>

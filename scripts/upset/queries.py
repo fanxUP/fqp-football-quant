@@ -29,6 +29,41 @@ def list_upset_reports(conn: Any, limit: int = 12) -> list[dict[str, Any]]:
         return _dict_rows(cur)
 
 
+def list_upset_leagues(
+    conn: Any,
+    *,
+    start_date: str | None = None,
+    end_date: str | None = None,
+) -> list[dict[str, Any]]:
+    """Return league navigation options for the selected date range."""
+    clauses = ["1 = 1"]
+    params: dict[str, Any] = {}
+    if start_date:
+        clauses.append("event.business_date >= %(start_date)s")
+        params["start_date"] = start_date
+    if end_date:
+        clauses.append("event.business_date <= %(end_date)s")
+        params["end_date"] = end_date
+
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            f"""
+            SELECT match.league_name, COUNT(*) AS upset_count
+            FROM upset_events event
+            JOIN official_matches match ON match.id = event.match_id
+            WHERE {' AND '.join(clauses)}
+            GROUP BY match.league_name
+            ORDER BY COUNT(*) DESC, match.league_name
+            """,
+            params,
+        )
+        rows = _dict_rows(cur)
+    return [
+        {"league_name": str(row["league_name"]), "upset_count": int(row["upset_count"])}
+        for row in rows
+    ]
+
+
 def list_upsets(
     conn: Any,
     *,

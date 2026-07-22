@@ -8,6 +8,7 @@ from apps.backend.src.db import get_db
 from scripts.upset.queries import (
     get_upset_detail,
     get_upset_summary,
+    list_upset_leagues,
     list_upset_reports,
     list_upsets,
 )
@@ -55,6 +56,17 @@ def index(
 def reports(limit: int = Query(12, ge=1, le=100)):
     with get_db() as conn:
         return {"items": list_upset_reports(conn, limit=limit)}
+
+
+@router.get("/leagues")
+def leagues(start_date: str | None = None, end_date: str | None = None):
+    with get_db() as conn:
+        items = list_upset_leagues(
+            conn,
+            start_date=start_date,
+            end_date=end_date,
+        )
+    return {"items": items}
 
 
 @router.get("/{event_id}")
