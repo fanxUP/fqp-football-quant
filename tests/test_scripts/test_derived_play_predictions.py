@@ -8,12 +8,12 @@ def test_derived_history_stores_every_official_option_for_each_capable_model():
     conn = MagicMock()
     cursor = conn.cursor.return_value.__enter__.return_value
     cursor.fetchall.return_value = [
-        (101, "zjq", "0", 12.0),
-        (102, "zjq", "7", 15.0),
-        (201, "bf", "1:0", 7.5),
-        (202, "bf", "other_h", 20.0),
-        (301, "bqc", "33", 3.2),
-        (302, "bqc", "10", 18.0),
+        (101, "zjq", "0", 1.5),
+        (102, "zjq", "7", 1.8),
+        (201, "bf", "1:0", 1.5),
+        (202, "bf", "other_h", 1.8),
+        (301, "bqc", "33", 1.5),
+        (302, "bqc", "10", 1.8),
     ]
     raw_poisson = score_matrix(1.3, 1.1)
     adjusted_poisson = score_matrix(1.6, 0.9)

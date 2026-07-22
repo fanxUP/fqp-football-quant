@@ -21,9 +21,9 @@ from scripts.derived_play_predictions import store_derived_play_predictions
 from scripts.dixon_coles_model import dixon_coles_matrix
 from scripts.elo_model import run_elo_1x2_prediction
 from scripts.feature_adjustment import GoalRateAdjustment, adjust_goal_rates
+from scripts.market_metric_validation import MarketMetricValidationError, validate_market
 from scripts.model_storage import store_committee_vote, store_model_prediction
 from scripts.odds_conversion import (
-    expected_value,
     full_debias_pipeline,
     normalize_probabilities,
     overround,
@@ -315,14 +315,13 @@ def _predict_match_play_type(
         return 0, 0
 
     odds_dict: dict[str, float] = {}
-    latest_snapshot_id: int | None = None
+    snapshot_ids: dict[str, int] = {}
     for row in odds_rows:
         snap_id, opt, sp = row
         code = OPTION_MAP.get(opt, opt)
         if code not in odds_dict:
             odds_dict[code] = float(sp)
-        if latest_snapshot_id is None:
-            latest_snapshot_id = snap_id
+            snapshot_ids[code] = int(snap_id)
 
     if not {"3", "1", "0"}.issubset(odds_dict):
         return 0, 0
@@ -421,10 +420,11 @@ def _predict_match_play_type(
     # 5. Elo model. Cold-start ratings are placeholders and must not become
     # independent positive-EV signals.
     try:
-        elo_1x2 = _load_trained_elo_probabilities(conn, feature_snapshot) or dict(
-            market_probs
-        )
+        trained_elo = _load_trained_elo_probabilities(conn, feature_snapshot)
+        elo_is_independent = trained_elo is not None
+        elo_1x2 = trained_elo or dict(market_probs)
     except Exception:
+        elo_is_independent = False
         elo_1x2 = dict(market_probs)
 
     # 6. Write predictions per model
@@ -433,6 +433,12 @@ def _predict_match_play_type(
         "maher_poisson": (raw_poisson_probs, poisson_probs),
         "dixon_coles": (raw_dc_probs, dc_probs),
         "elo_rating": (elo_1x2, elo_1x2),
+    }
+    model_independence = {
+        "market_baseline": False,
+        "maher_poisson": False,
+        "dixon_coles": False,
+        "elo_rating": elo_is_independent,
     }
 
     total_p = derived_predictions
@@ -443,14 +449,26 @@ def _predict_match_play_type(
         if mv_id is None:
             continue
 
+        try:
+            option_metrics = validate_market(
+                model_probabilities=probs,
+                market_probabilities=market_probs,
+                odds_by_option=odds_dict,
+                snapshot_ids=snapshot_ids,
+            )
+        except MarketMetricValidationError:
+            continue
+
         for opt_code in ("3", "1", "0"):
             model_p = probs.get(opt_code, 0.0)
             raw_model_p = raw_probs.get(opt_code, model_p)
             market_p = market_probs.get(opt_code, 0.0)
-            sp_val = odds_dict.get(opt_code, 0.0)
 
             fair_odds = (1.0 / model_p) if model_p and model_p > 0 else None
-            ev = expected_value(model_p, sp_val) if sp_val > 0 else 0.0
+            metric = option_metrics[opt_code]
+            stored_model_p = round(model_p, 6)
+            stored_market_p = round(market_p, 6)
+            stored_break_even = round(metric.break_even_probability, 6)
 
             uncertainty = _model_std(
                 [
@@ -464,20 +482,26 @@ def _predict_match_play_type(
             pred = {
                 "match_id": mid,
                 "model_version_id": mv_id,
-                "odds_snapshot_id": latest_snapshot_id,
+                "odds_snapshot_id": snapshot_ids[opt_code],
                 "feature_snapshot_id": feature_snapshot_id,
                 "predict_time": predict_time,
                 "play_type": play_type,
                 "option_code": opt_code,
                 "raw_model_probability": round(raw_model_p, 6),
-                "model_probability": round(model_p, 6),
-                "market_probability": round(market_p, 6),
+                "model_probability": stored_model_p,
+                "market_probability": stored_market_p,
                 "probability_lower_bound": round(max(0, model_p - uncertainty * 2), 6),
                 "probability_upper_bound": round(min(1, model_p + uncertainty * 2), 6),
                 "uncertainty_score": round(uncertainty, 6),
                 "adjusted_probability": round(model_p, 6),
                 "fair_odds": round(fair_odds, 4) if fair_odds else None,
-                "ev": round(ev, 6),
+                "ev": round(stored_model_p * odds_dict[opt_code] - 1.0, 6),
+                "break_even_probability": stored_break_even,
+                "market_edge": round(stored_model_p - stored_market_p, 6),
+                "breakeven_edge": round(stored_model_p - stored_break_even, 6),
+                "validation_status": "valid",
+                "validation_errors": [],
+                "calculation_version": "market_metrics_v2",
                 "confidence_score": round(max(0, 1.0 - uncertainty * 3), 4),
                 "risk_score": round(uncertainty * 3, 4),
                 "uncertainty_reason": {
@@ -490,6 +514,7 @@ def _predict_match_play_type(
                     if model_name in ("maher_poisson", "dixon_coles")
                     else "proportional",
                     "elo_based": model_name == "elo_rating",
+                    "model_independent": model_independence[model_name],
                     "feature_adjustment": {
                         "version": feature_adjustment.version,
                         "applied": feature_adjustment.applied

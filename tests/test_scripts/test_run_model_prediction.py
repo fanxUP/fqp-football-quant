@@ -220,6 +220,41 @@ def test_spf_prediction_includes_complete_derived_history_in_count():
     assert result == (21, 3)
 
 
+def test_each_prediction_binds_its_matching_official_option_snapshot():
+    conn = MagicMock()
+    cursor = conn.cursor.return_value.__enter__.return_value
+    cursor.fetchall.side_effect = [
+        [(11, "h", 2.1), (12, "d", 3.2), (13, "a", 3.6)],
+        [],
+    ]
+
+    with (
+        patch(
+            "scripts.jobs.run_model_prediction._latest_feature_snapshot",
+            return_value={"id": 88, "data_completeness_score": 70},
+        ),
+        patch("scripts.jobs.run_model_prediction.store_derived_play_predictions", return_value=0),
+        patch("scripts.jobs.run_model_prediction.store_model_prediction") as store_prediction,
+        patch("scripts.jobs.run_model_prediction.store_committee_vote"),
+    ):
+        _predict_match_play_type(
+            conn=conn,
+            mid=101,
+            home_team_name="主队",
+            away_team_name="客队",
+            play_type="spf",
+            active_models={"market_baseline": 1},
+            rho=-0.08,
+            mle_rho=None,
+            predict_time="2026-07-16T14:00:00",
+        )
+
+    stored = {call.args[1]["option_code"]: call.args[1] for call in store_prediction.call_args_list}
+    assert stored["3"]["odds_snapshot_id"] == 11
+    assert stored["1"]["odds_snapshot_id"] == 12
+    assert stored["0"]["odds_snapshot_id"] == 13
+
+
 def test_prediction_job_requires_odds_and_feature_snapshot_jobs() -> None:
     with (
         patch("scripts.jobs.run_model_prediction.start_tracked_job", return_value=9) as start,

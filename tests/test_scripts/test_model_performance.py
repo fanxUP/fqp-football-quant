@@ -48,6 +48,8 @@ def test_model_performance_history_returns_rolling_hit_rate_by_play_type() -> No
 
     result = get_model_performance_history(conn, window=20, days=90)
 
+    assert "source_mp.validation_status = 'valid'" in conn.cursor_instance.query
+
     assert result == {
         "status": "ok",
         "metric": "rolling_hit_rate",

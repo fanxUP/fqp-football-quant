@@ -791,7 +791,14 @@ export interface LiveRecommendation {
   fair_odds: number;
   ev: number;
   edge: number;
+  market_edge: number;
+  break_even_probability: number;
+  breakeven_edge: number;
   confidence: number;
+  odds_snapshot_time: string;
+  data_completeness: number | null;
+  validation_status: 'valid' | 'invalid';
+  model_independent: boolean;
   predict_time: string;
   model_name: string;
   home_team: string;

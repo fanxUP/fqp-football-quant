@@ -88,7 +88,9 @@ def get_live_recommendations(
                         sti.play_type,
                         sti.option_code,
                         sti.model_probability,
-                        sti.market_probability,
+                        (1.0 / current_odds.sp_value)
+                            / current_market.implied_probability_sum
+                            AS current_market_probability,
                         CASE WHEN sti.model_probability > 0
                              THEN 1.0 / sti.model_probability END AS fair_odds,
                         sti.model_probability * current_odds.sp_value - 1 AS current_ev,
@@ -103,14 +105,18 @@ def get_live_recommendations(
                         COALESCE(m.raw_json->>'matchNumStr', m.official_match_code::text)
                             AS official_match_code,
                         current_odds.sp_value,
-                        current_odds.handicap
+                        current_odds.handicap,
+                        current_odds.snapshot_time,
+                        fs.data_completeness_score
                     FROM simulation_tickets st
                     JOIN simulation_ticket_items sti ON sti.ticket_id = st.id
                     JOIN model_predictions mp ON mp.id = sti.model_prediction_id
                     JOIN model_versions mv ON mv.id = mp.model_version_id
                     JOIN official_matches m ON m.id = mp.match_id
+                    LEFT JOIN match_feature_snapshots fs
+                           ON fs.id = mp.feature_snapshot_id
                     JOIN LATERAL (
-                        SELECT os.sp_value, os.handicap
+                        SELECT os.sp_value, os.handicap, os.snapshot_time
                         FROM official_odds_snapshots os
                         WHERE os.match_id = sti.match_id
                           AND os.play_type = sti.play_type
@@ -124,11 +130,31 @@ def get_live_recommendations(
                         ORDER BY os.snapshot_time DESC, os.id DESC
                         LIMIT 1
                     ) current_odds ON true
+                    JOIN LATERAL (
+                        SELECT SUM(1.0 / latest.sp_value)
+                                   AS implied_probability_sum
+                        FROM (
+                            SELECT DISTINCT ON (os.option_code)
+                                os.option_code, os.sp_value
+                            FROM official_odds_snapshots os
+                            WHERE os.match_id = sti.match_id
+                              AND os.play_type = sti.play_type
+                              AND os.is_open = true
+                              AND os.sp_value > 1
+                            ORDER BY os.option_code,
+                                     os.snapshot_time DESC, os.id DESC
+                        ) latest
+                    ) current_market ON current_market.implied_probability_sum > 0
                     WHERE st.created_at::date = timezone('Asia/Shanghai', NOW())::date
                       AND st.ticket_status IN ('generated', 'activated', 'purchased')
                       AND mv.is_active = true
                       AND mp.odds_snapshot_id IS NOT NULL
                       AND mp.feature_snapshot_id IS NOT NULL
+                      AND mp.validation_status = 'valid'
+                      AND COALESCE(
+                          (mp.uncertainty_reason->>'model_independent')::boolean,
+                          false
+                      ) = true
                       AND m.sale_status = 'selling'
                       AND LOWER(COALESCE(m.match_status, '')) IN ('scheduled', 'selling', 'not_started')
                       AND m.kickoff_time > timezone('Asia/Shanghai', NOW())
@@ -151,7 +177,8 @@ def get_live_recommendations(
                        confidence_score, predict_time, model_name,
                        home_team_name, away_team_name, league_name,
                        kickoff_time, match_status, handicap,
-                       official_match_code, sp_value
+                       official_match_code, sp_value,
+                       snapshot_time, data_completeness_score
                 FROM released_items
                 ORDER BY current_ev DESC, confidence_score DESC
                 LIMIT %(limit)s
@@ -171,6 +198,10 @@ def get_live_recommendations(
         handicap = float(r[16]) if r[16] is not None else None
         official_match_code = r[17]
         sp_value = float(r[18])
+        break_even_probability = 1.0 / sp_value
+        breakeven_edge = model_prob - break_even_probability
+        odds_snapshot_time = r[19]
+        data_completeness = float(r[20]) if r[20] is not None else None
 
         recommendations.append(
             {
@@ -186,7 +217,18 @@ def get_live_recommendations(
                 "fair_odds": round(fair_odds, 2),
                 "ev": round(ev, 4),
                 "edge": round(edge, 4),
+                "market_edge": round(edge, 4),
+                "break_even_probability": round(break_even_probability, 4),
+                "breakeven_edge": round(breakeven_edge, 4),
                 "confidence": round(confidence, 4),
+                "odds_snapshot_time": odds_snapshot_time.isoformat()
+                if hasattr(odds_snapshot_time, "isoformat")
+                else str(odds_snapshot_time),
+                "data_completeness": round(data_completeness, 1)
+                if data_completeness is not None
+                else None,
+                "validation_status": "valid",
+                "model_independent": True,
                 "predict_time": r[9].isoformat() if hasattr(r[9], "isoformat") else str(r[9]),
                 "model_name": r[10],
                 "home_team": r[11],
@@ -257,6 +299,7 @@ def list_predictions(
                     JOIN model_versions mv ON mv.id = mp.model_version_id
                     JOIN official_matches m ON m.id = mp.match_id
                     WHERE mp.match_id = %s
+                      AND mp.validation_status = 'valid'
                       AND mp.predict_time < m.kickoff_time
                     ORDER BY mp.predict_time DESC, mp.ev DESC
                     LIMIT %s
@@ -275,7 +318,8 @@ def list_predictions(
                     FROM model_predictions mp
                     JOIN model_versions mv ON mv.id = mp.model_version_id
                     JOIN official_matches m ON m.id = mp.match_id
-                    WHERE mp.predict_time < m.kickoff_time
+                    WHERE mp.validation_status = 'valid'
+                      AND mp.predict_time < m.kickoff_time
                     ORDER BY mp.predict_time DESC, mp.ev DESC
                     LIMIT %s
                     """,

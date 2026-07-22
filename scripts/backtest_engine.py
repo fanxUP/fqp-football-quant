@@ -217,6 +217,7 @@ class BacktestEngine:
                 FROM model_predictions source_mp
                 JOIN official_matches source_m ON source_m.id = source_mp.match_id
                 WHERE source_mp.predict_time < source_m.kickoff_time
+                  AND source_mp.validation_status = 'valid'
             )
             SELECT
                 mp.match_id,

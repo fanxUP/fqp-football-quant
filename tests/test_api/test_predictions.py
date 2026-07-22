@@ -63,6 +63,8 @@ class TestPredictionsEndpoint:
         )
         assert "mp.odds_snapshot_id IS NOT NULL" in sql
         assert "mp.feature_snapshot_id IS NOT NULL" in sql
+        assert "mp.validation_status = 'valid'" in sql
+        assert "model_independent" in sql
         assert "mv.is_active = true" in sql
         assert "simulation_tickets" in sql
         assert "simulation_ticket_items" in sql
@@ -102,6 +104,8 @@ class TestPredictionsEndpoint:
                 None,
                 "周三207",
                 6.30,
+                datetime(2026, 7, 22, 12, 20),
+                92.0,
             )
         ]
 
@@ -118,6 +122,10 @@ class TestPredictionsEndpoint:
         assert recommendation["sp_value"] == 6.3
         assert recommendation["fair_odds"] == 1.95
         assert recommendation["ev"] == 2.2247
+        assert recommendation["break_even_probability"] == 0.1587
+        assert recommendation["market_edge"] == 0.3714
+        assert recommendation["data_completeness"] == 92.0
+        assert recommendation["model_independent"] is True
 
     def test_returns_empty_when_no_predictions(self, client):
         mock_conn = MagicMock()
@@ -134,6 +142,7 @@ class TestPredictionsEndpoint:
         assert data["predictions"] == []
         sql = mock_cur.execute.call_args.args[0]
         assert "mp.predict_time < m.kickoff_time" in sql
+        assert "mp.validation_status = 'valid'" in sql
 
     def test_returns_predictions_with_expected_fields(self, client):
         # Columns: id, match_id, predict_time, model_name, play_type, option_code,

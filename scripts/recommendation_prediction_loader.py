@@ -22,6 +22,11 @@ def load_actionable_predictions(conn: Any, model_names: list[str]) -> list[tuple
                   AND mv.is_active = true
                   AND mp.odds_snapshot_id IS NOT NULL
                   AND mp.feature_snapshot_id IS NOT NULL
+                  AND mp.validation_status = 'valid'
+                  AND COALESCE(
+                      (mp.uncertainty_reason->>'model_independent')::boolean,
+                      false
+                  ) = true
                   AND mp.predict_time < m.kickoff_time
                   AND m.sale_status = 'selling'
                   AND LOWER(COALESCE(m.match_status, ''))

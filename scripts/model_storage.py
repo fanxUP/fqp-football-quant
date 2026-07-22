@@ -36,6 +36,8 @@ def store_model_prediction(conn: Any, pred: dict) -> int | None:
             probability_lower_bound, probability_upper_bound,
             uncertainty_score, adjusted_probability,
             fair_odds, ev, confidence_score, risk_score,
+            break_even_probability, market_edge, breakeven_edge,
+            validation_status, validation_errors, calculation_version,
             uncertainty_reason, created_at
         ) VALUES (
             %(match_id)s, %(model_version_id)s, %(odds_snapshot_id)s, %(feature_snapshot_id)s, %(predict_time)s,
@@ -44,6 +46,8 @@ def store_model_prediction(conn: Any, pred: dict) -> int | None:
             %(probability_lower_bound)s, %(probability_upper_bound)s,
             %(uncertainty_score)s, %(adjusted_probability)s,
             %(fair_odds)s, %(ev)s, %(confidence_score)s, %(risk_score)s,
+            %(break_even_probability)s, %(market_edge)s, %(breakeven_edge)s,
+            %(validation_status)s, %(validation_errors)s, %(calculation_version)s,
             %(uncertainty_reason)s, now()
         )
         RETURNING id
@@ -72,6 +76,14 @@ def store_model_prediction(conn: Any, pred: dict) -> int | None:
                 "ev": pred.get("ev"),
                 "confidence_score": pred.get("confidence_score"),
                 "risk_score": pred.get("risk_score"),
+                "break_even_probability": pred.get("break_even_probability"),
+                "market_edge": pred.get("market_edge"),
+                "breakeven_edge": pred.get("breakeven_edge"),
+                "validation_status": pred.get("validation_status", "valid"),
+                "validation_errors": json.dumps(
+                    pred.get("validation_errors", []), ensure_ascii=False
+                ),
+                "calculation_version": pred.get("calculation_version", "legacy"),
                 "uncertainty_reason": json.dumps(
                     pred.get("uncertainty_reason", {}), ensure_ascii=False
                 ),

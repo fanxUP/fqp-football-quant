@@ -50,6 +50,8 @@ def test_actionable_predictions_are_latest_per_match_model_play_and_option(mock_
     assert "DISTINCT ON (" in query
     assert "mp.match_id, mp.model_version_id, mp.play_type, mp.option_code" in query
     assert "mp.predict_time < m.kickoff_time" in query
+    assert "mp.validation_status = 'valid'" in query
+    assert "model_independent" in query
     assert "m.kickoff_time > timezone('Asia/Shanghai', NOW())" in query
     assert "SELECT MAX(predict_time)" not in query
     assert "mp.model_probability * latest_os.sp_value - 1" in query

@@ -4,8 +4,12 @@ from __future__ import annotations
 
 from typing import Any
 
+from scripts.market_metric_validation import (
+    MarketMetricValidationError,
+    validate_market,
+)
 from scripts.model_storage import store_model_prediction
-from scripts.odds_conversion import expected_value, normalize_probabilities
+from scripts.odds_conversion import normalize_probabilities
 from scripts.poisson_model import (
     derive_1x2,
     derive_total_goals,
@@ -105,10 +109,12 @@ def _derive_probabilities(
     official_options: set[str],
 ) -> dict[str, float]:
     if play_type == "zjq":
-        return _total_goals_probabilities(matrix)
+        probabilities = _total_goals_probabilities(matrix)
+        return {option: probabilities.get(option, 0.0) for option in official_options}
     if play_type == "bf":
         return _score_probabilities(matrix, official_options)
-    return _half_full_probabilities(matrix, lambdas)
+    probabilities = _half_full_probabilities(matrix, lambdas)
+    return {option: probabilities.get(option, 0.0) for option in official_options}
 
 
 def _model_std(values: list[float]) -> float:
@@ -116,6 +122,14 @@ def _model_std(values: list[float]) -> float:
         return 0.0
     mean = sum(values) / len(values)
     return (sum((value - mean) ** 2 for value in values) / len(values)) ** 0.5
+
+
+def _normalize_distribution(probabilities: dict[str, float]) -> dict[str, float]:
+    """Normalize the exact set of official outcomes exposed by one market."""
+    total = sum(max(0.0, value) for value in probabilities.values())
+    if total <= 0:
+        return probabilities
+    return {option: max(0.0, value) / total for option, value in probabilities.items()}
 
 
 def store_derived_play_predictions(
@@ -158,8 +172,30 @@ def store_derived_play_predictions(
                 _derive_probabilities(play_type, dc_matrix, adjusted_lambdas, official_options),
             ),
         }
+        model_probabilities = {
+            model_name: (
+                _normalize_distribution(raw_probabilities),
+                _normalize_distribution(adjusted_probabilities),
+            )
+            for model_name, (raw_probabilities, adjusted_probabilities)
+            in model_probabilities.items()
+        }
+        snapshot_ids = {option: value[0] for option, value in option_odds.items()}
+        validated_metrics = {}
+        for model_name in capabilities:
+            if active_models.get(model_name) is None:
+                continue
+            try:
+                validated_metrics[model_name] = validate_market(
+                    model_probabilities=model_probabilities[model_name][1],
+                    market_probabilities=market_probabilities,
+                    odds_by_option=sp_values,
+                    snapshot_ids=snapshot_ids,
+                )
+            except MarketMetricValidationError:
+                continue
 
-        for option_code, (snapshot_id, sp_value) in option_odds.items():
+        for option_code, (snapshot_id, _sp_value) in option_odds.items():
             disagreement = _model_std([
                 model_probabilities[model_name][1].get(option_code, 0.0)
                 for model_name in capabilities
@@ -168,11 +204,15 @@ def store_derived_play_predictions(
             market_probability = market_probabilities.get(option_code, 0.0)
             for model_name in capabilities:
                 model_version_id = active_models.get(model_name)
-                if model_version_id is None:
+                if model_version_id is None or model_name not in validated_metrics:
                     continue
                 raw_probabilities, adjusted_probabilities = model_probabilities[model_name]
                 raw_probability = raw_probabilities.get(option_code, 0.0)
                 model_probability = adjusted_probabilities.get(option_code, 0.0)
+                metric = validated_metrics[model_name][option_code]
+                stored_model_probability = round(model_probability, 6)
+                stored_market_probability = round(market_probability, 6)
+                stored_break_even = round(metric.break_even_probability, 6)
                 fair_odds = 1.0 / model_probability if model_probability > 0 else None
                 store_model_prediction(
                     conn,
@@ -185,8 +225,8 @@ def store_derived_play_predictions(
                         "play_type": play_type,
                         "option_code": option_code,
                         "raw_model_probability": round(raw_probability, 6),
-                        "model_probability": round(model_probability, 6),
-                        "market_probability": round(market_probability, 6),
+                        "model_probability": stored_model_probability,
+                        "market_probability": stored_market_probability,
                         "probability_lower_bound": round(
                             max(0.0, model_probability - disagreement * 2), 6
                         ),
@@ -196,7 +236,17 @@ def store_derived_play_predictions(
                         "uncertainty_score": round(disagreement, 6),
                         "adjusted_probability": round(model_probability, 6),
                         "fair_odds": round(fair_odds, 4) if fair_odds else None,
-                        "ev": round(expected_value(model_probability, sp_value), 6),
+                        "ev": round(stored_model_probability * _sp_value - 1.0, 6),
+                        "break_even_probability": stored_break_even,
+                        "market_edge": round(
+                            stored_model_probability - stored_market_probability, 6
+                        ),
+                        "breakeven_edge": round(
+                            stored_model_probability - stored_break_even, 6
+                        ),
+                        "validation_status": "valid",
+                        "validation_errors": [],
+                        "calculation_version": "market_metrics_v2",
                         "confidence_score": round(max(0.0, 1.0 - disagreement * 3), 4),
                         "risk_score": round(min(1.0, disagreement * 3), 4),
                         "uncertainty_reason": {
@@ -204,6 +254,7 @@ def store_derived_play_predictions(
                             if model_name == "market_baseline"
                             else "score_matrix",
                             "model_capability": play_type,
+                            "model_independent": False,
                             "recommendation_filtered": False,
                             "feature_adjustment": {
                                 "applied": abs(raw_probability - model_probability) > 1e-9,

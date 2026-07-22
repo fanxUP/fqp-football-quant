@@ -55,8 +55,10 @@ export function RecommendationPanel(props: RecommendationPanelProps) {
                 <div className="betting-recommendation-metrics">
                   <span>模型 {percent(recommendation.model_probability)}</span>
                   <span>市场 {percent(recommendation.market_probability)}</span>
-                  <span>EV {recommendation.ev.toFixed(3)}</span>
-                  <span>置信 {percent(recommendation.confidence)}</span>
+                  <span>保本 {percent(recommendation.break_even_probability)}</span>
+                  <span>市场 Edge {percent(recommendation.market_edge)}</span>
+                  <span>EV {percent(recommendation.ev)}</span>
+                  <span>完整度 {recommendation.data_completeness == null ? '—' : `${recommendation.data_completeness.toFixed(0)}%`}</span>
                 </div>
                 <button
                   type="button"
