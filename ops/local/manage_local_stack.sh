@@ -13,6 +13,7 @@ FRONTEND_PORT="${FQP_FRONTEND_PORT:-8066}"
 BACKEND_PORT="${FQP_BACKEND_PORT:-8006}"
 
 fail() { echo "[fqp-local-stack] ERROR: $*" >&2; exit 1; }
+log() { echo "[fqp-local-stack] $*"; }
 
 is_registered() {
     launchctl print "$DOMAIN/$LABEL" >/dev/null 2>&1
@@ -59,6 +60,7 @@ status() {
 
 case "${1:-status}" in
     start)
+        log "checking native dependencies"
         command -v brew >/dev/null 2>&1 || fail "Homebrew is not installed"
         [[ -x "$POSTGRES_BIN/pg_isready" ]] || fail "postgresql@18 is not installed"
         [[ -x "$REDIS_BIN/redis-cli" ]] || fail "redis is not installed"
@@ -69,13 +71,18 @@ case "${1:-status}" in
         brew services start postgresql@18 >/dev/null
         brew services start redis >/dev/null
         wait_for_dependencies
+        log "applying database migrations"
         "$SCRIPT_DIR/apply_local_migrations.sh"
+        log "registering application services"
         "$PYTHON_BIN" -m scripts.local.local_stack_launch_agent --target "$PLIST_FILE" >/dev/null
         if is_registered; then
             launchctl bootout "$DOMAIN/$LABEL"
         fi
         launchctl bootstrap "$DOMAIN" "$PLIST_FILE"
-        launchctl kickstart -k "$DOMAIN/$LABEL"
+        # RunAtLoad starts the freshly bootstrapped service. A forced kickstart
+        # here would immediately terminate that first process tree and can also
+        # interrupt the calling terminal before health verification completes.
+        log "waiting for application health checks"
         wait_for_health
         status
         ;;
@@ -87,8 +94,10 @@ case "${1:-status}" in
         echo "[fqp-local-stack] stopped"
         ;;
     restart)
+        log "restarting local stack"
         "$0" stop
         "$0" start
+        log "local stack restart completed"
         ;;
     status)
         status

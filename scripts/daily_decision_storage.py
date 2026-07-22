@@ -63,7 +63,24 @@ def list_agent_daily_decisions(conn: Any, limit: int = 14) -> list[dict[str, Any
         cur.execute(
             """
             SELECT plan_date, total_budget, suggested_stake, unused_budget,
-                   status, reason, updated_at
+                   status, reason, updated_at,
+                   CASE
+                       WHEN EXISTS (
+                           SELECT 1 FROM simulation_tickets st
+                           WHERE st.budget_plan_id = daily_budget_plans.id
+                             AND COALESCE(st.ticket_type, '') <> 'training_observation'
+                             AND COALESCE(st.strategy_pool, '') NOT LIKE '%%observation%%'
+                       ) THEN 'formal'
+                       WHEN EXISTS (
+                           SELECT 1 FROM simulation_tickets st
+                           WHERE st.budget_plan_id = daily_budget_plans.id
+                             AND (
+                                 st.ticket_type = 'training_observation'
+                                 OR COALESCE(st.strategy_pool, '') LIKE '%%observation%%'
+                             )
+                       ) THEN 'observation'
+                       ELSE 'none'
+                   END AS decision_type
             FROM daily_budget_plans
             WHERE status IN ('purchased', 'abstained', 'failed')
             ORDER BY plan_date DESC
@@ -81,6 +98,7 @@ def list_agent_daily_decisions(conn: Any, limit: int = 14) -> list[dict[str, Any
             "unusedBudget": float(row[3] or 0),
             "reason": row[5] or "",
             "updatedAt": _iso(row[6]),
+            "decisionType": row[7],
         }
         for row in rows
     ]

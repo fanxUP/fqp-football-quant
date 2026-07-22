@@ -119,6 +119,7 @@ describe('CompetitionPage', () => {
         decisionDate: '2026-07-14', status: 'purchased', totalBudget: 500,
         totalStake: 2, unusedBudget: 498,
         reason: '已用 2 元生成 1 张高风险虚拟观察票',
+        decisionType: 'observation',
         updatedAt: '2026-07-14T16:00:00',
       }],
       total: 1,
@@ -127,7 +128,8 @@ describe('CompetitionPage', () => {
     render(<CompetitionPage />);
 
     expect(await screen.findByText('Agent票 · 20260714002')).toBeInTheDocument();
-    expect(screen.getByText('已购买')).toBeInTheDocument();
+    expect(screen.getByText('竞赛观察票')).toBeInTheDocument();
+    expect(screen.queryByText('已购买')).not.toBeInTheDocument();
     expect(screen.getByText('已用 2 元生成 1 张高风险虚拟观察票')).toBeInTheDocument();
     expect(screen.getByText('¥498.00')).toBeInTheDocument();
   });

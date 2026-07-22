@@ -1203,6 +1203,7 @@ export interface AgentDailyDecision {
   unusedBudget: number;
   reason: string;
   updatedAt: string | null;
+  decisionType: 'formal' | 'observation' | 'none';
 }
 
 // ---- Settings (localStorage) ----

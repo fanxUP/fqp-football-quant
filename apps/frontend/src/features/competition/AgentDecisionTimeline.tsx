@@ -2,9 +2,14 @@ import type { AgentDailyDecision } from '../../core/types';
 import EmptyState from '../../shared/components/EmptyState';
 
 const STATUS_META = {
-  purchased: { label: '已购买', color: 'var(--fqp-success, #16a34a)' },
+  purchased: { label: '正式推荐已购买', color: 'var(--fqp-success, #16a34a)' },
   abstained: { label: '已放弃', color: 'var(--fqp-warning, #d97706)' },
   failed: { label: '执行失败', color: 'var(--fqp-danger, #dc2626)' },
+};
+
+const OBSERVATION_META = {
+  label: '竞赛观察票',
+  color: 'var(--fqp-warning, #d97706)',
 };
 
 function money(value: number): string {
@@ -36,7 +41,9 @@ export default function AgentDecisionTimeline({ decisions }: { decisions: AgentD
         </thead>
         <tbody>
           {decisions.map((decision) => {
-            const meta = STATUS_META[decision.status];
+            const meta = decision.status === 'purchased' && decision.decisionType === 'observation'
+              ? OBSERVATION_META
+              : STATUS_META[decision.status];
             return (
               <tr key={decision.decisionDate}>
                 <td className="fqp-mono">{decision.decisionDate}</td>

@@ -53,3 +53,6 @@ def test_local_manager_applies_migrations_before_launching_runtime() -> None:
     launch_agent = manager.index("scripts.local.local_stack_launch_agent")
     assert migration < launch_agent
     assert '--max-time 10 "http://127.0.0.1:${BACKEND_PORT}/health"' in manager
+    assert 'launchctl kickstart -k "$DOMAIN/$LABEL"' not in manager
+    assert 'log "waiting for application health checks"' in manager
+    assert 'log "local stack restart completed"' in manager
