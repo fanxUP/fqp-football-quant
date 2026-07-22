@@ -150,9 +150,10 @@ def get_live_recommendations(
                                      os.snapshot_time DESC, os.id DESC
                         ) latest
                     ) current_market ON current_market.implied_probability_sum > 0
-                    WHERE st.created_at::date = timezone('Asia/Shanghai', NOW())::date
+                    WHERE (st.created_at AT TIME ZONE 'UTC'
+                           AT TIME ZONE 'Asia/Shanghai')::date
+                          = timezone('Asia/Shanghai', NOW())::date
                       AND st.ticket_status IN ('generated', 'activated', 'purchased')
-                      AND mv.is_active = true
                       AND mp.odds_snapshot_id IS NOT NULL
                       AND mp.feature_snapshot_id IS NOT NULL
                       AND mp.validation_status = 'valid'

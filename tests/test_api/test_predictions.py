@@ -65,14 +65,19 @@ class TestPredictionsEndpoint:
         assert "mp.feature_snapshot_id IS NOT NULL" in sql
         assert "mp.validation_status = 'valid'" in sql
         assert "model_independent" in sql
-        assert "mv.is_active = true" in sql
+        # A released ticket is immutable decision evidence. Retraining may
+        # supersede its model version, but must not make the ticket disappear.
+        assert "mv.is_active = true" not in sql
         assert "simulation_tickets" in sql
         assert "simulation_ticket_items" in sql
         assert "current_odds.sp_value" in sql
         assert "AS market_probability" in sql
         assert "official_markets" in sql
         normalized = " ".join(sql.split())
-        assert "st.created_at::date = timezone('Asia/Shanghai', NOW())::date" in normalized
+        assert (
+            "(st.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Shanghai')::date "
+            "= timezone('Asia/Shanghai', NOW())::date"
+        ) in normalized
         assert "st.ticket_status IN ('generated', 'activated', 'purchased')" in normalized
         assert "CASE WHEN sti.play_type IN ('spf', 'rqspf') THEN CASE sti.option_code" in normalized
 
