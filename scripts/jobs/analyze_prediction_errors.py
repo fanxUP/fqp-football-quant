@@ -12,15 +12,10 @@ Runs daily at 23:45, after settlement and daily review.
 
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Any
 
 from apps.backend.src.db import get_db
 from scripts.real_ticket_storage import create_error_analyses_batch
-
-
-def _now() -> str:
-    return datetime.now().isoformat(timespec="seconds")
 
 
 def run(dry_run: bool = False) -> dict[str, Any]:

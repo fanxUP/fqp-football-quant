@@ -15,6 +15,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
+from scripts.business_time import utc_now_iso
+
 
 @dataclass
 class TicketItem:
@@ -49,8 +51,8 @@ class TicketParseResult:
     parsed_at: str = ""
 
 
-def _now() -> str:
-    return datetime.now().isoformat(timespec="seconds")
+def _now(value: datetime | None = None) -> str:
+    return utc_now_iso(value)
 
 
 # ---------------------------------------------------------------------------

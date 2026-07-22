@@ -20,11 +20,12 @@ from typing import Any
 
 from apps.backend.src.db import get_db
 from scripts.agents.task_queue import finish_tracked_job, start_tracked_job
+from scripts.business_time import utc_now_iso
 from scripts.ops_storage import store_contamination_audit
 
 
-def _now() -> str:
-    return datetime.now().isoformat(timespec="seconds")
+def _now(value: datetime | None = None) -> str:
+    return utc_now_iso(value)
 
 
 def _resolve_previous_findings(conn: Any, check_type: str) -> None:

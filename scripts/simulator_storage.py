@@ -6,15 +6,9 @@ All functions accept conn: Any and call conn.commit() internally.
 
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Any
 
 INITIAL_SIMULATOR_BALANCE = 100_000.00  # 初始虚拟资金 10万元
-
-
-def _now() -> str:
-    return datetime.now().isoformat(timespec="seconds")
-
 
 # ---- Row dict helpers ----
 

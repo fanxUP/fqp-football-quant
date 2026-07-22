@@ -24,6 +24,7 @@ from scripts.agent_storage import (
 from scripts.agent_storage import (
     transition_task as _transition_task,
 )
+from scripts.business_time import utc_now_iso
 
 
 @dataclass
@@ -38,6 +39,10 @@ class AgentTask:
     input_refs: dict[str, Any] = field(default_factory=dict)
     acceptance_criteria: list[str] = field(default_factory=list)
     human_review_required: bool = False
+
+
+def _now(value: datetime | None = None) -> str:
+    return utc_now_iso(value)
 
 
 def requires_human_review(task: AgentTask) -> bool:
@@ -78,7 +83,7 @@ def create_task(task: AgentTask) -> dict[str, Any]:
         "status": task.status,
         "owner_agent": task.owner_agent,
         "human_review_required": requires_human_review(task),
-        "created_at": datetime.utcnow().isoformat(),
+        "created_at": _now(),
     }
 
 

@@ -18,9 +18,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from scripts.business_time import utc_now_iso
 
-def _now() -> str:
-    return datetime.now().isoformat(timespec="seconds")
+
+def _now(value: datetime | None = None) -> str:
+    return utc_now_iso(value)
 
 
 def _check_command(cmd: list[str]) -> dict:

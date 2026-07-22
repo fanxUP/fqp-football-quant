@@ -16,10 +16,6 @@ from scripts.real_ticket_storage import upsert_daily_review
 from scripts.review_generator import daily_summary
 
 
-def _now() -> str:
-    return datetime.now().isoformat(timespec="seconds")
-
-
 def _yesterday(now: datetime | None = None) -> str:
     return business_yesterday(now or datetime.now(UTC)).isoformat()
 

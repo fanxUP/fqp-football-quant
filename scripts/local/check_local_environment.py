@@ -10,6 +10,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from scripts.business_time import utc_now_iso
+
 ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / "data" / "runtime_version_snapshot.json"
 
@@ -22,6 +24,10 @@ COMMANDS = {
     "redis": ["/opt/homebrew/opt/redis/bin/redis-server", "--version"],
     "codex": ["codex", "--version"],
 }
+
+
+def _generated_at(value: datetime | None = None) -> str:
+    return utc_now_iso(value)
 
 
 def run(cmd: list[str]) -> dict:
@@ -45,7 +51,7 @@ def main() -> None:
             f"Python 3.14 is required; current runtime is {sys.version_info.major}.{sys.version_info.minor}."
         )
 
-    snapshot: dict[str, Any] = {"generated_at": datetime.now().isoformat(timespec="seconds"), "components": {}}
+    snapshot: dict[str, Any] = {"generated_at": _generated_at(), "components": {}}
     for name, cmd in COMMANDS.items():
         snapshot["components"][name] = run(cmd)
     OUT.parent.mkdir(parents=True, exist_ok=True)

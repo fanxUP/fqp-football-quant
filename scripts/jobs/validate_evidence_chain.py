@@ -16,11 +16,25 @@ from typing import Any
 
 from apps.backend.src.db import get_db
 from scripts.agents.task_queue import finish_tracked_job, start_tracked_job
+from scripts.business_time import business_now, utc_now_iso
 from scripts.ops_storage import store_evidence_chain_audit
 
 
-def _now() -> str:
-    return datetime.now().isoformat(timespec="seconds")
+def _now(value: datetime | None = None) -> str:
+    return utc_now_iso(value)
+
+
+def _business_snapshot_age_seconds(
+    snapshot_time: datetime | str, now: datetime | None = None
+) -> int:
+    """Compare a business-local snapshot against the Asia/Shanghai clock."""
+    snapshot = (
+        datetime.fromisoformat(snapshot_time) if isinstance(snapshot_time, str) else snapshot_time
+    )
+    if snapshot.tzinfo is not None:
+        snapshot = business_now(snapshot).replace(tzinfo=None)
+    current = business_now(now).replace(tzinfo=None)
+    return int((current - snapshot).total_seconds())
 
 
 def _get_recent_ticket_items(conn: Any, days: int = 7) -> list[dict]:
@@ -169,8 +183,9 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
                     )
                     row = cur.fetchone()
                 if row and row[0]:
-                    age = (datetime.now() - row[0]).total_seconds()
-                    chain_details["odds_snapshot_age_seconds"] = int(age)
+                    chain_details["odds_snapshot_age_seconds"] = (
+                        _business_snapshot_age_seconds(row[0])
+                    )
                 else:
                     broken_link = "odds_snapshot_invalid"
                     chain_ok = False

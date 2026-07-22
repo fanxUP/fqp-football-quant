@@ -18,11 +18,12 @@ from pathlib import Path
 from typing import Any
 
 from apps.backend.src.db import get_db
+from scripts.business_time import utc_now_iso
 from scripts.ops_storage import store_backup_log
 
 
-def _now() -> str:
-    return datetime.now().isoformat(timespec="seconds")
+def _now(value: datetime | None = None) -> str:
+    return utc_now_iso(value)
 
 
 def _get_backup_dir() -> str:
