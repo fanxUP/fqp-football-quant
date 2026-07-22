@@ -23,6 +23,7 @@ from apps.backend.src.routers import (
     teams,
     tickets,
     ui,
+    upsets,
 )
 
 
@@ -67,5 +68,6 @@ def create_app() -> FastAPI:
     app.include_router(competition.router)
     app.include_router(dashboard.router)
     app.include_router(ui.router)
+    app.include_router(upsets.router)
 
     return app
