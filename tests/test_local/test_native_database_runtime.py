@@ -22,8 +22,8 @@ def test_incremental_migrations_track_applied_files() -> None:
     assert "local_schema_migrations" in script
     assert "ON_ERROR_STOP=1" in script
     assert "BASELINE_VERSION=32" in script
-    assert "SELECT filename FROM local_schema_migrations ORDER BY filename" in script
-    assert "SELECT 1 FROM local_schema_migrations WHERE filename" not in script
+    assert "SELECT checksum_sha256" in script
+    assert "WHERE filename = :'filename'" in script
     assert "FQP_PSQL_BIN" in script
     assert "docker compose" not in script
 
@@ -142,3 +142,11 @@ def test_evidence_less_agent_tickets_are_purged_and_statistics_rebuilt() -> None
     assert "refresh_agent_statistics_after_cleanup" in migration
     assert "competition_daily_snapshots" in migration
     assert "daily_reviews" in migration
+
+
+def test_local_migration_runner_detects_applied_file_drift() -> None:
+    runner = (PROJECT_ROOT / "ops/local/apply_local_migrations.sh").read_text(encoding="utf-8")
+
+    assert "checksum_sha256" in runner
+    assert "migration_checksum" in runner
+    assert "applied migration was modified" in runner

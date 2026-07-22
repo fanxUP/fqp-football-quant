@@ -14,6 +14,14 @@ psql_exec() {
     "$PSQL_BIN" -X "$DATABASE_URL" -v ON_ERROR_STOP=1 "$@"
 }
 
+migration_checksum() {
+    if command -v sha256sum >/dev/null 2>&1; then
+        sha256sum "$1" | awk '{print $1}'
+    else
+        shasum -a 256 "$1" | awk '{print $1}'
+    fi
+}
+
 [[ -f "$ENV_FILE" ]] || { echo "[fqp-db] missing $ENV_FILE" >&2; exit 1; }
 set -a
 # shellcheck disable=SC1090
@@ -36,8 +44,11 @@ SQL
 BEGIN;
 CREATE TABLE IF NOT EXISTS local_schema_migrations (
     filename TEXT PRIMARY KEY,
+    checksum_sha256 TEXT,
     applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+ALTER TABLE local_schema_migrations
+    ADD COLUMN IF NOT EXISTS checksum_sha256 TEXT;
 SQL
     for migration in "$PROJECT_ROOT"/sql/*.sql; do
         filename="$(basename "$migration")"
@@ -50,23 +61,47 @@ SQL
     printf 'COMMIT;\n'
 } | psql_exec -q
 
-applied_files="$(psql_exec -Atq -c 'SELECT filename FROM local_schema_migrations ORDER BY filename;')"
-applied_files=$'\n'"$applied_files"$'\n'
+# Existing ledgers predate checksums. Accept the current repository once as the
+# baseline, then fail closed whenever an applied migration is edited later.
+for migration in "$PROJECT_ROOT"/sql/*.sql; do
+    filename="$(basename "$migration")"
+    [[ "$filename" =~ ^([0-9]+)_.*\.sql$ ]] || continue
+    checksum="$(migration_checksum "$migration")"
+    psql_exec -q -v filename="$filename" -v checksum="$checksum" <<'SQL'
+UPDATE local_schema_migrations
+SET checksum_sha256 = :'checksum'
+WHERE filename = :'filename'
+  AND checksum_sha256 IS NULL;
+SQL
+done
 
 for migration in "$PROJECT_ROOT"/sql/*.sql; do
     filename="$(basename "$migration")"
     [[ "$filename" =~ ^([0-9]+)_.*\.sql$ ]] || continue
     version=$((10#${BASH_REMATCH[1]}))
 
-    (( version <= BASELINE_VERSION )) && continue
+    checksum="$(migration_checksum "$migration")"
+    stored_checksum="$(psql_exec -Atq -v filename="$filename" <<'SQL'
+SELECT checksum_sha256
+FROM local_schema_migrations
+WHERE filename = :'filename';
+SQL
+)"
+    if [[ -n "$stored_checksum" ]]; then
+        if [[ "$stored_checksum" != "$checksum" ]]; then
+            echo "[fqp-db] applied migration was modified: $filename" >&2
+            exit 1
+        fi
+        continue
+    fi
 
-    [[ "$applied_files" == *$'\n'"$filename"$'\n'* ]] && continue
+    (( version <= BASELINE_VERSION )) && continue
 
     echo "[fqp-db] applying $filename"
     {
         printf 'BEGIN;\n'
         sed -n '1,$p' "$migration"
-        printf "\nINSERT INTO local_schema_migrations (filename) VALUES ('%s');\n" "$filename"
+        printf "\nINSERT INTO local_schema_migrations (filename, checksum_sha256) VALUES ('%s', '%s');\n" "$filename" "$checksum"
         printf 'COMMIT;\n'
     } | psql_exec -q
 done

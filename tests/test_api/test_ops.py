@@ -219,6 +219,29 @@ class TestOpsHealth:
         assert resp.json()["snapshot_time"] == "2026-07-15T03:55:00Z"
 
 
+def test_backup_status_uses_latest_verified_restore_not_rolling_perfection(client):
+    mock_conn, _ = _mock_db_conn()
+    latest = {
+        "success": True,
+        "integrity_check_passed": True,
+        "restore_test_passed": True,
+        "started_at": datetime.now(UTC),
+    }
+    with (
+        patch("apps.backend.src.routers.ops.get_db", return_value=mock_conn),
+        patch(
+            "apps.backend.src.routers.ops.get_backup_success_rate",
+            return_value={"success_rate": 0.913, "total_backups": 23},
+        ),
+        patch("apps.backend.src.routers.ops.get_latest_backup_log", return_value=latest),
+    ):
+        response = client.get("/api/ops/backups")
+
+    assert response.status_code == 200
+    assert response.json()["success_rate"]["success_rate"] == 0.913
+    assert response.json()["passes_stage8"] is True
+
+
 class TestOpsPipeline:
     def test_pipeline_excludes_dry_runs_and_surfaces_result_error_message(self, client):
         mock_conn, mock_cur = _mock_db_conn()

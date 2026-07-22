@@ -13,7 +13,7 @@ scripts/feature_storage.py.
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from scripts.business_time import utc_now_iso
@@ -295,6 +295,29 @@ def get_latest_backup_log(conn: Any) -> dict | None:
             "created_at",
         ],
     )
+
+
+def is_latest_backup_healthy(latest: dict | None, *, max_age_hours: int = 36) -> bool:
+    """Judge current recoverability separately from the rolling success KPI."""
+    if not latest:
+        return False
+    if not all(
+        latest.get(field) is True
+        for field in ("success", "integrity_check_passed", "restore_test_passed")
+    ):
+        return False
+
+    started_at = latest.get("started_at")
+    if isinstance(started_at, str):
+        try:
+            started_at = datetime.fromisoformat(started_at.replace("Z", "+00:00"))
+        except ValueError:
+            return False
+    if not isinstance(started_at, datetime):
+        return False
+    if started_at.tzinfo is None:
+        started_at = started_at.replace(tzinfo=UTC)
+    return datetime.now(UTC) - started_at.astimezone(UTC) <= timedelta(hours=max_age_hours)
 
 
 def get_backup_success_rate(conn: Any, days: int = 30) -> dict:

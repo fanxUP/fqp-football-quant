@@ -18,6 +18,7 @@ from scripts.ops_storage import (
     get_latest_backup_log,
     get_latest_health_snapshot,
     get_recent_contamination_issues,
+    is_latest_backup_healthy,
 )
 
 router = APIRouter(tags=["ops"])
@@ -174,5 +175,5 @@ def get_backup_status(days: int = Query(30)):
         "period_days": days,
         "success_rate": success_rate,
         "latest_backup": latest,
-        "passes_stage8": success_rate["success_rate"] >= 1.0,
+        "passes_stage8": is_latest_backup_healthy(latest),
     }

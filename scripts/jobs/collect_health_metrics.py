@@ -28,6 +28,8 @@ from scripts.ops_storage import (
     get_backup_success_rate,
     get_contamination_stats,
     get_evidence_chain_stats,
+    get_latest_backup_log,
+    is_latest_backup_healthy,
     store_health_snapshot,
 )
 
@@ -113,35 +115,38 @@ def _compute_review_generation_rate(
     conn: Any,
     review_end: date | None = None,
 ) -> dict:
-    """Compute review success for completed business days only."""
+    """Compute review success only for dates whose official matches all settled."""
     end = review_end or (business_today() - timedelta(days=1))
     start = end - timedelta(days=29)
     with conn.cursor() as cur:
-        # Successful: reviews with content (not empty/error)
+        completed_days_sql = """
+            SELECT match.business_date
+            FROM official_matches match
+            LEFT JOIN official_results result ON result.match_id = match.id
+            WHERE match.business_date BETWEEN %(start)s AND %(end)s
+            GROUP BY match.business_date
+            HAVING COUNT(*) > 0
+               AND COUNT(*) = COUNT(*) FILTER (
+                   WHERE result.result_status IN ('confirmed', 'final')
+               )
+        """
         cur.execute(
-            """
-            SELECT COUNT(*) FROM daily_reviews
-            WHERE review_date BETWEEN %(start)s AND %(end)s
-              AND summary_text IS NOT NULL
-              AND summary_text != ''
+            f"""
+            SELECT COUNT(*)
+            FROM daily_reviews review
+            WHERE review.review_date IN ({completed_days_sql})
+              AND review.summary_text IS NOT NULL
+              AND review.summary_text != ''
             """,
             {"start": start, "end": end},
         )
         success = cur.fetchone()[0] or 0
-
-        # Find the earliest review date to calculate expected days
         cur.execute(
-            "SELECT MIN(review_date) FROM daily_reviews WHERE review_date <= %(end)s",
-            {"end": end},
+            f"SELECT COUNT(*) FROM ({completed_days_sql}) completed_days",
+            {"start": start, "end": end},
         )
-        earliest = cur.fetchone()[0]
-        if earliest:
-            days_running = (end - earliest).days + 1
-        else:
-            days_running = 1
-    # Expected = days since first review, capped at 30 and minimum 1
-    expected = max(1, min(30, days_running))
-    rate = round(success / expected, 4) if expected > 0 else 0.0
+        expected = cur.fetchone()[0] or 0
+    rate = round(success / expected, 4) if expected > 0 else 1.0
     return {
         "total_reviews_expected": expected,
         "successful_review_generations": success,
@@ -223,6 +228,7 @@ def run(dry_run: bool = False) -> dict[str, Any]:
 
         # 4. Backup success rate (last 30 days)
         backups = get_backup_success_rate(conn, days=30)
+        latest_backup = get_latest_backup_log(conn)
 
         # 5. Evidence chain completeness
         evidence = get_evidence_chain_stats(conn, days=30)
@@ -243,7 +249,7 @@ def run(dry_run: bool = False) -> dict[str, Any]:
         official_ok = official["rate"] >= 0.98
         odds_ok = odds_missing["rate"] <= 0.02
         reviews_ok = reviews["rate"] >= 0.99
-        backup_ok = backups["success_rate"] >= 1.0
+        backup_ok = is_latest_backup_healthy(latest_backup)
         evidence_ok = bool(
             evidence["has_data"]
             and evidence["completeness_rate"] is not None
@@ -298,7 +304,7 @@ def run(dry_run: bool = False) -> dict[str, Any]:
             if not reviews_ok:
                 notes_parts.append(f"日报成功率 {reviews['rate']:.1%} < 99%")
             if not backup_ok:
-                notes_parts.append(f"备份成功率 {backups['success_rate']:.1%} < 100%")
+                notes_parts.append("最近备份超时或未通过恢复校验")
             if not evidence_ok:
                 if evidence["has_data"] and evidence["completeness_rate"] is not None:
                     notes_parts.append(f"证据链完整率 {evidence['completeness_rate']:.1%} < 100%")
@@ -322,7 +328,7 @@ def run(dry_run: bool = False) -> dict[str, Any]:
             "official_collection_success_rate": official["rate"],
             "odds_snapshot_missing_rate": odds_missing["rate"],
             "review_generation_success_rate": reviews["rate"],
-            "backup_success": backups["success_rate"] >= 1.0,
+            "backup_success": backup_ok,
             "evidence_chain_completeness_rate": evidence["completeness_rate"],
             "data_contamination_count": contamination_count,
             "total_official_matches": official["total_official_matches"],
@@ -347,6 +353,7 @@ def run(dry_run: bool = False) -> dict[str, Any]:
                 "odds_missing": odds_missing,
                 "reviews": reviews,
                 "backups": backups,
+                "latest_backup": latest_backup,
                 "evidence": evidence,
                 "contamination": contamination,
                 "services": services,

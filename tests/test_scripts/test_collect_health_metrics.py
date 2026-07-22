@@ -15,7 +15,7 @@ from scripts.jobs.collect_health_metrics import (
 
 def test_review_generation_rate_expects_completed_days_through_yesterday(mock_conn):
     conn, cur = mock_conn
-    cur.fetchone.side_effect = [(15,), (date(2026, 6, 30),)]
+    cur.fetchone.side_effect = [(15,), (15,)]
 
     result = _compute_review_generation_rate(conn, review_end=date(2026, 7, 14))
 
@@ -25,7 +25,8 @@ def test_review_generation_rate_expects_completed_days_through_yesterday(mock_co
         "rate": 1.0,
     }
     query = " ".join(cur.execute.call_args_list[0].args[0].split())
-    assert "review_date BETWEEN" in query
+    assert "result.result_status IN ('confirmed', 'final')" in query
+    assert "COUNT(*) = COUNT(*) FILTER" in query
 
 
 def test_health_is_degraded_when_audit_samples_are_missing():
@@ -63,6 +64,8 @@ def test_health_is_degraded_when_audit_samples_are_missing():
             "scripts.jobs.collect_health_metrics.get_backup_success_rate",
             return_value={"success_rate": 1.0},
         ),
+        patch("scripts.jobs.collect_health_metrics.get_latest_backup_log", return_value={}),
+        patch("scripts.jobs.collect_health_metrics.is_latest_backup_healthy", return_value=True),
         patch(
             "scripts.jobs.collect_health_metrics.get_evidence_chain_stats",
             return_value={
@@ -152,6 +155,8 @@ def test_health_notes_report_noncritical_unresolved_contamination():
             "scripts.jobs.collect_health_metrics.get_backup_success_rate",
             return_value={"success_rate": 1.0},
         ),
+        patch("scripts.jobs.collect_health_metrics.get_latest_backup_log", return_value={}),
+        patch("scripts.jobs.collect_health_metrics.is_latest_backup_healthy", return_value=True),
         patch(
             "scripts.jobs.collect_health_metrics.get_evidence_chain_stats",
             return_value={
