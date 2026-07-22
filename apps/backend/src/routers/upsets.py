@@ -5,7 +5,12 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Query
 
 from apps.backend.src.db import get_db
-from scripts.upset.queries import get_upset_detail, get_upset_summary, list_upsets
+from scripts.upset.queries import (
+    get_upset_detail,
+    get_upset_summary,
+    list_upset_reports,
+    list_upsets,
+)
 
 router = APIRouter(prefix="/api/upsets", tags=["upsets"])
 
@@ -44,6 +49,12 @@ def index(
             offset=offset,
         )
     return {"items": items, "total": total, "limit": limit, "offset": offset}
+
+
+@router.get("/reports")
+def reports(limit: int = Query(12, ge=1, le=100)):
+    with get_db() as conn:
+        return {"items": list_upset_reports(conn, limit=limit)}
 
 
 @router.get("/{event_id}")

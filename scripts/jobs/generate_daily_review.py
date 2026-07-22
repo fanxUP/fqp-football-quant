@@ -14,6 +14,7 @@ from scripts.agents.task_queue import finish_tracked_job, start_tracked_job
 from scripts.business_time import business_yesterday
 from scripts.real_ticket_storage import upsert_daily_review
 from scripts.review_generator import daily_summary
+from scripts.upset.reports import generate_report
 
 
 def _yesterday(now: datetime | None = None) -> str:
@@ -231,6 +232,12 @@ def _run_impl(review_date: str | None = None, dry_run: bool = False) -> dict[str
                 "next_day_adjustment": "",
             },
         )
+        upset_report = generate_report(
+            conn,
+            report_type="daily",
+            start=date,
+            end=date,
+        )
 
     return {
         "status": "ok",
@@ -240,6 +247,7 @@ def _run_impl(review_date: str | None = None, dry_run: bool = False) -> dict[str
         "simulation_ticket_count": sim_ticket_count,
         "real_ticket_count": real_ticket_count,
         "summary": summary,
+        "upset_report": upset_report,
     }
 
 

@@ -2,14 +2,15 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import UpsetsPage from './UpsetsPage';
 
-const { summary, list, detail } = vi.hoisted(() => ({
+const { summary, list, detail, reports } = vi.hoisted(() => ({
   summary: vi.fn(),
   list: vi.fn(),
   detail: vi.fn(),
+  reports: vi.fn(),
 }));
 
 vi.mock('../core/apiClient', () => ({
-  api: { upsets: { summary, list, detail } },
+  api: { upsets: { summary, list, detail, reports } },
 }));
 
 describe('UpsetsPage', () => {
@@ -83,6 +84,17 @@ describe('UpsetsPage', () => {
       user_tickets: [{ ticket_id: 12, stake_amount: 20, profit_loss: -20 }],
       agent_tickets: [],
     });
+    reports.mockResolvedValue({ items: [{
+      id: 3,
+      report_type: 'weekly',
+      period_start: '2026-07-13',
+      period_end: '2026-07-19',
+      report_version: 'upset-report-v1',
+      report_markdown: '# 周报',
+      pdf_available: true,
+      validation_status: 'validated',
+      generated_at: '2026-07-22T12:00:00',
+    }] });
   });
 
   it('展示冷门统计、比赛卡片和数据等待状态', async () => {
@@ -94,6 +106,7 @@ describe('UpsetsPage', () => {
     expect(screen.getByText('主队 1:2 客队')).toBeInTheDocument();
     expect(screen.getByText('等待详细证据')).toBeInTheDocument();
     expect(screen.getByText('用户实票涉及')).toBeInTheDocument();
+    expect(screen.getByText('Markdown · HTML · PDF')).toBeInTheDocument();
   });
 
   it('筛选条件会传给列表和统计接口', async () => {

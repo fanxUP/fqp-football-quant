@@ -11,6 +11,24 @@ def _dict_rows(cursor: Any) -> list[dict[str, Any]]:
     return [dict(row) for row in cursor.fetchall()]
 
 
+def list_upset_reports(conn: Any, limit: int = 12) -> list[dict[str, Any]]:
+    """Return current report artifacts without exposing local filesystem contents."""
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            """
+            SELECT id, report_type, period_start, period_end, report_version,
+                   metrics_json, report_markdown, report_html,
+                   (report_pdf_path IS NOT NULL) AS pdf_available,
+                   validation_status, generated_at
+            FROM upset_report_metrics
+            ORDER BY period_end DESC, generated_at DESC, id DESC
+            LIMIT %s
+            """,
+            (limit,),
+        )
+        return _dict_rows(cur)
+
+
 def list_upsets(
     conn: Any,
     *,

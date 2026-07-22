@@ -100,3 +100,15 @@ export interface UpsetFilters {
   agent_involved?: boolean;
   review_status?: string;
 }
+
+export interface UpsetReport {
+  id: number;
+  report_type: 'daily' | 'weekly' | 'monthly';
+  period_start: string;
+  period_end: string;
+  report_version: string;
+  report_markdown: string;
+  pdf_available: boolean;
+  validation_status: string;
+  generated_at: string;
+}

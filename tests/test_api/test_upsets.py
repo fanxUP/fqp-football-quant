@@ -67,6 +67,15 @@ def test_upset_detail_returns_404_for_unknown_event(client):
     assert response.json()["detail"] == "冷门事件不存在"
 
 
+def test_upset_reports_return_versioned_artifacts(client):
+    reports = [{"id": 3, "report_type": "weekly", "pdf_available": True}]
+    with patch("apps.backend.src.routers.upsets.list_upset_reports", return_value=reports):
+        response = client.get("/api/upsets/reports?limit=6")
+
+    assert response.status_code == 200
+    assert response.json() == {"items": reports}
+
+
 def test_upset_detail_returns_signals_evidence_review_and_tickets(client):
     detail = {
         "event": {"id": 7, "upset_level": "A"},

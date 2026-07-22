@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { api } from '../core/apiClient';
 import UpsetDetailDialog from '../features/upsets/UpsetDetailDialog';
 import { UpsetCard, UpsetMetrics } from '../features/upsets/UpsetOverview';
-import type { UpsetDetail, UpsetFilters, UpsetListItem, UpsetSummary } from '../features/upsets/types';
+import type { UpsetDetail, UpsetFilters, UpsetListItem, UpsetReport, UpsetSummary } from '../features/upsets/types';
 import EmptyState from '../shared/components/EmptyState';
 import ErrorState from '../shared/components/ErrorState';
 import LoadingSpinner from '../shared/components/LoadingSpinner';
@@ -17,17 +17,20 @@ export default function UpsetsPage() {
   const [error, setError] = useState<string | null>(null);
   const [detail, setDetail] = useState<UpsetDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [reports, setReports] = useState<UpsetReport[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [summaryResponse, listResponse] = await Promise.all([
+      const [summaryResponse, listResponse, reportResponse] = await Promise.all([
         api.upsets.summary({ start_date: filters.start_date, end_date: filters.end_date }),
         api.upsets.list({ ...filters, limit: 50, offset: 0 }),
+        api.upsets.reports(6),
       ]);
       setSummary(summaryResponse);
       setItems(listResponse.items);
+      setReports(reportResponse.items);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : '加载冷门研究数据失败');
     } finally {
@@ -65,6 +68,20 @@ export default function UpsetsPage() {
       ) : (
         <>
           {summary && <UpsetMetrics summary={summary} />}
+          {reports.length > 0 && (
+            <section className="upset-reports" aria-label="冷门周期报告">
+              <header><h2>周期报告</h2><span>日报 / 周报 / 月报</span></header>
+              <div>
+                {reports.map((report) => (
+                  <article key={report.id}>
+                    <strong>{report.report_type === 'daily' ? '日报' : report.report_type === 'weekly' ? '周报' : '月报'}</strong>
+                    <span>{report.period_start} 至 {report.period_end}</span>
+                    <small>{report.pdf_available ? 'Markdown · HTML · PDF' : 'Markdown · HTML'}</small>
+                  </article>
+                ))}
+              </div>
+            </section>
+          )}
           {items.length === 0 ? <EmptyState icon="🧊" title="没有符合条件的冷门" description="调整日期、等级或玩法筛选" /> : (
             <section className="upset-list" aria-label="冷门比赛列表">
               {items.map((item) => <UpsetCard key={item.id} item={item} onOpen={() => void openDetail(item.id)} />)}

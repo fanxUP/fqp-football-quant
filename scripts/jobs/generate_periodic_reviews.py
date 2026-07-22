@@ -9,6 +9,7 @@ from apps.backend.src.db import get_db
 from scripts.business_time import business_today
 from scripts.real_ticket_storage import upsert_monthly_review, upsert_weekly_review
 from scripts.review_generator import monthly_summary, weekly_summary
+from scripts.upset.reports import generate_report
 
 
 def _previous_week(today: date | None = None) -> tuple[str, str]:
@@ -106,8 +107,20 @@ def run_weekly(
         }
         data["strategy_adjustment"] = weekly_summary(data)
         review_id = upsert_weekly_review(conn, data)
+        upset_report = generate_report(
+            conn,
+            report_type="weekly",
+            start=start,
+            end=end,
+        )
 
-    return {"status": "ok", "review_id": review_id, "week_start": start, "week_end": end}
+    return {
+        "status": "ok",
+        "review_id": review_id,
+        "week_start": start,
+        "week_end": end,
+        "upset_report": upset_report,
+    }
 
 
 def run_monthly(month: str | None = None, dry_run: bool = False) -> dict[str, Any]:
@@ -145,8 +158,23 @@ def run_monthly(month: str | None = None, dry_run: bool = False) -> dict[str, An
         }
         data["summary_text"] = monthly_summary(data)
         review_id = upsert_monthly_review(conn, data)
+        month_start = f"{target_month}-01"
+        month_end = (
+            date.fromisoformat(month_start).replace(day=28) + timedelta(days=4)
+        ).replace(day=1) - timedelta(days=1)
+        upset_report = generate_report(
+            conn,
+            report_type="monthly",
+            start=month_start,
+            end=month_end.isoformat(),
+        )
 
-    return {"status": "ok", "review_id": review_id, "month": target_month}
+    return {
+        "status": "ok",
+        "review_id": review_id,
+        "month": target_month,
+        "upset_report": upset_report,
+    }
 
 
 if __name__ == "__main__":

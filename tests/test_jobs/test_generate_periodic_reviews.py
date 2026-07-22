@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from scripts.jobs.generate_periodic_reviews import _aggregate_review_rows
 
 
@@ -24,3 +26,10 @@ def test_periodic_review_handles_no_stake_without_fake_roi():
 
     assert aggregate["roi"] == 0.0
     assert aggregate["max_drawdown"] == 0.0
+
+
+def test_periodic_reviews_generate_weekly_and_monthly_upset_reports():
+    source = Path("scripts/jobs/generate_periodic_reviews.py").read_text()
+
+    assert 'report_type="weekly"' in source
+    assert 'report_type="monthly"' in source

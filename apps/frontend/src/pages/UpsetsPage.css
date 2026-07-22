@@ -7,6 +7,13 @@
 .upset-metric span, .upset-metric small { color: var(--fqp-text-muted); }
 .upset-metric strong { color: var(--fqp-text); font: 700 1.5rem/1.2 var(--fqp-font-mono); }
 .upset-list { display: grid; gap: .75rem; }
+.upset-reports { display: grid; gap: .75rem; padding: 1rem; border: 1px solid var(--fqp-border); background: var(--fqp-bg-glass); }
+.upset-reports > header { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; }
+.upset-reports h2 { margin: 0; font-size: 1rem; color: var(--fqp-text); }
+.upset-reports > header span, .upset-reports small { color: var(--fqp-text-muted); }
+.upset-reports > div { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .75rem; }
+.upset-reports article { display: grid; gap: .3rem; padding: .75rem; border: 1px solid var(--fqp-border); color: var(--fqp-text-muted); }
+.upset-reports article strong { color: var(--fqp-text); }
 .upset-card { display: grid; gap: .75rem; padding: 1rem 1.25rem; border: 1px solid var(--fqp-border); background: var(--fqp-bg-glass); }
 .upset-card > header { display: flex; justify-content: space-between; gap: 1rem; }
 .upset-code { color: var(--fqp-text); font-weight: 700; }
@@ -32,4 +39,4 @@
 .upset-muted { color: var(--fqp-text-muted); }
 .upset-detail-loading { position: fixed; right: 1rem; bottom: 1rem; z-index: 60; padding: .75rem 1rem; border: 1px solid var(--fqp-border); background: var(--fqp-bg); color: var(--fqp-text); }
 @media (max-width: 64rem) { .upset-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-@media (max-width: 40rem) { .upset-metrics, .upset-ticket-columns { grid-template-columns: 1fr; } .upset-filters label { flex: 1 1 100%; } .upset-card > header { align-items: start; } }
+@media (max-width: 40rem) { .upset-metrics, .upset-ticket-columns, .upset-reports > div { grid-template-columns: 1fr; } .upset-filters label { flex: 1 1 100%; } .upset-card > header { align-items: start; } }

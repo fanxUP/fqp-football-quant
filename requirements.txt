@@ -13,6 +13,7 @@ beautifulsoup4
 playwright
 python-multipart
 jinja2
+reportlab==4.4.9
 apscheduler
 redis
 alembic

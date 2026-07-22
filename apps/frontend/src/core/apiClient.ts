@@ -173,6 +173,10 @@ export const api = {
       ),
     detail: (eventId: number) =>
       request<import('../features/upsets/types').UpsetDetail>(`/api/upsets/${eventId}`),
+    reports: (limit = 12) =>
+      request<{ items: import('../features/upsets/types').UpsetReport[] }>(
+        `/api/upsets/reports?limit=${limit}`,
+      ),
   },
 
   // Matches

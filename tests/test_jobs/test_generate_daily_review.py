@@ -25,6 +25,7 @@ def test_daily_review_only_counts_prematch_features_and_predictions(mock_conn):
         patch.object(generate_daily_review, "get_db", return_value=conn),
         patch.object(generate_daily_review, "daily_summary", return_value="summary"),
         patch.object(generate_daily_review, "upsert_daily_review", return_value=7),
+        patch.object(generate_daily_review, "generate_report", return_value={}),
     ):
         generate_daily_review._run_impl(review_date="2026-07-14")
 
