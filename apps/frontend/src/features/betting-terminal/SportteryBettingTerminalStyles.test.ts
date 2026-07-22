@@ -25,8 +25,8 @@ describe('SportteryBettingTerminal visual semantics', () => {
     expect(stylesheet).toMatch(/span\.is-negative\s*{[^}]*color:\s*var\(--st-handicap-negative\)/);
     expect(stylesheet).toContain('--st-handicap-positive: #ff6b73;');
     expect(stylesheet).toContain('--st-handicap-negative: #2fc39b;');
-    expect(stylesheet).toMatch(/span\.is-positive\s*{[^}]*background:\s*transparent/);
-    expect(stylesheet).toMatch(/span\.is-negative\s*{[^}]*background:\s*transparent/);
+    expect(stylesheet).toMatch(/span\.is-positive\s*{[^}]*background:\s*linear-gradient\(145deg, #fff, #ededed\)/);
+    expect(stylesheet).toMatch(/span\.is-negative\s*{[^}]*background:\s*linear-gradient\(145deg, #fff, #ededed\)/);
   });
 
   it('keeps the score market on a five-column grid at every breakpoint', () => {

@@ -78,8 +78,8 @@
 .sporttery-market-stack,
 .sporttery-odds-stack { display: grid; gap: 8px; }
 .sporttery-goal-stack span { display: grid; place-items: center; min-height: 48px; border-radius: 22px 7px 7px 22px; color: #969b9e; background: linear-gradient(145deg, #fff, #ededed); box-shadow: inset 0 0 0 1px rgba(255,255,255,.85); font-size: 17px; }
-.sporttery-terminal .sporttery-goal-stack span.is-positive { color: var(--st-handicap-positive); background: transparent; box-shadow: none; }
-.sporttery-terminal .sporttery-goal-stack span.is-negative { color: var(--st-handicap-negative); background: transparent; box-shadow: none; }
+.sporttery-terminal .sporttery-goal-stack span.is-positive { color: var(--st-handicap-positive); background: linear-gradient(145deg, #fff, #ededed); box-shadow: inset 0 0 0 1px rgba(255,255,255,.85); }
+.sporttery-terminal .sporttery-goal-stack span.is-negative { color: var(--st-handicap-negative); background: linear-gradient(145deg, #fff, #ededed); box-shadow: inset 0 0 0 1px rgba(255,255,255,.85); }
 .sporttery-market-flags { display: grid; align-content: center; min-height: 48px; }
 .sporttery-market-flags span { display: grid; place-items: center; width: 28px; height: 22px; color: #fff; background: #d0d2d3; font-size: 12px; line-height: 1; }
 .sporttery-market-flags span:first-child { border-radius: 7px 3px 0 7px; }
