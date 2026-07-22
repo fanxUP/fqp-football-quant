@@ -523,6 +523,34 @@ def main() -> None:
                 id="detect_upsets",
             )
 
+            scheduler.add_job(
+                _audited_job(
+                    "collect_upset_evidence",
+                    "冷门证据采集",
+                    "review_agent",
+                    lambda: __import__(
+                        "scripts.jobs.collect_upset_evidence", fromlist=["run"]
+                    ).run(),
+                ),
+                "cron",
+                minute="22,52",
+                id="collect_upset_evidence",
+            )
+
+            scheduler.add_job(
+                _audited_job(
+                    "generate_upset_reviews",
+                    "冷门客观复盘",
+                    "review_agent",
+                    lambda: __import__(
+                        "scripts.jobs.generate_upset_reviews", fromlist=["run"]
+                    ).run(),
+                ),
+                "cron",
+                minute="25,55",
+                id="generate_upset_reviews",
+            )
+
             # Daily at 08:00: generate review for the previous business day
             scheduler.add_job(
                 _audited_job(

@@ -132,6 +132,19 @@ def test_scheduler_detects_upsets_after_results_and_ticket_settlement():
     assert source.index('id="detect_upsets"') < source.index('id="generate_daily_review"')
 
 
+def test_scheduler_builds_upset_evidence_and_review_after_detection():
+    source = Path("scripts/jobs/run_scheduler.py").read_text()
+
+    assert 'id="collect_upset_evidence"' in source
+    assert 'minute="22,52"' in source
+    assert 'id="generate_upset_reviews"' in source
+    assert 'minute="25,55"' in source
+    assert source.index('id="detect_upsets"') < source.index('id="collect_upset_evidence"')
+    assert source.index('id="collect_upset_evidence"') < source.index(
+        'id="generate_upset_reviews"'
+    )
+
+
 def test_scheduler_dispatches_odds_by_default_for_host_runtime(monkeypatch):
     monkeypatch.delenv("FQP_ODDS_DISPATCH_OWNER", raising=False)
 
