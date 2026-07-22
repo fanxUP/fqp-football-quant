@@ -57,7 +57,8 @@ def _get_prediction_chain(conn: Any, prediction_id: int) -> dict | None:
                 mp.odds_snapshot_id AS pred_odds_snapshot_id,
                 mp.predict_time,
                 mv.model_name,
-                mv.version
+                mv.version,
+                mv.is_active
             FROM model_predictions mp
             LEFT JOIN model_versions mv ON mv.id = mp.model_version_id
             WHERE mp.id = %s
@@ -74,8 +75,12 @@ def _get_prediction_chain(conn: Any, prediction_id: int) -> dict | None:
         "predict_time",
         "model_name",
         "version",
+        "model_version_is_active",
     ]
-    return dict(zip(cols, row, strict=False))
+    result = dict(zip(cols, row, strict=False))
+    result["model_version_exists"] = bool(result.get("model_name") and result.get("version"))
+    result["model_version_is_active"] = bool(result.get("model_version_is_active"))
+    return result
 
 
 def _get_feature_snapshot_for_match(conn: Any, match_id: int, before_time: str) -> dict | None:
@@ -116,7 +121,7 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
     Checks each ticket item for:
       1. odds_snapshot_id → valid, not stale (>24h old)
       2. model_prediction_id → valid, has model_version
-      3. model_version → exists and is current
+      3. model_version → exists (historical inactive versions remain valid evidence)
       4. feature_snapshot → exists for the match before prediction time
 
     Returns:
@@ -183,8 +188,12 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
                     chain_ok = False
                 else:
                     chain_details["model_version_id"] = pred_chain["model_version_id"]
-                    if not pred_chain["model_version_id"]:
-                        broken_link = broken_link or "model_version"
+                    chain_details["model_version_exists"] = pred_chain["model_version_exists"]
+                    chain_details["model_version_is_active"] = pred_chain[
+                        "model_version_is_active"
+                    ]
+                    if not pred_chain["model_version_id"] or not pred_chain["model_version_exists"]:
+                        broken_link = broken_link or "model_version_invalid"
                         chain_ok = False
 
                     # Link 3: feature_snapshot (find by match + time)
@@ -227,7 +236,9 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
                 "chain_details": chain_details,
                 "odds_snapshot_age_seconds": chain_details.get("odds_snapshot_age_seconds"),
                 "feature_snapshot_age_seconds": chain_details.get("feature_snapshot_age_seconds"),
-                "model_version_is_current": chain_details.get("model_version_id") is not None,
+                # Legacy column name: this means the referenced immutable model
+                # version still exists, not that it is the currently active one.
+                "model_version_is_current": chain_details.get("model_version_exists", False),
             }
 
             if not dry_run:

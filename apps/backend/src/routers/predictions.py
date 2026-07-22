@@ -368,8 +368,8 @@ def list_model_versions(limit: int = Query(50)):
         with conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT id, model_name, version, parameters_json, training_window_start,
-                       training_window_end, is_active, created_at
+                SELECT id, model_name, version, parameters_json, training_start_date,
+                       training_end_date, is_active, created_at
                 FROM model_versions
                 ORDER BY created_at DESC
                 LIMIT %s
@@ -384,6 +384,9 @@ def list_model_versions(limit: int = Query(50)):
                 "model_name": row[1],
                 "version": row[2],
                 "parameters_json": row[3],
+                "training_start_date": str(row[4]) if row[4] else None,
+                "training_end_date": str(row[5]) if row[5] else None,
+                # Compatibility aliases retained for existing API consumers.
                 "training_window_start": str(row[4]) if row[4] else None,
                 "training_window_end": str(row[5]) if row[5] else None,
                 "is_active": row[6],

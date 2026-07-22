@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from unittest.mock import MagicMock, patch
 
 
@@ -223,6 +223,42 @@ class TestPredictionsEndpoint:
         p = resp.json()["predictions"][0]
         assert p["model_probability"] is None
         assert p["ev"] is None
+
+
+class TestModelVersionsEndpoint:
+    def test_returns_training_date_range_from_current_schema(self, client):
+        now = datetime(2026, 7, 22, 14, 41, 37)
+        mock_conn = MagicMock()
+        mock_cur = MagicMock()
+        mock_conn.__enter__.return_value = mock_conn
+        mock_conn.cursor.return_value.__enter__.return_value = mock_cur
+        mock_cur.fetchall.return_value = [
+            (
+                9,
+                "maher_poisson",
+                "mle-20260722T144137727716",
+                {"n_matches": 4852},
+                date(2023, 3, 23),
+                date(2026, 7, 21),
+                True,
+                now,
+            )
+        ]
+
+        with patch("apps.backend.src.routers.predictions.get_db", return_value=mock_conn):
+            response = client.get("/api/models/versions")
+
+        assert response.status_code == 200
+        sql = mock_cur.execute.call_args.args[0]
+        assert "training_start_date" in sql
+        assert "training_end_date" in sql
+        assert "training_window_start" not in sql
+        version = response.json()["versions"][0]
+        assert version["training_start_date"] == "2023-03-23"
+        assert version["training_end_date"] == "2026-07-21"
+        # Keep the original response names compatible with older clients.
+        assert version["training_window_start"] == "2023-03-23"
+        assert version["training_window_end"] == "2026-07-21"
 
 
 class TestTicketsEndpoint:
