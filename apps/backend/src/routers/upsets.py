@@ -20,6 +20,7 @@ def summary(start_date: str | None = None, end_date: str | None = None):
 def index(
     start_date: str | None = None,
     end_date: str | None = None,
+    league_name: str | None = None,
     level: str | None = None,
     play_type: str | None = None,
     user_involved: bool | None = None,
@@ -33,6 +34,7 @@ def index(
             conn,
             start_date=start_date,
             end_date=end_date,
+            league_name=league_name,
             level=level,
             play_type=play_type,
             user_involved=user_involved,

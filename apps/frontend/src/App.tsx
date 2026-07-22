@@ -22,6 +22,7 @@ const PoolPage = lazy(() => import('./pages/PoolPage'));
 const AnalysisPage = lazy(() => import('./pages/AnalysisPage'));
 const BettingCenterPage = lazy(() => import('./pages/BettingCenterPage'));
 const OddsMovementPage = lazy(() => import('./pages/OddsMovementPage'));
+const UpsetsPage = lazy(() => import('./pages/UpsetsPage'));
 
 function RedirectTo({ path, text = '正在进入页面...' }: { path: string; text?: string }) {
   useEffect(() => {
@@ -59,6 +60,7 @@ const routes = [
   { path: '/competition', render: () => <BettingCenterPage initialTab="competition" /> },
   { path: '/competition/history', render: () => <RedirectTo path="/betting?tab=competition" text="正在进入投注中心..." /> },
   { path: '/odds', render: () => <OddsMovementPage /> },
+  { path: '/upsets', render: () => <UpsetsPage /> },
 ];
 
 createRouter(routes);

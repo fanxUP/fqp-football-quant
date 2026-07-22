@@ -55,6 +55,13 @@ panels:
     order: 110
     visible: true
     icon: brain
+  - panel_id: upset_research
+    name: 冷门研究
+    route: /upsets
+    module_id: upset_intelligence_module
+    order: 120
+    visible: true
+    icon: snowflake
   - panel_id: backtest_lab
     name: 策略验证
     route: /backtest

@@ -21,7 +21,7 @@ def test_upset_list_exposes_filters_and_pagination(client):
     with patch("apps.backend.src.routers.upsets.list_upsets", return_value=(rows, 23)) as query:
         response = client.get(
             "/api/upsets?start_date=2026-07-01&end_date=2026-07-20"
-            "&level=A&play_type=spf&agent_involved=true&limit=10&offset=20"
+            "&league_name=测试联赛&level=A&play_type=spf&agent_involved=true&limit=10&offset=20"
         )
 
     assert response.status_code == 200
@@ -29,6 +29,7 @@ def test_upset_list_exposes_filters_and_pagination(client):
     assert query.call_args.kwargs == {
         "start_date": "2026-07-01",
         "end_date": "2026-07-20",
+        "league_name": "测试联赛",
         "level": "A",
         "play_type": "spf",
         "user_involved": None,

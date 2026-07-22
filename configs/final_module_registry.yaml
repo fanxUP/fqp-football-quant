@@ -34,6 +34,13 @@ modules:
     safe_disable: true
     depends_on: [official_data_core, multidim_feature_module]
     panels: [model_lab, backtest_lab]
+  - module_id: upset_intelligence_module
+    name: 冷门研究与决策知识
+    category: research
+    required: false
+    safe_disable: true
+    depends_on: [official_data_core, betting_center_module, model_research_module]
+    panels: [upset_research]
   - module_id: pool_lottery_module
     name: 传统足彩胜负彩任选九
     category: strategy_lab

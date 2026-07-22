@@ -16,6 +16,7 @@ def list_upsets(
     *,
     start_date: str | None = None,
     end_date: str | None = None,
+    league_name: str | None = None,
     level: str | None = None,
     play_type: str | None = None,
     user_involved: bool | None = None,
@@ -30,6 +31,7 @@ def list_upsets(
     filters = {
         "event.business_date >= %(start_date)s": ("start_date", start_date),
         "event.business_date <= %(end_date)s": ("end_date", end_date),
+        "match.league_name = %(league_name)s": ("league_name", league_name),
         "event.upset_level = %(level)s": ("level", level),
         "event.primary_play_type = %(play_type)s": ("play_type", play_type),
         "event.user_bet_involved = %(user_involved)s": ("user_involved", user_involved),

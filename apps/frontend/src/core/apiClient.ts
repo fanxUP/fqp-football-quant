@@ -150,6 +150,31 @@ export const api = {
   // Teams
   teams: () => request<{ teams: Team[]; total: number }>('/api/teams'),
 
+  // Cold-result research
+  upsets: {
+    summary: (params?: { start_date?: string; end_date?: string }) =>
+      request<import('../features/upsets/types').UpsetSummary>(
+        `/api/upsets/summary${qs({ start_date: params?.start_date, end_date: params?.end_date })}`,
+      ),
+    list: (params?: import('../features/upsets/types').UpsetFilters & { limit?: number; offset?: number }) =>
+      request<{ items: import('../features/upsets/types').UpsetListItem[]; total: number; limit: number; offset: number }>(
+        `/api/upsets${qs({
+          start_date: params?.start_date,
+          end_date: params?.end_date,
+          league_name: params?.league_name,
+          level: params?.level,
+          play_type: params?.play_type,
+          user_involved: params?.user_involved === undefined ? undefined : String(params.user_involved),
+          agent_involved: params?.agent_involved === undefined ? undefined : String(params.agent_involved),
+          review_status: params?.review_status,
+          limit: params?.limit ?? 50,
+          offset: params?.offset ?? 0,
+        })}`,
+      ),
+    detail: (eventId: number) =>
+      request<import('../features/upsets/types').UpsetDetail>(`/api/upsets/${eventId}`),
+  },
+
   // Matches
   matches: {
     today: () =>
