@@ -55,8 +55,10 @@ def test_training_data_excludes_unmapped_teams_and_applies_minimum_history() -> 
 
     query, params = cur.execute.call_args.args
     normalized = " ".join(query.split())
-    assert "JOIN teams t1" in normalized
-    assert "JOIN teams t2" in normalized
+    assert "JOIN LATERAL" in normalized
+    assert "WHERE candidate.team_name_cn = m.home_team_name" in normalized
+    assert "WHERE candidate.team_name_cn = m.away_team_name" in normalized
+    assert "ORDER BY candidate.id LIMIT 1" in normalized
     assert "COALESCE(t1.id, 0)" not in normalized
     assert "HAVING COUNT(*) >= %s" in normalized
     assert params == (2,)
@@ -65,6 +67,38 @@ def test_training_data_excludes_unmapped_teams_and_applies_minimum_history() -> 
     assert away_idx == [1, 0]
     assert home_goals == [2, 0]
     assert away_goals == [1, 0]
+
+
+def test_mle_run_rejects_non_converged_fit_without_changing_active_versions():
+    conn = MagicMock()
+    cur = MagicMock()
+    conn.cursor.return_value = cur
+    db_context = MagicMock()
+    db_context.__enter__.return_value = conn
+    trained = {
+        "maher_poisson": {
+            "n_matches": 5286,
+            "n_teams": 721,
+            "nll": 100.0,
+            "converged": False,
+            "optimizer_message": "iteration limit reached",
+        },
+        "dixon_coles_rho": {"rho": -0.054, "nll": 50.0},
+    }
+
+    with (
+        patch("apps.backend.src.db.get_db", return_value=db_context),
+        patch("scripts.mle_trainer.fit_all_models", return_value=trained),
+    ):
+        result = run()
+
+    assert result == {
+        "status": "error",
+        "error": "Maher MLE did not converge",
+        "optimizer_message": "iteration limit reached",
+    }
+    cur.execute.assert_not_called()
+    conn.commit.assert_not_called()
 
 
 def test_mle_run_creates_new_active_versions_without_overwriting_history():

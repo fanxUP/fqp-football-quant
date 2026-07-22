@@ -16,6 +16,7 @@ from datetime import datetime
 from typing import Any
 
 from apps.backend.src.db import get_db
+from scripts.team_registry import official_team_code
 
 
 def _slugify(name: str) -> str:
@@ -181,35 +182,39 @@ def populate_all() -> dict[str, Any]:
             # 2. Insert teams
             # -----------------------------------------------------------
             for team_name in seen_teams:
-                team_code = _slugify(team_name)
                 country = _infer_country(team_name, team_league_map.get(team_name, ""))
 
                 cur.execute(
-                    """
-                    INSERT INTO teams (team_code, team_name_cn, team_name_en, short_name, country)
-                    VALUES (%(code)s, %(cn)s, %(en)s, %(short)s, %(country)s)
-                    ON CONFLICT (team_code) DO UPDATE SET
-                        team_name_cn = COALESCE(teams.team_name_cn, EXCLUDED.team_name_cn),
-                        team_name_en = COALESCE(teams.team_name_en, EXCLUDED.team_name_en),
-                        short_name = COALESCE(teams.short_name, EXCLUDED.short_name),
-                        country = CASE
-                            WHEN teams.country IS NULL OR teams.country = 'Unknown'
-                            THEN EXCLUDED.country
-                            ELSE teams.country
-                        END
-                    RETURNING id, (xmax = 0) AS is_inserted
-                    """,
-                    {
-                        "code": team_code,
-                        "cn": team_name,
-                        "en": None,  # We don't have English names from sporttery
-                        "short": team_name[:8] if len(team_name) > 8 else team_name,
-                        "country": country,
-                    },
+                    "SELECT id, false FROM teams WHERE team_name_cn = %s ORDER BY id LIMIT 1",
+                    (team_name,),
                 )
                 row = cur.fetchone()
-                team_id = row[0] if row else None
-                is_new = row[1] if row else False
+                if row:
+                    team_id, is_new = row
+                else:
+                    cur.execute(
+                        """
+                        INSERT INTO teams (
+                            team_code, team_name_cn, team_name_en, short_name, country
+                        )
+                        VALUES (%(code)s, %(cn)s, %(en)s, %(short)s, %(country)s)
+                        ON CONFLICT (team_code) DO UPDATE SET
+                            team_name_cn = EXCLUDED.team_name_cn,
+                            short_name = EXCLUDED.short_name,
+                            updated_at = now()
+                        RETURNING id, (xmax = 0) AS is_inserted
+                        """,
+                        {
+                            "code": official_team_code(team_name),
+                            "cn": team_name,
+                            "en": None,
+                            "short": team_name[:8] if len(team_name) > 8 else team_name,
+                            "country": country,
+                        },
+                    )
+                    row = cur.fetchone()
+                    team_id = row[0] if row else None
+                    is_new = row[1] if row else False
                 if is_new:
                     result["teams_created"] += 1
 

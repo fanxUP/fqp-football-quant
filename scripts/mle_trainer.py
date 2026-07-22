@@ -218,8 +218,20 @@ def _load_match_data(
                    r.full_home_goals, r.full_away_goals
             FROM official_matches m
             JOIN official_results r ON r.match_id = m.id
-            JOIN teams t1 ON t1.team_name_cn = m.home_team_name
-            JOIN teams t2 ON t2.team_name_cn = m.away_team_name
+            JOIN LATERAL (
+                SELECT candidate.id
+                FROM teams candidate
+                WHERE candidate.team_name_cn = m.home_team_name
+                ORDER BY candidate.id
+                LIMIT 1
+            ) t1 ON true
+            JOIN LATERAL (
+                SELECT candidate.id
+                FROM teams candidate
+                WHERE candidate.team_name_cn = m.away_team_name
+                ORDER BY candidate.id
+                LIMIT 1
+            ) t2 ON true
             WHERE {where}
               AND r.full_home_goals IS NOT NULL
               AND r.full_away_goals IS NOT NULL
@@ -278,8 +290,20 @@ def _load_training_window(conn: Any, min_matches: int = 5) -> tuple[Any, Any]:
                 SELECT m.kickoff_time, t1.id AS home_team_id, t2.id AS away_team_id
                 FROM official_matches m
                 JOIN official_results r ON r.match_id = m.id
-                JOIN teams t1 ON t1.team_name_cn = m.home_team_name
-                JOIN teams t2 ON t2.team_name_cn = m.away_team_name
+                JOIN LATERAL (
+                    SELECT candidate.id
+                    FROM teams candidate
+                    WHERE candidate.team_name_cn = m.home_team_name
+                    ORDER BY candidate.id
+                    LIMIT 1
+                ) t1 ON true
+                JOIN LATERAL (
+                    SELECT candidate.id
+                    FROM teams candidate
+                    WHERE candidate.team_name_cn = m.away_team_name
+                    ORDER BY candidate.id
+                    LIMIT 1
+                ) t2 ON true
                 WHERE LOWER(m.match_status) = 'settled'
                   AND r.full_home_goals IS NOT NULL
                   AND r.full_away_goals IS NOT NULL
@@ -364,14 +388,20 @@ def fit_maher_poisson(
             options={"maxiter": 1000, "ftol": 1e-9, "gtol": 1e-6},
         )
 
-        converged = result.success
+        converged = bool(result.success)
         final_params = result.x
         nll = float(result.fun)
+        optimizer_message = str(result.message)
+        optimizer_iterations = int(result.nit)
+        optimizer_gradient_norm = float(np.linalg.norm(result.jac, ord=np.inf))
     except ImportError:
         # Fallback: simple method-of-moments estimation
         converged = False
         final_params = init
         nll = _nll_maher(init, team_ids, home_idx, away_idx, hg_vec, ag_vec, n_teams)
+        optimizer_message = "scipy is unavailable"
+        optimizer_iterations = 0
+        optimizer_gradient_norm = None
 
     attack = {team_ids[i]: round(float(final_params[i]), 4) for i in range(n_teams)}
     defense = {team_ids[i]: round(float(final_params[n_teams + i]), 4) for i in range(n_teams)}
@@ -392,6 +422,9 @@ def fit_maher_poisson(
         "n_teams": n_teams,
         "nll": round(nll, 2),
         "converged": converged,
+        "optimizer_message": optimizer_message,
+        "optimizer_iterations": optimizer_iterations,
+        "optimizer_gradient_norm": optimizer_gradient_norm,
     }
 
 
@@ -510,6 +543,15 @@ def run(dry_run: bool = False) -> dict[str, Any]:
 
         maher = result["maher_poisson"]
         dc = result["dixon_coles_rho"]
+
+        if not maher.get("converged", False):
+            return {
+                "status": "error",
+                "error": "Maher MLE did not converge",
+                "optimizer_message": maher.get("optimizer_message"),
+            }
+        if "error" in dc:
+            return {"status": "error", "error": f"Dixon-Coles fit failed: {dc['error']}"}
 
         # Each training run creates immutable versions. Historical predictions
         # keep pointing to their original parameters, while only the new pair
