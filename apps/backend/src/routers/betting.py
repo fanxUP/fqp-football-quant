@@ -83,9 +83,7 @@ def _map_simulator_ticket(ticket: dict) -> dict:
     legacy_id = int(ticket.get("id") or 0)
     return {
         "ticketUid": f"simulator:{ticket.get('id')}",
-        "ticketNumber": _ticket_number(
-            ticket.get("ledger_ticket_no"), purchase_date, legacy_id
-        ),
+        "ticketNumber": _ticket_number(ticket.get("ledger_ticket_no"), purchase_date, legacy_id),
         "legacyId": ticket.get("id"),
         "owner": "me",
         "kind": "simulation",
@@ -117,9 +115,7 @@ def _map_real_ticket(ticket: dict) -> dict:
     legacy_id = int(ticket.get("id") or 0)
     return {
         "ticketUid": f"real:{ticket.get('id')}",
-        "ticketNumber": _ticket_number(
-            ticket.get("ledger_ticket_no"), purchase_date, legacy_id
-        ),
+        "ticketNumber": _ticket_number(ticket.get("ledger_ticket_no"), purchase_date, legacy_id),
         "legacyId": ticket.get("id"),
         "owner": owner,
         "kind": "real",
@@ -473,7 +469,7 @@ def _round_result_bucket(bucket: dict) -> dict:
 def _valid_ticket_date(value: object) -> date | None:
     try:
         return date.fromisoformat(str(value)[:10])
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return None
 
 
@@ -535,20 +531,14 @@ def _build_betting_results(
                 parsed
                 for ticket in tickets
                 if ticket.get("status") == "settled"
-                if (
-                    parsed := _valid_ticket_date(
-                        ticket.get("settledAt") or ticket.get("date")
-                    )
-                )
+                if (parsed := _valid_ticket_date(ticket.get("settledAt") or ticket.get("date")))
                 is not None
             ]
             trend_start_date = min(settled_dates) if settled_dates else None
 
     if trend_start_date is not None:
         valid_daily_dates = [
-            parsed
-            for day in daily
-            if (parsed := _valid_ticket_date(day)) is not None
+            parsed for day in daily if (parsed := _valid_ticket_date(day)) is not None
         ]
         latest_data_date = max(valid_daily_dates, default=None)
         trend_end_date = max(
@@ -574,8 +564,7 @@ def _build_betting_results(
         daily = {
             day: row
             for day, row in daily.items()
-            if (parsed := _valid_ticket_date(day)) is not None
-            and parsed >= trend_start_date
+            if (parsed := _valid_ticket_date(day)) is not None and parsed >= trend_start_date
         }
 
     trend = []

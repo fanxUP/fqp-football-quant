@@ -98,8 +98,7 @@ def _market_sp_quality(
     for market_key, option_values in market_values.items():
         values = list(option_values.values())
         quality[market_key] = not (
-            any(value <= 0 for value in values)
-            or (len(values) >= 2 and len(set(values)) == 1)
+            any(value <= 0 for value in values) or (len(values) >= 2 and len(set(values)) == 1)
         )
     valid_match_count = len(
         {match_id for (match_id, _play_type), is_valid in quality.items() if is_valid}
@@ -187,7 +186,9 @@ def _split_budget(total: float, count: int) -> list[float]:
         return []
     total_units = int(_official_stake(total) / STAKE_UNIT)
     base_units, remainder = divmod(total_units, count)
-    return [float((base_units + (1 if index < remainder else 0)) * STAKE_UNIT) for index in range(count)]
+    return [
+        float((base_units + (1 if index < remainder else 0)) * STAKE_UNIT) for index in range(count)
+    ]
 
 
 def _stake_chunks(stake: float) -> list[float]:
@@ -257,7 +258,9 @@ def _build_virtual_recommendation_tickets(
 
     planned: list[dict[str, Any]] = []
     if singles:
-        for candidate, allocated in zip(singles, _split_budget(daily_budget, len(singles)), strict=True):
+        for candidate, allocated in zip(
+            singles, _split_budget(daily_budget, len(singles)), strict=True
+        ):
             for chunk in _stake_chunks(allocated):
                 planned.append(_ticket_entry([candidate], pass_type="single", stake=chunk))
         return planned
@@ -477,9 +480,7 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
 
         single_allowed = {(row[0], row[1]) for row in market_permissions if row[2]}
         pass_allowed = {
-            (row[0], row[1])
-            for row in market_permissions
-            if _market_allows_pass(row[3])
+            (row[0], row[1]) for row in market_permissions if _market_allows_pass(row[3])
         }
         planned = _build_virtual_recommendation_tickets(
             candidates,

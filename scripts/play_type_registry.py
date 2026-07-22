@@ -23,10 +23,10 @@ CANONICAL_CODES = ("spf", "rqspf", "bf", "zjq", "bqc")
 # ── Traditional lottery game type codes ─────────────────────────────
 
 TRADITIONAL_GAME_TYPES: dict[int, str] = {
-    90: "t14c",   # 胜负游戏（14场）
-    91: "r9",     # 任选9场
-    98: "bqc6",   # 6场半全场
-    99: "jq4",    # 4场进球
+    90: "t14c",  # 胜负游戏（14场）
+    91: "r9",  # 任选9场
+    98: "bqc6",  # 6场半全场
+    99: "jq4",  # 4场进球
 }
 
 TRADITIONAL_GAME_LABELS: dict[str, str] = {

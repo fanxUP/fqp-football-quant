@@ -39,4 +39,9 @@ def test_backtest_metrics_are_checked_against_explicit_thresholds():
         {"min_bets": 100, "min_roi": 0.03, "max_brier": 0.25, "max_drawdown_pct": 0.2},
     )
     assert passed is False
-    assert set(reasons) == {"INSUFFICIENT_SAMPLE", "ROI_BELOW_THRESHOLD", "BRIER_TOO_HIGH", "DRAWDOWN_TOO_HIGH"}
+    assert set(reasons) == {
+        "INSUFFICIENT_SAMPLE",
+        "ROI_BELOW_THRESHOLD",
+        "BRIER_TOO_HIGH",
+        "DRAWDOWN_TOO_HIGH",
+    }

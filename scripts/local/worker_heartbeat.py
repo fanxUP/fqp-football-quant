@@ -31,5 +31,5 @@ def is_worker_alive(max_age_minutes: int = 5) -> bool:
             heartbeat = heartbeat.replace(tzinfo=UTC)
         age = datetime.now(UTC) - heartbeat.astimezone(UTC)
         return timedelta(0) <= age <= timedelta(minutes=max_age_minutes)
-    except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError):
+    except OSError, KeyError, TypeError, ValueError, json.JSONDecodeError:
         return False

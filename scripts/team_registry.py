@@ -36,9 +36,7 @@ def ensure_official_match_teams(conn: Any) -> int:
         )
         names = [row[0] for row in cur.fetchall()]
 
-        cur.execute(
-            "SELECT DISTINCT BTRIM(team_name_cn) FROM teams WHERE team_name_cn IS NOT NULL"
-        )
+        cur.execute("SELECT DISTINCT BTRIM(team_name_cn) FROM teams WHERE team_name_cn IS NOT NULL")
         existing_names = {row[0] for row in cur.fetchall() if row[0]}
 
         created = 0

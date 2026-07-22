@@ -20,9 +20,7 @@ def test_api_football_competitions_use_independent_season_codes():
     season_codes = [item["season_code"] for item in LEAGUE_MAP]
 
     assert len(season_codes) == len(set(season_codes))
-    assert season_codes == [
-        f"apifootball:{item['api_league_id']}:2026" for item in LEAGUE_MAP
-    ]
+    assert season_codes == [f"apifootball:{item['api_league_id']}:2026" for item in LEAGUE_MAP]
 
 
 def test_current_selling_teams_have_api_football_aliases():

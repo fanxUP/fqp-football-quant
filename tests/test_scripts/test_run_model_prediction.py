@@ -130,9 +130,7 @@ def test_prediction_skips_match_without_official_odds():
 
 
 def test_prediction_skips_incomplete_spf_market_instead_of_inventing_odds():
-    result, store_prediction, store_vote = _run_with_odds(
-        [(11, "h", 2.1), (12, "d", 3.2)]
-    )
+    result, store_prediction, store_vote = _run_with_odds([(11, "h", 2.1), (12, "d", 3.2)])
 
     assert result == (0, 0)
     store_prediction.assert_not_called()

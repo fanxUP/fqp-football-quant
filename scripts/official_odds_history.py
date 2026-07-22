@@ -25,9 +25,15 @@ from scripts.official_storage import store_odds_snapshots
 from scripts.sporttery_client import SportteryClient
 
 HAFU_OPTIONS = {
-    "hh": ("33", "胜胜"), "hd": ("31", "胜平"), "ha": ("30", "胜负"),
-    "dh": ("13", "平胜"), "dd": ("11", "平平"), "da": ("10", "平负"),
-    "ah": ("03", "负胜"), "ad": ("01", "负平"), "aa": ("00", "负负"),
+    "hh": ("33", "胜胜"),
+    "hd": ("31", "胜平"),
+    "ha": ("30", "胜负"),
+    "dh": ("13", "平胜"),
+    "dd": ("11", "平平"),
+    "da": ("10", "平负"),
+    "ah": ("03", "负胜"),
+    "ad": ("01", "负平"),
+    "aa": ("00", "负负"),
 }
 
 BATCH_SIZE = 300
@@ -49,7 +55,7 @@ def _snapshot_time(entry: dict[str, Any]) -> str | None:
 def _positive_float(value: Any) -> float | None:
     try:
         parsed = float(value)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return None
     return parsed if parsed > 0 else None
 
@@ -59,13 +65,20 @@ def _handicap(value: Any) -> float | None:
         return None
     try:
         return float(value)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return None
 
 
 def _base_snapshot(
-    *, entry: dict[str, Any], history_type: str, snapshot_time: str, play_type: str,
-    option_code: str, option_name: str, sp_value: float, handicap: float | None = None,
+    *,
+    entry: dict[str, Any],
+    history_type: str,
+    snapshot_time: str,
+    play_type: str,
+    option_code: str,
+    option_name: str,
+    sp_value: float,
+    handicap: float | None = None,
 ) -> dict[str, Any]:
     return {
         "snapshot_time": snapshot_time,
@@ -102,11 +115,18 @@ def parse_fixed_bonus_history(raw: dict[str, Any]) -> list[dict[str, Any]]:
             handicap = _handicap(entry.get("goalLine"))
             for code, name in labels.items():
                 if (sp := _positive_float(entry.get(code))) is not None:
-                    snapshots.append(_base_snapshot(
-                        entry=entry, history_type=history_type, snapshot_time=at,
-                        play_type=play_type, option_code=code, option_name=name,
-                        sp_value=sp, handicap=handicap,
-                    ))
+                    snapshots.append(
+                        _base_snapshot(
+                            entry=entry,
+                            history_type=history_type,
+                            snapshot_time=at,
+                            play_type=play_type,
+                            option_code=code,
+                            option_name=name,
+                            sp_value=sp,
+                            handicap=handicap,
+                        )
+                    )
 
     parse_1x2("hadList", "spf", {"h": "主胜", "d": "平", "a": "客胜"})
     parse_1x2("hhadList", "rqspf", {"h": "让球主胜", "d": "让球平", "a": "让球客胜"})
@@ -116,21 +136,34 @@ def parse_fixed_bonus_history(raw: dict[str, Any]) -> list[dict[str, Any]]:
             continue
         for goals in range(8):
             if (sp := _positive_float(entry.get(f"s{goals}"))) is not None:
-                snapshots.append(_base_snapshot(
-                    entry=entry, history_type="ttgList", snapshot_time=at, play_type="zjq",
-                    option_code=str(goals), option_name="7+" if goals == 7 else f"{goals}球",
-                    sp_value=sp,
-                ))
+                snapshots.append(
+                    _base_snapshot(
+                        entry=entry,
+                        history_type="ttgList",
+                        snapshot_time=at,
+                        play_type="zjq",
+                        option_code=str(goals),
+                        option_name="7+" if goals == 7 else f"{goals}球",
+                        sp_value=sp,
+                    )
+                )
 
     for entry in history.get("hafuList", []) or []:
         if not isinstance(entry, dict) or not (at := _snapshot_time(entry)):
             continue
         for source_code, (option_code, option_name) in HAFU_OPTIONS.items():
             if (sp := _positive_float(entry.get(source_code))) is not None:
-                snapshots.append(_base_snapshot(
-                    entry=entry, history_type="hafuList", snapshot_time=at, play_type="bqc",
-                    option_code=option_code, option_name=option_name, sp_value=sp,
-                ))
+                snapshots.append(
+                    _base_snapshot(
+                        entry=entry,
+                        history_type="hafuList",
+                        snapshot_time=at,
+                        play_type="bqc",
+                        option_code=option_code,
+                        option_name=option_name,
+                        sp_value=sp,
+                    )
+                )
 
     for entry in history.get("crsList", []) or []:
         if not isinstance(entry, dict) or not (at := _snapshot_time(entry)):
@@ -139,8 +172,12 @@ def parse_fixed_bonus_history(raw: dict[str, Any]) -> list[dict[str, Any]]:
             if source_code.endswith("f"):
                 continue
             if source_code in {"s-1sh", "s-1sd", "s-1sa"}:
-                option_code = {"s-1sh": "other_h", "s-1sd": "other_d", "s-1sa": "other_a"}[source_code]
-                option_name = {"other_h": "胜其他", "other_d": "平其他", "other_a": "负其他"}[option_code]
+                option_code = {"s-1sh": "other_h", "s-1sd": "other_d", "s-1sa": "other_a"}[
+                    source_code
+                ]
+                option_name = {"other_h": "胜其他", "other_d": "平其他", "other_a": "负其他"}[
+                    option_code
+                ]
             elif len(source_code) == 6 and source_code.startswith("s") and source_code[3] == "s":
                 try:
                     option_code = f"{int(source_code[1:3])}:{int(source_code[4:6])}"
@@ -150,15 +187,24 @@ def parse_fixed_bonus_history(raw: dict[str, Any]) -> list[dict[str, Any]]:
             else:
                 continue
             if (sp := _positive_float(value)) is not None:
-                snapshots.append(_base_snapshot(
-                    entry=entry, history_type="crsList", snapshot_time=at, play_type="bf",
-                    option_code=option_code, option_name=option_name, sp_value=sp,
-                ))
+                snapshots.append(
+                    _base_snapshot(
+                        entry=entry,
+                        history_type="crsList",
+                        snapshot_time=at,
+                        play_type="bf",
+                        option_code=option_code,
+                        option_name=option_name,
+                        sp_value=sp,
+                    )
+                )
 
     return snapshots
 
 
-def _remove_existing_snapshots(conn: Any, match_id: int, snapshots: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _remove_existing_snapshots(
+    conn: Any, match_id: int, snapshots: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
     """Keep a rerun resumable without replacing or duplicating snapshot rows."""
     if not snapshots:
         return []
@@ -173,15 +219,26 @@ def _remove_existing_snapshots(conn: Any, match_id: int, snapshots: list[dict[st
             (match_id, times),
         )
         existing = {
-            (row[0].isoformat() if hasattr(row[0], "isoformat") else str(row[0]), row[1], row[2], float(row[3]), float(row[4]))
+            (
+                row[0].isoformat() if hasattr(row[0], "isoformat") else str(row[0]),
+                row[1],
+                row[2],
+                float(row[3]),
+                float(row[4]),
+            )
             for row in cur.fetchall()
         }
     return [
-        snapshot for snapshot in snapshots
+        snapshot
+        for snapshot in snapshots
         if (
-            snapshot["snapshot_time"], snapshot["play_type"], snapshot["option_code"],
-            float(snapshot["sp_value"]), snapshot["handicap"] if snapshot["handicap"] is not None else 9999.0,
-        ) not in existing
+            snapshot["snapshot_time"],
+            snapshot["play_type"],
+            snapshot["option_code"],
+            float(snapshot["sp_value"]),
+            snapshot["handicap"] if snapshot["handicap"] is not None else 9999.0,
+        )
+        not in existing
     ]
 
 
@@ -220,7 +277,8 @@ def backfill_fixed_bonus_history(
                         AND oos.raw_json->>'source_endpoint' = 'getFixedBonusV1.qry'
                   ))
                 ORDER BY m.business_date, m.id
-                """ + (" LIMIT %s" if limit is not None else ""),
+                """
+                + (" LIMIT %s" if limit is not None else ""),
                 (start_date, end_date, include_existing, limit)
                 if limit is not None
                 else (start_date, end_date, include_existing),
@@ -243,14 +301,18 @@ def backfill_fixed_bonus_history(
                     if result["errors"]:
                         failed += 1
                 consecutive_forbidden = 0
-            except Exception as exc:  # Continue so a single retired fixture cannot stop a season backfill.
+            except (
+                Exception
+            ) as exc:  # Continue so a single retired fixture cannot stop a season backfill.
                 failed += 1
                 print(f"[official_odds_history] match_id={match_id} failed: {exc}")
                 if "403" in str(exc):
                     consecutive_forbidden += 1
                     if consecutive_forbidden >= 3:
                         source_blocked = True
-                        print("[official_odds_history] stopping after 3 consecutive Sporttery 403 responses")
+                        print(
+                            "[official_odds_history] stopping after 3 consecutive Sporttery 403 responses"
+                        )
                         break
                 else:
                     consecutive_forbidden = 0
@@ -278,7 +340,9 @@ def _season_start(today: date) -> date:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Backfill official Sporttery fixed-bonus odds history")
+    parser = argparse.ArgumentParser(
+        description="Backfill official Sporttery fixed-bonus odds history"
+    )
     parser.add_argument("--start-date")
     parser.add_argument("--end-date", default=date.today().isoformat())
     parser.add_argument("--limit", type=int)

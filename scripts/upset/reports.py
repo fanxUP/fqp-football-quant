@@ -41,36 +41,37 @@ def render_markdown(
     agent = metrics["agent"]
     cold = metrics["cold_impact"]
     quality = metrics["model_quality"]
-    league_lines = "\n".join(
-        f"- {row['league']}：{row['count']}场" for row in metrics["by_league"]
-    ) or "- 暂无"
+    league_lines = (
+        "\n".join(f"- {row['league']}：{row['count']}场" for row in metrics["by_league"])
+        or "- 暂无"
+    )
     level_lines = "、".join(f"{key}级 {value}" for key, value in metrics["by_level"].items())
     play_lines = "、".join(f"{key.upper()} {value}" for key, value in metrics["by_play"].items())
-    return f"""# 冷门研究{labels.get(report_type, '报告')}（{start} 至 {end}）
+    return f"""# 冷门研究{labels.get(report_type, "报告")}（{start} 至 {end}）
 
 ## 冷门概况
 
-- 冷门事件：{upset['count']}场
-- S/A级：{upset['severe_count']}场
-- 已结算比赛冷门率：{_percent(upset['rate'])}
-- 等级分布：{level_lines or '暂无'}
-- 玩法分布：{play_lines or '暂无'}
+- 冷门事件：{upset["count"]}场
+- S/A级：{upset["severe_count"]}场
+- 已结算比赛冷门率：{_percent(upset["rate"])}
+- 等级分布：{level_lines or "暂无"}
+- 玩法分布：{play_lines or "暂无"}
 
 ## 用户实票
 
-- 投入：{_money(user['stake'])}
-- 返还：{_money(user['prize'])}
-- 盈亏：{_money(user['profit'])}
-- ROI：{_percent(user['roi'])}
-- 冷门相关盈亏：{_money(cold['user_profit'])}
+- 投入：{_money(user["stake"])}
+- 返还：{_money(user["prize"])}
+- 盈亏：{_money(user["profit"])}
+- ROI：{_percent(user["roi"])}
+- 冷门相关盈亏：{_money(cold["user_profit"])}
 
 ## Agent虚拟投注
 
-- 投入：{_money(agent['stake'])}
-- 返还：{_money(agent['prize'])}
-- 盈亏：{_money(agent['profit'])}
-- ROI：{_percent(agent['roi'])}
-- 冷门相关盈亏：{_money(cold['agent_profit'])}
+- 投入：{_money(agent["stake"])}
+- 返还：{_money(agent["prize"])}
+- 盈亏：{_money(agent["profit"])}
+- ROI：{_percent(agent["roi"])}
+- 冷门相关盈亏：{_money(cold["agent_profit"])}
 
 ## 联赛分布
 
@@ -78,9 +79,9 @@ def render_markdown(
 
 ## 模型质量
 
-- 有效样本：{quality['sample_size']}
-- Brier：{quality['brier'] if quality['brier'] is not None else '暂无'}
-- Log Loss：{quality['log_loss'] if quality['log_loss'] is not None else '暂无'}
+- 有效样本：{quality["sample_size"]}
+- Brier：{quality["brier"] if quality["brier"] is not None else "暂无"}
+- Log Loss：{quality["log_loss"] if quality["log_loss"] is not None else "暂无"}
 
 > 用户实票与Agent虚拟资金严格分开统计；盈亏按整张彩票结算，不把串关中的单项命中计作盈利。
 """
@@ -230,9 +231,7 @@ def build_report_metrics(conn: Any, start: str, end: str) -> dict[str, Any]:
         "model_quality": {
             "sample_size": int(quality["sample_size"] or 0),
             "brier": float(quality["brier"]) if quality["brier"] is not None else None,
-            "log_loss": (
-                float(quality["log_loss"]) if quality["log_loss"] is not None else None
-            ),
+            "log_loss": (float(quality["log_loss"]) if quality["log_loss"] is not None else None),
         },
     }
 

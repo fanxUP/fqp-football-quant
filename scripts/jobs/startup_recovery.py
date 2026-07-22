@@ -45,7 +45,9 @@ class StartupRecovery:
             state.attempts += 1
             try:
                 result = task()
-                status = str(result.get("status", "ok")).lower() if isinstance(result, dict) else "ok"
+                status = (
+                    str(result.get("status", "ok")).lower() if isinstance(result, dict) else "ok"
+                )
                 if status in {"error", "failed", "blocked"}:
                     raise RuntimeError(str(result.get("error") or result.get("message") or result))
             except Exception as exc:

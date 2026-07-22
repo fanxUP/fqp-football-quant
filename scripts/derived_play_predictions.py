@@ -91,9 +91,7 @@ def _half_full_probabilities(
     lambdas: tuple[float, float],
 ) -> dict[str, float]:
     home_lambda, away_lambda = lambdas
-    half_time = derive_1x2(
-        score_matrix(home_lambda * 0.45, away_lambda * 0.45, max_goals=4)
-    )
+    half_time = derive_1x2(score_matrix(home_lambda * 0.45, away_lambda * 0.45, max_goals=4))
     full_time = derive_1x2(matrix)
     return {
         f"{half_code}{full_code}": half_time[half_code] * full_time[full_code]
@@ -162,9 +160,7 @@ def store_derived_play_predictions(
         model_probabilities = {
             "market_baseline": (market_probabilities, market_probabilities),
             "maher_poisson": (
-                _derive_probabilities(
-                    play_type, raw_poisson_matrix, raw_lambdas, official_options
-                ),
+                _derive_probabilities(play_type, raw_poisson_matrix, raw_lambdas, official_options),
                 _derive_probabilities(
                     play_type, poisson_matrix, adjusted_lambdas, official_options
                 ),
@@ -179,8 +175,10 @@ def store_derived_play_predictions(
                 _normalize_distribution(raw_probabilities),
                 _normalize_distribution(adjusted_probabilities),
             )
-            for model_name, (raw_probabilities, adjusted_probabilities)
-            in model_probabilities.items()
+            for model_name, (
+                raw_probabilities,
+                adjusted_probabilities,
+            ) in model_probabilities.items()
         }
         snapshot_ids = {option: value[0] for option, value in option_odds.items()}
         validated_metrics = {}
@@ -198,11 +196,13 @@ def store_derived_play_predictions(
                 continue
 
         for option_code, (snapshot_id, _sp_value) in option_odds.items():
-            disagreement = _model_std([
-                model_probabilities[model_name][1].get(option_code, 0.0)
-                for model_name in capabilities
-                if active_models.get(model_name) is not None
-            ])
+            disagreement = _model_std(
+                [
+                    model_probabilities[model_name][1].get(option_code, 0.0)
+                    for model_name in capabilities
+                    if active_models.get(model_name) is not None
+                ]
+            )
             market_probability = market_probabilities.get(option_code, 0.0)
             for model_name in capabilities:
                 model_version_id = active_models.get(model_name)
@@ -243,9 +243,7 @@ def store_derived_play_predictions(
                         "market_edge": round(
                             stored_model_probability - stored_market_probability, 6
                         ),
-                        "breakeven_edge": round(
-                            stored_model_probability - stored_break_even, 6
-                        ),
+                        "breakeven_edge": round(stored_model_probability - stored_break_even, 6),
                         "validation_status": "valid",
                         "validation_errors": [],
                         "calculation_version": "market_metrics_v2",

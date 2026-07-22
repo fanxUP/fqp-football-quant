@@ -53,9 +53,7 @@ def test_rule_thresholds_are_loaded_from_database_version():
 
 
 def test_primary_detection_is_the_least_likely_actual_result():
-    primary = select_primary_detection(
-        [_detection(0.24, "B", False), _detection(0.12, "S", True)]
-    )
+    primary = select_primary_detection([_detection(0.24, "B", False), _detection(0.12, "S", True)])
 
     assert primary.signal.actual_probability == 0.12
 

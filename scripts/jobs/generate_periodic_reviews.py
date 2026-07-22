@@ -159,9 +159,9 @@ def run_monthly(month: str | None = None, dry_run: bool = False) -> dict[str, An
         data["summary_text"] = monthly_summary(data)
         review_id = upsert_monthly_review(conn, data)
         month_start = f"{target_month}-01"
-        month_end = (
-            date.fromisoformat(month_start).replace(day=28) + timedelta(days=4)
-        ).replace(day=1) - timedelta(days=1)
+        month_end = (date.fromisoformat(month_start).replace(day=28) + timedelta(days=4)).replace(
+            day=1
+        ) - timedelta(days=1)
         upset_report = generate_report(
             conn,
             report_type="monthly",

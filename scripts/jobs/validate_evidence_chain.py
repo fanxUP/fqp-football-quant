@@ -183,8 +183,8 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
                     )
                     row = cur.fetchone()
                 if row and row[0]:
-                    chain_details["odds_snapshot_age_seconds"] = (
-                        _business_snapshot_age_seconds(row[0])
+                    chain_details["odds_snapshot_age_seconds"] = _business_snapshot_age_seconds(
+                        row[0]
                     )
                 else:
                     broken_link = "odds_snapshot_invalid"
@@ -204,9 +204,7 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
                 else:
                     chain_details["model_version_id"] = pred_chain["model_version_id"]
                     chain_details["model_version_exists"] = pred_chain["model_version_exists"]
-                    chain_details["model_version_is_active"] = pred_chain[
-                        "model_version_is_active"
-                    ]
+                    chain_details["model_version_is_active"] = pred_chain["model_version_is_active"]
                     if not pred_chain["model_version_id"] or not pred_chain["model_version_exists"]:
                         broken_link = broken_link or "model_version_invalid"
                         chain_ok = False

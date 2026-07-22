@@ -54,8 +54,12 @@ OFFICIAL_LEAGUE_REFS: dict[str, tuple[OfficialLeagueRef, ...]] = {
     "U23亚洲杯": _refs((27, "亚洲杯23")),
     "世界杯": _refs((2308, "世界杯")),
     "世界杯预选赛": _refs(
-        (111, "世预赛"), (942, "世预赛"), (941, "世预赛"),
-        (305, "世预赛"), (1443, "世预赛"), (1758, "世预赛"),
+        (111, "世预赛"),
+        (942, "世预赛"),
+        (941, "世预赛"),
+        (305, "世预赛"),
+        (1443, "世预赛"),
+        (1758, "世预赛"),
         (1703, "世预赛"),
     ),
     "东亚锦标赛": _refs((57, "东亚锦")),
@@ -130,34 +134,18 @@ MANUAL_SEASON_CANDIDATES: dict[str, tuple[SeasonCandidate, ...]] = {
         SeasonCandidate(None, "2026", date(2026, 7, 14), date(2026, 10, 31)),
         SeasonCandidate(None, "2025", date(2025, 5, 13), date(2025, 10, 4)),
     ),
-    "中北美冠军杯": (
-        SeasonCandidate(None, "2026", date(2026, 2, 3), date(2026, 5, 30)),
-    ),
-    "俄罗斯超级联赛": (
-        SeasonCandidate(None, "2025/2026", date(2025, 7, 18), date(2026, 5, 17)),
-    ),
-    "巴西甲级联赛": (
-        SeasonCandidate(None, "2026", date(2026, 1, 28), date(2026, 12, 2)),
-    ),
-    "女足亚洲杯": (
-        SeasonCandidate(None, "2026", date(2026, 3, 1), date(2026, 3, 21)),
-    ),
-    "巴西杯": (
-        SeasonCandidate(None, "2026", date(2026, 2, 17), date(2026, 12, 6)),
-    ),
-    "挪威杯": (
-        SeasonCandidate(None, "2026/2027", date(2026, 6, 5), date(2027, 5, 31)),
-    ),
+    "中北美冠军杯": (SeasonCandidate(None, "2026", date(2026, 2, 3), date(2026, 5, 30)),),
+    "俄罗斯超级联赛": (SeasonCandidate(None, "2025/2026", date(2025, 7, 18), date(2026, 5, 17)),),
+    "巴西甲级联赛": (SeasonCandidate(None, "2026", date(2026, 1, 28), date(2026, 12, 2)),),
+    "女足亚洲杯": (SeasonCandidate(None, "2026", date(2026, 3, 1), date(2026, 3, 21)),),
+    "巴西杯": (SeasonCandidate(None, "2026", date(2026, 2, 17), date(2026, 12, 6)),),
+    "挪威杯": (SeasonCandidate(None, "2026/2027", date(2026, 6, 5), date(2027, 5, 31)),),
     "日本天皇杯": (
         SeasonCandidate(None, "2026", date(2026, 8, 19), date(2027, 1, 1)),
         SeasonCandidate(None, "2025", date(2025, 5, 24), date(2025, 11, 22)),
     ),
-    "瑞典杯": (
-        SeasonCandidate(None, "2026/2027", date(2026, 5, 26), date(2027, 5, 31)),
-    ),
-    "葡萄牙杯": (
-        SeasonCandidate(None, "2025/2026", date(2025, 8, 1), date(2026, 5, 24)),
-    ),
+    "瑞典杯": (SeasonCandidate(None, "2026/2027", date(2026, 5, 26), date(2027, 5, 31)),),
+    "葡萄牙杯": (SeasonCandidate(None, "2025/2026", date(2025, 8, 1), date(2026, 5, 24)),),
 }
 
 MANUAL_SOURCE_URLS = {
@@ -175,18 +163,23 @@ MANUAL_SOURCE_URLS = {
 }
 
 DEPENDENT_MATCH_TABLES = (
-    "simulation_ticket_items", "prediction_error_analysis",
-    "model_committee_votes", "market_efficiency_metrics",
-    "odds_probability_conversions", "score_distribution_snapshots",
-    "real_ticket_items", "football_pool_issue_matches", "simulator_ticket_items",
-    "model_predictions", "official_odds_snapshots", "official_markets",
+    "simulation_ticket_items",
+    "prediction_error_analysis",
+    "model_committee_votes",
+    "market_efficiency_metrics",
+    "odds_probability_conversions",
+    "score_distribution_snapshots",
+    "real_ticket_items",
+    "football_pool_issue_matches",
+    "simulator_ticket_items",
+    "model_predictions",
+    "official_odds_snapshots",
+    "official_markets",
     "official_results",
 )
 
 
-def select_season_window(
-    candidates: list[SeasonCandidate], *, today: date
-) -> SelectedSeasonWindow:
+def select_season_window(candidates: list[SeasonCandidate], *, today: date) -> SelectedSeasonWindow:
     if not candidates:
         raise ValueError("competition has no season candidates")
     ordered = sorted(candidates, key=lambda item: item.start_date, reverse=True)
@@ -198,7 +191,11 @@ def select_season_window(
     completed = next((item for item in ordered if item.end_date < today), None)
     if completed is None:
         raise ValueError("competition has not started and has no completed season")
-    reason = "previous_complete" if any(item.start_date > today for item in ordered) else "latest_complete"
+    reason = (
+        "previous_complete"
+        if any(item.start_date > today for item in ordered)
+        else "latest_complete"
+    )
     return SelectedSeasonWindow(
         completed.season_name, completed.start_date, completed.end_date, reason
     )
@@ -234,7 +231,8 @@ def flatten_leagues(payload: dict[str, Any]) -> dict[int, dict[str, Any]]:
 def _candidate(season: dict[str, Any], response: dict[str, Any]) -> SeasonCandidate:
     value = response.get("value") or {}
     return SeasonCandidate(
-        int(season["seasonId"]), str(season["seasonName"]),
+        int(season["seasonId"]),
+        str(season["seasonName"]),
         date.fromisoformat(value["seasonStartDate"]),
         date.fromisoformat(value["seasonEndDate"]),
     )
@@ -286,7 +284,8 @@ def resolve_targets(
             )
         selected = aggregate_selected_windows(selected_refs)
         targets[league_name] = {
-            **asdict(selected), "boundary_source": "sporttery",
+            **asdict(selected),
+            "boundary_source": "sporttery",
             "source_url": SPORTTERY_SEASON_URL,
             "official_league_refs": [asdict(ref) for ref in refs],
             "evidence": evidence,
@@ -295,7 +294,8 @@ def resolve_targets(
     for league_name, manual_candidates in MANUAL_SEASON_CANDIDATES.items():
         selected = select_season_window(list(manual_candidates), today=today)
         targets[league_name] = {
-            **asdict(selected), "boundary_source": "competition_organiser",
+            **asdict(selected),
+            "boundary_source": "competition_organiser",
             "source_url": MANUAL_SOURCE_URLS[league_name],
             "official_league_refs": [],
             "evidence": [asdict(item) for item in manual_candidates],
@@ -343,10 +343,16 @@ def _persist_and_purge(
                         updated_at=now()
                     """,
                     (
-                        league_name, target["season_name"], target["start_date"],
-                        target["end_date"], target["selection_reason"],
-                        target["boundary_source"], Json(target["official_league_refs"]),
-                        target["source_url"], today, Json(serializable_target),
+                        league_name,
+                        target["season_name"],
+                        target["start_date"],
+                        target["end_date"],
+                        target["selection_reason"],
+                        target["boundary_source"],
+                        Json(target["official_league_refs"]),
+                        target["source_url"],
+                        today,
+                        Json(serializable_target),
                     ),
                 )
 
@@ -400,7 +406,9 @@ def _persist_and_purge(
 
 
 def run(
-    *, today: date | None = None, dry_run: bool = False,
+    *,
+    today: date | None = None,
+    dry_run: bool = False,
     artifact_root: Path | None = None,
 ) -> dict[str, Any]:
     business_today = today or datetime.now(ZoneInfo("Asia/Shanghai")).date()
@@ -430,4 +438,10 @@ if __name__ == "__main__":
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--artifact-root", type=Path)
     args = parser.parse_args()
-    print(json.dumps(run(today=args.today, dry_run=args.dry_run, artifact_root=args.artifact_root), ensure_ascii=False, default=str))
+    print(
+        json.dumps(
+            run(today=args.today, dry_run=args.dry_run, artifact_root=args.artifact_root),
+            ensure_ascii=False,
+            default=str,
+        )
+    )

@@ -6,14 +6,18 @@ def test_review_gates_endpoint_returns_gate_context(client):
     mock_cur = MagicMock()
     mock_conn.__enter__.return_value = mock_conn
     mock_conn.cursor.return_value.__enter__.return_value = mock_cur
-    gates = [{
-        "id": 1,
-        "task_code": "RISK-001",
-        "task_title": "推荐审核",
-        "review_status": "pending",
-    }]
-    with patch("apps.backend.src.routers.agents.get_db", return_value=mock_conn), \
-         patch("apps.backend.src.routers.agents._list_gates", return_value=gates):
+    gates = [
+        {
+            "id": 1,
+            "task_code": "RISK-001",
+            "task_title": "推荐审核",
+            "review_status": "pending",
+        }
+    ]
+    with (
+        patch("apps.backend.src.routers.agents.get_db", return_value=mock_conn),
+        patch("apps.backend.src.routers.agents._list_gates", return_value=gates),
+    ):
         resp = client.get("/api/agent-review-gates?review_status=pending&limit=10")
 
     assert resp.status_code == 200
@@ -32,8 +36,10 @@ def test_agent_summary_endpoint_returns_counts(client):
         "scheduler_running": True,
     }
     mock_conn = MagicMock()
-    with patch("apps.backend.src.routers.agents.get_db", return_value=mock_conn), \
-         patch("apps.backend.src.routers.agents._get_summary", return_value=summary):
+    with (
+        patch("apps.backend.src.routers.agents.get_db", return_value=mock_conn),
+        patch("apps.backend.src.routers.agents._get_summary", return_value=summary),
+    ):
         resp = client.get("/api/agent-summary")
     assert resp.status_code == 200
     assert resp.json() == {"summary": summary}
@@ -48,8 +54,10 @@ def test_review_gate_resolve_requires_explicit_reviewer(client):
 def test_review_gate_resolve_updates_gate(client):
     mock_conn = MagicMock()
     mock_conn.__enter__.return_value = mock_conn
-    with patch("apps.backend.src.routers.agents.get_db", return_value=mock_conn), \
-         patch("apps.backend.src.routers.agents._resolve_gate", return_value=True) as resolve:
+    with (
+        patch("apps.backend.src.routers.agents.get_db", return_value=mock_conn),
+        patch("apps.backend.src.routers.agents._resolve_gate", return_value=True) as resolve,
+    ):
         resp = client.post(
             "/api/agent-review-gates/1/resolve",
             json={"reviewer": "human", "status": "approved", "comment": "checked"},
@@ -62,8 +70,10 @@ def test_review_gate_resolve_updates_gate(client):
 def test_stale_jobs_endpoint_returns_diagnostics(client):
     jobs = [{"id": 4, "job_code": "weather_collection", "running_minutes": 42.5}]
     mock_conn = MagicMock()
-    with patch("apps.backend.src.routers.agents.get_db", return_value=mock_conn), \
-         patch("apps.backend.src.routers.agents._list_stale_jobs", return_value=jobs):
+    with (
+        patch("apps.backend.src.routers.agents.get_db", return_value=mock_conn),
+        patch("apps.backend.src.routers.agents._list_stale_jobs", return_value=jobs),
+    ):
         resp = client.get("/api/agent-stale-jobs?threshold_minutes=30")
     assert resp.status_code == 200
     assert resp.json() == {"jobs": jobs, "total": 1, "threshold_minutes": 30}
@@ -72,8 +82,10 @@ def test_stale_jobs_endpoint_returns_diagnostics(client):
 def test_stale_tasks_endpoint_returns_diagnostics(client):
     tasks = [{"id": 7, "task_code": "TEST-001", "stale_minutes": 20160.5}]
     mock_conn = MagicMock()
-    with patch("apps.backend.src.routers.agents.get_db", return_value=mock_conn), \
-         patch("apps.backend.src.routers.agents._list_stale_tasks", return_value=tasks):
+    with (
+        patch("apps.backend.src.routers.agents.get_db", return_value=mock_conn),
+        patch("apps.backend.src.routers.agents._list_stale_tasks", return_value=tasks),
+    ):
         resp = client.get("/api/agent-stale-tasks?threshold_minutes=60")
     assert resp.status_code == 200
     assert resp.json() == {"tasks": tasks, "total": 1, "threshold_minutes": 60}

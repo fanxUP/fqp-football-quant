@@ -75,9 +75,7 @@ class SportteryClient:
                 print(f"[sporttery] GET {path} error (attempt {attempt}): {e}")
                 # Don't retry on 403 (permanent block) — let caller fall back
                 if isinstance(e, httpx.HTTPStatusError) and e.response.status_code == 403:
-                    raise RuntimeError(
-                        f"SportteryClient: {path} returned 403 Forbidden"
-                    ) from e
+                    raise RuntimeError(f"SportteryClient: {path} returned 403 Forbidden") from e
                 if attempt < self._max_retries:
                     backoff = 2**attempt
                     print(f"[sporttery] retrying in {backoff}s...")
@@ -110,9 +108,7 @@ class SportteryClient:
                 last_error = e
                 print(f"[sporttery] GET {url} error (attempt {attempt}): {e}")
                 if isinstance(e, httpx.HTTPStatusError) and e.response.status_code == 403:
-                    raise RuntimeError(
-                        f"SportteryClient: {url} returned 403 Forbidden"
-                    ) from e
+                    raise RuntimeError(f"SportteryClient: {url} returned 403 Forbidden") from e
                 if attempt < self._max_retries:
                     backoff = 2**attempt
                     print(f"[sporttery] retrying in {backoff}s...")
@@ -152,9 +148,7 @@ class SportteryClient:
             endpoint,
         )
 
-    def get_uniform_match_results(
-        self, begin_date: str, end_date: str
-    ) -> dict[str, Any]:
+    def get_uniform_match_results(self, begin_date: str, end_date: str) -> dict[str, Any]:
         """Fetch official result pages one day at a time via the Uniform API.
 
         Official page: https://www.lottery.gov.cn/jc/zqsgkj/
@@ -275,9 +269,7 @@ class SportteryClient:
         params = {"isVerify": "1", "param": "90,0;91,0;98,0;99,0"}
         # Attempt 1: direct API request with JSON fix
         try:
-            return self._request_url(
-                self.LOTTERY_BASE_URL + "getFootBallDrawInfoV2.qry", params
-            )
+            return self._request_url(self.LOTTERY_BASE_URL + "getFootBallDrawInfoV2.qry", params)
         except RuntimeError as e:
             msg = str(e)
             # Only fall back to browser on 403 (WAF block), not malformed JSON
@@ -303,12 +295,12 @@ class SportteryClient:
                     raise RuntimeError("403 Forbidden")
                 text = resp.text
                 # Fix sporttery's malformed JSON: "key":, → "key":null,
-                text = _re.sub(r'("[^"]+")\s*:\s*,', r'\1:null,', text)
+                text = _re.sub(r'("[^"]+")\s*:\s*,', r"\1:null,", text)
                 return json.loads(text)
             except (httpx.HTTPError, json.JSONDecodeError) as e:
                 print(f"[sporttery] lottery JSON fix attempt {attempt} failed: {e}")
                 if attempt < self._max_retries:
-                    time.sleep(2 ** attempt)
+                    time.sleep(2**attempt)
         raise RuntimeError(
             f"SportteryClient: failed to fetch lottery data after {self._max_retries} attempts"
         )
@@ -385,14 +377,12 @@ class SportteryClient:
                 if status != 200:
                     body_text = page.evaluate("document.body.innerText") if resp else ""
                     browser.close()
-                    raise RuntimeError(
-                        f"Browser request returned {status}: {body_text[:200]}"
-                    )
+                    raise RuntimeError(f"Browser request returned {status}: {body_text[:200]}")
 
                 body_text = page.evaluate("document.body.innerText")
 
                 # Fix sporttery API bug: malformed JSON like "key":,
-                body_text = _re.sub(r'("[^"]+")\s*:\s*,', r'\1:null,', body_text)
+                body_text = _re.sub(r'("[^"]+")\s*:\s*,', r"\1:null,", body_text)
 
                 data = json.loads(body_text)
                 elapsed = int((time.monotonic() - t0) * 1000)

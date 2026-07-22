@@ -26,6 +26,7 @@ def payout_cap(match_count: int) -> float:
         return 500_000.0
     return 1_000_000.0
 
+
 # ---- Play-type max matches per ticket ----
 
 PLAY_TYPE_MAX_MATCHES: dict[str, int] = {
@@ -56,7 +57,7 @@ PLAY_TYPE_LABELS: dict[str, str] = {
 
 PASS_TYPE_REGISTRY: dict[str, list[tuple[int, int]]] = {
     # M串1: choose every M-match subset from the selected matches.
-    "single": [(1, 1)],    # special: each match is its own independent bet
+    "single": [(1, 1)],  # special: each match is its own independent bet
     "2x1": [(2, 2)],
     "3x1": [(3, 3)],
     "4x1": [(4, 4)],
@@ -64,54 +65,59 @@ PASS_TYPE_REGISTRY: dict[str, list[tuple[int, int]]] = {
     "6x1": [(6, 6)],
     "7x1": [(7, 7)],
     "8x1": [(8, 8)],
-
     # ---- 3-match M串N ----
-    "3x3": [(3, 2)],                                    # C(3,2) = 3
-    "3x4": [(3, 2), (3, 3)],                            # 3 + 1 = 4
-
+    "3x3": [(3, 2)],  # C(3,2) = 3
+    "3x4": [(3, 2), (3, 3)],  # 3 + 1 = 4
     # ---- 4-match M串N ----
-    "4x4": [(4, 3)],                                    # C(4,3) = 4
-    "4x5": [(4, 3), (4, 4)],                            # 4 + 1 = 5
-    "4x6": [(4, 2)],                                    # C(4,2) = 6
-    "4x11": [(4, 2), (4, 3), (4, 4)],                   # 6 + 4 + 1 = 11
-
+    "4x4": [(4, 3)],  # C(4,3) = 4
+    "4x5": [(4, 3), (4, 4)],  # 4 + 1 = 5
+    "4x6": [(4, 2)],  # C(4,2) = 6
+    "4x11": [(4, 2), (4, 3), (4, 4)],  # 6 + 4 + 1 = 11
     # ---- 5-match M串N ----
-    "5x5": [(5, 4)],                                    # C(5,4) = 5
-    "5x6": [(5, 4), (5, 5)],                            # 5 + 1 = 6
-    "5x10": [(5, 2)],                                   # C(5,2) = 10
-    "5x16": [(5, 3), (5, 4), (5, 5)],                   # 10 + 5 + 1 = 16
-    "5x20": [(5, 2), (5, 3)],                           # 10 + 10 = 20
-    "5x26": [(5, 2), (5, 3), (5, 4), (5, 5)],           # 10 + 10 + 5 + 1 = 26
-
+    "5x5": [(5, 4)],  # C(5,4) = 5
+    "5x6": [(5, 4), (5, 5)],  # 5 + 1 = 6
+    "5x10": [(5, 2)],  # C(5,2) = 10
+    "5x16": [(5, 3), (5, 4), (5, 5)],  # 10 + 5 + 1 = 16
+    "5x20": [(5, 2), (5, 3)],  # 10 + 10 = 20
+    "5x26": [(5, 2), (5, 3), (5, 4), (5, 5)],  # 10 + 10 + 5 + 1 = 26
     # ---- 6-match M串N ----
-    "6x6": [(6, 5)],                                    # C(6,5) = 6
-    "6x7": [(6, 5), (6, 6)],                            # 6 + 1 = 7
-    "6x15": [(6, 2)],                                   # C(6,2) = 15
-    "6x20": [(6, 3)],                                   # C(6,3) = 20
-    "6x22": [(6, 4), (6, 5), (6, 6)],                   # 15 + 6 + 1 = 22
-    "6x35": [(6, 2), (6, 3)],                           # 15 + 20 = 35
-    "6x42": [(6, 3), (6, 4), (6, 5), (6, 6)],           # 20 + 15 + 6 + 1 = 42
-    "6x50": [(6, 2), (6, 3), (6, 4)],                    # 15 + 20 + 15 = 50
-    "6x57": [(6, 2), (6, 3), (6, 4), (6, 5), (6, 6)],   # 15 + 20 + 15 + 6 + 1 = 57
-
+    "6x6": [(6, 5)],  # C(6,5) = 6
+    "6x7": [(6, 5), (6, 6)],  # 6 + 1 = 7
+    "6x15": [(6, 2)],  # C(6,2) = 15
+    "6x20": [(6, 3)],  # C(6,3) = 20
+    "6x22": [(6, 4), (6, 5), (6, 6)],  # 15 + 6 + 1 = 22
+    "6x35": [(6, 2), (6, 3)],  # 15 + 20 = 35
+    "6x42": [(6, 3), (6, 4), (6, 5), (6, 6)],  # 20 + 15 + 6 + 1 = 42
+    "6x50": [(6, 2), (6, 3), (6, 4)],  # 15 + 20 + 15 = 50
+    "6x57": [(6, 2), (6, 3), (6, 4), (6, 5), (6, 6)],  # 15 + 20 + 15 + 6 + 1 = 57
     # ---- 7-match M串N ----
-    "7x7": [(7, 6)],                                    # C(7,6) = 7
-    "7x8": [(7, 6), (7, 7)],                            # 7 + 1 = 8
-    "7x21": [(7, 5)],                                   # C(7,5) = 21
-    "7x35": [(7, 4)],                                   # C(7,4) = 35
+    "7x7": [(7, 6)],  # C(7,6) = 7
+    "7x8": [(7, 6), (7, 7)],  # 7 + 1 = 8
+    "7x21": [(7, 5)],  # C(7,5) = 21
+    "7x35": [(7, 4)],  # C(7,4) = 35
     "7x120": [
-        (7, 2), (7, 3), (7, 4), (7, 5), (7, 6), (7, 7),
-    ],                                                   # 21+35+35+21+7+1 = 120
-
+        (7, 2),
+        (7, 3),
+        (7, 4),
+        (7, 5),
+        (7, 6),
+        (7, 7),
+    ],  # 21+35+35+21+7+1 = 120
     # ---- 8-match M串N ----
-    "8x8": [(8, 7)],                                    # C(8,7) = 8
-    "8x9": [(8, 7), (8, 8)],                            # 8 + 1 = 9
-    "8x28": [(8, 6)],                                   # C(8,6) = 28
-    "8x56": [(8, 5)],                                   # C(8,5) = 56
-    "8x70": [(8, 4)],                                   # C(8,4) = 70
+    "8x8": [(8, 7)],  # C(8,7) = 8
+    "8x9": [(8, 7), (8, 8)],  # 8 + 1 = 9
+    "8x28": [(8, 6)],  # C(8,6) = 28
+    "8x56": [(8, 5)],  # C(8,5) = 56
+    "8x70": [(8, 4)],  # C(8,4) = 70
     "8x247": [
-        (8, 2), (8, 3), (8, 4), (8, 5), (8, 6), (8, 7), (8, 8),
-    ],                                                   # 28+56+70+56+28+8+1 = 247
+        (8, 2),
+        (8, 3),
+        (8, 4),
+        (8, 5),
+        (8, 6),
+        (8, 7),
+        (8, 8),
+    ],  # 28+56+70+56+28+8+1 = 247
 }
 
 # Max matches allowed per pass type (the M in M串N must match exactly)
@@ -221,9 +227,7 @@ def get_available_pass_types(match_count: int | list[dict]) -> list[str]:
     return available
 
 
-def calculate_bet_combinations(
-    matches: list[dict], pass_type: str
-) -> list[list[dict]]:
+def calculate_bet_combinations(matches: list[dict], pass_type: str) -> list[list[dict]]:
     """Decompose M matches into N bet combinations based on pass_type.
 
     - 'single': each match is its own 1-match combo → returns M combos
@@ -241,7 +245,9 @@ def calculate_bet_combinations(
 
     # Separate dan (banker) matches — they appear in ALL combos
     dan_groups = [group for group in match_groups if any(item.get("is_dan") for item in group)]
-    normal_groups = [group for group in match_groups if not any(item.get("is_dan") for item in group)]
+    normal_groups = [
+        group for group in match_groups if not any(item.get("is_dan") for item in group)
+    ]
     n_dan = len(dan_groups)
     n_normal = len(normal_groups)
 
@@ -250,7 +256,12 @@ def calculate_bet_combinations(
 
     if pass_type == "single":
         # Each match is its own independent bet (1x1)
-        return [[item] for group in match_groups for item in group if item.get("is_single_allowed", True)]
+        return [
+            [item]
+            for group in match_groups
+            for item in group
+            if item.get("is_single_allowed", True)
+        ]
 
     if pass_type.endswith("x1") and pass_type != "single":
         # M串1: choose every M-match combination from the current selections.
@@ -277,9 +288,7 @@ def calculate_bet_combinations(
     bet_combos: list[list[dict]] = []
     for n, k in specs:
         if n != n_matches:
-            raise ValueError(
-                f"Pass spec ({n},{k}) requires {n} matches, got {n_matches}"
-            )
+            raise ValueError(f"Pass spec ({n},{k}) requires {n} matches, got {n_matches}")
         # Adjust k for dan matches: dan matches already count toward the k total
         k_effective = k - n_dan
         if k_effective < 0:
@@ -298,9 +307,7 @@ def calculate_bet_combinations(
     return bet_combos
 
 
-def calculate_max_prize(
-    combinations_result: list[list[dict]], multiple: int = 1
-) -> float:
+def calculate_max_prize(combinations_result: list[list[dict]], multiple: int = 1) -> float:
     """Calculate max potential prize across all combinations.
 
     For each combination: product of all SP values × 2 yuan base.
@@ -395,18 +402,20 @@ def calculate_all(
         for item in combo:
             combo_sp *= float(item["sp_value"])
         combo_prize = round(min(combo_sp * UNIT_STAKE, payout_cap(len(combo))) * multiple, 2)
-        combo_details.append({
-            "items": [
-                {
-                    "match_id": item["match_id"],
-                    "option_code": item["option_code"],
-                    "sp_value": item["sp_value"],
-                }
-                for item in combo
-            ],
-            "combo_sp": round(combo_sp, 4),
-            "max_prize": combo_prize,
-        })
+        combo_details.append(
+            {
+                "items": [
+                    {
+                        "match_id": item["match_id"],
+                        "option_code": item["option_code"],
+                        "sp_value": item["sp_value"],
+                    }
+                    for item in combo
+                ],
+                "combo_sp": round(combo_sp, 4),
+                "max_prize": combo_prize,
+            }
+        )
 
     return {
         "pass_type": pass_type,
@@ -431,7 +440,9 @@ def validate_items(items: list[dict], pass_type: str) -> list[str]:
     match_ids = [item.get("match_id") for item in items]
     if any(match_id is None for match_id in match_ids):
         errors.append("每个投注项必须包含官方比赛编号")
-    selection_keys = [(item.get("match_id"), item.get("play_type"), item.get("option_code")) for item in items]
+    selection_keys = [
+        (item.get("match_id"), item.get("play_type"), item.get("option_code")) for item in items
+    ]
     if len(selection_keys) != len(set(selection_keys)):
         errors.append("同一场比赛的同一投注选项不能重复添加")
     match_count = len(set(match_ids))
@@ -515,20 +526,26 @@ if __name__ == "__main__":
 
     # Test calculate_all
     result = calculate_all(matches, "4x11", multiple=1)
-    print(f"  bet_count={result['bet_count']}, cost={result['total_cost']}, max_prize={result['max_prize']}")
+    print(
+        f"  bet_count={result['bet_count']}, cost={result['total_cost']}, max_prize={result['max_prize']}"
+    )
     assert result["bet_count"] == 11
     assert result["total_cost"] == 22.0  # 11 × 2 × 1
 
     # Test single
     result_single = calculate_all(matches, "single", multiple=5)
-    print(f"\nsingle (4 matches, 5x): bet_count={result_single['bet_count']}, cost={result_single['total_cost']}")
+    print(
+        f"\nsingle (4 matches, 5x): bet_count={result_single['bet_count']}, cost={result_single['total_cost']}"
+    )
     assert result_single["bet_count"] == 4
     assert result_single["total_cost"] == 40.0  # 4 × 2 × 5
 
     # Test 3x3
     matches_3 = matches[:3]
     result_3x3 = calculate_all(matches_3, "3x3", multiple=1)
-    print(f"\n3x3: bet_count={result_3x3['bet_count']}, cost={result_3x3['total_cost']}, combos={len(result_3x3['combinations'])}")
+    print(
+        f"\n3x3: bet_count={result_3x3['bet_count']}, cost={result_3x3['total_cost']}, combos={len(result_3x3['combinations'])}"
+    )
     assert result_3x3["bet_count"] == 3  # C(3,2) = 3
     assert len(result_3x3["combinations"]) == 3
 
@@ -547,7 +564,9 @@ if __name__ == "__main__":
     print(f"\n3x3 with 1 dan: {len(combos_dan)} combos")
     for c in combos_dan:
         dan_count = sum(1 for m in c if m.get("is_dan"))
-        print(f"  combo: {[(m['match_id'], 'dan' if m.get('is_dan') else 'normal') for m in c]}, dan_count={dan_count}")
+        print(
+            f"  combo: {[(m['match_id'], 'dan' if m.get('is_dan') else 'normal') for m in c]}, dan_count={dan_count}"
+        )
         assert dan_count == 1, "Dan match should appear in every combo"
 
     # Test max prize calculation

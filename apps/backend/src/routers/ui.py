@@ -65,7 +65,9 @@ def _module_map() -> dict[str, dict[str, Any]]:
     return modules
 
 
-def _module_payload(module: dict[str, Any], disabled_modules: set[str] | None = None) -> dict[str, Any]:
+def _module_payload(
+    module: dict[str, Any], disabled_modules: set[str] | None = None
+) -> dict[str, Any]:
     module_code = str(module.get("module_id", ""))
     is_disabled = disabled_modules is not None and module_code in disabled_modules
     return {
@@ -81,7 +83,9 @@ def _module_payload(module: dict[str, Any], disabled_modules: set[str] | None = 
     }
 
 
-def _enabled_dependents(module_code: str, modules: dict[str, dict[str, Any]], disabled_modules: set[str]) -> list[str]:
+def _enabled_dependents(
+    module_code: str, modules: dict[str, dict[str, Any]], disabled_modules: set[str]
+) -> list[str]:
     return sorted(
         candidate_code
         for candidate_code, candidate in modules.items()
@@ -138,9 +142,7 @@ def update_module_status(module_code: str, payload: dict[str, bool]) -> dict[str
             )
         disabled_modules.add(module_code)
     else:
-        missing_dependencies = [
-            dep for dep in module["dependsOn"] if dep in disabled_modules
-        ]
+        missing_dependencies = [dep for dep in module["dependsOn"] if dep in disabled_modules]
         if missing_dependencies:
             raise HTTPException(
                 status_code=409,
@@ -170,7 +172,9 @@ def list_ui_panels(
     safely_disabled = {
         module_code
         for module_code in runtime_disabled.union(disabled_modules or [])
-        if module_code in modules and modules[module_code]["safeDisable"] and not modules[module_code]["required"]
+        if module_code in modules
+        and modules[module_code]["safeDisable"]
+        and not modules[module_code]["required"]
     }
 
     panels: list[dict[str, object]] = []

@@ -74,7 +74,7 @@ def run(dry_run: bool = False, season: int | None = None) -> dict[str, Any]:
                     if comp_code and comp_code.startswith("apifootball:"):
                         try:
                             api_league_id = int(comp_code.split(":")[1])
-                        except (ValueError, IndexError):
+                        except ValueError, IndexError:
                             pass
 
                     if api_league_id is None:
@@ -131,11 +131,19 @@ def run(dry_run: bool = False, season: int | None = None) -> dict[str, Any]:
                                             "drawn": all_stats.get("draw"),
                                             "lost": all_stats.get("lose"),
                                             "goals_for": (all_stats.get("goals") or {}).get("for"),
-                                            "goals_against": (all_stats.get("goals") or {}).get("against"),
+                                            "goals_against": (all_stats.get("goals") or {}).get(
+                                                "against"
+                                            ),
                                             "goal_difference": row.get("goalsDiff"),
                                             "points": row.get("points"),
-                                            "home_points": home_stats.get("win", 0) * 3 + home_stats.get("draw", 0) if home_stats else None,
-                                            "away_points": away_stats.get("win", 0) * 3 + away_stats.get("draw", 0) if away_stats else None,
+                                            "home_points": home_stats.get("win", 0) * 3
+                                            + home_stats.get("draw", 0)
+                                            if home_stats
+                                            else None,
+                                            "away_points": away_stats.get("win", 0) * 3
+                                            + away_stats.get("draw", 0)
+                                            if away_stats
+                                            else None,
                                             "source_name": "api-football",
                                             "source_confidence": 0.85,
                                             "raw_json": row,

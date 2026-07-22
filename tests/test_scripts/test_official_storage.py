@@ -97,12 +97,17 @@ def test_confirmed_result_closes_match_sales_even_when_match_was_already_settled
     cursor = conn.cursor.return_value.__enter__.return_value
     cursor.fetchone.return_value = (9, True)
 
-    result = store_results(conn, [{
-        "match_id": 7,
-        "result_status": "confirmed",
-        "full_home_goals": 2,
-        "full_away_goals": 1,
-    }])
+    result = store_results(
+        conn,
+        [
+            {
+                "match_id": 7,
+                "result_status": "confirmed",
+                "full_home_goals": 2,
+                "full_away_goals": 1,
+            }
+        ],
+    )
 
     close_query = cursor.execute.call_args_list[-1].args[0]
     assert "sale_status = 'closed'" in close_query

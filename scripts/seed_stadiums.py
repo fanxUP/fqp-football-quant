@@ -181,5 +181,6 @@ def run() -> dict[str, Any]:
         "message": None if mappings_total > 0 else "waiting for official team registry",
     }
 
+
 if __name__ == "__main__":
     run()

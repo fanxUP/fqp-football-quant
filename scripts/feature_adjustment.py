@@ -93,8 +93,7 @@ def adjust_goal_rates(
         MAX_GOAL_RATE,
     )
     applied = bool(reasons) and (
-        abs(adjusted_home - home_lambda) > 1e-9
-        or abs(adjusted_away - away_lambda) > 1e-9
+        abs(adjusted_home - home_lambda) > 1e-9 or abs(adjusted_away - away_lambda) > 1e-9
     )
 
     return GoalRateAdjustment(

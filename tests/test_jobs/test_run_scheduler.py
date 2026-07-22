@@ -156,15 +156,11 @@ def test_scheduler_builds_upset_evidence_and_review_after_detection():
     assert 'id="generate_upset_reviews"' in source
     assert 'minute="25,55"' in source
     assert source.index('id="detect_upsets"') < source.index('id="collect_upset_evidence"')
-    assert source.index('id="detect_upsets"') < source.index(
-        'id="collect_upset_provider_evidence"'
-    )
+    assert source.index('id="detect_upsets"') < source.index('id="collect_upset_provider_evidence"')
     assert source.index('id="collect_upset_provider_evidence"') < source.index(
         'id="collect_upset_evidence"'
     )
-    assert source.index('id="collect_upset_evidence"') < source.index(
-        'id="generate_upset_reviews"'
-    )
+    assert source.index('id="collect_upset_evidence"') < source.index('id="generate_upset_reviews"')
 
 
 def test_scheduler_refreshes_upset_knowledge_daily():

@@ -30,9 +30,7 @@ def _normalize_team_name(value: str) -> str:
 
 
 def _team_similarity(left: str, right: str) -> float:
-    return SequenceMatcher(
-        None, _normalize_team_name(left), _normalize_team_name(right)
-    ).ratio()
+    return SequenceMatcher(None, _normalize_team_name(left), _normalize_team_name(right)).ratio()
 
 
 def _select_official_match(
@@ -46,9 +44,9 @@ def _select_official_match(
         home_score = _team_similarity(home_team, official_home)
         away_score = _team_similarity(away_team, official_away)
         one_exact = home_score == 1.0 or away_score == 1.0
-        translated_pair = max(home_score, away_score) >= 0.85 and min(
-            home_score, away_score
-        ) >= 0.40
+        translated_pair = (
+            max(home_score, away_score) >= 0.85 and min(home_score, away_score) >= 0.40
+        )
         if (one_exact and home_score + away_score >= 1.20) or translated_pair:
             scored.append((home_score + away_score, match_id))
 
@@ -104,9 +102,7 @@ def parse_match_results(html: str) -> list[dict[str, Any]]:
     results: list[dict] = []
 
     # Find all match rows
-    tr_pattern = re.compile(
-        r'<tr\s+id="(a\d+)"\s+gy="([^"]*)"[^>]*>(.*?)</tr>', re.DOTALL
-    )
+    tr_pattern = re.compile(r'<tr\s+id="(a\d+)"\s+gy="([^"]*)"[^>]*>(.*?)</tr>', re.DOTALL)
     for match_id, gy, content in tr_pattern.findall(html):
         # Extract league name (first link in the row)
         league_m = re.search(r"<a[^>]*>([^<]+)</a>", content)
@@ -118,9 +114,7 @@ def parse_match_results(html: str) -> list[dict[str, Any]]:
         match_datetime = td_centers[1] if len(td_centers) > 1 else ""
 
         # Extract status
-        status_m = re.search(
-            r'<span class="[^"]*">(完|中|推迟|取消|待)</span>', content
-        )
+        status_m = re.search(r'<span class="[^"]*">(完|中|推迟|取消|待)</span>', content)
         status = status_m.group(1) if status_m else ""
 
         # Extract home team (span.mainName)
@@ -140,9 +134,7 @@ def parse_match_results(html: str) -> list[dict[str, Any]]:
         ft_away_m = re.search(r'class="clt3"\s*>(\d+)</a>', content)
 
         # Extract half-time score
-        ht_m = re.search(
-            r'<td align="center" class="[^"]*">(\d+)\s*-\s*(\d+)</td>', content
-        )
+        ht_m = re.search(r'<td align="center" class="[^"]*">(\d+)\s*-\s*(\d+)</td>', content)
 
         ft_home = int(ft_home_m.group(1)) if ft_home_m else None
         ft_away = int(ft_away_m.group(1)) if ft_away_m else None
@@ -303,10 +295,8 @@ def get_match_results(
 
             kickoff = None
             try:
-                kickoff = datetime.strptime(
-                    f"{match_date[:4]}-{match_datetime}", "%Y-%m-%d %H:%M"
-                )
-            except (TypeError, ValueError):
+                kickoff = datetime.strptime(f"{match_date[:4]}-{match_datetime}", "%Y-%m-%d %H:%M")
+            except TypeError, ValueError:
                 pass
 
             match_id = None
@@ -354,5 +344,11 @@ if __name__ == "__main__":
     print(f"Total matches: {len(matches)}, Finished with scores: {len(finished)}")
     for m in finished[:15]:
         score = f"{m['ft_home_goals']}-{m['ft_away_goals']}"
-        ht = f"{m['ht_home_goals']}-{m['ht_away_goals']}" if m['ht_home_goals'] is not None else '?-?'
-        print(f"  {m['match_datetime']} [{m['league']}] {m['home_team']} {score} {m['away_team']} (HT: {ht})")
+        ht = (
+            f"{m['ht_home_goals']}-{m['ht_away_goals']}"
+            if m["ht_home_goals"] is not None
+            else "?-?"
+        )
+        print(
+            f"  {m['match_datetime']} [{m['league']}] {m['home_team']} {score} {m['away_team']} (HT: {ht})"
+        )

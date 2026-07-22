@@ -300,11 +300,7 @@ def build_motivation_features(
     covered_team_count = int(home_team_id in standings_team_ids) + int(
         away_team_id in standings_team_ids
     )
-    has_motivation = (
-        home_score is not None
-        and away_score is not None
-        and covered_team_count == 2
-    )
+    has_motivation = home_score is not None and away_score is not None and covered_team_count == 2
 
     return {
         "home_motivation_score": home_score,

@@ -58,6 +58,7 @@ def _model_sample_status(sample_count: int) -> str:
         return "preliminary"
     return "monitoring"
 
+
 _LATEST_PREDICTIONS_CTE = """
     WITH latest_predictions AS (
         SELECT DISTINCT ON (
@@ -387,9 +388,7 @@ def _compute_permutation_importance(
     try:
         from sklearn.inspection import permutation_importance
 
-        r = permutation_importance(
-            model, X, y, n_repeats=n_repeats, random_state=42, n_jobs=1
-        )
+        r = permutation_importance(model, X, y, n_repeats=n_repeats, random_state=42, n_jobs=1)
 
         rankings = []
         for i, name in enumerate(feature_names):
@@ -496,7 +495,8 @@ def explain_prediction(
     col_refs = ", ".join(f"fs.{c}" for c in FEATURE_COLUMNS)
 
     with conn.cursor() as cur:
-        cur.execute(f"""
+        cur.execute(
+            f"""
             SELECT
                 fs.match_id,
                 m.home_team_name,
@@ -508,7 +508,9 @@ def explain_prediction(
               AND fs.snapshot_time < m.kickoff_time
             ORDER BY fs.snapshot_time DESC
             LIMIT 1
-        """, (match_id,))
+        """,
+            (match_id,),
+        )
         row = cur.fetchone()
 
     if not row:
@@ -632,9 +634,7 @@ def get_model_comparison_data(conn: Any) -> dict[str, Any]:
                 "rps": round(float(d["avg_rps"] or 0), 4),
                 "clv": round(float(d["avg_clv"]), 4) if d["avg_clv"] is not None else None,
                 "flb_score": (
-                    round(float(d["avg_flb_score"]), 4)
-                    if d["avg_flb_score"] is not None
-                    else None
+                    round(float(d["avg_flb_score"]), 4) if d["avg_flb_score"] is not None else None
                 ),
             }
 
@@ -770,7 +770,8 @@ def get_calibration_data(
 
     with conn.cursor() as cur:
         if model_name:
-            cur.execute(f"""
+            cur.execute(
+                f"""
                 {_LATEST_PREDICTIONS_CTE}
                 SELECT
                     mp.model_probability,
@@ -788,7 +789,9 @@ def get_calibration_data(
                   AND mp.model_probability IS NOT NULL
                 ORDER BY mp.predict_time DESC
                 LIMIT 2000
-            """, (model_name,))
+            """,
+                (model_name,),
+            )
         else:
             cur.execute(f"""
                 {_LATEST_PREDICTIONS_CTE}
@@ -808,9 +811,7 @@ def get_calibration_data(
                 LIMIT 5000
             """)
 
-        predictions = [
-            (float(row[0]), int(row[1])) for row in cur.fetchall()
-        ]
+        predictions = [(float(row[0]), int(row[1])) for row in cur.fetchall()]
 
     if len(predictions) < n_bins:
         return {

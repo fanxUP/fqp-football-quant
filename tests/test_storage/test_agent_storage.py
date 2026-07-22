@@ -73,9 +73,19 @@ class TestSeedAgentRegistry:
 
 class TestListAgents:
     def test_returns_formatted_agent_list(self):
-        mock_conn, mock_cur = _mock_conn(fetchall=[
-            (1, "agent_a", "system", "desc a", "P1", True, MagicMock(isoformat=lambda: "2025-01-01T00:00:00")),
-        ])
+        mock_conn, mock_cur = _mock_conn(
+            fetchall=[
+                (
+                    1,
+                    "agent_a",
+                    "system",
+                    "desc a",
+                    "P1",
+                    True,
+                    MagicMock(isoformat=lambda: "2025-01-01T00:00:00"),
+                ),
+            ]
+        )
 
         result = list_agents(mock_conn)
         assert len(result) == 1
@@ -183,7 +193,13 @@ class TestStaleAgentTasks:
     def test_summary_counts_stale_tasks_separately_from_jobs(self):
         mock_conn, mock_cur = _mock_conn()
         mock_cur.fetchone.side_effect = [
-            [11], [2], [1], [3], [4], [0], [1],
+            [11],
+            [2],
+            [1],
+            [3],
+            [4],
+            [0],
+            [1],
         ]
 
         result = get_agent_summary(mock_conn)
@@ -198,23 +214,35 @@ class TestStaleAgentTasks:
     def test_lists_active_tasks_older_than_threshold(self):
         started_at = MagicMock(isoformat=lambda: "2026-07-02T10:00:00")
         updated_at = MagicMock(isoformat=lambda: "2026-07-02T10:05:00")
-        mock_conn, mock_cur = _mock_conn(fetchall=[
-            (7, "TEST-001", "Test task", "qa_agent", "in_progress",
-             started_at, updated_at, 20160.5),
-        ])
+        mock_conn, mock_cur = _mock_conn(
+            fetchall=[
+                (
+                    7,
+                    "TEST-001",
+                    "Test task",
+                    "qa_agent",
+                    "in_progress",
+                    started_at,
+                    updated_at,
+                    20160.5,
+                ),
+            ]
+        )
 
         result = list_stale_tasks(mock_conn, threshold_minutes=60, limit=20)
 
-        assert result == [{
-            "id": 7,
-            "task_code": "TEST-001",
-            "task_title": "Test task",
-            "owner_agent": "qa_agent",
-            "status": "in_progress",
-            "started_at": "2026-07-02T10:00:00",
-            "updated_at": "2026-07-02T10:05:00",
-            "stale_minutes": 20160.5,
-        }]
+        assert result == [
+            {
+                "id": 7,
+                "task_code": "TEST-001",
+                "task_title": "Test task",
+                "owner_agent": "qa_agent",
+                "status": "in_progress",
+                "started_at": "2026-07-02T10:00:00",
+                "updated_at": "2026-07-02T10:05:00",
+                "stale_minutes": 20160.5,
+            }
+        ]
         query, params = mock_cur.execute.call_args.args
         assert "COALESCE(updated_at, started_at, assigned_at, created_at)" in query
         assert params == (60, 20)
@@ -252,16 +280,23 @@ class TestRetryJobRun:
 class TestTaskArtifacts:
     def test_adds_artifact_with_metadata(self):
         mock_conn, mock_cur = _mock_conn(fetchone=[9])
-        result = add_task_artifact(mock_conn, {
-            "task_id": 5, "artifact_type": "test_report",
-            "artifact_path": "reports/test.txt", "metadata": {"passed": 3},
-        })
+        result = add_task_artifact(
+            mock_conn,
+            {
+                "task_id": 5,
+                "artifact_type": "test_report",
+                "artifact_path": "reports/test.txt",
+                "metadata": {"passed": 3},
+            },
+        )
         assert result == 9
         assert '"passed": 3' in mock_cur.execute.call_args[0][1]["metadata"]
 
     def test_lists_artifacts(self):
         now = MagicMock(isoformat=lambda: "2025-01-01T00:00:00")
-        mock_conn, mock_cur = _mock_conn(fetchall=[(9, 5, "test_report", "x", "ok", "abc", {}, now)])
+        mock_conn, mock_cur = _mock_conn(
+            fetchall=[(9, 5, "test_report", "x", "ok", "abc", {}, now)]
+        )
         result = list_task_artifacts(mock_conn, 5)
         assert result[0]["artifact_hash"] == "abc"
 
@@ -269,10 +304,28 @@ class TestTaskArtifacts:
 class TestListAgentTasks:
     def test_returns_formatted_task_list(self):
         now = MagicMock(isoformat=lambda: "2025-01-01T00:00:00")
-        mock_conn, mock_cur = _mock_conn(fetchall=[
-            (1, "T-001", "Title", "general", "agent_x", "high", "L2", "created",
-             "scope", True, "codex", now, now, now, now, now),
-        ])
+        mock_conn, mock_cur = _mock_conn(
+            fetchall=[
+                (
+                    1,
+                    "T-001",
+                    "Title",
+                    "general",
+                    "agent_x",
+                    "high",
+                    "L2",
+                    "created",
+                    "scope",
+                    True,
+                    "codex",
+                    now,
+                    now,
+                    now,
+                    now,
+                    now,
+                ),
+            ]
+        )
 
         result = list_agent_tasks(mock_conn)
         assert len(result) == 1
@@ -292,11 +345,27 @@ class TestListAgentTasks:
 class TestGetAgentTask:
     def test_returns_full_task_details(self):
         now = MagicMock(isoformat=lambda: "2025-01-01T00:00:00")
-        mock_conn, mock_cur = _mock_conn(fetchone=[
-            1, "T-001", "Title", "general", "agent_x", "high", "L2", "created",
-            "scope", '{"key":"val"}', '["crit1","crit2"]', True, "codex",
-            now, now, now, now,
-        ])
+        mock_conn, mock_cur = _mock_conn(
+            fetchone=[
+                1,
+                "T-001",
+                "Title",
+                "general",
+                "agent_x",
+                "high",
+                "L2",
+                "created",
+                "scope",
+                '{"key":"val"}',
+                '["crit1","crit2"]',
+                True,
+                "codex",
+                now,
+                now,
+                now,
+                now,
+            ]
+        )
 
         result = get_agent_task(mock_conn, "T-001")
         assert result is not None
@@ -345,9 +414,11 @@ class TestWriteAuditLog:
 class TestListAuditLogs:
     def test_returns_formatted_list(self):
         now = MagicMock(isoformat=lambda: "2025-01-01T00:00:00")
-        mock_conn, mock_cur = _mock_conn(fetchall=[
-            (1, 5, "agent_x", "deploy", "cmd", "success", "All good", now),
-        ])
+        mock_conn, mock_cur = _mock_conn(
+            fetchall=[
+                (1, 5, "agent_x", "deploy", "cmd", "success", "All good", now),
+            ]
+        )
 
         result = list_audit_logs(mock_conn)
         assert len(result) == 1
@@ -413,10 +484,25 @@ class TestJobRuns:
 
     def test_list_job_runs_with_filters(self):
         now = MagicMock(isoformat=lambda: "2025-01-01T00:00:00")
-        mock_conn, mock_cur = _mock_conn(fetchall=[
-            (1, "J-001", "Job", "agent", "cron", "prod", "completed", 0,
-             now, now, 5000, None, now),
-        ])
+        mock_conn, mock_cur = _mock_conn(
+            fetchall=[
+                (
+                    1,
+                    "J-001",
+                    "Job",
+                    "agent",
+                    "cron",
+                    "prod",
+                    "completed",
+                    0,
+                    now,
+                    now,
+                    5000,
+                    None,
+                    now,
+                ),
+            ]
+        )
 
         result = list_job_runs(mock_conn, status="completed")
         assert len(result) == 1
@@ -445,9 +531,23 @@ class TestReviewGatesAndReports:
 
     def test_lists_review_gates(self):
         now = MagicMock(isoformat=lambda: "2025-01-01T00:00:00")
-        mock_conn, mock_cur = _mock_conn(fetchall=[
-            (1, 5, "T-005", "Risk review", "human_review", "L4", None, "pending", None, None, now)
-        ])
+        mock_conn, mock_cur = _mock_conn(
+            fetchall=[
+                (
+                    1,
+                    5,
+                    "T-005",
+                    "Risk review",
+                    "human_review",
+                    "L4",
+                    None,
+                    "pending",
+                    None,
+                    None,
+                    now,
+                )
+            ]
+        )
         result = list_review_gates(mock_conn, review_status="pending")
         assert result[0]["task_code"] == "T-005"
         assert result[0]["review_status"] == "pending"

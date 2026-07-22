@@ -33,9 +33,7 @@ class UpsetRule:
     general_max: float
     mild_max: float
     favourite_min: float
-    play_thresholds: Mapping[str, tuple[float, float, float, float]] = field(
-        default_factory=dict
-    )
+    play_thresholds: Mapping[str, tuple[float, float, float, float]] = field(default_factory=dict)
 
     @classmethod
     def default(cls) -> UpsetRule:

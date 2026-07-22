@@ -18,14 +18,16 @@ def test_normalizes_name_spacing_and_punctuation_for_provider_matching():
 
 def test_resolves_official_match_team_id_without_provider_name_listing():
     entries, missing = resolve_team_icons(
-        [{
-            "id": None,
-            "name_cn": "皇家盐湖城",
-            "name_en": "",
-            "short_name": "",
-            "aliases": [],
-            "provider_id": "1663",
-        }],
+        [
+            {
+                "id": None,
+                "name_cn": "皇家盐湖城",
+                "name_en": "",
+                "short_name": "",
+                "aliases": [],
+                "provider_id": "1663",
+            }
+        ],
         {},
     )
 

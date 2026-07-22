@@ -131,9 +131,7 @@ def build_injury_features(
     if home_team_id:
         try:
             home_injuries = get_injuries_for_match(conn, match_id, home_team_id)
-            home_observation = get_injury_observation_for_match(
-                conn, match_id, home_team_id
-            )
+            home_observation = get_injury_observation_for_match(conn, match_id, home_team_id)
             result = compute_team_absence_impact(home_injuries)
             home_impact = result["total_impact_score"]
             home_key = result["key_absence_count"]
@@ -143,9 +141,7 @@ def build_injury_features(
     if away_team_id:
         try:
             away_injuries = get_injuries_for_match(conn, match_id, away_team_id)
-            away_observation = get_injury_observation_for_match(
-                conn, match_id, away_team_id
-            )
+            away_observation = get_injury_observation_for_match(conn, match_id, away_team_id)
             result = compute_team_absence_impact(away_injuries)
             away_impact = result["total_impact_score"]
             away_key = result["key_absence_count"]

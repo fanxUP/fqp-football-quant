@@ -21,16 +21,37 @@ class HistoryCursor:
     def fetchall(self):
         return [
             (
-                date(2026, 7, 11), "spf", "elo_rating", 0.6, 5,
-                42, 8, date(2026, 6, 1), date(2026, 7, 12),
+                date(2026, 7, 11),
+                "spf",
+                "elo_rating",
+                0.6,
+                5,
+                42,
+                8,
+                date(2026, 6, 1),
+                date(2026, 7, 12),
             ),
             (
-                date(2026, 7, 12), "spf", "elo_rating", 0.7, 10,
-                42, 8, date(2026, 6, 1), date(2026, 7, 12),
+                date(2026, 7, 12),
+                "spf",
+                "elo_rating",
+                0.7,
+                10,
+                42,
+                8,
+                date(2026, 6, 1),
+                date(2026, 7, 12),
             ),
             (
-                date(2026, 7, 12), "bf", "maher_poisson", 0.2, 5,
-                5, 1, date(2026, 7, 12), date(2026, 7, 12),
+                date(2026, 7, 12),
+                "bf",
+                "maher_poisson",
+                0.2,
+                5,
+                5,
+                1,
+                date(2026, 7, 12),
+                date(2026, 7, 12),
             ),
         ]
 

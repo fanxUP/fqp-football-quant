@@ -12,9 +12,21 @@ from typing import Any
 from scripts.business_time import utc_now_naive
 
 TASK_STATUSES = {
-    "created", "queued", "assigned", "running", "in_progress",
-    "waiting_review", "blocked", "failed", "passed_tests", "approved",
-    "rejected", "merged", "closed", "completed", "cancelled",
+    "created",
+    "queued",
+    "assigned",
+    "running",
+    "in_progress",
+    "waiting_review",
+    "blocked",
+    "failed",
+    "passed_tests",
+    "approved",
+    "rejected",
+    "merged",
+    "closed",
+    "completed",
+    "cancelled",
 }
 
 
@@ -196,14 +208,17 @@ def add_task_artifact(conn: Any, artifact: dict) -> int | None:
         RETURNING id
     """
     with conn.cursor() as cur:
-        cur.execute(sql, {
-            "task_id": artifact["task_id"],
-            "artifact_type": artifact.get("artifact_type", "output"),
-            "artifact_path": artifact.get("artifact_path"),
-            "artifact_summary": artifact.get("artifact_summary", ""),
-            "artifact_hash": artifact.get("artifact_hash"),
-            "metadata": json.dumps(artifact.get("metadata", {}), ensure_ascii=False),
-        })
+        cur.execute(
+            sql,
+            {
+                "task_id": artifact["task_id"],
+                "artifact_type": artifact.get("artifact_type", "output"),
+                "artifact_path": artifact.get("artifact_path"),
+                "artifact_summary": artifact.get("artifact_summary", ""),
+                "artifact_hash": artifact.get("artifact_hash"),
+                "metadata": json.dumps(artifact.get("metadata", {}), ensure_ascii=False),
+            },
+        )
         row = cur.fetchone()
     conn.commit()
     return row[0] if row else None
@@ -222,9 +237,13 @@ def list_task_artifacts(conn: Any, task_id: int, limit: int = 100) -> list[dict]
         rows = cur.fetchall()
     return [
         {
-            "id": r[0], "task_id": r[1], "artifact_type": r[2],
-            "artifact_path": r[3], "artifact_summary": r[4],
-            "artifact_hash": r[5], "metadata": r[6],
+            "id": r[0],
+            "task_id": r[1],
+            "artifact_type": r[2],
+            "artifact_path": r[3],
+            "artifact_summary": r[4],
+            "artifact_hash": r[5],
+            "metadata": r[6],
             "created_at": r[7].isoformat() if hasattr(r[7], "isoformat") else str(r[7]),
         }
         for r in rows
@@ -659,9 +678,7 @@ def resolve_review_gate(
     return bool(row)
 
 
-def list_review_gates(
-    conn: Any, review_status: str | None = None, limit: int = 50
-) -> list[dict]:
+def list_review_gates(conn: Any, review_status: str | None = None, limit: int = 50) -> list[dict]:
     """List human-review gates with their owning task context."""
     clause = "AND g.review_status = %(review_status)s" if review_status else ""
     params: dict[str, Any] = {"limit": limit}
@@ -685,10 +702,17 @@ def list_review_gates(
 
     return [
         {
-            "id": r[0], "task_id": r[1], "task_code": r[2], "task_title": r[3],
-            "gate_type": r[4], "reason": r[5], "reviewer": r[6],
-            "review_status": r[7], "review_comment": r[8],
-            "reviewed_at": ts(r[9]), "created_at": ts(r[10]),
+            "id": r[0],
+            "task_id": r[1],
+            "task_code": r[2],
+            "task_title": r[3],
+            "gate_type": r[4],
+            "reason": r[5],
+            "reviewer": r[6],
+            "review_status": r[7],
+            "review_comment": r[8],
+            "reviewed_at": ts(r[9]),
+            "created_at": ts(r[10]),
         }
         for r in rows
     ]
@@ -742,7 +766,9 @@ def list_stale_jobs(conn: Any, threshold_minutes: int = 30, limit: int = 50) -> 
         rows = cur.fetchall()
     return [
         {
-            "id": r[0], "job_code": r[1], "job_name": r[2],
+            "id": r[0],
+            "job_code": r[1],
+            "job_name": r[2],
             "owner_agent": r[3],
             "started_at": r[4].isoformat() if hasattr(r[4], "isoformat") else str(r[4]),
             "running_minutes": round(float(r[5] or 0), 1),

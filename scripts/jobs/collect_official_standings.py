@@ -53,7 +53,18 @@ def _fetch(url: str) -> BeautifulSoup:
         # macOS curl can use the system keychain where a Python venv may not
         # see the local proxy CA. Keep TLS verification enabled in curl.
         result = subprocess.run(
-            ["curl", "--fail", "--location", "--silent", "--show-error", "--max-time", "30", "-A", "FQP standings collector/1.0", url],
+            [
+                "curl",
+                "--fail",
+                "--location",
+                "--silent",
+                "--show-error",
+                "--max-time",
+                "30",
+                "-A",
+                "FQP standings collector/1.0",
+                url,
+            ],
             check=True,
             capture_output=True,
         )
@@ -72,11 +83,16 @@ def _fetch_kleague() -> list[dict[str, Any]]:
     rows = payload.get("data", {}).get("teamRank", [])
     return [
         {
-            "rank": row.get("rank"), "team_name": row.get("teamName", ""),
-            "played": row.get("gameCount"), "won": row.get("winCnt"),
-            "drawn": row.get("tieCnt"), "lost": row.get("lossCnt"),
-            "goals_for": row.get("gainGoal"), "goals_against": row.get("lossGoal"),
-            "goal_difference": row.get("gapCnt"), "points": row.get("gainPoint"),
+            "rank": row.get("rank"),
+            "team_name": row.get("teamName", ""),
+            "played": row.get("gameCount"),
+            "won": row.get("winCnt"),
+            "drawn": row.get("tieCnt"),
+            "lost": row.get("lossCnt"),
+            "goals_for": row.get("gainGoal"),
+            "goals_against": row.get("lossGoal"),
+            "goal_difference": row.get("gapCnt"),
+            "points": row.get("gainPoint"),
             "raw": row,
         }
         for row in rows
@@ -94,10 +110,20 @@ def parse_norway(soup: BeautifulSoup) -> list[dict[str, Any]]:
         values = _numbers(" ".join(cells[2:9]))
         if len(values) < 7:
             continue
-        result.append({"rank": int(cells[0]), "team_name": cells[1].split()[0], "played": values[0],
-                       "won": values[1], "drawn": values[2], "lost": values[3],
-                       "goals_for": values[4], "goals_against": values[5],
-                       "points": values[7] if len(values) > 7 else values[6], "raw": cells})
+        result.append(
+            {
+                "rank": int(cells[0]),
+                "team_name": cells[1].split()[0],
+                "played": values[0],
+                "won": values[1],
+                "drawn": values[2],
+                "lost": values[3],
+                "goals_for": values[4],
+                "goals_against": values[5],
+                "points": values[7] if len(values) > 7 else values[6],
+                "raw": cells,
+            }
+        )
     return result
 
 
@@ -111,8 +137,15 @@ def parse_finland(soup: BeautifulSoup) -> list[dict[str, Any]]:
             cells = [c.get_text(" ", strip=True) for c in row.find_all(["th", "td"])]
             if len(cells) < 5 or not cells[1].rstrip(".").isdigit():
                 continue
-            result.append({"rank": int(cells[1].rstrip(".")), "team_name": cells[2],
-                           "points": int(cells[3]), "played": int(cells[4]), "raw": cells})
+            result.append(
+                {
+                    "rank": int(cells[1].rstrip(".")),
+                    "team_name": cells[2],
+                    "points": int(cells[3]),
+                    "played": int(cells[4]),
+                    "raw": cells,
+                }
+            )
         return result
     return []
 
@@ -143,7 +176,9 @@ def run(source_code: str | None = None, dry_run: bool = True) -> dict[str, Any]:
                     )
                     season_row = cur.fetchone()
                     if not season_row:
-                        raise RuntimeError(f"missing 2026 competition season: {source['competition_name']}")
+                        raise RuntimeError(
+                            f"missing 2026 competition season: {source['competition_name']}"
+                        )
                     competition_season_id = season_row[0]
                     snapshot_time = datetime.now().isoformat(timespec="seconds")
                     for item in rows:
@@ -161,22 +196,39 @@ def run(source_code: str | None = None, dry_run: bool = True) -> dict[str, Any]:
                             unresolved.append(item["team_name"])
                             continue
                         stored = dict(item)
-                        stored.update({"team_id": team_row[0], "competition_season_id": competition_season_id,
-                                       "snapshot_time": snapshot_time, "source_name": code,
-                                       "source_confidence": 0.95})
+                        stored.update(
+                            {
+                                "team_id": team_row[0],
+                                "competition_season_id": competition_season_id,
+                                "snapshot_time": snapshot_time,
+                                "source_name": code,
+                                "source_confidence": 0.95,
+                            }
+                        )
                         store_season_standings_snapshot(conn, stored)
                         written += 1
                 conn.commit()
-        reports.append({"source": code, "competition": source["competition_name"],
-                        "rows": len(rows), "written": written,
-                        "unresolved": unresolved,
-                        "teams": [r["team_name"] for r in rows],
-                        "status": "dry_run" if dry_run else "written"})
-    return {"status": "ok", "reports": reports, "snapshot_time": datetime.now().isoformat(timespec="seconds")}
+        reports.append(
+            {
+                "source": code,
+                "competition": source["competition_name"],
+                "rows": len(rows),
+                "written": written,
+                "unresolved": unresolved,
+                "teams": [r["team_name"] for r in rows],
+                "status": "dry_run" if dry_run else "written",
+            }
+        )
+    return {
+        "status": "ok",
+        "reports": reports,
+        "snapshot_time": datetime.now().isoformat(timespec="seconds"),
+    }
 
 
 if __name__ == "__main__":
     import argparse
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--source", choices=sorted(SOURCES))
     parser.add_argument("--write", action="store_true", help="reserved for verified team mapping")

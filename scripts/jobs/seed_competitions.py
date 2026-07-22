@@ -252,9 +252,12 @@ def run(dry_run: bool = False) -> dict[str, Any]:
                         updated_at = now()
                     RETURNING id, (xmax = 0) AS is_insert
                     """,
-                    {"comp_id": comp_id, "season_id": season_id,
-                     "total_teams": entry.get("total_teams"),
-                     "stage_format": entry.get("stage_format")},
+                    {
+                        "comp_id": comp_id,
+                        "season_id": season_id,
+                        "total_teams": entry.get("total_teams"),
+                        "stage_format": entry.get("stage_format"),
+                    },
                 )
                 row = cur.fetchone()
                 if row and row[1]:

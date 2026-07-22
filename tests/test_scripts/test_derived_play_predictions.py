@@ -44,9 +44,12 @@ def test_derived_history_stores_every_official_option_for_each_capable_model():
     stored = [call.args[1] for call in store.call_args_list]
     assert count == 18
     assert {(row["play_type"], row["option_code"]) for row in stored} == {
-        ("zjq", "0"), ("zjq", "7"),
-        ("bf", "1:0"), ("bf", "other_h"),
-        ("bqc", "33"), ("bqc", "10"),
+        ("zjq", "0"),
+        ("zjq", "7"),
+        ("bf", "1:0"),
+        ("bf", "other_h"),
+        ("bqc", "33"),
+        ("bqc", "10"),
     }
     assert {row["model_version_id"] for row in stored} == {1, 2, 3}
     assert all(row["odds_snapshot_id"] is not None for row in stored)
@@ -57,10 +60,7 @@ def test_derived_history_stores_every_official_option_for_each_capable_model():
         for row in stored
         if row["model_version_id"] in {2, 3}
     )
-    zjq_seven = [
-        row for row in stored
-        if row["play_type"] == "zjq" and row["option_code"] == "7"
-    ]
+    zjq_seven = [row for row in stored if row["play_type"] == "zjq" and row["option_code"] == "7"]
     assert all(row["model_probability"] > 0 for row in zjq_seven)
     assert any(row["ev"] < 0 for row in stored)
     assert any(

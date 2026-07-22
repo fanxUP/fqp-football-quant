@@ -70,41 +70,67 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "seed-agents":
         print(seed_from_yaml())
     elif args.command == "create-task":
-        print(create_task(AgentTask(
-            task_code=args.task_code, task_title=args.task_title,
-            owner_agent=args.owner_agent, task_type=args.task_type,
-            risk_level=args.risk_level,
-        )))
+        print(
+            create_task(
+                AgentTask(
+                    task_code=args.task_code,
+                    task_title=args.task_title,
+                    owner_agent=args.owner_agent,
+                    task_type=args.task_type,
+                    risk_level=args.risk_level,
+                )
+            )
+        )
     elif args.command == "transition":
         print(transition_task(args.task_code, args.status, args.summary))
     elif args.command == "add-artifact":
         path = Path(args.artifact_path)
         digest = hashlib.sha256(path.read_bytes()).hexdigest() if path.is_file() else None
         with get_db() as conn:
-            artifact_id = add_task_artifact(conn, {
-                "task_id": args.task_id, "artifact_type": args.artifact_type,
-                "artifact_path": str(path), "artifact_summary": args.summary,
-                "artifact_hash": digest,
-            })
+            artifact_id = add_task_artifact(
+                conn,
+                {
+                    "task_id": args.task_id,
+                    "artifact_type": args.artifact_type,
+                    "artifact_path": str(path),
+                    "artifact_summary": args.summary,
+                    "artifact_hash": digest,
+                },
+            )
         print({"artifact_id": artifact_id, "artifact_hash": digest})
     elif args.command == "qa-report":
         with get_db() as conn:
-            report_id = create_review_report(conn, {
-                "task_id": args.task_id, "report_type": "qa",
-                "test_command": args.test_command, "pass_count": args.passed,
-                "fail_count": args.failed,
-                "report_json": {"summary": args.summary, "status": "passed" if args.failed == 0 else "failed"},
-            })
+            report_id = create_review_report(
+                conn,
+                {
+                    "task_id": args.task_id,
+                    "report_type": "qa",
+                    "test_command": args.test_command,
+                    "pass_count": args.passed,
+                    "fail_count": args.failed,
+                    "report_json": {
+                        "summary": args.summary,
+                        "status": "passed" if args.failed == 0 else "failed",
+                    },
+                },
+            )
         print({"report_id": report_id, "status": "passed" if args.failed == 0 else "failed"})
     elif args.command == "job-start":
         check_job_dependencies(args.depends_on)
         with get_db() as conn:
-            run_id = start_job_run(conn, {
-                "job_code": args.job_code, "job_name": args.job_name or args.job_code,
-                "owner_agent": args.owner_agent, "schedule_type": "manual",
-                "environment": "local",
-                "input_snapshot_refs": {"dependencies": args.depends_on} if args.depends_on else {},
-            })
+            run_id = start_job_run(
+                conn,
+                {
+                    "job_code": args.job_code,
+                    "job_name": args.job_name or args.job_code,
+                    "owner_agent": args.owner_agent,
+                    "schedule_type": "manual",
+                    "environment": "local",
+                    "input_snapshot_refs": {"dependencies": args.depends_on}
+                    if args.depends_on
+                    else {},
+                },
+            )
         print({"run_id": run_id, "status": "running"})
     elif args.command == "job-finish":
         with get_db() as conn:
@@ -116,9 +142,7 @@ def main(argv: list[str] | None = None) -> int:
         print({"run_id": args.run_id, "retried": ok})
     elif args.command == "review-resolve":
         with get_db() as conn:
-            ok = resolve_review_gate(
-                conn, args.gate_id, args.reviewer, args.status, args.comment
-            )
+            ok = resolve_review_gate(conn, args.gate_id, args.reviewer, args.status, args.comment)
         print({"gate_id": args.gate_id, "resolved": ok, "status": args.status})
     return 0
 

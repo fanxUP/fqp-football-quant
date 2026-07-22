@@ -6,8 +6,20 @@ def test_event_coverage_exposes_source_counts(client):
         connection = get_db.return_value.__enter__.return_value
         cursor = connection.cursor.return_value.__enter__.return_value
         cursor.fetchall.return_value = [
-            (1, "瑞典超级联赛", "2026", 16, 8, 236, 0, 16,
-             "2026-07-11T01:08:05", "2026-07-11T01:23:12", 236, 0)
+            (
+                1,
+                "瑞典超级联赛",
+                "2026",
+                16,
+                8,
+                236,
+                0,
+                16,
+                "2026-07-11T01:08:05",
+                "2026-07-11T01:23:12",
+                236,
+                0,
+            )
         ]
 
         response = client.get("/api/events/coverage")

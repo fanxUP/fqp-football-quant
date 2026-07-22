@@ -143,9 +143,7 @@ def _store_team_observations(
                 "key_absence_count": 0,
                 "squad_health_score": max(
                     0.0,
-                    100.0
-                    - status_counts["injured"] * 8.0
-                    - status_counts["suspended"] * 10.0,
+                    100.0 - status_counts["injured"] * 8.0 - status_counts["suspended"] * 10.0,
                 ),
                 "data_confidence": 0.90,
                 "raw_json": {
@@ -206,9 +204,7 @@ def _run_impl(
             for match in matches:
                 if get_injury_observation_for_match(
                     conn, match["id"], match["home_team_id"]
-                ) and get_injury_observation_for_match(
-                    conn, match["id"], match["away_team_id"]
-                ):
+                ) and get_injury_observation_for_match(conn, match["id"], match["away_team_id"]):
                     matches_already_observed += 1
                     continue
                 fixture = find_matching_fixture(match, fixtures, alias_to_team_id)
@@ -298,17 +294,13 @@ def _run_impl(
         client.close()
 
     quality_status = (
-        "degraded"
-        if provider_errors or processing_errors or matches_unmatched
-        else "healthy"
+        "degraded" if provider_errors or processing_errors or matches_unmatched else "healthy"
     )
     return {
         "status": "dry_run" if dry_run else "ok",
         "quality_status": quality_status,
         "target_date": target_date.isoformat(),
-        "matches_supported": (
-            matches_matched + matches_unmatched + matches_already_observed
-        ),
+        "matches_supported": (matches_matched + matches_unmatched + matches_already_observed),
         "matches_matched": matches_matched,
         "matches_unmatched": matches_unmatched,
         "matches_already_observed": matches_already_observed,

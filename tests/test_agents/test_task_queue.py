@@ -33,14 +33,20 @@ def test_start_tracked_job_records_dependencies():
     conn = MagicMock()
     cur = conn.cursor.return_value.__enter__.return_value
     cur.fetchone.return_value = [12]
-    with patch("scripts.agents.task_queue.check_job_dependencies") as check, patch(
-        "scripts.agents.task_queue.get_db"
-    ) as get_db:
+    with (
+        patch("scripts.agents.task_queue.check_job_dependencies") as check,
+        patch("scripts.agents.task_queue.get_db") as get_db,
+    ):
         get_db.return_value.__enter__.return_value = conn
-        assert start_tracked_job("model_prediction", "model_agent", {}, ["official_odds_snapshot"]) == 12
+        assert (
+            start_tracked_job("model_prediction", "model_agent", {}, ["official_odds_snapshot"])
+            == 12
+        )
         check.assert_called_once_with(["official_odds_snapshot"])
         params = cur.execute.call_args[0][1]
-        assert json.loads(params["input_snapshot_refs"])["dependencies"] == ["official_odds_snapshot"]
+        assert json.loads(params["input_snapshot_refs"])["dependencies"] == [
+            "official_odds_snapshot"
+        ]
 
 
 def test_start_tracked_job_recovers_previous_interrupted_run():

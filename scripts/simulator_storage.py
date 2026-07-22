@@ -12,6 +12,7 @@ INITIAL_SIMULATOR_BALANCE = 100_000.00  # 初始虚拟资金 10万元
 
 # ---- Row dict helpers ----
 
+
 def _account_row(r: tuple) -> dict:
     return {
         "id": r[0],
@@ -106,6 +107,7 @@ def _iso(val) -> str | None:
 
 
 # ---- Bankroll (account_type = 'simulator') ----
+
 
 def ensure_simulator_bankroll(conn: Any) -> dict:
     """Get or create the simulator bankroll account. Returns account dict."""
@@ -234,6 +236,7 @@ def reset_bankroll(conn: Any) -> dict:
 
 
 # ---- Simulator Tickets ----
+
 
 def create_simulator_ticket(conn: Any, ticket: dict) -> int | None:
     """Insert a simulator ticket. Returns the new ticket id."""

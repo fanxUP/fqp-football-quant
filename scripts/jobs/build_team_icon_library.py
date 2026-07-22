@@ -115,10 +115,17 @@ def load_database_teams() -> list[dict[str, Any]]:
                 if alias_name in by_name and canonical_name in by_name:
                     alias_team = by_name.pop(alias_name)
                     canonical_team = by_name[canonical_name]
-                    canonical_team["aliases"] = list(dict.fromkeys([
-                        *canonical_team["aliases"], alias_name,
-                        alias_team["name_cn"], alias_team["name_en"], alias_team["short_name"],
-                    ]))
+                    canonical_team["aliases"] = list(
+                        dict.fromkeys(
+                            [
+                                *canonical_team["aliases"],
+                                alias_name,
+                                alias_team["name_cn"],
+                                alias_team["name_en"],
+                                alias_team["short_name"],
+                            ]
+                        )
+                    )
             for team_name, provider_id in official_rows:
                 canonical_name = MANUAL_TEAM_NAME_ALIASES.get(team_name, team_name)
                 if canonical_name != team_name and canonical_name in by_name:
@@ -148,9 +155,18 @@ def resolve_team_icons(
         if team.get("provider_id"):
             resolved.append(
                 {
-                    "names": list(dict.fromkeys(name for name in [
-                        team["name_cn"], team["name_en"], team["short_name"], *team["aliases"]
-                    ] if name)),
+                    "names": list(
+                        dict.fromkeys(
+                            name
+                            for name in [
+                                team["name_cn"],
+                                team["name_en"],
+                                team["short_name"],
+                                *team["aliases"],
+                            ]
+                            if name
+                        )
+                    ),
                     "logoUrl": f"/team-crests/500-{team['provider_id']}.png",
                     "source": "500com",
                     "sourceUrl": ICON_URL.format(team_id=team["provider_id"]),
@@ -163,7 +179,11 @@ def resolve_team_icons(
             names.append(manual)
         unique_names = list(dict.fromkeys(name for name in names if name))
         provider = next(
-            (provider_teams.get(normalize_team_name(name)) for name in unique_names if normalize_team_name(name) in provider_teams),
+            (
+                provider_teams.get(normalize_team_name(name))
+                for name in unique_names
+                if normalize_team_name(name) in provider_teams
+            ),
             None,
         )
         if not provider:

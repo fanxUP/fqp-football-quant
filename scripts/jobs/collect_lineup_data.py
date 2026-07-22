@@ -62,8 +62,7 @@ def _get_or_create_player(conn: Any, player_data: dict[str, Any]) -> int | None:
                 else None
             ),
             "nationality": player_data.get("nationality", ""),
-            "primary_position": player_data.get("pos")
-            or player_data.get("position", ""),
+            "primary_position": player_data.get("pos") or player_data.get("position", ""),
             "secondary_positions": [],
             "preferred_foot": "",
             "height_cm": _safe_height(player_data.get("height")),
@@ -116,9 +115,7 @@ def _process_lineup(
                 "player_id": player_id,
                 "is_starting": False,
                 "is_substitute": True,
-                "position": str(
-                    player_info.get("pos") or player_info.get("position") or ""
-                ),
+                "position": str(player_info.get("pos") or player_info.get("position") or ""),
                 "tactical_role": "",
                 "market_value": None,
                 "recent_minutes": None,
@@ -255,9 +252,7 @@ def _run_impl(
                         if dry_run:
                             continue
                         for team_lineup in lineups:
-                            api_team_name = str(
-                                team_lineup.get("team", {}).get("name") or ""
-                            )
+                            api_team_name = str(team_lineup.get("team", {}).get("name") or "")
                             team_id = alias_to_team_id.get(api_team_name)
                             if team_id is None or team_id not in {
                                 match["home_team_id"],
@@ -287,9 +282,7 @@ def _run_impl(
         "status": "dry_run" if dry_run else "ok",
         "quality_status": quality_status,
         "window_minutes": lookahead,
-        "matches_supported": (
-            matches_matched + matches_unmatched + matches_already_complete
-        ),
+        "matches_supported": (matches_matched + matches_unmatched + matches_already_complete),
         "matches_matched": matches_matched,
         "matches_unmatched": matches_unmatched,
         "matches_waiting_lineup": matches_waiting,

@@ -142,7 +142,9 @@ def test_create_real_betting_ticket_attaches_ocr_confirmation(monkeypatch):
         return 89
 
     monkeypatch.setattr(betting, "create_real_ticket", fake_create_real_ticket)
-    monkeypatch.setattr(betting, "create_real_ticket_items_batch", lambda conn, ticket_id, items: [1])
+    monkeypatch.setattr(
+        betting, "create_real_ticket_items_batch", lambda conn, ticket_id, items: [1]
+    )
 
     req = betting.CreateBettingTicketRequest(
         source="real-user",

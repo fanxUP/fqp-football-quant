@@ -35,9 +35,7 @@ def canonical_odds_option(play_type: str, option_code: object) -> str:
     """Normalize official h/d/a odds codes to canonical 3/1/0 codes."""
     raw = str(option_code).strip()
     if play_type in {"spf", "rqspf"}:
-        return {"h": "3", "H": "3", "d": "1", "D": "1", "a": "0", "A": "0"}.get(
-            raw, raw
-        )
+        return {"h": "3", "H": "3", "d": "1", "D": "1", "a": "0", "A": "0"}.get(raw, raw)
     return raw
 
 
@@ -70,8 +68,8 @@ def build_market_detections(
         if previous is None or int(snapshot_id) > previous[0]:
             grouped[key][option] = (int(snapshot_id), float(sp_value))
 
-    complete: dict[tuple[str, float | None], list[tuple[datetime, dict[str, float]]]] = (
-        defaultdict(list)
+    complete: dict[tuple[str, float | None], list[tuple[datetime, dict[str, float]]]] = defaultdict(
+        list
     )
     for (play_type, handicap, snapshot_time), option_rows in grouped.items():
         if len(option_rows) < MINIMUM_OPTION_COUNTS[play_type]:

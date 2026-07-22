@@ -84,19 +84,14 @@ def _market_evidence(conn: Any, event: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _result_evidence(event: dict[str, Any]) -> dict[str, Any]:
-    available_at = (
-        event["official_publish_time"] or event["result_updated_at"] or datetime.now()
-    )
+    available_at = event["official_publish_time"] or event["result_updated_at"] or datetime.now()
     score = f"{event['full_home_goals']}:{event['full_away_goals']}"
     return evidence_record(
         event_id=int(event["id"]),
         category="official_result",
         code="final_score",
         value={
-            "text": (
-                f"官方赛果为{event['home_team_name']} {score} "
-                f"{event['away_team_name']}"
-            ),
+            "text": (f"官方赛果为{event['home_team_name']} {score} {event['away_team_name']}"),
             "score": score,
             "status": event["result_status"],
         },

@@ -43,9 +43,11 @@ def _has_result_list(payload: Any) -> bool:
         or isinstance(value.get("matchResult"), list)
     ):
         return True
-    return isinstance(payload.get("matchResultList"), list) or isinstance(
-        payload.get("matchInfoList"), list
-    ) or isinstance(payload.get("matchResult"), list)
+    return (
+        isinstance(payload.get("matchResultList"), list)
+        or isinstance(payload.get("matchInfoList"), list)
+        or isinstance(payload.get("matchResult"), list)
+    )
 
 
 def _walk_payloads(value: Any) -> list[dict[str, Any]]:
@@ -104,9 +106,11 @@ def extract_official_result_payloads(text: str) -> list[dict[str, Any]]:
     seen: set[str] = set()
     for payload in payloads:
         if isinstance(payload.get("value"), dict):
-            result_block = payload["value"].get("matchResultList") or payload["value"].get(
-                "matchInfoList"
-            ) or payload["value"].get("matchResult")
+            result_block = (
+                payload["value"].get("matchResultList")
+                or payload["value"].get("matchInfoList")
+                or payload["value"].get("matchResult")
+            )
         else:
             result_block = (
                 payload.get("matchResultList")
@@ -237,9 +241,9 @@ def parse_local_official_history_text(
             match_code = normalize_official_match_code(
                 _first_text(row, "matchNumStr", "matchCode", "matchNum")
             )
-            business_date = _first_text(
-                row, "businessDate", "matchBusinessDate", "betDate"
-            ) or (default_business_date or "")
+            business_date = _first_text(row, "businessDate", "matchBusinessDate", "betDate") or (
+                default_business_date or ""
+            )
             derived_business_date = False
             if not business_date and match_code and uses_uniform_result_shape:
                 business_date = derive_business_date_from_match_date(
@@ -296,9 +300,7 @@ def parse_local_official_history_text(
             result["_source_match_id"] = source_match_id
             results.append(result)
 
-            league_name = _first_text(
-                row, "leagueAllName", "leagueName", "leagueAbbName"
-            )
+            league_name = _first_text(row, "leagueAllName", "leagueName", "leagueAbbName")
             home_team_name = _first_text(
                 row, "homeTeamAllName", "allHomeTeam", "homeTeamName", "homeTeam"
             )
@@ -395,11 +397,15 @@ def import_local_official_results_file(
         }
 
     with get_db() as conn:
-        stored_matches = store_matches(conn, matches) if matches else {
-            "inserted": 0,
-            "updated": 0,
-            "errors": [],
-        }
+        stored_matches = (
+            store_matches(conn, matches)
+            if matches
+            else {
+                "inserted": 0,
+                "updated": 0,
+                "errors": [],
+            }
+        )
         matched: list[dict[str, Any]] = []
         unresolved: list[str] = []
         with conn.cursor() as cur:
@@ -418,11 +424,15 @@ def import_local_official_results_file(
                 else:
                     unresolved.append(f"{result_business_date}/{code}")
 
-        stored = store_results(conn, matched) if matched else {
-            "inserted": 0,
-            "updated": 0,
-            "errors": [],
-        }
+        stored = (
+            store_results(conn, matched)
+            if matched
+            else {
+                "inserted": 0,
+                "updated": 0,
+                "errors": [],
+            }
+        )
         matches_inserted = cast(int, stored_matches.get("inserted", 0) or 0)
         results_inserted = cast(int, stored.get("inserted", 0) or 0)
         matches_updated = cast(int, stored_matches.get("updated", 0) or 0)
@@ -440,8 +450,7 @@ def import_local_official_results_file(
             records_inserted=matches_inserted + results_inserted,
             records_updated=matches_updated + results_updated,
             error_message=(
-                f"unresolved identities: {', '.join(unresolved)}; "
-                f"rejected rows: {len(rejected)}"
+                f"unresolved identities: {', '.join(unresolved)}; rejected rows: {len(rejected)}"
                 if unresolved or rejected
                 else None
             ),

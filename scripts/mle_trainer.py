@@ -104,10 +104,9 @@ def _nll_maher_with_gradient(
     mean_strength = 1000.0
     mean_attack = float(np.mean(attack))
     mean_defense = float(np.mean(defense))
-    penalty = (
-        ridge_strength * float(np.dot(attack, attack) + np.dot(defense, defense))
-        + mean_strength * (mean_attack**2 + mean_defense**2)
-    )
+    penalty = ridge_strength * float(
+        np.dot(attack, attack) + np.dot(defense, defense)
+    ) + mean_strength * (mean_attack**2 + mean_defense**2)
     nll = float(np.sum(lam_h - hg * log_lam_h) + np.sum(lam_a - ag * log_lam_a))
     nll += penalty
 

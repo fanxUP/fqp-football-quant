@@ -61,9 +61,10 @@ def test_four_pass_allows_more_selected_matches_for_score_limited_plays(play_typ
     assert result["match_count"] == 5
     assert result["bet_count"] == 5
     assert result["total_cost"] == 10.0
-    assert {tuple(sorted(item["match_id"] for item in combo)) for combo in calculate_bet_combinations(items, "4x1")} == {
-        (1, 2, 3, 4), (1, 2, 3, 5), (1, 2, 4, 5), (1, 3, 4, 5), (2, 3, 4, 5)
-    }
+    assert {
+        tuple(sorted(item["match_id"] for item in combo))
+        for combo in calculate_bet_combinations(items, "4x1")
+    } == {(1, 2, 3, 4), (1, 2, 3, 5), (1, 2, 4, 5), (1, 3, 4, 5), (2, 3, 4, 5)}
 
 
 def test_single_requires_official_single_eligibility_when_present():
@@ -125,7 +126,13 @@ def test_settlement_treats_same_match_options_as_alternatives():
 
 def test_single_ticket_prize_is_capped_before_multiple():
     items = [
-        {"match_id": 1, "play_type": "spf", "option_code": "3", "sp_value": 100_000, "is_won": True},
+        {
+            "match_id": 1,
+            "play_type": "spf",
+            "option_code": "3",
+            "sp_value": 100_000,
+            "is_won": True,
+        },
     ]
 
     result = calculate_all(items, "single", multiple=2)

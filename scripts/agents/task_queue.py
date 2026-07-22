@@ -89,14 +89,17 @@ def start_tracked_job(
             [job_code],
             reason="superseded by a new execution after process interruption",
         )
-        return start_job_run(conn, {
-            "job_code": job_code,
-            "job_name": job_code,
-            "owner_agent": owner_agent,
-            "schedule_type": "scheduled",
-            "environment": "local",
-            "input_snapshot_refs": tracked_input_refs,
-        })
+        return start_job_run(
+            conn,
+            {
+                "job_code": job_code,
+                "job_name": job_code,
+                "owner_agent": owner_agent,
+                "schedule_type": "scheduled",
+                "environment": "local",
+                "input_snapshot_refs": tracked_input_refs,
+            },
+        )
 
 
 def finish_tracked_job(

@@ -182,7 +182,7 @@ def parse_matches_from_response(
                 if handicap is not None and handicap != "":
                     try:
                         handicap_val = float(handicap)
-                    except (ValueError, TypeError):
+                    except ValueError, TypeError:
                         handicap_val = None
                 else:
                     handicap_val = None
@@ -256,7 +256,7 @@ def parse_odds_snapshots_from_match(
                 stop_dt = datetime.fromisoformat(sale_stop.replace("Z", "+00:00"))
                 now_dt = datetime.fromisoformat(snap_time.replace("Z", "+00:00"))
                 minutes_before_stop = int((stop_dt - now_dt).total_seconds() / 60)
-        except (ValueError, TypeError):
+        except ValueError, TypeError:
             pass
 
     odds_by_pool = _odds_by_pool(match_raw)
@@ -277,7 +277,7 @@ def parse_odds_snapshots_from_match(
         if handicap is not None and handicap != "":
             try:
                 handicap_val = float(handicap)
-            except (ValueError, TypeError):
+            except ValueError, TypeError:
                 handicap_val = None
         else:
             handicap_val = None
@@ -317,7 +317,7 @@ def parse_odds_snapshots_from_match(
         for option_code, option_name, sp_value in option_rows:
             try:
                 sp_val = float(sp_value)
-            except (ValueError, TypeError):
+            except ValueError, TypeError:
                 continue
             if sp_val <= 0:
                 continue  # rule: SP must be positive
@@ -349,7 +349,7 @@ def _derive_official_handicap_result(
         return None
     try:
         adjusted_home = home_goals + float(handicap)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return None
     if adjusted_home > away_goals:
         return "3"
@@ -457,9 +457,7 @@ def parse_results_from_response(
                 "full_home_goals": fh,
                 "full_away_goals": fa,
                 "spf_result": spf,
-                "rqspf_result": _derive_official_handicap_result(
-                    fh, fa, item.get("goalLine")
-                ),
+                "rqspf_result": _derive_official_handicap_result(fh, fa, item.get("goalLine")),
                 "total_goals_result": fh + fa if fh is not None and fa is not None else None,
                 "score_result": score,
                 "half_full_result": half_full,
@@ -663,9 +661,7 @@ def crawl_official_results(begin_date: str, end_date: str) -> dict[str, Any]:
                         {
                             "source_name": "sporttery",
                             "source_type": "official",
-                            "source_url": (
-                                "https://www.lottery.gov.cn/jc/zqsgkj/"
-                            ),
+                            "source_url": ("https://www.lottery.gov.cn/jc/zqsgkj/"),
                         }
                     )
                     r["raw_json"] = raw_json
@@ -709,9 +705,7 @@ def crawl_official_results(begin_date: str, end_date: str) -> dict[str, Any]:
         with get_db() as conn:
             collection_status = (
                 "blocked"
-                if "403" in error_msg
-                or "567" in error_msg
-                or "blocked" in error_msg.lower()
+                if "403" in error_msg or "567" in error_msg or "blocked" in error_msg.lower()
                 else "error"
             )
             record_official_collection_status(

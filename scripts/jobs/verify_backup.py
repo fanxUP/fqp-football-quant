@@ -98,7 +98,9 @@ def _create_backup(backup_dir: str) -> tuple[str | None, int, str | None]:
                 f.write(f"-- Table: {fqn}\n")
 
                 # Count rows
-                cur.execute(psql.SQL("SELECT COUNT(*) FROM {}").format(psql.Identifier(schema, table)))
+                cur.execute(
+                    psql.SQL("SELECT COUNT(*) FROM {}").format(psql.Identifier(schema, table))
+                )
                 count = cur.fetchone()[0]
                 f.write(f"-- Rows: {count}\n")
 
@@ -195,10 +197,9 @@ def _test_restore(filepath: str) -> bool:
         with open(filepath) as f:
             content = f.read()
         required_tables = ("official_matches",)
-        return (
-            "COPY failed:" not in content
-            and all(f"COPY public.{table} " in content or f'COPY "public"."{table}" ' in content
-                    for table in required_tables)
+        return "COPY failed:" not in content and all(
+            f"COPY public.{table} " in content or f'COPY "public"."{table}" ' in content
+            for table in required_tables
         )
     except Exception:
         return False

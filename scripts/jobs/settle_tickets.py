@@ -32,9 +32,7 @@ def _calculate_tax(prize: float) -> float:
     return 0.0
 
 
-def _derive_rqspf_result(
-    handicap: Any, full_home_goals: Any, full_away_goals: Any
-) -> str | None:
+def _derive_rqspf_result(handicap: Any, full_home_goals: Any, full_away_goals: Any) -> str | None:
     """Derive the ticket-specific handicap result from its locked handicap."""
     if handicap is None or full_home_goals is None or full_away_goals is None:
         return None
@@ -90,9 +88,7 @@ def _resolve_ticket_items(
                 "play_type": play_type,
                 "option_code": option_code,
                 "sp_value": 1.0 if is_void else original_sp_value,
-                "handicap": (
-                    float(item["handicap"]) if item.get("handicap") is not None else None
-                ),
+                "handicap": (float(item["handicap"]) if item.get("handicap") is not None else None),
                 "is_dan": bool(item.get("is_dan", False)),
                 "actual_result": "void" if is_void else actual_result,
                 "is_won": True if is_void else option_code == actual_result,
@@ -398,13 +394,15 @@ def run(dry_run: bool = False) -> dict[str, Any]:
                         "max_prize": float(si[10] or 0),
                         "items": [],
                     }
-                simulator_tickets[tid]["items"].append({
-                    "item_id": si[0],
-                    "option_code": si[2],
-                    "sp_value": float(si[3] or 0),
-                    "play_type": si[4],
-                    "match_id": si[5],
-                })
+                simulator_tickets[tid]["items"].append(
+                    {
+                        "item_id": si[0],
+                        "option_code": si[2],
+                        "sp_value": float(si[3] or 0),
+                        "play_type": si[4],
+                        "match_id": si[5],
+                    }
+                )
 
             for tid, ticket in simulator_tickets.items():
                 # Idempotency check
@@ -456,26 +454,29 @@ def run(dry_run: bool = False) -> dict[str, Any]:
                 roi = profit_loss / stake if stake > 0 else 0.0
 
                 # Insert settlement
-                settlement_id = create_settlement(conn, {
-                    "ticket_source": "simulator",
-                    "ticket_id": tid,
-                    "settle_time": utc_now_iso(),
-                    "is_won": ticket_won,
-                    "stake_amount": stake,
-                    "prize_amount": prize,
-                    "tax_amount": tax,
-                    "net_prize": net_prize,
-                    "profit_loss": profit_loss,
-                    "roi": roi,
-                    "settlement_detail_json": {
-                        "source": "simulator",
-                        "items": detail,
-                        "pass_type": pass_type,
-                        "multiple": multiple,
-                        "all_won": all(item["is_won"] for item in detail),
-                        "has_winning_combination": ticket_won,
+                settlement_id = create_settlement(
+                    conn,
+                    {
+                        "ticket_source": "simulator",
+                        "ticket_id": tid,
+                        "settle_time": utc_now_iso(),
+                        "is_won": ticket_won,
+                        "stake_amount": stake,
+                        "prize_amount": prize,
+                        "tax_amount": tax,
+                        "net_prize": net_prize,
+                        "profit_loss": profit_loss,
+                        "roi": roi,
+                        "settlement_detail_json": {
+                            "source": "simulator",
+                            "items": detail,
+                            "pass_type": pass_type,
+                            "multiple": multiple,
+                            "all_won": all(item["is_won"] for item in detail),
+                            "has_winning_combination": ticket_won,
+                        },
                     },
-                })
+                )
 
                 if settlement_id:
                     # Bankroll: credit the prize (if won) — stake already deducted at purchase

@@ -188,9 +188,7 @@ def _run_impl(*, limit: int | None = None, lookback_days: int | None = None) -> 
                         provider_statistics = client.get_fixture_statistics(fixture_id)
                         statistics_errors = client.last_response_meta.get("errors") or {}
                         if statistics_errors:
-                            raise RuntimeError(
-                                f"statistics endpoint error: {statistics_errors}"
-                            )
+                            raise RuntimeError(f"statistics endpoint error: {statistics_errors}")
                         team_names = {
                             int((fixture.get("teams", {}).get("home") or {}).get("id") or 0): str(
                                 event["home_team_name"]

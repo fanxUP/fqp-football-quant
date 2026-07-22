@@ -43,14 +43,10 @@ def validate_market(
     ):
         for option_code, probability in probabilities.items():
             if not isfinite(probability) or probability < 0 or probability > 1:
-                raise MarketMetricValidationError(
-                    f"{label}概率越界: {option_code}={probability}"
-                )
+                raise MarketMetricValidationError(f"{label}概率越界: {option_code}={probability}")
         probability_sum = sum(probabilities.values())
         if abs(probability_sum - 1.0) > tolerance:
-            raise MarketMetricValidationError(
-                f"{label}概率合计异常: {probability_sum:.6f}"
-            )
+            raise MarketMetricValidationError(f"{label}概率合计异常: {probability_sum:.6f}")
 
     metrics: dict[str, OptionMetrics] = {}
     for option_code in option_codes:

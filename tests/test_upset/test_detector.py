@@ -63,27 +63,19 @@ def test_keeps_different_handicap_lines_in_separate_markets():
     rows = [
         *[
             _row(index, "2026-07-20T10:00:00", "rqspf", code, odds, -1)
-            for index, (code, odds) in enumerate(
-                [("h", 2.50), ("d", 3.40), ("a", 2.20)], start=1
-            )
+            for index, (code, odds) in enumerate([("h", 2.50), ("d", 3.40), ("a", 2.20)], start=1)
         ],
         *[
             _row(index, "2026-07-20T10:00:00", "rqspf", code, odds, 1)
-            for index, (code, odds) in enumerate(
-                [("h", 1.20), ("d", 4.80), ("a", 8.50)], start=10
-            )
+            for index, (code, odds) in enumerate([("h", 1.20), ("d", 4.80), ("a", 8.50)], start=10)
         ],
         *[
             _row(index, "2026-07-20T11:00:00", "rqspf", code, odds, -1)
-            for index, (code, odds) in enumerate(
-                [("h", 2.45), ("d", 3.45), ("a", 2.25)], start=20
-            )
+            for index, (code, odds) in enumerate([("h", 2.45), ("d", 3.45), ("a", 2.25)], start=20)
         ],
         *[
             _row(index, "2026-07-20T11:00:00", "rqspf", code, odds, 1)
-            for index, (code, odds) in enumerate(
-                [("h", 1.22), ("d", 4.70), ("a", 8.20)], start=30
-            )
+            for index, (code, odds) in enumerate([("h", 1.22), ("d", 4.70), ("a", 8.20)], start=30)
         ],
     ]
 

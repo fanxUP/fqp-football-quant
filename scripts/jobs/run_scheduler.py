@@ -132,9 +132,7 @@ def _audited_job(
                 recover_interrupted_job_runs(
                     conn,
                     [job_code],
-                    reason=(
-                        "superseded by a new scheduler execution after process interruption"
-                    ),
+                    reason=("superseded by a new scheduler execution after process interruption"),
                 )
                 run_id = start_job_run(
                     conn,

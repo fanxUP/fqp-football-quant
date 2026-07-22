@@ -111,7 +111,9 @@ def test_uniform_league_matches_passes_official_season_window_parameters():
 
 def test_uniform_match_calculator_rejects_official_api_error_payload():
     client = SportteryClient(min_interval=0)
-    client._request_url = MagicMock(return_value={"errorCode": "1001", "errorMessage": "invalid channel"})
+    client._request_url = MagicMock(
+        return_value={"errorCode": "1001", "errorMessage": "invalid channel"}
+    )
 
     try:
         try:
@@ -119,6 +121,8 @@ def test_uniform_match_calculator_rejects_official_api_error_payload():
         except RuntimeError as exc:
             assert "invalid channel" in str(exc)
         else:
-            raise AssertionError("official API error payload must not be treated as a successful empty response")
+            raise AssertionError(
+                "official API error payload must not be treated as a successful empty response"
+            )
     finally:
         client.close()

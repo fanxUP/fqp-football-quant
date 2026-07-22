@@ -15,7 +15,8 @@ def _minute_text(time_value: Any) -> str:
 
 
 def _team_name(event: dict[str, Any], names: dict[int, str]) -> tuple[int, str]:
-    team = event.get("team") if isinstance(event.get("team"), dict) else {}
+    team_value = event.get("team")
+    team: dict[str, Any] = team_value if isinstance(team_value, dict) else {}
     team_id = int(team.get("id") or 0)
     return team_id, names.get(team_id) or str(team.get("name") or "未知球队")
 
@@ -35,7 +36,8 @@ def build_event_evidence_values(
         detail_lower = detail.lower()
         minute = _minute_text(event.get("time"))
         team_id, team_name = _team_name(event, team_names_by_api_id)
-        player = event.get("player") if isinstance(event.get("player"), dict) else {}
+        player_value = event.get("player")
+        player: dict[str, Any] = player_value if isinstance(player_value, dict) else {}
         player_name = str(player.get("name") or "未知球员")
 
         code: str | None = None
@@ -80,7 +82,8 @@ def build_statistics_evidence_values(
     teams: list[dict[str, Any]] = []
     text_parts: list[str] = []
     for team_row in statistics:
-        team = team_row.get("team") if isinstance(team_row.get("team"), dict) else {}
+        team_value = team_row.get("team")
+        team: dict[str, Any] = team_value if isinstance(team_value, dict) else {}
         team_id = int(team.get("id") or 0)
         team_name = team_names_by_api_id.get(team_id) or str(team.get("name") or "未知球队")
         raw_stats = team_row.get("statistics") or []

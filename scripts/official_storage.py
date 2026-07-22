@@ -71,9 +71,7 @@ def store_matches(conn: Any, matches: list[dict]) -> dict[str, Any]:
     for match in matches:
         match_code = str(match.get("official_match_code") or "").strip()
         raw = match.get("raw_json", {})
-        source_match_id = str(
-            match.get("source_match_id") or raw.get("matchId") or ""
-        ).strip()
+        source_match_id = str(match.get("source_match_id") or raw.get("matchId") or "").strip()
         if not OFFICIAL_MATCH_CODE_RE.fullmatch(match_code):
             errors.append(
                 {
@@ -636,10 +634,16 @@ def store_pool_issue(
             RETURNING id
             """,
             (
-                issue_no, game_type, sale_start, sale_stop,
-                total_matches, official_status, raw_hash,
-                json.dumps(raw_json, ensure_ascii=False) if raw_json else '{}',
-                now_ts, now_ts,
+                issue_no,
+                game_type,
+                sale_start,
+                sale_stop,
+                total_matches,
+                official_status,
+                raw_hash,
+                json.dumps(raw_json, ensure_ascii=False) if raw_json else "{}",
+                now_ts,
+                now_ts,
             ),
         )
         row = cur.fetchone()

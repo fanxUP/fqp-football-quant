@@ -94,8 +94,7 @@ def build_review_payload(
     turning_points = [
         {"text": text, "evidence_id": int(row["id"])}
         for row in verified
-        if row.get("evidence_phase") == "in_match"
-        and (text := _evidence_text(row))
+        if row.get("evidence_phase") == "in_match" and (text := _evidence_text(row))
     ]
     level = event.get("upset_level")
     classification = f"{level}级冷门" if level else "热门未打出事件"

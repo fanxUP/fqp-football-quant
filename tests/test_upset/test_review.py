@@ -152,7 +152,5 @@ def test_review_counts_postmatch_statistics_but_hides_capture_metadata_from_fact
         model_postmortem={"status": "unavailable"},
     )
 
-    assert payload["facts_json"] == [
-        {"text": "主队射门18次；客队射门7次", "evidence_id": 10}
-    ]
+    assert payload["facts_json"] == [{"text": "主队射门18次；客队射门7次", "evidence_id": 10}]
     assert payload["data_completeness"] == 0.05

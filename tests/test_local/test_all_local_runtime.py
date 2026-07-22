@@ -46,9 +46,7 @@ def test_local_runner_requires_native_database_and_owns_odds_dispatch() -> None:
 
 
 def test_local_manager_applies_migrations_before_launching_runtime() -> None:
-    manager = (PROJECT_ROOT / "ops/local/manage_local_stack.sh").read_text(
-        encoding="utf-8"
-    )
+    manager = (PROJECT_ROOT / "ops/local/manage_local_stack.sh").read_text(encoding="utf-8")
 
     migration = manager.index('"$SCRIPT_DIR/apply_local_migrations.sh"')
     launch_agent = manager.index("scripts.local.local_stack_launch_agent")

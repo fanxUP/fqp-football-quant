@@ -20,8 +20,7 @@ import httpx
 from scripts.official_history_importer import import_local_official_results_file
 
 UNIFORM_RESULT_URL = (
-    "https://webapi.sporttery.cn/gateway/uniform/football/"
-    "getUniformMatchResultV1.qry"
+    "https://webapi.sporttery.cn/gateway/uniform/football/getUniformMatchResultV1.qry"
 )
 RESULT_REFERER = "https://www.lottery.gov.cn/jc/zqsgkj/"
 DEFAULT_OUTPUT_DIR = Path("data/official_history/uniform_results")
@@ -118,9 +117,7 @@ def fetch_and_backfill(
                 artifact_path.write_text(
                     json.dumps(artifact, ensure_ascii=False, indent=2), encoding="utf-8"
                 )
-                imported = import_local_official_results_file(
-                    str(artifact_path), dry_run=dry_run
-                )
+                imported = import_local_official_results_file(str(artifact_path), dry_run=dry_run)
                 if imported["status"] != "ok":
                     raise RuntimeError(
                         f"Official artifact import was not clean for {artifact_path}: "

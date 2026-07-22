@@ -51,7 +51,7 @@ def list_upset_leagues(
             SELECT match.league_name, COUNT(*) AS upset_count
             FROM upset_events event
             JOIN official_matches match ON match.id = event.match_id
-            WHERE {' AND '.join(clauses)}
+            WHERE {" AND ".join(clauses)}
             GROUP BY match.league_name
             ORDER BY COUNT(*) DESC, match.league_name
             """,
@@ -129,7 +129,7 @@ def list_upsets(
                 ORDER BY created_at DESC, id DESC
                 LIMIT 1
             ) review ON true
-            WHERE {' AND '.join(clauses)}
+            WHERE {" AND ".join(clauses)}
             ORDER BY event.business_date DESC, event.surprise_bits DESC, event.id DESC
             LIMIT %(limit)s OFFSET %(offset)s
             """,
@@ -172,7 +172,7 @@ def get_upset_summary(
                    COUNT(*) FILTER (WHERE event.user_bet_involved) AS user_involved_count,
                    COUNT(*) FILTER (WHERE event.agent_bet_involved) AS agent_involved_count
             FROM upset_events event
-            WHERE {' AND '.join(clauses)}
+            WHERE {" AND ".join(clauses)}
             """,
             params,
         )
@@ -182,7 +182,7 @@ def get_upset_summary(
             SELECT COUNT(*) AS settled_match_count
             FROM official_matches match
             JOIN official_results result ON result.match_id = match.id
-            WHERE {' AND '.join(match_clauses)}
+            WHERE {" AND ".join(match_clauses)}
             """,
             params,
         )
@@ -191,7 +191,7 @@ def get_upset_summary(
             f"""
             SELECT COALESCE(event.upset_level, '热门未打出') AS key, COUNT(*) AS count
             FROM upset_events event
-            WHERE {' AND '.join(clauses)}
+            WHERE {" AND ".join(clauses)}
             GROUP BY COALESCE(event.upset_level, '热门未打出')
             """,
             params,
@@ -201,7 +201,7 @@ def get_upset_summary(
             f"""
             SELECT event.primary_play_type AS key, COUNT(*) AS count
             FROM upset_events event
-            WHERE {' AND '.join(clauses)}
+            WHERE {" AND ".join(clauses)}
             GROUP BY event.primary_play_type
             """,
             params,

@@ -51,9 +51,7 @@ def test_upset_summary_returns_market_and_betting_counts(client):
         "level_counts": {"S": 2, "A": 6, "B": 9, "C": 7},
     }
     with patch("apps.backend.src.routers.upsets.get_upset_summary", return_value=summary):
-        response = client.get(
-            "/api/upsets/summary?start_date=2026-07-01&end_date=2026-07-20"
-        )
+        response = client.get("/api/upsets/summary?start_date=2026-07-01&end_date=2026-07-20")
 
     assert response.status_code == 200
     assert response.json() == summary
@@ -65,15 +63,11 @@ def test_upset_leagues_return_navigation_options(client):
         {"league_name": "欧洲冠军联赛", "upset_count": 7},
     ]
     with patch("apps.backend.src.routers.upsets.list_upset_leagues", return_value=leagues) as query:
-        response = client.get(
-            "/api/upsets/leagues?start_date=2026-07-01&end_date=2026-07-22"
-        )
+        response = client.get("/api/upsets/leagues?start_date=2026-07-01&end_date=2026-07-22")
 
     assert response.status_code == 200
     assert response.json() == {"items": leagues}
-    query.assert_called_once_with(
-        ANY, start_date="2026-07-01", end_date="2026-07-22"
-    )
+    query.assert_called_once_with(ANY, start_date="2026-07-01", end_date="2026-07-22")
 
 
 def test_upset_detail_returns_404_for_unknown_event(client):

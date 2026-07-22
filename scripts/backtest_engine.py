@@ -654,12 +654,14 @@ class BacktestEngine:
         for wcfg in windows_cfg:
             bets = self._simulate_bets(rows, wcfg["test_start"], wcfg["test_end"])
             for bet in bets:
-                all_bets_by_key[(
-                    bet.match_id,
-                    bet.model_name,
-                    bet.play_type,
-                    bet.match_date,
-                )] = bet
+                all_bets_by_key[
+                    (
+                        bet.match_id,
+                        bet.model_name,
+                        bet.play_type,
+                        bet.match_date,
+                    )
+                ] = bet
 
             # 按模型分组计算指标
             model_bets: dict[str, list[BetRecord]] = defaultdict(list)
@@ -678,9 +680,7 @@ class BacktestEngine:
                 if wcfg.get("train_start")
                 else 0
             )
-            n_test = len({
-                r["match_id"] for r in rows if ts <= str(r["match_date"])[:10] <= te
-            })
+            n_test = len({r["match_id"] for r in rows if ts <= str(r["match_date"])[:10] <= te})
 
             window_results.append(
                 WindowResult(

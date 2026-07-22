@@ -63,10 +63,7 @@ def _upsert_competition_season(
     if row:
         competition_id = row[0]
     else:
-        is_cup = any(
-            marker in league_name
-            for marker in ("杯", "冠军联赛", "欧罗巴", "解放者")
-        )
+        is_cup = any(marker in league_name for marker in ("杯", "冠军联赛", "欧罗巴", "解放者"))
         cur.execute(
             """
             INSERT INTO competitions (
@@ -260,9 +257,7 @@ def populate_all() -> dict[str, Any]:
                     kickoff_time=kickoff_time,
                 )
                 result["competitions_created"] += created["competitions_created"]
-                result["competition_seasons_created"] += created[
-                    "competition_seasons_created"
-                ]
+                result["competition_seasons_created"] += created["competition_seasons_created"]
 
         conn.commit()
 

@@ -158,10 +158,29 @@ class TestFeaturesSnapshotsEndpoint:
 def test_match_detail_uses_latest_prematch_features_and_all_option_predictions(client):
     now = datetime(2026, 7, 14, 12, 0, 0)
     match_row = (
-        101, "英超", "曼联", "利物浦", now, "Settled", "closed",
-        None, None, 2, 1, "3", "confirmed",
-        None, None, None, None, None,
-        None, None, None, None, None,
+        101,
+        "英超",
+        "曼联",
+        "利物浦",
+        now,
+        "Settled",
+        "closed",
+        None,
+        None,
+        2,
+        1,
+        "3",
+        "confirmed",
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
     )
     conn = MagicMock()
     cur = MagicMock()

@@ -69,9 +69,27 @@ def test_prediction_sp_value_does_not_treat_kickoff_as_sp():
 
 def test_daily_selection_uses_model_direction_without_ev_or_risk_rejection() -> None:
     candidates = [
-        {"match_id": 7, "play_type": "spf", "option_code": "3", "model_probability": 0.52, "ev": -0.08},
-        {"match_id": 7, "play_type": "spf", "option_code": "1", "model_probability": 0.28, "ev": 0.15},
-        {"match_id": 7, "play_type": "rqspf", "option_code": "0", "model_probability": 0.48, "ev": 0.04},
+        {
+            "match_id": 7,
+            "play_type": "spf",
+            "option_code": "3",
+            "model_probability": 0.52,
+            "ev": -0.08,
+        },
+        {
+            "match_id": 7,
+            "play_type": "spf",
+            "option_code": "1",
+            "model_probability": 0.28,
+            "ev": 0.15,
+        },
+        {
+            "match_id": 7,
+            "play_type": "rqspf",
+            "option_code": "0",
+            "model_probability": 0.48,
+            "ev": 0.04,
+        },
     ]
 
     assert _select_daily_candidates(candidates) == [candidates[2]]
@@ -120,13 +138,15 @@ def test_sp_quality_isolated_by_match_and_play_type():
         row[16] = sp_value
         return tuple(row)
 
-    quality, valid_match_count = _market_sp_quality([
-        prediction("spf", "3", 2.10),
-        prediction("spf", "1", 3.20),
-        prediction("spf", "0", 3.40),
-        prediction("zjq", "0", 0),
-        prediction("zjq", "1", 6.50),
-    ])
+    quality, valid_match_count = _market_sp_quality(
+        [
+            prediction("spf", "3", 2.10),
+            prediction("spf", "1", 3.20),
+            prediction("spf", "0", 3.40),
+            prediction("zjq", "0", 0),
+            prediction("zjq", "1", 6.50),
+        ]
+    )
 
     assert quality[(7, "spf")] is True
     assert quality[(7, "zjq")] is False
@@ -179,8 +199,7 @@ def test_only_current_independent_model_tickets_are_reusable(mock_conn):
     assert "CASE WHEN st.ticket_type" not in query
     assert "NOT EXISTS" in query
     assert (
-        "AND EXISTS ( SELECT 1 FROM simulation_ticket_items sti "
-        "WHERE sti.ticket_id = st.id )"
+        "AND EXISTS ( SELECT 1 FROM simulation_ticket_items sti WHERE sti.ticket_id = st.id )"
     ) in query
 
 
@@ -209,7 +228,9 @@ def test_virtual_recommendations_spend_the_full_daily_budget_on_sellable_singles
     )
 
     assert sum(entry["ticket"]["suggested_stake"] for entry in tickets) == 500.0
-    assert all(entry["ticket"]["strategy_pool"] == "agent_virtual_recommendation" for entry in tickets)
+    assert all(
+        entry["ticket"]["strategy_pool"] == "agent_virtual_recommendation" for entry in tickets
+    )
     assert all(entry["ticket"]["ticket_type"] == "virtual_recommendation" for entry in tickets)
     assert all(entry["ticket"]["multiple"] <= 99 for entry in tickets)
     assert all(entry["items"] == [candidates[0]] for entry in tickets)

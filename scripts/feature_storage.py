@@ -692,9 +692,7 @@ def store_player_availability_snapshot(conn: Any, snap: dict) -> int | None:
     match-specific. Historical league snapshots retain the legacy player rule.
     """
     raw_json = snap.get("raw_json", {})
-    official_match_id = (
-        raw_json.get("official_match_id") if isinstance(raw_json, dict) else None
-    )
+    official_match_id = raw_json.get("official_match_id") if isinstance(raw_json, dict) else None
     with conn.cursor() as cur:
         if official_match_id:
             cur.execute(

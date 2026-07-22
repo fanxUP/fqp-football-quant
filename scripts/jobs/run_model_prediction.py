@@ -76,7 +76,9 @@ def _load_trained_goal_rates(
     defense = parameters.get("defense") or {}
     match_counts = parameters.get("team_match_counts") or {}
     required_keys = (home_key, away_key)
-    if any(key not in attack or key not in defense or key not in match_counts for key in required_keys):
+    if any(
+        key not in attack or key not in defense or key not in match_counts for key in required_keys
+    ):
         return None
     minimum_team_matches = min(int(match_counts[home_key]), int(match_counts[away_key]))
     if minimum_team_matches < MIN_MAHER_MATCHES:
@@ -93,7 +95,9 @@ def _load_trained_goal_rates(
         + float(defense[home_key])
         + float(parameters.get("league_intercept", 0.0))
     )
-    if not all(math.isfinite(value) and 0.05 <= value <= 8.0 for value in (home_lambda, away_lambda)):
+    if not all(
+        math.isfinite(value) and 0.05 <= value <= 8.0 for value in (home_lambda, away_lambda)
+    ):
         return None
     return TrainedGoalRates(
         home_lambda=home_lambda,
@@ -171,9 +175,7 @@ def _load_trained_elo_probabilities(
         )
         rows = cur.fetchall()
 
-    if len(rows) != 2 or any(
-        row[0] is None or int(row[1] or 0) < MIN_ELO_MATCHES for row in rows
-    ):
+    if len(rows) != 2 or any(row[0] is None or int(row[1] or 0) < MIN_ELO_MATCHES for row in rows):
         return None
     return run_elo_1x2_prediction(float(rows[0][0]), float(rows[1][0]))
 
@@ -189,15 +191,12 @@ def _run_impl(match_id: int | None = None, dry_run: bool = False) -> dict[str, A
         # 1. Get active model version IDs
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT id, model_name, parameters_json "
-                "FROM model_versions WHERE is_active = true"
+                "SELECT id, model_name, parameters_json FROM model_versions WHERE is_active = true"
             )
             model_rows = cur.fetchall()
             active_models = {row[1]: row[0] for row in model_rows}
             model_parameters = {
-                row[1]: row[2]
-                for row in model_rows
-                if len(row) > 2 and isinstance(row[2], dict)
+                row[1]: row[2] for row in model_rows if len(row) > 2 and isinstance(row[2], dict)
             }
 
         if not active_models:
@@ -558,7 +557,7 @@ def _predict_match_play_type(
                 ]
             )
 
-            pred = {
+            pred: dict[str, Any] = {
                 "match_id": mid,
                 "model_version_id": mv_id,
                 "odds_snapshot_id": snapshot_ids[opt_code],

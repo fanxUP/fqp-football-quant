@@ -39,9 +39,7 @@ def write_launch_agent_plist(target: Path, project_root: Path) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Render the FQP local stack LaunchAgent")
     parser.add_argument("--target", type=Path, required=True)
-    parser.add_argument(
-        "--project-root", type=Path, default=Path(__file__).resolve().parents[2]
-    )
+    parser.add_argument("--project-root", type=Path, default=Path(__file__).resolve().parents[2])
     args = parser.parse_args()
     write_launch_agent_plist(args.target, args.project_root)
     print(args.target)

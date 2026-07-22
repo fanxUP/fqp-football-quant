@@ -54,9 +54,9 @@ def evaluate_validation_metrics(
         thresholds.get("max_brier", 1)
     ):
         reasons.append("BRIER_TOO_HIGH")
-    if metrics.get("max_drawdown_pct") is None or float(
-        metrics["max_drawdown_pct"]
-    ) > float(thresholds.get("max_drawdown_pct", 1)):
+    if metrics.get("max_drawdown_pct") is None or float(metrics["max_drawdown_pct"]) > float(
+        thresholds.get("max_drawdown_pct", 1)
+    ):
         reasons.append("DRAWDOWN_TOO_HIGH")
     return not reasons, reasons
 

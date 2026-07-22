@@ -63,7 +63,10 @@ def test_resolves_every_supported_official_result_format():
     assert resolve_actual_option("spf", "H", {"3", "1", "0"}) == "3"
     assert resolve_actual_option("rqspf", "a", {"3", "1", "0"}) == "0"
     assert resolve_actual_option("zjq", "7+", {str(value) for value in range(8)}) == "7"
-    assert resolve_actual_option("bqc", "H/A", {"33", "31", "30", "13", "11", "10", "03", "01", "00"}) == "30"
+    assert (
+        resolve_actual_option("bqc", "H/A", {"33", "31", "30", "13", "11", "10", "03", "01", "00"})
+        == "30"
+    )
     assert resolve_actual_option("bf", "2-1", {"2:1", "other_h"}) == "2:1"
 
 

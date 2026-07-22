@@ -62,8 +62,12 @@ class EvaluationCursor:
     def description(self):
         if self._result_index == 0:
             return [
-                ("model_name",), ("n",), ("avg_brier",),
-                ("avg_logloss",), ("avg_rps",), ("avg_clv",),
+                ("model_name",),
+                ("n",),
+                ("avg_brier",),
+                ("avg_logloss",),
+                ("avg_rps",),
+                ("avg_clv",),
             ]
         return [("total_evaluated",), ("overall_brier",), ("overall_logloss",)]
 
@@ -100,13 +104,22 @@ class ComparisonCursor:
     def description(self):
         if self.phase == 1:
             return [
-                ("model_name",), ("n_predictions",), ("avg_brier",),
-                ("avg_log_loss",), ("avg_rps",), ("avg_clv",),
+                ("model_name",),
+                ("n_predictions",),
+                ("avg_brier",),
+                ("avg_log_loss",),
+                ("avg_rps",),
+                ("avg_clv",),
                 ("avg_flb_score",),
             ]
         return [
-            ("model_name",), ("hit_rate",), ("roi",), ("sharpe_ratio",),
-            ("max_drawdown_pct",), ("profit_factor",), ("total_profit",),
+            ("model_name",),
+            ("hit_rate",),
+            ("roi",),
+            ("sharpe_ratio",),
+            ("max_drawdown_pct",),
+            ("profit_factor",),
+            ("total_profit",),
         ]
 
     def fetchall(self):
