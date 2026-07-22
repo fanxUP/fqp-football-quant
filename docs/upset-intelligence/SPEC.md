@@ -158,7 +158,7 @@ npm --prefix apps/frontend test
 npm --prefix apps/frontend run build
 
 # 本地服务
-./scripts/local/run_local_stack.sh restart
+./ops/local/manage_local_stack.sh restart
 ```
 
 ## 6. 边界

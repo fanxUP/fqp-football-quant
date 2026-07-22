@@ -24,6 +24,20 @@ def test_self_tracked_job_is_not_wrapped_again():
     assert wrapped is job
 
 
+def test_upset_provider_collection_is_not_double_tracked():
+    def job():
+        return {"status": "skipped"}
+
+    wrapped = _audited_job(
+        "collect_upset_provider_evidence",
+        "冷门赛中事件与技术统计采集",
+        "review_agent",
+        job,
+    )
+
+    assert wrapped is job
+
+
 def test_legacy_job_still_gets_scheduler_wrapper():
     def job():
         return "legacy"
@@ -135,11 +149,19 @@ def test_scheduler_detects_upsets_after_results_and_ticket_settlement():
 def test_scheduler_builds_upset_evidence_and_review_after_detection():
     source = Path("scripts/jobs/run_scheduler.py").read_text()
 
+    assert 'id="collect_upset_provider_evidence"' in source
+    assert 'minute="21,51"' in source
     assert 'id="collect_upset_evidence"' in source
     assert 'minute="22,52"' in source
     assert 'id="generate_upset_reviews"' in source
     assert 'minute="25,55"' in source
     assert source.index('id="detect_upsets"') < source.index('id="collect_upset_evidence"')
+    assert source.index('id="detect_upsets"') < source.index(
+        'id="collect_upset_provider_evidence"'
+    )
+    assert source.index('id="collect_upset_provider_evidence"') < source.index(
+        'id="collect_upset_evidence"'
+    )
     assert source.index('id="collect_upset_evidence"') < source.index(
         'id="generate_upset_reviews"'
     )

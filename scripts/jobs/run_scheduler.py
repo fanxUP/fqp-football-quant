@@ -106,6 +106,7 @@ def _audited_job(
         "build_feature_snapshots",
         "collect_injury_data",
         "collect_lineup_data",
+        "collect_upset_provider_evidence",
         "collect_weather",
         "run_model_prediction",
         "run_recommendation_candidate",
@@ -521,6 +522,20 @@ def main() -> None:
                 "cron",
                 minute="20,50",
                 id="detect_upsets",
+            )
+
+            scheduler.add_job(
+                _audited_job(
+                    "collect_upset_provider_evidence",
+                    "冷门赛中事件与技术统计采集",
+                    "review_agent",
+                    lambda: __import__(
+                        "scripts.jobs.collect_upset_provider_evidence", fromlist=["run"]
+                    ).run(),
+                ),
+                "cron",
+                minute="21,51",
+                id="collect_upset_provider_evidence",
             )
 
             scheduler.add_job(

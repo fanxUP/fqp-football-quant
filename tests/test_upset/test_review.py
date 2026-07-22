@@ -93,3 +93,66 @@ def test_review_explicitly_waits_when_only_base_facts_exist():
 
     assert payload["summary"] == "该场已识别为B级冷门，暂无充分证据解释形成原因。"
     assert payload["validation_status"] == "waiting_data"
+
+
+def test_review_places_verified_in_match_events_in_turning_points():
+    kickoff = datetime(2026, 7, 20, 12)
+    evidence = [
+        {
+            "id": 9,
+            "factor_category": "match_event",
+            "factor_code": "red_card:31:101",
+            "factor_value_json": {"text": "第31分钟主队球员张三被红牌罚下"},
+            "evidence_phase": "in_match",
+            "available_before_kickoff": False,
+            "available_at": datetime(2026, 7, 20, 14),
+            "verification_status": "verified",
+        }
+    ]
+
+    payload = build_review_payload(
+        event={"upset_level": "A", "home_team_name": "主队", "away_team_name": "客队"},
+        evidence=evidence,
+        kickoff_time=kickoff,
+        model_postmortem={"status": "unavailable"},
+    )
+
+    assert payload["in_match_turning_points_json"] == [
+        {"text": "第31分钟主队球员张三被红牌罚下", "evidence_id": 9}
+    ]
+
+
+def test_review_counts_postmatch_statistics_but_hides_capture_metadata_from_facts():
+    kickoff = datetime(2026, 7, 20, 12)
+    evidence = [
+        {
+            "id": 10,
+            "factor_category": "technical_statistics",
+            "factor_value_json": {"text": "主队射门18次；客队射门7次"},
+            "evidence_phase": "postmatch",
+            "available_before_kickoff": False,
+            "available_at": datetime(2026, 7, 20, 14),
+            "verification_status": "verified",
+        },
+        {
+            "id": 11,
+            "factor_category": "provider_capture",
+            "factor_value_json": {"text": "赛后辅助比赛数据已完成采集"},
+            "evidence_phase": "postmatch",
+            "available_before_kickoff": False,
+            "available_at": datetime(2026, 7, 20, 14),
+            "verification_status": "verified",
+        },
+    ]
+
+    payload = build_review_payload(
+        event={"upset_level": "B"},
+        evidence=evidence,
+        kickoff_time=kickoff,
+        model_postmortem={"status": "unavailable"},
+    )
+
+    assert payload["facts_json"] == [
+        {"text": "主队射门18次；客队射门7次", "evidence_id": 10}
+    ]
+    assert payload["data_completeness"] == 0.05

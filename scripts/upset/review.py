@@ -63,7 +63,9 @@ def _completeness(evidence: list[dict[str, Any]], model_postmortem: dict[str, An
     if "feature" in categories:
         score += 0.15
     if any(row.get("evidence_phase") == "in_match" for row in evidence):
-        score += 0.15
+        score += 0.10
+    if "technical_statistics" in categories:
+        score += 0.05
     return min(score, 1.0)
 
 
@@ -79,6 +81,7 @@ def build_review_payload(
     facts = [
         {"text": text, "evidence_id": int(row["id"])}
         for row in verified
+        if row.get("factor_category") != "provider_capture"
         if (text := _evidence_text(row))
     ]
     prematch = [
@@ -86,6 +89,12 @@ def build_review_payload(
         for row in verified
         if row.get("available_before_kickoff")
         and (_as_datetime(row.get("available_at")) or kickoff_time) < kickoff_time
+        and (text := _evidence_text(row))
+    ]
+    turning_points = [
+        {"text": text, "evidence_id": int(row["id"])}
+        for row in verified
+        if row.get("evidence_phase") == "in_match"
         and (text := _evidence_text(row))
     ]
     level = event.get("upset_level")
@@ -100,7 +109,7 @@ def build_review_payload(
         "summary": summary,
         "facts_json": facts,
         "prematch_signals_json": prematch,
-        "in_match_turning_points_json": [],
+        "in_match_turning_points_json": turning_points,
         "inferences_json": [],
         "hypotheses_json": [],
         "randomness_json": [],

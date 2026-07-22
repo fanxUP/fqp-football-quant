@@ -259,6 +259,18 @@ class ApiFootballClient:
             params["to"] = to_date
         return self._extract_response(self._request("fixtures", params=params))
 
+    def get_fixture_events(self, fixture_id: int) -> list[dict[str, Any]]:
+        """Get goals, cards and VAR events for one fixture."""
+        return self._extract_response(
+            self._request("fixtures/events", params={"fixture": fixture_id})
+        )
+
+    def get_fixture_statistics(self, fixture_id: int) -> list[dict[str, Any]]:
+        """Get team-level post-match statistics for one fixture."""
+        return self._extract_response(
+            self._request("fixtures/statistics", params={"fixture": fixture_id})
+        )
+
     # ------------------------------------------------------------------
     # Public API — Injuries
     # ------------------------------------------------------------------

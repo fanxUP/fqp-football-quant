@@ -192,7 +192,7 @@ def _prediction_evidence(conn: Any, event: dict[str, Any]) -> dict[str, Any] | N
     )
 
 
-def _insert_evidence(conn: Any, record: dict[str, Any]) -> bool:
+def insert_evidence(conn: Any, record: dict[str, Any]) -> bool:
     with conn.cursor() as cur:
         cur.execute(
             """
@@ -235,7 +235,7 @@ def collect_evidence(conn: Any, *, limit: int = 500) -> dict[str, int]:
         for optional in (_feature_evidence(conn, event), _prediction_evidence(conn, event)):
             if optional:
                 records.append(optional)
-        inserted += sum(_insert_evidence(conn, record) for record in records)
+        inserted += sum(insert_evidence(conn, record) for record in records)
     conn.commit()
     return {"events": len(events), "inserted": inserted}
 
