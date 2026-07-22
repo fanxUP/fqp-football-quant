@@ -362,11 +362,11 @@ def main() -> None:
             )
 
             # ----- Stage 3b: enrichment data collection jobs -----
-            # Daily at 03:00: collect league standings
+            # Daily at 03:00: collect verified current-season official standings.
             scheduler.add_job(
                 _audited_job(
                     "collect_standings",
-                    "联赛积分榜采集",
+                    "官方当季联赛积分榜采集",
                     "crawler_agent",
                     lambda: __import__("scripts.jobs.collect_standings", fromlist=["run"]).run(),
                 ),

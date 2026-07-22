@@ -31,11 +31,21 @@ def test_ocr_upload_persists_original_image(client, tmp_path):
 
         resp = client.post(
             "/api/tickets/ocr",
-            files={"file": ("ticket sample.jpg", b"image-bytes", "image/jpeg")},
+            files={"file": ("ticket sample.jpg", b"\xff\xd8\xffimage-bytes", "image/jpeg")},
         )
 
     assert resp.status_code == 200
     data = resp.json()
     assert data["ticket_image_url"].startswith("/uploads/tickets/")
     stored = Path(tmp_path, "tickets", Path(data["ticket_image_url"]).name)
-    assert stored.read_bytes() == b"image-bytes"
+    assert stored.read_bytes() == b"\xff\xd8\xffimage-bytes"
+
+
+def test_ocr_upload_rejects_fake_image_content(client):
+    response = client.post(
+        "/api/tickets/ocr",
+        files={"file": ("ticket.jpg", b"not-an-image", "image/jpeg")},
+    )
+
+    assert response.status_code == 400
+    assert "不是有效" in response.json()["detail"]

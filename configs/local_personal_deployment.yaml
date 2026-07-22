@@ -17,7 +17,7 @@ network:
   expose_lan: false
 
 storage:
-  database_dir: ./data/postgres
+  database_dir: /opt/homebrew/var/postgresql@18
   upload_dir: ./data/uploads/tickets
   backup_dir: ./data/backups
   report_export_dir: ./exports/reports

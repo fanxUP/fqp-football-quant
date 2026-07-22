@@ -1,0 +1,2 @@
+-- Contaminated standings are intentionally not restored. Re-run a verified
+-- current-season collector if valid source data needs to be repopulated.

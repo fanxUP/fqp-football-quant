@@ -61,6 +61,16 @@ router = APIRouter(tags=["tickets"])
 UPLOAD_ROOT = Path(os.getenv("FQP_UPLOAD_DIR", "data/uploads")).resolve()
 
 
+def _detected_image_type(contents: bytes) -> str | None:
+    if contents.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png"
+    if contents.startswith(b"\xff\xd8\xff"):
+        return "image/jpeg"
+    if len(contents) >= 12 and contents[:4] == b"RIFF" and contents[8:12] == b"WEBP":
+        return "image/webp"
+    return None
+
+
 def _safe_upload_name(filename: str | None) -> str:
     stem = Path(filename or "ticket.jpg").stem
     suffix = Path(filename or "ticket.jpg").suffix.lower() or ".jpg"
@@ -239,6 +249,11 @@ def ocr_ticket_image(file: UploadFile = File(...)):  # noqa: B008
     max_size = 10 * 1024 * 1024  # 10MB
     if len(contents) > max_size:
         raise HTTPException(400, f"文件过大 ({len(contents) / 1024 / 1024:.1f}MB)，最大 10MB")
+    detected_type = _detected_image_type(contents)
+    if detected_type is None:
+        raise HTTPException(400, "文件内容不是有效的 PNG、JPG 或 WEBP 图片")
+    if file.content_type and detected_type != file.content_type.replace("image/jpg", "image/jpeg"):
+        raise HTTPException(400, "文件内容与声明的图片类型不一致")
 
     _, ticket_image_url = _save_ticket_upload(file.filename, contents)
 
