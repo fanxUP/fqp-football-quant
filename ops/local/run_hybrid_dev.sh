@@ -41,7 +41,9 @@ log "Stopping only the Docker frontend/backend to release ports 8066/8006..."
 docker compose -f "$COMPOSE_FILE" stop frontend backend >/dev/null
 
 log "Keeping PostgreSQL, Redis, Worker, Scheduler and Grafana in Docker (${FQP_DEPLOY_REVISION:0:18})..."
-"${COMPOSE[@]}" up --detach --no-build postgres redis worker scheduler grafana
+# Frontend/backend recovery must never interrupt a running database or job.
+# Explicit deployment commands own image/revision synchronization.
+"${COMPOSE[@]}" up --detach --no-build --no-recreate postgres redis worker scheduler grafana
 
 log "Starting host frontend/backend against Docker PostgreSQL on port ${POSTGRES_PORT}..."
 cd "$PROJECT_ROOT"

@@ -56,6 +56,7 @@ def test_hybrid_runtime_uses_the_single_docker_database_and_scheduler() -> None:
     assert "127.0.0.1:5432/fqp" not in env_example
     assert "stop frontend backend" in hybrid
     assert "postgres redis worker scheduler grafana" in hybrid
+    assert "--no-recreate postgres redis worker scheduler grafana" in hybrid
     assert "run_local_scheduler" not in hybrid
     assert "FQP_DATABASE_URL_OVERRIDE" in hybrid
     assert "FQP_DATABASE_URL_OVERRIDE" in dev
