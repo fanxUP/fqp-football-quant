@@ -21,6 +21,39 @@ def _now() -> str:
     return business_now().replace(tzinfo=None).isoformat(timespec="seconds")
 
 
+_REQUIRED_VALID_PREDICTION_FIELDS = (
+    "odds_snapshot_id",
+    "feature_snapshot_id",
+    "model_probability",
+    "market_probability",
+    "break_even_probability",
+    "market_edge",
+    "breakeven_edge",
+    "ev",
+)
+
+
+def _validate_prediction_payload(pred: dict) -> None:
+    """Fail closed when a publishable prediction lacks auditable evidence."""
+    if "validation_status" not in pred or "calculation_version" not in pred:
+        raise ValueError("预测必须显式声明校验状态和计算版本")
+
+    if pred["calculation_version"] == "legacy":
+        raise ValueError("不允许写入 legacy 预测")
+
+    if pred["validation_status"] != "valid":
+        return
+
+    missing = [name for name in _REQUIRED_VALID_PREDICTION_FIELDS if pred.get(name) is None]
+    if missing:
+        raise ValueError(f"有效预测缺少必要证据: {', '.join(missing)}")
+
+    for name in ("model_probability", "market_probability", "break_even_probability"):
+        value = float(pred[name])
+        if not 0.0 <= value <= 1.0:
+            raise ValueError(f"{name} 必须在 0~1 之间")
+
+
 # ---------------------------------------------------------------------------
 # model_predictions (append-only — each run creates new predictions)
 # ---------------------------------------------------------------------------
@@ -28,6 +61,7 @@ def _now() -> str:
 
 def store_model_prediction(conn: Any, pred: dict) -> int | None:
     """Insert a single model prediction row. Returns the new id."""
+    _validate_prediction_payload(pred)
     sql = """
         INSERT INTO model_predictions (
             match_id, model_version_id, odds_snapshot_id, feature_snapshot_id, predict_time,
@@ -79,11 +113,11 @@ def store_model_prediction(conn: Any, pred: dict) -> int | None:
                 "break_even_probability": pred.get("break_even_probability"),
                 "market_edge": pred.get("market_edge"),
                 "breakeven_edge": pred.get("breakeven_edge"),
-                "validation_status": pred.get("validation_status", "valid"),
+                "validation_status": pred["validation_status"],
                 "validation_errors": json.dumps(
                     pred.get("validation_errors", []), ensure_ascii=False
                 ),
-                "calculation_version": pred.get("calculation_version", "legacy"),
+                "calculation_version": pred["calculation_version"],
                 "uncertainty_reason": json.dumps(
                     pred.get("uncertainty_reason", {}), ensure_ascii=False
                 ),
