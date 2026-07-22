@@ -50,7 +50,7 @@ export function RecommendationPanel(props: RecommendationPanelProps) {
                 </div>
                 <div className="betting-recommendation-pick">
                   <span>{recommendation.play_type_name}</span>
-                  <strong>{recommendation.option_name} @{recommendation.fair_odds.toFixed(2)}</strong>
+                  <strong>{recommendation.option_name} @{recommendation.sp_value.toFixed(2)}</strong>
                 </div>
                 <div className="betting-recommendation-metrics">
                   <span>模型 {percent(recommendation.model_probability)}</span>

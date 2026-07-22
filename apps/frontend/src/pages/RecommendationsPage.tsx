@@ -96,10 +96,10 @@ function recommendationOptionTone(option: LiveRecommendation): RecommendationOpt
 }
 
 export function formatRecommendationOptionDisplay(
-  option: Pick<LiveRecommendation, 'option_name' | 'fair_odds'>,
+  option: Pick<LiveRecommendation, 'option_name' | 'sp_value'>,
   outcome: RecommendationOptionOutcome,
 ) {
-  const base = `${normalizeWinDrawLossLabel(option.option_name)}@${option.fair_odds}`;
+  const base = `${normalizeWinDrawLossLabel(option.option_name)}@${option.sp_value}`;
   if (outcome === 'win') return `${base}/胜利`;
   if (outcome === 'lose') return `${base}/失败`;
   return base;
@@ -803,7 +803,7 @@ export default function RecommendationsPage({ embedded = false, onMatchSelect }:
                                 <span className={`recommendation-option-name ${recommendationOptionTone(o)}`}>
                                   {normalizeWinDrawLossLabel(o.option_name)}
                                 </span>
-                                <span className="recommendation-option-odds">@{o.fair_odds}</span>
+                                <span className="recommendation-option-odds">@{o.sp_value}</span>
                                 {outcome ? (
                                   <>
                                     <span className="recommendation-option-separator">/</span>

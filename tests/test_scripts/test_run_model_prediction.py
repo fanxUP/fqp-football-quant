@@ -7,7 +7,13 @@ from unittest.mock import MagicMock, patch
 from zoneinfo import ZoneInfo
 
 from scripts.feature_adjustment import GoalRateAdjustment
-from scripts.jobs.run_model_prediction import _now, _predict_match_play_type, _run_impl, run
+from scripts.jobs.run_model_prediction import (
+    _load_trained_elo_probabilities,
+    _now,
+    _predict_match_play_type,
+    _run_impl,
+    run,
+)
 
 
 def test_prediction_timestamp_uses_naive_business_wall_clock() -> None:
@@ -15,6 +21,34 @@ def test_prediction_timestamp_uses_naive_business_wall_clock() -> None:
 
     with patch("scripts.jobs.run_model_prediction.business_now", return_value=shanghai_now):
         assert _now() == "2026-07-15T17:30:00"
+
+
+def test_elo_cold_start_is_not_treated_as_an_independent_model_signal() -> None:
+    conn = MagicMock()
+    cursor = conn.cursor.return_value.__enter__.return_value
+    cursor.fetchall.return_value = [(1300, 0), (1300, 0)]
+
+    probabilities = _load_trained_elo_probabilities(
+        conn,
+        {"home_team_id": 10, "away_team_id": 20},
+    )
+
+    assert probabilities is None
+
+
+def test_trained_elo_uses_snapshot_home_and_away_team_order() -> None:
+    conn = MagicMock()
+    cursor = conn.cursor.return_value.__enter__.return_value
+    cursor.fetchall.return_value = [(1450, 20), (1620, 30)]
+
+    probabilities = _load_trained_elo_probabilities(
+        conn,
+        {"home_team_id": 10, "away_team_id": 20},
+    )
+
+    assert probabilities is not None
+    assert probabilities["0"] > probabilities["3"]
+    assert cursor.execute.call_args.args[1] == (10, 20)
 
 
 def _run_with_odds(odds_rows):

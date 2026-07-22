@@ -787,6 +787,7 @@ export interface LiveRecommendation {
   option_name: string;
   model_probability: number;
   market_probability: number;
+  sp_value: number;
   fair_odds: number;
   ev: number;
   edge: number;

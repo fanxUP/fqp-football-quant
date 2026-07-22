@@ -20,6 +20,7 @@ const recommendation: LiveRecommendation = {
   option_name: '主胜',
   model_probability: 0.61,
   market_probability: 0.48,
+  sp_value: 2.08,
   fair_odds: 1.64,
   ev: 0.12,
   edge: 0.13,
@@ -94,9 +95,9 @@ describe('RecommendationsPage', () => {
   });
 
   it('formats recommendation option rows with odds and settlement result', () => {
-    expect(formatRecommendationOptionDisplay({ option_name: '让胜(+1)', fair_odds: 1.15 }, 'win')).toBe('主胜(+1)@1.15/胜利');
-    expect(formatRecommendationOptionDisplay({ option_name: '让负(+1)', fair_odds: 4.32 }, 'lose')).toBe('主负(+1)@4.32/失败');
-    expect(formatRecommendationOptionDisplay({ option_name: '让平(+1)', fair_odds: 3.9 }, null)).toBe('平(+1)@3.9');
+    expect(formatRecommendationOptionDisplay({ option_name: '让胜(+1)', sp_value: 1.15 }, 'win')).toBe('主胜(+1)@1.15/胜利');
+    expect(formatRecommendationOptionDisplay({ option_name: '让负(+1)', sp_value: 4.32 }, 'lose')).toBe('主负(+1)@4.32/失败');
+    expect(formatRecommendationOptionDisplay({ option_name: '让平(+1)', sp_value: 3.9 }, null)).toBe('平(+1)@3.9');
   });
 
   it('summarizes strong and conflicting match signals from live recommendations', () => {

@@ -64,17 +64,60 @@ class TestPredictionsEndpoint:
         assert "mp.odds_snapshot_id IS NOT NULL" in sql
         assert "mp.feature_snapshot_id IS NOT NULL" in sql
         assert "mv.is_active = true" in sql
+        assert "simulation_tickets" in sql
+        assert "simulation_ticket_items" in sql
+        assert "current_odds.sp_value" in sql
         assert "official_markets" in sql
         normalized = " ".join(sql.split())
-        assert (
-            "DISTINCT ON (mp.match_id, mp.model_version_id, mp.play_type, mp.option_code)"
-            in normalized
-        )
-        assert "best_by_option" in normalized
-        assert normalized.index("best_by_option") < normalized.index("WHERE ev > %(min_ev)s")
-        latest_clause = normalized.split("), best_by_option AS", maxsplit=1)[0]
-        assert "LEFT JOIN LATERAL" not in latest_clause
-        assert normalized.index("FROM best_by_option") < normalized.index("LEFT JOIN LATERAL")
+        assert "st.created_at::date = timezone('Asia/Shanghai', NOW())::date" in normalized
+        assert "st.ticket_status IN ('generated', 'activated', 'purchased')" in normalized
+
+    def test_live_recommendation_exposes_current_official_sp_separately_from_fair_odds(
+        self, client
+    ):
+        open_window = MagicMock(is_open=True)
+        open_window.as_dict.return_value = {"is_open": True}
+        mock_conn = MagicMock()
+        mock_cur = MagicMock()
+        mock_conn.__enter__.return_value = mock_conn
+        mock_conn.cursor.return_value.__enter__.return_value = mock_cur
+        mock_cur.fetchall.return_value = [
+            (
+                91,
+                26257,
+                "spf",
+                "3",
+                0.5119,
+                0.1405,
+                1.9537,
+                2.2247,
+                0.4792,
+                datetime(2026, 7, 22, 12, 15),
+                "elo_rating",
+                "沙佩科恩斯",
+                "弗拉门戈",
+                "巴西甲级联赛",
+                datetime(2026, 7, 23, 8, 30),
+                "scheduled",
+                None,
+                "周三207",
+                6.30,
+            )
+        ]
+
+        with (
+            patch(
+                "apps.backend.src.routers.predictions.get_sporttery_sales_window",
+                return_value=open_window,
+            ),
+            patch("apps.backend.src.routers.predictions.get_db", return_value=mock_conn),
+        ):
+            response = client.get("/api/recommendations/live")
+
+        recommendation = response.json()["recommendations"][0]
+        assert recommendation["sp_value"] == 6.3
+        assert recommendation["fair_odds"] == 1.95
+        assert recommendation["ev"] == 2.2247
 
     def test_returns_empty_when_no_predictions(self, client):
         mock_conn = MagicMock()

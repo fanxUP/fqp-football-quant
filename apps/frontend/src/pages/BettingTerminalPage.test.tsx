@@ -111,7 +111,8 @@ const recommendation: LiveRecommendation = {
   option_name: '主胜',
   model_probability: 0.62,
   market_probability: 0.49,
-  fair_odds: 2.04,
+  sp_value: 2.04,
+  fair_odds: 1.61,
   ev: 0.13,
   edge: 0.12,
   confidence: 0.73,
@@ -238,6 +239,14 @@ describe('BettingTerminalPage desktop workbench', () => {
     await waitFor(() => expect(within(terminal).getByRole('button', { name: '胜平负 主胜 2.04' })).toHaveClass('is-selected'));
     expect(within(previewPanel).getByText('首尔FC vs 江原FC')).toBeInTheDocument();
     expect(within(previewPanel).getAllByText('推荐投注').length).toBeGreaterThan(0);
+  });
+
+  it('shows the current official SP instead of model fair odds', async () => {
+    render(<BettingTerminalPage />);
+
+    const recommendationPanel = await screen.findByLabelText('推荐投注');
+    expect(within(recommendationPanel).getByText('主胜 @2.04')).toBeInTheDocument();
+    expect(within(recommendationPanel).queryByText('主胜 @1.61')).not.toBeInTheDocument();
   });
 
   it('matches model 3/1/0 recommendation codes to official h/d/a options', async () => {

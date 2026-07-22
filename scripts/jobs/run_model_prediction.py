@@ -19,7 +19,7 @@ from scripts.agents.task_queue import finish_tracked_job, start_tracked_job
 from scripts.business_time import business_now
 from scripts.derived_play_predictions import store_derived_play_predictions
 from scripts.dixon_coles_model import dixon_coles_matrix
-from scripts.elo_model import get_or_create_elo, run_elo_1x2_prediction
+from scripts.elo_model import run_elo_1x2_prediction
 from scripts.feature_adjustment import GoalRateAdjustment, adjust_goal_rates
 from scripts.model_storage import store_committee_vote, store_model_prediction
 from scripts.odds_conversion import (
@@ -39,6 +39,7 @@ from scripts.poisson_model import (
 # Negative means low scores (0:0, 1:0, 0:1, 1:1) are less common than
 # independent Poisson predicts.
 DEFAULT_RHO = -0.08
+MIN_ELO_MATCHES = 5
 
 # Option code mapping: odds_conversion uses "3"/"1"/"0", snapshots use "h"/"d"/"a"
 OPTION_MAP = {"h": "3", "d": "1", "a": "0"}
@@ -53,6 +54,8 @@ def _latest_feature_snapshot(conn: Any, match_id: int) -> dict[str, Any] | None:
     """Load the latest pre-match fields used by the explainable adjustment layer."""
     columns = [
         "id",
+        "home_team_id",
+        "away_team_id",
         "data_completeness_score",
         "lineup_strength_diff",
         "absence_impact_diff",
@@ -74,6 +77,48 @@ def _latest_feature_snapshot(conn: Any, match_id: int) -> dict[str, Any] | None:
         )
         row = cur.fetchone()
     return dict(zip(columns, row, strict=False)) if row else None
+
+
+def _load_trained_elo_probabilities(
+    conn: Any,
+    feature_snapshot: dict[str, Any] | None,
+) -> dict[str, float] | None:
+    """Return an Elo signal only when both ordered teams have real history.
+
+    A zero-match initial rating is a placeholder, not model evidence.  Team IDs
+    come from the feature snapshot so home/away order cannot be changed by a
+    name lookup or database sort order.
+    """
+    if not feature_snapshot:
+        return None
+    home_team_id = feature_snapshot.get("home_team_id")
+    away_team_id = feature_snapshot.get("away_team_id")
+    if not home_team_id or not away_team_id:
+        return None
+
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT latest.elo_rating, latest.matches_played
+            FROM (VALUES (%s, 1), (%s, 2)) AS requested(team_id, team_order)
+            LEFT JOIN LATERAL (
+                SELECT elo_rating, matches_played
+                FROM team_elo_ratings
+                WHERE team_id = requested.team_id
+                ORDER BY season DESC NULLS LAST, updated_at DESC
+                LIMIT 1
+            ) latest ON true
+            ORDER BY requested.team_order
+            """,
+            (home_team_id, away_team_id),
+        )
+        rows = cur.fetchall()
+
+    if len(rows) != 2 or any(
+        row[0] is None or int(row[1] or 0) < MIN_ELO_MATCHES for row in rows
+    ):
+        return None
+    return run_elo_1x2_prediction(float(rows[0][0]), float(rows[1][0]))
 
 
 def _run_impl(match_id: int | None = None, dry_run: bool = False) -> dict[str, Any]:
@@ -373,21 +418,12 @@ def _predict_match_play_type(
             predict_time=predict_time,
         )
 
-    # 5. Elo model
+    # 5. Elo model. Cold-start ratings are placeholders and must not become
+    # independent positive-EV signals.
     try:
-        with conn.cursor() as cur:
-            cur.execute(
-                "SELECT id FROM teams WHERE team_name_cn IN (%s, %s) ORDER BY id",
-                (home_team_name, away_team_name),
-            )
-            team_rows = cur.fetchall()
-        team_ids = [r[0] for r in team_rows]
-        if len(team_ids) >= 2:
-            home_elo, _ = get_or_create_elo(conn, team_ids[0])
-            away_elo, _ = get_or_create_elo(conn, team_ids[1])
-            elo_1x2 = run_elo_1x2_prediction(home_elo, away_elo)
-        else:
-            elo_1x2 = dict(market_probs)
+        elo_1x2 = _load_trained_elo_probabilities(conn, feature_snapshot) or dict(
+            market_probs
+        )
     except Exception:
         elo_1x2 = dict(market_probs)
 

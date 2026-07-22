@@ -62,10 +62,11 @@ def get_live_recommendations(
     min_ev: float = Query(0.02, description="最小EV阈值"),
     min_confidence: float = Query(0.3, description="最小置信度"),
 ):
-    """Generate live betting recommendations from latest model predictions.
+    """Return today's decision-agent releases at the current official SP.
 
-    Returns the best match+option combos with positive EV, sorted by EV descending.
-    Each recommendation includes match info, odds, probabilities, edge, and suggested action.
+    Raw model predictions are research evidence, not publishable betting advice.
+    Only items already written into a simulation ticket by the decision/risk
+    pipeline may cross this API boundary.
     """
     sales_window = get_sporttery_sales_window()
     if not sales_window.is_open:
@@ -80,18 +81,18 @@ def get_live_recommendations(
         with conn.cursor() as cur:
             cur.execute(
                 """
-                WITH latest_by_model AS (
-                    SELECT DISTINCT ON (mp.match_id, mp.model_version_id, mp.play_type, mp.option_code)
-                        mp.id,
-                        mp.match_id,
-                        mp.model_version_id,
-                        mp.play_type,
-                        mp.option_code,
-                        mp.model_probability,
-                        mp.market_probability,
-                        mp.fair_odds,
-                        mp.ev,
-                        mp.confidence_score,
+                WITH released_items AS (
+                    SELECT DISTINCT ON (sti.match_id, sti.play_type, sti.option_code)
+                        mp.id AS prediction_id,
+                        sti.match_id,
+                        sti.play_type,
+                        sti.option_code,
+                        sti.model_probability,
+                        sti.market_probability,
+                        CASE WHEN sti.model_probability > 0
+                             THEN 1.0 / sti.model_probability END AS fair_odds,
+                        sti.model_probability * current_odds.sp_value - 1 AS current_ev,
+                        sti.confidence_score,
                         mp.predict_time,
                         mv.model_name,
                         m.home_team_name,
@@ -99,25 +100,33 @@ def get_live_recommendations(
                         m.league_name,
                         m.kickoff_time,
                         m.match_status,
-                        m.official_match_code,
-                        r.half_home_goals,
-                        r.half_away_goals,
-                        r.full_home_goals,
-                        r.full_away_goals,
-                        (r.raw_json->>'et_home_goals')::int AS et_home_goals,
-                        (r.raw_json->>'et_away_goals')::int AS et_away_goals,
-                        (r.raw_json->>'pk_home_goals')::int AS pk_home_goals,
-                        (r.raw_json->>'pk_away_goals')::int AS pk_away_goals,
-                        r.spf_result,
-                        r.rqspf_result,
-                        r.total_goals_result,
-                        r.score_result,
-                        r.half_full_result
-                    FROM model_predictions mp
+                        COALESCE(m.raw_json->>'matchNumStr', m.official_match_code::text)
+                            AS official_match_code,
+                        current_odds.sp_value,
+                        current_odds.handicap
+                    FROM simulation_tickets st
+                    JOIN simulation_ticket_items sti ON sti.ticket_id = st.id
+                    JOIN model_predictions mp ON mp.id = sti.model_prediction_id
                     JOIN model_versions mv ON mv.id = mp.model_version_id
                     JOIN official_matches m ON m.id = mp.match_id
-                    LEFT JOIN official_results r ON r.match_id = m.id
-                    WHERE mv.is_active = true
+                    JOIN LATERAL (
+                        SELECT os.sp_value, os.handicap
+                        FROM official_odds_snapshots os
+                        WHERE os.match_id = sti.match_id
+                          AND os.play_type = sti.play_type
+                          AND os.option_code = CASE sti.option_code
+                              WHEN '3' THEN 'h'
+                              WHEN '1' THEN 'd'
+                              WHEN '0' THEN 'a'
+                              ELSE sti.option_code
+                          END
+                          AND os.is_open = true
+                        ORDER BY os.snapshot_time DESC, os.id DESC
+                        LIMIT 1
+                    ) current_odds ON true
+                    WHERE st.created_at::date = timezone('Asia/Shanghai', NOW())::date
+                      AND st.ticket_status IN ('generated', 'activated', 'purchased')
+                      AND mv.is_active = true
                       AND mp.odds_snapshot_id IS NOT NULL
                       AND mp.feature_snapshot_id IS NOT NULL
                       AND m.sale_status = 'selling'
@@ -132,38 +141,19 @@ def get_live_recommendations(
                             AND market.play_type = mp.play_type
                             AND market.is_open = true
                       )
-                    ORDER BY mp.match_id, mp.model_version_id, mp.play_type,
-                             mp.option_code, mp.predict_time DESC, mp.id DESC
-                ), best_by_option AS (
-                    SELECT DISTINCT ON (match_id, play_type, option_code) *
-                    FROM latest_by_model
-                    WHERE ev > %(min_ev)s
-                      AND confidence_score >= %(min_confidence)s
-                    ORDER BY match_id, play_type, option_code,
-                             ev DESC NULLS LAST, confidence_score DESC NULLS LAST,
-                             predict_time DESC, id DESC
+                      AND sti.model_probability * current_odds.sp_value - 1 > %(min_ev)s
+                      AND sti.confidence_score >= %(min_confidence)s
+                    ORDER BY sti.match_id, sti.play_type, sti.option_code,
+                             st.created_at DESC, sti.id DESC
                 )
-                SELECT id, match_id, play_type, option_code,
-                       model_probability, market_probability, fair_odds, ev,
+                SELECT prediction_id, match_id, play_type, option_code,
+                       model_probability, market_probability, fair_odds, current_ev,
                        confidence_score, predict_time, model_name,
                        home_team_name, away_team_name, league_name,
-                       kickoff_time, match_status, om.handicap,
-                       official_match_code,
-                       half_home_goals, half_away_goals,
-                       full_home_goals, full_away_goals,
-                       et_home_goals, et_away_goals,
-                       pk_home_goals, pk_away_goals,
-                       spf_result, rqspf_result, total_goals_result,
-                       score_result, half_full_result
-                FROM best_by_option
-                LEFT JOIN LATERAL (
-                    SELECT handicap FROM official_odds_snapshots
-                    WHERE match_id = best_by_option.match_id
-                      AND play_type = best_by_option.play_type
-                      AND handicap IS NOT NULL
-                    ORDER BY snapshot_time DESC LIMIT 1
-                ) om ON true
-                ORDER BY ev DESC, confidence_score DESC
+                       kickoff_time, match_status, handicap,
+                       official_match_code, sp_value
+                FROM released_items
+                ORDER BY current_ev DESC, confidence_score DESC
                 LIMIT %(limit)s
                 """,
                 {"min_ev": min_ev, "min_confidence": min_confidence, "limit": limit},
@@ -178,21 +168,9 @@ def get_live_recommendations(
         ev = float(r[7]) if r[7] else 0
         confidence = float(r[8]) if r[8] else 0
         edge = model_prob - market_prob if market_prob > 0 else 0
-        handicap = float(r[16]) if len(r) > 16 and r[16] is not None else None
-        official_match_code = r[17] if len(r) > 17 else None
-        ht_home_goals = r[18] if len(r) > 18 else None
-        ht_away_goals = r[19] if len(r) > 19 else None
-        ft_home_goals = r[20] if len(r) > 20 else None
-        ft_away_goals = r[21] if len(r) > 21 else None
-        et_home_goals = r[22] if len(r) > 22 else None
-        et_away_goals = r[23] if len(r) > 23 else None
-        pk_home_goals = r[24] if len(r) > 24 else None
-        pk_away_goals = r[25] if len(r) > 25 else None
-        spf_result = r[26] if len(r) > 26 else None
-        rqspf_result = r[27] if len(r) > 27 else None
-        total_goals_result = r[28] if len(r) > 28 else None
-        score_result = r[29] if len(r) > 29 else None
-        half_full_result = r[30] if len(r) > 30 else None
+        handicap = float(r[16]) if r[16] is not None else None
+        official_match_code = r[17]
+        sp_value = float(r[18])
 
         recommendations.append(
             {
@@ -204,6 +182,7 @@ def get_live_recommendations(
                 "option_name": _option_name(r[2], r[3], handicap),
                 "model_probability": round(model_prob, 4),
                 "market_probability": round(market_prob, 4),
+                "sp_value": round(sp_value, 2),
                 "fair_odds": round(fair_odds, 2),
                 "ev": round(ev, 4),
                 "edge": round(edge, 4),
@@ -220,19 +199,19 @@ def get_live_recommendations(
                 else None,
                 "match_status": r[15],
                 "match_num_str": official_match_code,
-                "ht_home_goals": ht_home_goals,
-                "ht_away_goals": ht_away_goals,
-                "ft_home_goals": ft_home_goals,
-                "ft_away_goals": ft_away_goals,
-                "et_home_goals": et_home_goals,
-                "et_away_goals": et_away_goals,
-                "pk_home_goals": pk_home_goals,
-                "pk_away_goals": pk_away_goals,
-                "spf_result": spf_result,
-                "rqspf_result": rqspf_result,
-                "total_goals_result": total_goals_result,
-                "score_result": score_result,
-                "half_full_result": half_full_result,
+                "ht_home_goals": None,
+                "ht_away_goals": None,
+                "ft_home_goals": None,
+                "ft_away_goals": None,
+                "et_home_goals": None,
+                "et_away_goals": None,
+                "pk_home_goals": None,
+                "pk_away_goals": None,
+                "spf_result": None,
+                "rqspf_result": None,
+                "total_goals_result": None,
+                "score_result": None,
+                "half_full_result": None,
             }
         )
 
