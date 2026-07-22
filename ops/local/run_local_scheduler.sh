@@ -9,6 +9,9 @@ CHECK_ONLY="${1:-}"
 
 fail() { echo "[fqp-scheduler] ERROR: $*" >&2; exit 1; }
 
+[[ "${FQP_ALLOW_HOST_SCHEDULER:-0}" == "1" ]] \
+  || fail "Host Scheduler is retired. Use Docker Worker/Scheduler via ./ops/local/run_hybrid_dev.sh."
+
 [[ -x "$PYTHON_BIN" ]] || fail "Missing project Python runtime: $PYTHON_BIN"
 [[ -f "$ENV_FILE" ]] || fail "Missing $ENV_FILE"
 
@@ -23,7 +26,7 @@ set +a
 "$PYTHON_BIN" -c 'import sys; raise SystemExit(0 if sys.version_info[:2] == (3, 14) else 1)' \
   || fail "Python 3.14 is required"
 "$PYTHON_BIN" -c 'import psycopg2, os; conn=psycopg2.connect(os.environ["DATABASE_URL"]); conn.close()' \
-  || fail "Cannot connect to local PostgreSQL"
+  || fail "Cannot connect to Docker PostgreSQL"
 "$PYTHON_BIN" -c 'import apscheduler' \
   || fail "APScheduler is not installed in the project Python runtime"
 

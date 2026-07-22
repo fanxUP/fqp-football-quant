@@ -61,12 +61,12 @@ _pool: BlockingThreadedConnectionPool | None = None
 
 
 def _build_pool() -> BlockingThreadedConnectionPool:
-    # Host-local PostgreSQL is the only supported default runtime.  A Docker
-    # hostname here makes standalone jobs fail when they are launched without
-    # the shell wrapper that sources .env.local.
+    # Docker Desktop PostgreSQL is the project's single source of truth. Host
+    # processes reach the published port; containers override this with the
+    # internal `postgres:5432` address through their environment file.
     dsn = os.getenv(
         "DATABASE_URL",
-        "postgresql://fqp:fqp_local_password@127.0.0.1:5432/fqp",
+        "postgresql://fqp:fqp_local_password@127.0.0.1:5433/fqp",
     )
     min_connections = int(os.getenv("FQP_DB_POOL_MIN", "2"))
     max_connections = int(os.getenv("FQP_DB_POOL_MAX", "16"))

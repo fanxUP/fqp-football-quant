@@ -61,3 +61,27 @@ def test_hybrid_runtime_uses_the_single_docker_database_and_scheduler() -> None:
     assert "FQP_DATABASE_URL_OVERRIDE" in dev
     assert "profiles: [docker-app]" in override
     assert override.count("http://host.docker.internal:8006/health") == 2
+
+
+def test_all_executable_host_defaults_target_docker_postgres() -> None:
+    executable_paths = (
+        PROJECT_ROOT / "apps/backend/src/db.py",
+        PROJECT_ROOT / "ops/backup_daily.sh",
+        PROJECT_ROOT / "scripts/jobs/verify_backup.py",
+    )
+
+    for path in executable_paths:
+        content = path.read_text(encoding="utf-8")
+        assert "127.0.0.1:5433/fqp" in content
+        assert "127.0.0.1:5432/fqp" not in content
+
+
+def test_legacy_host_scheduler_fails_closed_by_default() -> None:
+    scheduler = (PROJECT_ROOT / "ops/local/run_local_scheduler.sh").read_text(
+        encoding="utf-8"
+    )
+
+    guard = scheduler.index('FQP_ALLOW_HOST_SCHEDULER:-0')
+    environment_load = scheduler.index('source "$ENV_FILE"')
+    assert guard < environment_load
+    assert "Host Scheduler is retired" in scheduler

@@ -12,10 +12,10 @@
 ## 当前运行口径
 
 - 源码只在本机工作目录修改、测试、提交；容器内禁止直接改源码。
-- 日常热开发使用 `./ops/local/run_local_dev.sh`，依赖本机 Python、Node.js 和 PostgreSQL。
+- 日常热开发使用 `./ops/local/run_hybrid_dev.sh`：前后端在本机运行，数据库、Redis、Worker、Scheduler 在 Docker Desktop 运行。
 - 需要完整发布运行时，使用 `./ops/local/run_local_stack.sh deploy`。脚本会先校验干净工作区、推送 GitHub 并核对提交 SHA，再重建 Docker Desktop 服务。
 - `data/` 是宿主机持久数据，不提交 Git；容器是可重建运行环境，不是源码来源。
-- Scheduler/Worker 只能选择一个运行模式：本机开发模式使用 `ops/local/run_local_scheduler.sh` 或 `manage_scheduler.sh`；Docker 发布模式由 Compose 服务运行。不要同时启动两套。
+- Scheduler/Worker 只允许 Docker Compose 服务运行；旧的本机 Scheduler 入口默认拒绝启动，避免重复采集与结算。
 
 ## 文档分组
 
