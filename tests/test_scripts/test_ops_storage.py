@@ -1,8 +1,28 @@
 """Operational statistics must not turn empty samples into green checks."""
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
-from scripts.ops_storage import get_contamination_stats, get_evidence_chain_stats
+from scripts.ops_storage import (
+    get_contamination_stats,
+    get_evidence_chain_stats,
+    store_health_snapshot,
+)
+
+
+def test_health_snapshot_defaults_to_utc_audit_time():
+    conn = MagicMock()
+    cur = conn.cursor.return_value.__enter__.return_value
+    cur.fetchone.side_effect = [None, [7]]
+
+    with patch(
+        "scripts.ops_storage.utc_now_iso",
+        return_value="2026-07-22T10:30:00",
+    ):
+        result = store_health_snapshot(conn, {"snapshot_date": "2026-07-22"})
+
+    assert result == 7
+    insert_params = cur.execute.call_args_list[1].args[1]
+    assert insert_params["snapshot_time"] == "2026-07-22T10:30:00"
 
 
 def _connection_with_row(row):

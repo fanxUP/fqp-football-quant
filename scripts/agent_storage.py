@@ -7,13 +7,9 @@ All functions accept conn: Any and call conn.commit() internally.
 from __future__ import annotations
 
 import json
-from datetime import datetime
 from typing import Any
 
-
-def _now() -> str:
-    return datetime.now().isoformat(timespec="seconds")
-
+from scripts.business_time import utc_now_naive
 
 TASK_STATUSES = {
     "created", "queued", "assigned", "running", "in_progress",
@@ -147,7 +143,7 @@ def transition_task(conn: Any, task_code: str, new_status: str, summary: str = "
     """Update task status and write audit log. Returns True on success."""
     if new_status not in TASK_STATUSES:
         raise ValueError(f"Unsupported task status: {new_status}")
-    now_val = datetime.now()
+    now_val = utc_now_naive()
     sql = """
         UPDATE agent_tasks
         SET status = %(new_status)s,

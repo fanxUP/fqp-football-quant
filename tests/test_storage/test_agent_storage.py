@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+from datetime import datetime
+from unittest.mock import MagicMock, patch
 
 from scripts.agent_storage import (
     add_task_artifact,
@@ -150,9 +151,15 @@ class TestTransitionTask:
         mock_conn = MagicMock()
         mock_conn.cursor.return_value.__enter__.return_value = mock_cur
 
-        result = transition_task(mock_conn, "TASK-001", "completed", "Done successfully")
+        audit_time = datetime(2026, 7, 22, 10, 30)
+        with patch(
+            "scripts.agent_storage.utc_now_naive",
+            return_value=audit_time,
+        ):
+            result = transition_task(mock_conn, "TASK-001", "completed", "Done successfully")
         assert result is True
         assert mock_cur.execute.call_count == 2  # UPDATE + audit INSERT
+        assert mock_cur.execute.call_args_list[0].args[1]["now"] == audit_time
         mock_conn.commit.assert_called()
 
     def test_returns_false_when_task_not_found(self):

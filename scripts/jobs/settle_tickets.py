@@ -9,10 +9,10 @@ No-data path returns {"status": "ok", "settled": 0} when no results exist.
 
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Any
 
 from apps.backend.src.db import get_db
+from scripts.business_time import utc_now_iso
 from scripts.jobs.settlement_repairs import repair_legacy_real_settlements
 from scripts.play_type_registry import result_column
 from scripts.real_ticket_storage import (
@@ -23,10 +23,6 @@ from scripts.result_codes import normalize_result as _normalize_result
 from scripts.result_status import is_void_official_result as _is_void_result
 from scripts.simulator_calculator import calculate_winning_prize
 from scripts.simulator_storage import update_ticket_status as update_sim_ticket_status
-
-
-def _now() -> str:
-    return datetime.now().isoformat(timespec="seconds")
 
 
 def _calculate_tax(prize: float) -> float:
@@ -318,7 +314,7 @@ def run(dry_run: bool = False) -> dict[str, Any]:
                     {
                         "ticket_source": "simulation",
                         "ticket_id": tid,
-                        "settle_time": _now(),
+                        "settle_time": utc_now_iso(),
                         "is_won": agent_ticket_won,
                         "stake_amount": stake,
                         "prize_amount": prize,
@@ -463,7 +459,7 @@ def run(dry_run: bool = False) -> dict[str, Any]:
                 settlement_id = create_settlement(conn, {
                     "ticket_source": "simulator",
                     "ticket_id": tid,
-                    "settle_time": _now(),
+                    "settle_time": utc_now_iso(),
                     "is_won": ticket_won,
                     "stake_amount": stake,
                     "prize_amount": prize,
@@ -611,7 +607,7 @@ def run(dry_run: bool = False) -> dict[str, Any]:
                     {
                         "ticket_source": "real",
                         "ticket_id": rtid,
-                        "settle_time": _now(),
+                        "settle_time": utc_now_iso(),
                         "is_won": real_ticket_won,
                         "stake_amount": stake,
                         "prize_amount": prize,

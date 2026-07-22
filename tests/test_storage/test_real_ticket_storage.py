@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from scripts.real_ticket_storage import (
     create_bankroll_transaction,
@@ -50,9 +50,14 @@ class TestCreateRealTicket:
         mock_conn, mock_cur = _mock_conn(fetchone=[1])
 
         ticket = {}
-        result = create_real_ticket(mock_conn, ticket)
+        with patch(
+            "scripts.real_ticket_storage.utc_now_iso",
+            return_value="2026-07-22T10:30:00",
+        ):
+            result = create_real_ticket(mock_conn, ticket)
         assert result == 1
         call_args = mock_cur.execute.call_args[0][1]
+        assert call_args["purchase_time"] == "2026-07-22T10:30:00"
         assert call_args["pass_type"] == "single"
         assert call_args["total_amount"] == 0
         assert call_args["settlement_status"] == "pending"
@@ -196,9 +201,15 @@ class TestSettlements:
         mock_conn.cursor.return_value.__enter__.return_value = mock_cur
 
         settlement = {"ticket_source": "real", "ticket_id": 1, "stake_amount": 100}
-        result = create_settlement(mock_conn, settlement)
+        with patch(
+            "scripts.real_ticket_storage.utc_now_iso",
+            return_value="2026-07-22T10:30:00",
+        ):
+            result = create_settlement(mock_conn, settlement)
         assert result == 99
         assert mock_cur.execute.call_count == 2  # check + insert
+        insert_params = mock_cur.execute.call_args_list[1].args[1]
+        assert insert_params["settle_time"] == "2026-07-22T10:30:00"
 
     def test_create_settlement_skips_if_exists(self):
         """Returns existing id if settlement already exists."""

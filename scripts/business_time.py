@@ -25,3 +25,16 @@ def business_today(value: datetime | None = None) -> date:
 
 def business_yesterday(value: datetime | None = None) -> date:
     return business_today(value) - timedelta(days=1)
+
+
+def utc_now_naive(value: datetime | None = None) -> datetime:
+    """Return canonical naive UTC for database audit timestamp columns."""
+    current = value or datetime.now(UTC)
+    if current.tzinfo is None:
+        current = current.replace(tzinfo=UTC)
+    return current.astimezone(UTC).replace(tzinfo=None)
+
+
+def utc_now_iso(value: datetime | None = None) -> str:
+    """Return canonical naive UTC as a seconds-precision ISO timestamp."""
+    return utc_now_naive(value).isoformat(timespec="seconds")

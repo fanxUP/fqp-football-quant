@@ -7,13 +7,9 @@ All functions accept conn: Any and call conn.commit() internally.
 from __future__ import annotations
 
 import json
-from datetime import datetime
 from typing import Any
 
-
-def _now() -> str:
-    return datetime.now().isoformat(timespec="seconds")
-
+from scripts.business_time import utc_now_iso
 
 # ---------------------------------------------------------------------------
 # Audit log (shared utility)
@@ -83,7 +79,7 @@ def create_real_ticket(conn: Any, ticket: dict) -> int | None:
         "related_simulation_ticket_id": ticket.get("related_simulation_ticket_id"),
         "ticket_image_url": ticket.get("ticket_image_url"),
         "ticket_no": ticket.get("ticket_no"),
-        "purchase_time": ticket.get("purchase_time", _now()),
+        "purchase_time": ticket.get("purchase_time", utc_now_iso()),
         "store_code": ticket.get("store_code"),
         "total_amount": ticket.get("total_amount", 0),
         "multiple": ticket.get("multiple", 1),
@@ -403,7 +399,7 @@ def create_settlement(conn: Any, settlement: dict) -> int | None:
         params = {
             "ticket_source": settlement["ticket_source"],
             "ticket_id": settlement["ticket_id"],
-            "settle_time": settlement.get("settle_time", _now()),
+            "settle_time": settlement.get("settle_time", utc_now_iso()),
             "is_won": settlement.get("is_won", False),
             "stake_amount": settlement.get("stake_amount", 0),
             "prize_amount": settlement.get("prize_amount", 0),

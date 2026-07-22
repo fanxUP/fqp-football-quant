@@ -1,8 +1,15 @@
 from datetime import UTC, date, datetime
 from pathlib import Path
 from unittest.mock import patch
+from zoneinfo import ZoneInfo
 
-from scripts.business_time import business_now, business_today, business_yesterday
+from scripts.business_time import (
+    business_now,
+    business_today,
+    business_yesterday,
+    utc_now_iso,
+    utc_now_naive,
+)
 from scripts.jobs import settle_finished_matches
 
 
@@ -12,6 +19,13 @@ def test_business_date_rolls_over_at_shanghai_midnight():
     assert business_now(utc_evening).isoformat() == "2026-07-15T04:30:00+08:00"
     assert business_today(utc_evening) == date(2026, 7, 15)
     assert business_yesterday(utc_evening) == date(2026, 7, 14)
+
+
+def test_utc_audit_clock_normalizes_aware_values_to_naive_utc():
+    shanghai_evening = datetime(2026, 7, 22, 18, 30, tzinfo=ZoneInfo("Asia/Shanghai"))
+
+    assert utc_now_naive(shanghai_evening) == datetime(2026, 7, 22, 10, 30)
+    assert utc_now_iso(shanghai_evening) == "2026-07-22T10:30:00"
 
 
 def test_result_settlement_uses_business_dates_during_utc_evening():

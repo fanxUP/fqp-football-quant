@@ -16,10 +16,7 @@ import json
 from datetime import datetime
 from typing import Any
 
-
-def _now() -> str:
-    return datetime.now().isoformat(timespec="seconds")
-
+from scripts.business_time import utc_now_iso
 
 # ---------------------------------------------------------------------------
 # operational_health_snapshots
@@ -41,7 +38,7 @@ def store_health_snapshot(conn: Any, snapshot: dict) -> int | None:
 
         common = {
             "snapshot_date": snapshot["snapshot_date"],
-            "snapshot_time": snapshot.get("snapshot_time", _now()),
+            "snapshot_time": snapshot.get("snapshot_time", utc_now_iso()),
             "continuous_uptime_days": snapshot.get("continuous_uptime_days"),
             "official_collection_success_rate": snapshot.get("official_collection_success_rate"),
             "odds_snapshot_missing_rate": snapshot.get("odds_snapshot_missing_rate"),
@@ -260,7 +257,7 @@ def store_backup_log(conn: Any, log_entry: dict) -> int:
                 "backup_type": log_entry.get("backup_type", "full"),
                 "backup_path": log_entry.get("backup_path"),
                 "backup_size_bytes": log_entry.get("backup_size_bytes"),
-                "started_at": log_entry.get("started_at", _now()),
+                "started_at": log_entry.get("started_at", utc_now_iso()),
                 "finished_at": log_entry.get("finished_at"),
                 "success": log_entry.get("success", False),
                 "integrity_check_passed": log_entry.get("integrity_check_passed"),
@@ -350,7 +347,7 @@ def store_evidence_chain_audit(conn: Any, audit: dict) -> int:
             ) RETURNING id
             """,
             {
-                "audit_time": audit.get("audit_time", _now()),
+                "audit_time": audit.get("audit_time", utc_now_iso()),
                 "recommendation_id": audit.get("recommendation_id"),
                 "ticket_id": audit.get("ticket_id"),
                 "odds_snapshot_id": audit.get("odds_snapshot_id"),
@@ -449,7 +446,7 @@ def store_contamination_audit(conn: Any, audit: dict) -> int:
             ) RETURNING id
             """,
             {
-                "audit_time": audit.get("audit_time", _now()),
+                "audit_time": audit.get("audit_time", utc_now_iso()),
                 "check_type": audit["check_type"],
                 "match_id": audit.get("match_id"),
                 "severity": audit.get("severity", "info"),
