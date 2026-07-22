@@ -4,18 +4,18 @@
 
 本文档目录保留了产品设计、实施计划、历史验收和运维记录。为避免把历史结论当作当前操作指令，文档按以下优先级使用：
 
-1. **当前运行与操作**：本文件、[54_本机运行与DockerDesktop弃用说明.md](54_本机运行与DockerDesktop弃用说明.md)、[../ops/local/README_Codex_Docker_Desktop.md](../ops/local/README_Codex_Docker_Desktop.md) 与实际脚本。
+1. **当前运行与操作**：本文件、[54_本机运行与DockerDesktop弃用说明.md](54_本机运行与DockerDesktop弃用说明.md)、[../ops/local/README_LOCAL_RUNTIME.md](../ops/local/README_LOCAL_RUNTIME.md) 与实际脚本。
 2. **当前产品与架构约束**：[00_项目总览与边界.md](00_项目总览与边界.md)、[01_PRD_产品需求文档.md](01_PRD_产品需求文档.md)、[03_系统架构设计.md](03_系统架构设计.md)、[44_最终版架构逻辑体检与冲突修复报告.md](44_最终版架构逻辑体检与冲突修复报告.md)。
 3. **实现契约**：`configs/final_*_registry.yaml`、`configs/module_dependencies.yaml`、`api/`、`sql/` 与代码测试。若文档与这些可执行契约冲突，以可执行契约和当前测试为准。
 4. **历史设计与验收**：52 号文档以及 58–63 号验收记录。它们保存当时的决策和证据，不构成当前启动指令。
 
 ## 当前运行口径
 
-- 源码只在本机工作目录修改、测试、提交；容器内禁止直接改源码。
-- 日常热开发使用 `./ops/local/run_hybrid_dev.sh`：前后端在本机运行，数据库、Redis、Worker、Scheduler 在 Docker Desktop 运行。
-- 需要完整发布运行时，使用 `./ops/local/run_local_stack.sh deploy`。脚本会先校验干净工作区、推送 GitHub 并核对提交 SHA，再重建 Docker Desktop 服务。
-- `data/` 是宿主机持久数据，不提交 Git；容器是可重建运行环境，不是源码来源。
-- Scheduler/Worker 只允许 Docker Compose 服务运行；旧的本机 Scheduler 入口默认拒绝启动，避免重复采集与结算。
+- 源码只在唯一本机工作目录修改、测试和提交。
+- 使用 `./ops/local/manage_local_stack.sh start` 启动全部本机服务。
+- PostgreSQL `127.0.0.1:5432/fqp` 是唯一数据库，Redis 使用 `127.0.0.1:6379/0`。
+- Worker 和 Scheduler 由同一本机守护进程监管，任一子进程异常时独立重启。
+- `data/` 是本机持久数据与备份，不提交 Git。
 
 ## 文档分组
 

@@ -3,19 +3,26 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-COMPOSE_FILE="$SCRIPT_DIR/docker-compose.local.yml"
+ENV_FILE="$PROJECT_ROOT/.env.local"
+PSQL_BIN="${FQP_PSQL_BIN:-/opt/homebrew/opt/postgresql@18/bin/psql}"
 
 # 01-32 predate the migration ledger and already form the baseline of existing
 # local databases. New numbered files are applied once and recorded below.
 BASELINE_VERSION=32
 
 psql_exec() {
-    docker compose -f "$COMPOSE_FILE" exec -T postgres \
-        psql -X -U fqp -d fqp -v ON_ERROR_STOP=1 "$@"
+    "$PSQL_BIN" -X "$DATABASE_URL" -v ON_ERROR_STOP=1 "$@"
 }
 
-# Register the legacy baseline in one database session. Starting a separate
-# `docker compose exec` for every old file made each deploy look stalled.
+[[ -f "$ENV_FILE" ]] || { echo "[fqp-db] missing $ENV_FILE" >&2; exit 1; }
+set -a
+# shellcheck disable=SC1090
+source "$ENV_FILE"
+set +a
+[[ "$DATABASE_URL" == *"@127.0.0.1:5432/fqp" ]] \
+    || { echo "[fqp-db] native DATABASE_URL is required" >&2; exit 1; }
+
+# Register the legacy baseline in one native database session.
 {
     cat <<'SQL'
 BEGIN;

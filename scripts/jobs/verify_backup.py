@@ -48,9 +48,9 @@ def _create_backup(backup_dir: str) -> tuple[str | None, int, str | None]:
     filepath = str(Path(backup_dir) / filename)
 
     db_url = os.environ.get(
-            "DATABASE_URL",
-            "postgresql://fqp:fqp_local_password@127.0.0.1:5433/fqp",
-        )
+        "DATABASE_URL",
+        "postgresql://fqp:fqp_local_password@127.0.0.1:5432/fqp",
+    )
     pg_dump = shutil.which("pg_dump")
     if pg_dump:
         try:

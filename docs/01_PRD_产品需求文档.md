@@ -76,7 +76,7 @@
 
 ## 3. 非功能需求
 - PostgreSQL 数据库；
-- macOS 宿主机本机开发，Docker Desktop 受控发布运行（详见 `54_本机运行与DockerDesktop弃用说明.md`）；
+- macOS 本机原生开发与长期运行，不依赖 Docker Desktop（详见 `54_本机运行与DockerDesktop弃用说明.md`）；
 - 数据快照不可覆盖；
 - 任务失败自动重试；
 - 全量日志和审计；

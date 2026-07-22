@@ -3,7 +3,7 @@ scope: local_personal_deployment
 priority: final_execution_policy
 principles:
   - 项目使用 Codex 进行开发、维护、测试、修复和代码审查。
-  - 前后端使用 macOS 宿主机进程，PostgreSQL 只使用 Docker Desktop 中的一套。
+  - 前端、后端、Worker、Scheduler、PostgreSQL 与 Redis 全部使用 macOS 本机服务。
   - Python、Node、PostgreSQL、Redis 等组件不在项目中锁死版本。
   - 主机已安装组件时，优先使用本地计算机当前版本。
   - 主机缺失组件时，按官方安装渠道安装当前最新版。
@@ -12,9 +12,7 @@ principles:
 non_pinned_files:
   - requirements.txt
   - requirements-dev.txt
-  - ops/Dockerfile.api
-  - ops/docker-compose.yml
-  - ops/local/docker-compose.local.yml
+  - ops/local/manage_local_stack.sh
 version_snapshot:
   enabled: true
   output: data/runtime_version_snapshot.json
@@ -25,5 +23,5 @@ installation_mode:
   node_packages: latest_resolved_by_npm
 risk_controls:
   - 每月备份 runtime_version_snapshot.json，记录当月实际运行版本。
-  - 每次依赖自动更新后必须运行 tests/local_smoke_acceptance.md。
-  - 如果最新版依赖导致故障，使用 Python 虚拟环境重建、Docker PostgreSQL 备份恢复或 Codex 修复分支处理。
+  - 每次依赖更新后必须运行本机运行回归测试和健康检查。
+  - 如果最新版依赖导致故障，使用 Python 虚拟环境重建、本机 PostgreSQL 备份恢复或 Codex 修复分支处理。

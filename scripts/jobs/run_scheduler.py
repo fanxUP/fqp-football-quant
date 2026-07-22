@@ -90,7 +90,7 @@ def _official_source_enabled() -> bool:
 
 
 def _odds_dispatch_owner() -> str:
-    """Choose one odds dispatcher: Scheduler on host, Worker in Docker."""
+    """Keep the Worker as the single high-frequency odds dispatcher."""
     return os.getenv("FQP_ODDS_DISPATCH_OWNER", "scheduler").lower()
 
 

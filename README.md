@@ -33,7 +33,7 @@ FQP 是一套面向个人本地部署的足球竞彩/足彩量化研究与长期
 - `configs/`：本地部署、模块注册、面板注册、Agent、任务调度、红黑 UI 主题配置。
 - `scripts/`：采集、模型、特征、Agent、模块加载、部署辅助脚本骨架。
 - `apps/`：前端主题与应用骨架。
-- `ops/`：Docker、本地运行、备份恢复、Codex 环境说明。
+- `ops/`：本机运行、备份恢复、Codex 环境说明。
 - `tests/`：最终逻辑一致性与验收清单。
 - `personal_run/`：个人长期运行手册。
 
@@ -41,32 +41,29 @@ FQP 是一套面向个人本地部署的足球竞彩/足彩量化研究与长期
 
 先按 `docs/51_最终开发阶段计划与验收清单.md` 拆阶段执行，再根据 `configs/final_module_registry.yaml` 和 `configs/final_panel_registry.yaml` 控制模块与功能面板上线顺序。
 
-## 运行方式：本机开发与 Docker 运行自动选择
+## 运行方式：全本机原生运行
 
-日常代码修改和快速验证使用本机前后端；PostgreSQL 只保留 Docker Desktop 中的一套，Redis、Worker 与 Scheduler 也由 Docker 长期运行。源码以 Git 提交为准，容器仅是可重建的运行环境；`data/` 中的数据库和备份不提交 Git。
+前端、后端、Worker、Scheduler、PostgreSQL 和 Redis 全部在 macOS 本机运行，不需要 Docker Desktop。源码以 Git 提交为准，数据库以本机 `127.0.0.1:5432/fqp` 为唯一事实源。
 
 ```bash
 cp .env.local.example .env.local
-./ops/local/run_hybrid_dev.sh
+./ops/local/setup_local_latest_macos.sh
+./ops/local/manage_local_stack.sh start
 ```
 
 - 前端：http://127.0.0.1:8066
 - 后端：http://127.0.0.1:8006
-- 本机开发统一使用 Python 3.14 和 Node.js，并连接 Docker PostgreSQL `127.0.0.1:5433/fqp`。
+- PostgreSQL：`127.0.0.1:5432/fqp`
+- Redis：`127.0.0.1:6379`
+- 本机运行统一使用 Python 3.14 和 Node.js。
 - `.env.local` 只保存在本机，不提交 GitHub。
 
-切换到 Docker Desktop（自动检查工作区、推送 GitHub、重建容器并做健康检查）：
+查看、重启与停止：
 
 ```bash
-./ops/local/run_local_stack.sh deploy
+./ops/local/manage_local_stack.sh status
+./ops/local/manage_local_stack.sh restart
+./ops/local/manage_local_stack.sh stop
 ```
 
-查看、日志与停止：
-
-```bash
-./ops/local/run_local_stack.sh status
-./ops/local/run_local_stack.sh logs
-./ops/local/run_local_stack.sh stop
-```
-
-唯一工作区、Git 同步和 Docker 运行规则见 `docs/54_本机运行与DockerDesktop弃用说明.md`；日常命令见 `ops/local/README_Codex_Docker_Desktop.md`。
+唯一工作区、Git 同步和本机运行规则见 `docs/54_本机运行与DockerDesktop弃用说明.md`；日常命令见 `ops/local/README_LOCAL_RUNTIME.md`。

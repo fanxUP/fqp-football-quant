@@ -14,12 +14,12 @@ ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / "data" / "runtime_version_snapshot.json"
 
 COMMANDS = {
-    "docker": ["docker", "--version"],
-    "docker_compose": ["docker", "compose", "version"],
     "git": ["git", "--version"],
     "python": [sys.executable, "--version"],
     "node": ["node", "--version"],
     "npm": ["npm", "--version"],
+    "postgresql": ["/opt/homebrew/opt/postgresql@18/bin/psql", "--version"],
+    "redis": ["/opt/homebrew/opt/redis/bin/redis-server", "--version"],
     "codex": ["codex", "--version"],
 }
 

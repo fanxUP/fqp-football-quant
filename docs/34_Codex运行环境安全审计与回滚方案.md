@@ -4,7 +4,7 @@
 
 ```text
 local-dev：本地开发，Codex CLI/IDE 可直接修改。
-docker-release：从已推送 GitHub 提交重建的 Docker Desktop 发布栈，只允许受控任务和人工审核。
+local-release：从已推送 GitHub 提交启动的本机发布栈，只允许受控任务和人工审核。
 future-staging：预发环境，连接脱敏或影子数据（预留，不作为当前环境）。
 ```
 
@@ -13,9 +13,8 @@ future-staging：预发环境，连接脱敏或影子数据（预留，不作为
 Codex 不应把密钥写入代码、日志或文档。所有密钥进入：
 
 ```text
-.env
-Secret Manager
-Docker secrets
+.env.local
+macOS Keychain 或受控 Secret Manager
 CI/CD encrypted variables
 ```
 
@@ -50,7 +49,7 @@ CI/CD encrypted variables
 
 ```text
 git revert <commit>
-git checkout 到已验证提交后重新执行 ./ops/local/run_local_stack.sh deploy
+git checkout 到已验证提交后重新执行 ./ops/local/manage_local_stack.sh restart
 按当前运行模式重启 scheduler/worker
 运行 smoke test
 ```
@@ -84,7 +83,7 @@ configs 使用版本号
 每次涉及生产时必须在任务里写明：
 
 ```text
-环境：local-dev/docker-release/future-staging
+环境：local-dev/local-release/future-staging
 是否写生产库：是/否
 是否影响推荐：是/否
 是否影响资金：是/否

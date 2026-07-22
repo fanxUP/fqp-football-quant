@@ -41,7 +41,7 @@ http://localhost:3001
 
 如需更细粒度的指标监控，后期可加入 Prometheus：
 
-1. 在 `docker-compose.local.yml` 新增 `prometheus` 服务
+1. 通过 Homebrew 安装并启动本机 `prometheus` 服务
 2. 在 API 中暴露 `/metrics` 端点（使用 `prometheus_client`）
 3. Grafana 添加 Prometheus 数据源
 

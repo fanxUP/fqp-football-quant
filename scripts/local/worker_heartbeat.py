@@ -1,4 +1,4 @@
-"""Shared Worker heartbeat used by Docker health checks and monitoring."""
+"""Worker heartbeat used by the local runtime health monitor."""
 
 from __future__ import annotations
 

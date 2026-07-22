@@ -61,12 +61,10 @@ _pool: BlockingThreadedConnectionPool | None = None
 
 
 def _build_pool() -> BlockingThreadedConnectionPool:
-    # Docker Desktop PostgreSQL is the project's single source of truth. Host
-    # processes reach the published port; containers override this with the
-    # internal `postgres:5432` address through their environment file.
+    # Homebrew PostgreSQL is the project's single source of truth.
     dsn = os.getenv(
         "DATABASE_URL",
-        "postgresql://fqp:fqp_local_password@127.0.0.1:5433/fqp",
+        "postgresql://fqp:fqp_local_password@127.0.0.1:5432/fqp",
     )
     min_connections = int(os.getenv("FQP_DB_POOL_MIN", "2"))
     max_connections = int(os.getenv("FQP_DB_POOL_MAX", "16"))

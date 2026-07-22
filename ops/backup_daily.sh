@@ -13,7 +13,7 @@
 set -euo pipefail
 
 BACKUP_DIR="${BACKUP_DIR:-./backups}"
-DB_URL="${DATABASE_URL:-postgresql://fqp:fqp_local_password@127.0.0.1:5433/fqp}"
+DB_URL="${DATABASE_URL:-postgresql://fqp:fqp_local_password@127.0.0.1:5432/fqp}"
 RETENTION_DAYS="${BACKUP_RETENTION_DAYS:-30}"
 
 log()  { echo "[backup] $(date '+%H:%M:%S')  $*"; }
