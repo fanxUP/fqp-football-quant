@@ -109,3 +109,21 @@ def test_hybrid_runtime_tracks_and_mounts_the_current_source_revision() -> None:
     assert 'status --porcelain' in hybrid
     assert override.count("../../apps/backend/src:/app/apps/backend/src:ro") == 2
     assert override.count("../../scripts:/app/scripts:ro") == 2
+
+
+def test_managed_hybrid_service_excludes_the_retired_host_scheduler() -> None:
+    manager = (PROJECT_ROOT / "ops/local/manage_hybrid_service.sh").read_text(
+        encoding="utf-8"
+    )
+    local_dev = (PROJECT_ROOT / "ops/local/run_local_dev.sh").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'LABEL="com.fqp.hybrid"' in manager
+    assert 'launchctl bootstrap "$DOMAIN" "$PLIST_FILE"' in manager
+    assert 'launchctl print "$DOMAIN/com.fqp.scheduler"' in manager
+    assert "run_local_scheduler" not in manager
+    assert 'port_is_busy "$BACKEND_PORT"' in manager
+    assert 'port_is_busy "$FRONTEND_PORT"' in manager
+    assert 'kill -0 "$BACKEND_PID"' in local_dev
+    assert 'kill -0 "$FRONTEND_PID"' in local_dev

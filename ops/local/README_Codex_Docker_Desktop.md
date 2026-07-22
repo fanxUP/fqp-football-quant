@@ -29,6 +29,14 @@
 # 推荐：本机前后端 + Docker 数据和定时任务
 ./ops/local/run_hybrid_dev.sh
 
+# 推荐长期使用：注册登录自启并自动恢复前后端进程
+./ops/local/manage_hybrid_service.sh start
+./ops/local/manage_hybrid_service.sh status
+./ops/local/manage_hybrid_service.sh restart
+
+# 停止前后端并取消登录自启
+./ops/local/manage_hybrid_service.sh stop
+
 # 仅启动本机前后端（仍连接 Docker PostgreSQL，数据容器需已运行）
 ./ops/local/run_local_dev.sh
 
@@ -40,6 +48,11 @@
 ./ops/local/run_local_stack.sh logs
 ./ops/local/run_local_stack.sh stop
 ```
+
+`com.fqp.hybrid` 只管理本机前后端；PostgreSQL、Redis、Worker、Scheduler 仍由
+Docker Desktop 管理。因为项目位于 macOS 的“下载”保护目录，必须在“系统设置 →
+隐私与安全性 → 完全磁盘访问权限”中启用 `/bin/bash`，否则 launchd 无法读取项目。
+不要为了登录自启复制第二份项目，否则会重新引入代码和数据库运行边界错乱。
 
 ## 维护
 

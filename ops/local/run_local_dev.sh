@@ -74,4 +74,15 @@ VITE_PROXY_TARGET="${VITE_PROXY_TARGET:-http://127.0.0.1:${BACKEND_PORT}}" \
     npm --prefix "$FRONTEND_DIR" run dev -- --host 127.0.0.1 --port "$FRONTEND_PORT" &
 FRONTEND_PID=$!
 
-wait "$BACKEND_PID"
+# Treat the frontend and backend as one service. If either child exits, the
+# parent exits too so launchd can restart a complete, consistent pair.
+while kill -0 "$BACKEND_PID" 2>/dev/null && kill -0 "$FRONTEND_PID" 2>/dev/null; do
+    sleep 2
+done
+
+if ! kill -0 "$BACKEND_PID" 2>/dev/null; then
+    log "Backend process exited; restarting the complete local service."
+else
+    log "Frontend process exited; restarting the complete local service."
+fi
+exit 1
