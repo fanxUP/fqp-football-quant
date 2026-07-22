@@ -82,7 +82,10 @@ def build_market_detections(
     detections: list[MarketDetection] = []
     for (play_type, handicap), snapshots in complete.items():
         actual_result = result_by_play.get(play_type)
-        if actual_result is None:
+        # A single complete price is only a point-in-time quote, not an
+        # official odds history. Cold-result research requires at least two
+        # complete Sporttery captures for the same market and handicap line.
+        if actual_result is None or len(snapshots) < 2:
             continue
         snapshots.sort(key=lambda item: item[0])
         opening_time, opening_odds = snapshots[0]

@@ -73,6 +73,18 @@ def test_keeps_different_handicap_lines_in_separate_markets():
                 [("h", 1.20), ("d", 4.80), ("a", 8.50)], start=10
             )
         ],
+        *[
+            _row(index, "2026-07-20T11:00:00", "rqspf", code, odds, -1)
+            for index, (code, odds) in enumerate(
+                [("h", 2.45), ("d", 3.45), ("a", 2.25)], start=20
+            )
+        ],
+        *[
+            _row(index, "2026-07-20T11:00:00", "rqspf", code, odds, 1)
+            for index, (code, odds) in enumerate(
+                [("h", 1.22), ("d", 4.70), ("a", 8.20)], start=30
+            )
+        ],
     ]
 
     detections = build_market_detections(
@@ -91,6 +103,25 @@ def test_ignores_market_without_result_or_complete_option_set():
             _row(2, "2026-07-20T09:00:00", "spf", "d", 3.90),
         ],
         result_by_play={"spf": None},
+        rule=UpsetRule.default(),
+    )
+
+    assert detections == []
+
+
+def test_requires_two_complete_official_snapshots_before_detecting_upset():
+    rows = [
+        _row(1, "2026-07-20T09:00:00", "spf", "h", 1.50),
+        _row(2, "2026-07-20T09:00:00", "spf", "d", 3.90),
+        _row(3, "2026-07-20T09:00:00", "spf", "a", 6.20),
+        # A partial later capture is not an official historical market.
+        _row(4, "2026-07-20T10:00:00", "spf", "h", 1.55),
+        _row(5, "2026-07-20T10:00:00", "spf", "d", 3.80),
+    ]
+
+    detections = build_market_detections(
+        odds_rows=rows,
+        result_by_play={"spf": "0"},
         rule=UpsetRule.default(),
     )
 

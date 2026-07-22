@@ -14,6 +14,27 @@ from apps.backend.src.db import get_db
 # These are derived from comparing our official_matches data against
 # API-Football /teams responses.
 MANUAL_ALIASES: dict[str, list[str]] = {
+    # 巴西甲级联赛 (Serie A)
+    "米内罗竞技": ["Atletico-MG"],
+    "巴伊亚": ["Bahia"],
+    "圣保罗": ["Sao Paulo"],
+    "巴拉纳竞技": ["Atletico Paranaense"],
+    "沙佩科恩斯": ["Chapecoense-sc"],
+    "弗拉门戈": ["Flamengo"],
+    # 欧洲冠军联赛 (UEFA Champions League)
+    "萨巴赫": ["Sabah FA"],
+    "库奥皮奥": ["KuPS"],
+    "奥胡斯": ["Aarhus"],
+    "波兹南莱赫": ["Lech Poznan"],
+    "格拉茨风暴": ["Sturm Graz"],
+    "哈茨": ["Heart Of Midlothian"],
+    "奥莫尼亚": ["Omonia Nicosia"],
+    "阿拉木图凯拉特": ["Kairat Almaty"],
+    # 美国职业大联盟 (Major League Soccer)
+    "迈阿密国际": ["Inter Miami"],
+    "芝加哥火焰": ["Chicago Fire"],
+    "洛杉矶FC": ["Los Angeles FC"],
+    "皇家盐湖城": ["Real Salt Lake"],
     # 瑞典超级联赛 (Allsvenskan)
     "天狼星": ["Sirius", "IK Sirius"],
     "米亚尔比": ["Mjallby AIF", "Mjällby AIF"],

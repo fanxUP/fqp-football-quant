@@ -47,7 +47,8 @@ apps/frontend/src/features/upsets/
 
 ```text
 official result confirmed
-  → select last complete official market before kickoff
+  → require at least two complete Sporttery snapshots for the same market/line
+  → select the first and last complete official market before kickoff
   → calculate normalized market probabilities
   → map official result to actual outcome
   → upsert upset_event and market signals
@@ -99,9 +100,10 @@ settle_finished_matches
 
 ## 6. 降级策略
 
-- 无完整官方赔率：不判定冷门，记录缺失原因。
+- 无完整官方赔率历史：同一玩法、同一让球线至少需要两个时间点的完整体彩官方盘口；只有单点赔率、不完整盘口或无历史赔率的比赛不判定冷门。
 - 无模型预测：仍可识别市场冷门，模型复盘显示不可用。
 - 无 `API_FOOTBALL_KEY` 或辅助源失败：发布基础冷门事实，详细复盘保持等待状态；不影响官方赛果、结算和冷门识别。
+- API-SPORTS 只能补充赛中事件与赛后技术统计，不能代替体彩官方历史盘口，也不能让不合格比赛获得冷门入库资格。
 - 辅助源启用后，仅接受联赛、开赛时间、主队和客队同时唯一匹配的比赛；赛中事件和赛后统计永不进入赛前特征。
 - 无用户或 Agent 彩票：投注影响显示“未涉及”。
 - 外部 AI 不可用：保留结构化事实，延后生成自然语言总结。
