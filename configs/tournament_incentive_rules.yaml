@@ -1,0 +1,20 @@
+avoid_strong_opponent_weights:
+  rank_controllability: 0.25
+  opponent_strength_gap_by_rank: 0.35
+  qualification_safety: 0.20
+  points_goal_difference_constraint: 0.10
+  manager_rotation_tendency: 0.10
+risk_thresholds:
+  avoid_strong_opponent_high: 70
+  tanking_risk_high: 65
+  rotation_after_qualification_high: 60
+handling_rules:
+  high_avoid_strong_opponent:
+    add_uncertainty: 15
+    reduce_favourite_heavy_stake: true
+    block_aggressive_handicap_bets: true
+  draw_enough:
+    increase_draw_sensitivity: true
+    reduce_win_must_assumption: true
+  already_qualified:
+    require_lineup_confirmation_for_main_pool: true

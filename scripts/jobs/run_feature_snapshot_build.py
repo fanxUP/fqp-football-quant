@@ -1,0 +1,601 @@
+"""Feature snapshot build job — full 10-dimension pipeline.
+
+Orchestrates: team mapping → team profiles → all enrichment dimensions →
+full 49-column snapshot → storage.
+
+Stage 3a: odds, rest days, team form, basic completeness.
+Stage 3b (v2_enriched): lineup, injury, rotation, travel, weather,
+  motivation, tournament incentive, full completeness.
+"""
+
+from __future__ import annotations
+
+import os
+from datetime import datetime
+from typing import Any
+from zoneinfo import ZoneInfo
+
+from apps.backend.src.db import get_db
+from scripts.agents.task_queue import finish_tracked_job, start_tracked_job
+from scripts.feature_quality import (
+    FEATURE_DIMENSIONS as _DIMENSIONS,
+)
+from scripts.feature_quality import (
+    compute_full_completeness,
+)
+from scripts.feature_quality import (
+    snapshot_job_result as _snapshot_job_result,
+)
+from scripts.feature_storage import (
+    get_weather_for_match,
+    store_match_feature_snapshot,
+    store_team_season_profile,
+)
+from scripts.features.build_basic_features import (
+    compute_odds_implied_probabilities,
+    compute_rest_days,
+    compute_team_form,
+)
+
+
+def _now() -> str:
+    return _business_now_naive().isoformat(timespec="seconds")
+
+
+def _business_now_naive() -> datetime:
+    """Return local business time for tables that store local-naive match times."""
+    timezone_name = os.getenv("FQP_TIMEZONE", "Asia/Shanghai")
+    return datetime.now(ZoneInfo(timezone_name)).replace(tzinfo=None)
+
+
+def _resolve_team_id(conn: Any, official_name: str) -> int | None:
+    """Map an official team name to internal team_id via aliases."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT t.id FROM teams t
+            JOIN team_aliases ta ON ta.team_id = t.id
+            WHERE ta.alias_name = %(name)s AND ta.source_name = 'sporttery'
+            LIMIT 1
+            """,
+            {"name": official_name},
+        )
+        row = cur.fetchone()
+    return row[0] if row else None
+
+
+def _resolve_competition_season_id(
+    conn: Any, league_name: str, kickoff_time: datetime
+) -> int | None:
+    """Resolve the current canonical competition season for an official match."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT cs.id
+            FROM competition_seasons cs
+            JOIN competitions c ON c.id = cs.competition_id
+            JOIN seasons s ON s.id = cs.season_id
+            WHERE c.competition_name_cn = %(league_name)s
+              AND %(kickoff_date)s::date BETWEEN s.start_date AND s.end_date
+            ORDER BY EXISTS (
+                         SELECT 1
+                         FROM season_standings_snapshots standings
+                         WHERE standings.competition_season_id = cs.id
+                     ) DESC,
+                     s.is_current DESC,
+                     s.start_date DESC
+            LIMIT 1
+            """,
+            {"league_name": league_name, "kickoff_date": kickoff_time.date()},
+        )
+        row = cur.fetchone()
+    return row[0] if row else None
+
+
+def _resolve_match_stadium_id(
+    conn: Any, raw_json: dict[str, Any] | None, home_team_name: str | None = None
+) -> int | None:
+    """Resolve through the shared official-venue/home-stadium policy."""
+    from scripts.features.stadium_resolver import resolve_match_stadium_location
+
+    location = resolve_match_stadium_location(conn, raw_json, home_team_name)
+    return location["stadium_id"] if location else None
+
+
+def _load_collected_weather(conn: Any, match_id: int) -> tuple[dict[str, Any], bool]:
+    """Load weather already collected by the dedicated weather job."""
+    snapshot = get_weather_for_match(conn, match_id)
+    if not snapshot:
+        return {}, False
+    weather = {
+        **snapshot,
+        "goal_expectation_weather_adjustment": snapshot.get("goal_expectation_adjustment"),
+    }
+    has_weather = (
+        snapshot.get("temperature_2m") is not None
+        and snapshot.get("weather_impact_score") is not None
+    )
+    return weather, has_weather
+
+
+def _load_latest_open_odds(conn: Any, match_id: int) -> list[dict[str, Any]]:
+    """Load one current open snapshot per official market option."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT DISTINCT ON (play_type, option_code)
+                   play_type, option_code, sp_value
+            FROM official_odds_snapshots
+            WHERE match_id = %s AND is_open = true
+            ORDER BY play_type, option_code, snapshot_time DESC
+            """,
+            (match_id,),
+        )
+        rows = cur.fetchall()
+    return [
+        {
+            "play_type": row[0],
+            "option_code": row[1],
+            "sp_value": float(row[2]),
+        }
+        for row in rows
+    ]
+
+
+def can_build_team_dependent_features(home_id: int | None, away_id: int | None) -> bool:
+    """Return whether enrichment builders may safely use team foreign keys."""
+    return home_id is not None and away_id is not None
+
+
+# ---------------------------------------------------------------------------
+# Main pipeline
+# ---------------------------------------------------------------------------
+
+
+def _run_impl(match_id: int | None = None, dry_run: bool = False) -> dict[str, Any]:
+    """Build full feature snapshots for matches.
+
+    Args:
+        match_id: If provided, build for a specific match. Otherwise all active.
+        dry_run: If True, compute but don't store.
+
+    Returns:
+        Summary dict with counts.
+    """
+    if dry_run:
+        return {"status": "dry_run", "message": "feature snapshot build (dry run)"}
+
+    business_now = _business_now_naive()
+    snap_time = business_now.isoformat(timespec="seconds")
+    feature_version = "v2_enriched"
+
+    with get_db() as conn:
+        # ---------------------------------------------------------------
+        # 1. Get matches to process
+        # ---------------------------------------------------------------
+        if match_id:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT id FROM official_matches WHERE id = %s AND kickoff_time > %s",
+                    (match_id, business_now),
+                )
+                match_ids = [row[0] for row in cur.fetchall()]
+        else:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT DISTINCT m.id, m.kickoff_time FROM official_matches m
+                    JOIN official_odds_snapshots os ON os.match_id = m.id
+                    WHERE m.sale_status = 'selling'
+                      AND m.kickoff_time > %s
+                    ORDER BY m.kickoff_time
+                    """,
+                    (business_now,),
+                )
+                match_ids = [row[0] for row in cur.fetchall()]
+
+        if not match_ids:
+            return {"status": "ok", "snapshots_built": 0, "note": "no matches to process"}
+
+        snapshots_built = 0
+        profiles_updated = 0
+        completeness_total = 0.0
+        dim_stats = {d: 0.0 for d in _DIMENSIONS}
+        failed_matches: list[dict[str, Any]] = []
+
+        for mid in match_ids:
+            try:
+                # ---------------------------------------------------
+                # 2. Load match data
+                # ---------------------------------------------------
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "SELECT id, home_team_name, away_team_name, league_name, kickoff_time, raw_json "
+                        "FROM official_matches WHERE id = %s",
+                        (mid,),
+                    )
+                    row = cur.fetchone()
+                if not row:
+                    continue
+                match_data = {
+                    "id": row[0],
+                    "home_team_name": row[1],
+                    "away_team_name": row[2],
+                    "league_name": row[3],
+                    "kickoff_time": row[4],
+                    "raw_json": row[5] or {},
+                }
+                kt = match_data["kickoff_time"]
+                kickoff_str = kt.isoformat() if isinstance(kt, datetime) else str(kt)
+
+                # ---------------------------------------------------
+                # 3. Resolve team IDs
+                # ---------------------------------------------------
+                home_id = _resolve_team_id(conn, match_data["home_team_name"])
+                away_id = _resolve_team_id(conn, match_data["away_team_name"])
+                has_mapping = can_build_team_dependent_features(home_id, away_id)
+                competition_season_id = _resolve_competition_season_id(
+                    conn, match_data["league_name"], kt
+                )
+
+                # ---------------------------------------------------
+                # 4. Compute team profiles
+                # ---------------------------------------------------
+                profile_team_count = 0
+                if has_mapping and competition_season_id and home_id and away_id:
+                    for tname, tid in [
+                        (match_data["home_team_name"], home_id),
+                        (match_data["away_team_name"], away_id),
+                    ]:
+                        form = compute_team_form(
+                            tname,
+                            kickoff_str,
+                            last_n=10,
+                            conn=conn,
+                            team_id=tid,
+                        )
+                        if form["matches_played"] > 0:
+                            profile = {
+                                "team_id": tid,
+                                "competition_season_id": competition_season_id,
+                                "snapshot_time": snap_time,
+                                "attack_strength_score": round(
+                                    form["goals_for"] / max(1, form["matches_played"]), 2
+                                ),
+                                "defense_strength_score": round(
+                                    form["goals_against"] / max(1, form["matches_played"]), 2
+                                ),
+                                "data_source": "computed_form",
+                                "data_confidence": min(1.0, form["matches_played"] / 10),
+                                "raw_json": form,
+                            }
+                            store_team_season_profile(conn, profile)
+                            profiles_updated += 1
+                            profile_team_count += 1
+                has_profile = profile_team_count == 2
+
+                # ---------------------------------------------------
+                # 5. Load odds
+                # ---------------------------------------------------
+                odds_snaps = _load_latest_open_odds(conn, mid)
+                has_odds = len(odds_snaps) > 0
+                probs = compute_odds_implied_probabilities(odds_snaps) if has_odds else {}
+
+                # Basic features
+                home_rest = compute_rest_days(
+                    match_data["home_team_name"], kickoff_str, conn, team_id=home_id
+                )
+                away_rest = compute_rest_days(
+                    match_data["away_team_name"], kickoff_str, conn, team_id=away_id
+                )
+                rest_diff = (
+                    (home_rest or 0) - (away_rest or 0)
+                    if home_rest is not None and away_rest is not None
+                    else None
+                )
+
+                # ---------------------------------------------------
+                # 6. [NEW] Lineup features
+                # ---------------------------------------------------
+                lineup = {}
+                has_lineup = False
+                lineup_coverage = 0.0
+                try:
+                    from scripts.features.build_lineup_strength import build_lineup_features
+
+                    lineup = build_lineup_features(conn, mid, home_id, away_id)
+                    has_lineup = lineup.get("has_lineup_data", False)
+                    lineup_coverage = float(lineup.get("covered_team_count", 0)) / 2
+                except Exception as e:
+                    conn.rollback()
+                    print(f"[snapshot] lineup error match {mid}: {e}")
+
+                # ---------------------------------------------------
+                # 7. [NEW] Injury features
+                # ---------------------------------------------------
+                injury = {}
+                has_injury = False
+                injury_coverage = 0.0
+                try:
+                    from scripts.features.build_injury_impact import build_injury_features
+
+                    injury = build_injury_features(conn, mid, home_id, away_id)
+                    has_injury = injury.get("has_injury_data", False)
+                    injury_coverage = float(injury.get("covered_team_count", 0)) / 2
+                except Exception as e:
+                    conn.rollback()
+                    print(f"[snapshot] injury error match {mid}: {e}")
+
+                # ---------------------------------------------------
+                # 8. [NEW] Travel features
+                # ---------------------------------------------------
+                travel = {}
+                has_travel = False
+                if has_mapping:
+                    try:
+                        from scripts.features.build_travel_features import build_travel_features
+
+                        stadium_id = _resolve_match_stadium_id(
+                            conn, match_data["raw_json"], match_data["home_team_name"]
+                        )
+                        travel = build_travel_features(
+                            conn,
+                            mid,
+                            home_id,
+                            away_id,
+                            match_stadium_id=stadium_id,
+                            kickoff_time=kt,
+                        )
+                        has_travel = travel.get("has_travel_data", False)
+                    except Exception as e:
+                        conn.rollback()
+                        print(f"[snapshot] travel error match {mid}: {e}")
+                else:
+                    print(
+                        f"[snapshot] skip team-dependent enrichment for match {mid}: team mapping incomplete"
+                    )
+
+                # ---------------------------------------------------
+                # 9. [NEW] Weather features
+                # ---------------------------------------------------
+                try:
+                    weather, has_weather = _load_collected_weather(conn, mid)
+                except Exception as e:
+                    conn.rollback()
+                    print(f"[snapshot] weather error match {mid}: {e}")
+                    weather, has_weather = {}, False
+
+                # ---------------------------------------------------
+                # 10. [NEW] Motivation features
+                # ---------------------------------------------------
+                motivation = {}
+                has_motivation = False
+                motivation_coverage = 0.0
+                try:
+                    from scripts.features.build_motivation_score import build_motivation_features
+
+                    motivation = build_motivation_features(
+                        conn,
+                        mid,
+                        home_id,
+                        away_id,
+                        competition_season_id=competition_season_id,
+                    )
+                    has_motivation = motivation.get("has_motivation_data", False)
+                    motivation_coverage = float(motivation.get("covered_team_count", 0)) / 2
+                except Exception as e:
+                    conn.rollback()
+                    print(f"[snapshot] motivation error match {mid}: {e}")
+
+                # ---------------------------------------------------
+                # 11. [NEW] Tournament incentive features
+                # ---------------------------------------------------
+                tournament = {}
+                has_tournament = False
+                try:
+                    from scripts.features.build_tournament_incentive import (
+                        build_tournament_incentive_features,
+                    )
+
+                    tournament = build_tournament_incentive_features(
+                        conn,
+                        mid,
+                        home_id,
+                        away_id,
+                        is_cup=False,
+                    )
+                    has_tournament = bool(
+                        tournament.get("has_tournament_incentive_data", False) and has_motivation
+                    )
+                except Exception as e:
+                    conn.rollback()
+                    print(f"[snapshot] tournament error match {mid}: {e}")
+
+                # ---------------------------------------------------
+                # 12. Compute upgraded completeness
+                # ---------------------------------------------------
+                dims = {
+                    "odds": has_odds,
+                    "team_mapping": has_mapping,
+                    "team_profile": has_profile,
+                    "lineup": has_lineup,
+                    "injury": has_injury,
+                    "rotation": has_lineup,  # rotation comes from lineup analysis
+                    "travel": has_travel,
+                    "weather": has_weather,
+                    "motivation": has_motivation,
+                    "tournament": has_tournament,
+                }
+                dimension_coverage = {
+                    "odds": float(has_odds),
+                    "team_mapping": float(has_mapping),
+                    "team_profile": profile_team_count / 2,
+                    "lineup": lineup_coverage,
+                    "injury": injury_coverage,
+                    "rotation": lineup_coverage,
+                    "travel": float(has_travel),
+                    "weather": float(has_weather),
+                    "motivation": motivation_coverage,
+                    "tournament": float(has_tournament),
+                }
+                completeness = compute_full_completeness(dims)
+                for d in _DIMENSIONS:
+                    dim_stats[d] += dimension_coverage[d]
+
+                # ---------------------------------------------------
+                # 13. Assemble full 49-column snapshot
+                # ---------------------------------------------------
+                snapshot = {
+                    "match_id": mid,
+                    "snapshot_time": snap_time,
+                    "feature_version": feature_version,
+                    "home_team_id": home_id,
+                    "away_team_id": away_id,
+                    "competition_season_id": competition_season_id,
+                    # Team strength (basic + profiles)
+                    "home_team_market_value": probs.get("home_win_prob"),
+                    "away_team_market_value": probs.get("away_win_prob"),
+                    "team_market_value_ratio": (
+                        round(home_prob / away_prob, 4)
+                        if (home_prob := probs.get("home_win_prob"))
+                        and (away_prob := probs.get("away_win_prob"))
+                        and away_prob > 0
+                        else None
+                    ),
+                    "home_attack_strength_score": probs.get("home_win_prob"),
+                    "away_attack_strength_score": probs.get("away_win_prob"),
+                    "home_defense_strength_score": probs.get("home_draw_prob"),
+                    "away_defense_strength_score": probs.get("away_draw_prob"),
+                    # Lineup (NEW)
+                    "home_lineup_confirmed": lineup.get("home_lineup_confirmed"),
+                    "away_lineup_confirmed": lineup.get("away_lineup_confirmed"),
+                    "home_starting_11_value": lineup.get("home_starting_11_value"),
+                    "away_starting_11_value": lineup.get("away_starting_11_value"),
+                    "starting_11_value_diff": lineup.get("starting_11_value_diff"),
+                    "home_lineup_strength_score": lineup.get("home_lineup_strength_score"),
+                    "away_lineup_strength_score": lineup.get("away_lineup_strength_score"),
+                    "lineup_strength_diff": lineup.get("lineup_strength_diff"),
+                    # Injury (NEW)
+                    "home_absence_impact_score": injury.get("home_absence_impact_score"),
+                    "away_absence_impact_score": injury.get("away_absence_impact_score"),
+                    "absence_impact_diff": injury.get("absence_impact_diff"),
+                    "home_key_absence_count": injury.get("home_key_absence_count"),
+                    "away_key_absence_count": injury.get("away_key_absence_count"),
+                    # Rotation (NEW — from lineup)
+                    "home_rotation_risk_score": lineup.get("home_rotation_risk_score"),
+                    "away_rotation_risk_score": lineup.get("away_rotation_risk_score"),
+                    "rotation_risk_diff": lineup.get("rotation_risk_diff"),
+                    # Rest / schedule (existing)
+                    "home_rest_days": home_rest,
+                    "away_rest_days": away_rest,
+                    "rest_days_diff": rest_diff,
+                    # Travel (NEW)
+                    "stadium_id": travel.get("stadium_id"),
+                    "away_travel_distance_km": travel.get("away_travel_distance_km"),
+                    "timezone_diff": travel.get("timezone_diff"),
+                    "altitude_m": travel.get("altitude_m"),
+                    "away_travel_fatigue_score": travel.get("away_travel_fatigue_score"),
+                    # Weather (NEW)
+                    "temperature_2m": weather.get("temperature_2m"),
+                    "precipitation": weather.get("precipitation"),
+                    "wind_speed_10m": weather.get("wind_speed_10m"),
+                    "weather_impact_score": weather.get("weather_impact_score"),
+                    "goal_expectation_weather_adjustment": weather.get(
+                        "goal_expectation_weather_adjustment"
+                    ),
+                    # Motivation (NEW)
+                    "home_motivation_score": motivation.get("home_motivation_score"),
+                    "away_motivation_score": motivation.get("away_motivation_score"),
+                    "motivation_diff": motivation.get("motivation_diff"),
+                    "home_must_win": motivation.get("home_must_win"),
+                    "away_must_win": motivation.get("away_must_win"),
+                    "home_draw_enough": motivation.get("home_draw_enough"),
+                    "away_draw_enough": motivation.get("away_draw_enough"),
+                    # Tournament incentive (NEW)
+                    "home_avoid_strong_opponent_score": tournament.get(
+                        "home_avoid_strong_opponent_score"
+                    ),
+                    "away_avoid_strong_opponent_score": tournament.get(
+                        "away_avoid_strong_opponent_score"
+                    ),
+                    "home_tanking_risk_score": tournament.get("home_tanking_risk_score"),
+                    "away_tanking_risk_score": tournament.get("away_tanking_risk_score"),
+                    "tournament_incentive_risk_score": tournament.get(
+                        "tournament_incentive_risk_score"
+                    ),
+                    # Data quality
+                    "data_completeness_score": completeness["data_completeness_score"],
+                    "source_confidence_score": completeness["source_confidence_score"],
+                    "uncertainty_score": completeness["uncertainty_score"],
+                    # Metadata
+                    "raw_feature_refs": {
+                        "feature_version": feature_version,
+                        "dimensions": dims,
+                        "dimension_coverage": dimension_coverage,
+                        "dimension_status": {
+                            dimension: "available"
+                            if coverage >= 1
+                            else "partial"
+                            if coverage > 0
+                            else "missing"
+                            for dimension, coverage in dimension_coverage.items()
+                        },
+                        "odds_implied": probs,
+                        "source": "sporttery.cn",
+                        "enrichment_sources": [
+                            "api-football" if (has_injury or has_lineup) else None,
+                            "open-meteo" if has_weather else None,
+                            "football-data.org" if has_profile else None,
+                        ],
+                    },
+                }
+
+                # ---------------------------------------------------
+                # 14. Store
+                # ---------------------------------------------------
+                snap_id = store_match_feature_snapshot(conn, snapshot)
+                if snap_id:
+                    snapshots_built += 1
+                    completeness_total += float(completeness["data_completeness_score"])
+
+            except Exception as e:
+                conn.rollback()
+                failed_matches.append({"match_id": mid, "error": str(e)[:500]})
+                print(f"[feature_snapshot_build] error on match {mid}: {e}")
+                continue
+
+    return _snapshot_job_result(
+        feature_version=feature_version,
+        matches_processed=len(match_ids),
+        snapshots_built=snapshots_built,
+        profiles_updated=profiles_updated,
+        completeness_total=completeness_total,
+        dim_stats=dim_stats,
+        failed_matches=failed_matches,
+    )
+
+
+def run(match_id: int | None = None, dry_run: bool = False) -> dict[str, Any]:
+    """Build snapshots and persist its multi-agent execution record."""
+    run_id = start_tracked_job(
+        "feature_snapshot_build",
+        "feature_agent",
+        {"dry_run": dry_run, "match_id": match_id},
+        dependencies=[] if dry_run else ["official_odds_snapshot"],
+    )
+    try:
+        result = _run_impl(match_id=match_id, dry_run=dry_run)
+        finish_tracked_job(run_id, result.get("status", "completed"), {"result": result})
+        return result
+    except Exception as exc:
+        finish_tracked_job(run_id, "failed", error=str(exc))
+        raise
+
+
+if __name__ == "__main__":
+    import sys
+
+    mid = int(sys.argv[1]) if len(sys.argv) > 1 else None
+    dry = "--dry-run" in sys.argv
+    result = run(match_id=mid, dry_run=dry)
+    print(result)

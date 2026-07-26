@@ -1,0 +1,62 @@
+panels:
+  - panel_code: dashboard.overview
+    module_code: ops_admin
+    panel_name: 系统总览
+    panel_type: dashboard
+    route_path: /dashboard
+    component_name: OverviewDashboard
+    menu_group: 首页总览
+    icon_name: dashboard
+    order: 10
+    permissions: [dashboard.view]
+    feature_flags: [dashboard_enabled]
+  - panel_code: official.matches
+    module_code: core_official
+    panel_name: 官方赛程
+    panel_type: list
+    route_path: /official/matches
+    component_name: OfficialMatchesPanel
+    menu_group: 官方数据
+    icon_name: calendar
+    order: 100
+    permissions: [official_data.view.schedule]
+  - panel_code: match.feature_snapshot
+    module_code: feature_store
+    panel_name: 多维特征快照
+    panel_type: detail
+    route_path: /matches/:matchId/features
+    component_name: MatchFeatureSnapshotPanel
+    menu_group: 赛前情报
+    icon_name: layers
+    order: 230
+    permissions: [feature_store.view.snapshot]
+  - panel_code: model.committee
+    module_code: model_committee
+    panel_name: 模型委员会
+    panel_type: analytics
+    route_path: /models/committee
+    component_name: ModelCommitteePanel
+    menu_group: 模型研究
+    icon_name: brain
+    order: 300
+    permissions: [model_committee.view]
+  - panel_code: recommendation.daily
+    module_code: recommendation
+    panel_name: 今日推荐
+    panel_type: workflow
+    route_path: /recommendation/daily
+    component_name: DailyRecommendationPanel
+    menu_group: 推荐资金
+    icon_name: ticket
+    order: 400
+    permissions: [recommendation.view.daily]
+  - panel_code: agent.tasks
+    module_code: agent_codex
+    panel_name: Codex Agent任务
+    panel_type: agent
+    route_path: /agents/tasks
+    component_name: CodexAgentTasksPanel
+    menu_group: Codex Agent
+    icon_name: bot
+    order: 900
+    permissions: [agent_codex.view.tasks]

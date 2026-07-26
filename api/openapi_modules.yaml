@@ -1,0 +1,60 @@
+openapi: 3.0.3
+info:
+  title: FQP Modular Extension API
+  version: 5.0.0
+paths:
+  /api/v1/modules:
+    get:
+      summary: List enabled system modules
+      tags: [modules]
+      responses:
+        '200':
+          description: Module list
+  /api/v1/modules/{moduleCode}/status:
+    patch:
+      summary: Enable or disable a module
+      tags: [modules]
+      parameters:
+        - in: path
+          name: moduleCode
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Updated module status
+        '409':
+          description: Module is required or has enabled dependents
+  /api/v1/ui/panels:
+    get:
+      summary: Get visible panels for current user
+      tags: [ui]
+      responses:
+        '200':
+          description: Panel registry filtered by permissions and feature flags
+  /api/v1/plugins:
+    get:
+      summary: List registered plugins
+      tags: [plugins]
+      responses:
+        '200':
+          description: Plugin list
+    post:
+      summary: Register a plugin manifest
+      tags: [plugins]
+      responses:
+        '201':
+          description: Plugin registered
+  /api/v1/feature-flags/{flagKey}:
+    patch:
+      summary: Update feature flag rollout
+      tags: [feature-flags]
+      parameters:
+        - in: path
+          name: flagKey
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Feature flag updated

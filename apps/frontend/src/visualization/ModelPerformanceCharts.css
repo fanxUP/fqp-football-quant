@@ -1,0 +1,120 @@
+.model-performance-section {
+  margin-bottom: 20px;
+}
+
+.model-performance-heading {
+  margin-bottom: 12px;
+}
+
+.model-performance-heading h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.model-performance-heading p {
+  margin: 4px 0 0;
+  color: var(--fqp-text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.model-performance-overall {
+  margin-bottom: 16px;
+}
+
+.model-performance-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.model-performance-sample-warning {
+  border: 1px solid color-mix(in srgb, var(--fqp-warning) 44%, transparent);
+  border-radius: var(--fqp-radius-xs);
+  color: var(--fqp-warning);
+  padding: 3px 7px;
+}
+
+.model-performance-ranking {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.model-performance-rank-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--fqp-border-light);
+  border-radius: var(--fqp-radius-sm);
+  background: var(--fqp-panel-2);
+  padding: 10px 12px;
+}
+
+.model-performance-rank-number {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--fqp-panel-2);
+  color: var(--fqp-text-muted);
+  font-family: var(--fqp-font-mono);
+  font-size: 11px;
+}
+
+.model-performance-rank-copy,
+.model-performance-rank-value {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.model-performance-rank-copy strong {
+  overflow: hidden;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.model-performance-rank-copy span,
+.model-performance-rank-value span {
+  color: var(--fqp-text-muted);
+  font-size: 10px;
+}
+
+.model-performance-rank-value {
+  align-items: flex-end;
+  text-align: right;
+}
+
+.model-performance-rank-value strong {
+  font-family: var(--fqp-font-mono);
+  font-size: 16px;
+}
+
+.model-performance-rank-value span.is-down {
+  color: var(--fqp-danger);
+}
+
+@media (max-width: 1023px) {
+  .model-performance-grid,
+  .model-performance-ranking {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 520px) {
+  .model-performance-rank-item {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .model-performance-rank-value {
+    grid-column: 2;
+    align-items: flex-start;
+    text-align: left;
+  }
+}

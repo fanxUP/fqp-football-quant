@@ -1,0 +1,59 @@
+modules:
+  - module_code: core_official
+    module_name: 官方数据中台
+    category: data
+    version: 1.0.0
+    status: active
+    is_core: true
+    owner_agent: OfficialDataAgent
+    depends_on: []
+  - module_code: data_governance
+    module_name: 数据治理
+    category: data
+    version: 1.0.0
+    status: active
+    is_core: true
+    owner_agent: OfficialDataAgent
+    depends_on: [core_official]
+  - module_code: season_team
+    module_name: 赛季球队数据库
+    category: intelligence
+    version: 1.0.0
+    status: active
+    owner_agent: TeamIntelAgent
+    depends_on: [data_governance]
+  - module_code: player_lineup
+    module_name: 球员阵容数据库
+    category: intelligence
+    version: 1.0.0
+    status: active
+    owner_agent: TeamIntelAgent
+    depends_on: [season_team]
+  - module_code: feature_store
+    module_name: 比赛特征快照库
+    category: feature
+    version: 1.0.0
+    status: active
+    owner_agent: FeatureAgent
+    depends_on: [season_team, player_lineup, injury_availability, stadium_weather, motivation_tournament]
+  - module_code: model_committee
+    module_name: 模型委员会
+    category: model
+    version: 1.0.0
+    status: active
+    owner_agent: ModelAgent
+    depends_on: [feature_store, model_research]
+  - module_code: recommendation
+    module_name: 推荐引擎
+    category: business
+    version: 1.0.0
+    status: active
+    owner_agent: RecommendationAgent
+    depends_on: [core_official, feature_store, model_committee]
+  - module_code: frontend_panels
+    module_name: 前端功能面板
+    category: frontend
+    version: 1.0.0
+    status: active
+    owner_agent: FrontendPanelAgent
+    depends_on: [recommendation, backtest, ticket_review, ops_admin]

@@ -1,0 +1,41 @@
+menu_groups:
+  - name: 首页总览
+    order: 10
+  - name: 官方数据
+    order: 100
+  - name: 赛季球队
+    order: 200
+  - name: 赛前情报
+    order: 230
+  - name: 模型研究
+    order: 300
+  - name: 推荐资金
+    order: 400
+  - name: 实票复盘
+    order: 500
+  - name: 传统足彩
+    order: 600
+  - name: 回测中心
+    order: 700
+  - name: Codex Agent
+    order: 900
+  - name: 系统后台
+    order: 1000
+permissions:
+  - code: dashboard.view
+    name: 查看首页总览
+  - code: official_data.view.schedule
+    name: 查看官方赛程
+  - code: feature_store.view.snapshot
+    name: 查看特征快照
+  - code: recommendation.view.daily
+    name: 查看今日推荐
+  - code: recommendation.approve.publish
+    name: 审核推荐发布
+    risk_level: high
+  - code: agent_codex.create.task
+    name: 创建 Codex 任务
+    risk_level: high
+  - code: ops_admin.manage.module
+    name: 管理模块启停
+    risk_level: critical

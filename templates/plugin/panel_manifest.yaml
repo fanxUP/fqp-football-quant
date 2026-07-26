@@ -1,0 +1,15 @@
+panel_code: example.panel
+module_code: example_module
+panel_name: 示例面板
+panel_type: dashboard
+route_path: /example
+component_name: ExamplePanel
+menu_group: 示例
+icon_name: puzzle
+order: 100
+permissions:
+  - example_module.view
+feature_flags:
+  - example_module_enabled
+empty_state: 暂无数据
+error_state: 数据加载失败，请检查接口与权限。

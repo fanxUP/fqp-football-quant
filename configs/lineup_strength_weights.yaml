@@ -1,0 +1,23 @@
+lineup_strength_weights:
+  starting_11_market_value_score: 0.25
+  recent_minutes_stability: 0.20
+  key_player_integrity: 0.20
+  positional_completeness: 0.15
+  formation_stability: 0.10
+  bench_strength: 0.10
+rotation_risk_weights:
+  next_match_importance: 0.35
+  insufficient_rest_days: 0.25
+  recent_match_density: 0.20
+  manager_rotation_tendency: 0.10
+  low_current_table_pressure: 0.10
+lineup_types:
+  - predicted_48h
+  - predicted_24h
+  - predicted_6h
+  - official_1h
+  - actual_post_match
+formal_recommendation_rules:
+  require_official_lineup_for_main_pool: false
+  if_lineup_not_confirmed_uncertainty_add: 12
+  if_lineup_strength_diff_absent_reduce_confidence: 8

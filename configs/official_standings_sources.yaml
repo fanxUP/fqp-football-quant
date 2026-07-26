@@ -1,0 +1,41 @@
+# Official competition standings sources.
+# These sources supplement Sporttery's official lottery schedule; they never
+# create or replace official_matches rows.
+sources:
+  - source_code: norway_eliteserien
+    competition_name: 挪威超级联赛
+    season_code: "2026"
+    url: https://www.eliteserien.no/tabell
+    parser: html_table
+    confidence: A
+  - source_code: sweden_allsvenskan
+    competition_name: 瑞典超级联赛
+    season_code: "2026"
+    url: https://allsvenskan.se/tabell
+    parser: html_table
+    confidence: A
+  - source_code: finland_veikkausliiga
+    competition_name: 芬兰超级联赛
+    season_code: "2026"
+    url: https://www.veikkausliiga.com/
+    parser: html_table
+    confidence: A
+  - source_code: korea_kleague1
+    competition_name: 韩国职业联赛
+    season_code: "2026"
+    url: https://www.kleague.com/record/teamRank.do
+    parser: json_api
+    request_params:
+      leagueId: 1
+      year: 2026
+      stadium: all
+      recordType: rank
+    confidence: A
+  - source_code: fifa_world_cup_2026
+    competition_name: 世界杯
+    season_code: "2026"
+    url: https://www.fifa.com/en/tournaments/mens/worldcup/2026/match-center
+    parser: dynamic_page_pending
+    confidence: A
+    status: pending_official_dynamic_endpoint
+    note: 官方页面可查看分组和排名，但当前未确认稳定的无浏览器 JSON 接口，暂不写入数据库。

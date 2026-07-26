@@ -1,0 +1,97 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint-and-typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+
+      - name: Ruff lint
+        run: ruff check .
+
+      - name: Ruff format check
+        run: ruff format --check .
+
+      - name: Mypy type check
+        run: mypy apps/backend/src scripts --explicit-package-bases
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: apps/frontend/package-lock.json
+
+      - name: Frontend quality gates
+        working-directory: apps/frontend
+        run: |
+          npm ci
+          npm run typecheck
+          npm test
+          npm run build
+
+  test:
+    runs-on: ubuntu-latest
+    needs: lint-and-typecheck
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: fqp_test
+          POSTGRES_USER: fqp
+          POSTGRES_PASSWORD: fqp_test_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+
+      - name: Initialize test database schema
+        run: |
+          set -euo pipefail
+          for f in sql/*.sql; do
+            PGPASSWORD=fqp_test_password psql -X -v ON_ERROR_STOP=1 \
+              -h localhost -U fqp -d fqp_test -f "$f"
+          done
+        env:
+          PGPASSWORD: fqp_test_password
+
+      - name: Run tests with coverage
+        run: |
+          DATABASE_URL=postgresql://fqp:fqp_test_password@localhost:5432/fqp_test \
+          pytest --cov=. --cov-report=xml --cov-report=term --cov-fail-under=50 -m "not slow"
+        env:
+          DATABASE_URL: postgresql://fqp:fqp_test_password@localhost:5432/fqp_test
