@@ -140,7 +140,10 @@ def _run_impl(*, limit: int | None = None, lookback_days: int | None = None) -> 
         }
 
     row_limit = limit or int(os.getenv("UPSET_PROVIDER_EVIDENCE_LIMIT", "20"))
-    days = lookback_days or int(os.getenv("UPSET_PROVIDER_EVIDENCE_LOOKBACK_DAYS", "14"))
+    # The free API-Football plan only exposes yesterday through tomorrow.
+    # Premium installations can widen this explicitly without making the
+    # default scheduler burn quota on dates the provider will always reject.
+    days = lookback_days or int(os.getenv("UPSET_PROVIDER_EVIDENCE_LOOKBACK_DAYS", "1"))
     client = ApiFootballClient(api_key=api_key)
     matched = 0
     unmatched = 0

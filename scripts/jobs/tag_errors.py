@@ -157,7 +157,9 @@ def run(dry_run: bool = False) -> dict[str, Any]:
                         %(pid)s, %(mid)s, %(tag)s, %(level)s,
                         %(cause)s, %(mp)s, %(mkp)s, %(actual)s
                     )
-                    ON CONFLICT (prediction_id) DO UPDATE SET
+                    ON CONFLICT (prediction_id)
+                    WHERE prediction_id IS NOT NULL
+                    DO UPDATE SET
                         match_id = EXCLUDED.match_id,
                         error_type = EXCLUDED.error_type,
                         error_level = EXCLUDED.error_level,

@@ -688,7 +688,7 @@ def store_pool_issue_matches(
                                 LIMIT 1
                             )
                         ),
-                        %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,now()
+                        %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,now()
                     )
                     ON CONFLICT (issue_id, match_order) DO UPDATE SET
                         match_id = EXCLUDED.match_id,
