@@ -27,6 +27,7 @@ STADIUMS = [
     ("Bravida Arena", "Gothenburg", "Sweden", 57.7230, 11.9330, 6500),
     ("Olympia", "Helsingborg", "Sweden", 56.0480, 12.7000, 16500),
     ("Orjans Vall", "Halmstad", "Sweden", 56.6745, 12.8569, 10873),
+    ("Grimsta IP", "Stockholm", "Sweden", 59.3623, 17.8518, 6820),
     # K League 1
     ("Jeonju World Cup Stadium", "Jeonju", "South Korea", 35.8680, 127.0650, 42477),
     ("Seoul World Cup Stadium", "Seoul", "South Korea", 37.5680, 126.8970, 66704),
@@ -51,6 +52,19 @@ STADIUMS = [
     ("Hietalahti Stadium", "Vaasa", "Finland", 63.0950, 21.6170, 4600),
     ("Seinajoen Keskuskentta", "Seinajoki", "Finland", 62.7900, 22.8400, 5000),
     ("Project Liv Arena", "Pietarsaari", "Finland", 63.6743, 22.7029, 5000),
+    # Current Norwegian league venues verified from the official fixture list
+    ("Brann stadion", "Bergen", "Norway", 60.3668, 5.3574, 16686),
+    ("Sarpsborg st KG", "Sarpsborg", "Norway", 59.2863, 11.0977, 8022),
+    ("KFUM-Arena", "Oslo", "Norway", 59.8896, 10.7831, 3300),
+    ("Jotun Arena", "Sandefjord", "Norway", 59.1372, 10.1795, 6582),
+    ("Color Line Stadion", "Alesund", "Norway", 62.4697, 6.1886, 10778),
+    ("Lerkendal stadion", "Trondheim", "Norway", 63.4123, 10.4045, 21423),
+    ("Aspmyra stadion", "Bodo", "Norway", 67.2766, 14.3844, 8270),
+    ("Briskeby", "Hamar", "Norway", 60.7956, 11.0922, 7600),
+    ("Intility Arena", "Oslo", "Norway", 59.9179, 10.8066, 16555),
+    ("Fredrikstad stadion", "Fredrikstad", "Norway", 59.2131, 10.9281, 12565),
+    ("Mustapekka Areena", "Helsinki", "Finland", 60.2347, 24.9625, 1100),
+    ("Strawberry Arena", "Solna", "Sweden", 59.3725, 18.0017, 50000),
     # International / World Cup
     ("Lusail Stadium", "Lusail", "Qatar", 25.4200, 51.4900, 88966),
     ("Al Bayt Stadium", "Al Khor", "Qatar", 25.6520, 51.4880, 68895),
@@ -64,6 +78,8 @@ STADIUMS = [
     ("Stade de France", "Saint-Denis", "France", 48.9245, 2.3600, 81338),
     ("Estadio Nacional", "Brasilia", "Brazil", -15.7801, -47.9292, 72788),
     ("Maracana", "Rio de Janeiro", "Brazil", -22.9120, -43.2300, 78838),
+    ("Arena do Grêmio", "Porto Alegre", "Brazil", -29.9734, -51.1944, 60540),
+    ("MorumBIS", "Sao Paulo", "Brazil", -23.6001, -46.7201, 66795),
     ("Soccer City", "Johannesburg", "South Africa", -26.2347, 27.9825, 94736),
 ]
 
@@ -93,6 +109,37 @@ TEAM_STADIUM_CITIES = {
     "玛丽港": "Mariehamn",
     "卡尔马": "Kalmar",
     "厄尔格里特": "Gothenburg",
+}
+
+# Exact mappings take precedence over legacy city mappings. This matters in
+# cities with several stadiums (for example Gothenburg and Stockholm).
+TEAM_STADIUM_NAMES = {
+    "布鲁马波卡纳": "Grimsta IP",
+    "天狼星": "Studenternas IP",
+    "国际图尔库": "Veritas Stadion",
+    "坦佩雷山猫": "Tammelan Stadion",
+    "布兰": "Brann stadion",
+    "赫尔辛基": "Bolt Arena",
+    "哥德堡盖斯": "Gamla Ullevi",
+    "马尔默": "Eleda Stadion",
+    "萨尔普斯堡": "Sarpsborg st KG",
+    "奥斯陆KFUM": "KFUM-Arena",
+    "桑纳菲尤尔": "Jotun Arena",
+    "奥勒松": "Color Line Stadion",
+    "弗拉门戈": "Maracana",
+    "格雷米奥": "Arena do Grêmio",
+    "赫根": "Bravida Arena",
+    "罗森博格": "Lerkendal stadion",
+    "博德闪耀": "Aspmyra stadion",
+    "汉坎": "Briskeby",
+    "瓦勒伦加": "Intility Arena",
+    "腓特烈斯塔": "Fredrikstad stadion",
+    "赫尔辛基火花": "Mustapekka Areena",
+    "AIK索尔纳": "Strawberry Arena",
+    "圣保罗": "MorumBIS",
+    "弗鲁米嫩塞": "Maracana",
+    "拉赫蒂": "Lahden Stadion",
+    "IFK哥德堡": "Gamla Ullevi",
 }
 
 
@@ -162,6 +209,44 @@ def run() -> dict[str, Any]:
                     UPDATE teams
                     SET primary_stadium_id = COALESCE(primary_stadium_id, %s),
                         updated_at = now()
+                    WHERE id = %s
+                    """,
+                    (row[1], row[0]),
+                )
+
+            for team_name, stadium_name in TEAM_STADIUM_NAMES.items():
+                cur.execute(
+                    """
+                    SELECT t.id, s.id
+                    FROM teams t
+                    JOIN team_aliases ta ON ta.team_id = t.id
+                    JOIN stadiums s ON s.stadium_name = %s
+                    WHERE ta.alias_name = %s AND ta.source_name = 'sporttery'
+                    ORDER BY t.id, s.id
+                    LIMIT 1
+                    """,
+                    (stadium_name, team_name),
+                )
+                row = cur.fetchone()
+                if not row:
+                    continue
+                cur.execute(
+                    """
+                    INSERT INTO team_stadium_history
+                        (team_id, stadium_id, start_date, is_primary, is_temporary)
+                    SELECT %s, %s, DATE '2026-01-01', true, false
+                    WHERE NOT EXISTS (
+                        SELECT 1 FROM team_stadium_history
+                        WHERE team_id = %s AND stadium_id = %s AND is_primary = true
+                    )
+                    """,
+                    (row[0], row[1], row[0], row[1]),
+                )
+                history_inserted += cur.rowcount
+                cur.execute(
+                    """
+                    UPDATE teams
+                    SET primary_stadium_id = %s, updated_at = now()
                     WHERE id = %s
                     """,
                     (row[1], row[0]),

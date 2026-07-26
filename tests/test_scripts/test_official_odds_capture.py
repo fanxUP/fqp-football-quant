@@ -5,6 +5,7 @@ from zoneinfo import ZoneInfo
 from scripts.official_odds_capture import (
     OfficialCaptureCandidate,
     _close_expired_sales,
+    _load_candidates,
     collect_due_official_odds,
 )
 
@@ -20,6 +21,19 @@ def test_expired_sales_close_after_final_capture_grace(mock_conn):
     assert "kickoff_time < %s" in query
     assert params[0] == datetime(2026, 7, 15, 11, 20)
     conn.commit.assert_called_once()
+
+
+def test_candidate_query_limits_history_to_relevant_matches(mock_conn):
+    conn, cur = mock_conn
+    cur.fetchall.return_value = []
+    now = datetime(2026, 7, 15, 11, 30, tzinfo=ZoneInfo("Asia/Shanghai"))
+
+    assert _load_candidates(conn, now) == []
+
+    query = cur.execute.call_args.args[0]
+    assert "WITH relevant_matches AS" in query
+    assert "JOIN relevant_matches relevant ON relevant.id = history.match_id" in query
+    assert query.index("WITH relevant_matches AS") < query.index("offered_plays AS")
 
 
 def test_no_due_matches_still_refreshes_odds_source_health():

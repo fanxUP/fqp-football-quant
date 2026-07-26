@@ -52,46 +52,57 @@ def _load_candidates(conn: Any, now: datetime) -> list[OfficialCaptureCandidate]
     with conn.cursor() as cur:
         cur.execute(
             """
-            WITH offered_plays AS (
-                SELECT match_id, ARRAY_AGG(DISTINCT play_type ORDER BY play_type) AS play_types
+            WITH relevant_matches AS MATERIALIZED (
+                SELECT m.id, m.business_date, m.official_match_code, m.kickoff_time
+                FROM official_matches m
+                WHERE m.kickoff_time >= %(grace_start)s
+                  AND (
+                      (m.kickoff_time > %(now)s AND m.sale_status = 'selling')
+                      OR
+                      (m.kickoff_time <= %(now)s AND EXISTS (
+                          SELECT 1
+                          FROM official_odds_snapshots history
+                          WHERE history.match_id = m.id
+                      ))
+                  )
+            ),
+            offered_plays AS (
+                SELECT offered.match_id,
+                       ARRAY_AGG(DISTINCT offered.play_type ORDER BY offered.play_type)
+                           AS play_types
                 FROM (
-                    SELECT match_id, play_type
-                    FROM official_markets
-                    WHERE play_type = ANY(%(canonical_play_types)s) AND is_open = TRUE
+                    SELECT market.match_id, market.play_type
+                    FROM official_markets market
+                    JOIN relevant_matches relevant ON relevant.id = market.match_id
+                    WHERE market.play_type = ANY(%(canonical_play_types)s)
+                      AND market.is_open = TRUE
                     UNION
-                    SELECT match_id, play_type
-                    FROM official_odds_snapshots
-                    WHERE play_type = ANY(%(canonical_play_types)s)
+                    SELECT history.match_id, history.play_type
+                    FROM official_odds_snapshots history
+                    JOIN relevant_matches relevant ON relevant.id = history.match_id
+                    WHERE history.play_type = ANY(%(canonical_play_types)s)
                 ) offered
-                GROUP BY match_id
+                GROUP BY offered.match_id
             )
-            SELECT m.id, m.business_date, m.official_match_code, m.kickoff_time,
+            SELECT relevant.id, relevant.business_date, relevant.official_match_code,
+                   relevant.kickoff_time,
                    offered.play_types,
                    latest.attempted_at, latest.status,
                    EXISTS (
                        SELECT 1 FROM official_odds_capture_batches final_batch
-                       WHERE final_batch.match_id = m.id
+                       WHERE final_batch.match_id = relevant.id
                          AND final_batch.capture_kind = 'final'
                    ) AS final_attempted
-            FROM official_matches m
-            JOIN offered_plays offered ON offered.match_id = m.id
+            FROM relevant_matches relevant
+            JOIN offered_plays offered ON offered.match_id = relevant.id
             LEFT JOIN LATERAL (
                 SELECT attempted_at, status
                 FROM official_odds_capture_batches batch
-                WHERE batch.match_id = m.id AND batch.capture_kind <> 'final'
+                WHERE batch.match_id = relevant.id AND batch.capture_kind <> 'final'
                 ORDER BY attempted_at DESC, id DESC
                 LIMIT 1
             ) latest ON TRUE
-            WHERE m.kickoff_time >= %(grace_start)s
-              AND (
-                  (m.kickoff_time > %(now)s AND m.sale_status = 'selling')
-                  OR
-                  (m.kickoff_time <= %(now)s AND EXISTS (
-                      SELECT 1 FROM official_odds_snapshots history
-                      WHERE history.match_id = m.id
-                  ))
-              )
-            ORDER BY m.kickoff_time, m.id
+            ORDER BY relevant.kickoff_time, relevant.id
             """,
             {
                 "canonical_play_types": ["spf", "rqspf", "bf", "zjq", "bqc"],

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import re
 import subprocess
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
 import certifi
@@ -33,6 +33,30 @@ SOURCES = {
         "url": "https://www.kleague.com/record/teamRank.do",
     },
 }
+
+
+def _resolve_current_competition_season_id(
+    conn: Any, competition_name: str, as_of: date
+) -> int | None:
+    """Resolve the competition's active season without reusing a global year code."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT cs.id
+            FROM competition_seasons cs
+            JOIN competitions c ON c.id = cs.competition_id
+            JOIN seasons s ON s.id = cs.season_id
+            WHERE c.competition_name_cn = %s
+            ORDER BY (%s BETWEEN s.start_date AND s.end_date) DESC,
+                     s.is_current DESC,
+                     s.end_date DESC,
+                     cs.id DESC
+            LIMIT 1
+            """,
+            (competition_name, as_of),
+        )
+        row = cur.fetchone()
+    return int(row[0]) if row else None
 
 
 def _numbers(value: str) -> list[int]:
@@ -164,23 +188,16 @@ def run(source_code: str | None = None, dry_run: bool = True) -> dict[str, Any]:
         unresolved = []
         if not dry_run:
             with get_db() as conn:
-                with conn.cursor() as cur:
-                    cur.execute(
-                        """
-                        SELECT cs.id FROM competition_seasons cs
-                        JOIN competitions c ON c.id=cs.competition_id
-                        JOIN seasons s ON s.id=cs.season_id
-                        WHERE c.competition_name_cn=%s AND s.season_code='2026'
-                        """,
-                        (source["competition_name"],),
+                collection_time = datetime.now()
+                competition_season_id = _resolve_current_competition_season_id(
+                    conn, source["competition_name"], collection_time.date()
+                )
+                if competition_season_id is None:
+                    raise RuntimeError(
+                        f"missing current competition season: {source['competition_name']}"
                     )
-                    season_row = cur.fetchone()
-                    if not season_row:
-                        raise RuntimeError(
-                            f"missing 2026 competition season: {source['competition_name']}"
-                        )
-                    competition_season_id = season_row[0]
-                    snapshot_time = datetime.now().isoformat(timespec="seconds")
+                with conn.cursor() as cur:
+                    snapshot_time = collection_time.isoformat(timespec="seconds")
                     for item in rows:
                         cur.execute(
                             """

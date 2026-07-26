@@ -77,7 +77,13 @@ def _resolve_competition_season_id(
             JOIN seasons s ON s.id = cs.season_id
             WHERE c.competition_name_cn = %(league_name)s
               AND %(kickoff_date)s::date BETWEEN s.start_date AND s.end_date
-            ORDER BY s.is_current DESC, s.start_date DESC
+            ORDER BY EXISTS (
+                         SELECT 1
+                         FROM season_standings_snapshots standings
+                         WHERE standings.competition_season_id = cs.id
+                     ) DESC,
+                     s.is_current DESC,
+                     s.start_date DESC
             LIMIT 1
             """,
             {"league_name": league_name, "kickoff_date": kickoff_time.date()},
@@ -110,6 +116,30 @@ def _load_collected_weather(conn: Any, match_id: int) -> tuple[dict[str, Any], b
         and snapshot.get("weather_impact_score") is not None
     )
     return weather, has_weather
+
+
+def _load_latest_open_odds(conn: Any, match_id: int) -> list[dict[str, Any]]:
+    """Load one current open snapshot per official market option."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT DISTINCT ON (play_type, option_code)
+                   play_type, option_code, sp_value
+            FROM official_odds_snapshots
+            WHERE match_id = %s AND is_open = true
+            ORDER BY play_type, option_code, snapshot_time DESC
+            """,
+            (match_id,),
+        )
+        rows = cur.fetchall()
+    return [
+        {
+            "play_type": row[0],
+            "option_code": row[1],
+            "sp_value": float(row[2]),
+        }
+        for row in rows
+    ]
 
 
 def can_build_team_dependent_features(home_id: int | None, away_id: int | None) -> bool:
@@ -247,20 +277,8 @@ def _run_impl(match_id: int | None = None, dry_run: bool = False) -> dict[str, A
                 # ---------------------------------------------------
                 # 5. Load odds
                 # ---------------------------------------------------
-                with conn.cursor() as cur:
-                    cur.execute(
-                        """
-                        SELECT play_type, option_code, sp_value FROM official_odds_snapshots
-                        WHERE match_id = %s ORDER BY snapshot_time DESC
-                        """,
-                        (mid,),
-                    )
-                    odds_rows = cur.fetchall()
-                has_odds = len(odds_rows) > 0
-                odds_snaps = [
-                    {"play_type": r[0], "option_code": r[1], "sp_value": float(r[2])}
-                    for r in odds_rows
-                ]
+                odds_snaps = _load_latest_open_odds(conn, mid)
+                has_odds = len(odds_snaps) > 0
                 probs = compute_odds_implied_probabilities(odds_snaps) if has_odds else {}
 
                 # Basic features

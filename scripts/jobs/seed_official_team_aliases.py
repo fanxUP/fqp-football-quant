@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from typing import Any
 
 from apps.backend.src.db import get_db
 
@@ -28,13 +29,13 @@ ALIASES = {
     "芬兰超级联赛": {
         "拉赫蒂": "FC Lahti",
         "瓦萨": "VPS",
-        "赫尔辛基火花": "HJK",
+        "赫尔辛基": "HJK",
         "TPS图尔库": "TPS",
         "古比斯": "KuPS",
         "国际图尔库": "FC Inter",
         "AC奥卢": "AC Oulu",
-        "格尼斯坦": "IF Gnistan",
-        "伊尔维斯": "Ilves",
+        "赫尔辛基火花": "IF Gnistan",
+        "坦佩雷山猫": "Ilves",
         "塞伊奈约基": "SJK",
         "雅罗": "FF Jaro",
         "玛丽港": "IFK Mariehamn",
@@ -56,15 +57,53 @@ ALIASES = {
 }
 
 
+def _upsert_alias(
+    cur: Any, team_id: int, source_name: str, alias_name: str
+) -> tuple[int, int]:
+    cur.execute(
+        """
+        INSERT INTO team_aliases (
+            team_id, source_name, alias_name, language, confidence, is_verified
+        )
+        VALUES (%s, %s, %s, 'en', 0.95, true)
+        ON CONFLICT (source_name, alias_name) DO UPDATE SET
+            team_id = EXCLUDED.team_id,
+            language = EXCLUDED.language,
+            confidence = EXCLUDED.confidence,
+            is_verified = EXCLUDED.is_verified
+        RETURNING id, (xmax = 0) AS is_inserted
+        """,
+        (team_id, source_name, alias_name),
+    )
+    row = cur.fetchone()
+    if not row:
+        return 0, 0
+    return (1, 0) if row[1] else (0, 1)
+
+
 def run() -> dict[str, int | str]:
     inserted = 0
+    updated = 0
     unresolved = 0
     with get_db() as conn:
         with conn.cursor() as cur:
             for team_cn, official_name in [
                 (cn, name) for league in ALIASES.values() for cn, name in league.items()
             ]:
-                cur.execute("SELECT id FROM teams WHERE team_name_cn = %s", (team_cn,))
+                cur.execute(
+                    """
+                    SELECT t.id
+                    FROM teams t
+                    LEFT JOIN team_aliases ta
+                      ON ta.team_id = t.id
+                     AND ta.source_name = 'sporttery'
+                     AND ta.alias_name = %s
+                    WHERE t.team_name_cn = %s
+                    ORDER BY (ta.id IS NOT NULL) DESC, t.id DESC
+                    LIMIT 1
+                    """,
+                    (team_cn, team_cn),
+                )
                 row = cur.fetchone()
                 if not row:
                     # Official standings may contain a team not yet present in
@@ -123,19 +162,22 @@ def run() -> dict[str, int | str]:
                     if not row:
                         unresolved += 1
                         continue
-                cur.execute(
-                    """
-                    INSERT INTO team_aliases (team_id, source_name, alias_name, language, confidence, is_verified)
-                    VALUES (%s, 'official_standings', %s, 'en', 0.95, true)
-                    ON CONFLICT (source_name, alias_name) DO NOTHING
-                    RETURNING id
-                    """,
-                    (row[0], official_name),
-                )
-                if cur.fetchone():
-                    inserted += 1
+                for source_name, alias_name in (
+                    ("official_standings", official_name),
+                    ("sporttery", team_cn),
+                ):
+                    alias_inserted, alias_updated = _upsert_alias(
+                        cur, int(row[0]), source_name, alias_name
+                    )
+                    inserted += alias_inserted
+                    updated += alias_updated
         conn.commit()
-    return {"status": "ok", "aliases_inserted": inserted, "unresolved": unresolved}
+    return {
+        "status": "ok",
+        "aliases_inserted": inserted,
+        "aliases_updated": updated,
+        "unresolved": unresolved,
+    }
 
 
 if __name__ == "__main__":

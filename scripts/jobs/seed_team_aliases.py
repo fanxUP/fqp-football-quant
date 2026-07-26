@@ -47,6 +47,10 @@ MANUAL_ALIASES: dict[str, list[str]] = {
     "马尔默": ["Malmo FF", "Malmö FF"],
     "厄尔格里特": ["Orgryte IS", "Örgryte IS"],
     "佐加顿斯": ["Djurgardens IF", "Djurgårdens IF"],
+    "布鲁马波卡纳": ["IF Brommapojkarna"],
+    "IFK哥德堡": ["IFK Goteborg"],
+    "哥德堡盖斯": ["Gais"],
+    "AIK索尔纳": ["AIK Stockholm", "AIK"],
     # 芬兰超级联赛 (Veikkausliiga)
     "雅罗": ["FF Jaro"],
     "国际图尔库": ["Inter Turku", "FC Inter Turku"],
@@ -54,6 +58,8 @@ MANUAL_ALIASES: dict[str, list[str]] = {
     "坦佩雷山猫": ["Ilves Tampere", "Ilves"],
     "玛丽港": ["IFK Mariehamn", "Mariehamn"],
     "拉赫蒂": ["FC Lahti", "Lahti"],
+    "赫尔辛基火花": ["Gnistan", "IF Gnistan"],
+    "赫尔辛基": ["HJK Helsinki", "HJK"],
     # 韩国职业联赛 (K League 1)
     "大田市民": ["Daejeon Citizen", "Daejeon Hana Citizen"],
     "富川FC": ["Bucheon FC", "Bucheon FC 1995"],
@@ -67,6 +73,22 @@ MANUAL_ALIASES: dict[str, list[str]] = {
     "蔚山现代": ["Ulsan Hyundai FC", "Ulsan HD FC"],
     "仁川联": ["Incheon United"],
     "济州SK": ["Jeju United FC"],
+    # 挪威超级联赛 (Eliteserien)
+    "布兰": ["Brann"],
+    "瓦勒伦加": ["Valerenga"],
+    "萨尔普斯堡": ["Sarpsborg 08 FF"],
+    "汉坎": ["Ham-Kam"],
+    "奥斯陆KFUM": ["KFUM Oslo"],
+    "莫尔德": ["Molde"],
+    "桑纳菲尤尔": ["Sandefjord"],
+    "博德闪耀": ["Bodo/Glimt"],
+    "奥勒松": ["Aalesund"],
+    "维京": ["Viking"],
+    "罗森博格": ["Rosenborg"],
+    "腓特烈斯塔": ["Fredrikstad"],
+    # 巴西甲级联赛补充
+    "格雷米奥": ["Gremio"],
+    "弗鲁米嫩塞": ["Fluminense"],
     # 世界杯 (World Cup) — national teams
     "澳大利亚": ["Australia"],
     "埃及": ["Egypt"],
@@ -101,6 +123,7 @@ def run(dry_run: bool = False) -> dict[str, Any]:
         Summary dict.
     """
     aliases_added = 0
+    aliases_updated = 0
     teams_matched = 0
 
     with get_db() as conn:
@@ -133,15 +156,25 @@ def run(dry_run: bool = False) -> dict[str, Any]:
                     with conn.cursor() as cur:
                         cur.execute(
                             """
-                            INSERT INTO team_aliases (team_id, source_name, alias_name, language)
-                            VALUES (%(tid)s, 'apifootball', %(alias)s, 'en')
-                            ON CONFLICT (source_name, alias_name) DO NOTHING
-                            RETURNING id
+                            INSERT INTO team_aliases (
+                                team_id, source_name, alias_name, language,
+                                confidence, is_verified
+                            )
+                            VALUES (%(tid)s, 'apifootball', %(alias)s, 'en', 1.0, true)
+                            ON CONFLICT (source_name, alias_name) DO UPDATE SET
+                                team_id = EXCLUDED.team_id,
+                                language = EXCLUDED.language,
+                                confidence = EXCLUDED.confidence,
+                                is_verified = EXCLUDED.is_verified
+                            RETURNING id, (xmax = 0) AS is_inserted
                             """,
                             {"tid": team_id, "alias": en_name},
                         )
-                        if cur.fetchone():
+                        alias_row = cur.fetchone()
+                        if alias_row and alias_row[1]:
                             aliases_added += 1
+                        elif alias_row:
+                            aliases_updated += 1
                 except Exception as e:
                     print(f"[seed_aliases] error adding '{en_name}' for '{cn_name}': {e}")
 
@@ -152,6 +185,7 @@ def run(dry_run: bool = False) -> dict[str, Any]:
         "status": "ok" if not dry_run else "dry_run",
         "teams_matched": teams_matched,
         "aliases_added": aliases_added,
+        "aliases_updated": aliases_updated,
     }
 
 

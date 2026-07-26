@@ -1,6 +1,25 @@
 from bs4 import BeautifulSoup
 
-from scripts.jobs.collect_official_standings import parse_finland, parse_norway
+from scripts.jobs.collect_official_standings import (
+    _resolve_current_competition_season_id,
+    parse_finland,
+    parse_norway,
+)
+
+
+def test_current_competition_season_is_resolved_by_date_not_global_season_code(mock_conn):
+    conn, cur = mock_conn
+    cur.fetchone.return_value = (558,)
+
+    result = _resolve_current_competition_season_id(
+        conn, "芬兰超级联赛", __import__("datetime").date(2026, 7, 26)
+    )
+
+    query, params = cur.execute.call_args.args
+    assert result == 558
+    assert "season_code='2026'" not in query
+    assert "BETWEEN s.start_date AND s.end_date" in query
+    assert params == ("芬兰超级联赛", __import__("datetime").date(2026, 7, 26))
 
 
 def test_parse_norway_keeps_team_and_table_statistics():

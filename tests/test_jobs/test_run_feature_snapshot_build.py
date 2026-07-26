@@ -4,11 +4,29 @@ from zoneinfo import ZoneInfo
 from scripts.jobs.run_feature_snapshot_build import (
     _business_now_naive,
     _load_collected_weather,
+    _load_latest_open_odds,
     _resolve_competition_season_id,
     _snapshot_job_result,
     can_build_team_dependent_features,
     compute_full_completeness,
 )
+
+
+def test_feature_snapshot_reads_only_latest_open_odds(mock_conn):
+    conn, cur = mock_conn
+    cur.fetchall.return_value = [
+        ("had", "h", 1.58),
+        ("had", "d", 3.70),
+        ("had", "a", 4.45),
+    ]
+
+    odds = _load_latest_open_odds(conn, 30021)
+
+    query = " ".join(cur.execute.call_args.args[0].split())
+    assert "DISTINCT ON (play_type, option_code)" in query
+    assert "WHERE match_id = %s AND is_open = true" in query
+    assert "ORDER BY play_type, option_code, snapshot_time DESC" in query
+    assert odds[0] == {"play_type": "had", "option_code": "h", "sp_value": 1.58}
 
 
 def test_feature_snapshot_reuses_collected_weather_without_external_fetch(mock_conn):
@@ -51,6 +69,7 @@ def test_competition_season_resolution_uses_league_and_kickoff_date(mock_conn):
     params = cur.execute.call_args.args[1]
     assert params["league_name"] == "瑞典超级联赛"
     assert params["kickoff_date"].isoformat() == "2026-07-14"
+    assert "season_standings_snapshots" in cur.execute.call_args.args[0]
 
 
 def test_snapshot_job_reports_failure_when_every_match_write_fails():

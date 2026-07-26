@@ -1,4 +1,5 @@
 from scripts.jobs.seed_competitions import LEAGUE_MAP
+from scripts.jobs.seed_official_team_aliases import ALIASES as OFFICIAL_STANDINGS_ALIASES
 from scripts.jobs.seed_team_aliases import MANUAL_ALIASES
 
 
@@ -77,3 +78,38 @@ def test_recent_brazil_champions_league_and_mls_teams_have_provider_aliases():
 
     for chinese_name, provider_name in required.items():
         assert provider_name in MANUAL_ALIASES[chinese_name]
+
+
+def test_current_selling_card_has_verified_api_football_aliases():
+    required = {
+        "布鲁马波卡纳": "IF Brommapojkarna",
+        "IFK哥德堡": "IFK Goteborg",
+        "赫尔辛基火花": "Gnistan",
+        "布兰": "Brann",
+        "瓦勒伦加": "Valerenga",
+        "赫尔辛基": "HJK Helsinki",
+        "哥德堡盖斯": "Gais",
+        "萨尔普斯堡": "Sarpsborg 08 FF",
+        "汉坎": "Ham-Kam",
+        "奥斯陆KFUM": "KFUM Oslo",
+        "莫尔德": "Molde",
+        "桑纳菲尤尔": "Sandefjord",
+        "博德闪耀": "Bodo/Glimt",
+        "奥勒松": "Aalesund",
+        "维京": "Viking",
+        "格雷米奥": "Gremio",
+        "弗鲁米嫩塞": "Fluminense",
+        "罗森博格": "Rosenborg",
+        "腓特烈斯塔": "Fredrikstad",
+    }
+
+    for chinese_name, provider_name in required.items():
+        assert provider_name in MANUAL_ALIASES[chinese_name]
+
+
+def test_official_standings_aliases_reuse_current_sporttery_team_identity():
+    finland = OFFICIAL_STANDINGS_ALIASES["芬兰超级联赛"]
+
+    assert finland["赫尔辛基火花"] == "IF Gnistan"
+    assert finland["坦佩雷山猫"] == "Ilves"
+    assert finland["赫尔辛基"] == "HJK"
