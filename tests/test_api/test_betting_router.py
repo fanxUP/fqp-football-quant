@@ -93,6 +93,28 @@ def test_map_agent_ticket_uses_agent_recommendation_source():
     assert ticket["expectedValue"] == 0.1234
 
 
+def test_invalid_agent_ticket_is_not_mapped_to_pending():
+    row = (
+        31,
+        50,
+        0.1234,
+        "agent_value",
+        "medium",
+        "invalid",
+        datetime(2026, 7, 7, 16, 0, 0),
+        "single",
+        "single",
+        1,
+        1,
+        1,
+        "20260707002",
+    )
+
+    ticket = betting._map_agent_ticket(row)
+
+    assert ticket["status"] == "cancelled"
+
+
 def test_create_real_betting_ticket_maps_agent_source(monkeypatch):
     created: dict[str, object] = {}
     inserted_items: list[dict] = []
@@ -645,7 +667,7 @@ def test_result_ticket_merge_replaces_current_settled_rows_with_full_history():
     assert [ticket["ticketUid"] for ticket in merged] == ["agent:52", "agent:39", "agent:40"]
 
 
-def test_collect_betting_tickets_keeps_valid_agent_history_without_cancelled_rows(
+def test_collect_betting_tickets_keeps_only_settleable_agent_history(
     monkeypatch,
 ):
     captured_sql: list[str] = []
@@ -676,5 +698,5 @@ def test_collect_betting_tickets_keeps_valid_agent_history_without_cancelled_row
 
     agent_sql = captured_sql[0]
     assert "BETWEEN" not in agent_sql
-    assert "ticket_status <> 'cancelled'" in agent_sql
+    assert "ticket_status IN ('generated', 'activated', 'settled')" in agent_sql
     assert "JOIN simulation_ticket_items" in agent_sql

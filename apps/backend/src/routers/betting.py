@@ -64,9 +64,11 @@ def _date_key(value: str | None) -> str:
 
 
 def _settlement_status(status: str | None) -> str:
-    if status in {"settled", "won", "lost", "cancelled"}:
+    if status in {"settled", "won", "lost"}:
         return str(status)
-    return "pending"
+    if status in {"pending", "generated", "activated"}:
+        return "pending"
+    return "cancelled"
 
 
 def _ticket_number(value: str | None, purchase_date: str, legacy_id: int) -> str:
@@ -723,7 +725,7 @@ def _collect_betting_tickets(conn, limit: int) -> list[dict]:
                    st.ledger_ticket_no
             FROM simulation_tickets st
             JOIN simulation_ticket_items sti ON sti.ticket_id = st.id
-            WHERE st.ticket_status <> 'cancelled'
+            WHERE st.ticket_status IN ('generated', 'activated', 'settled')
             GROUP BY st.id
             ORDER BY st.created_at DESC
             LIMIT %(limit)s

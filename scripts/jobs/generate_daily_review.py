@@ -89,7 +89,8 @@ def _run_impl(review_date: str | None = None, dry_run: bool = False) -> dict[str
         with conn.cursor() as cur:
             cur.execute(
                 """SELECT COUNT(*) FROM simulation_tickets
-                   WHERE (created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Shanghai')::date = %s""",
+                   WHERE (created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Shanghai')::date = %s
+                     AND ticket_status IN ('generated', 'activated', 'settled')""",
                 (date,),
             )
             sim_ticket_count = cur.fetchone()[0] or 0
@@ -107,7 +108,8 @@ def _run_impl(review_date: str | None = None, dry_run: bool = False) -> dict[str
         with conn.cursor() as cur:
             cur.execute(
                 """SELECT COALESCE(SUM(suggested_stake), 0) FROM simulation_tickets
-                   WHERE (created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Shanghai')::date = %s""",
+                   WHERE (created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Shanghai')::date = %s
+                     AND ticket_status IN ('generated', 'activated', 'settled')""",
                 (date,),
             )
             suggested_stake = float(cur.fetchone()[0] or 0)

@@ -152,6 +152,7 @@ def get_current_round_tickets():
             JOIN official_matches m ON m.id = sti.match_id
             WHERE (st.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Shanghai')::date
                   BETWEEN %(start)s AND %(end)s
+              AND st.ticket_status IN ('generated', 'activated', 'settled')
             ORDER BY st.id, sti.id
             """,
             {
