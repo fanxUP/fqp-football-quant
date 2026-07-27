@@ -99,5 +99,6 @@ async def change_password(body: ChangePasswordRequest, request: Request) -> dict
     if not found:
         lines.append(f"FQP_ADMIN_PASSWORD_HASH={new_hash}\n")
     open(env_path, "w").writelines(lines)
+    os.environ["FQP_ADMIN_PASSWORD_HASH"] = new_hash
 
     return {"ok": True}
