@@ -1,8 +1,10 @@
 import { createRouter, navigate as routerNavigate, useRouter } from './core/router';
 import { ThemeProvider } from './app/ThemeContext';
 import { ToastProvider } from './shared/components/Toast';
+import { AuthProvider, useAuth } from './app/AuthContext';
 import Layout from './app/layout/Layout';
 import LoadingSpinner from './shared/components/LoadingSpinner';
+import LoginPage from './pages/LoginPage';
 
 // Lazy-load all pages
 import { lazy, Suspense, useEffect } from 'react';
@@ -33,6 +35,7 @@ function RedirectTo({ path, text = '正在进入页面...' }: { path: string; te
 
 // ---- Route table ----
 const routes = [
+  { path: '/login', render: () => <LoginPage /> },
   { path: '/', render: () => <DashboardPage /> },
   { path: '/matches', render: () => <MatchesPage /> },
   { path: '/matches/:id', render: (p: Record<string, string>) => <MatchDetailPage matchId={Number(p.id)} /> },
@@ -102,14 +105,42 @@ function PageOutlet() {
   );
 }
 
+// ---- Auth-aware content ----
+function AppContent() {
+  const { user, isLoading } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="fqp-loading-screen">
+        <LoadingSpinner text="加载中..." size="lg" />
+      </div>
+    );
+  }
+
+  if (!user) {
+    // Only allow /login when not authenticated
+    const path = window.location.hash.replace(/^#/, '') || '/';
+    if (path !== '/login') {
+      window.location.hash = '#/login';
+    }
+    return <PageOutlet />;
+  }
+
+  return (
+    <Layout>
+      <PageOutlet />
+    </Layout>
+  );
+}
+
 // ---- App root ----
 export default function App() {
   return (
     <ThemeProvider>
       <ToastProvider>
-        <Layout>
-          <PageOutlet />
-        </Layout>
+        <AuthProvider>
+          <AppContent />
+        </AuthProvider>
       </ToastProvider>
     </ThemeProvider>
   );
