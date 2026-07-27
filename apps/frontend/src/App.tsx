@@ -126,6 +126,12 @@ function AppContent() {
     return <PageOutlet />;
   }
 
+  // Logged in — redirect away from /login to dashboard
+  const loggedPath = window.location.hash.replace(/^#/, '') || '/';
+  if (loggedPath === '/login') {
+    window.location.hash = '#/';
+  }
+
   return (
     <Layout>
       <PageOutlet />
