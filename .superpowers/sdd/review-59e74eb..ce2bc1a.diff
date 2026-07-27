@@ -1,0 +1,260 @@
+# Review package: 59e74eb..ce2bc1a
+
+## Commits
+ce2bc1a fix(auth): use injected Response for set_cookie
+309fd34 feat(auth): add session management and auth endpoints
+
+## Files changed
+ apps/__init__.py                        |   1 -
+ apps/backend/__init__.py                |   1 -
+ apps/backend/src/app.py                 |   6 ++
+ apps/backend/src/auth.py                | 103 ++++++++++++++++++++++++++++++++
+ apps/backend/src/routers/auth_router.py |  68 +++++++++++++++++++++
+ 5 files changed, 177 insertions(+), 2 deletions(-)
+
+## Diff
+diff --git a/apps/__init__.py b/apps/__init__.py
+index 8b13789..e69de29 100644
+--- a/apps/__init__.py
++++ b/apps/__init__.py
+@@ -1 +0,0 @@
+-
+diff --git a/apps/backend/__init__.py b/apps/backend/__init__.py
+index 8b13789..e69de29 100644
+--- a/apps/backend/__init__.py
++++ b/apps/backend/__init__.py
+@@ -1 +0,0 @@
+-
+diff --git a/apps/backend/src/app.py b/apps/backend/src/app.py
+index 7a4d13e..5f04e6c 100644
+--- a/apps/backend/src/app.py
++++ b/apps/backend/src/app.py
+@@ -1,18 +1,21 @@
+ """FQP FastAPI application factory."""
+ 
+ from __future__ import annotations
+ 
+ from fastapi import FastAPI
+ from starlette.staticfiles import StaticFiles
+ from starlette.types import ASGIApp, Receive, Scope, Send
+ 
++from apps.backend.src.auth import AuthMiddleware
++from apps.backend.src.routers import auth_router
++
+ from apps.backend.src.routers import (
+     agents,
+     analysis,
+     backtests,
+     betting,
+     competition,
+     dashboard,
+     enrichment,
+     health,
+     official,
+@@ -45,20 +48,23 @@ class ApiV1AliasMiddleware:
+ def create_app() -> FastAPI:
+     app = FastAPI(
+         title="FQP From Scratch API",
+         description="足彩/竞彩足球量化研究与长期运行系统。仅用于数据分析、模拟和复盘，不提供售彩、代购、出票、收款。",
+         version="1.2.0",
+     )
+     app.add_middleware(ApiV1AliasMiddleware)
+     tickets.UPLOAD_ROOT.mkdir(parents=True, exist_ok=True)
+     app.mount("/uploads", StaticFiles(directory=str(tickets.UPLOAD_ROOT)), name="uploads")
+ 
++    app.include_router(auth_router.router)
++    app.add_middleware(AuthMiddleware)
++
+     app.include_router(health.router)
+     app.include_router(official.router)
+     app.include_router(teams.router)
+     app.include_router(predictions.router)
+     app.include_router(tickets.router)
+     app.include_router(agents.router)
+     app.include_router(enrichment.router)
+     app.include_router(ops.router)
+     app.include_router(backtests.router)
+     app.include_router(pool.router)
+diff --git a/apps/backend/src/auth.py b/apps/backend/src/auth.py
+new file mode 100644
+index 0000000..b17ac76
+--- /dev/null
++++ b/apps/backend/src/auth.py
+@@ -0,0 +1,103 @@
++"""Session-based authentication for FQP.
++
++Uses Redis for session storage and bcrypt for password verification.
++Controlled by FQP_AUTH_MODE env var: "none" bypasses all checks.
++"""
++
++from __future__ import annotations
++
++import os
++import uuid
++from typing import Any
++
++import bcrypt
++import redis.asyncio as aioredis
++from starlette.middleware.base import BaseHTTPMiddleware
++from starlette.requests import Request
++from starlette.responses import JSONResponse, Response
++from starlette.types import ASGIApp
++
++COOKIE_NAME = "fqp_session"
++SESSION_TTL = int(os.getenv("FQP_SESSION_TTL", "86400"))
++
++
++async def get_redis() -> aioredis.Redis:
++    """Return an async Redis connection."""
++    url = os.getenv("REDIS_URL", "redis://127.0.0.1:6379/0")
++    return aioredis.from_url(url, decode_responses=True)
++
++
++def verify_password(password: str) -> bool:
++    """Check password against bcrypt hash in env."""
++    stored_hash = os.getenv("FQP_ADMIN_PASSWORD_HASH", "")
++    if not stored_hash:
++        return False
++    try:
++        return bcrypt.checkpw(password.encode("utf-8"), stored_hash.encode("utf-8"))
++    except (ValueError, TypeError):
++        return False
++
++
++async def create_session(response: Response) -> str:
++    """Create a new session in Redis and set cookie on the response."""
++    session_id = str(uuid.uuid4())
++    r = await get_redis()
++    await r.setex(f"session:{session_id}", SESSION_TTL, "admin")
++    response.set_cookie(
++        key=COOKIE_NAME,
++        value=session_id,
++        max_age=SESSION_TTL,
++        httponly=True,
++        samesite="lax",
++        path="/",
++    )
++    return session_id
++
++
++async def validate_session(session_id: str) -> str | None:
++    """Validate a session ID. Returns username if valid, None otherwise."""
++    r = await get_redis()
++    user: str | None = await r.get(f"session:{session_id}")
++    if user is not None:
++        # Refresh TTL on each access
++        await r.expire(f"session:{session_id}", SESSION_TTL)
++    return user
++
++
++async def destroy_session(session_id: str) -> None:
++    """Delete a session from Redis."""
++    r = await get_redis()
++    await r.delete(f"session:{session_id}")
++
++
++class AuthMiddleware(BaseHTTPMiddleware):
++    """FastAPI middleware that checks session cookie on protected routes.
++
++    When FQP_AUTH_MODE=none, all requests pass through unchecked.
++    When FQP_AUTH_MODE=session, protected /api/* routes require a valid session.
++    """
++
++    def __init__(self, app: ASGIApp) -> None:
++        super().__init__(app)
++
++    async def dispatch(self, request: Request, call_next: Any) -> Response:
++        auth_mode = os.getenv("FQP_AUTH_MODE", "none")
++
++        # Mode: none — bypass all auth checks
++        if auth_mode == "none":
++            return await call_next(request)
++
++        # Public paths — always allowed
++        public_prefixes = ("/api/auth/", "/health", "/uploads")
++        if request.url.path.startswith(public_prefixes):
++            return await call_next(request)
++
++        # Protected paths — require valid session
++        session_id = request.cookies.get(COOKIE_NAME)
++        if session_id:
++            user = await validate_session(session_id)
++            if user is not None:
++                request.state.user = user
++                return await call_next(request)
++
++        return JSONResponse(status_code=401, content={"detail": "未登录"})
+diff --git a/apps/backend/src/routers/auth_router.py b/apps/backend/src/routers/auth_router.py
+new file mode 100644
+index 0000000..29f1ce5
+--- /dev/null
++++ b/apps/backend/src/routers/auth_router.py
+@@ -0,0 +1,68 @@
++"""Authentication endpoints — login, logout, session check."""
++
++from __future__ import annotations
++
++from fastapi import APIRouter, HTTPException, Request, Response
++from pydantic import BaseModel
++
++from apps.backend.src.auth import (
++    COOKIE_NAME,
++    create_session,
++    destroy_session,
++    verify_password,
++)
++
++router = APIRouter(prefix="/api/auth", tags=["auth"])
++
++
++class LoginRequest(BaseModel):
++    password: str
++
++
++class LoginResponse(BaseModel):
++    ok: bool
++    user: str
++
++
++class MeResponse(BaseModel):
++    user: str
++
++
++@router.post("/login")
++async def login(body: LoginRequest, request: Request, response: Response) -> LoginResponse:
++    """Authenticate with password. Creates a session on success."""
++    if not verify_password(body.password):
++        raise HTTPException(status_code=401, detail="密码错误")
++
++    # If there's an existing session, destroy it first
++    existing = request.cookies.get(COOKIE_NAME)
++    if existing:
++        await destroy_session(existing)
++
++    await create_session(response)
++    return LoginResponse(ok=True, user="admin")
++
++
++@router.post("/logout")
++async def logout(request: Request) -> dict[str, bool]:
++    """Destroy the current session."""
++    session_id = request.cookies.get(COOKIE_NAME)
++    if session_id:
++        await destroy_session(session_id)
++    response: dict[str, bool] = {"ok": True}
++    return response
++
++
++@router.get("/me")
++async def me(request: Request) -> MeResponse:
++    """Return current user if authenticated."""
++    user = getattr(request.state, "user", None)
++    if not user:
++        # Check cookie manually — middleware may not have run for this path
++        session_id = request.cookies.get(COOKIE_NAME)
++        if session_id:
++            from apps.backend.src.auth import validate_session
++            user = await validate_session(session_id)
++    if not user:
++        raise HTTPException(status_code=401, detail="未登录")
++    return MeResponse(user=user)

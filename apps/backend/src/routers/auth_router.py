@@ -10,6 +10,7 @@ from apps.backend.src.auth import (
     create_session,
     destroy_session,
     verify_password,
+    validate_session,
 )
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -61,7 +62,6 @@ async def me(request: Request) -> MeResponse:
         # Check cookie manually — middleware may not have run for this path
         session_id = request.cookies.get(COOKIE_NAME)
         if session_id:
-            from apps.backend.src.auth import validate_session
             user = await validate_session(session_id)
     if not user:
         raise HTTPException(status_code=401, detail="未登录")
