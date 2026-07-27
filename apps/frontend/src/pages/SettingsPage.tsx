@@ -1,6 +1,7 @@
 import PageHeader from '../shared/components/PageHeader';
 import AppearanceSettingsPanel from './settings/AppearanceSettingsPanel';
 import LocalSettingsPanel from './settings/LocalSettingsPanel';
+import PasswordChangePanel from './settings/PasswordChangePanel';
 
 export default function SettingsPage() {
   return (
@@ -11,6 +12,7 @@ export default function SettingsPage() {
       />
       <AppearanceSettingsPanel />
       <LocalSettingsPanel />
+      <PasswordChangePanel />
     </div>
   );
 }
