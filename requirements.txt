@@ -15,6 +15,7 @@ python-multipart==0.0.32
 jinja2==3.1.6
 reportlab==4.4.9
 apscheduler==3.11.3
+bcrypt==4.3.0
 redis==8.0.1
 alembic==1.18.5
 loguru==0.7.3
