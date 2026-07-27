@@ -1950,3 +1950,26 @@ body {
   background: var(--fqp-bg);
   color: var(--fqp-text-muted);
 }
+
+/* ---- Logout Button ---- */
+.fqp-logout-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: calc(100% - 24px);
+  margin: 4px 12px;
+  padding: 10px 16px;
+  background: transparent;
+  border: 1px solid rgba(255, 42, 61, 0.2);
+  border-radius: var(--fqp-radius-sm);
+  color: var(--fqp-text-muted);
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.fqp-logout-btn:hover {
+  background: rgba(255, 42, 61, 0.1);
+  border-color: var(--fqp-red-neon);
+  color: var(--fqp-red-neon);
+}
