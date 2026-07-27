@@ -21,10 +21,16 @@ COOKIE_NAME = "fqp_session"
 SESSION_TTL = int(os.getenv("FQP_SESSION_TTL", "86400"))
 
 
+# Singleton Redis connection pool
+_redis_pool: aioredis.Redis | None = None
+
+
 async def get_redis() -> aioredis.Redis:
-    """Return an async Redis connection."""
-    url = os.getenv("REDIS_URL", "redis://127.0.0.1:6379/0")
-    return aioredis.from_url(url, decode_responses=True)
+    global _redis_pool
+    if _redis_pool is None:
+        url = os.getenv("REDIS_URL", "redis://127.0.0.1:6379/0")
+        _redis_pool = aioredis.from_url(url, decode_responses=True)
+    return _redis_pool
 
 
 def verify_password(password: str) -> bool:

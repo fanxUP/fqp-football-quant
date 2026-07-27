@@ -7,9 +7,8 @@ from starlette.staticfiles import StaticFiles
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from apps.backend.src.auth import AuthMiddleware
-from apps.backend.src.routers import auth_router
-
 from apps.backend.src.routers import (
+    auth_router,
     agents,
     analysis,
     backtests,

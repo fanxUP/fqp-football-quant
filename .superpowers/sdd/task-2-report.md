@@ -20,3 +20,18 @@
 - The __init__.py files in apps/ and apps/backend/ have unstaged whitespace-only changes (blank line removal) that appear pre-existing; not included in this commit.
 
 STATUS: DONE
+
+
+## Fix Round 2: Import consolidation + Redis pool leak
+
+### Issues Fixed
+1. **app.py** — Merged auth_router import from a separate line into the existing multi-import block for all routers
+2. **auth.py** — Replaced get_redis() with a singleton connection pool via _redis_pool global variable to prevent connection leaks
+3. **apps/__init__.py**, **apps/backend/__init__.py** — Reverted stray whitespace-only changes (blank line removal)
+
+### Verification
+- from apps.backend.src.app import create_app — imports OK
+
+
+- Commit hash: 92d9edc86a01bf09247021173893424606863b2c
+STATUS: DONE
