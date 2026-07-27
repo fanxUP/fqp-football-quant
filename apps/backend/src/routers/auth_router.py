@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, Response
 from pydantic import BaseModel
 
 from apps.backend.src.auth import (
@@ -29,7 +29,7 @@ class MeResponse(BaseModel):
 
 
 @router.post("/login")
-async def login(body: LoginRequest, request: Request) -> LoginResponse:
+async def login(body: LoginRequest, request: Request, response: Response) -> LoginResponse:
     """Authenticate with password. Creates a session on success."""
     if not verify_password(body.password):
         raise HTTPException(status_code=401, detail="密码错误")
@@ -39,9 +39,8 @@ async def login(body: LoginRequest, request: Request) -> LoginResponse:
     if existing:
         await destroy_session(existing)
 
-    response = LoginResponse(ok=True, user="admin")
     await create_session(response)
-    return response
+    return LoginResponse(ok=True, user="admin")
 
 
 @router.post("/logout")
