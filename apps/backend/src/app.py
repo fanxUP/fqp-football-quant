@@ -6,6 +6,9 @@ from fastapi import FastAPI
 from starlette.staticfiles import StaticFiles
 from starlette.types import ASGIApp, Receive, Scope, Send
 
+from apps.backend.src.auth import AuthMiddleware
+from apps.backend.src.routers import auth_router
+
 from apps.backend.src.routers import (
     agents,
     analysis,
@@ -51,6 +54,9 @@ def create_app() -> FastAPI:
     app.add_middleware(ApiV1AliasMiddleware)
     tickets.UPLOAD_ROOT.mkdir(parents=True, exist_ok=True)
     app.mount("/uploads", StaticFiles(directory=str(tickets.UPLOAD_ROOT)), name="uploads")
+
+    app.include_router(auth_router.router)
+    app.add_middleware(AuthMiddleware)
 
     app.include_router(health.router)
     app.include_router(official.router)
