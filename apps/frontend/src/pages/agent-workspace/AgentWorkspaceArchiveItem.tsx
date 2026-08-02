@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api, type AgentWorkspaceComparison, type AgentWorkspaceReviewEvent, type AgentWorkspaceTask } from '../../core/apiClient';
 import { toast } from '../../shared/components/Toast';
-import { downloadTaskMarkdown, formatTime } from './archiveHelpers';
+import { downloadComparisonMarkdown, downloadTaskMarkdown, formatTime } from './archiveHelpers';
 
 interface Props {
   task: AgentWorkspaceTask;
@@ -19,6 +19,7 @@ export default function AgentWorkspaceArchiveItem({ task, busy, onSetReviewed, o
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [loadingComparison, setLoadingComparison] = useState(false);
   const [savingComparisonReview, setSavingComparisonReview] = useState(false);
+  const [exportingComparison, setExportingComparison] = useState(false);
   const [exporting, setExporting] = useState(false);
   const reviewed = Boolean(task.reviewedAt);
   useEffect(() => {
@@ -64,6 +65,12 @@ export default function AgentWorkspaceArchiveItem({ task, busy, onSetReviewed, o
     } catch (error) { toast.error(error instanceof Error ? error.message : '人工结论保存失败'); }
     finally { setSavingComparisonReview(false); }
   };
+  const exportComparison = () => {
+    if (!comparison || !comparisonTasks) return;
+    setExportingComparison(true);
+    try { downloadComparisonMarkdown(comparison, comparisonTasks); }
+    finally { setExportingComparison(false); }
+  };
 
   return <article className="agent-workspace-archive-item">
     <header><div><strong>{task.title}</strong><span>{task.agentCode} · {task.providerCode} · {task.model}{task.comparisonId ? ' · 多模型对比' : ''}</span></div><time>{formatTime(task.createdAt)}</time></header>
@@ -91,6 +98,7 @@ export default function AgentWorkspaceArchiveItem({ task, busy, onSetReviewed, o
       {comparison && <div className="agent-workspace-comparison-review"><label className="fqp-label" htmlFor={`workspace-comparison-review-${task.id}`}>本批人工结论</label>
         <textarea id={`workspace-comparison-review-${task.id}`} className="fqp-input" maxLength={2000} disabled={savingComparisonReview} value={comparisonReviewNote} onChange={(event) => setComparisonReviewNote(event.target.value)} placeholder="仅记录人工核验后的结论，不要记录密钥或敏感信息。" />
         <button type="button" className="fqp-btn" disabled={savingComparisonReview || !comparisonReviewNote.trim()} onClick={() => void saveComparisonReview()}>{savingComparisonReview ? '正在保存…' : '保存人工结论'}</button>
+        <button type="button" className="fqp-btn" disabled={exportingComparison} onClick={exportComparison}>{exportingComparison ? '正在导出…' : '导出本批复核报告'}</button>
       </div>}
     </section>}
   </article>;

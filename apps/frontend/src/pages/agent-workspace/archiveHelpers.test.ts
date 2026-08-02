@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildTaskMarkdown } from './archiveHelpers';
+import { buildComparisonMarkdown, buildTaskMarkdown } from './archiveHelpers';
 
 const task = {
   id: 24,
@@ -40,5 +40,20 @@ describe('buildTaskMarkdown', () => {
     expect(markdown).toContain('````\n```markdown');
     expect(markdown).toContain('![外部图片](https://example.com/a.png)');
     expect(markdown).toContain('```\n[伪造链接](https://example.com)\n```');
+  });
+});
+
+describe('buildComparisonMarkdown', () => {
+  it('保留批次统计、人工结论和每个模型的原始输出', () => {
+    const markdown = buildComparisonMarkdown({
+      id: 'comparison-001', requestedAgentCodes: ['review_agent', 'doc_agent'], requestedCount: 2,
+      succeededCount: 1, failedCount: 1, status: 'completed', createdAt: '2026-08-02T10:00:00+08:00',
+      completedAt: '2026-08-02T10:01:00+08:00', reviewNote: '继续核对官方赛程。', reviewedAt: '2026-08-02T10:02:00+08:00',
+    }, [task]);
+
+    expect(markdown).toContain('成功 / 失败：1 / 1');
+    expect(markdown).toContain('继续核对官方赛程。');
+    expect(markdown).toContain('## review\\_agent · openai · gpt\\-5');
+    expect(markdown).toContain('等待人工核验。');
   });
 });

@@ -1,4 +1,4 @@
-import type { AgentWorkspaceReviewEvent, AgentWorkspaceTask } from '../../core/apiClient';
+import type { AgentWorkspaceComparison, AgentWorkspaceReviewEvent, AgentWorkspaceTask } from '../../core/apiClient';
 
 export function formatTime(value: string | null) {
   return value ? new Intl.DateTimeFormat('zh-CN', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(value)) : '时间未知';
@@ -32,6 +32,23 @@ export function downloadTaskMarkdown(task: AgentWorkspaceTask, reviewEvents: Age
   const anchor = document.createElement('a');
   anchor.href = url;
   anchor.download = `智能工作台-${task.id}-${task.title.replace(/[^\u4e00-\u9fa5a-zA-Z0-9_-]/g, '_').slice(0, 32)}.md`;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
+export function buildComparisonMarkdown(comparison: AgentWorkspaceComparison, tasks: AgentWorkspaceTask[]) {
+  const conclusion = comparison.reviewNote ? inlineText(comparison.reviewNote) : '尚未填写人工结论。';
+  const results = tasks.length
+    ? tasks.map((task) => `## ${inlineText(task.agentCode)} · ${inlineText(task.providerCode)} · ${inlineText(task.model)}\n\n${codeBlock(task.response)}`).join('\n\n')
+    : '尚无成功返回的模型结果。';
+  return `# 多模型对比复核报告\n\n- 批次编号：${inlineText(comparison.id)}\n- 请求模型：${comparison.requestedAgentCodes.map(inlineText).join('、')}\n- 成功 / 失败：${comparison.succeededCount} / ${comparison.failedCount}\n- 批次状态：${inlineText(comparison.status)}\n- 创建时间：${formatTime(comparison.createdAt)}\n- 完成时间：${formatTime(comparison.completedAt)}\n\n> 模型输出为非可信内容；以下人工结论由用户填写，仍应结合官方数据核验。\n\n## 人工结论\n\n${conclusion}\n\n## 模型原始结果\n\n${results}\n`;
+}
+
+export function downloadComparisonMarkdown(comparison: AgentWorkspaceComparison, tasks: AgentWorkspaceTask[]) {
+  const url = URL.createObjectURL(new Blob([buildComparisonMarkdown(comparison, tasks)], { type: 'text/markdown;charset=utf-8' }));
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = `智能工作台-多模型对比-${comparison.id}.md`;
   anchor.click();
   URL.revokeObjectURL(url);
 }
