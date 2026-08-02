@@ -50,4 +50,25 @@ describe('api client GET request coalescing', () => {
       expect.objectContaining({ status: 409, message: '模型预测待补齐' }),
     );
   });
+
+  it('uses the stable task review-history subresource and coalesces duplicate reads', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ events: [{ id: 1, action: 'confirmed' }] }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const first = api.agentWorkspace.reviewHistory(24);
+    const second = api.agentWorkspace.reviewHistory(24);
+
+    await expect(Promise.all([first, second])).resolves.toEqual([
+      { events: [{ id: 1, action: 'confirmed' }] },
+      { events: [{ id: 1, action: 'confirmed' }] },
+    ]);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/agent-workspace/tasks/24/reviews',
+      expect.objectContaining({ headers: expect.objectContaining({ 'Content-Type': 'application/json' }) }),
+    );
+  });
 });
