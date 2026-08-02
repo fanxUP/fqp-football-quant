@@ -250,6 +250,8 @@ describe('BettingTerminalPage desktop workbench', () => {
     expect(within(terminal).getByRole('button', { name: '混合过关' })).toBeInTheDocument();
     expect(within(terminal).getByRole('button', { name: '游戏规则' })).toBeInTheDocument();
     expect(within(terminal).getByRole('button', { name: '筛选' })).toBeInTheDocument();
+    expect(within(terminal).getByRole('button', { name: '时光机补录' })).toHaveClass('sporttery-toolbar-action');
+    expect(within(terminal).getByRole('button', { name: '时光机补录' })).toHaveAttribute('aria-pressed', 'false');
     expect(within(terminal).getByText('周日203')).toBeInTheDocument();
     expect(within(terminal).getAllByLabelText('胜平负支持单场，支持过关')[0]).toHaveTextContent('单过');
     expect(within(terminal).getAllByLabelText('让球胜平负不支持单场，支持过关')[0]).toHaveTextContent('−过');
@@ -265,6 +267,7 @@ describe('BettingTerminalPage desktop workbench', () => {
   it('replays a historical official market and submits only immutable selection keys', async () => {
     render(<BettingTerminalPage />);
     fireEvent.click(await screen.findByRole('button', { name: '时光机补录' }));
+    expect(screen.getByRole('button', { name: '时光机补录' })).toHaveAttribute('aria-pressed', 'true');
     expect(await screen.findByLabelText('选择原投注业务日')).toHaveValue('2026-07-12');
     const first = await screen.findByRole('article', { name: '周日203 首尔FC 对 江原FC' });
     fireEvent.click(within(first).getByRole('button', { name: '胜平负 主胜 2.04' }));

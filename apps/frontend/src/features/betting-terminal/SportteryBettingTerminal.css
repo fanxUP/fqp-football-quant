@@ -204,7 +204,45 @@
 .time-machine-guide { align-self: start; padding: 20px; }
 .time-machine-guide h3 { margin: 0 0 10px; color: var(--fqp-text); font-size: 20px; }
 .time-machine-guide p { margin: 0; color: var(--fqp-text-muted); line-height: 1.7; }
-.sporttery-toolbar button.is-active { border-color: var(--fqp-accent); color: var(--fqp-accent); }
+.sporttery-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.sporttery-toolbar-actions .sporttery-toolbar-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 34px;
+  border: 1px solid var(--fqp-border);
+  border-radius: var(--fqp-radius-xs);
+  padding: 6px 10px;
+  background: var(--fqp-panel);
+  color: var(--fqp-text-muted);
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--fqp-text) 8%, transparent);
+  font-size: 13px;
+  line-height: 1;
+  transition: border-color 160ms ease, background-color 160ms ease, color 160ms ease, box-shadow 160ms ease, transform 120ms ease;
+}
+.sporttery-toolbar-actions .sporttery-toolbar-action > span { display: inline-grid; place-items: center; min-width: 1em; color: var(--fqp-accent); font-size: 15px; line-height: 1; }
+.sporttery-toolbar-actions .sporttery-toolbar-action:hover {
+  border-color: var(--fqp-accent);
+  background: var(--fqp-hover-bg);
+  color: var(--fqp-text);
+  box-shadow: 0 0 0 3px var(--fqp-accent-muted);
+  transform: translateY(-1px);
+}
+.sporttery-toolbar-actions .sporttery-toolbar-action:active { transform: translateY(0); box-shadow: none; }
+.sporttery-toolbar-actions .sporttery-toolbar-action:focus-visible { outline: 2px solid var(--fqp-accent); outline-offset: 2px; }
+.sporttery-toolbar-actions .sporttery-toolbar-action[aria-pressed='true'] {
+  border-color: var(--fqp-accent);
+  background: var(--fqp-accent-muted);
+  color: var(--fqp-accent);
+}
+.sporttery-toolbar-actions .sporttery-toolbar-action[aria-busy='true'] { cursor: progress; }
+.sporttery-toolbar-actions .sporttery-toolbar-action .is-spinning { animation: sporttery-toolbar-spin 760ms linear infinite; }
+@keyframes sporttery-toolbar-spin { to { transform: rotate(360deg); } }
 .sporttery-time-machine-date { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--st-line); color: var(--st-muted); font-size: 13px; }
 .sporttery-time-machine-date select { min-width: 180px; border: 1px solid var(--st-line); border-radius: 5px; padding: 7px 9px; background: var(--st-surface); color: var(--st-ink); }
 .betting-desktop-workbench .sporttery-main { padding-bottom: 24px; }
@@ -219,6 +257,9 @@
 .betting-desktop-workbench .sporttery-teams strong,
 .betting-desktop-workbench .sporttery-dialog h2,
 .betting-desktop-workbench .sporttery-play-section h3 { color: var(--fqp-text); }
+.betting-desktop-workbench .sporttery-toolbar-actions .sporttery-toolbar-action { border-color: var(--fqp-border); background: var(--fqp-panel); color: var(--fqp-text-muted); }
+.betting-desktop-workbench .sporttery-toolbar-actions .sporttery-toolbar-action:hover { border-color: var(--fqp-accent); background: var(--fqp-hover-bg); color: var(--fqp-text); }
+.betting-desktop-workbench .sporttery-toolbar-actions .sporttery-toolbar-action[aria-pressed='true'] { border-color: var(--fqp-accent); background: var(--fqp-accent-muted); color: var(--fqp-accent); }
 .betting-desktop-workbench .sporttery-match-card { border-bottom-color: var(--fqp-border); }
 .betting-desktop-workbench .sporttery-match-meta,
 .betting-desktop-workbench .sporttery-home-tag,
@@ -331,7 +372,8 @@
   .sporttery-hero nav { gap: 24px; font-size: 14px; }
   .sporttery-toolbar { min-height: 58px; }
   .sporttery-mode-button { font-size: 18px !important; }
-  .sporttery-toolbar > div button { padding-inline: 10px; font-size: 15px; }
+  .sporttery-toolbar-actions { gap: 5px; }
+  .sporttery-toolbar-actions .sporttery-toolbar-action { min-height: 32px; padding: 6px 7px; font-size: 12px; }
   .sporttery-match-list { padding-inline: 16px; }
   .sporttery-teams-row { grid-template-columns: 54px 1fr 38px; }
   .sporttery-teams { font-size: 18px; }
@@ -342,4 +384,11 @@
   .sporttery-bet-slip { right: 10px; left: 10px; }
   .sporttery-slip-footer { padding-inline: 12px; }
   .sporttery-confirm-button { padding-inline: 18px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sporttery-toolbar-actions .sporttery-toolbar-action { transition: none; }
+  .sporttery-toolbar-actions .sporttery-toolbar-action:hover,
+  .sporttery-toolbar-actions .sporttery-toolbar-action:active { transform: none; }
+  .sporttery-toolbar-actions .sporttery-toolbar-action .is-spinning { animation: none; }
 }

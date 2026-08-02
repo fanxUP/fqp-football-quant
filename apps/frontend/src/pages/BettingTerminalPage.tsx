@@ -354,11 +354,28 @@ export default function BettingTerminalPage() {
           </div>
           <section className="sporttery-terminal" role="region" aria-label="竞彩足球模拟试玩投注器">
       <div className="sporttery-main">
-        <div className="sporttery-toolbar">
+          <div className="sporttery-toolbar">
           <button type="button" className="sporttery-mode-button" aria-label="混合过关">混合过关 <span aria-hidden="true">▾</span></button>
-          <div>
-            <button type="button" className={timeMachineMode ? 'is-active' : ''} onClick={() => { resetBetSlip(); setTimeMachineMode((value) => !value); }}>时光机补录</button>
-            <button type="button" aria-label="刷新赔率" onClick={timeMachineMode ? () => setTimeMachineRefreshToken((value) => value + 1) : refresh}>刷新</button><button type="button" onClick={() => setShowRules(true)}>游戏规则</button><button type="button" onClick={() => setShowFilter(true)}>筛选</button>
+          <div className="sporttery-toolbar-actions" aria-label="投注器工具">
+            <button
+              type="button"
+              className="sporttery-toolbar-action sporttery-time-machine-action"
+              aria-pressed={timeMachineMode}
+              onClick={() => { resetBetSlip(); setTimeMachineMode((value) => !value); }}
+            >
+              <span aria-hidden="true">◷</span> 时光机补录
+            </button>
+            <button
+              type="button"
+              className="sporttery-toolbar-action"
+              aria-label="刷新赔率"
+              aria-busy={timeMachineMode ? timeMachineLoading : loading}
+              onClick={timeMachineMode ? () => setTimeMachineRefreshToken((value) => value + 1) : refresh}
+            >
+              <span className={timeMachineMode ? timeMachineLoading ? 'is-spinning' : '' : loading ? 'is-spinning' : ''} aria-hidden="true">↻</span> 刷新
+            </button>
+            <button type="button" className="sporttery-toolbar-action" aria-expanded={showRules} onClick={() => setShowRules(true)}><span aria-hidden="true">ⓘ</span> 游戏规则</button>
+            <button type="button" className="sporttery-toolbar-action" aria-expanded={showFilter} onClick={() => setShowFilter(true)}><span aria-hidden="true">⌕</span> 筛选</button>
           </div>
         </div>
 
