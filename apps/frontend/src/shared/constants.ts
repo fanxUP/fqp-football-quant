@@ -24,6 +24,7 @@ export const PLAY_TYPE_LABELS: Record<string, string> = {
   hhgg: '混合过关',
   mixed: '混合过关',
   single: '单关',
+  virtual_recommendation: 'Agent 推荐票',
   // legacy aliases
   score: '比分',
   total_goals: '总进球数',
@@ -76,14 +77,21 @@ export const BQC_OPTION_LABELS: Record<string, string> = {
   '03': '负胜', '01': '负平', '00': '负负',
 };
 
+export const BF_OPTION_LABELS: Record<string, string> = {
+  other_h: '胜其他',
+  other_d: '平其他',
+  other_a: '负其他',
+};
+
 /** Map a play_type + option_code to a Chinese label. */
 export function optionLabel(playType: string, optionCode: string): string {
-  const pt = PLAY_TYPE_LABELS[playType] ? playType : playType;
+  const pt = playType.toLowerCase();
   if (pt === 'spf') return SPF_OPTION_LABELS[optionCode] || optionCode;
   if (pt === 'rqspf') return RQSPF_OPTION_LABELS[optionCode] || optionCode;
   if (pt === 'bqc') return BQC_OPTION_LABELS[optionCode] || optionCode;
   if (pt === 'zjq') return optionCode === '7' || optionCode === '7+' ? '7+球' : `${optionCode}球`;
-  // bf keeps the official score notation (e.g. "1:0")
+  if (pt === 'bf' || pt === 'score') return BF_OPTION_LABELS[optionCode] || optionCode;
+  // 比分保留官方比分格式，例如 "1:0"。
   return optionCode;
 }
 

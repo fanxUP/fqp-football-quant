@@ -262,6 +262,13 @@ def _attach_ticket_items(conn, tickets: list[dict], limit_per_ticket: int = 4) -
 
     for ticket in tickets:
         ticket["items"] = item_map.get(ticket["ticketUid"], [])
+        if ticket.get("source") != "agent_recommendation":
+            continue
+        item_play_types = {str(item.get("playType") or "") for item in ticket["items"]}
+        if len(item_play_types) == 1:
+            ticket["playType"] = item_play_types.pop()
+        elif len(item_play_types) > 1:
+            ticket["playType"] = "hhgg"
 
 
 def _float(value, default: float = 0.0) -> float:

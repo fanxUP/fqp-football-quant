@@ -93,6 +93,38 @@ def test_map_agent_ticket_uses_agent_recommendation_source():
     assert ticket["expectedValue"] == 0.1234
 
 
+def test_attach_agent_ticket_items_uses_actual_ticket_play_type():
+    ticket = {
+        "ticketUid": "agent:31",
+        "source": "agent_recommendation",
+        "playType": "virtual_recommendation",
+    }
+
+    class Cursor:
+        def execute(self, *_args, **_kwargs):
+            return None
+
+        def fetchall(self):
+            return [
+                (31, 101, "周日214", "奥斯KFUM", "莫尔德", "bf", "other_a", "other_a", 20.0, "official"),
+            ]
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    class Conn:
+        def cursor(self):
+            return Cursor()
+
+    betting._attach_ticket_items(Conn(), [ticket])
+
+    assert ticket["playType"] == "bf"
+    assert ticket["items"][0]["optionCode"] == "other_a"
+
+
 def test_invalid_agent_ticket_is_not_mapped_to_pending():
     row = (
         31,
