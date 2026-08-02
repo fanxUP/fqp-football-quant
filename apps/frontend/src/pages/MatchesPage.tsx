@@ -66,7 +66,7 @@ export default function MatchesPage() {
                 <span style={{ fontSize: '11px', color: 'var(--fqp-text-muted)', minWidth: '105px' }}>{String(match.kickoff_time).replace('T', ' ').slice(5, 16)}</span>
                 <span style={{ fontSize: '12px', color: 'var(--fqp-text-muted)', minWidth: '70px' }}>{match.league_name}</span>
                 <TeamName name={match.home_team_name} style={{ fontWeight: 600, fontSize: '13px' }} />
-                <span style={{ color: 'var(--fqp-text-muted)', fontWeight: 700 }}>对阵</span>
+                <span style={{ color: 'var(--fqp-text-muted)', fontWeight: 700 }}>VS</span>
                 <TeamName name={match.away_team_name} style={{ fontWeight: 600, fontSize: '13px' }} />
                 <span style={{ marginLeft: 'auto' }}><StatusBadge status={match.match_status === 'Selling' ? 'ok' : 'info'} label={statusLabel(match.match_status)} /></span>
               </div>

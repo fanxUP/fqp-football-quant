@@ -34,6 +34,8 @@ describe('MatchesPage', () => {
     expect(screen.getByText(/体彩官方未结束比赛/)).toBeInTheDocument();
     expect(screen.getByText('上海海港')).toBeInTheDocument();
     expect(screen.getByText('成都蓉城')).toBeInTheDocument();
+    expect(screen.getAllByText('VS')).toHaveLength(2);
+    expect(screen.queryByText('对阵')).not.toBeInTheDocument();
     expect(screen.getByText('等待赛果')).toBeInTheDocument();
   });
 
