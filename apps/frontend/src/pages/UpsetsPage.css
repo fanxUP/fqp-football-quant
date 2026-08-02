@@ -54,3 +54,22 @@
 .upset-detail-loading { position: fixed; right: 1rem; bottom: 1rem; z-index: 60; padding: .75rem 1rem; border: 1px solid var(--fqp-border); background: var(--fqp-bg); color: var(--fqp-text); }
 @media (max-width: 64rem) { .upset-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 40rem) { .upset-metrics, .upset-ticket-columns, .upset-reports > div { grid-template-columns: 1fr; } .upset-filters label { flex: 1 1 100%; } .upset-card > header { align-items: start; } .upset-league-accordion-toolbar { align-items: stretch; flex-direction: column; } .upset-league-accordion-actions { display: grid; grid-template-columns: 1fr 1fr; } }
+
+/* 全部冷门 section */
+.upset-section-divider {
+  margin: 0;
+  border: none;
+  border-top: 1px solid var(--fqp-border);
+}
+.upset-all-panel {
+  display: grid;
+  gap: .75rem;
+}
+
+/* 比赛时间标签 */
+.upset-card > header .upset-time {
+  margin-left: .5rem;
+  color: var(--fqp-text-muted);
+  font-size: .75rem;
+  font-variant-numeric: tabular-nums;
+}

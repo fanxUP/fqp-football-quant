@@ -33,6 +33,7 @@ export interface UpsetListItem {
   user_bet_involved: boolean;
   agent_bet_involved: boolean;
   review_status: string;
+  kickoff_time?: string | null;
   data_completeness?: number | null;
   confidence?: number | null;
 }

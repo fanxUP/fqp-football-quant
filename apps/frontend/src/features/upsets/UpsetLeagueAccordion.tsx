@@ -24,15 +24,16 @@ function groupByLeague(items: UpsetListItem[]): LeagueGroup[] {
 export default function UpsetLeagueAccordion({ items, onOpen }: UpsetLeagueAccordionProps) {
   const groups = useMemo(() => groupByLeague(items), [items]);
   const leagueNames = useMemo(() => groups.map((group) => group.leagueName), [groups]);
+  const [showAll, setShowAll] = useState(true);
   const [expandedLeagues, setExpandedLeagues] = useState<Set<string>>(
-    () => new Set(groups[0] ? [groups[0].leagueName] : []),
+    () => new Set(),
   );
 
   useEffect(() => {
     setExpandedLeagues((current) => {
       const available = new Set(leagueNames);
       const retained = new Set(Array.from(current).filter((leagueName) => available.has(leagueName)));
-      if (retained.size === 0 && leagueNames[0]) retained.add(leagueNames[0]);
+      // all leagues collapsed by default
       return retained;
     });
   }, [leagueNames]);
@@ -54,10 +55,37 @@ export default function UpsetLeagueAccordion({ items, onOpen }: UpsetLeagueAccor
           <span>{groups.length} 个联赛 · {items.length} 场冷门</span>
         </div>
         <div className="upset-league-accordion-actions">
-          <button type="button" className="fqp-btn" onClick={() => setExpandedLeagues(new Set(leagueNames))}>全部展开</button>
-          <button type="button" className="fqp-btn" onClick={() => setExpandedLeagues(new Set())}>全部收起</button>
+          <button type="button" className="fqp-btn" onClick={() => { setExpandedLeagues(new Set(leagueNames)); setShowAll(true); }}>全部展开</button>
+          <button type="button" className="fqp-btn" onClick={() => { setExpandedLeagues(new Set()); setShowAll(false); }}>全部收起</button>
         </div>
       </header>
+
+      {/* 全部冷门 — flat list of all matches */}
+      <section className="upset-league-group">
+        <h3>
+          <button
+            type="button"
+            className="upset-league-toggle"
+            aria-label="全部冷门"
+            aria-expanded={showAll}
+            aria-controls="upset-league-all"
+            onClick={() => setShowAll((v) => !v)}
+          >
+            <span className="upset-league-chevron" aria-hidden="true">›</span>
+            <span>全部冷门</span>
+            <strong>{items.length} 场</strong>
+          </button>
+        </h3>
+        {showAll && (
+          <div id="upset-league-all" className="upset-league-panel upset-all-panel">
+            {items.map((item) => (
+              <UpsetCard key={item.id} item={item} onOpen={() => onOpen(item.id)} />
+            ))}
+          </div>
+        )}
+      </section>
+
+      <hr className="upset-section-divider" />
 
       <div className="upset-league-groups">
         {groups.map((group) => {

@@ -35,6 +35,7 @@ export function UpsetCard({ item, onOpen }: { item: UpsetListItem; onOpen: () =>
         <div>
           <span className="upset-code">{item.official_match_code}</span>
           <span className="upset-league">{item.league_name}</span>
+          {item.kickoff_time && <span className="upset-time">{item.kickoff_time.slice(0, 16).replace("T", " ")}</span>}
         </div>
         <span className={`upset-level upset-level-${item.upset_level ?? 'fav'}`}>
           {item.upset_level ? `${item.upset_level}级冷门` : '热门未打出'}
