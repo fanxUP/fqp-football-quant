@@ -57,6 +57,7 @@ export default function LightweightLineChart({
   const { theme } = useTheme();
   const seriesIds = useMemo(() => series.map((item) => item.id).join('|'), [series]);
   const [visibleIds, setVisibleIds] = useState(() => new Set(series.map((item) => item.id)));
+  const [interactionsEnabled, setInteractionsEnabled] = useState(false);
 
   useEffect(() => {
     setVisibleIds(new Set(series.map((item) => item.id)));
@@ -91,8 +92,16 @@ export default function LightweightLineChart({
         priceFormatter: (value: number) => `${value.toFixed(valuePrecision)}${valueSuffix}`,
         timeFormatter: (time: Time) => formatTime(time),
       },
-      handleScale: { axisPressedMouseMove: true, mouseWheel: true, pinch: true },
-      handleScroll: { horzTouchDrag: true, mouseWheel: true, pressedMouseMove: true },
+      handleScale: {
+        axisPressedMouseMove: interactionsEnabled,
+        mouseWheel: interactionsEnabled,
+        pinch: interactionsEnabled,
+      },
+      handleScroll: {
+        horzTouchDrag: interactionsEnabled,
+        mouseWheel: interactionsEnabled,
+        pressedMouseMove: interactionsEnabled,
+      },
     });
     chartRef.current = chart;
 
@@ -110,7 +119,7 @@ export default function LightweightLineChart({
       chart.remove();
       chartRef.current = null;
     };
-  }, [height, theme, valuePrecision, valueSuffix]);
+  }, [height, interactionsEnabled, theme, valuePrecision, valueSuffix]);
 
   useEffect(() => {
     const chart = chartRef.current;
@@ -173,6 +182,8 @@ export default function LightweightLineChart({
     });
   };
 
+  const enableInteractions = () => setInteractionsEnabled(true);
+
   const colors = getChartColors();
   const palette = [colors.primary, colors.blue, colors.amber, colors.green, colors.purple, colors.cyan];
 
@@ -202,9 +213,19 @@ export default function LightweightLineChart({
       </div>
       <div
         ref={containerRef}
-        className="lightweight-line-canvas"
+        className={`lightweight-line-canvas${interactionsEnabled ? ' is-interactive' : ''}`}
         role="img"
         aria-label={ariaLabel}
+        aria-description={interactionsEnabled ? '已启用滚轮缩放和拖动查看时间' : '点击图表后可使用滚轮缩放和拖动查看时间'}
+        data-zoom-enabled={interactionsEnabled}
+        tabIndex={0}
+        onClick={enableInteractions}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            enableInteractions();
+          }
+        }}
         style={{ height }}
       />
     </div>

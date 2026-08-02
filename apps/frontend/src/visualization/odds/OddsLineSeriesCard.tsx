@@ -36,7 +36,7 @@ export default function OddsLineSeriesCard({
   return (
     <ChartFrame
       title={title}
-      subtitle={`${context} · 滚轮缩放，拖动查看时间`}
+      subtitle={`${context} · 点击图表后可滚轮缩放、拖动查看时间`}
       updatedAt={latestSnapshot(data)}
       empty={!series.length}
       emptyReason={emptyReason || '该玩法暂无官方赔率快照'}

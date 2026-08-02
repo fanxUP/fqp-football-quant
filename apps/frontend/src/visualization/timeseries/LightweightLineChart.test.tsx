@@ -91,4 +91,20 @@ describe('LightweightLineChart', () => {
     expect(screen.getByRole('button', { name: '显示主胜' })).toHaveAttribute('aria-pressed', 'false');
     expect(fitContent).toHaveBeenCalledTimes(1);
   });
+
+  it('仅在点击图表后启用滚轮缩放和滚轮平移', () => {
+    render(<LightweightLineChart series={series} ariaLabel="胜平负赔率走势" />);
+
+    expect(createChart).toHaveBeenLastCalledWith(expect.anything(), expect.objectContaining({
+      handleScale: expect.objectContaining({ mouseWheel: false }),
+      handleScroll: expect.objectContaining({ mouseWheel: false }),
+    }));
+
+    fireEvent.click(screen.getByRole('img', { name: '胜平负赔率走势' }));
+
+    expect(createChart).toHaveBeenLastCalledWith(expect.anything(), expect.objectContaining({
+      handleScale: expect.objectContaining({ mouseWheel: true }),
+      handleScroll: expect.objectContaining({ mouseWheel: true }),
+    }));
+  });
 });

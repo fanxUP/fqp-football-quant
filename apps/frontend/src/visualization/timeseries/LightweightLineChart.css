@@ -47,4 +47,19 @@
 .lightweight-line-canvas {
   width: 100%;
   min-width: 0;
+  cursor: zoom-in;
+  outline: none;
+}
+
+.lightweight-line-canvas.is-interactive {
+  cursor: grab;
+}
+
+.lightweight-line-canvas.is-interactive:active {
+  cursor: grabbing;
+}
+
+.lightweight-line-canvas:focus-visible {
+  outline: 2px solid var(--fqp-chart-primary);
+  outline-offset: 3px;
 }
