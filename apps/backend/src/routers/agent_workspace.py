@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from time import perf_counter
 from typing import Literal
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, HTTPException, Path, Query
 from pydantic import BaseModel, Field, field_validator
@@ -14,6 +14,7 @@ from apps.backend.src.services.agent_workspace_store import (
     AgentWorkspaceError,
     create_workspace_task,
     delete_workspace_task,
+    list_workspace_comparison_tasks,
     list_workspace_task_page,
     list_workspace_task_review_events,
     set_workspace_task_reviewed,
@@ -140,6 +141,14 @@ def get_tasks(
             "hasMore": offset + len(tasks) < total_items,
         },
     }
+
+
+@router.get("/comparisons/{comparison_id}")
+def get_comparison_tasks(comparison_id: UUID):
+    """Read archived outputs from one manually initiated comparison batch."""
+    with get_db() as conn:
+        tasks = list_workspace_comparison_tasks(conn, str(comparison_id))
+    return {"comparisonId": str(comparison_id), "tasks": tasks}
 
 
 @router.patch("/{task_id}")

@@ -290,6 +290,9 @@ export const api = {
       request<{ comparisonId: string; tasks: AgentWorkspaceTask[]; failures: { agentCode: string; message: string }[] }>(
         '/api/agent-workspace/tasks/comparisons', { method: 'POST', body: JSON.stringify(payload) },
       ),
+    comparison: (comparisonId: string) => request<{ comparisonId: string; tasks: AgentWorkspaceTask[] }>(
+      `/api/agent-workspace/tasks/comparisons/${encodeURIComponent(comparisonId)}`,
+    ),
     setReviewed: (taskId: number, reviewed: boolean, reviewNote?: string) =>
       request<{ task: AgentWorkspaceTask }>(`/api/agent-workspace/tasks/${taskId}`, {
         method: 'PATCH', body: JSON.stringify({ reviewed, reviewNote }),

@@ -56,6 +56,20 @@ def list_workspace_tasks(conn: Any, limit: int = 20) -> list[dict[str, Any]]:
     return [_serialize(row) for row in rows]
 
 
+def list_workspace_comparison_tasks(conn: Any, comparison_id: str) -> list[dict[str, Any]]:
+    """Return the small, explicitly linked set created by one manual comparison."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """SELECT id, title, agent_code, provider_code, model, review_note, reviewed_at, created_at, prompt, response, comparison_id
+               FROM agent_workspace_tasks
+               WHERE comparison_id = %s
+               ORDER BY created_at ASC, id ASC""",
+            (comparison_id,),
+        )
+        rows = cur.fetchall()
+    return [_serialize(row) for row in rows]
+
+
 def list_workspace_task_page(
     conn: Any, *, limit: int = 20, offset: int = 0, review_status: str = "all", query: str = ""
 ) -> tuple[list[dict[str, Any]], int]:

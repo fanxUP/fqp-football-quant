@@ -2,12 +2,12 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import AgentWorkspaceArchiveItem from './AgentWorkspaceArchiveItem';
 
-const apiMocks = vi.hoisted(() => ({ reviewHistory: vi.fn() }));
+const apiMocks = vi.hoisted(() => ({ reviewHistory: vi.fn(), comparison: vi.fn() }));
 const toastMocks = vi.hoisted(() => ({ error: vi.fn() }));
 const helperMocks = vi.hoisted(() => ({ downloadTaskMarkdown: vi.fn() }));
 
 vi.mock('../../core/apiClient', () => ({
-  api: { agentWorkspace: { reviewHistory: apiMocks.reviewHistory } },
+  api: { agentWorkspace: { reviewHistory: apiMocks.reviewHistory, comparison: apiMocks.comparison } },
 }));
 
 vi.mock('../../shared/components/Toast', () => ({ toast: toastMocks }));
@@ -100,5 +100,18 @@ describe('AgentWorkspaceArchiveItem', () => {
 
     await waitFor(() => expect(helperMocks.downloadTaskMarkdown).toHaveBeenCalledWith(task, events));
     expect(apiMocks.reviewHistory).toHaveBeenCalledWith(24);
+  });
+
+  it('可按需载入同一批次的多模型结果横向核对', async () => {
+    apiMocks.comparison.mockResolvedValue({ tasks: [
+      { ...task, comparisonId: 'comparison-001' },
+      { ...task, id: 25, agentCode: 'doc_agent', model: 'gpt-5-mini', response: '第二个模型的分析。', comparisonId: 'comparison-001' },
+    ] });
+    render(<AgentWorkspaceArchiveItem task={{ ...task, comparisonId: 'comparison-001' }} busy={false} onSetReviewed={vi.fn()} onRemove={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole('button', { name: '横向查看本批对比' }));
+
+    await waitFor(() => expect(apiMocks.comparison).toHaveBeenCalledWith('comparison-001'));
+    expect(await screen.findByText('第二个模型的分析。')).toBeInTheDocument();
   });
 });

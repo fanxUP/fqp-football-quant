@@ -6,6 +6,7 @@ import pytest
 
 from apps.backend.src.services.agent_workspace_store import (
     AgentWorkspaceError,
+    list_workspace_comparison_tasks,
     list_workspace_task_page,
     list_workspace_task_review_events,
     list_workspace_tasks,
@@ -88,6 +89,16 @@ def test_workspace_task_page_parameterizes_full_archive_keyword() -> None:
     assert "ILIKE %s" in conn.queries[0][0]
     assert conn.queries[0][1] == ("%' OR 1=1 --%",)
     assert conn.queries[1][1] == ("%' OR 1=1 --%", 20, 0)
+
+
+def test_workspace_comparison_returns_only_its_tasks_in_creation_order() -> None:
+    conn = _Connection(rows=[_task_row(), _task_row()])
+
+    tasks = list_workspace_comparison_tasks(conn, "comparison-001")
+
+    assert [task["comparisonId"] for task in tasks] == ["comparison-001", "comparison-001"]
+    assert "comparison_id = %s" in conn.queries[0][0]
+    assert conn.queries[0][1] == ("comparison-001",)
 
 
 def test_workspace_review_uses_parameterized_update() -> None:

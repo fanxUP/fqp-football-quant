@@ -13,7 +13,9 @@ interface Props {
 export default function AgentWorkspaceArchiveItem({ task, busy, onSetReviewed, onRemove }: Props) {
   const [reviewNote, setReviewNote] = useState(task.reviewNote ?? '');
   const [history, setHistory] = useState<AgentWorkspaceReviewEvent[] | null>(null);
+  const [comparisonTasks, setComparisonTasks] = useState<AgentWorkspaceTask[] | null>(null);
   const [loadingHistory, setLoadingHistory] = useState(false);
+  const [loadingComparison, setLoadingComparison] = useState(false);
   const [exporting, setExporting] = useState(false);
   const reviewed = Boolean(task.reviewedAt);
   useEffect(() => {
@@ -37,6 +39,13 @@ export default function AgentWorkspaceArchiveItem({ task, busy, onSetReviewed, o
       setExporting(false);
     }
   };
+  const loadComparison = async () => {
+    if (!task.comparisonId) return;
+    setLoadingComparison(true);
+    try { setComparisonTasks((await api.agentWorkspace.comparison(task.comparisonId)).tasks); }
+    catch (error) { toast.error(error instanceof Error ? error.message : '多模型对比加载失败'); }
+    finally { setLoadingComparison(false); }
+  };
 
   return <article className="agent-workspace-archive-item">
     <header><div><strong>{task.title}</strong><span>{task.agentCode} · {task.providerCode} · {task.model}{task.comparisonId ? ' · 多模型对比' : ''}</span></div><time>{formatTime(task.createdAt)}</time></header>
@@ -48,11 +57,19 @@ export default function AgentWorkspaceArchiveItem({ task, busy, onSetReviewed, o
     <footer><span data-reviewed={reviewed}>{reviewed ? `已人工确认 · ${formatTime(task.reviewedAt)}` : '待人工确认'}</span><div>
       <button type="button" className="fqp-btn" disabled={busy} onClick={() => { setHistory(null); onSetReviewed(task, reviewNote); }}>{reviewed ? '撤销确认' : '确认并归档'}</button>
       <button type="button" className="fqp-btn" disabled={loadingHistory || exporting} onClick={() => void loadHistory()}>{loadingHistory ? '加载历史…' : '核验历史'}</button>
+      {task.comparisonId && <button type="button" className="fqp-btn" disabled={loadingComparison} onClick={() => void loadComparison()}>{loadingComparison ? '加载对比…' : '横向查看本批对比'}</button>}
       <button type="button" className="fqp-btn" disabled={busy || exporting} onClick={() => void exportMarkdown()}>{exporting ? '正在导出…' : '导出 Markdown'}</button>
       <button type="button" className="fqp-btn fqp-btn-danger" disabled={busy} onClick={() => onRemove(task)}>删除</button>
     </div></footer>
     {history && <ol className="agent-workspace-review-history" aria-label="核验历史">
       {history.length === 0 ? <li>尚无核验历史。</li> : history.map((event) => <li key={event.id}><b>{event.action === 'confirmed' ? '已确认' : '已撤销确认'}</b> · {formatTime(event.createdAt)}{event.reviewNote ? ` · ${event.reviewNote}` : ''}</li>)}
     </ol>}
+    {comparisonTasks && <section className="agent-workspace-comparison-results" aria-label="同批模型结果">
+      <h4>同批模型结果</h4><p>同一材料由不同模型独立生成，结论仍需人工核验。</p>
+      <div>{comparisonTasks.map((comparisonTask) => <article key={comparisonTask.id}>
+        <strong>{comparisonTask.agentCode}</strong><span>{comparisonTask.providerCode} · {comparisonTask.model}</span>
+        <pre>{comparisonTask.response}</pre>
+      </article>)}</div>
+    </section>}
   </article>;
 }
