@@ -10,7 +10,7 @@ LABEL="com.fqp.local-stack"
 DOMAIN="gui/$(id -u)"
 PLIST_FILE="$HOME/Library/LaunchAgents/$LABEL.plist"
 FRONTEND_PORT="${FQP_FRONTEND_PORT:-8066}"
-BACKEND_PORT="${FQP_BACKEND_PORT:-8006}"
+BACKEND_PORT="${FQP_BACKEND_PORT:-8080}"
 
 fail() { echo "[fqp-local-stack] ERROR: $*" >&2; exit 1; }
 log() { echo "[fqp-local-stack] $*"; }

@@ -10,7 +10,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 def test_local_supervisor_assigns_one_owner_per_runtime_process() -> None:
     specs = build_process_specs(
         python_bin="/project/.venv/bin/python",
-        backend_port=8006,
+        backend_port=8080,
         frontend_port=8066,
     )
 

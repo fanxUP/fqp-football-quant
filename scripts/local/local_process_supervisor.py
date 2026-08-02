@@ -95,7 +95,7 @@ def _stop(process: subprocess.Popen[bytes]) -> None:
 
 
 def main() -> None:
-    backend_port = int(os.getenv("FQP_BACKEND_PORT", "8006"))
+    backend_port = int(os.getenv("FQP_BACKEND_PORT", "8080"))
     frontend_port = int(os.getenv("FQP_FRONTEND_PORT", "8066"))
     python_bin = os.getenv("FQP_PYTHON_BIN", sys.executable)
     specs = build_process_specs(

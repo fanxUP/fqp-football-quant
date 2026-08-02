@@ -11,7 +11,7 @@ from scripts.local.worker_heartbeat import is_worker_alive
 
 def is_http_service_alive(url: str | None = None, timeout_seconds: float = 1.0) -> bool:
     """Probe the configured API health endpoint with a bounded timeout."""
-    target = url or os.getenv("FQP_API_HEALTH_URL") or "http://127.0.0.1:8006/health"
+    target = url or os.getenv("FQP_API_HEALTH_URL") or "http://127.0.0.1:8080/health"
     try:
         with urllib.request.urlopen(target, timeout=timeout_seconds) as response:
             return 200 <= int(response.status) < 300

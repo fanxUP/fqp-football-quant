@@ -6,7 +6,7 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 FRONTEND_DIR="$PROJECT_ROOT/apps/frontend"
 ENV_FILE="$PROJECT_ROOT/.env.local"
 FRONTEND_PORT="${FQP_FRONTEND_PORT:-8066}"
-BACKEND_PORT="${FQP_BACKEND_PORT:-8006}"
+BACKEND_PORT="${FQP_BACKEND_PORT:-8080}"
 
 log() { echo "[fqp-dev] $(date '+%H:%M:%S')  $*"; }
 fail() { echo "[fqp-dev] ERROR: $*" >&2; exit 1; }

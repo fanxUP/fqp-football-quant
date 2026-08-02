@@ -9,11 +9,11 @@ def test_host_ports_use_the_canonical_local_endpoints() -> None:
     vite_config = (PROJECT_ROOT / "apps/frontend/vite.config.ts").read_text(encoding="utf-8")
 
     assert 'FRONTEND_PORT="${FQP_FRONTEND_PORT:-8066}"' in manager
-    assert 'BACKEND_PORT="${FQP_BACKEND_PORT:-8006}"' in manager
+    assert 'BACKEND_PORT="${FQP_BACKEND_PORT:-8080}"' in manager
     assert 'FRONTEND_PORT="${FQP_FRONTEND_PORT:-8066}"' in dev_script
-    assert 'BACKEND_PORT="${FQP_BACKEND_PORT:-8006}"' in dev_script
+    assert 'BACKEND_PORT="${FQP_BACKEND_PORT:-8080}"' in dev_script
     assert "port: 8066" in vite_config
-    assert "http://127.0.0.1:8006" in vite_config
+    assert "http://127.0.0.1:8080" in vite_config
 
 
 def test_incremental_migrations_track_applied_files() -> None:
