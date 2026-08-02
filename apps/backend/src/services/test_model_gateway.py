@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from apps.backend.src.services.model_agent_prompts import get_agent_system_instruction
-from apps.backend.src.services.model_gateway import _request_completion
+from apps.backend.src.services.model_gateway import ModelGatewayError, _request_completion, invoke_agent_model
 
 
 class FakeClient:
@@ -50,3 +50,13 @@ def test_provider_specific_payload_includes_system_boundary(protocol: str) -> No
         assert payload["system"] == "固定边界"
     else:
         assert payload["systemInstruction"]["parts"][0]["text"] == "固定边界"
+
+
+def test_invocation_requires_a_fresh_provider_test(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "apps.backend.src.services.model_gateway.get_agent_model_binding",
+        lambda _conn, _agent_code: {"enabled": True, "last_test_status": None},
+    )
+
+    with pytest.raises(ModelGatewayError, match="重新测试连接"):
+        invoke_agent_model(object(), "review_agent", "检查数据质量")

@@ -233,7 +233,7 @@ def get_agent_model_binding(conn: Any, agent_code: str) -> dict[str, Any] | None
     with conn.cursor() as cur:
         cur.execute(
             """SELECT b.agent_code, b.provider_code, b.enabled, p.base_url, p.default_model,
-                      p.api_key_encrypted, p.enabled
+                      p.api_key_encrypted, p.enabled, p.last_test_status
                FROM llm_agent_bindings b
                JOIN llm_provider_configs p ON p.provider_code = b.provider_code
                WHERE b.agent_code = %s""",
@@ -248,7 +248,7 @@ def get_agent_model_binding(conn: Any, agent_code: str) -> dict[str, Any] | None
     return {
         "agent_code": row[0], "provider_code": row[1], "enabled": row[2],
         "base_url": row[3], "default_model": row[4], "api_key_encrypted": row[5],
-        "protocol": provider.protocol,
+        "protocol": provider.protocol, "last_test_status": row[7],
     }
 
 

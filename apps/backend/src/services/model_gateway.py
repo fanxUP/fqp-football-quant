@@ -32,6 +32,8 @@ def invoke_agent_model(conn: Any, agent_code: str, prompt: str) -> ModelReply:
     binding = get_agent_model_binding(conn, agent_code)
     if not binding or not binding["enabled"]:
         raise ModelGatewayError("该智能代理未启用模型调用")
+    if binding["last_test_status"] != "passed":
+        raise ModelGatewayError("模型服务商配置变更后，请重新测试连接再试运行")
     api_key = _decrypt_key(binding["api_key_encrypted"])
     try:
         system_instruction = get_agent_system_instruction(agent_code)
