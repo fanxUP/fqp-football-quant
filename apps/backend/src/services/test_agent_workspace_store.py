@@ -11,6 +11,7 @@ from apps.backend.src.services.agent_workspace_store import (
     list_workspace_tasks,
     set_workspace_task_reviewed,
 )
+from apps.backend.src.app import create_app
 
 
 class _Cursor:
@@ -113,3 +114,15 @@ def test_workspace_review_history_requires_existing_task_and_uses_parameterized_
     assert events[0]["reviewNote"] == "已核对来源"
     assert conn.queries[0][1] == (7,)
     assert conn.queries[1][1] == (7, 100)
+
+
+def test_workspace_task_routes_reject_non_positive_task_ids_at_the_api_boundary() -> None:
+    paths = create_app().openapi()["paths"]
+
+    for path, method in (
+        ("/api/agent-workspace/tasks/{task_id}", "patch"),
+        ("/api/agent-workspace/tasks/{task_id}/reviews", "get"),
+        ("/api/agent-workspace/tasks/{task_id}", "delete"),
+    ):
+        parameter = next(item for item in paths[path][method]["parameters"] if item["name"] == "task_id")
+        assert parameter["schema"]["minimum"] == 1

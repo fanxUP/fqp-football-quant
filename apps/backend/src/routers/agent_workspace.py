@@ -5,7 +5,7 @@ from __future__ import annotations
 from time import perf_counter
 from typing import Literal
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Path, Query
 from pydantic import BaseModel, Field, field_validator
 
 from apps.backend.src.db import get_db
@@ -101,7 +101,7 @@ def get_tasks(
 
 
 @router.patch("/{task_id}")
-def update_task_review(task_id: int, body: WorkspaceTaskReviewRequest):
+def update_task_review(task_id: int = Path(ge=1), body: WorkspaceTaskReviewRequest = ...):
     try:
         with get_db() as conn:
             task = set_workspace_task_reviewed(conn, task_id, body.reviewed, body.reviewNote)
@@ -111,7 +111,7 @@ def update_task_review(task_id: int, body: WorkspaceTaskReviewRequest):
 
 
 @router.get("/{task_id}/reviews")
-def get_task_review_events(task_id: int, limit: int = Query(50, ge=1, le=100)):
+def get_task_review_events(task_id: int = Path(ge=1), limit: int = Query(50, ge=1, le=100)):
     try:
         with get_db() as conn:
             events = list_workspace_task_review_events(conn, task_id, limit)
@@ -121,7 +121,7 @@ def get_task_review_events(task_id: int, limit: int = Query(50, ge=1, le=100)):
 
 
 @router.delete("/{task_id}", status_code=204)
-def remove_task(task_id: int):
+def remove_task(task_id: int = Path(ge=1)):
     try:
         with get_db() as conn:
             delete_workspace_task(conn, task_id)
