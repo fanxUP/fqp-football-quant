@@ -1,4 +1,5 @@
 import type { BetSlipItem, CalculationResult } from '../../core/types';
+import { optionLabel } from '../../shared/constants';
 import { formatPassTypes } from './model';
 
 interface BetSlipProps {
@@ -45,7 +46,7 @@ export default function BetSlip(props: BetSlipProps) {
         <div className="sporttery-slip-details">
           <div className="sporttery-selected-details">
             {props.selections.map((item) => (
-              <span key={`${item.match_id}:${item.play_type}:${item.option_code}`}>{item.option_name} @{item.sp_value.toFixed(2)}</span>
+              <span key={`${item.match_id}:${item.play_type}:${item.option_code}`}>{optionLabel(item.play_type, item.option_code)} @{item.sp_value.toFixed(2)}</span>
             ))}
           </div>
           <div className="sporttery-pass-grid" role="group" aria-label="过关方式">

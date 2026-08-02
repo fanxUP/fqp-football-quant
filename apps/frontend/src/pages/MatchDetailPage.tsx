@@ -8,7 +8,7 @@ import LoadingSpinner from '../shared/components/LoadingSpinner';
 import ErrorState from '../shared/components/ErrorState';
 import EmptyState from '../shared/components/EmptyState';
 import DataTable, { type Column } from '../shared/components/DataTable';
-import { playTypeLabel } from '../shared/constants';
+import { optionLabel, playTypeLabel } from '../shared/constants';
 
 interface MatchDetailPageProps {
   matchId: number;
@@ -56,7 +56,7 @@ export default function MatchDetailPage({ matchId }: MatchDetailPageProps) {
   const predColumns: Column<Prediction>[] = [
     { key: 'model_name', title: '模型' },
     { key: 'play_type', title: '玩法', render: (v) => playTypeLabel(String(v)) },
-    { key: 'option_code', title: '选项', render: (v) => <span className="fqp-mono">{String(v)}</span> },
+    { key: 'option_code', title: '选项', render: (v, row) => <span className="fqp-mono">{optionLabel(row.play_type, String(v))}</span> },
     {
       key: 'model_probability',
       title: '模型概率',

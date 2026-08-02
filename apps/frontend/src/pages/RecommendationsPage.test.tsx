@@ -105,6 +105,7 @@ describe('RecommendationsPage', () => {
     expect(formatRecommendationOptionDisplay({ option_name: '让胜(+1)', sp_value: 1.15 }, 'win')).toBe('主胜(+1)@1.15/胜利');
     expect(formatRecommendationOptionDisplay({ option_name: '让负(+1)', sp_value: 4.32 }, 'lose')).toBe('主负(+1)@4.32/失败');
     expect(formatRecommendationOptionDisplay({ option_name: '让平(+1)', sp_value: 3.9 }, null)).toBe('平(+1)@3.9');
+    expect(formatRecommendationOptionDisplay({ play_type: 'bf', option_code: 'other_h', option_name: 'other_h', sp_value: 18 }, null)).toBe('胜其他@18');
   });
 
   it('summarizes strong and conflicting match signals from live recommendations', () => {

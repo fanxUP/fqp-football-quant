@@ -23,6 +23,7 @@ import ReviewsPage from './ReviewsPage';
 import TeamName from '../shared/components/TeamName';
 import FeatureSnapshotPanel from '../features/analysis/FeatureSnapshotPanel';
 import BusinessInterpretationPanel from './agent-workspace/BusinessInterpretationPanel';
+import { optionLabel, playTypeLabel } from '../shared/constants';
 
 // ---------------------------------------------------------------------------
 // Tab definitions
@@ -306,7 +307,7 @@ function AnalysisMatchDrawer({
       <div className="analysis-match-signal">
         <div>
           <span>主信号</span>
-          <strong>{best.option_name}</strong>
+          <strong>{optionLabel(best.play_type, best.option_code)}</strong>
         </div>
         <div>
           <span>EV</span>
@@ -324,7 +325,7 @@ function AnalysisMatchDrawer({
           return (
             <div key={`${option.play_type}:${option.option_code}`} className="analysis-match-option">
               <div className="analysis-match-option-row">
-                <span>{option.play_type_name} · {option.option_name}</span>
+                <span>{playTypeLabel(option.play_type)} · {optionLabel(option.play_type, option.option_code)}</span>
                 <strong>{(option.model_probability * 100).toFixed(1)}%</strong>
               </div>
               <div className="analysis-prob-bar">

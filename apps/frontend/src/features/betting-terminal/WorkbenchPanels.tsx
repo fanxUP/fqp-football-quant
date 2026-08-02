@@ -1,4 +1,5 @@
 import type { BetSlipItem, CalculationResult, LiveRecommendation } from '../../core/types';
+import { optionLabel, playTypeLabel } from '../../shared/constants';
 import { formatPassTypes } from './model';
 
 interface RecommendationPanelProps {
@@ -42,6 +43,7 @@ export function RecommendationPanel(props: RecommendationPanelProps) {
         <div className="betting-recommendation-list">
           {props.recommendations.map((recommendation) => {
             const available = props.availableRecommendationIds.has(recommendation.prediction_id);
+            const optionName = optionLabel(recommendation.play_type, recommendation.option_code);
             const actionTitle = available
               ? '使用当前官方固定奖金加入投注器'
               : '当前官方投注器没有对应的可售选项';
@@ -52,8 +54,8 @@ export function RecommendationPanel(props: RecommendationPanelProps) {
                   <strong>{recommendation.home_team} 对阵 {recommendation.away_team}</strong>
                 </div>
                 <div className="betting-recommendation-pick">
-                  <span>{recommendation.play_type_name}</span>
-                  <strong>{recommendation.option_name} @{recommendation.sp_value.toFixed(2)}</strong>
+                  <span>{playTypeLabel(recommendation.play_type)}</span>
+                  <strong>{optionName} @{recommendation.sp_value.toFixed(2)}</strong>
                 </div>
                 <div className="betting-recommendation-metrics">
                   <span>模型 {percent(recommendation.model_probability)}</span>
@@ -70,7 +72,7 @@ export function RecommendationPanel(props: RecommendationPanelProps) {
                   title={actionTitle}
                   onClick={() => props.onAdd(recommendation)}
                 >
-                  {available ? `加入 ${recommendation.option_name}` : '当前不可投'}
+                  {available ? `加入 ${optionName}` : '当前不可投'}
                 </button>
               </article>
             );
@@ -103,9 +105,9 @@ export function TicketPreview(props: TicketPreviewProps) {
         <div className="betting-slip-items">
           {props.selections.map((item) => (
             <article key={`${item.match_id}:${item.play_type}:${item.option_code}`} className="betting-slip-item">
-              <span>{item.play_type_label}</span>
+              <span>{playTypeLabel(item.play_type)}</span>
               <strong>{item.home_team} 对阵 {item.away_team}</strong>
-              <div className="betting-slip-pick"><span>{item.option_name}</span><strong>@ {item.sp_value.toFixed(2)}</strong></div>
+              <div className="betting-slip-pick"><span>{optionLabel(item.play_type, item.option_code)}</span><strong>@ {item.sp_value.toFixed(2)}</strong></div>
               <div className="betting-slip-basis">
                 <div><span>来源</span><strong>{item.basis?.source === 'recommendation' ? '推荐投注' : '手工选号'}</strong></div>
                 <button type="button" className="fqp-btn fqp-btn-sm" onClick={() => props.onRemove(item)}>移除</button>

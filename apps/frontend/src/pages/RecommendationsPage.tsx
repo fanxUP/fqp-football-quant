@@ -12,7 +12,7 @@ import ChartCard from '../shared/components/ChartCard';
 import StatusBadge from '../shared/components/StatusBadge';
 import TeamLogo from '../shared/components/TeamLogo';
 import TeamName from '../shared/components/TeamName';
-import { normalizeWinDrawLossLabel, riskLabel, statusLabel, strategyPoolLabel } from '../shared/constants';
+import { normalizeWinDrawLossLabel, optionLabel, playTypeLabel, riskLabel, statusLabel, strategyPoolLabel } from '../shared/constants';
 import { formatTimestamp } from '../shared/utils';
 
 export interface RecommendationMatchSelection {
@@ -97,10 +97,13 @@ function recommendationOptionTone(option: LiveRecommendation): RecommendationOpt
 }
 
 export function formatRecommendationOptionDisplay(
-  option: Pick<LiveRecommendation, 'option_name' | 'sp_value'>,
+  option: Pick<LiveRecommendation, 'option_name' | 'sp_value'> & Partial<Pick<LiveRecommendation, 'play_type' | 'option_code'>>,
   outcome: RecommendationOptionOutcome,
 ) {
-  const base = `${normalizeWinDrawLossLabel(option.option_name)}@${option.sp_value}`;
+  const optionName = option.play_type && option.option_code
+    ? optionLabel(option.play_type, option.option_code)
+    : normalizeWinDrawLossLabel(option.option_name);
+  const base = `${optionName}@${option.sp_value}`;
   if (outcome === 'win') return `${base}/胜利`;
   if (outcome === 'lose') return `${base}/失败`;
   return base;
@@ -130,8 +133,8 @@ export function buildRecommendationInsightSummary(recommendations: LiveRecommend
       league: best.league,
       kickoffTime: best.kickoff_time,
       matchStatus: best.match_status,
-      bestOptionName: normalizeWinDrawLossLabel(best.option_name),
-      bestPlayTypeName: best.play_type_name,
+      bestOptionName: optionLabel(best.play_type, best.option_code),
+      bestPlayTypeName: playTypeLabel(best.play_type),
       bestEv: best.ev,
       bestEdge: best.edge,
       bestConfidence: best.confidence,
@@ -796,7 +799,7 @@ export default function RecommendationsPage({ embedded = false, onMatchSelect }:
                       </td>
                       <td>
                         <span style={{ padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600, background: 'rgba(59,130,246,0.12)', color: 'var(--fqp-info)' }}>
-                          {row.play_type_name}
+                          {playTypeLabel(row.play_type)}
                         </span>
                       </td>
                       <td>
@@ -806,7 +809,7 @@ export default function RecommendationsPage({ embedded = false, onMatchSelect }:
                             return (
                               <div key={o.option_code} className="recommendation-option-line" title={formatRecommendationOptionDisplay(o, outcome)}>
                                 <span className={`recommendation-option-name ${recommendationOptionTone(o)}`}>
-                                  {normalizeWinDrawLossLabel(o.option_name)}
+                                  {optionLabel(o.play_type, o.option_code)}
                                 </span>
                                 <span className="recommendation-option-odds">@{o.sp_value}</span>
                                 {outcome ? (
