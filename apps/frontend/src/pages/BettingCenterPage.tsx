@@ -68,6 +68,9 @@ export default function BettingCenterPage({ initialTab = 'bet-slip' }: BettingCe
               <span className="betting-center-tab-description">
                 {tab.description}
               </span>
+              <span className="betting-center-tab-action" aria-hidden="true">
+                点击进入 <span>→</span>
+              </span>
             </button>
           );
         })}

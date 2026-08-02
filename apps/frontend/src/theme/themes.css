@@ -1293,6 +1293,7 @@
 }
 
 .betting-center-tab {
+  position: relative;
   min-width: 0;
   min-height: 104px;
   padding: 10px 12px;
@@ -1302,13 +1303,33 @@
   gap: 4px;
   text-align: center;
   white-space: normal;
-  border-color: var(--fqp-border);
+  cursor: pointer;
+  border-color: color-mix(in srgb, var(--fqp-border) 74%, var(--fqp-accent));
   background: var(--fqp-card-bg);
+  box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--fqp-accent) 48%, transparent);
+  transition: border-color 160ms ease, background-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
 }
 
 .betting-center-tab[data-active='true'] {
   border-color: var(--fqp-accent);
-  background: rgba(34, 197, 94, 0.12);
+  background: var(--fqp-accent-muted);
+  box-shadow: inset 0 -3px 0 var(--fqp-accent), 0 0 0 1px color-mix(in srgb, var(--fqp-accent) 24%, transparent);
+}
+
+.betting-center-tab:not([data-active='true']):hover {
+  border-color: var(--fqp-accent-strong);
+  background: color-mix(in srgb, var(--fqp-accent-muted) 65%, var(--fqp-card-bg));
+  box-shadow: inset 0 -3px 0 var(--fqp-accent-strong);
+  transform: translateY(-2px);
+}
+
+.betting-center-tab:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--fqp-accent-strong) 72%, transparent);
+  outline-offset: 3px;
+}
+
+.betting-center-tab:active {
+  transform: translateY(0);
 }
 
 .betting-center-tab-label {
@@ -1325,6 +1346,26 @@
   font-size: 12px;
   line-height: 1.45;
   overflow-wrap: anywhere;
+}
+
+.betting-center-tab-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 2px;
+  color: var(--fqp-accent-strong);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.betting-center-tab-action span {
+  transition: transform 160ms ease;
+}
+
+.betting-center-tab:hover .betting-center-tab-action span,
+.betting-center-tab:focus-visible .betting-center-tab-action span {
+  transform: translateX(3px);
 }
 
 @media (max-width: 760px) {
@@ -1366,6 +1407,11 @@
 
   .betting-center-tab-description {
     display: none !important;
+  }
+
+  .betting-center-tab-action {
+    margin-top: 0;
+    font-size: 11px;
   }
 
   .betting-terminal {
