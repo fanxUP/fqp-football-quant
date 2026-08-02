@@ -6,6 +6,7 @@ import pytest
 
 from apps.backend.src.services.agent_workspace_store import (
     AgentWorkspaceError,
+    create_workspace_task,
     get_workspace_comparison,
     list_workspace_comparison_tasks,
     set_workspace_comparison_completed,
@@ -55,7 +56,7 @@ class _Connection:
 
 def _task_row(reviewed_at=None):
     return (7, "结构化复盘", "review_agent", "openai", "gpt-5-mini", "已核对来源", reviewed_at,
-            datetime(2026, 8, 2, tzinfo=UTC), "材料", "结果", "comparison-001")
+            datetime(2026, 8, 2, tzinfo=UTC), "材料", "结果", "comparison-001", "pre_match", "42")
 
 
 def test_workspace_tasks_return_untrusted_content_as_plain_data() -> None:
@@ -68,6 +69,8 @@ def test_workspace_tasks_return_untrusted_content_as_plain_data() -> None:
     assert tasks[0]["reviewNote"] == "已核对来源"
     assert tasks[0]["reviewedAt"] is None
     assert tasks[0]["comparisonId"] == "comparison-001"
+    assert tasks[0]["sourceType"] == "pre_match"
+    assert tasks[0]["sourceRef"] == "42"
     assert conn.queries[-1][1] == (50,)
 
 
@@ -190,6 +193,24 @@ def test_workspace_comparison_requires_two_distinct_agent_bindings() -> None:
             "agentCode": "review_agent", "title": "对比", "prompt": "材料",
             "targetAgentCodes": ["review_agent"],
         })
+
+
+def test_workspace_task_archives_immutable_business_source_reference() -> None:
+    conn = _Connection(row=_task_row())
+
+    task = create_workspace_task(
+        conn, title="赛前解读：周日001", agent_code="pre_match_interpretation_agent",
+        provider_code="openai", model="gpt-5-mini", prompt="官方比赛材料", response="仅供人工核验",
+        source_type="pre_match", source_ref="42",
+    )
+
+    assert task["sourceType"] == "pre_match"
+    assert task["sourceRef"] == "42"
+    assert "source_type, source_ref" in conn.queries[0][0]
+    assert conn.queries[0][1] == (
+        "赛前解读：周日001", "pre_match_interpretation_agent", "openai", "gpt-5-mini",
+        "官方比赛材料", "仅供人工核验", None, "pre_match", "42",
+    )
 
     request = WorkspaceComparisonRequest.model_validate({
         "agentCode": "review_agent", "title": "对比", "prompt": "材料",

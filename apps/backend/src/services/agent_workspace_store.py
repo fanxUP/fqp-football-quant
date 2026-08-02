@@ -31,6 +31,7 @@ def _serialize(row: tuple[Any, ...], *, include_content: bool = True) -> dict[st
         "id": row[0], "title": row[1], "agentCode": row[2], "providerCode": row[3],
         "model": row[4], "reviewNote": row[5], "reviewedAt": row[6].isoformat() if row[6] else None,
         "createdAt": row[7].isoformat() if row[7] else None, "comparisonId": row[10],
+        "sourceType": row[11], "sourceRef": row[12],
     }
     if include_content:
         task.update({"prompt": row[8], "response": row[9]})
@@ -39,15 +40,15 @@ def _serialize(row: tuple[Any, ...], *, include_content: bool = True) -> dict[st
 
 def create_workspace_task(
     conn: Any, *, title: str, agent_code: str, provider_code: str, model: str, prompt: str, response: str,
-    comparison_id: str | None = None,
+    comparison_id: str | None = None, source_type: str | None = None, source_ref: str | None = None,
 ) -> dict[str, Any]:
     with conn.cursor() as cur:
         cur.execute(
             """INSERT INTO agent_workspace_tasks
-                   (title, agent_code, provider_code, model, prompt, response, comparison_id)
-               VALUES (%s, %s, %s, %s, %s, %s, %s)
-               RETURNING id, title, agent_code, provider_code, model, review_note, reviewed_at, created_at, prompt, response, comparison_id""",
-            (title, agent_code, provider_code, model, prompt, response, comparison_id),
+                   (title, agent_code, provider_code, model, prompt, response, comparison_id, source_type, source_ref)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+               RETURNING id, title, agent_code, provider_code, model, review_note, reviewed_at, created_at, prompt, response, comparison_id, source_type, source_ref""",
+            (title, agent_code, provider_code, model, prompt, response, comparison_id, source_type, source_ref),
         )
         row = cur.fetchone()
     conn.commit()
@@ -58,7 +59,7 @@ def list_workspace_tasks(conn: Any, limit: int = 20) -> list[dict[str, Any]]:
     safe_limit = max(1, min(limit, 50))
     with conn.cursor() as cur:
         cur.execute(
-            """SELECT id, title, agent_code, provider_code, model, review_note, reviewed_at, created_at, prompt, response, comparison_id
+            """SELECT id, title, agent_code, provider_code, model, review_note, reviewed_at, created_at, prompt, response, comparison_id, source_type, source_ref
                FROM agent_workspace_tasks ORDER BY created_at DESC, id DESC LIMIT %s""",
             (safe_limit,),
         )
@@ -70,7 +71,7 @@ def list_workspace_comparison_tasks(conn: Any, comparison_id: str) -> list[dict[
     """Return the small, explicitly linked set created by one manual comparison."""
     with conn.cursor() as cur:
         cur.execute(
-            """SELECT id, title, agent_code, provider_code, model, review_note, reviewed_at, created_at, prompt, response, comparison_id
+            """SELECT id, title, agent_code, provider_code, model, review_note, reviewed_at, created_at, prompt, response, comparison_id, source_type, source_ref
                FROM agent_workspace_tasks
                WHERE comparison_id = %s
                ORDER BY created_at ASC, id ASC""",
@@ -162,7 +163,7 @@ def list_workspace_task_page(
         cur.execute(f"SELECT COUNT(*) FROM agent_workspace_tasks{where_clause}", query_params)
         total = cur.fetchone()[0]
         cur.execute(
-            f"""SELECT id, title, agent_code, provider_code, model, review_note, reviewed_at, created_at, prompt, response, comparison_id
+            f"""SELECT id, title, agent_code, provider_code, model, review_note, reviewed_at, created_at, prompt, response, comparison_id, source_type, source_ref
                 FROM agent_workspace_tasks{where_clause}
                 ORDER BY created_at DESC, id DESC LIMIT %s OFFSET %s""",
             (*query_params, safe_limit, safe_offset),
@@ -180,7 +181,7 @@ def set_workspace_task_reviewed(
                SET reviewed_at = CASE WHEN %s THEN NOW() ELSE NULL END,
                    review_note = CASE WHEN %s THEN %s ELSE NULL END
                WHERE id = %s
-               RETURNING id, title, agent_code, provider_code, model, review_note, reviewed_at, created_at, prompt, response, comparison_id""",
+               RETURNING id, title, agent_code, provider_code, model, review_note, reviewed_at, created_at, prompt, response, comparison_id, source_type, source_ref""",
             (reviewed, reviewed, review_note, task_id),
         )
         row = cur.fetchone()

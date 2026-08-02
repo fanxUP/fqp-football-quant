@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 import pytest
 
 from apps.backend.src.services.model_provider_store import (
+    AGENT_MODEL_OPTIONS,
     ProviderConfigError,
     _cipher,
     list_agent_model_bindings,
@@ -139,3 +140,8 @@ def test_agent_binding_exposes_provider_test_status() -> None:
 
     review_binding = next(item for item in bindings if item["agentCode"] == "review_agent")
     assert review_binding["providerTestStatus"] == "passed"
+
+
+def test_interpretation_agents_are_independently_bindable() -> None:
+    assert AGENT_MODEL_OPTIONS["pre_match_interpretation_agent"] == "赛前解读 Agent"
+    assert AGENT_MODEL_OPTIONS["post_match_review_agent"] == "赛后复盘 Agent"

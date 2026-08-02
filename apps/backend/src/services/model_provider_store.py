@@ -189,6 +189,8 @@ AGENT_MODEL_OPTIONS: dict[str, str] = {
     "orchestrator_agent": "任务编排 Agent",
     "review_agent": "复盘 Agent",
     "doc_agent": "文档 Agent",
+    "pre_match_interpretation_agent": "赛前解读 Agent",
+    "post_match_review_agent": "赛后复盘 Agent",
 }
 
 
