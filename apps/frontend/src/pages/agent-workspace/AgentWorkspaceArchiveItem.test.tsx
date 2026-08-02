@@ -4,12 +4,18 @@ import AgentWorkspaceArchiveItem from './AgentWorkspaceArchiveItem';
 
 const apiMocks = vi.hoisted(() => ({ reviewHistory: vi.fn() }));
 const toastMocks = vi.hoisted(() => ({ error: vi.fn() }));
+const helperMocks = vi.hoisted(() => ({ downloadTaskMarkdown: vi.fn() }));
 
 vi.mock('../../core/apiClient', () => ({
   api: { agentWorkspace: { reviewHistory: apiMocks.reviewHistory } },
 }));
 
 vi.mock('../../shared/components/Toast', () => ({ toast: toastMocks }));
+
+vi.mock('./archiveHelpers', () => ({
+  downloadTaskMarkdown: helperMocks.downloadTaskMarkdown,
+  formatTime: (value: string | null) => value ?? '时间未知',
+}));
 
 const task = {
   id: 24,
@@ -83,5 +89,16 @@ describe('AgentWorkspaceArchiveItem', () => {
     );
 
     expect(screen.getByLabelText('核验备注（可选）')).toHaveValue('');
+  });
+
+  it('导出时附带核验历史，且只在未加载时读取一次', async () => {
+    const events = [{ id: 1, action: 'confirmed' as const, reviewNote: '已复核。', createdAt: '2026-08-02T10:30:00+08:00' }];
+    apiMocks.reviewHistory.mockResolvedValue({ events });
+    render(<AgentWorkspaceArchiveItem task={task} busy={false} onSetReviewed={vi.fn()} onRemove={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole('button', { name: '导出 Markdown' }));
+
+    await waitFor(() => expect(helperMocks.downloadTaskMarkdown).toHaveBeenCalledWith(task, events));
+    expect(apiMocks.reviewHistory).toHaveBeenCalledWith(24);
   });
 });
