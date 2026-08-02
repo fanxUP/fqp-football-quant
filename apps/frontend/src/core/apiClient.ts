@@ -99,6 +99,13 @@ export interface AgentWorkspaceTaskPage {
   hasMore: boolean;
 }
 
+export interface AgentWorkspaceReviewEvent {
+  id: number;
+  action: 'confirmed' | 'revoked';
+  reviewNote: string | null;
+  createdAt: string | null;
+}
+
 // ---- Base request ----
 
 const TIMEOUT_MS = 15_000;
@@ -280,6 +287,9 @@ export const api = {
       request<{ task: AgentWorkspaceTask }>(`/api/agent-workspace/tasks/${taskId}`, {
         method: 'PATCH', body: JSON.stringify({ reviewed, reviewNote }),
       }),
+    reviewHistory: (taskId: number) => request<{ events: AgentWorkspaceReviewEvent[] }>(
+      `/api/agent-workspace/tasks/${taskId}/reviews`,
+    ),
     remove: (taskId: number) => request<void>(`/api/agent-workspace/tasks/${taskId}`, { method: 'DELETE' }),
   },
 

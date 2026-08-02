@@ -9,6 +9,13 @@ class AgentWorkspaceError(ValueError):
     """Raised when a workspace task cannot be safely read or changed."""
 
 
+def _serialize_review_event(row: tuple[Any, ...]) -> dict[str, Any]:
+    return {
+        "id": row[0], "action": row[1], "reviewNote": row[2],
+        "createdAt": row[3].isoformat() if row[3] else None,
+    }
+
+
 def _serialize(row: tuple[Any, ...], *, include_content: bool = True) -> dict[str, Any]:
     task = {
         "id": row[0], "title": row[1], "agentCode": row[2], "providerCode": row[3],
@@ -96,8 +103,30 @@ def set_workspace_task_reviewed(
         row = cur.fetchone()
     if not row:
         raise AgentWorkspaceError("任务不存在或已删除")
+    with conn.cursor() as cur:
+        cur.execute(
+            """INSERT INTO agent_workspace_task_review_events (task_id, action, review_note)
+               VALUES (%s, %s, %s)""",
+            (task_id, "confirmed" if reviewed else "revoked", review_note if reviewed else None),
+        )
     conn.commit()
     return _serialize(row)
+
+
+def list_workspace_task_review_events(conn: Any, task_id: int, limit: int = 50) -> list[dict[str, Any]]:
+    safe_limit = max(1, min(limit, 100))
+    with conn.cursor() as cur:
+        cur.execute("SELECT 1 FROM agent_workspace_tasks WHERE id = %s", (task_id,))
+        if not cur.fetchone():
+            raise AgentWorkspaceError("任务不存在或已删除")
+        cur.execute(
+            """SELECT id, action, review_note, created_at
+               FROM agent_workspace_task_review_events
+               WHERE task_id = %s ORDER BY created_at DESC, id DESC LIMIT %s""",
+            (task_id, safe_limit),
+        )
+        rows = cur.fetchall()
+    return [_serialize_review_event(row) for row in rows]
 
 
 def delete_workspace_task(conn: Any, task_id: int) -> None:

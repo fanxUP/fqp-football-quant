@@ -438,6 +438,8 @@
 .agent-workspace-review-input { margin-top: 12px; }
 .agent-workspace-review-input .fqp-label { display: block; margin-bottom: 6px; }
 .agent-workspace-review-input textarea { min-height: 72px; resize: vertical; }
+.agent-workspace-review-history { margin: 12px 0 0; padding: 10px 0 0 20px; border-top: 1px dashed var(--fqp-border); color: var(--fqp-text-muted); font-size: 11px; line-height: 1.7; }
+.agent-workspace-review-history b { color: var(--fqp-text); }
 .agent-workspace-archive-item footer { align-items: center; margin-top: 12px; }
 .agent-workspace-archive-item footer > span { color: var(--fqp-text-muted); font-size: 11px; }
 .agent-workspace-archive-item footer > span[data-reviewed='true'] { color: var(--fqp-success); }

@@ -14,6 +14,7 @@ from apps.backend.src.services.agent_workspace_store import (
     create_workspace_task,
     delete_workspace_task,
     list_workspace_task_page,
+    list_workspace_task_review_events,
     set_workspace_task_reviewed,
 )
 from apps.backend.src.services.model_gateway import ModelGatewayError, invoke_agent_model
@@ -107,6 +108,16 @@ def update_task_review(task_id: int, body: WorkspaceTaskReviewRequest):
     except AgentWorkspaceError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return {"task": task}
+
+
+@router.get("/{task_id}/reviews")
+def get_task_review_events(task_id: int, limit: int = Query(50, ge=1, le=100)):
+    try:
+        with get_db() as conn:
+            events = list_workspace_task_review_events(conn, task_id, limit)
+    except AgentWorkspaceError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return {"events": events}
 
 
 @router.delete("/{task_id}", status_code=204)

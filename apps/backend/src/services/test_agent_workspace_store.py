@@ -7,6 +7,7 @@ import pytest
 from apps.backend.src.services.agent_workspace_store import (
     AgentWorkspaceError,
     list_workspace_task_page,
+    list_workspace_task_review_events,
     list_workspace_tasks,
     set_workspace_task_reviewed,
 )
@@ -93,9 +94,22 @@ def test_workspace_review_uses_parameterized_update() -> None:
 
     assert task["reviewedAt"] == "2026-08-02T00:00:00+00:00"
     assert conn.committed
-    assert conn.queries[-1][1] == (True, True, "已核验数据来源", 7)
+    assert conn.queries[-2][1] == (True, True, "已核验数据来源", 7)
+    assert conn.queries[-1][1] == (7, "confirmed", "已核验数据来源")
 
 
 def test_workspace_review_rejects_missing_task() -> None:
     with pytest.raises(AgentWorkspaceError, match="不存在"):
         set_workspace_task_reviewed(_Connection(row=None), 404, True)
+
+
+def test_workspace_review_history_requires_existing_task_and_uses_parameterized_query() -> None:
+    event_row = (1, "confirmed", "已核对来源", datetime(2026, 8, 2, tzinfo=UTC))
+    conn = _Connection(rows=[event_row], row=(1,))
+
+    events = list_workspace_task_review_events(conn, 7, limit=999)
+
+    assert events[0]["action"] == "confirmed"
+    assert events[0]["reviewNote"] == "已核对来源"
+    assert conn.queries[0][1] == (7,)
+    assert conn.queries[1][1] == (7, 100)
