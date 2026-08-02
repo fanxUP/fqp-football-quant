@@ -8,7 +8,7 @@ import LoadingSpinner from '../shared/components/LoadingSpinner';
 import ErrorState from '../shared/components/ErrorState';
 import StatusBadge from '../shared/components/StatusBadge';
 import EmptyState from '../shared/components/EmptyState';
-import { passTypeLabel, statusLabel, riskLabel } from '../shared/constants';
+import { passTypeLabel, riskLabel, statusLabel, strategyPoolLabel } from '../shared/constants';
 import { formatTimestamp } from '../shared/utils';
 
 interface RecommendationDetailPageProps {
@@ -67,7 +67,7 @@ export default function RecommendationDetailPage({ ticketId }: RecommendationDet
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             <div>
               <div className="fqp-label">策略池</div>
-              <div>{ticket.strategy_pool}</div>
+              <div>{strategyPoolLabel(ticket.strategy_pool)}</div>
             </div>
             <div>
               <div className="fqp-label">过关方式</div>

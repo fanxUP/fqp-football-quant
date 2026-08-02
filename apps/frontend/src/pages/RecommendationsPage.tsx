@@ -12,7 +12,7 @@ import ChartCard from '../shared/components/ChartCard';
 import StatusBadge from '../shared/components/StatusBadge';
 import TeamLogo from '../shared/components/TeamLogo';
 import TeamName from '../shared/components/TeamName';
-import { normalizeWinDrawLossLabel, statusLabel, riskLabel } from '../shared/constants';
+import { normalizeWinDrawLossLabel, riskLabel, statusLabel, strategyPoolLabel } from '../shared/constants';
 import { formatTimestamp } from '../shared/utils';
 
 export interface RecommendationMatchSelection {
@@ -408,7 +408,11 @@ export default function RecommendationsPage({ embedded = false, onMatchSelect }:
       width: '80px',
       render: (v) => <span className="fqp-mono">#{String(v)}</span>,
     },
-    { key: 'strategy_pool', title: '策略池' },
+    {
+      key: 'strategy_pool',
+      title: '策略池',
+      render: (v) => strategyPoolLabel(String(v)),
+    },
     { key: 'pass_type', title: '过关方式' },
     {
       key: 'suggested_stake',
@@ -465,7 +469,7 @@ export default function RecommendationsPage({ embedded = false, onMatchSelect }:
       riskCount[t.risk_level] = (riskCount[t.risk_level] || 0) + 1;
     }
     const colorMap: Record<string, string> = { low: '#22c55e', medium: '#f59e0b', high: '#ef4444' };
-    const labelMap: Record<string, string> = { low: '低风险', medium: '中风险', high: '高风险' };
+    const labelMap: Record<string, string> = { low: '低风险', medium: '中风险', high: '高风险', reference: '参考级' };
 
     return {
       tooltip: {
@@ -513,7 +517,7 @@ export default function RecommendationsPage({ embedded = false, onMatchSelect }:
       pools[p].totalEv += (t.expected_value ?? 0);
     }
     const entries = Object.entries(pools).sort((a, b) => b[1].count - a[1].count);
-    const names = entries.map(([k]) => k);
+    const names = entries.map(([key]) => strategyPoolLabel(key));
     const counts = entries.map(([, v]) => v.count);
     const avgEvs = entries.map(([, v]) => v.count > 0 ? +(v.totalEv / v.count).toFixed(4) : 0);
 

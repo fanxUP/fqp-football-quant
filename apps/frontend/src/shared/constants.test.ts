@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { modelNameLabel, optionLabel, passTypeLabel, playTypeLabel } from './constants';
+import {
+  modelNameLabel,
+  optionLabel,
+  passTypeLabel,
+  playTypeLabel,
+  riskLabel,
+  statusLabel,
+  strategyPoolLabel,
+} from './constants';
 
 describe('modelNameLabel', () => {
   it.each([
@@ -28,5 +36,13 @@ describe('彩票玩法中文标签', () => {
     expect(optionLabel('bf', 'other_h')).toBe('胜其他');
     expect(optionLabel('bf', 'other_d')).toBe('平其他');
     expect(optionLabel('bf', 'other_a')).toBe('负其他');
+  });
+});
+
+describe('推荐票内部标识中文标签', () => {
+  it('将 Agent 虚拟推荐、待激活与参考级显示为中文', () => {
+    expect(strategyPoolLabel('agent_virtual_recommendation')).toBe('Agent 虚拟推荐');
+    expect(statusLabel('generated')).toBe('待激活');
+    expect(riskLabel('reference')).toBe('参考级');
   });
 });

@@ -107,6 +107,9 @@ export function normalizeWinDrawLossLabel(label: string): string {
 
 export const STATUS_LABELS: Record<string, string> = {
   // ticket statuses
+  generated: '待激活',
+  activated: '已激活',
+  invalidated: '已失效',
   pending: '待结算',
   settled: '已结算',
   confirmed: '已确认',
@@ -149,12 +152,26 @@ export function sourceTypeLabel(code: string): string {
   return SOURCE_TYPE_LABELS[code] || code;
 }
 
+// ── Recommendation strategy pools ──────────────────────────────
+
+export const STRATEGY_POOL_LABELS: Record<string, string> = {
+  main: '主策略',
+  agent_virtual_recommendation: 'Agent 虚拟推荐',
+  agent_value: 'Agent 价值推荐',
+  agent_competition_observation: 'Agent 赛事观察',
+};
+
+export function strategyPoolLabel(code: string): string {
+  return STRATEGY_POOL_LABELS[code] || code;
+}
+
 // ── Risk level labels ───────────────────────────────────────────
 
 export const RISK_LABELS: Record<string, string> = {
   low: '低风险',
   medium: '中风险',
   high: '高风险',
+  reference: '参考级',
   L1: 'L1-极低',
   L2: 'L2-低',
   L3: 'L3-中',
