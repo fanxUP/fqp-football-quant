@@ -12,12 +12,15 @@ from pydantic import BaseModel, Field, field_validator
 from apps.backend.src.db import get_db
 from apps.backend.src.services.agent_workspace_store import (
     AgentWorkspaceError,
+    create_workspace_comparison,
     create_workspace_task,
     delete_workspace_task,
+    get_workspace_comparison,
     list_workspace_comparison_tasks,
     list_workspace_task_page,
     list_workspace_task_review_events,
     set_workspace_task_reviewed,
+    set_workspace_comparison_completed,
 )
 from apps.backend.src.services.model_gateway import ModelGatewayError, invoke_agent_model
 from apps.backend.src.services.model_invocation_audit import record_model_invocation
@@ -109,14 +112,22 @@ def create_comparison(body: WorkspaceComparisonRequest):
     comparison_id = str(uuid4())
     tasks: list[dict] = []
     failures: list[dict[str, str]] = []
-    for agent_code in body.target_agent_codes:
-        try:
-            tasks.append(_run_workspace_task(
-                agent_code=agent_code, title=body.title, prompt=body.prompt, comparison_id=comparison_id,
-            ))
-        except (ProviderConfigError, ModelGatewayError) as exc:
-            failures.append({"agentCode": agent_code, "message": str(exc)})
-    return {"comparisonId": comparison_id, "tasks": tasks, "failures": failures}
+    with get_db() as conn:
+        create_workspace_comparison(conn, comparison_id, body.target_agent_codes)
+    try:
+        for agent_code in body.target_agent_codes:
+            try:
+                tasks.append(_run_workspace_task(
+                    agent_code=agent_code, title=body.title, prompt=body.prompt, comparison_id=comparison_id,
+                ))
+            except (ProviderConfigError, ModelGatewayError) as exc:
+                failures.append({"agentCode": agent_code, "message": str(exc)})
+    finally:
+        with get_db() as conn:
+            comparison = set_workspace_comparison_completed(
+                conn, comparison_id, succeeded_count=len(tasks), failed_count=len(failures),
+            )
+    return {"comparisonId": comparison_id, "comparison": comparison, "tasks": tasks, "failures": failures}
 
 
 @router.get("")
@@ -147,8 +158,9 @@ def get_tasks(
 def get_comparison_tasks(comparison_id: UUID):
     """Read archived outputs from one manually initiated comparison batch."""
     with get_db() as conn:
+        comparison = get_workspace_comparison(conn, str(comparison_id))
         tasks = list_workspace_comparison_tasks(conn, str(comparison_id))
-    return {"comparisonId": str(comparison_id), "tasks": tasks}
+    return {"comparisonId": str(comparison_id), "comparison": comparison, "tasks": tasks}
 
 
 @router.patch("/{task_id}")

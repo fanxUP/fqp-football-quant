@@ -102,6 +102,17 @@ export interface AgentWorkspaceTaskPage {
   hasMore: boolean;
 }
 
+export interface AgentWorkspaceComparison {
+  id: string;
+  requestedAgentCodes: string[];
+  requestedCount: number;
+  succeededCount: number;
+  failedCount: number;
+  status: 'running' | 'completed';
+  createdAt: string | null;
+  completedAt: string | null;
+}
+
 export interface AgentWorkspaceReviewEvent {
   id: number;
   action: 'confirmed' | 'revoked';
@@ -287,10 +298,10 @@ export const api = {
         method: 'POST', body: JSON.stringify(payload),
       }),
     compare: (payload: { agentCode: string; title: string; prompt: string; targetAgentCodes: string[] }) =>
-      request<{ comparisonId: string; tasks: AgentWorkspaceTask[]; failures: { agentCode: string; message: string }[] }>(
+      request<{ comparisonId: string; comparison: AgentWorkspaceComparison; tasks: AgentWorkspaceTask[]; failures: { agentCode: string; message: string }[] }>(
         '/api/agent-workspace/tasks/comparisons', { method: 'POST', body: JSON.stringify(payload) },
       ),
-    comparison: (comparisonId: string) => request<{ comparisonId: string; tasks: AgentWorkspaceTask[] }>(
+    comparison: (comparisonId: string) => request<{ comparisonId: string; comparison: AgentWorkspaceComparison | null; tasks: AgentWorkspaceTask[] }>(
       `/api/agent-workspace/tasks/comparisons/${encodeURIComponent(comparisonId)}`,
     ),
     setReviewed: (taskId: number, reviewed: boolean, reviewNote?: string) =>

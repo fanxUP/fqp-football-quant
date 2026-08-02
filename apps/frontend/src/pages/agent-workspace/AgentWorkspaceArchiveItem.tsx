@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api, type AgentWorkspaceReviewEvent, type AgentWorkspaceTask } from '../../core/apiClient';
+import { api, type AgentWorkspaceComparison, type AgentWorkspaceReviewEvent, type AgentWorkspaceTask } from '../../core/apiClient';
 import { toast } from '../../shared/components/Toast';
 import { downloadTaskMarkdown, formatTime } from './archiveHelpers';
 
@@ -14,6 +14,7 @@ export default function AgentWorkspaceArchiveItem({ task, busy, onSetReviewed, o
   const [reviewNote, setReviewNote] = useState(task.reviewNote ?? '');
   const [history, setHistory] = useState<AgentWorkspaceReviewEvent[] | null>(null);
   const [comparisonTasks, setComparisonTasks] = useState<AgentWorkspaceTask[] | null>(null);
+  const [comparison, setComparison] = useState<AgentWorkspaceComparison | null>(null);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [loadingComparison, setLoadingComparison] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -42,7 +43,11 @@ export default function AgentWorkspaceArchiveItem({ task, busy, onSetReviewed, o
   const loadComparison = async () => {
     if (!task.comparisonId) return;
     setLoadingComparison(true);
-    try { setComparisonTasks((await api.agentWorkspace.comparison(task.comparisonId)).tasks); }
+    try {
+      const result = await api.agentWorkspace.comparison(task.comparisonId);
+      setComparison(result.comparison);
+      setComparisonTasks(result.tasks);
+    }
     catch (error) { toast.error(error instanceof Error ? error.message : '多模型对比加载失败'); }
     finally { setLoadingComparison(false); }
   };
@@ -65,7 +70,7 @@ export default function AgentWorkspaceArchiveItem({ task, busy, onSetReviewed, o
       {history.length === 0 ? <li>尚无核验历史。</li> : history.map((event) => <li key={event.id}><b>{event.action === 'confirmed' ? '已确认' : '已撤销确认'}</b> · {formatTime(event.createdAt)}{event.reviewNote ? ` · ${event.reviewNote}` : ''}</li>)}
     </ol>}
     {comparisonTasks && <section className="agent-workspace-comparison-results" aria-label="同批模型结果">
-      <h4>同批模型结果</h4><p>同一材料由不同模型独立生成，结论仍需人工核验。</p>
+      <h4>同批模型结果</h4><p>{comparison ? `已完成 · 成功 ${comparison.succeededCount} / ${comparison.requestedCount}，失败 ${comparison.failedCount}。` : '历史批次未保存汇总信息。'} 同一材料由不同模型独立生成，结论仍需人工核验。</p>
       <div>{comparisonTasks.map((comparisonTask) => <article key={comparisonTask.id}>
         <strong>{comparisonTask.agentCode}</strong><span>{comparisonTask.providerCode} · {comparisonTask.model}</span>
         <pre>{comparisonTask.response}</pre>

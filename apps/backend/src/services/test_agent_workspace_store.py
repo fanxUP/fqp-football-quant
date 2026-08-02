@@ -6,7 +6,9 @@ import pytest
 
 from apps.backend.src.services.agent_workspace_store import (
     AgentWorkspaceError,
+    get_workspace_comparison,
     list_workspace_comparison_tasks,
+    set_workspace_comparison_completed,
     list_workspace_task_page,
     list_workspace_task_review_events,
     list_workspace_tasks,
@@ -99,6 +101,30 @@ def test_workspace_comparison_returns_only_its_tasks_in_creation_order() -> None
     assert [task["comparisonId"] for task in tasks] == ["comparison-001", "comparison-001"]
     assert "comparison_id = %s" in conn.queries[0][0]
     assert conn.queries[0][1] == ("comparison-001",)
+
+
+def test_workspace_comparison_exposes_requested_and_completed_counts() -> None:
+    comparison_row = (
+        "comparison-001", ["review_agent", "doc_agent", "data_agent"], 3, 2, 1, "completed",
+        datetime(2026, 8, 2, tzinfo=UTC), datetime(2026, 8, 2, tzinfo=UTC),
+    )
+    conn = _Connection(row=comparison_row)
+
+    comparison = get_workspace_comparison(conn, "comparison-001")
+
+    assert comparison == {
+        "id": "comparison-001", "requestedAgentCodes": ["review_agent", "doc_agent", "data_agent"],
+        "requestedCount": 3, "succeededCount": 2, "failedCount": 1, "status": "completed",
+        "createdAt": "2026-08-02T00:00:00+00:00", "completedAt": "2026-08-02T00:00:00+00:00",
+    }
+    assert conn.queries[0][1] == ("comparison-001",)
+
+    conn = _Connection(row=comparison_row)
+    completed = set_workspace_comparison_completed(conn, "comparison-001", succeeded_count=2, failed_count=1)
+
+    assert completed["failedCount"] == 1
+    assert conn.committed
+    assert conn.queries[0][1] == (2, 1, "comparison-001")
 
 
 def test_workspace_review_uses_parameterized_update() -> None:

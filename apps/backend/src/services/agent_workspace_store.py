@@ -16,6 +16,15 @@ def _serialize_review_event(row: tuple[Any, ...]) -> dict[str, Any]:
     }
 
 
+def _serialize_comparison(row: tuple[Any, ...]) -> dict[str, Any]:
+    return {
+        "id": str(row[0]), "requestedAgentCodes": row[1], "requestedCount": row[2],
+        "succeededCount": row[3], "failedCount": row[4], "status": row[5],
+        "createdAt": row[6].isoformat() if row[6] else None,
+        "completedAt": row[7].isoformat() if row[7] else None,
+    }
+
+
 def _serialize(row: tuple[Any, ...], *, include_content: bool = True) -> dict[str, Any]:
     task = {
         "id": row[0], "title": row[1], "agentCode": row[2], "providerCode": row[3],
@@ -68,6 +77,48 @@ def list_workspace_comparison_tasks(conn: Any, comparison_id: str) -> list[dict[
         )
         rows = cur.fetchall()
     return [_serialize(row) for row in rows]
+
+
+def create_workspace_comparison(conn: Any, comparison_id: str, agent_codes: list[str]) -> dict[str, Any]:
+    with conn.cursor() as cur:
+        cur.execute(
+            """INSERT INTO agent_workspace_comparisons (id, requested_agent_codes, requested_count)
+               VALUES (%s, %s, %s)
+               RETURNING id, requested_agent_codes, requested_count, succeeded_count, failed_count, status, created_at, completed_at""",
+            (comparison_id, agent_codes, len(agent_codes)),
+        )
+        row = cur.fetchone()
+    conn.commit()
+    return _serialize_comparison(row)
+
+
+def get_workspace_comparison(conn: Any, comparison_id: str) -> dict[str, Any] | None:
+    with conn.cursor() as cur:
+        cur.execute(
+            """SELECT id, requested_agent_codes, requested_count, succeeded_count, failed_count, status, created_at, completed_at
+               FROM agent_workspace_comparisons WHERE id = %s""",
+            (comparison_id,),
+        )
+        row = cur.fetchone()
+    return _serialize_comparison(row) if row else None
+
+
+def set_workspace_comparison_completed(
+    conn: Any, comparison_id: str, *, succeeded_count: int, failed_count: int,
+) -> dict[str, Any]:
+    with conn.cursor() as cur:
+        cur.execute(
+            """UPDATE agent_workspace_comparisons
+               SET succeeded_count = %s, failed_count = %s, status = 'completed', completed_at = NOW()
+               WHERE id = %s
+               RETURNING id, requested_agent_codes, requested_count, succeeded_count, failed_count, status, created_at, completed_at""",
+            (succeeded_count, failed_count, comparison_id),
+        )
+        row = cur.fetchone()
+    if not row:
+        raise AgentWorkspaceError("对比批次不存在")
+    conn.commit()
+    return _serialize_comparison(row)
 
 
 def list_workspace_task_page(
