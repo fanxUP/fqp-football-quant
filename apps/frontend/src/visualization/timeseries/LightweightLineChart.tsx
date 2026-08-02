@@ -164,7 +164,7 @@ export default function LightweightLineChart({
     });
 
     chart.timeScale().fitContent();
-  }, [series, theme, valuePrecision, valueRange, valueSuffix]);
+  }, [interactionsEnabled, series, theme, valuePrecision, valueRange, valueSuffix]);
 
   useEffect(() => {
     seriesRef.current.forEach((api, id) => {

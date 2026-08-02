@@ -106,5 +106,6 @@ describe('LightweightLineChart', () => {
       handleScale: expect.objectContaining({ mouseWheel: true }),
       handleScroll: expect.objectContaining({ mouseWheel: true }),
     }));
+    expect(setData).toHaveBeenCalledTimes(2);
   });
 });
