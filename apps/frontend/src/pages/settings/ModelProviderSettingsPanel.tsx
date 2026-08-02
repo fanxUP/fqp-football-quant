@@ -136,7 +136,7 @@ export default function ModelProviderSettingsPanel() {
             <input id="model-default" className="fqp-input" value={draft.defaultModel} onChange={(event) => updateDraft({ defaultModel: event.target.value })} placeholder="例如 gpt-5-mini" />
             {selected.requiresApiKey && <>
               <label className="fqp-label" htmlFor="model-api-key">API 密钥 {saved?.hasApiKey ? '（已保存；留空则保持不变）' : ''}</label>
-              <input id="model-api-key" className="fqp-input" type="password" autoComplete="off" value={draft.apiKey} onChange={(event) => updateDraft({ apiKey: event.target.value })} placeholder="仅在保存时上传到服务器" />
+              <input id="model-api-key" className="fqp-input" type="password" autoComplete="off" value={draft.apiKey} onChange={(event) => updateDraft({ apiKey: event.target.value })} placeholder={saved?.hasApiKey ? '留空则保留已保存密钥' : '仅在保存时上传到服务器'} />
             </>}
             <label className="appearance-checkbox-row model-provider-enabled">
               <input type="checkbox" checked={draft.enabled} onChange={(event) => updateDraft({ enabled: event.target.checked })} />

@@ -259,8 +259,19 @@ def save_provider_config(conn: Any, payload: dict[str, Any]) -> dict[str, Any]:
         str(payload.get("defaultModel", "")),
     )
     api_key = str(payload.get("apiKey", "")).strip()
+    # The UI intentionally never reads an existing key back.  A blank value on
+    # an update therefore means "keep the encrypted key", not "delete it".
+    has_saved_key = False
     if provider.requires_api_key and not api_key:
-        raise ProviderConfigError("请填写 API 密钥")
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT api_key_encrypted IS NOT NULL FROM llm_provider_configs WHERE provider_code = %s",
+                (provider.code,),
+            )
+            saved = cur.fetchone()
+        has_saved_key = bool(saved and saved[0])
+        if not has_saved_key:
+            raise ProviderConfigError("请填写 API 密钥")
     encrypted = _cipher().encrypt(api_key.encode("utf-8")).decode("utf-8") if api_key else None
     display_name = str(payload.get("displayName") or provider.name).strip()[:80] or provider.name
     enabled = bool(payload.get("enabled", True))

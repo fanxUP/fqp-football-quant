@@ -5,6 +5,7 @@ import pytest
 from apps.backend.src.services.model_provider_store import (
     ProviderConfigError,
     _cipher,
+    save_provider_config,
     validate_provider_input,
 )
 
@@ -31,3 +32,48 @@ def test_provider_keys_are_encrypted_with_server_secret(monkeypatch: pytest.Monk
 
     assert b"sk-never-store-plain" not in encrypted
     assert _cipher().decrypt(encrypted) == b"sk-never-store-plain"
+
+
+class _SavedKeyCursor:
+    def __init__(self, connection: "_SavedKeyConnection") -> None:
+        self.connection = connection
+
+    def __enter__(self) -> "_SavedKeyCursor":
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        return None
+
+    def execute(self, query: str, _params: object = None) -> None:
+        self.connection.queries.append(query)
+
+    def fetchone(self) -> tuple[object, ...]:
+        if "SELECT api_key_encrypted" in self.connection.queries[-1]:
+            return (True,)
+        return (
+            "openai", "OpenAI", "https://api.openai.com/v1", "gpt-5-mini", True,
+            True, None, None, None, None,
+        )
+
+
+class _SavedKeyConnection:
+    def __init__(self) -> None:
+        self.queries: list[str] = []
+        self.committed = False
+
+    def cursor(self) -> _SavedKeyCursor:
+        return _SavedKeyCursor(self)
+
+    def commit(self) -> None:
+        self.committed = True
+
+
+def test_provider_update_can_keep_encrypted_api_key() -> None:
+    conn = _SavedKeyConnection()
+
+    result = save_provider_config(conn, {
+        "providerCode": "openai", "defaultModel": "gpt-5-mini", "enabled": True,
+    })
+
+    assert result["hasApiKey"] is True
+    assert conn.committed is True
