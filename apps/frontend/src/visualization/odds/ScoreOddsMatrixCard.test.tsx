@@ -15,14 +15,20 @@ const points: OddsMovementPoint[] = [
 ];
 
 describe('ScoreOddsMatrixCard', () => {
-  it('以主客进球矩阵展示比分，并在点击后展开单个比分走势', () => {
+  it('按投注器比分票面的主胜、平局、客胜顺序展示，并在点击后展开走势', () => {
     render(<ScoreOddsMatrixCard data={points} title="比分走势" subtitle="官方固定奖金" />);
 
-    expect(screen.getByRole('grid', { name: '主客队进球比分' })).toBeInTheDocument();
-    expect(screen.getByText('胜其他 SP 18.00')).toBeInTheDocument();
+    const scoreGrid = screen.getByRole('group', { name: '比分选项' });
+    expect(scoreGrid).toBeInTheDocument();
+    const codes = Array.from(scoreGrid.querySelectorAll<HTMLElement>('[data-score-code]'))
+      .map((element) => element.dataset.scoreCode);
+    expect(codes).toEqual(['1:0', 'other_h', '0:0']);
+    expect(scoreGrid.querySelector('[data-score-code="1:0"]')).toBeTruthy();
+    expect(scoreGrid.querySelector('[data-score-code="0:0"]')).toBeTruthy();
+    expect(scoreGrid.querySelector('[data-score-code="other_h"]')).toBeTruthy();
     expect(screen.queryByTestId('score-detail-line')).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('gridcell', { name: '比分 0:0，SP 6.80，下调 0.40' }));
+    fireEvent.click(screen.getByRole('button', { name: '比分 0:0 SP 6.80 下调 0.40' }));
 
     expect(screen.getByTestId('score-detail-line')).toHaveTextContent('0:0 历史赔率走势');
   });
