@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import PageHeader from '../shared/components/PageHeader';
 import BettingTerminalPage from './BettingTerminalPage';
 import TicketsPage from './TicketsPage';
@@ -32,11 +32,6 @@ export default function BettingCenterPage({ initialTab = 'bet-slip' }: BettingCe
     window.addEventListener('hashchange', syncFromHash);
     return () => window.removeEventListener('hashchange', syncFromHash);
   }, [initialTab]);
-
-  const activeMeta = useMemo(
-    () => TABS.find((tab) => tab.code === activeTab) ?? TABS[0],
-    [activeTab],
-  );
 
   const switchTab = (tab: BettingTab) => {
     setActiveTab(tab);
@@ -76,28 +71,6 @@ export default function BettingCenterPage({ initialTab = 'bet-slip' }: BettingCe
             </button>
           );
         })}
-      </div>
-
-      <div
-        className="fqp-card betting-center-context"
-        style={{
-          marginBottom: '16px',
-          padding: '12px 16px',
-          display: 'flex',
-          justifyContent: 'space-between',
-          gap: '12px',
-          alignItems: 'center',
-        }}
-      >
-        <div>
-          <div style={{ color: 'var(--fqp-text)', fontWeight: 700 }}>{activeMeta.label}</div>
-          <div style={{ color: 'var(--fqp-text-muted)', fontSize: '12px', marginTop: '2px' }}>
-            {activeMeta.description}
-          </div>
-        </div>
-        <div style={{ color: 'var(--fqp-text-muted)', fontSize: '12px' }}>
-          投注确认 · 彩票台账 · 比赛结果
-        </div>
       </div>
 
       {activeTab === 'bet-slip' && <BettingTerminalPage />}
