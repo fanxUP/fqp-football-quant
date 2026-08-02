@@ -8,15 +8,22 @@ export default function AgentModelBindings({ providers }: { providers: ModelProv
   const [bindings, setBindings] = useState<AgentModelBinding[]>([]);
   const [saving, setSaving] = useState<string | null>(null);
   const [auditVersion, setAuditVersion] = useState(0);
+  const [providerChoices, setProviderChoices] = useState<Record<string, string>>({});
+  const readyProviders = providers.filter((provider) => provider.enabled && provider.hasApiKey && provider.lastTestStatus === 'passed');
 
   useEffect(() => {
     api.modelProviders.bindings()
-      .then((result) => setBindings(result.bindings))
+      .then((result) => {
+        setBindings(result.bindings);
+        setProviderChoices(Object.fromEntries(result.bindings
+          .filter((binding) => binding.providerCode)
+          .map((binding) => [binding.agentCode, binding.providerCode as string])));
+      })
       .catch((error: Error) => toast.error(`代理模型配置加载失败：${error.message}`));
   }, []);
 
-  const save = async (binding: AgentModelBinding, enabled: boolean) => {
-    const provider = binding.providerCode ?? providers.find((item) => item.enabled)?.providerCode;
+  const save = async (binding: AgentModelBinding, enabled: boolean, action: 'binding' | 'toggle') => {
+    const provider = providerChoices[binding.agentCode] ?? binding.providerCode ?? readyProviders[0]?.providerCode;
     if (!provider) {
       toast.error('请先保存、启用并测试一个模型服务商');
       return;
@@ -25,7 +32,8 @@ export default function AgentModelBindings({ providers }: { providers: ModelProv
     try {
       const result = await api.modelProviders.saveBinding(binding.agentCode, { providerCode: provider, enabled });
       setBindings((current) => current.map((item) => item.agentCode === binding.agentCode ? result.binding : item));
-      toast.success(enabled ? `${binding.agentName} 已启用模型调用` : `${binding.agentName} 已关闭模型调用`);
+      setProviderChoices((current) => ({ ...current, [binding.agentCode]: provider }));
+      toast.success(action === 'binding' ? `${binding.agentName} 的服务商已保存` : enabled ? `${binding.agentName} 已启用模型调用` : `${binding.agentName} 已关闭模型调用`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '保存失败');
     } finally {
@@ -40,11 +48,24 @@ export default function AgentModelBindings({ providers }: { providers: ModelProv
     </div>
     <div className="agent-model-binding-list">
       {bindings.map((binding) => <div className="agent-model-binding" key={binding.agentCode}>
-        <div><strong>{binding.agentName}</strong><span>{binding.providerName ? `${binding.providerName} · ${binding.model}` : '尚未绑定服务商'}</span></div>
-        <button type="button" className="fqp-btn" disabled={saving === binding.agentCode}
-          onClick={() => void save(binding, !binding.enabled)}>
-          {saving === binding.agentCode ? '保存中…' : binding.enabled ? '关闭调用' : '启用调用'}
-        </button>
+        <div className="agent-model-binding-info"><strong>{binding.agentName}</strong><span>{binding.providerName ? `${binding.providerName} · ${binding.model}` : '尚未绑定服务商'}</span></div>
+        <label className="agent-model-provider-select"><span>服务商</span><select className="fqp-input" aria-label={`${binding.agentName} 服务商`}
+          value={providerChoices[binding.agentCode] ?? binding.providerCode ?? ''}
+          disabled={saving === binding.agentCode || readyProviders.length === 0}
+          onChange={(event) => setProviderChoices((current) => ({ ...current, [binding.agentCode]: event.target.value }))}>
+          {!binding.providerCode && <option value="">请选择已测试服务商</option>}
+          {binding.providerCode && !readyProviders.some((provider) => provider.providerCode === binding.providerCode) &&
+            <option value={binding.providerCode}>当前服务商不可启用，请重新选择</option>}
+          {readyProviders.map((provider) => <option key={provider.providerCode} value={provider.providerCode}>{provider.displayName} · {provider.defaultModel}</option>)}
+        </select></label>
+        <div className="agent-model-binding-actions">
+          <button type="button" className="fqp-btn" disabled={saving === binding.agentCode || readyProviders.length === 0}
+            onClick={() => void save(binding, binding.enabled, 'binding')}>保存服务商</button>
+          <button type="button" className="fqp-btn" disabled={saving === binding.agentCode}
+            onClick={() => void save(binding, !binding.enabled, 'toggle')}>
+            {saving === binding.agentCode ? '保存中…' : binding.enabled ? '关闭调用' : '启用调用'}
+          </button>
+        </div>
       </div>)}
     </div>
     <AgentModelTrial bindings={bindings} onCompleted={() => setAuditVersion((version) => version + 1)} />

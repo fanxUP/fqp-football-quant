@@ -348,10 +348,13 @@
 .agent-model-bindings h3 { margin: 0; color: var(--fqp-text); font-size: 16px; }
 .agent-model-bindings p { margin: 6px 0 0; color: var(--fqp-text-muted); font-size: 12px; line-height: 1.6; }
 .agent-model-binding-list { display: grid; gap: 8px; margin-top: 12px; }
-.agent-model-binding { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px; border: 1px solid var(--fqp-border); border-radius: var(--fqp-radius-sm); background: var(--fqp-panel-2); }
+.agent-model-binding { display: grid; grid-template-columns: minmax(150px, 1fr) minmax(180px, 0.9fr) auto; align-items: center; gap: 12px; padding: 12px; border: 1px solid var(--fqp-border); border-radius: var(--fqp-radius-sm); background: var(--fqp-panel-2); }
 .agent-model-binding strong, .agent-model-binding span { display: block; }
 .agent-model-binding strong { color: var(--fqp-text); font-size: 13px; }
 .agent-model-binding span { margin-top: 3px; color: var(--fqp-text-muted); font-size: 11px; }
+.agent-model-provider-select > span { display: block; margin-bottom: 4px; color: var(--fqp-text-muted); font-size: 10px; }
+.agent-model-provider-select .fqp-input { width: 100%; min-height: 34px; }
+.agent-model-binding-actions { display: flex; gap: 6px; }
 .agent-model-trial { display: grid; gap: 8px; margin-top: 16px; padding: 14px; border: 1px solid var(--fqp-border); border-radius: var(--fqp-radius-sm); background: var(--fqp-panel-2); }
 .agent-model-trial h4 { margin: 0; color: var(--fqp-text); font-size: 14px; }
 .agent-model-trial p { margin: 4px 0 0; }
@@ -404,7 +407,7 @@
   .appearance-panel-heading, .local-settings-heading { display: grid; }
   .theme-card-grid, .appearance-controls-grid, .local-settings-grid { grid-template-columns: 1fr; }
   .model-provider-layout { grid-template-columns: 1fr; }
-  .agent-model-binding { align-items: flex-start; flex-direction: column; }
+  .agent-model-binding { grid-template-columns: 1fr; align-items: flex-start; }
   .agent-model-reply > div { align-items: flex-start; flex-direction: column; gap: 3px; }
   .model-invocation-item { align-items: flex-start; flex-direction: column; }
   .model-invocation-meta { text-align: left; }
