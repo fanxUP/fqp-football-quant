@@ -10,6 +10,7 @@ export default function AgentModelBindings({ providers }: { providers: ModelProv
   const [auditVersion, setAuditVersion] = useState(0);
   const [providerChoices, setProviderChoices] = useState<Record<string, string>>({});
   const readyProviders = providers.filter((provider) => provider.enabled && provider.hasApiKey && provider.lastTestStatus === 'passed');
+  const testedButDisabledProviders = providers.filter((provider) => !provider.enabled && provider.hasApiKey && provider.lastTestStatus === 'passed');
 
   useEffect(() => {
     api.modelProviders.bindings()
@@ -45,6 +46,9 @@ export default function AgentModelBindings({ providers }: { providers: ModelProv
     <div>
       <h3 id="agent-model-bindings-title">智能代理模型开关</h3>
       <p>仅允许任务编排、复盘与文档智能代理手动调用模型；每日推荐、风控和彩票结算不会使用外部模型。</p>
+      {readyProviders.length === 0 && testedButDisabledProviders.length > 0 && <p className="agent-model-binding-hint" role="status">
+        {testedButDisabledProviders.map((provider) => provider.displayName).join('、')} 已通过测试，但服务商总开关未开启。请在上方开启后再启用智能代理。
+      </p>}
     </div>
     <div className="agent-model-binding-list">
       {bindings.map((binding) => <div className="agent-model-binding" key={binding.agentCode}>

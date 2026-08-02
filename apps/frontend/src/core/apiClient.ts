@@ -51,6 +51,7 @@ export interface ModelProviderConnection {
   defaultModel: string;
   enabled: boolean;
   hasApiKey: boolean;
+  apiKeyMask: string | null;
   updatedAt: string | null;
   lastTestAt: string | null;
   lastTestStatus: 'passed' | 'failed' | null;

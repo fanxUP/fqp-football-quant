@@ -98,6 +98,7 @@ def test_provider_update_can_keep_encrypted_api_key() -> None:
     })
 
     assert result["hasApiKey"] is True
+    assert result["apiKeyMask"] == "••••••••••••"
     assert conn.committed is True
 
 

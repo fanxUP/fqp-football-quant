@@ -4,7 +4,7 @@ import Card from '../../shared/components/Card';
 import { toast } from '../../shared/components/Toast';
 import AgentModelBindings from './AgentModelBindings';
 
-type Draft = { baseUrl: string; defaultModel: string; apiKey: string; enabled: boolean };
+type Draft = { baseUrl: string; defaultModel: string; apiKey: string; apiKeyChanged: boolean; enabled: boolean };
 
 const capabilityLabels: Record<string, string> = {
   analysis: '分析', coding: '代码', vision: '图像',
@@ -14,8 +14,9 @@ function initialDraft(preset: ModelProviderPreset, saved?: ModelProviderConnecti
   return {
     baseUrl: saved?.baseUrl ?? preset.defaultBaseUrl,
     defaultModel: saved?.defaultModel ?? preset.defaultModel,
-    apiKey: '',
-    enabled: saved?.enabled ?? false,
+    apiKey: saved?.apiKeyMask ?? '',
+    apiKeyChanged: false,
+    enabled: saved?.enabled ?? true,
   };
 }
 
@@ -70,11 +71,11 @@ export default function ModelProviderSettingsPanel() {
         providerCode: selected.providerCode,
         baseUrl: draft.baseUrl,
         defaultModel: draft.defaultModel,
-        apiKey: draft.apiKey || undefined,
+        apiKey: draft.apiKeyChanged && draft.apiKey ? draft.apiKey : undefined,
         enabled: draft.enabled,
       });
       setConnections((current) => [...current.filter((item) => item.providerCode !== selected.providerCode), result.provider]);
-      setDraft((current) => current ? { ...current, apiKey: '' } : current);
+      setDraft(initialDraft(selected, result.provider));
       toast.success('模型服务商配置已加密保存');
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '保存失败');
@@ -146,11 +147,13 @@ export default function ModelProviderSettingsPanel() {
             </div>}
             {selected.requiresApiKey && <>
               <label className="fqp-label" htmlFor="model-api-key">API 密钥 {saved?.hasApiKey ? '（已保存；留空则保持不变）' : ''}</label>
-              <input id="model-api-key" className="fqp-input" type="password" autoComplete="off" value={draft.apiKey} onChange={(event) => updateDraft({ apiKey: event.target.value })} placeholder={saved?.hasApiKey ? '留空则保留已保存密钥' : '仅在保存时上传到服务器'} />
+              <input id="model-api-key" className="fqp-input" type="password" autoComplete="off" value={draft.apiKey}
+                onChange={(event) => updateDraft({ apiKey: event.target.value, apiKeyChanged: true })}
+                placeholder={saved?.hasApiKey ? '已加密保存；直接输入可替换密钥' : '仅在保存时上传到服务器'} />
             </>}
             <label className="appearance-checkbox-row model-provider-enabled">
               <input type="checkbox" checked={draft.enabled} onChange={(event) => updateDraft({ enabled: event.target.checked })} />
-              <span>启用此服务商参与模型路由</span>
+              <span>启用此服务商，允许已通过测试的智能代理调用</span>
             </label>
             <div className="model-provider-actions">
               <button type="button" className="fqp-btn" disabled={saving} onClick={() => void save()}>{saving ? '保存中…' : '加密保存'}</button>

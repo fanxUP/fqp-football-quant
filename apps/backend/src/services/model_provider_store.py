@@ -234,16 +234,16 @@ def validate_provider_input(
 def mask_api_key(value: str | None) -> str | None:
     if not value:
         return None
-    if len(value) <= 8:
-        return "*" * len(value)
-    return f"{value[:4]}{'*' * min(12, len(value) - 8)}{value[-4:]}"
+    # Never expose key prefixes, suffixes, length, or encrypted ciphertext to
+    # the browser.  The fixed mask only indicates that a usable secret exists.
+    return "••••••••••••"
 
 
 def list_provider_configs(conn: Any) -> list[dict[str, Any]]:
     with conn.cursor() as cur:
         cur.execute(
             """SELECT provider_code, display_name, base_url, default_model, enabled,
-                      api_key_encrypted IS NOT NULL AS has_api_key, updated_at, last_test_at,
+                      api_key_encrypted, updated_at, last_test_at,
                       last_test_status, last_test_message
                FROM llm_provider_configs ORDER BY updated_at DESC, provider_code"""
         )
@@ -255,7 +255,8 @@ def list_provider_configs(conn: Any) -> list[dict[str, Any]]:
             "baseUrl": row[2],
             "defaultModel": row[3],
             "enabled": row[4],
-            "hasApiKey": row[5],
+            "hasApiKey": bool(row[5]),
+            "apiKeyMask": mask_api_key(row[5]),
             "updatedAt": row[6].isoformat() if row[6] else None,
             "lastTestAt": row[7].isoformat() if row[7] else None,
             "lastTestStatus": row[8],
@@ -305,8 +306,12 @@ def save_agent_model_binding(conn: Any, agent_code: str, provider_code: str, ena
         provider = cur.fetchone()
         if not provider:
             raise ProviderConfigError("请先保存模型服务商配置")
-        if enabled and (not provider[1] or not provider[2] or provider[3] != "passed"):
-            raise ProviderConfigError("请先启用服务商并通过连通性测试，再启用智能代理")
+        if enabled and not provider[2]:
+            raise ProviderConfigError("请先保存服务商 API 密钥，再启用智能代理")
+        if enabled and provider[3] != "passed":
+            raise ProviderConfigError("请先通过服务商连通性测试，再启用智能代理")
+        if enabled and not provider[1]:
+            raise ProviderConfigError("服务商已通过测试但尚未启用，请先在模型接入中开启服务商")
         cur.execute(
             """INSERT INTO llm_agent_bindings (agent_code, provider_code, enabled, updated_at)
                VALUES (%s, %s, %s, NOW())
@@ -398,6 +403,7 @@ def save_provider_config(conn: Any, payload: dict[str, Any]) -> dict[str, Any]:
         "defaultModel": row[3],
         "enabled": row[4],
         "hasApiKey": row[5],
+        "apiKeyMask": "••••••••••••" if row[5] else None,
         "updatedAt": row[6].isoformat() if row[6] else None,
         "lastTestAt": row[7].isoformat() if row[7] else None,
         "lastTestStatus": row[8],
