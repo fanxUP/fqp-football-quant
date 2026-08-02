@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from time import perf_counter
+from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field, field_validator
@@ -12,7 +13,7 @@ from apps.backend.src.services.agent_workspace_store import (
     AgentWorkspaceError,
     create_workspace_task,
     delete_workspace_task,
-    list_workspace_tasks,
+    list_workspace_task_page,
     set_workspace_task_reviewed,
 )
 from apps.backend.src.services.model_gateway import ModelGatewayError, invoke_agent_model
@@ -69,10 +70,26 @@ def create_task(body: WorkspaceTaskRequest):
 
 
 @router.get("")
-def get_tasks(limit: int = Query(20, ge=1, le=50)):
+def get_tasks(
+    limit: int = Query(20, ge=1, le=50),
+    offset: int = Query(0, ge=0),
+    review_status: Literal["all", "pending", "reviewed"] = Query("all", alias="reviewStatus"),
+):
     with get_db() as conn:
-        tasks = list_workspace_tasks(conn, limit)
-    return {"tasks": tasks, "total": len(tasks)}
+        tasks, total_items = list_workspace_task_page(
+            conn, limit=limit, offset=offset, review_status=review_status,
+        )
+    # Keep `total` for existing clients; pagination is additive for new clients.
+    return {
+        "tasks": tasks,
+        "total": len(tasks),
+        "pagination": {
+            "offset": offset,
+            "limit": limit,
+            "totalItems": total_items,
+            "hasMore": offset + len(tasks) < total_items,
+        },
+    }
 
 
 @router.patch("/{task_id}")

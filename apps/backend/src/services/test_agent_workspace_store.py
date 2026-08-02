@@ -6,6 +6,7 @@ import pytest
 
 from apps.backend.src.services.agent_workspace_store import (
     AgentWorkspaceError,
+    list_workspace_task_page,
     list_workspace_tasks,
     set_workspace_task_reviewed,
 )
@@ -59,6 +60,17 @@ def test_workspace_tasks_return_untrusted_content_as_plain_data() -> None:
     assert tasks[0]["response"] == "结果"
     assert tasks[0]["reviewedAt"] is None
     assert conn.queries[-1][1] == (50,)
+
+
+def test_workspace_task_page_uses_fixed_status_clause_and_parameterized_paging() -> None:
+    conn = _Connection(rows=[_task_row()], row=(3,))
+
+    tasks, total = list_workspace_task_page(conn, limit=99, offset=4, review_status="pending")
+
+    assert tasks[0]["id"] == 7
+    assert total == 3
+    assert "reviewed_at IS NULL" in conn.queries[0][0]
+    assert conn.queries[1][1] == (50, 4)
 
 
 def test_workspace_review_uses_parameterized_update() -> None:

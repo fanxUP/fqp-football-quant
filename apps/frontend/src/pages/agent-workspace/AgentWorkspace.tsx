@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api, type AgentModelBinding, type AgentWorkspaceTask } from '../../core/apiClient';
 import { toast } from '../../shared/components/Toast';
 import AgentWorkspaceArchive from './AgentWorkspaceArchive';
@@ -27,14 +27,25 @@ export default function AgentWorkspace() {
   const [material, setMaterial] = useState('');
   const [running, setRunning] = useState(false);
   const [tasks, setTasks] = useState<AgentWorkspaceTask[]>([]);
+  const [reviewFilter, setReviewFilter] = useState<'all' | 'reviewed' | 'pending'>('all');
+  const [taskTotal, setTaskTotal] = useState(0);
+  const [hasMoreTasks, setHasMoreTasks] = useState(false);
+  const [loadingMoreTasks, setLoadingMoreTasks] = useState(false);
   const [busyTaskId, setBusyTaskId] = useState<number | null>(null);
 
+  const loadTasks = useCallback(async (nextReviewFilter: 'all' | 'reviewed' | 'pending', offset = 0) => {
+    const result = await api.agentWorkspace.list({ limit: 20, offset, reviewStatus: nextReviewFilter });
+    setTasks((current) => offset === 0 ? result.tasks : [...current, ...result.tasks]);
+    setTaskTotal(result.pagination.totalItems);
+    setHasMoreTasks(result.pagination.hasMore);
+  }, []);
+
   useEffect(() => {
-    Promise.all([api.modelProviders.bindings(), api.agentWorkspace.list()])
-      .then(([bindingResult, taskResult]) => { setBindings(bindingResult.bindings); setTasks(taskResult.tasks); })
+    Promise.all([api.modelProviders.bindings(), loadTasks('all')])
+      .then(([bindingResult]) => setBindings(bindingResult.bindings))
       .catch((error: Error) => toast.error(`智能工作台加载失败：${error.message}`))
       .finally(() => setLoading(false));
-  }, []);
+  }, [loadTasks]);
 
   const availableBindings = useMemo(() => bindings.filter(
     (binding) => binding.enabled && binding.providerEnabled && binding.providerTestStatus === 'passed',
@@ -68,12 +79,12 @@ export default function AgentWorkspace() {
     }
     setRunning(true);
     try {
-      const result = await api.agentWorkspace.create({
+      await api.agentWorkspace.create({
         agentCode: selected.agentCode,
         title: taskTitle.trim() || selectedTemplate.label,
         prompt: `${selectedTemplate.prompt}${materialText}`,
       });
-      setTasks((current) => [result.task, ...current]);
+      await loadTasks(reviewFilter);
       setMaterial('');
       setTaskTitle('');
       toast.success('分析已归档，等待人工核验');
@@ -84,11 +95,26 @@ export default function AgentWorkspace() {
     }
   };
 
+  const changeReviewFilter = async (nextReviewFilter: 'all' | 'reviewed' | 'pending') => {
+    setReviewFilter(nextReviewFilter);
+    setLoadingMoreTasks(true);
+    try { await loadTasks(nextReviewFilter); }
+    catch (error) { toast.error(error instanceof Error ? error.message : '归档任务加载失败'); }
+    finally { setLoadingMoreTasks(false); }
+  };
+
+  const loadMoreTasks = async () => {
+    setLoadingMoreTasks(true);
+    try { await loadTasks(reviewFilter, tasks.length); }
+    catch (error) { toast.error(error instanceof Error ? error.message : '归档任务加载失败'); }
+    finally { setLoadingMoreTasks(false); }
+  };
+
   const setReviewed = async (task: AgentWorkspaceTask) => {
     setBusyTaskId(task.id);
     try {
-      const result = await api.agentWorkspace.setReviewed(task.id, !task.reviewedAt);
-      setTasks((current) => current.map((item) => item.id === task.id ? result.task : item));
+      await api.agentWorkspace.setReviewed(task.id, !task.reviewedAt);
+      await loadTasks(reviewFilter);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '更新确认状态失败');
     } finally { setBusyTaskId(null); }
@@ -99,7 +125,7 @@ export default function AgentWorkspace() {
     setBusyTaskId(task.id);
     try {
       await api.agentWorkspace.remove(task.id);
-      setTasks((current) => current.filter((item) => item.id !== task.id));
+      await loadTasks(reviewFilter);
       toast.success('归档任务已删除');
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '删除归档任务失败');
@@ -147,6 +173,8 @@ export default function AgentWorkspace() {
         <p>模型输出可能出错。请人工核验后，再自行使用其中的结论。</p>
       </aside>
     </div>}
-    <AgentWorkspaceArchive tasks={tasks} busyTaskId={busyTaskId} onSetReviewed={(task) => void setReviewed(task)} onRemove={(task) => void removeTask(task)} />
+    <AgentWorkspaceArchive tasks={tasks} totalItems={taskTotal} hasMore={hasMoreTasks} loadingMore={loadingMoreTasks}
+      reviewFilter={reviewFilter} busyTaskId={busyTaskId} onReviewFilterChange={(value) => void changeReviewFilter(value)} onLoadMore={() => void loadMoreTasks()}
+      onSetReviewed={(task) => void setReviewed(task)} onRemove={(task) => void removeTask(task)} />
   </section>;
 }

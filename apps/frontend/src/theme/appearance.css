@@ -421,6 +421,7 @@
 .agent-workspace-archive-filters { display: grid; grid-template-columns: minmax(0, 1fr) 160px; align-items: end; gap: 12px; margin-top: 14px; }
 .agent-workspace-archive-filters .fqp-label { display: block; margin: 0 0 6px; }
 .agent-workspace-archive-filters .fqp-input { min-width: 0; }
+.agent-workspace-archive-count { margin: 10px 0 0; color: var(--fqp-text-muted); font-size: 11px; }
 .agent-workspace-archive-list { display: grid; gap: 10px; margin-top: 14px; }
 .agent-workspace-archive-item { padding: 14px; border: 1px solid var(--fqp-border); border-radius: var(--fqp-radius-sm); background: var(--fqp-panel-2); }
 .agent-workspace-archive-item header, .agent-workspace-archive-item footer { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
@@ -436,6 +437,7 @@
 .agent-workspace-archive-item footer > span { color: var(--fqp-text-muted); font-size: 11px; }
 .agent-workspace-archive-item footer > span[data-reviewed='true'] { color: var(--fqp-success); }
 .agent-workspace-archive-item footer > div { display: flex; flex-wrap: wrap; gap: 8px; }
+.agent-workspace-load-more { display: block; margin: 14px auto 0; }
 
 .local-settings-grid {
   display: grid;

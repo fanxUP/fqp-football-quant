@@ -91,6 +91,13 @@ export interface AgentWorkspaceTask {
   createdAt: string | null;
 }
 
+export interface AgentWorkspaceTaskPage {
+  offset: number;
+  limit: number;
+  totalItems: number;
+  hasMore: boolean;
+}
+
 // ---- Base request ----
 
 const TIMEOUT_MS = 15_000;
@@ -259,8 +266,10 @@ export const api = {
   },
 
   agentWorkspace: {
-    list: (limit = 20) => request<{ tasks: AgentWorkspaceTask[]; total: number }>(
-      `/api/agent-workspace/tasks?limit=${limit}`,
+    list: ({ limit = 20, offset = 0, reviewStatus = 'all' }: {
+      limit?: number; offset?: number; reviewStatus?: 'all' | 'pending' | 'reviewed';
+    } = {}) => request<{ tasks: AgentWorkspaceTask[]; total: number; pagination: AgentWorkspaceTaskPage }>(
+      `/api/agent-workspace/tasks?limit=${limit}&offset=${offset}&reviewStatus=${reviewStatus}`,
     ),
     create: (payload: { agentCode: string; title: string; prompt: string }) =>
       request<{ task: AgentWorkspaceTask }>('/api/agent-workspace/tasks', {

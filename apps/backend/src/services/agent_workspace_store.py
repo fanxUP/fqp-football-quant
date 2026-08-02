@@ -48,6 +48,35 @@ def list_workspace_tasks(conn: Any, limit: int = 20) -> list[dict[str, Any]]:
     return [_serialize(row) for row in rows]
 
 
+def list_workspace_task_page(
+    conn: Any, *, limit: int = 20, offset: int = 0, review_status: str = "all"
+) -> tuple[list[dict[str, Any]], int]:
+    """Return a bounded archive page and its matching total.
+
+    The status clause is selected from a fixed allowlist; user values are never
+    interpolated into SQL.  The router validates the status before this call.
+    """
+    safe_limit = max(1, min(limit, 50))
+    safe_offset = max(0, offset)
+    clauses = {
+        "all": ("", ()),
+        "pending": (" WHERE reviewed_at IS NULL", ()),
+        "reviewed": (" WHERE reviewed_at IS NOT NULL", ()),
+    }
+    where_clause, filter_params = clauses.get(review_status, clauses["all"])
+    with conn.cursor() as cur:
+        cur.execute(f"SELECT COUNT(*) FROM agent_workspace_tasks{where_clause}", filter_params)
+        total = cur.fetchone()[0]
+        cur.execute(
+            f"""SELECT id, title, agent_code, provider_code, model, reviewed_at, created_at, prompt, response
+                FROM agent_workspace_tasks{where_clause}
+                ORDER BY created_at DESC, id DESC LIMIT %s OFFSET %s""",
+            (*filter_params, safe_limit, safe_offset),
+        )
+        rows = cur.fetchall()
+    return [_serialize(row) for row in rows], total
+
+
 def set_workspace_task_reviewed(conn: Any, task_id: int, reviewed: bool) -> dict[str, Any]:
     with conn.cursor() as cur:
         cur.execute(

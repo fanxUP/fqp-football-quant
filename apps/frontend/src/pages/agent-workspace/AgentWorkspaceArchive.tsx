@@ -18,14 +18,22 @@ function downloadTaskMarkdown(task: AgentWorkspaceTask) {
 
 interface Props {
   tasks: AgentWorkspaceTask[];
+  totalItems: number;
+  hasMore: boolean;
+  loadingMore: boolean;
+  reviewFilter: 'all' | 'reviewed' | 'pending';
   busyTaskId: number | null;
+  onReviewFilterChange: (reviewFilter: 'all' | 'reviewed' | 'pending') => void;
+  onLoadMore: () => void;
   onSetReviewed: (task: AgentWorkspaceTask) => void;
   onRemove: (task: AgentWorkspaceTask) => void;
 }
 
-export default function AgentWorkspaceArchive({ tasks, busyTaskId, onSetReviewed, onRemove }: Props) {
+export default function AgentWorkspaceArchive({
+  tasks, totalItems, hasMore, loadingMore, reviewFilter, busyTaskId,
+  onReviewFilterChange, onLoadMore, onSetReviewed, onRemove,
+}: Props) {
   const [query, setQuery] = useState('');
-  const [reviewFilter, setReviewFilter] = useState<'all' | 'reviewed' | 'pending'>('all');
   const visibleTasks = useMemo(() => {
     const keyword = query.trim().toLowerCase();
     return tasks.filter((task) => {
@@ -43,10 +51,11 @@ export default function AgentWorkspaceArchive({ tasks, busyTaskId, onSetReviewed
         <div><label className="fqp-label" htmlFor="workspace-archive-search">检索归档</label>
           <input id="workspace-archive-search" className="fqp-input" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="标题、Agent、材料或结果关键词" /></div>
         <div><label className="fqp-label" htmlFor="workspace-archive-review">核验状态</label>
-          <select id="workspace-archive-review" className="fqp-input" value={reviewFilter} onChange={(event) => setReviewFilter(event.target.value as typeof reviewFilter)}>
+          <select id="workspace-archive-review" className="fqp-input" value={reviewFilter} onChange={(event) => onReviewFilterChange(event.target.value as typeof reviewFilter)}>
             <option value="all">全部状态</option><option value="pending">待人工确认</option><option value="reviewed">已人工确认</option>
           </select></div>
       </div>
+      <p className="agent-workspace-archive-count" role="status">已载入 {tasks.length} / {totalItems} 条{query.trim() ? '，关键词仅检索已载入任务' : ''}</p>
       {visibleTasks.length === 0 ? <p className="agent-workspace-archive-empty" role="status">没有符合条件的归档任务。</p> : <div className="agent-workspace-archive-list">
       {visibleTasks.map((task) => <article key={task.id} className="agent-workspace-archive-item">
         <header><div><strong>{task.title}</strong><span>{task.agentCode} · {task.providerCode} · {task.model}</span></div><time>{formatTime(task.createdAt)}</time></header>
@@ -57,6 +66,7 @@ export default function AgentWorkspaceArchive({ tasks, busyTaskId, onSetReviewed
           <button type="button" className="fqp-btn fqp-btn-danger" disabled={busyTaskId === task.id} onClick={() => onRemove(task)}>删除</button>
         </div></footer>
       </article>)}</div>}
+      {hasMore && <button type="button" className="fqp-btn agent-workspace-load-more" disabled={loadingMore} onClick={onLoadMore}>{loadingMore ? '正在加载…' : '加载更多归档任务'}</button>}
     </>}
   </section>;
 }
