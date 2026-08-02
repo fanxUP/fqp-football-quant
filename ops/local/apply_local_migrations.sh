@@ -25,7 +25,9 @@ migration_checksum() {
 [[ -f "$ENV_FILE" ]] || { echo "[fqp-db] missing $ENV_FILE" >&2; exit 1; }
 set -a
 # shellcheck disable=SC1090
+set +u
 source "$ENV_FILE"
+set -u
 set +a
 [[ "$DATABASE_URL" == *"@127.0.0.1:5432/fqp" ]] \
     || { echo "[fqp-db] native DATABASE_URL is required" >&2; exit 1; }
