@@ -7,12 +7,12 @@ FQP 是单用户本地使用的足球竞彩与足彩量化研究系统：官方�
 ## 当前运行规则
 
 - 当前发布版本：`1.2.0`；根目录 `VERSION` 是版本事实来源。
-- 当前唯一工作区：`/Users/fan/Downloads/足球量化`；旧 iCloud 副本不得再用于开发或启动服务。
-- 源码仅在本机工作目录开发、测试、提交；Git 提交是唯一代码版本边界。
-- 本机长期运行：`./ops/local/manage_local_stack.sh start`。
-- 前端、后端、Worker、Scheduler、PostgreSQL 和 Redis 全部为 macOS 本机进程。
-- 本机 PostgreSQL `127.0.0.1:5432/fqp` 是唯一数据库；不再使用 Docker Desktop。
-- `data/` 是本机持久数据和备份，不提交 Git，不用删除目录替代恢复。
+- 当前运行环境：Ubuntu 24.04 服务器 `FQPfootball`（192.168.0.106），工作区 `/home/admin/fqp-football-quant`。
+- 源码仅在工作区目录开发、测试、提交；Git 提交是唯一代码版本边界。
+- 服务由 systemd 托管：`fqp-backend`（uvicorn main:app，监听 8080）、`fqp-scheduler`、`fqp-worker`；用 `systemctl status <服务名>` 查看。
+- 前端由 nginx 反向代理（监听 80）对外提供，API 走 8080；前端、后端、Worker、Scheduler、PostgreSQL、Redis 均为 Ubuntu 服务器进程。
+- PostgreSQL `127.0.0.1:5432/fqp` 是唯一数据库；Redis 仅监听本机 6379；不再使用 Docker Desktop。
+- 数据库每日 15:00 自动备份到 `backups/`；`data/` 是持久数据，不提交 Git，不用删除目录替代恢复。
 - Worker 是赔率高频调度的唯一执行者；Scheduler 不重复轮询。
 
 ## 文档与实现入口
