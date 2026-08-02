@@ -461,6 +461,9 @@
 .agent-workspace-comparison-results strong { color: var(--fqp-text); font-size: 12px; }
 .agent-workspace-comparison-results span { margin-top: 3px; color: var(--fqp-text-muted); font-size: 11px; }
 .agent-workspace-comparison-results pre { margin: 10px 0 0; color: var(--fqp-text); font-family: inherit; font-size: 12px; line-height: 1.65; white-space: pre-wrap; word-break: break-word; }
+.agent-workspace-comparison-review { display: grid; gap: 6px; margin-top: 12px; }
+.agent-workspace-comparison-review textarea { min-height: 72px; resize: vertical; }
+.agent-workspace-comparison-review .fqp-btn { justify-self: start; }
 .agent-workspace-archive-item footer { align-items: center; margin-top: 12px; }
 .agent-workspace-archive-item footer > span { color: var(--fqp-text-muted); font-size: 11px; }
 .agent-workspace-archive-item footer > span[data-reviewed='true'] { color: var(--fqp-success); }

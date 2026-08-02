@@ -111,6 +111,8 @@ export interface AgentWorkspaceComparison {
   status: 'running' | 'completed';
   createdAt: string | null;
   completedAt: string | null;
+  reviewNote: string | null;
+  reviewedAt: string | null;
 }
 
 export interface AgentWorkspaceReviewEvent {
@@ -303,6 +305,9 @@ export const api = {
       ),
     comparison: (comparisonId: string) => request<{ comparisonId: string; comparison: AgentWorkspaceComparison | null; tasks: AgentWorkspaceTask[] }>(
       `/api/agent-workspace/tasks/comparisons/${encodeURIComponent(comparisonId)}`,
+    ),
+    setComparisonReview: (comparisonId: string, reviewNote: string) => request<{ comparison: AgentWorkspaceComparison }>(
+      `/api/agent-workspace/tasks/comparisons/${encodeURIComponent(comparisonId)}`, { method: 'PATCH', body: JSON.stringify({ reviewNote }) },
     ),
     setReviewed: (taskId: number, reviewed: boolean, reviewNote?: string) =>
       request<{ task: AgentWorkspaceTask }>(`/api/agent-workspace/tasks/${taskId}`, {

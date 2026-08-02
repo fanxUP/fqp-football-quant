@@ -21,6 +21,7 @@ from apps.backend.src.services.agent_workspace_store import (
     list_workspace_task_review_events,
     set_workspace_task_reviewed,
     set_workspace_comparison_completed,
+    set_workspace_comparison_reviewed,
 )
 from apps.backend.src.services.model_gateway import ModelGatewayError, invoke_agent_model
 from apps.backend.src.services.model_invocation_audit import record_model_invocation
@@ -66,6 +67,18 @@ class WorkspaceComparisonRequest(WorkspaceTaskRequest):
         if any(agent_code not in AGENT_MODEL_OPTIONS for agent_code in value):
             raise ValueError("包含不支持的智能代理")
         return value
+
+
+class WorkspaceComparisonReviewRequest(BaseModel):
+    reviewNote: str = Field(min_length=1, max_length=2000)
+
+    @field_validator("reviewNote")
+    @classmethod
+    def normalize_review_note(cls, value: str) -> str:
+        trimmed = value.strip()
+        if not trimmed:
+            raise ValueError("人工结论不能为空")
+        return trimmed
 
 
 def _run_workspace_task(
@@ -161,6 +174,16 @@ def get_comparison_tasks(comparison_id: UUID):
         comparison = get_workspace_comparison(conn, str(comparison_id))
         tasks = list_workspace_comparison_tasks(conn, str(comparison_id))
     return {"comparisonId": str(comparison_id), "comparison": comparison, "tasks": tasks}
+
+
+@router.patch("/comparisons/{comparison_id}")
+def update_comparison_review(comparison_id: UUID, body: WorkspaceComparisonReviewRequest):
+    try:
+        with get_db() as conn:
+            comparison = set_workspace_comparison_reviewed(conn, str(comparison_id), body.reviewNote)
+    except AgentWorkspaceError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return {"comparison": comparison}
 
 
 @router.patch("/{task_id}")

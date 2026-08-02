@@ -9,6 +9,7 @@ from apps.backend.src.services.agent_workspace_store import (
     get_workspace_comparison,
     list_workspace_comparison_tasks,
     set_workspace_comparison_completed,
+    set_workspace_comparison_reviewed,
     list_workspace_task_page,
     list_workspace_task_review_events,
     list_workspace_tasks,
@@ -106,7 +107,7 @@ def test_workspace_comparison_returns_only_its_tasks_in_creation_order() -> None
 def test_workspace_comparison_exposes_requested_and_completed_counts() -> None:
     comparison_row = (
         "comparison-001", ["review_agent", "doc_agent", "data_agent"], 3, 2, 1, "completed",
-        datetime(2026, 8, 2, tzinfo=UTC), datetime(2026, 8, 2, tzinfo=UTC),
+        datetime(2026, 8, 2, tzinfo=UTC), datetime(2026, 8, 2, tzinfo=UTC), None, None,
     )
     conn = _Connection(row=comparison_row)
 
@@ -116,6 +117,7 @@ def test_workspace_comparison_exposes_requested_and_completed_counts() -> None:
         "id": "comparison-001", "requestedAgentCodes": ["review_agent", "doc_agent", "data_agent"],
         "requestedCount": 3, "succeededCount": 2, "failedCount": 1, "status": "completed",
         "createdAt": "2026-08-02T00:00:00+00:00", "completedAt": "2026-08-02T00:00:00+00:00",
+        "reviewNote": None, "reviewedAt": None,
     }
     assert conn.queries[0][1] == ("comparison-001",)
 
@@ -125,6 +127,21 @@ def test_workspace_comparison_exposes_requested_and_completed_counts() -> None:
     assert completed["failedCount"] == 1
     assert conn.committed
     assert conn.queries[0][1] == (2, 1, "comparison-001")
+
+
+def test_workspace_comparison_can_save_a_human_conclusion() -> None:
+    comparison_row = (
+        "comparison-001", ["review_agent", "doc_agent"], 2, 2, 0, "completed",
+        datetime(2026, 8, 2, tzinfo=UTC), datetime(2026, 8, 2, tzinfo=UTC),
+        "人工结论：继续核对赛程。", datetime(2026, 8, 2, tzinfo=UTC),
+    )
+    conn = _Connection(row=comparison_row)
+
+    comparison = set_workspace_comparison_reviewed(conn, "comparison-001", "人工结论：继续核对赛程。")
+
+    assert comparison["reviewNote"] == "人工结论：继续核对赛程。"
+    assert comparison["reviewedAt"] == "2026-08-02T00:00:00+00:00"
+    assert conn.queries[0][1] == ("人工结论：继续核对赛程。", "comparison-001")
 
 
 def test_workspace_review_uses_parameterized_update() -> None:

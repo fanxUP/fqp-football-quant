@@ -22,6 +22,7 @@ def _serialize_comparison(row: tuple[Any, ...]) -> dict[str, Any]:
         "succeededCount": row[3], "failedCount": row[4], "status": row[5],
         "createdAt": row[6].isoformat() if row[6] else None,
         "completedAt": row[7].isoformat() if row[7] else None,
+        "reviewNote": row[8], "reviewedAt": row[9].isoformat() if row[9] else None,
     }
 
 
@@ -84,7 +85,7 @@ def create_workspace_comparison(conn: Any, comparison_id: str, agent_codes: list
         cur.execute(
             """INSERT INTO agent_workspace_comparisons (id, requested_agent_codes, requested_count)
                VALUES (%s, %s, %s)
-               RETURNING id, requested_agent_codes, requested_count, succeeded_count, failed_count, status, created_at, completed_at""",
+               RETURNING id, requested_agent_codes, requested_count, succeeded_count, failed_count, status, created_at, completed_at, review_note, reviewed_at""",
             (comparison_id, agent_codes, len(agent_codes)),
         )
         row = cur.fetchone()
@@ -95,7 +96,7 @@ def create_workspace_comparison(conn: Any, comparison_id: str, agent_codes: list
 def get_workspace_comparison(conn: Any, comparison_id: str) -> dict[str, Any] | None:
     with conn.cursor() as cur:
         cur.execute(
-            """SELECT id, requested_agent_codes, requested_count, succeeded_count, failed_count, status, created_at, completed_at
+            """SELECT id, requested_agent_codes, requested_count, succeeded_count, failed_count, status, created_at, completed_at, review_note, reviewed_at
                FROM agent_workspace_comparisons WHERE id = %s""",
             (comparison_id,),
         )
@@ -111,8 +112,24 @@ def set_workspace_comparison_completed(
             """UPDATE agent_workspace_comparisons
                SET succeeded_count = %s, failed_count = %s, status = 'completed', completed_at = NOW()
                WHERE id = %s
-               RETURNING id, requested_agent_codes, requested_count, succeeded_count, failed_count, status, created_at, completed_at""",
+               RETURNING id, requested_agent_codes, requested_count, succeeded_count, failed_count, status, created_at, completed_at, review_note, reviewed_at""",
             (succeeded_count, failed_count, comparison_id),
+        )
+        row = cur.fetchone()
+    if not row:
+        raise AgentWorkspaceError("对比批次不存在")
+    conn.commit()
+    return _serialize_comparison(row)
+
+
+def set_workspace_comparison_reviewed(conn: Any, comparison_id: str, review_note: str) -> dict[str, Any]:
+    with conn.cursor() as cur:
+        cur.execute(
+            """UPDATE agent_workspace_comparisons
+               SET review_note = %s, reviewed_at = NOW()
+               WHERE id = %s
+               RETURNING id, requested_agent_codes, requested_count, succeeded_count, failed_count, status, created_at, completed_at, review_note, reviewed_at""",
+            (review_note, comparison_id),
         )
         row = cur.fetchone()
     if not row:
