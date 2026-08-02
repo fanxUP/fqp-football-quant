@@ -45,10 +45,6 @@ export default function LoginPage() {
 
       {/* Login card */}
       <div className={`fqp-login-card${visible ? ' visible' : ''}`}>
-        <div className="fqp-login-ball">
-          <span className="fqp-login-ball-icon">⚽</span>
-        </div>
-
         <form onSubmit={handleSubmit} className="fqp-login-form">
           <div className="fqp-login-field">
             <div className="fqp-login-input-wrap">
