@@ -25,6 +25,8 @@ def test_provider_input_uses_preset_defaults() -> None:
 def test_provider_catalog_exposes_current_presets_and_official_documentation() -> None:
     catalog = {item["providerCode"]: item for item in provider_catalog()}
 
+    assert catalog["deepseek"]["defaultBaseUrl"] == "https://api.deepseek.com"
+    assert catalog["deepseek"]["recommendedModels"] == ("deepseek-v4-flash", "deepseek-v4-pro")
     assert catalog["gemini"]["defaultModel"] == "gemini-3.6-flash"
     assert catalog["groq"]["defaultBaseUrl"] == "https://api.groq.com/openai/v1"
     assert catalog["minimax"]["recommendedModels"][0] == "MiniMax-M2.7"
