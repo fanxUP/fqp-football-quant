@@ -37,7 +37,7 @@ export default function RoiCompareBarChart({
         axisPointer: { type: 'shadow' },
         valueFormatter: (v: number) => `${(v * 100).toFixed(2)}%`,
       },
-      legend: { data: ['Agent 资金池', '我的票池'] },
+      legend: { data: ['智能代理资金池', '我的票池'] },
       xAxis: { type: 'category', data: dates },
       yAxis: {
         type: 'value',
@@ -46,7 +46,7 @@ export default function RoiCompareBarChart({
       },
       series: [
         {
-          name: 'Agent 资金池',
+          name: '智能代理资金池',
           type: 'bar',
           data: agent,
           barWidth: '30%',

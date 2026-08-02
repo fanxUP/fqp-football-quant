@@ -30,7 +30,7 @@ export function RecommendationPanel(props: RecommendationPanelProps) {
   return (
     <aside className="betting-recommendations" aria-label="推荐投注">
       <div className="betting-slip-head">
-        <div><h3>Agent 每日推荐</h3><span>虚拟 500 元用于记录模型表现，是否购买由你决定</span></div>
+        <div><h3>智能代理每日推荐</h3><span>虚拟 500 元用于记录模型表现，是否购买由你决定</span></div>
       </div>
       {props.error ? (
         <div className="betting-slip-empty"><strong>推荐加载失败</strong><span>{props.error}</span></div>
@@ -49,7 +49,7 @@ export function RecommendationPanel(props: RecommendationPanelProps) {
               <article key={recommendation.prediction_id} className="betting-recommendation-card">
                 <div className="betting-recommendation-head">
                   <span>{recommendation.match_num_str || recommendation.league}</span>
-                  <strong>{recommendation.home_team} vs {recommendation.away_team}</strong>
+                  <strong>{recommendation.home_team} 对阵 {recommendation.away_team}</strong>
                 </div>
                 <div className="betting-recommendation-pick">
                   <span>{recommendation.play_type_name}</span>
@@ -104,7 +104,7 @@ export function TicketPreview(props: TicketPreviewProps) {
           {props.selections.map((item) => (
             <article key={`${item.match_id}:${item.play_type}:${item.option_code}`} className="betting-slip-item">
               <span>{item.play_type_label}</span>
-              <strong>{item.home_team} vs {item.away_team}</strong>
+              <strong>{item.home_team} 对阵 {item.away_team}</strong>
               <div className="betting-slip-pick"><span>{item.option_name}</span><strong>@ {item.sp_value.toFixed(2)}</strong></div>
               <div className="betting-slip-basis">
                 <div><span>来源</span><strong>{item.basis?.source === 'recommendation' ? '推荐投注' : '手工选号'}</strong></div>

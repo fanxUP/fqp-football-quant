@@ -21,7 +21,7 @@ import ErrorState from '../shared/components/ErrorState';
 import LoadingSpinner from '../shared/components/LoadingSpinner';
 import EmptyState from '../shared/components/EmptyState';
 import TeamName from '../shared/components/TeamName';
-import { optionLabel, passTypeLabel, playTypeLabel, statusLabel } from '../shared/constants';
+import { optionLabel, passTypeLabel, playTypeLabel, riskLabel, statusLabel, strategyPoolLabel } from '../shared/constants';
 
 type DateFilter = 'all' | string;
 
@@ -161,7 +161,7 @@ function TicketCard({ ticket, deleting, onDelete }: {
               <div key={`${item.matchId}-${item.playType}-${item.optionCode}`} className="lottery-match-row">
                 <span>{item.matchCode}</span>
                 <strong style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <TeamName name={item.homeTeam} size={18} /><span>vs</span><TeamName name={item.awayTeam} size={18} />
+                  <TeamName name={item.homeTeam} size={18} /><span>对阵</span><TeamName name={item.awayTeam} size={18} />
                 </strong>
                 <em>{playTypeLabel(item.playType)} · {optionLabel(item.playType, item.optionCode || item.optionName)}{item.spValue ? ` @ ${item.spValue}` : ''}{item.oddsSource === 'synthetic_model' ? ' · 模型估算' : ''}</em>
               </div>
@@ -171,7 +171,7 @@ function TicketCard({ ticket, deleting, onDelete }: {
 
         <div className="lottery-detail-note">
           {ticket.source === 'agent_recommendation' && (
-            <span>Agent 推荐：{ticket.strategyPool || '默认策略'} · EV {Number(ticket.expectedValue || 0).toFixed(3)} · 分层 {ticket.riskLevel || '—'}</span>
+            <span>智能代理推荐：{strategyPoolLabel(ticket.strategyPool || 'main')} · EV {Number(ticket.expectedValue || 0).toFixed(3)} · 分层 {ticket.riskLevel ? riskLabel(ticket.riskLevel) : '—'}</span>
           )}
           <span>{ticketKindLabel(ticket)} · {ticketSourceLabel(ticket)} · {ticketOutcomeLabel(ticket)}</span>
           {ticket.confirmStatus && <span>确认状态：{statusLabel(ticket.confirmStatus)}</span>}
@@ -321,7 +321,7 @@ export default function TicketsPage() {
     <div>
       <PageHeader
         title="彩票"
-        subtitle="按日期归档我的彩票和 Agent 的彩票，统一展示票面、结算、盈亏和 ROI"
+        subtitle="按日期归档我的彩票和智能代理的彩票，统一展示票面、结算、盈亏和 ROI"
         lastUpdated={lastUpdated}
         actions={
           <button className="fqp-btn fqp-btn-primary" onClick={() => navigate('/betting?tab=bet-slip')}>

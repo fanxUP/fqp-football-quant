@@ -16,11 +16,11 @@ export function formatTicketDate(value: string | null | undefined): string {
 }
 
 export function ticketOwnerLabel(owner: BettingTicketOwner): string {
-  return owner === 'agent' ? 'Agent 的彩票' : '我的彩票';
+  return owner === 'agent' ? '智能代理的彩票' : '我的彩票';
 }
 
 export function ticketKindLabel(ticket: BettingTicket): string {
-  if (ticket.source === 'agent_recommendation') return 'Agent 推荐票';
+  if (ticket.source === 'agent_recommendation') return '智能代理推荐票';
   return ticket.kind === 'real' ? '彩票' : '投注票';
 }
 
@@ -45,14 +45,14 @@ export function ticketOutcomeWatermark(ticket: BettingTicket): string {
 export function ticketSourceLabel(ticket: BettingTicket): string {
   if (ticket.source === 'ocr') return 'OCR 识别';
   if (ticket.source === 'time_machine') return '时光机补录';
-  if (ticket.source === 'agent_recommendation') return 'Agent 推荐';
+  if (ticket.source === 'agent_recommendation') return '智能代理推荐';
   return ticket.kind === 'real' ? '手工录入' : '投注台';
 }
 
 export function ticketPrimaryMatchLabel(ticket: BettingTicket): string {
   const first = ticket.items?.[0];
   if (!first) return `${ticket.matchCount || ticket.itemCount || 0} 场比赛`;
-  return `${first.homeTeam} vs ${first.awayTeam}`;
+  return `${first.homeTeam} 对阵 ${first.awayTeam}`;
 }
 
 export function ticketPrimaryMatchCode(ticket: BettingTicket): string {

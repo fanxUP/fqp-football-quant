@@ -44,7 +44,7 @@ export default function AgentModelBindings({ providers }: { providers: ModelProv
   return <section className="agent-model-bindings" aria-labelledby="agent-model-bindings-title">
     <div>
       <h3 id="agent-model-bindings-title">智能代理模型开关</h3>
-      <p>仅允许任务编排、复盘与文档 Agent 手动调用模型；每日推荐、风控和彩票结算不会使用外部模型。</p>
+      <p>仅允许任务编排、复盘与文档智能代理手动调用模型；每日推荐、风控和彩票结算不会使用外部模型。</p>
     </div>
     <div className="agent-model-binding-list">
       {bindings.map((binding) => <div className="agent-model-binding" key={binding.agentCode}>

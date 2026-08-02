@@ -84,7 +84,7 @@ export default function UpsetDetailDialog({ detail, onClose }: { detail: UpsetDe
         <ReviewSection detail={detail} />
         <div className="upset-ticket-columns">
           <TicketRows title="用户实票影响" prefix="实票" tickets={detail.user_tickets} />
-          <TicketRows title="Agent虚拟票影响" prefix="Agent票" tickets={detail.agent_tickets} />
+          <TicketRows title="智能代理虚拟票影响" prefix="智能代理票" tickets={detail.agent_tickets} />
         </div>
       </section>
     </div>

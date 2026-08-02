@@ -352,8 +352,8 @@ export default function DashboardPage() {
 
       {/* AI资金池 + 盈亏趋势 */}
       <div className="fqp-grid-2" style={{ marginBottom: '24px' }}>
-        {/* Agent 资金池仪表盘 — 取代数据完整度环状图 */}
-        <Card title="Agent 资金池">
+        {/* 智能代理资金池仪表盘 — 取代数据完整度环状图 */}
+        <Card title="智能代理资金池">
           <div style={{ padding: '8px 0' }}>
             {/* 大数字：已用 / 总额 */}
             <div style={{ textAlign: 'center', marginBottom: '16px' }}>
@@ -426,7 +426,7 @@ export default function DashboardPage() {
             />
             <span style={{ fontSize: '12px', color: 'var(--fqp-text-muted)' }}>
               {agentPendingCount > 0
-                ? `存在 ${agentPendingCount} 张待开奖 Agent 票，请关注风险敞口`
+                ? `存在 ${agentPendingCount} 张待开奖智能代理票，请关注风险敞口`
                 : '系统空闲，无活跃风险敞口'}
             </span>
           </div>
@@ -472,7 +472,7 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      {/* Dashboard API Charts — AI vs ROI comparison + pool usage */}
+        {/* 驾驶舱图表 — 人工智能与 ROI 对比及资金池使用情况 */}
       <div className="fqp-grid-2" style={{ marginBottom: '24px' }}>
         {roiDaily.length > 0 ? (
           <RoiLineChart
@@ -495,8 +495,8 @@ export default function DashboardPage() {
           </Card>
         )}
 
-        {/* Agent 资金池综合看板 — 多维度数据 */}
-        <Card title="Agent 资金池概览" subtitle="当日策略统计">
+        {/* 智能代理资金池综合看板 — 多维度数据 */}
+        <Card title="智能代理资金池概览" subtitle="当日策略统计">
           <AiPoolDashboard
             kpis={todayKpis}
             models={modelPerf}

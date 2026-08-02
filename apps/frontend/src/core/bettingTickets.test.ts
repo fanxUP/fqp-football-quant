@@ -50,10 +50,10 @@ describe('bettingTickets', () => {
 
   it('labels owners and ticket kinds for the lottery ledger', () => {
     expect(ticketOwnerLabel('me')).toBe('我的彩票');
-    expect(ticketOwnerLabel('agent')).toBe('Agent 的彩票');
+    expect(ticketOwnerLabel('agent')).toBe('智能代理的彩票');
     expect(ticketKindLabel(ticket({ kind: 'real' }))).toBe('彩票');
     expect(ticketKindLabel(ticket({ kind: 'simulation' }))).toBe('投注票');
-    expect(ticketKindLabel(ticket({ source: 'agent_recommendation' }))).toBe('Agent 推荐票');
+    expect(ticketKindLabel(ticket({ source: 'agent_recommendation' }))).toBe('智能代理推荐票');
   });
 
   it('groups tickets by date newest first', () => {
@@ -91,7 +91,7 @@ describe('bettingTickets', () => {
 
   it('labels ticket sources for card metadata', () => {
     expect(ticketSourceLabel(ticket({ source: 'ocr', kind: 'real' }))).toBe('OCR 识别');
-    expect(ticketSourceLabel(ticket({ source: 'agent_recommendation' }))).toBe('Agent 推荐');
+    expect(ticketSourceLabel(ticket({ source: 'agent_recommendation' }))).toBe('智能代理推荐');
     expect(ticketSourceLabel(ticket({ source: 'manual', kind: 'real' }))).toBe('手工录入');
     expect(ticketSourceLabel(ticket({ source: 'manual', kind: 'simulation' }))).toBe('投注台');
   });
@@ -113,7 +113,7 @@ describe('bettingTickets', () => {
     });
 
     expect(ticketPrimaryMatchCode(withItem)).toBe('周二001');
-    expect(ticketPrimaryMatchLabel(withItem)).toBe('阿森纳 vs 切尔西');
+    expect(ticketPrimaryMatchLabel(withItem)).toBe('阿森纳 对阵 切尔西');
     expect(ticketPrimaryMatchCode(ticket({ items: [] }))).toBe('比赛编号待补全');
     expect(ticketPrimaryMatchLabel(ticket({ matchCount: 2, itemCount: 2, items: [] }))).toBe('2 场比赛');
   });

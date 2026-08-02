@@ -129,7 +129,7 @@ export default function RecommendationDetailPage({ ticketId }: RecommendationDet
           <div>{formatTimestamp(ticket.created_at)}</div>
           <div style={{ marginTop: '16px', padding: '12px', background: 'var(--fqp-panel)', borderRadius: 'var(--fqp-radius-sm)' }}>
             ⚠️ 明细项（各场次的具体选项与赔率）需要后端提供 <code>/api/tickets/{'{id}'}/items</code> 端点。
-            当前后端仅有列表端点。联系 Codex Agent 补充该端点后即可显示完整明细。
+            当前后端仅有列表端点。待补充该端点后即可显示完整明细。
           </div>
         </div>
       </Card>

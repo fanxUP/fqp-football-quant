@@ -175,14 +175,14 @@ export default function AgentWorkspace() {
 
   return <section className="agent-workspace" aria-labelledby="agent-workspace-title">
     <div className="agent-workspace-heading">
-      <div><span className="appearance-eyebrow">V3 · 人工多模型对比</span><h2 id="agent-workspace-title">新建分析任务</h2></div>
+      <div><span className="appearance-eyebrow">第三版 · 人工多模型对比</span><h2 id="agent-workspace-title">新建分析任务</h2></div>
       <span className="agent-workspace-safety">不自动执行 · 不写入业务数据</span>
     </div>
     <div className="agent-workspace-stats" aria-label="归档任务概览">
       <span><b>{taskStats.total}</b>归档任务</span><span><b>{taskStats.pending}</b>待人工确认</span><span><b>{taskStats.reviewed}</b>已人工确认</span>
     </div>
     {availableBindings.length === 0 ? <div className="agent-workspace-empty" role="status">
-      <strong>暂无可用模型</strong><p>请先在“模型接入”中保存服务商、完成连通性测试，并为至少一个 Agent 开启调用。</p>
+      <strong>暂无可用模型</strong><p>请先在“模型接入”中保存服务商、完成连通性测试，并为至少一个智能代理开启调用。</p>
     </div> : <div className="agent-workspace-grid">
       <div className="agent-workspace-form">
         <label className="fqp-label" htmlFor="workspace-agent">任务职责</label>

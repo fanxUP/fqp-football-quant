@@ -6,7 +6,7 @@ import Card from '../shared/components/Card';
 import DataTable, { type Column } from '../shared/components/DataTable';
 import StatusBadge from '../shared/components/StatusBadge';
 import ErrorState from '../shared/components/ErrorState';
-import { statusLabel, riskLabel, actionLabel } from '../shared/constants';
+import { actionLabel, agentLabel, agentTypeLabel, permissionLevelLabel, reviewStatusLabel, riskLabel, statusLabel } from '../shared/constants';
 import { formatTimestamp } from '../shared/utils';
 
 type TabKey = 'tasks' | 'jobs' | 'stale' | 'staleTasks' | 'gates' | 'audit';
@@ -133,42 +133,42 @@ export default function AgentPanel() {
 
   return (
     <div>
-      <PageHeader title="Codex Agent" />
+      <PageHeader title="智能代理中心" />
       <Card style={{ padding: 0, overflow: 'hidden', marginBottom: 20 }}>
         <div style={{ padding: '16px 20px 8px' }}>
-          <h2 style={{ margin: 0, fontSize: 16 }}>Agent 列表</h2>
-          <div className="fqp-stat-sub">已注册 {agents.length} 个本地 Agent</div>
+          <h2 style={{ margin: 0, fontSize: 16 }}>智能代理列表</h2>
+          <div className="fqp-stat-sub">已注册 {agents.length} 个本地智能代理</div>
         </div>
         <DataTable
           columns={[
-            { key: 'agent_name', title: 'Agent' },
-            { key: 'agent_type', title: '类型' },
+            { key: 'agent_name', title: '智能代理', render: (value) => agentLabel(String(value)) },
+            { key: 'agent_type', title: '类型', render: (value) => agentTypeLabel(String(value)) },
             { key: 'description', title: '职责' },
-            { key: 'permission_level', title: '权限' },
+            { key: 'permission_level', title: '权限', render: (value) => permissionLevelLabel(String(value)) },
             { key: 'is_active', title: '状态', render: (value) => <StatusBadge status={value ? 'ok' : 'disabled'} label={value ? '启用' : '停用'} /> },
           ]}
           rows={agents}
           loading={!summary && agents.length === 0}
-          emptyText="暂无已注册 Agent"
+          emptyText="暂无已注册智能代理"
           rowKey={(row) => row.id}
         />
       </Card>
       {summary && (
         <div className="fqp-grid-4" style={{ marginBottom: 20 }}>
-          <Card className="fqp-stat-card"><div className="fqp-stat-label">活跃 Agent</div><div className="fqp-stat-value">{summary.active_agents}</div></Card>
+          <Card className="fqp-stat-card"><div className="fqp-stat-label">活跃智能代理</div><div className="fqp-stat-value">{summary.active_agents}</div></Card>
           <Card className="fqp-stat-card"><div className="fqp-stat-label">未完成任务</div><div className="fqp-stat-value">{summary.open_tasks}</div></Card>
-          <Card className="fqp-stat-card"><div className="fqp-stat-label">运行中 Job</div><div className="fqp-stat-value">{summary.running_jobs}</div></Card>
-          <Card className="fqp-stat-card"><div className="fqp-stat-label">疑似卡住</div><div className="fqp-stat-value" style={{ color: summary.stale_jobs + summary.stale_tasks ? 'var(--fqp-warning)' : undefined }}>{summary.stale_jobs + summary.stale_tasks}</div><div className="fqp-stat-sub">{summary.stale_tasks} 个超时任务 · {summary.stale_jobs} 个超时 Job</div></Card>
+          <Card className="fqp-stat-card"><div className="fqp-stat-label">运行中任务</div><div className="fqp-stat-value">{summary.running_jobs}</div></Card>
+          <Card className="fqp-stat-card"><div className="fqp-stat-label">疑似卡住</div><div className="fqp-stat-value" style={{ color: summary.stale_jobs + summary.stale_tasks ? 'var(--fqp-warning)' : undefined }}>{summary.stale_jobs + summary.stale_tasks}</div><div className="fqp-stat-sub">{summary.stale_tasks} 个超时任务 · {summary.stale_jobs} 个超时调度任务</div></Card>
           <Card className="fqp-stat-card"><div className="fqp-stat-label">待审核闸门</div><div className="fqp-stat-value" style={{ color: summary.pending_review_gates ? 'var(--fqp-warning)' : undefined }}>{summary.pending_review_gates}</div></Card>
-          <Card className="fqp-stat-card"><div className="fqp-stat-label">24h 失败 Job</div><div className="fqp-stat-value" style={{ color: summary.failed_jobs_24h ? 'var(--fqp-red-neon)' : undefined }}>{summary.failed_jobs_24h}</div></Card>
-          <Card className="fqp-stat-card"><div className="fqp-stat-label">Scheduler</div><div className="fqp-stat-value" style={{ color: summary.scheduler_running ? 'var(--fqp-green-neon)' : 'var(--fqp-red-neon)', fontSize: 24 }}>{summary.scheduler_running ? '在线' : '离线'}</div><div className="fqp-stat-sub">{scheduler?.heartbeat_at ? `心跳 ${formatTimestamp(scheduler.heartbeat_at)}` : '请启动本机 Scheduler'}</div></Card>
+          <Card className="fqp-stat-card"><div className="fqp-stat-label">24 小时失败任务</div><div className="fqp-stat-value" style={{ color: summary.failed_jobs_24h ? 'var(--fqp-red-neon)' : undefined }}>{summary.failed_jobs_24h}</div></Card>
+          <Card className="fqp-stat-card"><div className="fqp-stat-label">调度器</div><div className="fqp-stat-value" style={{ color: summary.scheduler_running ? 'var(--fqp-green-neon)' : 'var(--fqp-red-neon)', fontSize: 24 }}>{summary.scheduler_running ? '在线' : '离线'}</div><div className="fqp-stat-sub">{scheduler?.heartbeat_at ? `心跳 ${formatTimestamp(scheduler.heartbeat_at)}` : '请启动本机调度器'}</div></Card>
         </div>
       )}
       <div className="fqp-tabs">
         {([
-          ['tasks', 'Agent 任务'],
+          ['tasks', '智能代理任务'],
           ['jobs', '任务执行'],
-          ['stale', '超时 Job'],
+          ['stale', '超时调度任务'],
           ['staleTasks', '超时任务'],
           ['gates', '审核闸门'],
           ['audit', '审计日志'],
@@ -214,13 +214,13 @@ function StaleTasksTab() {
   const columns: Column<StaleTask>[] = [
     { key: 'task_code', title: '任务编号' },
     { key: 'task_title', title: '任务标题' },
-    { key: 'owner_agent', title: '负责 Agent' },
+    { key: 'owner_agent', title: '负责代理', render: (v) => agentLabel(String(v)) },
     { key: 'status', title: '状态', render: (v) => <StatusBadge status="warning" label={statusLabel(String(v))} /> },
     { key: 'stale_minutes', title: '未更新时长', render: (v) => `${Number(v).toFixed(1)} 分钟` },
     { key: 'updated_at', title: '最后更新', render: (v) => formatTimestamp(v) },
   ];
   if (error) return <ErrorState message={error} onRetry={fetchStaleTasks} />;
-  return <Card style={{ padding: 0, overflow: 'hidden' }}><DataTable columns={columns} rows={tasks} loading={loading} emptyText="暂无超时 Agent 任务" rowKey={(r) => String(r.id)} /></Card>;
+  return <Card style={{ padding: 0, overflow: 'hidden' }}><DataTable columns={columns} rows={tasks} loading={loading} emptyText="暂无超时智能代理任务" rowKey={(r) => String(r.id)} /></Card>;
 }
 
 function StaleJobsTab() {
@@ -240,14 +240,14 @@ function StaleJobsTab() {
     return () => window.clearInterval(timer);
   }, []);
   const columns: Column<StaleJob>[] = [
-    { key: 'job_code', title: 'Job 编码' },
+    { key: 'job_code', title: '调度任务编码' },
     { key: 'job_name', title: '任务名称' },
-    { key: 'owner_agent', title: '负责 Agent' },
+    { key: 'owner_agent', title: '负责代理', render: (v) => agentLabel(String(v)) },
     { key: 'running_minutes', title: '运行时长', render: (v) => `${Number(v).toFixed(1)} 分钟` },
     { key: 'started_at', title: '开始时间', render: (v) => formatTimestamp(v) },
   ];
   if (error) return <ErrorState message={error} onRetry={fetchStaleJobs} />;
-  return <Card style={{ padding: 0, overflow: 'hidden' }}><DataTable columns={columns} rows={jobs} loading={loading} emptyText="暂无超时 Job" rowKey={(r) => String(r.id)} /></Card>;
+  return <Card style={{ padding: 0, overflow: 'hidden' }}><DataTable columns={columns} rows={jobs} loading={loading} emptyText="暂无超时调度任务" rowKey={(r) => String(r.id)} /></Card>;
 }
 
 function GatesTab() {
@@ -271,7 +271,7 @@ function GatesTab() {
     { key: 'task_title', title: '任务标题' },
     { key: 'reason', title: '审核原因' },
     { key: 'reviewer', title: '审核人', render: (v) => typeof v === 'string' && v ? v : '待审核' },
-    { key: 'review_status', title: '状态', render: (v) => <StatusBadge status={v === 'approved' ? 'ok' : v === 'rejected' ? 'error' : 'warning'} label={String(v)} /> },
+    { key: 'review_status', title: '状态', render: (v) => <StatusBadge status={v === 'approved' ? 'ok' : v === 'rejected' ? 'error' : 'warning'} label={reviewStatusLabel(String(v))} /> },
     { key: 'id', title: '操作', render: (_v, row) => row.review_status === 'pending' ? <GateActions gateId={row.id} onResolved={fetchGates} /> : '—' },
     { key: 'created_at', title: '创建时间', render: (v) => formatTimestamp(v) },
   ];
@@ -337,7 +337,7 @@ function TasksTab() {
   const columns: Column<AgentTask>[] = [
     { key: 'task_code', title: '任务编号' },
     { key: 'task_title', title: '标题' },
-    { key: 'owner_agent', title: '负责Agent' },
+    { key: 'owner_agent', title: '负责代理', render: (v) => agentLabel(String(v)) },
     {
       key: 'risk_level',
       title: '风险',
@@ -380,7 +380,7 @@ function TasksTab() {
           columns={columns}
           rows={tasks}
           loading={loading}
-          emptyText="暂无 Agent 任务记录"
+          emptyText="暂无智能代理任务记录"
           rowKey={(r) => String(r.id)}
         />
       </Card>
@@ -422,7 +422,7 @@ function JobsTab() {
   const columns: Column<JobRun>[] = [
     { key: 'job_code', title: '任务编码' },
     { key: 'job_name', title: '任务名称' },
-    { key: 'owner_agent', title: '负责Agent' },
+    { key: 'owner_agent', title: '负责代理', render: (v) => agentLabel(String(v)) },
     {
       key: 'status',
       title: '状态',
@@ -484,7 +484,7 @@ function AuditTab() {
       width: '80px',
       render: (v) => v ? <span className="fqp-mono">#{String(v)}</span> : '—',
     },
-    { key: 'agent_name', title: 'Agent' },
+    { key: 'agent_name', title: '智能代理', render: (v) => agentLabel(String(v)) },
     { key: 'action_type', title: '动作类型' },
     {
       key: 'result_status',

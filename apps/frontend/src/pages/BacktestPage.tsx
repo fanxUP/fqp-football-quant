@@ -244,8 +244,8 @@ export default function BacktestPage() {
                 value={form.signalStrength}
                 onChange={(e) => setForm((f) => ({ ...f, signalStrength: e.target.value }))}
               >
-                <option value="strong">Strong（概率 &gt; 40%）</option>
-                <option value="weak">Weak（概率 30-40%）</option>
+                <option value="strong">强信号（概率 &gt; 40%）</option>
+                <option value="weak">弱信号（概率 30-40%）</option>
                 <option value="all">全部</option>
               </select>
             </div>
@@ -389,7 +389,7 @@ export default function BacktestPage() {
                   },
                   { key: 'avg_odds', title: '均赔', width: '70px', render: (_: unknown, row: BacktestResult) => fmtNum(row.avg_odds) },
                   { key: 'brier_score', title: 'Brier', width: '80px', render: (_: unknown, row: BacktestResult) => fmtNum(row.brier_score, 4) },
-                  { key: 'log_loss', title: 'LogLoss', width: '80px', render: (_: unknown, row: BacktestResult) => fmtNum(row.log_loss, 4) },
+                  { key: 'log_loss', title: '对数损失', width: '80px', render: (_: unknown, row: BacktestResult) => fmtNum(row.log_loss, 4) },
                   { key: 'clv', title: 'CLV', width: '80px', render: (_: unknown, row: BacktestResult) => fmtNum(row.clv, 4) },
                   {
                     key: 'max_drawdown_pct', title: '最大回撤', width: '90px',

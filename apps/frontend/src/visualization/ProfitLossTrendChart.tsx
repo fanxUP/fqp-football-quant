@@ -53,7 +53,7 @@ export function buildProfitLossTrendOption(
       top: 0,
       left: 0,
       right: 0,
-      data: ['我的当日盈亏', 'Agent 当日盈亏', '我的累计盈亏', 'Agent 累计盈亏'],
+      data: ['我的当日盈亏', '智能代理当日盈亏', '我的累计盈亏', '智能代理累计盈亏'],
     },
     grid: { left: 18, right: 24, top: 56, bottom: 24, containLabel: true },
     xAxis: {
@@ -84,7 +84,7 @@ export function buildProfitLossTrendOption(
         itemStyle: { color: CHART_COLORS.blue, opacity: 0.34 },
       },
       {
-        name: 'Agent 当日盈亏',
+        name: '智能代理当日盈亏',
         type: 'bar',
         data: data.map((point) => point.agentDailyProfitLoss),
         barMaxWidth: 14,
@@ -101,7 +101,7 @@ export function buildProfitLossTrendOption(
         markLine: zeroLine,
       },
       {
-        name: 'Agent 累计盈亏',
+        name: '智能代理累计盈亏',
         type: 'line',
         data: data.map((point) => point.agentCumulativeProfitLoss),
         symbol: 'emptyCircle',

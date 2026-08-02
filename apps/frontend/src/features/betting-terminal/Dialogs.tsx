@@ -16,7 +16,7 @@ export function AllGamesDialog({ match, selections, onToggle, onClose, bettingCl
     <div className="sporttery-dialog-backdrop" role="presentation" onClick={onClose}>
       <section className="sporttery-dialog sporttery-play-dialog" role="dialog" aria-modal="true" aria-label={`${match.match_num_str} 全部游戏`} onClick={(event) => event.stopPropagation()}>
         <div className="sporttery-play-heading">{match.match_num_str}　{match.league_name}　{match.kickoff_time.slice(5, 16).replace('T', ' ')}</div>
-        <div className="sporttery-play-teams"><small>[主]</small>{match.home_team_name} <span>vs</span> {match.away_team_name}</div>
+        <div className="sporttery-play-teams"><small>[主]</small>{match.home_team_name} <span>对阵</span> {match.away_team_name}</div>
         <div className="sporttery-play-scroll">
           {PLAY_TYPES.map((playType) => {
             const market = match.odds[playType];
@@ -145,7 +145,7 @@ export function ConfirmationDialog(props: ConfirmationDialogProps) {
         <div className="sporttery-confirm-body">
           <p className="sporttery-saved">已保存到我的彩票 · {props.ticketUid}</p>
           <p><strong>{new Set(props.selections.map((item) => item.match_id)).size} 场 / {props.selections.length} 项</strong></p>
-          <ol>{props.selections.map((item) => <li key={selectionKey(item.match_id, item.play_type, item.option_code)}>{item.home_team}vs{item.away_team} {item.play_type_label}{item.option_name} @{item.sp_value.toFixed(2)}</li>)}</ol>
+          <ol>{props.selections.map((item) => <li key={selectionKey(item.match_id, item.play_type, item.option_code)}>{item.home_team}对阵{item.away_team} {item.play_type_label}{item.option_name} @{item.sp_value.toFixed(2)}</li>)}</ol>
           <p>过关方式：{formatPassTypes(props.passTypes)}<br />倍数：{props.multiple}倍<br />注数：{props.betCount}注<br />模拟金额：{props.stake.toFixed(2)}元<br />理论最高奖金：{props.prize.toFixed(2)}元</p>
         </div>
         <button type="button" className="sporttery-dialog-close" onClick={props.onClose}>完成</button>

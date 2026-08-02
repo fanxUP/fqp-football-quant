@@ -25,7 +25,7 @@ export default function RoiLineChart({
   loading,
   empty,
   emptyReason,
-  agentLabel = 'Agent 资金池',
+  agentLabel = '智能代理资金池',
   userLabel = '我的票池',
 }: RoiLineChartProps) {
   const { theme } = useTheme();

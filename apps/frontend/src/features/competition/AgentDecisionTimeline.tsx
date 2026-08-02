@@ -2,13 +2,13 @@ import type { AgentDailyDecision } from '../../core/types';
 import EmptyState from '../../shared/components/EmptyState';
 
 const STATUS_META = {
-  purchased: { label: 'Agent 虚拟推荐', color: 'var(--fqp-success, #16a34a)' },
+  purchased: { label: '智能代理虚拟推荐', color: 'var(--fqp-success, #16a34a)' },
   abstained: { label: '已放弃', color: 'var(--fqp-warning, #d97706)' },
   failed: { label: '执行失败', color: 'var(--fqp-danger, #dc2626)' },
 };
 
 const OBSERVATION_META = {
-  label: 'Agent 虚拟推荐',
+  label: '智能代理虚拟推荐',
   color: 'var(--fqp-warning, #d97706)',
 };
 
@@ -21,7 +21,7 @@ export default function AgentDecisionTimeline({ decisions }: { decisions: AgentD
     return (
       <EmptyState
         icon="决策"
-        title="暂无 Agent 每日决策"
+        title="暂无智能代理每日决策"
         description="北京时间 16:00 执行后，会记录购买或放弃原因"
       />
     );

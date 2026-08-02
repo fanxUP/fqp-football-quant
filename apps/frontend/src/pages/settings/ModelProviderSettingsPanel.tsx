@@ -102,7 +102,7 @@ export default function ModelProviderSettingsPanel() {
     <section className="model-provider-panel" aria-labelledby="model-provider-title">
       <div className="local-settings-heading">
         <div>
-          <span className="appearance-eyebrow">MODEL GATEWAY</span>
+          <span className="appearance-eyebrow">模型网关</span>
           <h2 id="model-provider-title">模型接入中心</h2>
           <p>预置服务商统一接入；密钥仅加密保存在服务器，页面不会回显。</p>
         </div>

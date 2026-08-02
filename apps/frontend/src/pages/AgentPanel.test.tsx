@@ -32,11 +32,11 @@ describe('AgentPanel', () => {
   it('renders the operations summary and review gate tab', async () => {
     mockFetch();
     render(<AgentPanel />);
-    await waitFor(() => expect(screen.getByText('活跃 Agent')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('活跃智能代理')).toBeInTheDocument());
     expect(screen.getByText('在线')).toBeInTheDocument();
     expect(screen.getByText(/心跳 2026-07-10 10:00:00/)).toBeInTheDocument();
-    expect(screen.getByText('Agent 列表')).toBeInTheDocument();
-    expect(screen.getByText('data_agent')).toBeInTheDocument();
+    expect(screen.getByText('智能代理列表')).toBeInTheDocument();
+    expect(screen.getByText('数据代理')).toBeInTheDocument();
     expect(screen.getByText((content) => content.includes('1 个超时任务'))).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '审核闸门' }));
     expect(await screen.findByText('RISK-001')).toBeInTheDocument();
@@ -49,7 +49,7 @@ describe('AgentPanel', () => {
     fireEvent.click(await screen.findByRole('button', { name: '超时任务' }));
     expect(await screen.findByText('TEST-001')).toBeInTheDocument();
     expect(screen.getByText('Test task')).toBeInTheDocument();
-    expect(screen.getByText('qa_agent')).toBeInTheDocument();
+    expect(screen.getByText('质量验证代理')).toBeInTheDocument();
   });
 
   it('requires a reviewer before sending an approval request', async () => {

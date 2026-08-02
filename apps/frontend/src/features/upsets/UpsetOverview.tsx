@@ -22,7 +22,7 @@ export function UpsetMetrics({ summary }: { summary: UpsetSummary }) {
       <Metric label="S/A级" value={summary.severe_count} detail={`S级 ${summary.extreme_count} 场`} />
       <Metric label="热门未打出" value={summary.favourite_failed_count} />
       <Metric label="用户涉及" value={summary.user_involved_count} />
-      <Metric label="Agent涉及" value={summary.agent_involved_count} />
+      <Metric label="智能代理涉及" value={summary.agent_involved_count} />
     </section>
   );
 }
@@ -51,7 +51,7 @@ export function UpsetCard({ item, onOpen }: { item: UpsetListItem; onOpen: () =>
         {item.favourite_failed && <span>热门未打出</span>}
         {item.model_warned && <span>模型曾预警</span>}
         {item.user_bet_involved && <span>用户实票涉及</span>}
-        {item.agent_bet_involved && <span>Agent虚拟票涉及</span>}
+        {item.agent_bet_involved && <span>智能代理虚拟票涉及</span>}
         <span className={reviewWaiting ? 'is-waiting' : 'is-ready'}>
           {reviewWaiting ? '等待详细证据' : '复盘已生成'}
         </span>

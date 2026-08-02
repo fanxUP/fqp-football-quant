@@ -24,7 +24,7 @@ export const PLAY_TYPE_LABELS: Record<string, string> = {
   hhgg: '混合过关',
   mixed: '混合过关',
   single: '单关',
-  virtual_recommendation: 'Agent 推荐票',
+  virtual_recommendation: '智能代理推荐票',
   // legacy aliases
   score: '比分',
   total_goals: '总进球数',
@@ -145,7 +145,7 @@ export const SOURCE_TYPE_LABELS: Record<string, string> = {
   manual: '手动录入',
   simulator: '投注器',
   simulation: '投注推荐',
-  agent: 'Agent',
+  agent: '智能代理',
 };
 
 export function sourceTypeLabel(code: string): string {
@@ -156,13 +156,61 @@ export function sourceTypeLabel(code: string): string {
 
 export const STRATEGY_POOL_LABELS: Record<string, string> = {
   main: '主策略',
-  agent_virtual_recommendation: 'Agent 虚拟推荐',
-  agent_value: 'Agent 价值推荐',
-  agent_competition_observation: 'Agent 赛事观察',
+  agent_virtual_recommendation: '智能代理虚拟推荐',
+  agent_value: '智能代理价值推荐',
+  agent_competition_observation: '智能代理赛事观察',
 };
 
 export function strategyPoolLabel(code: string): string {
   return STRATEGY_POOL_LABELS[code] || code;
+}
+
+// ── Agent and review labels ─────────────────────────────────────
+
+export const AGENT_LABELS: Record<string, string> = {
+  orchestrator_agent: '编排代理',
+  data_agent: '数据代理',
+  feature_agent: '特征代理',
+  model_agent: '模型代理',
+  backtest_agent: '回测代理',
+  recommendation_agent: '推荐代理',
+  risk_agent: '风控代理',
+  review_agent: '复盘代理',
+  qa_agent: '质量验证代理',
+  devops_agent: '运维代理',
+  doc_agent: '文档代理',
+};
+
+export function agentLabel(code: string): string {
+  return AGENT_LABELS[code] || code;
+}
+
+const AGENT_TYPE_LABELS: Record<string, string> = {
+  orchestrator: '任务编排', data: '数据维护', feature: '特征构建', model: '模型维护',
+  backtest: '回测评估', recommendation: '推荐生成', risk: '风险控制', review: '赛后复盘',
+  qa: '质量验证', devops: '运维部署', docs: '文档维护',
+};
+
+export function agentTypeLabel(code: string): string {
+  return AGENT_TYPE_LABELS[code] || code;
+}
+
+const PERMISSION_LEVEL_LABELS: Record<string, string> = {
+  P1: 'P1-只读', P2: 'P2-受限操作', P3_controlled: 'P3-受控执行',
+};
+
+export function permissionLevelLabel(code: string): string {
+  return PERMISSION_LEVEL_LABELS[code] || code;
+}
+
+export const REVIEW_STATUS_LABELS: Record<string, string> = {
+  pending: '待审核',
+  approved: '已批准',
+  rejected: '已拒绝',
+};
+
+export function reviewStatusLabel(code: string): string {
+  return REVIEW_STATUS_LABELS[code] || statusLabel(code);
 }
 
 // ── Risk level labels ───────────────────────────────────────────

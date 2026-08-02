@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api, type AgentWorkspaceComparison, type AgentWorkspaceReviewEvent, type AgentWorkspaceTask } from '../../core/apiClient';
 import { toast } from '../../shared/components/Toast';
+import { agentLabel } from '../../shared/constants';
 import { downloadComparisonMarkdown, downloadTaskMarkdown, formatTime } from './archiveHelpers';
 
 interface Props {
@@ -77,7 +78,7 @@ export default function AgentWorkspaceArchiveItem({ task, busy, onSetReviewed, o
   };
 
   return <article className="agent-workspace-archive-item">
-    <header><div><strong>{task.title}</strong><span>{task.agentCode} · {task.providerCode} · {task.model}{task.comparisonId ? ' · 多模型对比' : ''}</span>{task.sourceType && task.sourceRef && <span>来源：{sourceLabels[task.sourceType] ?? task.sourceType} · {task.sourceRef}</span>}</div><time>{formatTime(task.createdAt)}</time></header>
+    <header><div><strong>{task.title}</strong><span>{agentLabel(task.agentCode)} · {task.providerCode} · {task.model}{task.comparisonId ? ' · 多模型对比' : ''}</span>{task.sourceType && task.sourceRef && <span>来源：{sourceLabels[task.sourceType] ?? task.sourceType} · {task.sourceRef}</span>}</div><time>{formatTime(task.createdAt)}</time></header>
     <details><summary>查看任务材料与分析结果</summary><div className="agent-workspace-archive-content"><h4>任务材料</h4><pre>{task.prompt}</pre><h4>分析结果</h4><pre>{task.response}</pre></div></details>
     {reviewed && task.reviewNote && <p className="agent-workspace-review-note"><b>核验备注：</b>{task.reviewNote}</p>}
     {!reviewed && <div className="agent-workspace-review-input"><label className="fqp-label" htmlFor={`workspace-review-note-${task.id}`}>核验备注（可选）</label>
@@ -96,7 +97,7 @@ export default function AgentWorkspaceArchiveItem({ task, busy, onSetReviewed, o
     {comparisonTasks && <section className="agent-workspace-comparison-results" aria-label="同批模型结果">
       <h4>同批模型结果</h4><p>{comparison ? `已完成 · 成功 ${comparison.succeededCount} / ${comparison.requestedCount}，失败 ${comparison.failedCount}。` : '历史批次未保存汇总信息。'} 同一材料由不同模型独立生成，结论仍需人工核验。</p>
       <div>{comparisonTasks.map((comparisonTask) => <article key={comparisonTask.id}>
-        <strong>{comparisonTask.agentCode}</strong><span>{comparisonTask.providerCode} · {comparisonTask.model}</span>
+        <strong>{agentLabel(comparisonTask.agentCode)}</strong><span>{comparisonTask.providerCode} · {comparisonTask.model}</span>
         <pre>{comparisonTask.response}</pre>
       </article>)}</div>
       {comparison && <div className="agent-workspace-comparison-review"><label className="fqp-label" htmlFor={`workspace-comparison-review-${task.id}`}>本批人工结论</label>

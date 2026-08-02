@@ -88,7 +88,7 @@ export default function MatchCard(props: MatchCardProps) {
       <div className="sporttery-teams-row">
         <span className="sporttery-home-tag">[主] ★</span>
         <div className="sporttery-teams">
-          <strong>{match.home_team_name}</strong><small>VS</small><strong>{match.away_team_name}</strong><span aria-hidden="true"> ★</span>
+          <strong>{match.home_team_name}</strong><small>对阵</small><strong>{match.away_team_name}</strong><span aria-hidden="true"> ★</span>
         </div>
         <button type="button" className="sporttery-analyse" aria-label={`查看${match.home_team_name}对${match.away_team_name}分析`} onClick={() => props.onAnalyse(match)}>析</button>
       </div>

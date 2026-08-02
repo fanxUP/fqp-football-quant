@@ -44,9 +44,9 @@ describe('ProfitLossTrendChart', () => {
 
     expect(series.map((item) => item.name)).toEqual([
       '我的当日盈亏',
-      'Agent 当日盈亏',
+      '智能代理当日盈亏',
       '我的累计盈亏',
-      'Agent 累计盈亏',
+      '智能代理累计盈亏',
     ]);
     expect(series[0].data).toEqual([-10, 0]);
     expect(series[1].data).toEqual([0, 25]);

@@ -353,7 +353,7 @@ export default function PoolPage() {
                           <td style={{ padding: '10px 8px' }}>
                             <TeamName name={m.home_team} style={{ fontWeight: 600 }} />
                             <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '11px', color: 'var(--fqp-text-muted)' }}>
-                              <span>vs</span><TeamName name={m.away_team} size={16} />
+                              <span>对阵</span><TeamName name={m.away_team} size={16} />
                             </div>
                           </td>
                           <td style={{ padding: '10px 8px', textAlign: 'center', fontSize: '12px', color: 'var(--fqp-text-muted)' }}>

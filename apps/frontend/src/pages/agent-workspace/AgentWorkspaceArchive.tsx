@@ -29,7 +29,7 @@ export default function AgentWorkspaceArchive({
     {!showFilters ? <p className="agent-workspace-archive-empty" role="status">尚无归档任务。完成一次分析后会显示在这里。</p> : <>
       <form className="agent-workspace-archive-filters" onSubmit={(event) => { event.preventDefault(); onSearch(); }}>
         <div><label className="fqp-label" htmlFor="workspace-archive-search">检索归档</label>
-          <input id="workspace-archive-search" className="fqp-input" maxLength={120} value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder="标题、Agent、材料、结果或备注" /></div>
+          <input id="workspace-archive-search" className="fqp-input" maxLength={120} value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder="标题、智能代理、材料、结果或备注" /></div>
         <div><label className="fqp-label" htmlFor="workspace-archive-review">核验状态</label>
           <select id="workspace-archive-review" className="fqp-input" value={reviewFilter} onChange={(event) => onReviewFilterChange(event.target.value as typeof reviewFilter)}>
             <option value="all">全部状态</option><option value="pending">待人工确认</option><option value="reviewed">已人工确认</option>

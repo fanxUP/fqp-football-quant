@@ -64,8 +64,8 @@ export default function AgentModelTrial({ bindings, onCompleted }: { bindings: A
       <h4 id="agent-model-trial-title">手动试运行</h4>
       <p>仅在你点击后发起一次模型调用，可能产生服务商费用；结果仅供查看，不会写入比赛、推荐、风控或彩票数据。</p>
     </div>
-    {availableBindings.length === 0 ? <p className="agent-model-trial-empty" role="status">暂无可试运行的 Agent。请先保存服务商、测试连接，并启用对应 Agent。</p> : <>
-      <label className="fqp-label" htmlFor="agent-model-trial-agent">调用 Agent</label>
+    {availableBindings.length === 0 ? <p className="agent-model-trial-empty" role="status">暂无可试运行的智能代理。请先保存服务商、测试连接，并启用对应智能代理。</p> : <>
+      <label className="fqp-label" htmlFor="agent-model-trial-agent">调用智能代理</label>
       <select id="agent-model-trial-agent" className="fqp-input" value={selected?.agentCode ?? ''}
         onChange={(event) => setAgentCode(event.target.value)}>
         {availableBindings.map((binding) => <option value={binding.agentCode} key={binding.agentCode}>

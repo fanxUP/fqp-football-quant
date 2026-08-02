@@ -260,7 +260,7 @@ describe('BettingTerminalPage desktop workbench', () => {
     fireEvent.click(within(recommendationPanel).getByRole('button', { name: '加入 主胜' }));
 
     await waitFor(() => expect(within(terminal).getByRole('button', { name: '胜平负 主胜 2.04' })).toHaveClass('is-selected'));
-    expect(within(previewPanel).getByText('首尔FC vs 江原FC')).toBeInTheDocument();
+    expect(within(previewPanel).getByText('首尔FC 对阵 江原FC')).toBeInTheDocument();
     expect(within(previewPanel).getAllByText('推荐投注').length).toBeGreaterThan(0);
   });
 
@@ -308,7 +308,7 @@ describe('BettingTerminalPage desktop workbench', () => {
     const addButton = within(recommendationPanel).getByRole('button', { name: '加入 主胜' });
     expect(addButton).toBeEnabled();
     fireEvent.click(addButton);
-    await waitFor(() => expect(screen.getByLabelText('票面预览')).toHaveTextContent('首尔FC vs 江原FC'));
+    await waitFor(() => expect(screen.getByLabelText('票面预览')).toHaveTextContent('首尔FC 对阵 江原FC'));
   });
 
   it('matches model 3/1/0 recommendation codes to official h/d/a options', async () => {
@@ -336,7 +336,7 @@ describe('BettingTerminalPage desktop workbench', () => {
     fireEvent.click(within(recommendationPanel).getByRole('button', { name: '加入 主胜' }));
 
     const previewPanel = screen.getByLabelText('票面预览');
-    await waitFor(() => expect(within(previewPanel).getByText('首尔FC vs 江原FC')).toBeInTheDocument());
+    await waitFor(() => expect(within(previewPanel).getByText('首尔FC 对阵 江原FC')).toBeInTheDocument());
   });
 
   it('opens the complete five-play selector with single and pass flags', async () => {
@@ -447,8 +447,8 @@ describe('BettingTerminalPage desktop workbench', () => {
     expect(within(first).getByRole('button', { name: '已选 2项' })).toBeInTheDocument();
 
     const preview = screen.getByLabelText('票面预览');
-    expect(within(preview).getAllByText('首尔FC vs 江原FC')).toHaveLength(2);
-    expect(within(preview).getByText('马尔默 vs 哥德堡')).toBeInTheDocument();
+    expect(within(preview).getAllByText('首尔FC 对阵 江原FC')).toHaveLength(2);
+    expect(within(preview).getByText('马尔默 对阵 哥德堡')).toBeInTheDocument();
     fireEvent.click(within(preview).getAllByRole('button', { name: '移除' })[0]);
     expect(within(first).getByRole('button', { name: '胜平负 主胜 2.04' })).not.toHaveClass('is-selected');
   });

@@ -182,7 +182,7 @@ export default function DataHealthPage() {
       {/* Stage 8: Operational Health KPIs */}
       {opsHealth && (
         <Card
-          title={`Stage 8 运行指标 (${stage8Passes}/${stage8Total})`}
+          title={`第 8 阶段运行指标 (${stage8Passes}/${stage8Total})`}
           style={{ marginBottom: '20px' }}
         >
           {/* Overall status banner */}
@@ -307,7 +307,7 @@ export default function DataHealthPage() {
           </div>
           <div>
             <div className="fqp-label">前端版本</div>
-            <div>Stage 8 — Red-Black Tech</div>
+            <div>第 8 阶段 — 红黑科技</div>
           </div>
           <div>
             <div className="fqp-label">部署模式</div>

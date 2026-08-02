@@ -123,7 +123,7 @@ export const MODULE_REGISTRY: ModuleManifest[] = [
   {
     moduleCode: 'betting_center_module',
     moduleName: '投注中心',
-    description: '投注器、彩票台账、Agent 结果和赛后结算',
+    description: '投注器、彩票台账、智能代理结果和赛后结算',
     version: '1.0.0',
     category: 'core_loop',
     status: 'active',
@@ -199,8 +199,8 @@ export const MODULE_REGISTRY: ModuleManifest[] = [
   },
   {
     moduleCode: 'codex_agent_module',
-    moduleName: 'Codex 多 Agent',
-    description: '本地 Agent 任务、协作边界与维护自动化',
+    moduleName: '多智能代理协作',
+    description: '本地智能代理任务、协作边界与维护自动化',
     version: '1.0.0',
     category: 'maintenance',
     status: 'active',

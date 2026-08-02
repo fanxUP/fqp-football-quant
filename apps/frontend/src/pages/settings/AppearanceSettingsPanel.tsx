@@ -10,7 +10,7 @@ import ThemePreviewCard from './ThemePreviewCard';
 const GROUPS: Array<{ id: ThemeCategory; label: string; description: string }> = [
   { id: 'professional', label: '专业量化', description: '资金、模型与系统运行' },
   { id: 'football', label: '足球赛事', description: '比赛日、战术与赛事大屏' },
-  { id: 'future', label: '科技未来', description: 'AI、Agent 与自动化链路' },
+  { id: 'future', label: '科技未来', description: '人工智能、智能代理与自动化链路' },
   { id: 'personal', label: '个性主题', description: '浅色办公与年轻化表达' },
 ];
 
@@ -49,7 +49,7 @@ export default function AppearanceSettingsPanel() {
     <section className="appearance-panel" aria-labelledby="appearance-title">
       <div className="appearance-panel-heading">
         <div>
-          <span className="appearance-eyebrow">APPEARANCE SYSTEM</span>
+          <span className="appearance-eyebrow">外观系统</span>
           <h2 id="appearance-title">外观与显示</h2>
           <p>选择符合使用场景的视觉语言，数据结构与业务状态保持不变。</p>
         </div>

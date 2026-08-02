@@ -296,7 +296,7 @@ function AnalysisMatchDrawer({
         <div>
           <div className="analysis-match-meta">{selection.matchNum} · {selection.league}</div>
           <h2 style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <TeamName name={selection.homeTeam} size={28} /><span>vs</span><TeamName name={selection.awayTeam} size={28} />
+            <TeamName name={selection.homeTeam} size={28} /><span>对阵</span><TeamName name={selection.awayTeam} size={28} />
           </h2>
           <p>{selection.kickoffTime ? String(selection.kickoffTime).replace('T', ' ').slice(0, 16) : '—'} · {selection.scoreText ?? selection.matchStatus}</p>
         </div>
@@ -491,8 +491,8 @@ function ModelCompareTab() {
                 <th style={thS}>排名</th>
                 <th style={thS}>模型</th>
                 <th style={thS}>评估数</th>
-                <th style={thS}>Brier ↓</th>
-                <th style={thS}>LogLoss ↓</th>
+                <th style={thS}>布里尔分数 ↓</th>
+                <th style={thS}>对数损失 ↓</th>
                 <th style={thS}>ROI</th>
                 <th style={thS}>胜率</th>
                 <th style={thS}>夏普</th>
@@ -544,7 +544,7 @@ function ModelCompareTab() {
 function buildRadarOption(models: ModelCompareItem[], dimensions: RadarDimension[]) {
   // Radar dimensions: brier (inv), log_loss (inv), roi, sharpe, hit_rate, profit_factor
   const radarKeys = ['brier', 'log_loss', 'roi', 'sharpe', 'hit_rate', 'profit_factor'] as const satisfies readonly (keyof ModelCompareItem)[];
-  const radarLabels = ['Brier ↓', 'LogLoss ↓', 'ROI', '夏普', '胜率', '盈利因子'];
+  const radarLabels = ['布里尔分数 ↓', '对数损失 ↓', 'ROI', '夏普', '胜率', '盈利因子'];
   const invertFlags = [true, true, false, false, false, false];
 
   // Collect all values per dimension
@@ -927,7 +927,7 @@ function ShapExplainTab({ initialMatchId }: { initialMatchId?: number | null }) 
       {matchId && probs && (
         <div style={{ animation: 'fqpSlideUpBounce 0.4s ease both' }}>
           {/* Prediction card */}
-          <Card title={`${homeTeam} vs ${awayTeam}`} style={{ marginBottom: 20 }}>
+          <Card title={`${homeTeam} 对阵 ${awayTeam}`} style={{ marginBottom: 20 }}>
             <div style={{ display: 'flex', gap: 32, flexWrap: 'wrap' }}>
               <div style={{ textAlign: 'center' }}>
                 <div style={{ fontSize: 12, color: 'var(--fqp-text-muted)' }}>主胜概率</div>
@@ -1100,7 +1100,7 @@ function ConditionTab() {
           ))}
         </div>
         <div style={{ fontSize: 11, color: 'var(--fqp-text-muted)', marginTop: 8 }}>
-          按{CONDITION_LABELS[dimension]}分组，展示各模型在不同条件下的 Brier Score 表现
+          按{CONDITION_LABELS[dimension]}分组，展示各模型在不同条件下的布里尔分数表现
         </div>
       </Card>
 
@@ -1115,7 +1115,7 @@ function ConditionTab() {
           </div>
         </Card>
       ) : (
-        <Card title={`按${CONDITION_LABELS[dimension]}分组的 Brier Score`} style={{ padding: 0, overflow: 'hidden' }}>
+        <Card title={`按${CONDITION_LABELS[dimension]}分组的布里尔分数`} style={{ padding: 0, overflow: 'hidden' }}>
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 600 }}>
               <thead>

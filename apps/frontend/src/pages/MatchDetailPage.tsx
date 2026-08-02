@@ -96,7 +96,7 @@ export default function MatchDetailPage({ matchId }: MatchDetailPageProps) {
   return (
     <div>
       <PageHeader
-        title={matchInfo ? `${matchInfo.home_team_name} vs ${matchInfo.away_team_name}` : `比赛 #${matchId}`}
+        title={matchInfo ? `${matchInfo.home_team_name} 对阵 ${matchInfo.away_team_name}` : `比赛 #${matchId}`}
         lastUpdated={matchInfo?.snapshot_time}
       />
 

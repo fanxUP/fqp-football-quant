@@ -54,7 +54,7 @@ export default function UpsetsPage() {
 
   return (
     <div className="upset-page">
-      <PageHeader title="冷门研究" subtitle="依据开赛前最后官方赔率识别，复盘模型、用户实票与 Agent 虚拟票" />
+      <PageHeader title="冷门研究" subtitle="依据开赛前最后官方赔率识别，复盘模型、用户实票与智能代理虚拟票" />
 
       <section className="upset-filters" aria-label="冷门筛选">
         <label>开始日期<input type="date" value={filters.start_date ?? ''} onChange={(event) => updateFilter('start_date', event.target.value)} /></label>

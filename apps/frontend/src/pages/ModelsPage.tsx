@@ -219,8 +219,8 @@ export default function ModelsPage() {
         ) : evalModels.length === 0 ? (
           <div style={{ display: 'flex', gap: '32px', flexWrap: 'wrap' }}>
             {[
-              { label: 'Brier Score', value: '—', note: '需要结算数据' },
-              { label: 'Log Loss', value: '—', note: '需要结算数据' },
+              { label: '布里尔分数', value: '—', note: '需要结算数据' },
+              { label: '对数损失', value: '—', note: '需要结算数据' },
               { label: 'ROI', value: '—', note: '需要回测数据' },
               { label: '最大回撤', value: '—', note: '需要回测数据' },
             ].map((m) => (
@@ -242,7 +242,7 @@ export default function ModelsPage() {
             </div>
             <div style={{ display: 'flex', gap: '32px', flexWrap: 'wrap', marginBottom: '16px' }}>
               <div>
-                <div className="fqp-label">最佳 Brier Score</div>
+                <div className="fqp-label">最佳布里尔分数</div>
                 <div className="fqp-mono" style={{ fontSize: '18px', fontWeight: 700, color: 'var(--fqp-success)' }}>
                   {bestBrier ? bestBrier.avg_brier.toFixed(4) : '尚无达标模型'}
                 </div>
@@ -251,7 +251,7 @@ export default function ModelsPage() {
                 </div>
               </div>
               <div>
-                <div className="fqp-label">平均 Brier Score</div>
+                <div className="fqp-label">平均布里尔分数</div>
                 <div className="fqp-mono" style={{ fontSize: '18px', fontWeight: 700 }}>
                   {overallBrier?.toFixed(4) ?? '—'}
                 </div>
@@ -260,7 +260,7 @@ export default function ModelsPage() {
                 </div>
               </div>
               <div>
-                <div className="fqp-label">Log Loss (最优)</div>
+                <div className="fqp-label">最优对数损失</div>
                 <div className="fqp-mono" style={{ fontSize: '18px', fontWeight: 700, color: 'var(--fqp-success)' }}>
                   {publishableModels.length > 0
                     ? publishableModels.reduce((best, m) => m.avg_logloss < best ? m.avg_logloss : best, Infinity).toFixed(4)
@@ -289,7 +289,7 @@ export default function ModelsPage() {
                   <th style={thStyle}>评估数</th>
                   <th style={thStyle}>结论状态</th>
                   <th style={thStyle}>Brier ↓</th>
-                  <th style={thStyle}>LogLoss ↓</th>
+                  <th style={thStyle}>对数损失 ↓</th>
                   <th style={thStyle}>RPS ↓</th>
                   <th style={thStyle}>CLV</th>
                 </tr>

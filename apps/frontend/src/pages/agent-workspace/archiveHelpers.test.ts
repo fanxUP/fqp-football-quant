@@ -53,7 +53,7 @@ describe('buildComparisonMarkdown', () => {
 
     expect(markdown).toContain('成功 / 失败：1 / 1');
     expect(markdown).toContain('继续核对官方赛程。');
-    expect(markdown).toContain('## review\\_agent · openai · gpt\\-5');
+    expect(markdown).toContain('## 复盘代理 · openai · gpt\\-5');
     expect(markdown).toContain('等待人工核验。');
   });
 });

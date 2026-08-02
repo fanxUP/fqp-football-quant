@@ -31,7 +31,7 @@ function pnlColor(value: number): string {
 
 function sourceLabel(sourceKey: string): string {
   const [owner, kind, source] = sourceKey.split(':');
-  const ownerLabel = owner === 'agent' ? 'Agent' : '我的';
+  const ownerLabel = owner === 'agent' ? '智能代理' : '我的';
   const kindLabel = kind === 'real' ? '彩票' : '投注票';
   const sourceMap: Record<string, string> = {
     manual: '手动',
@@ -44,7 +44,7 @@ function sourceLabel(sourceKey: string): string {
 
 function ticketLabel(ticket: BettingTicket): string {
   const ticketType = ticket.owner === 'agent'
-    ? 'Agent票'
+    ? '智能代理票'
     : ticket.kind === 'real' ? '实票' : '投注票';
   return `${ticketType} · ${ticket.ticketNumber}`;
 }
@@ -55,8 +55,8 @@ function ownerCards(results: BettingResults) {
   const diff = me.profitLoss - agent.profitLoss;
   return [
     { label: '我的盈亏', value: signedMoney(me.profitLoss), detail: `投入 ${money(me.stake)} · 回收 ${money(me.settledAmount)}`, color: pnlColor(me.profitLoss) },
-    { label: 'Agent 盈亏', value: signedMoney(agent.profitLoss), detail: `投入 ${money(agent.stake)} · 回收 ${money(agent.settledAmount)}`, color: pnlColor(agent.profitLoss) },
-    { label: '当前领先', value: results.leader === 'me' ? '我' : results.leader === 'agent' ? 'Agent' : '持平', detail: `差额 ${money(Math.abs(diff))}`, color: results.leader === 'draw' ? 'var(--fqp-text)' : 'var(--fqp-text)' },
+    { label: '智能代理盈亏', value: signedMoney(agent.profitLoss), detail: `投入 ${money(agent.stake)} · 回收 ${money(agent.settledAmount)}`, color: pnlColor(agent.profitLoss) },
+    { label: '当前领先', value: results.leader === 'me' ? '我' : results.leader === 'agent' ? '智能代理' : '持平', detail: `差额 ${money(Math.abs(diff))}`, color: results.leader === 'draw' ? 'var(--fqp-text)' : 'var(--fqp-text)' },
     { label: '结算进度', value: `${me.settled + agent.settled}/${me.ticketCount + agent.ticketCount}`, detail: `待结算 ${me.pending + agent.pending} 张 · 命中 ${me.hitCount + agent.hitCount} 张`, color: 'var(--fqp-text)' },
   ];
 }
@@ -104,7 +104,7 @@ function TicketRow({ ticket }: { ticket: BettingTicket }) {
   return (
     <tr>
       <td className="fqp-mono" style={{ fontWeight: 600 }}>{ticketLabel(ticket)}</td>
-      <td>{ticket.owner === 'agent' ? 'Agent' : '我的'}</td>
+      <td>{ticket.owner === 'agent' ? '智能代理' : '我的'}</td>
       <td>{ticket.kind === 'real' ? '彩票' : '投注票'}</td>
       <td className="fqp-mono">{ticket.date}</td>
       <td className="fqp-mono" style={{ textAlign: 'right' }}>{money(ticket.stake)}</td>
@@ -180,7 +180,7 @@ export default function CompetitionPage() {
     <div>
       <PageHeader
         title="比赛结果"
-        subtitle="汇总投注台、我的彩票、Agent 彩票与推荐票的结算盈亏"
+        subtitle="汇总投注台、我的彩票、智能代理彩票与推荐票的结算盈亏"
         actions={(
           <button className="fqp-btn fqp-btn-secondary" onClick={() => navigate('/betting?tab=tickets')}>
             查看彩票
@@ -206,7 +206,7 @@ export default function CompetitionPage() {
       </div>
 
       <div className="fqp-card" style={{ padding: 16, marginBottom: 16 }}>
-        <div style={{ fontWeight: 700, marginBottom: 4 }}>Agent 每日决策</div>
+        <div style={{ fontWeight: 700, marginBottom: 4 }}>智能代理每日决策</div>
         <div style={{ fontSize: 12, color: 'var(--fqp-text-muted)', marginBottom: 12 }}>
           只记录系统内虚拟购买；放弃投注也会保留门槛原因
         </div>

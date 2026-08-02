@@ -48,7 +48,7 @@ describe('CompetitionPage', () => {
     render(<CompetitionPage />);
 
     expect(await screen.findByText('每日与累计盈亏趋势')).toBeInTheDocument();
-    expect(await screen.findByText('Agent 每日决策')).toBeInTheDocument();
+    expect(await screen.findByText('智能代理每日决策')).toBeInTheDocument();
     expect(screen.getByText('已放弃')).toBeInTheDocument();
     expect(screen.getByText('数据完整度不足，今日不投注')).toBeInTheDocument();
     expect(apiMocks.decisions).toHaveBeenCalledWith(14);
@@ -82,7 +82,7 @@ describe('CompetitionPage', () => {
     expect(await screen.findByText('彩票汇总')).toBeInTheDocument();
     expect(screen.getByText('彩票投注列表')).toBeInTheDocument();
     expect(screen.getByText('实票 · 20260715008')).toBeInTheDocument();
-    expect(screen.getByText('Agent票 · 20260714002')).toBeInTheDocument();
+    expect(screen.getByText('智能代理票 · 20260714002')).toBeInTheDocument();
     expect(screen.queryByText('实票 #10')).not.toBeInTheDocument();
     expect(screen.queryByText('Agent 票 #52')).not.toBeInTheDocument();
   });
@@ -127,8 +127,8 @@ describe('CompetitionPage', () => {
 
     render(<CompetitionPage />);
 
-    expect(await screen.findByText('Agent票 · 20260714002')).toBeInTheDocument();
-    expect(screen.getByText('Agent 虚拟推荐')).toBeInTheDocument();
+    expect(await screen.findByText('智能代理票 · 20260714002')).toBeInTheDocument();
+    expect(screen.getByText('智能代理虚拟推荐')).toBeInTheDocument();
     expect(screen.queryByText('已购买')).not.toBeInTheDocument();
     expect(screen.getByText('已用 2 元生成 1 张高风险虚拟观察票')).toBeInTheDocument();
     expect(screen.getByText('¥498.00')).toBeInTheDocument();
