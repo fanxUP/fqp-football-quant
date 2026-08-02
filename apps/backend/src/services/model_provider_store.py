@@ -179,7 +179,7 @@ def list_agent_model_bindings(conn: Any) -> list[dict[str, Any]]:
     with conn.cursor() as cur:
         cur.execute(
             """SELECT b.agent_code, b.provider_code, b.enabled, b.updated_at,
-                      p.display_name, p.default_model, p.enabled
+                      p.display_name, p.default_model, p.enabled, p.last_test_status
                FROM llm_agent_bindings b
                JOIN llm_provider_configs p ON p.provider_code = b.provider_code
                ORDER BY b.agent_code"""
@@ -194,6 +194,7 @@ def list_agent_model_bindings(conn: Any) -> list[dict[str, Any]]:
             "model": row[5] if row else None,
             "enabled": bool(row[2]) if row else False,
             "providerEnabled": bool(row[6]) if row else False,
+            "providerTestStatus": row[7] if row else None,
             "updatedAt": row[3].isoformat() if row else None,
         }
         for code, name in AGENT_MODEL_OPTIONS.items()

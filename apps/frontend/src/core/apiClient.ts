@@ -63,6 +63,7 @@ export interface AgentModelBinding {
   model: string | null;
   enabled: boolean;
   providerEnabled: boolean;
+  providerTestStatus: 'passed' | 'failed' | null;
   updatedAt: string | null;
 }
 

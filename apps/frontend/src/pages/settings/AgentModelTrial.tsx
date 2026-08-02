@@ -25,7 +25,9 @@ const promptTemplates: Record<string, { label: string; prompt: string }[]> = {
 };
 
 export default function AgentModelTrial({ bindings, onCompleted }: { bindings: AgentModelBinding[]; onCompleted: () => void }) {
-  const availableBindings = bindings.filter((binding) => binding.enabled && binding.providerEnabled);
+  const availableBindings = bindings.filter(
+    (binding) => binding.enabled && binding.providerEnabled && binding.providerTestStatus === 'passed',
+  );
   const [agentCode, setAgentCode] = useState('');
   const [prompt, setPrompt] = useState('');
   const [running, setRunning] = useState(false);

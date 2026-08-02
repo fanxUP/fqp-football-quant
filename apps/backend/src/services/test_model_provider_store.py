@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 import pytest
 
 from apps.backend.src.services.model_provider_store import (
     ProviderConfigError,
     _cipher,
+    list_agent_model_bindings,
     save_provider_config,
     validate_provider_input,
 )
@@ -90,3 +93,31 @@ def test_provider_update_invalidates_test_after_connection_change() -> None:
     query, params = conn.queries[-1]
     assert "last_test_status = CASE WHEN %s THEN NULL" in query
     assert params is not None and tuple(params)[-3:] == (True, True, True)
+
+
+class _BindingCursor:
+    def __enter__(self) -> "_BindingCursor":
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        return None
+
+    def execute(self, _query: str) -> None:
+        return None
+
+    def fetchall(self) -> list[tuple[object, ...]]:
+        return [
+            ("review_agent", "openai", True, datetime.now(UTC), "OpenAI", "gpt-5-mini", True, "passed"),
+        ]
+
+
+class _BindingConnection:
+    def cursor(self) -> _BindingCursor:
+        return _BindingCursor()
+
+
+def test_agent_binding_exposes_provider_test_status() -> None:
+    bindings = list_agent_model_bindings(_BindingConnection())
+
+    review_binding = next(item for item in bindings if item["agentCode"] == "review_agent")
+    assert review_binding["providerTestStatus"] == "passed"
