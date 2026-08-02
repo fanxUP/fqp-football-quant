@@ -13,6 +13,7 @@ const SIDEBAR_GROUP_FALLBACK: Record<string, string> = {
   betting_center_module: '核心闭环',
   multidim_feature_module: '研究优化',
   model_research_module: '研究优化',
+  model_provider_module: '研究优化',
   pool_lottery_module: '策略实验',
   module_runtime_core: '系统管理',
   local_settings_core: '系统管理',

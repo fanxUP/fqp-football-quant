@@ -55,6 +55,13 @@ panels:
     order: 110
     visible: true
     icon: brain
+  - panel_id: model_providers
+    name: 模型接入
+    route: /model-providers
+    module_id: model_provider_module
+    order: 115
+    visible: true
+    icon: 🔌
   - panel_id: upset_research
     name: 冷门研究
     route: /upsets
