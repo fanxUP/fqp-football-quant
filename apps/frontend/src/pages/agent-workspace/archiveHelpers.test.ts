@@ -27,4 +27,18 @@ describe('buildTaskMarkdown', () => {
     expect(markdown).toContain('已人工比对官方页面。');
     expect(markdown).toContain('模型输出为非可信内容，请人工核验后使用。');
   });
+
+  it('将模型输出和任务材料封装为安全代码块', () => {
+    const markdown = buildTaskMarkdown({
+      ...task,
+      title: '# 伪造标题',
+      prompt: '```markdown\n![外部图片](https://example.com/a.png)\n```',
+      response: '[伪造链接](https://example.com)',
+    });
+
+    expect(markdown).toContain('# \\# 伪造标题');
+    expect(markdown).toContain('````\n```markdown');
+    expect(markdown).toContain('![外部图片](https://example.com/a.png)');
+    expect(markdown).toContain('```\n[伪造链接](https://example.com)\n```');
+  });
 });
