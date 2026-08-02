@@ -18,6 +18,12 @@ vi.mock('./Sidebar', () => ({
   ),
 }));
 
+const mockLogout = vi.fn();
+
+vi.mock('../AuthContext', () => ({
+  useAuth: () => ({ logout: mockLogout }),
+}));
+
 // ---- Helper ---------------------------------------------------------------
 
 // jsdom matchMedia stub for any media-query logic
@@ -36,6 +42,13 @@ describe('Layout', () => {
   // Rendering
   // ------------------------------------------------------------------
   describe('rendering', () => {
+    it('renders the logout control in the main top-right action area', () => {
+      const { container } = render(<Layout><div /></Layout>);
+
+      expect(screen.getByRole('button', { name: '退出登录' })).toBeTruthy();
+      expect(container.querySelector('.fqp-top-actions .fqp-logout-btn')).toBeTruthy();
+    });
+
     it('renders children inside the main area', () => {
       render(
         <Layout>

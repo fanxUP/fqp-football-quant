@@ -2029,24 +2029,48 @@ body {
 }
 
 /* ---- Logout Button ---- */
+.fqp-top-actions {
+  position: fixed;
+  top: 16px;
+  right: 24px;
+  z-index: 20;
+}
+
 .fqp-logout-btn {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 8px;
-  width: calc(100% - 24px);
-  margin: 4px 12px;
-  padding: 10px 16px;
-  background: transparent;
-  border: 1px solid rgba(255, 42, 61, 0.2);
+  padding: 9px 14px;
+  background: color-mix(in srgb, var(--fqp-panel) 88%, transparent);
+  border: 1px solid color-mix(in srgb, var(--fqp-red-neon) 36%, var(--fqp-border));
   border-radius: var(--fqp-radius-sm);
   color: var(--fqp-text-muted);
   font-size: 14px;
+  font-weight: 650;
   cursor: pointer;
-  transition: all 0.2s;
+  box-shadow: 0 5px 16px color-mix(in srgb, var(--fqp-bg) 46%, transparent);
+  transition: background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
 }
 
 .fqp-logout-btn:hover {
-  background: rgba(255, 42, 61, 0.1);
+  background: color-mix(in srgb, var(--fqp-red-neon) 12%, var(--fqp-panel));
   border-color: var(--fqp-red-neon);
   color: var(--fqp-red-neon);
+  box-shadow: 0 8px 20px color-mix(in srgb, var(--fqp-red-neon) 20%, transparent);
+  transform: translateY(-1px);
+}
+.fqp-logout-btn:active {
+  transform: translateY(1px) scale(0.98);
+  box-shadow: none;
+}
+.fqp-logout-btn:focus-visible {
+  outline: 2px solid var(--fqp-red-neon);
+  outline-offset: 3px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .fqp-logout-btn { transition: none; }
+}
+@media (max-width: 720px) {
+  .fqp-top-actions { top: 10px; right: 12px; }
+  .fqp-logout-btn { padding: 8px 10px; font-size: 13px; }
 }

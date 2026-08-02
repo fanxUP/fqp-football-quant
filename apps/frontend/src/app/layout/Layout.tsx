@@ -1,5 +1,6 @@
 import { useState, useCallback, type ReactNode } from 'react';
 import Sidebar from './Sidebar';
+import { useAuth } from '../AuthContext';
 
 interface LayoutProps {
   children: ReactNode;
@@ -7,6 +8,7 @@ interface LayoutProps {
 
 export default function Layout({ children }: LayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const { logout } = useAuth();
 
   const openSidebar = useCallback(() => setSidebarOpen(true), []);
   const closeSidebar = useCallback(() => setSidebarOpen(false), []);
@@ -30,6 +32,13 @@ export default function Layout({ children }: LayoutProps) {
       )}
 
       <Sidebar isOpen={sidebarOpen} onClose={closeSidebar} />
+
+      <div className="fqp-top-actions" aria-label="账户操作">
+        <button type="button" className="fqp-logout-btn" onClick={() => logout()}>
+          <span aria-hidden="true">🚪</span>
+          <span>退出登录</span>
+        </button>
+      </div>
 
       <main className="fqp-main">
         {children}

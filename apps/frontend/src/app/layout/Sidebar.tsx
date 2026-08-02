@@ -4,7 +4,6 @@ import { api } from '../../core/apiClient';
 import { getSidebarPanels, type SidebarPanel } from '../../panelRegistry';
 import { useLocalSettings } from '../../shared/hooks/useLocalSettings';
 import { useTheme } from '../ThemeContext';
-import { useAuth } from '../AuthContext';
 
 const SIDEBAR_GROUP_ORDER = ['核心闭环', '研究优化', '策略实验', '系统管理'];
 const SIDEBAR_GROUP_FALLBACK: Record<string, string> = {
@@ -56,7 +55,6 @@ export function normalizeSidebarIcon(icon: string): string {
 export default function Sidebar({ isOpen = false, onClose }: SidebarProps) {
   const { currentPath, navigate } = useRouter();
   const { theme, toggleTheme } = useTheme();
-  const { logout } = useAuth();
   const { settings } = useLocalSettings();
   const disabledModules = new Set(settings.disabledModules);
   const localSidebarPanels = getSidebarPanels(disabledModules);
@@ -135,11 +133,6 @@ export default function Sidebar({ isOpen = false, onClose }: SidebarProps) {
       <button type="button" className="fqp-theme-toggle" onClick={toggleTheme}>
         <span className="fqp-nav-icon">{theme === 'polar-lab' ? '🌙' : '☀️'}</span>
         <span>{theme === 'polar-lab' ? '切换黑红主题' : '切换极地浅色'}</span>
-      </button>
-
-      <button type="button" className="fqp-logout-btn" onClick={() => logout()}>
-        <span className="fqp-nav-icon">🚪</span>
-        <span>退出登录</span>
       </button>
     </aside>
   );
