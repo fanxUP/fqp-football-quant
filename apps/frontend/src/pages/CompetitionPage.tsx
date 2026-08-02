@@ -36,6 +36,7 @@ function sourceLabel(sourceKey: string): string {
   const sourceMap: Record<string, string> = {
     manual: '手动',
     ocr: 'OCR',
+    time_machine: '时光机补录',
     agent_recommendation: '推荐',
   };
   return `${ownerLabel}${kindLabel} · ${sourceMap[source] || source}`;

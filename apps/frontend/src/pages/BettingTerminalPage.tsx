@@ -53,6 +53,13 @@ export default function BettingTerminalPage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [salesWindow, setSalesWindow] = useState<SportterySalesWindow | null>(null);
+  const [timeMachineMode, setTimeMachineMode] = useState(false);
+  const [timeMachineDates, setTimeMachineDates] = useState<Array<{ businessDate: string; matchCount: number }>>([]);
+  const [timeMachineDate, setTimeMachineDate] = useState('');
+  const [timeMachineMatches, setTimeMachineMatches] = useState<BettingMatch[]>([]);
+  const [timeMachineLoading, setTimeMachineLoading] = useState(false);
+  const [timeMachineError, setTimeMachineError] = useState('');
+  const [timeMachineRefreshToken, setTimeMachineRefreshToken] = useState(0);
   const [recommendations, setRecommendations] = useState<LiveRecommendation[]>([]);
   const [recommendationsLoading, setRecommendationsLoading] = useState(true);
   const [recommendationsError, setRecommendationsError] = useState('');
@@ -102,6 +109,30 @@ export default function BettingTerminalPage() {
   useEffect(() => { fetchMatches(); }, [fetchMatches]);
 
   useEffect(() => {
+    if (!timeMachineMode) return;
+    setTimeMachineLoading(true);
+    setTimeMachineError('');
+    api.betting.timeMachineDates()
+      .then((response) => {
+        const dates = response.dates || [];
+        setTimeMachineDates(dates);
+        setTimeMachineDate((current) => current || dates[0]?.businessDate || '');
+      })
+      .catch((error) => setTimeMachineError(errorMessage(error, '历史业务日加载失败')))
+      .finally(() => setTimeMachineLoading(false));
+  }, [timeMachineMode]);
+
+  useEffect(() => {
+    if (!timeMachineMode || !timeMachineDate) return;
+    setTimeMachineLoading(true);
+    setTimeMachineError('');
+    api.betting.timeMachineMatches(timeMachineDate)
+      .then((response) => setTimeMachineMatches(response.matches || []))
+      .catch((error) => setTimeMachineError(errorMessage(error, '历史官方比赛加载失败')))
+      .finally(() => setTimeMachineLoading(false));
+  }, [timeMachineDate, timeMachineMode, timeMachineRefreshToken]);
+
+  useEffect(() => {
     if (salesWindow?.is_open === false) resetBetSlip();
   }, [resetBetSlip, salesWindow?.is_open]);
 
@@ -114,18 +145,21 @@ export default function BettingTerminalPage() {
       .finally(() => setRecommendationsLoading(false));
   }, []);
 
+  const activeMatches = timeMachineMode ? timeMachineMatches : matches;
+  const bettingClosed = !timeMachineMode && salesWindow?.is_open === false;
+
   const leagues = useMemo(
-    () => [...new Set(matches.map((match) => match.league_name).filter(Boolean))].sort(),
-    [matches],
+    () => [...new Set(activeMatches.map((match) => match.league_name).filter(Boolean))].sort(),
+    [activeMatches],
   );
 
   const filteredMatches = useMemo(
-    () => matches.filter((match) => {
+    () => activeMatches.filter((match) => {
       if (league && match.league_name !== league) return false;
       if (!singleOnly) return true;
       return Object.values(match.odds).some((market) => market.options.length > 0 && market.is_single_allowed === true);
     }),
-    [matches, league, singleOnly],
+    [activeMatches, league, singleOnly],
   );
 
   const availablePassTypes = useMemo(
@@ -133,14 +167,14 @@ export default function BettingTerminalPage() {
     [selections],
   );
   const hasPublishedOdds = useMemo(
-    () => matches.some((match) => Object.values(match.odds).some((market) => market.options.length > 0)),
-    [matches],
+    () => activeMatches.some((match) => Object.values(match.odds).some((market) => market.options.length > 0)),
+    [activeMatches],
   );
   const hasSelectableOfficialMarket = useMemo(
-    () => matches.some((match) => Object.values(match.odds).some(
+    () => activeMatches.some((match) => Object.values(match.odds).some(
       (market) => market.options.length > 0 && (market.is_single_allowed || market.is_pass_allowed),
     )),
-    [matches],
+    [activeMatches],
   );
   const matchCount = useMemo(() => selectedMatchCount(selections), [selections]);
   const encodedPassTypes = selectedPassTypes.join(',');
@@ -149,7 +183,7 @@ export default function BettingTerminalPage() {
     recommendations.forEach((recommendation) => {
       const playType = recommendation.play_type as SportteryPlayType;
       if (!PLAY_TYPES.includes(playType)) return;
-      const match = matches.find((item) => item.match_id === recommendation.match_id);
+      const match = activeMatches.find((item) => item.match_id === recommendation.match_id);
       const market = match?.odds[playType];
       const option = market
         ? findMatchingOption(playType, market.options, recommendation.option_code)
@@ -159,7 +193,7 @@ export default function BettingTerminalPage() {
       }
     });
     return ids;
-  }, [matches, recommendations]);
+  }, [activeMatches, recommendations]);
 
   useEffect(() => {
     if (selections.length === 0) {
@@ -271,15 +305,24 @@ export default function BettingTerminalPage() {
     if (selectedPassTypes.length === 0 || !calculation || calculation.total_cost > 20_000 || calculationWarning) return;
     setSubmitting(true);
     try {
-      const result = await api.betting.createTicket({
-        source: 'real-user',
-        play_type: getTicketPlayType(selections),
-        pass_type: encodedPassTypes,
-        multiple,
-        items: toCalculateItems(selections),
-      });
+      const result = timeMachineMode
+        ? await api.betting.createTimeMachineTicket({
+          business_date: timeMachineDate,
+          pass_type: encodedPassTypes,
+          multiple,
+          selections: selections.map((item) => ({
+            match_id: item.match_id, play_type: item.play_type, option_code: item.option_code,
+          })),
+        })
+        : await api.betting.createTicket({
+          source: 'real-user',
+          play_type: getTicketPlayType(selections),
+          pass_type: encodedPassTypes,
+          multiple,
+          items: toCalculateItems(selections),
+        });
       setConfirmation({ ticketUid: result.ticketUid, calculation, selections: [...selections], passTypes: [...selectedPassTypes], multiple });
-      toast.success('投注已保存到我的彩票。');
+      toast.success(timeMachineMode ? '历史彩票已补录，并已纳入我的盈亏。' : '投注已保存到我的彩票。');
     } catch (error) {
       toast.error(errorMessage(error, '投注保存失败'));
     } finally {
@@ -290,24 +333,44 @@ export default function BettingTerminalPage() {
   return (
     <div className="betting-terminal betting-desktop-workbench">
       <div className="betting-workbench">
-        <RecommendationPanel
-          recommendations={recommendations}
-          loading={recommendationsLoading}
-          error={recommendationsError}
-          availableRecommendationIds={availableRecommendationIds}
-          onAdd={addRecommendation}
-        />
+        {timeMachineMode ? (
+          <aside className="fqp-card time-machine-guide" aria-label="时光机补录说明">
+            <h3>时光机补录</h3>
+            <p>仅使用体彩官方编号比赛及停售前最后一次官方赔率。补录票会进入比赛结果和我的盈亏。</p>
+          </aside>
+        ) : (
+          <RecommendationPanel
+            recommendations={recommendations}
+            loading={recommendationsLoading}
+            error={recommendationsError}
+            availableRecommendationIds={availableRecommendationIds}
+            onAdd={addRecommendation}
+          />
+        )}
 
         <section className="betting-market sporttery-widget-column" aria-label="投注器">
           <div className="betting-slip-head betting-market-head">
-            <div><h3>投注器</h3><span>可手工选号，也可接收左侧推荐投注</span></div>
+            <div><h3>{timeMachineMode ? '历史投注器' : '投注器'}</h3><span>{timeMachineMode ? '按历史官方封盘赔率重新录入真实彩票' : '可手工选号，也可接收左侧推荐投注'}</span></div>
           </div>
           <section className="sporttery-terminal" role="region" aria-label="竞彩足球模拟试玩投注器">
       <div className="sporttery-main">
         <div className="sporttery-toolbar">
           <button type="button" className="sporttery-mode-button" aria-label="混合过关">混合过关 <span aria-hidden="true">▾</span></button>
-          <div><button type="button" aria-label="刷新赔率" onClick={refresh}>刷新</button><button type="button" onClick={() => setShowRules(true)}>游戏规则</button><button type="button" onClick={() => setShowFilter(true)}>筛选</button></div>
+          <div>
+            <button type="button" className={timeMachineMode ? 'is-active' : ''} onClick={() => { resetBetSlip(); setTimeMachineMode((value) => !value); }}>时光机补录</button>
+            <button type="button" aria-label="刷新赔率" onClick={timeMachineMode ? () => setTimeMachineRefreshToken((value) => value + 1) : refresh}>刷新</button><button type="button" onClick={() => setShowRules(true)}>游戏规则</button><button type="button" onClick={() => setShowFilter(true)}>筛选</button>
+          </div>
         </div>
+
+        {timeMachineMode && (
+          <label className="sporttery-time-machine-date">
+            <span>选择原投注业务日</span>
+            <select aria-label="选择原投注业务日" value={timeMachineDate} onChange={(event) => { resetBetSlip(); setTimeMachineDate(event.target.value); }} disabled={timeMachineLoading}>
+              {timeMachineDates.length === 0 && <option value="">暂无可补录日期</option>}
+              {timeMachineDates.map((item) => <option key={item.businessDate} value={item.businessDate}>{item.businessDate} · {item.matchCount} 场</option>)}
+            </select>
+          </label>
+        )}
 
         <BetSlip
           selections={selections}
@@ -331,16 +394,16 @@ export default function BettingTerminalPage() {
           onConfirm={confirmTicket}
         />
 
-        {loading && <div className="sporttery-status" role="status">正在读取官方开售比赛…</div>}
-        {loadError && <div className="sporttery-status is-error" role="alert">{loadError}<button type="button" onClick={() => fetchMatches()}>重试</button></div>}
-        {!loading && !loadError && salesWindow?.is_open === false && (
+        {(timeMachineMode ? timeMachineLoading : loading) && <div className="sporttery-status" role="status">{timeMachineMode ? '正在读取历史官方比赛…' : '正在读取官方开售比赛…'}</div>}
+        {(timeMachineMode ? timeMachineError : loadError) && <div className="sporttery-status is-error" role="alert">{timeMachineMode ? timeMachineError : loadError}<button type="button" onClick={timeMachineMode ? () => setTimeMachineRefreshToken((value) => value + 1) : fetchMatches}>重试</button></div>}
+        {!timeMachineMode && !loading && !loadError && salesWindow?.is_open === false && (
           <div className="sporttery-status" role="status">{salesWindow.message}</div>
         )}
-        {!loading && !loadError && salesWindow?.is_open !== false && filteredMatches.length === 0 && <div className="sporttery-status">当前筛选条件下没有开售比赛</div>}
-        {!loading && !loadError && matches.length > 0 && hasPublishedOdds && !hasSelectableOfficialMarket && (
+        {!(timeMachineMode ? timeMachineLoading : loading) && !(timeMachineMode ? timeMachineError : loadError) && (!timeMachineMode && salesWindow?.is_open === false ? false : filteredMatches.length === 0) && <div className="sporttery-status">{timeMachineMode ? '该日没有可补录的官方封盘赔率' : '当前筛选条件下没有开售比赛'}</div>}
+        {!timeMachineMode && !loading && !loadError && activeMatches.length > 0 && hasPublishedOdds && !hasSelectableOfficialMarket && (
           <div className="sporttery-status" role="status">官方赔率已发布，但当前未开放单关或过关，请稍后刷新。</div>
         )}
-        <section className="sporttery-match-list" aria-label="开售比赛">
+        <section className="sporttery-match-list" aria-label={timeMachineMode ? '历史官方比赛' : '开售比赛'}>
           {filteredMatches.map((match) => (
             <MatchCard
               key={match.match_id}
@@ -349,14 +412,14 @@ export default function BettingTerminalPage() {
               onToggle={toggleSelection}
               onAllGames={setActiveMatch}
               onAnalyse={(item) => navigate(`/matches/${item.match_id}`)}
-              bettingClosed={salesWindow?.is_open === false}
+              bettingClosed={bettingClosed}
             />
           ))}
         </section>
-        {matches.some((match) => Object.values(match.odds).some((market) => market.is_single_allowed)) && (
+        {activeMatches.some((match) => Object.values(match.odds).some((market) => market.is_single_allowed)) && (
           <aside className="sporttery-single-tip"><span aria-hidden="true">💡</span><span>有“单”标记的选项可投单场，其他至少选择2场比赛</span></aside>
         )}
-        <p className="sporttery-disclaimer">比赛信息及固定奖金仅供参考，请以出票时刻为准。</p>
+        <p className="sporttery-disclaimer">{timeMachineMode ? '赔率已锁定为官方停售前最后一次快照，补录后请人工核对票面。' : '比赛信息及固定奖金仅供参考，请以出票时刻为准。'}</p>
       </div>
 
           </section>
@@ -376,7 +439,7 @@ export default function BettingTerminalPage() {
         />
       </div>
 
-      {activeMatch && <AllGamesDialog match={activeMatch} selections={selections} onToggle={toggleSelection} onClose={() => setActiveMatch(null)} bettingClosed={salesWindow?.is_open === false} />}
+      {activeMatch && <AllGamesDialog match={activeMatch} selections={selections} onToggle={toggleSelection} onClose={() => setActiveMatch(null)} bettingClosed={bettingClosed} />}
       {showRules && <RulesDialog onClose={() => setShowRules(false)} />}
       {showFilter && <FilterDialog leagues={leagues} league={league} singleOnly={singleOnly} onLeague={setLeague} onSingleOnly={setSingleOnly} onClose={() => setShowFilter(false)} />}
       {confirmation && <ConfirmationDialog selections={confirmation.selections} passTypes={confirmation.passTypes} multiple={confirmation.multiple} betCount={confirmation.calculation.bet_count} stake={confirmation.calculation.total_cost} prize={confirmation.calculation.max_prize} ticketUid={confirmation.ticketUid} onClose={completeConfirmation} />}

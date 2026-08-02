@@ -559,8 +559,10 @@ def run(dry_run: bool = False) -> dict[str, Any]:
                 with conn.cursor() as cur:
                     cur.execute(
                         """SELECT rti.match_id, rti.option_code, rti.sp_value,
-                                  rti.play_type, odds.handicap
+                                  rti.play_type, COALESCE(locked.handicap, odds.handicap)
                            FROM real_ticket_items rti
+                           LEFT JOIN official_odds_snapshots locked
+                             ON locked.id = rti.odds_snapshot_id
                            LEFT JOIN LATERAL (
                                SELECT snapshot.handicap
                                FROM official_odds_snapshots snapshot

@@ -27,6 +27,7 @@ from apps.backend.src.routers import (
     simulator,
     teams,
     tickets,
+    time_machine,
     ui,
     upsets,
 )
@@ -76,6 +77,7 @@ def create_app() -> FastAPI:
     app.include_router(analysis.router)
     app.include_router(simulator.router)
     app.include_router(betting.router)
+    app.include_router(time_machine.router)
     app.include_router(competition.router)
     app.include_router(dashboard.router)
     app.include_router(ui.router)

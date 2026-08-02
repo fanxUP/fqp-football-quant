@@ -44,6 +44,7 @@ export function ticketOutcomeWatermark(ticket: BettingTicket): string {
 
 export function ticketSourceLabel(ticket: BettingTicket): string {
   if (ticket.source === 'ocr') return 'OCR 识别';
+  if (ticket.source === 'time_machine') return '时光机补录';
   if (ticket.source === 'agent_recommendation') return 'Agent 推荐';
   return ticket.kind === 'real' ? '手工录入' : '投注台';
 }

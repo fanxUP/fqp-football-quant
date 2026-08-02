@@ -273,10 +273,12 @@ def create_real_ticket_items_batch(conn: Any, ticket_id: int, items: list[dict])
         INSERT INTO real_ticket_items (
             real_ticket_id, match_id, official_match_code,
             play_type, option_code, option_name, sp_value,
+            odds_snapshot_id, odds_snapshot_time, odds_source,
             is_matched_with_model, deviation_type, created_at
         ) VALUES (
             %(real_ticket_id)s, %(match_id)s, %(official_match_code)s,
             %(play_type)s, %(option_code)s, %(option_name)s, %(sp_value)s,
+            %(odds_snapshot_id)s, %(odds_snapshot_time)s, %(odds_source)s,
             %(is_matched_with_model)s, %(deviation_type)s, now()
         )
         RETURNING id
@@ -292,6 +294,9 @@ def create_real_ticket_items_batch(conn: Any, ticket_id: int, items: list[dict])
                 "option_code": item.get("option_code"),
                 "option_name": item.get("option_name"),
                 "sp_value": item.get("sp_value", 0),
+                "odds_snapshot_id": item.get("odds_snapshot_id"),
+                "odds_snapshot_time": item.get("odds_snapshot_time"),
+                "odds_source": item.get("odds_source"),
                 "is_matched_with_model": item.get("is_matched_with_model", False),
                 "deviation_type": item.get("deviation_type"),
             }

@@ -631,6 +631,21 @@ export const api = {
 
   // Unified betting center
   betting: {
+    timeMachineDates: () => request<{ dates: Array<{ businessDate: string; matchCount: number }> }>('/api/betting/time-machine/dates'),
+    timeMachineMatches: (businessDate: string) => request<{ businessDate: string; matches: import('./types').BettingMatch[]; total: number }>(
+      `/api/betting/time-machine/matches${qs({ business_date: businessDate })}`,
+    ),
+    createTimeMachineTicket: (body: {
+      business_date: string;
+      pass_type: string;
+      multiple: number;
+      selections: Array<{ match_id: number; play_type: string; option_code: string }>;
+      ticket_no?: string;
+      notes?: string;
+    }) => request<{
+      status: string; ticketUid: string; legacyId: number; source: 'time_machine';
+      purchaseDate: string; stake: number; maxPrize: number; betCount: number; settlement: string;
+    }>('/api/betting/time-machine/tickets', { method: 'POST', body: JSON.stringify(body) }),
     tickets: (params?: { owner?: 'me' | 'agent'; date?: string; status?: string; limit?: number }) =>
       request<{
         tickets: import('./types').BettingTicket[];

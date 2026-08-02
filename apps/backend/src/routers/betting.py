@@ -121,11 +121,18 @@ def _map_real_ticket(ticket: dict) -> dict:
         "legacyId": ticket.get("id"),
         "owner": owner,
         "kind": "real",
-        "source": "ocr" if ticket.get("ocr_status") == "recognized" else "manual",
+        "source": (
+            "time_machine" if source_type == "time_machine_manual"
+            else "ocr" if ticket.get("ocr_status") == "recognized" else "manual"
+        ),
         "status": _settlement_status(ticket.get("settlement_status")),
         "date": purchase_date,
         "createdAt": ticket.get("created_at"),
-        "title": f"实票 #{ticket.get('id')}",
+        "title": (
+            f"时光机补录 #{ticket.get('id')}"
+            if source_type == "time_machine_manual"
+            else f"实票 #{ticket.get('id')}"
+        ),
         "playType": "mixed",
         "passType": ticket.get("pass_type") or "single",
         "multiple": int(ticket.get("multiple") or 1),

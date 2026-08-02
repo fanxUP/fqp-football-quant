@@ -1006,7 +1006,7 @@ export interface BankrollTransaction {
 
 export type BettingTicketOwner = 'me' | 'agent';
 export type BettingTicketKind = 'simulation' | 'real';
-export type BettingTicketSource = 'manual' | 'ocr' | 'agent_recommendation';
+export type BettingTicketSource = 'manual' | 'ocr' | 'time_machine' | 'agent_recommendation';
 
 export interface BettingTicketItemSummary {
   matchId: number | null;

@@ -152,6 +152,9 @@ const apiMocks = vi.hoisted(() => ({
   matches: vi.fn(),
   calculate: vi.fn(),
   createTicket: vi.fn(),
+  timeMachineDates: vi.fn(),
+  timeMachineMatches: vi.fn(),
+  createTimeMachineTicket: vi.fn(),
   recommendations: vi.fn(),
 }));
 
@@ -208,7 +211,13 @@ vi.mock('../core/apiClient', () => ({
   api: {
     bettingTerminal: { matches: apiMocks.matches, calculate: apiMocks.calculate },
     liveRecommendations: apiMocks.recommendations,
-    betting: { createTicket: apiMocks.createTicket, ocrUpload: vi.fn() },
+    betting: {
+      createTicket: apiMocks.createTicket,
+      createTimeMachineTicket: apiMocks.createTimeMachineTicket,
+      timeMachineDates: apiMocks.timeMachineDates,
+      timeMachineMatches: apiMocks.timeMachineMatches,
+      ocrUpload: vi.fn(),
+    },
   },
 }));
 
@@ -221,6 +230,9 @@ describe('BettingTerminalPage desktop workbench', () => {
     apiMocks.matches.mockReset().mockResolvedValue({ matches: [firstMatch, secondMatch], total: 2 });
     apiMocks.calculate.mockReset().mockImplementation(calculateResponse);
     apiMocks.createTicket.mockReset().mockResolvedValue(ticketResponse);
+    apiMocks.createTimeMachineTicket.mockReset().mockResolvedValue({ ...ticketResponse, source: 'time_machine', purchaseDate: '2026-07-12', settlement: '已进入官方结果结算流程' });
+    apiMocks.timeMachineDates.mockReset().mockResolvedValue({ dates: [{ businessDate: '2026-07-12', matchCount: 2 }] });
+    apiMocks.timeMachineMatches.mockReset().mockResolvedValue({ businessDate: '2026-07-12', matches: [firstMatch, secondMatch], total: 2 });
     apiMocks.recommendations.mockReset().mockResolvedValue({ recommendations: [recommendation], total: 1, status: 'ok' });
   });
 
@@ -248,6 +260,23 @@ describe('BettingTerminalPage desktop workbench', () => {
     await waitFor(() => expect(within(terminal).getByRole('button', { name: '胜平负 主胜 2.04' })).toHaveClass('is-selected'));
     expect(within(previewPanel).getByText('首尔FC vs 江原FC')).toBeInTheDocument();
     expect(within(previewPanel).getAllByText('推荐投注').length).toBeGreaterThan(0);
+  });
+
+  it('replays a historical official market and submits only immutable selection keys', async () => {
+    render(<BettingTerminalPage />);
+    fireEvent.click(await screen.findByRole('button', { name: '时光机补录' }));
+    expect(await screen.findByLabelText('选择原投注业务日')).toHaveValue('2026-07-12');
+    const first = await screen.findByRole('article', { name: '周日203 首尔FC 对 江原FC' });
+    fireEvent.click(within(first).getByRole('button', { name: '胜平负 主胜 2.04' }));
+    const slip = screen.getByRole('complementary', { name: '投注单' });
+    await waitFor(() => expect(within(slip).getByRole('button', { name: '确定' })).toBeEnabled());
+    fireEvent.click(within(slip).getByRole('button', { name: '确定' }));
+    await waitFor(() => expect(apiMocks.createTimeMachineTicket).toHaveBeenCalledOnce());
+    expect(apiMocks.createTimeMachineTicket).toHaveBeenCalledWith(expect.objectContaining({
+      business_date: '2026-07-12',
+      selections: [{ match_id: 901, play_type: 'spf', option_code: '3' }],
+    }));
+    expect(apiMocks.createTimeMachineTicket.mock.calls[0][0].selections[0]).not.toHaveProperty('sp_value');
   });
 
   it('shows the current official SP instead of model fair odds', async () => {
