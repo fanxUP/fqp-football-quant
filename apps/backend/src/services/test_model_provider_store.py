@@ -44,12 +44,12 @@ class _SavedKeyCursor:
     def __exit__(self, *_: object) -> None:
         return None
 
-    def execute(self, query: str, _params: object = None) -> None:
-        self.connection.queries.append(query)
+    def execute(self, query: str, params: object = None) -> None:
+        self.connection.queries.append((query, params))
 
     def fetchone(self) -> tuple[object, ...]:
-        if "SELECT api_key_encrypted" in self.connection.queries[-1]:
-            return (True,)
+        if "SELECT base_url" in self.connection.queries[-1][0]:
+            return ("https://api.openai.com/v1", "gpt-5-mini", True)
         return (
             "openai", "OpenAI", "https://api.openai.com/v1", "gpt-5-mini", True,
             True, None, None, None, None,
@@ -58,7 +58,7 @@ class _SavedKeyCursor:
 
 class _SavedKeyConnection:
     def __init__(self) -> None:
-        self.queries: list[str] = []
+        self.queries: list[tuple[str, object]] = []
         self.committed = False
 
     def cursor(self) -> _SavedKeyCursor:
@@ -77,3 +77,16 @@ def test_provider_update_can_keep_encrypted_api_key() -> None:
 
     assert result["hasApiKey"] is True
     assert conn.committed is True
+
+
+def test_provider_update_invalidates_test_after_connection_change() -> None:
+    conn = _SavedKeyConnection()
+
+    save_provider_config(conn, {
+        "providerCode": "openai", "baseUrl": "https://models.example.test/v1",
+        "defaultModel": "gpt-5-mini", "enabled": True,
+    })
+
+    query, params = conn.queries[-1]
+    assert "last_test_status = CASE WHEN %s THEN NULL" in query
+    assert params is not None and tuple(params)[-3:] == (True, True, True)

@@ -261,18 +261,19 @@ def save_provider_config(conn: Any, payload: dict[str, Any]) -> dict[str, Any]:
     api_key = str(payload.get("apiKey", "")).strip()
     # The UI intentionally never reads an existing key back.  A blank value on
     # an update therefore means "keep the encrypted key", not "delete it".
-    has_saved_key = False
-    if provider.requires_api_key and not api_key:
-        with conn.cursor() as cur:
-            cur.execute(
-                "SELECT api_key_encrypted IS NOT NULL FROM llm_provider_configs WHERE provider_code = %s",
-                (provider.code,),
-            )
-            saved = cur.fetchone()
-        has_saved_key = bool(saved and saved[0])
-        if not has_saved_key:
-            raise ProviderConfigError("请填写 API 密钥")
+    with conn.cursor() as cur:
+        cur.execute(
+            """SELECT base_url, default_model, api_key_encrypted IS NOT NULL
+               FROM llm_provider_configs WHERE provider_code = %s""",
+            (provider.code,),
+        )
+        saved: tuple[Any, ...] | None = cur.fetchone()
+    if provider.requires_api_key and not api_key and not (saved and saved[2]):
+        raise ProviderConfigError("请填写 API 密钥")
     encrypted = _cipher().encrypt(api_key.encode("utf-8")).decode("utf-8") if api_key else None
+    connection_changed = bool(
+        saved and (saved[0] != base_url or saved[1] != model or encrypted is not None)
+    )
     display_name = str(payload.get("displayName") or provider.name).strip()[:80] or provider.name
     enabled = bool(payload.get("enabled", True))
     with conn.cursor() as cur:
@@ -286,11 +287,15 @@ def save_provider_config(conn: Any, payload: dict[str, Any]) -> dict[str, Any]:
                  api_key_encrypted = CASE WHEN EXCLUDED.api_key_encrypted IS NULL
                                           THEN llm_provider_configs.api_key_encrypted
                                           ELSE EXCLUDED.api_key_encrypted END,
+                 last_test_at = CASE WHEN %s THEN NULL ELSE llm_provider_configs.last_test_at END,
+                 last_test_status = CASE WHEN %s THEN NULL ELSE llm_provider_configs.last_test_status END,
+                 last_test_message = CASE WHEN %s THEN NULL ELSE llm_provider_configs.last_test_message END,
                  updated_at = NOW()
                RETURNING provider_code, display_name, base_url, default_model, enabled,
                          api_key_encrypted IS NOT NULL, updated_at, last_test_at,
                          last_test_status, last_test_message""",
-            (provider.code, display_name, base_url, model, enabled, encrypted),
+            (provider.code, display_name, base_url, model, enabled, encrypted,
+             connection_changed, connection_changed, connection_changed),
         )
         row = cur.fetchone()
     conn.commit()
