@@ -22,6 +22,7 @@ import RecommendationsPage, { type RecommendationMatchSelection } from './Recomm
 import ReviewsPage from './ReviewsPage';
 import TeamName from '../shared/components/TeamName';
 import FeatureSnapshotPanel from '../features/analysis/FeatureSnapshotPanel';
+import BusinessInterpretationPanel from './agent-workspace/BusinessInterpretationPanel';
 
 // ---------------------------------------------------------------------------
 // Tab definitions
@@ -339,6 +340,10 @@ function AnalysisMatchDrawer({
           );
         })}
       </div>
+
+      <BusinessInterpretationPanel title="赛前解读" onRun={(focusQuestion) =>
+        api.agentInterpretations.preMatch(selection.matchId, focusQuestion)
+      } />
 
       <button type="button" className="fqp-btn fqp-btn-primary analysis-match-action" onClick={onExplain}>
         打开模型解释

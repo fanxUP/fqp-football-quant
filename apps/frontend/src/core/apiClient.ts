@@ -93,6 +93,8 @@ export interface AgentWorkspaceTask {
   reviewedAt: string | null;
   createdAt: string | null;
   comparisonId?: string | null;
+  sourceType?: 'pre_match' | 'post_daily' | 'post_weekly' | 'post_monthly' | null;
+  sourceRef?: string | null;
 }
 
 export interface AgentWorkspaceTaskPage {
@@ -317,6 +319,15 @@ export const api = {
       `/api/agent-workspace/tasks/${taskId}/reviews`,
     ),
     remove: (taskId: number) => request<void>(`/api/agent-workspace/tasks/${taskId}`, { method: 'DELETE' }),
+  },
+
+  agentInterpretations: {
+    preMatch: (matchId: number, focusQuestion = '') => request<{ task: AgentWorkspaceTask; agentCode: string; providerCode: string; model: string }>(
+      `/api/agent-interpretations/pre-match/${matchId}`, { method: 'POST', body: JSON.stringify({ focusQuestion }) },
+    ),
+    postMatch: (sourceType: 'post_daily' | 'post_weekly' | 'post_monthly', sourceRef: string, focusQuestion = '') => request<{ task: AgentWorkspaceTask; agentCode: string; providerCode: string; model: string }>(
+      `/api/agent-interpretations/post-match/${sourceType}/${encodeURIComponent(sourceRef)}`, { method: 'POST', body: JSON.stringify({ focusQuestion }) },
+    ),
   },
 
   // Teams

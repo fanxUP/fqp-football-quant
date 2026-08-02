@@ -11,6 +11,7 @@ import EmptyState from '../shared/components/EmptyState';
 import ErrorState from '../shared/components/ErrorState';
 import StatusBadge from '../shared/components/StatusBadge';
 import { formatTimestamp } from '../shared/utils';
+import BusinessInterpretationPanel from './agent-workspace/BusinessInterpretationPanel';
 
 type TabKey = 'daily' | 'weekly' | 'monthly' | 'settlements' | 'errors';
 
@@ -332,6 +333,9 @@ function DailyReviewsTab() {
                   <div>预算使用率: {(review.budget_usage_rate * 100).toFixed(0)}%</div>
                   <div>最大单票亏损: ¥{review.max_single_ticket_loss.toFixed(2)}</div>
                 </div>
+                <BusinessInterpretationPanel title="赛后复盘解读" onRun={(focusQuestion) =>
+                  api.agentInterpretations.postMatch('post_daily', review.review_date, focusQuestion)
+                } />
               </div>
             );
           })()}
@@ -346,6 +350,7 @@ function WeeklyReviewsTab() {
   const [reviews, setReviews] = useState<WeeklyReview[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [expandedId, setExpandedId] = useState<number | null>(null);
 
   useEffect(() => {
     api.reviews.weekly(12)
@@ -369,13 +374,19 @@ function WeeklyReviewsTab() {
 
   if (error) return <ErrorState message={error} onRetry={() => window.location.reload()} />;
   return (
-    <DataTable
-      columns={columns}
-      rows={reviews}
-      loading={loading}
-      emptyText="暂无周报数据"
-      rowKey={(r) => String(r.id)}
-    />
+    <>
+      <DataTable columns={columns} rows={reviews} loading={loading} emptyText="暂无周报数据"
+        onRowClick={(row) => setExpandedId(expandedId === row.id ? null : row.id)} rowKey={(r) => String(r.id)} />
+      {expandedId != null && (() => {
+        const review = reviews.find((item) => item.id === expandedId);
+        return review ? <Card title={`📅 ${review.week_start} 至 ${review.week_end} 周报详情`} style={{ marginTop: '16px' }}>
+          <div style={{ whiteSpace: 'pre-wrap' }}>{review.summary_text || '暂无摘要文本'}</div>
+          <BusinessInterpretationPanel title="赛后复盘解读" onRun={(focusQuestion) =>
+            api.agentInterpretations.postMatch('post_weekly', String(review.id), focusQuestion)
+          } />
+        </Card> : null;
+      })()}
+    </>
   );
 }
 
@@ -384,6 +395,7 @@ function MonthlyReviewsTab() {
   const [reviews, setReviews] = useState<MonthlyReview[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [expandedId, setExpandedId] = useState<number | null>(null);
 
   useEffect(() => {
     api.reviews.monthly(12)
@@ -406,13 +418,19 @@ function MonthlyReviewsTab() {
 
   if (error) return <ErrorState message={error} onRetry={() => window.location.reload()} />;
   return (
-    <DataTable
-      columns={columns}
-      rows={reviews}
-      loading={loading}
-      emptyText="暂无月报数据"
-      rowKey={(r) => String(r.id)}
-    />
+    <>
+      <DataTable columns={columns} rows={reviews} loading={loading} emptyText="暂无月报数据"
+        onRowClick={(row) => setExpandedId(expandedId === row.id ? null : row.id)} rowKey={(r) => String(r.id)} />
+      {expandedId != null && (() => {
+        const review = reviews.find((item) => item.id === expandedId);
+        return review ? <Card title={`📅 ${String(review.review_month ?? review.month ?? review.id)} 月报详情`} style={{ marginTop: '16px' }}>
+          <div style={{ whiteSpace: 'pre-wrap' }}>{review.summary_text || '暂无摘要文本'}</div>
+          <BusinessInterpretationPanel title="赛后复盘解读" onRun={(focusQuestion) =>
+            api.agentInterpretations.postMatch('post_monthly', String(review.id), focusQuestion)
+          } />
+        </Card> : null;
+      })()}
+    </>
   );
 }
 
