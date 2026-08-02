@@ -45,7 +45,7 @@ export default function Layout({ children }: LayoutProps) {
             value={language}
             onChange={(event) => setLanguage(event.target.value as AppLanguage)}
           >
-            {LANGUAGE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+            {LANGUAGE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.flag} {option.label}</option>)}
           </select>
         </label>
         <button type="button" className="fqp-logout-btn" onClick={() => logout()}>

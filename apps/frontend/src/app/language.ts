@@ -4,9 +4,9 @@ export type AppLanguage = 'zh-CN' | 'en';
 
 export const DEFAULT_LANGUAGE: AppLanguage = 'zh-CN';
 
-export const LANGUAGE_OPTIONS: ReadonlyArray<{ value: AppLanguage; label: string }> = [
-  { value: 'zh-CN', label: '简体中文' },
-  { value: 'en', label: 'English' },
+export const LANGUAGE_OPTIONS: ReadonlyArray<{ value: AppLanguage; label: string; flag: string }> = [
+  { value: 'zh-CN', label: '简体中文', flag: '🇨🇳' },
+  { value: 'en', label: 'English', flag: '🇬🇧' },
 ];
 
 const ENGLISH_SIDEBAR_GROUPS: Record<string, string> = {
