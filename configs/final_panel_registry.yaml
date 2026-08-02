@@ -62,6 +62,13 @@ panels:
     order: 115
     visible: true
     icon: 🔌
+  - panel_id: agent_workspace
+    name: 智能工作台
+    route: /agent-workspace
+    module_id: agent_workspace_module
+    order: 118
+    visible: true
+    icon: 🧭
   - panel_id: upset_research
     name: 冷门研究
     route: /upsets

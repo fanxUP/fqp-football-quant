@@ -19,6 +19,7 @@ const EventsPage = lazy(() => import('./pages/EventsPage'));
 const ModulesPage = lazy(() => import('./pages/ModulesPage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 const ModelProvidersPage = lazy(() => import('./pages/ModelProvidersPage'));
+const AgentWorkspacePage = lazy(() => import('./pages/AgentWorkspacePage'));
 const AgentPanel = lazy(() => import('./pages/AgentPanel'));
 const BacktestPage = lazy(() => import('./pages/BacktestPage'));
 const PoolPage = lazy(() => import('./pages/PoolPage'));
@@ -53,6 +54,7 @@ const routes = [
   { path: '/modules', render: () => <ModulesPage /> },
   { path: '/settings', render: () => <SettingsPage /> },
   { path: '/model-providers', render: () => <ModelProvidersPage /> },
+  { path: '/agent-workspace', render: () => <AgentWorkspacePage /> },
   { path: '/agents', render: () => <AgentPanel /> },
   { path: '/backtest', render: () => <BacktestPage /> },
   { path: '/pool', render: () => <PoolPage /> },

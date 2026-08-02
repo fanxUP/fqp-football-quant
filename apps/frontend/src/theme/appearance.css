@@ -384,6 +384,34 @@
 .model-invocation-meta b { color: var(--fqp-success); font-size: 11px; }
 .model-invocation-meta b[data-status='failed'] { color: var(--fqp-red); }
 
+.agent-workspace { margin-bottom: 24px; padding: 24px; border: 1px solid var(--fqp-border); border-radius: var(--fqp-radius-card); background: var(--fqp-panel); }
+.agent-workspace-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.agent-workspace-heading h2 { margin: 4px 0 0; color: var(--fqp-text); font-size: 22px; }
+.agent-workspace-safety { flex: none; padding: 7px 10px; border: 1px solid var(--fqp-border); border-radius: var(--fqp-radius-sm); color: var(--fqp-text-muted); font-size: 11px; }
+.agent-workspace-grid { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(220px, .8fr); gap: 16px; margin-top: 20px; }
+.agent-workspace-form { display: grid; gap: 8px; }
+.agent-workspace-template-list { display: flex; flex-wrap: wrap; gap: 8px; margin: 2px 0 8px; }
+.agent-workspace-template { padding: 7px 10px; border: 1px solid var(--fqp-border); border-radius: var(--fqp-radius-xs); background: var(--fqp-panel-2); color: var(--fqp-text); cursor: pointer; font-size: 12px; }
+.agent-workspace-template:hover, .agent-workspace-template[data-selected='true'] { border-color: var(--fqp-accent, var(--fqp-red)); color: var(--fqp-accent, var(--fqp-red)); }
+.agent-workspace-template:focus-visible { outline: 2px solid var(--fqp-accent, var(--fqp-red)); outline-offset: 2px; }
+.agent-workspace-input { min-height: 220px; resize: vertical; }
+.agent-workspace-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.agent-workspace-actions > span { color: var(--fqp-text-muted); font-family: var(--fqp-font-mono); font-size: 11px; }
+.agent-workspace-brief { padding: 16px; border: 1px solid var(--fqp-border); border-radius: var(--fqp-radius-sm); background: var(--fqp-panel-2); }
+.agent-workspace-brief h3 { margin: 0; color: var(--fqp-text); font-size: 14px; }
+.agent-workspace-brief dl { display: grid; gap: 12px; margin: 16px 0; }
+.agent-workspace-brief dt { color: var(--fqp-text-muted); font-size: 11px; }
+.agent-workspace-brief dd { margin: 3px 0 0; color: var(--fqp-text); font-size: 13px; line-height: 1.5; }
+.agent-workspace-brief p, .agent-workspace-result p { margin: 0; color: var(--fqp-text-muted); font-size: 12px; line-height: 1.6; }
+.agent-workspace-empty { margin-top: 20px; padding: 18px; border: 1px dashed var(--fqp-border); border-radius: var(--fqp-radius-sm); background: var(--fqp-panel-2); }
+.agent-workspace-empty strong { color: var(--fqp-text); }
+.agent-workspace-empty p { margin: 6px 0 0; color: var(--fqp-text-muted); font-size: 13px; line-height: 1.6; }
+.agent-workspace-result { margin-top: 16px; padding: 14px; border-left: 3px solid var(--fqp-accent, var(--fqp-red)); background: var(--fqp-panel-2); }
+.agent-workspace-result > div { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.agent-workspace-result strong { color: var(--fqp-text); font-size: 14px; }
+.agent-workspace-result span { color: var(--fqp-text-muted); font-size: 11px; }
+.agent-workspace-result pre { margin: 12px 0; overflow: auto; color: var(--fqp-text); font-family: inherit; font-size: 13px; line-height: 1.7; white-space: pre-wrap; word-break: break-word; }
+
 .local-settings-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -412,6 +440,9 @@
   .appearance-panel-heading, .local-settings-heading { display: grid; }
   .theme-card-grid, .appearance-controls-grid, .local-settings-grid { grid-template-columns: 1fr; }
   .model-provider-layout { grid-template-columns: 1fr; }
+  .agent-workspace { padding: 16px; }
+  .agent-workspace-heading, .agent-workspace-result > div { align-items: flex-start; flex-direction: column; gap: 6px; }
+  .agent-workspace-grid { grid-template-columns: 1fr; }
   .agent-model-binding { grid-template-columns: 1fr; align-items: flex-start; }
   .agent-model-reply > div { align-items: flex-start; flex-direction: column; gap: 3px; }
   .model-invocation-item { align-items: flex-start; flex-direction: column; }

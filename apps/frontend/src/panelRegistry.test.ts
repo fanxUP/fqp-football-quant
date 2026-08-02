@@ -34,6 +34,8 @@ describe('panel registry', () => {
       '今日决策分析',
       '特征数据健康',
       '模型表现',
+      '模型接入',
+      '智能工作台',
       '冷门研究',
       '策略验证',
       '足彩彩池',
@@ -56,10 +58,12 @@ describe('panel registry', () => {
     const modules = new Map(MODULE_REGISTRY.map((module) => [module.moduleCode, module]));
     const modelResearch = modules.get('model_research_module');
     const poolLottery = modules.get('pool_lottery_module');
+    const agentWorkspace = modules.get('agent_workspace_module');
     const operationsPanel = PANEL_REGISTRY.find((panel) => panel.panelCode === 'data_health');
 
     expect(modelResearch?.dependencies).toEqual(['official_data_core', 'multidim_feature_module']);
     expect(poolLottery?.dependencies).toEqual(['official_data_core', 'model_research_module']);
+    expect(agentWorkspace?.dependencies).toEqual(['model_provider_module']);
     expect(operationsPanel?.moduleCode).toBe('ops_admin');
   });
 });

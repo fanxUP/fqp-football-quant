@@ -41,6 +41,13 @@ modules:
     safe_disable: true
     depends_on: []
     panels: [model_providers]
+  - module_id: agent_workspace_module
+    name: 智能工作台
+    category: research
+    required: false
+    safe_disable: true
+    depends_on: [model_provider_module]
+    panels: [agent_workspace]
   - module_id: upset_intelligence_module
     name: 冷门研究与决策知识
     category: research

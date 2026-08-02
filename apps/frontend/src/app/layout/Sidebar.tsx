@@ -14,6 +14,7 @@ const SIDEBAR_GROUP_FALLBACK: Record<string, string> = {
   multidim_feature_module: '研究优化',
   model_research_module: '研究优化',
   model_provider_module: '研究优化',
+  agent_workspace_module: '研究优化',
   pool_lottery_module: '策略实验',
   module_runtime_core: '系统管理',
   local_settings_core: '系统管理',
