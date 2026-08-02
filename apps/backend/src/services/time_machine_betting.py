@@ -5,7 +5,6 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-
 PLAY_TYPES = ("spf", "rqspf", "zjq", "bf", "bqc")
 _WIN_DRAW_LOSS_ORDER = {"h": 0, "3": 0, "d": 1, "1": 1, "a": 2, "0": 2}
 

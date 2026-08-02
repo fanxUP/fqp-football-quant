@@ -52,7 +52,7 @@ def invoke_agent_model(conn: Any, agent_code: str, prompt: str) -> ModelReply:
 
 
 def _request_completion(
-    client: httpx.Client,
+    client: Any,
     binding: dict[str, Any],
     api_key: str | None,
     prompt: str,

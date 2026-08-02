@@ -44,7 +44,7 @@ class AgentInvokeRequest(BaseModel):
     prompt: str = Field(min_length=1, max_length=8000)
 
 
-def _raise_config_error(exc: ProviderConfigError) -> None:
+def _raise_config_error(exc: ProviderConfigError | ModelGatewayError) -> None:
     raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 

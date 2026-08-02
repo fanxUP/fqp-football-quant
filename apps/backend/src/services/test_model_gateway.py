@@ -1,19 +1,26 @@
 from __future__ import annotations
 
+from typing import Any
+
+import httpx
 import pytest
 
 from apps.backend.src.services.model_agent_prompts import get_agent_system_instruction
-from apps.backend.src.services.model_gateway import ModelGatewayError, _request_completion, invoke_agent_model
+from apps.backend.src.services.model_gateway import (
+    ModelGatewayError,
+    _request_completion,
+    invoke_agent_model,
+)
 
 
 class FakeClient:
     def __init__(self) -> None:
-        self.args = ()
-        self.kwargs = {}
-        self.response = object()
+        self.args: tuple[str, ...] = ()
+        self.kwargs: dict[str, Any] = {}
+        self.response = httpx.Response(200)
 
-    def post(self, *args, **kwargs):
-        self.args, self.kwargs = args, kwargs
+    def post(self, url: str, **kwargs: Any) -> httpx.Response:
+        self.args, self.kwargs = (url,), kwargs
         return self.response
 
 

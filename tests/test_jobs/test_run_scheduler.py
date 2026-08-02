@@ -1,5 +1,6 @@
 import re
-from datetime import datetime, time as clock_time, timedelta
+from datetime import datetime, timedelta
+from datetime import time as clock_time
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 

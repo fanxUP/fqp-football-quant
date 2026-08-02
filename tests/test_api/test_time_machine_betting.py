@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-from apps.backend.src.services.time_machine_betting import build_time_machine_matches
 from apps.backend.src.routers import time_machine
+from apps.backend.src.services.time_machine_betting import build_time_machine_matches
 
 
 def test_time_machine_keeps_the_last_official_open_odds_before_sales_stop():

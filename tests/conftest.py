@@ -11,8 +11,9 @@ from apps.backend.src.app import create_app
 
 
 @pytest.fixture
-def client() -> TestClient:
-    """FastAPI TestClient using the app factory."""
+def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
+    """FastAPI TestClient with explicit test-only authentication bypass."""
+    monkeypatch.setenv("FQP_AUTH_MODE", "none")
     app = create_app()
     return TestClient(app)
 

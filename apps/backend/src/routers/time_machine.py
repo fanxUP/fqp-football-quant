@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import date
+from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -80,7 +81,7 @@ def list_time_machine_dates(limit: int = Query(180, ge=1, le=365)):
 
 
 @router.get("/api/betting/time-machine/matches")
-def list_time_machine_matches(business_date: date = Query(...)):
+def list_time_machine_matches(business_date: Annotated[date, Query()]):
     """Return official historical matches and their last pre-close odds."""
     _require_historical_date(business_date)
     with get_db() as conn, conn.cursor() as cur:

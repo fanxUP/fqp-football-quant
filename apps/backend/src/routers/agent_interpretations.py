@@ -3,14 +3,16 @@
 from __future__ import annotations
 
 from time import perf_counter
-from typing import Literal
+from typing import Annotated, Literal
 
-from fastapi import APIRouter, HTTPException, Path
+from fastapi import APIRouter, Body, HTTPException, Path
 from pydantic import BaseModel, Field, field_validator
 
 from apps.backend.src.db import get_db
 from apps.backend.src.services.agent_interpretation import (
-    InterpretationSourceError, build_post_match_source, build_pre_match_source,
+    InterpretationSourceError,
+    build_post_match_source,
+    build_pre_match_source,
 )
 from apps.backend.src.services.agent_workspace_store import create_workspace_task
 from apps.backend.src.services.model_gateway import ModelGatewayError, invoke_agent_model
@@ -52,7 +54,9 @@ def _run(source):
 
 
 @router.post("/pre-match/{match_id}")
-def interpret_pre_match(match_id: int = Path(ge=1), body: InterpretationRequest = ...):
+def interpret_pre_match(
+    body: Annotated[InterpretationRequest, Body()], match_id: int = Path(ge=1),
+):
     try:
         with get_db() as conn:
             source = build_pre_match_source(conn, match_id, body.focusQuestion)

@@ -4,27 +4,27 @@ from datetime import UTC, datetime
 
 import pytest
 
+from apps.backend.src.app import create_app
+from apps.backend.src.routers.agent_workspace import WorkspaceComparisonRequest
 from apps.backend.src.services.agent_workspace_store import (
     AgentWorkspaceError,
     create_workspace_task,
     get_workspace_comparison,
     list_workspace_comparison_tasks,
-    set_workspace_comparison_completed,
-    set_workspace_comparison_reviewed,
     list_workspace_task_page,
     list_workspace_task_review_events,
     list_workspace_tasks,
+    set_workspace_comparison_completed,
+    set_workspace_comparison_reviewed,
     set_workspace_task_reviewed,
 )
-from apps.backend.src.app import create_app
-from apps.backend.src.routers.agent_workspace import WorkspaceComparisonRequest
 
 
 class _Cursor:
-    def __init__(self, conn: "_Connection") -> None:
+    def __init__(self, conn: _Connection) -> None:
         self.conn = conn
 
-    def __enter__(self) -> "_Cursor":
+    def __enter__(self) -> _Cursor:
         return self
 
     def __exit__(self, *_: object) -> None:

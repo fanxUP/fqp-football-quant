@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from time import perf_counter
-from typing import Literal
+from typing import Annotated, Literal
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, HTTPException, Path, Query
+from fastapi import APIRouter, Body, HTTPException, Path, Query
 from pydantic import BaseModel, Field, field_validator
 
 from apps.backend.src.db import get_db
@@ -19,9 +19,9 @@ from apps.backend.src.services.agent_workspace_store import (
     list_workspace_comparison_tasks,
     list_workspace_task_page,
     list_workspace_task_review_events,
-    set_workspace_task_reviewed,
     set_workspace_comparison_completed,
     set_workspace_comparison_reviewed,
+    set_workspace_task_reviewed,
 )
 from apps.backend.src.services.model_gateway import ModelGatewayError, invoke_agent_model
 from apps.backend.src.services.model_invocation_audit import record_model_invocation
@@ -99,7 +99,7 @@ def _run_workspace_task(
                 duration_ms=round((perf_counter() - started_at) * 1000),
             )
             return task
-    except (ProviderConfigError, ModelGatewayError) as exc:
+    except (ProviderConfigError, ModelGatewayError):
         with get_db() as conn:
             record_model_invocation(
                 conn, agent_code=agent_code, provider_code=None, model=None, status="failed",
@@ -187,7 +187,9 @@ def update_comparison_review(comparison_id: UUID, body: WorkspaceComparisonRevie
 
 
 @router.patch("/{task_id}")
-def update_task_review(task_id: int = Path(ge=1), body: WorkspaceTaskReviewRequest = ...):
+def update_task_review(
+    body: Annotated[WorkspaceTaskReviewRequest, Body()], task_id: int = Path(ge=1),
+):
     try:
         with get_db() as conn:
             task = set_workspace_task_reviewed(conn, task_id, body.reviewed, body.reviewNote)

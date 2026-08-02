@@ -57,16 +57,16 @@ def test_provider_keys_are_encrypted_with_server_secret(monkeypatch: pytest.Monk
 
 
 class _SavedKeyCursor:
-    def __init__(self, connection: "_SavedKeyConnection") -> None:
+    def __init__(self, connection: _SavedKeyConnection) -> None:
         self.connection = connection
 
-    def __enter__(self) -> "_SavedKeyCursor":
+    def __enter__(self) -> _SavedKeyCursor:
         return self
 
     def __exit__(self, *_: object) -> None:
         return None
 
-    def execute(self, query: str, params: object = None) -> None:
+    def execute(self, query: str, params: tuple[object, ...] | None = None) -> None:
         self.connection.queries.append((query, params))
 
     def fetchone(self) -> tuple[object, ...]:
@@ -80,7 +80,7 @@ class _SavedKeyCursor:
 
 class _SavedKeyConnection:
     def __init__(self) -> None:
-        self.queries: list[tuple[str, object]] = []
+        self.queries: list[tuple[str, tuple[object, ...] | None]] = []
         self.committed = False
 
     def cursor(self) -> _SavedKeyCursor:
@@ -115,7 +115,7 @@ def test_provider_update_invalidates_test_after_connection_change() -> None:
 
 
 class _BindingCursor:
-    def __enter__(self) -> "_BindingCursor":
+    def __enter__(self) -> _BindingCursor:
         return self
 
     def __exit__(self, *_: object) -> None:
