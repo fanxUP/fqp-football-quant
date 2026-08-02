@@ -96,6 +96,12 @@ PROVIDERS: dict[str, ProviderDefinition] = {
     ),
 }
 
+AGENT_MODEL_OPTIONS: dict[str, str] = {
+    "orchestrator_agent": "任务编排 Agent",
+    "review_agent": "复盘 Agent",
+    "doc_agent": "文档 Agent",
+}
+
 
 class ProviderConfigError(ValueError):
     """Raised when a provider configuration is unsafe or incomplete."""
@@ -166,6 +172,84 @@ def list_provider_configs(conn: Any) -> list[dict[str, Any]]:
         }
         for row in rows
     ]
+
+
+def list_agent_model_bindings(conn: Any) -> list[dict[str, Any]]:
+    """Return the narrow allow-list of agents that may opt into a model call."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """SELECT b.agent_code, b.provider_code, b.enabled, b.updated_at,
+                      p.display_name, p.default_model, p.enabled
+               FROM llm_agent_bindings b
+               JOIN llm_provider_configs p ON p.provider_code = b.provider_code
+               ORDER BY b.agent_code"""
+        )
+        saved = {row[0]: row for row in cur.fetchall()}
+    return [
+        {
+            "agentCode": code,
+            "agentName": name,
+            "providerCode": row[1] if row else None,
+            "providerName": row[4] if row else None,
+            "model": row[5] if row else None,
+            "enabled": bool(row[2]) if row else False,
+            "providerEnabled": bool(row[6]) if row else False,
+            "updatedAt": row[3].isoformat() if row else None,
+        }
+        for code, name in AGENT_MODEL_OPTIONS.items()
+        for row in [saved.get(code)]
+    ]
+
+
+def save_agent_model_binding(conn: Any, agent_code: str, provider_code: str, enabled: bool) -> dict[str, Any]:
+    if agent_code not in AGENT_MODEL_OPTIONS:
+        raise ProviderConfigError("该智能代理不允许配置外部模型")
+    with conn.cursor() as cur:
+        cur.execute(
+            """SELECT provider_code, enabled, api_key_encrypted IS NOT NULL, last_test_status
+               FROM llm_provider_configs WHERE provider_code = %s""",
+            (provider_code,),
+        )
+        provider = cur.fetchone()
+        if not provider:
+            raise ProviderConfigError("请先保存模型服务商配置")
+        if enabled and (not provider[1] or not provider[2] or provider[3] != "passed"):
+            raise ProviderConfigError("请先启用服务商并通过连通性测试，再启用智能代理")
+        cur.execute(
+            """INSERT INTO llm_agent_bindings (agent_code, provider_code, enabled, updated_at)
+               VALUES (%s, %s, %s, NOW())
+               ON CONFLICT (agent_code) DO UPDATE SET provider_code = EXCLUDED.provider_code,
+                 enabled = EXCLUDED.enabled, updated_at = NOW()""",
+            (agent_code, provider_code, enabled),
+        )
+    conn.commit()
+    return next(item for item in list_agent_model_bindings(conn) if item["agentCode"] == agent_code)
+
+
+def get_agent_model_binding(conn: Any, agent_code: str) -> dict[str, Any] | None:
+    """Load the secret-bearing record only at the model invocation boundary."""
+    if agent_code not in AGENT_MODEL_OPTIONS:
+        return None
+    with conn.cursor() as cur:
+        cur.execute(
+            """SELECT b.agent_code, b.provider_code, b.enabled, p.base_url, p.default_model,
+                      p.api_key_encrypted, p.enabled
+               FROM llm_agent_bindings b
+               JOIN llm_provider_configs p ON p.provider_code = b.provider_code
+               WHERE b.agent_code = %s""",
+            (agent_code,),
+        )
+        row = cur.fetchone()
+    if not row or not row[6]:
+        return None
+    provider = PROVIDERS.get(row[1])
+    if provider is None:
+        return None
+    return {
+        "agent_code": row[0], "provider_code": row[1], "enabled": row[2],
+        "base_url": row[3], "default_model": row[4], "api_key_encrypted": row[5],
+        "protocol": provider.protocol,
+    }
 
 
 def save_provider_config(conn: Any, payload: dict[str, Any]) -> dict[str, Any]:

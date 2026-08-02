@@ -344,6 +344,15 @@
 .model-provider-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
 .model-provider-test-message { margin: 12px 0 0; color: var(--fqp-text-muted); font-size: 12px; }
 
+.agent-model-bindings { margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--fqp-border); }
+.agent-model-bindings h3 { margin: 0; color: var(--fqp-text); font-size: 16px; }
+.agent-model-bindings p { margin: 6px 0 0; color: var(--fqp-text-muted); font-size: 12px; line-height: 1.6; }
+.agent-model-binding-list { display: grid; gap: 8px; margin-top: 12px; }
+.agent-model-binding { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px; border: 1px solid var(--fqp-border); border-radius: var(--fqp-radius-sm); background: var(--fqp-panel-2); }
+.agent-model-binding strong, .agent-model-binding span { display: block; }
+.agent-model-binding strong { color: var(--fqp-text); font-size: 13px; }
+.agent-model-binding span { margin-top: 3px; color: var(--fqp-text-muted); font-size: 11px; }
+
 .local-settings-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -372,6 +381,7 @@
   .appearance-panel-heading, .local-settings-heading { display: grid; }
   .theme-card-grid, .appearance-controls-grid, .local-settings-grid { grid-template-columns: 1fr; }
   .model-provider-layout { grid-template-columns: 1fr; }
+  .agent-model-binding { align-items: flex-start; flex-direction: column; }
   .appearance-select-grid { grid-template-columns: 1fr; }
   .appearance-switches { display: grid; }
   .appearance-actions { flex-wrap: wrap; }

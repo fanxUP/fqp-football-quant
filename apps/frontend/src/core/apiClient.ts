@@ -55,6 +55,17 @@ export interface ModelProviderConnection {
   lastTestMessage: string | null;
 }
 
+export interface AgentModelBinding {
+  agentCode: string;
+  agentName: string;
+  providerCode: string | null;
+  providerName: string | null;
+  model: string | null;
+  enabled: boolean;
+  providerEnabled: boolean;
+  updatedAt: string | null;
+}
+
 // ---- Base request ----
 
 const TIMEOUT_MS = 15_000;
@@ -207,6 +218,16 @@ export const api = {
       message: string;
       testedAt: string;
     }>(`/api/model-providers/${encodeURIComponent(providerCode)}/test`, { method: 'POST' }),
+    bindings: () => request<{ bindings: AgentModelBinding[] }>('/api/model-providers/agent-bindings'),
+    saveBinding: (agentCode: string, payload: { providerCode: string; enabled: boolean }) =>
+      request<{ binding: AgentModelBinding }>(`/api/model-providers/agent-bindings/${encodeURIComponent(agentCode)}`, {
+        method: 'PUT', body: JSON.stringify(payload),
+      }),
+    invokeBinding: (agentCode: string, prompt: string) => request<{
+      agentCode: string; providerCode: string; model: string; content: string;
+    }>(`/api/model-providers/agent-bindings/${encodeURIComponent(agentCode)}/invoke`, {
+      method: 'POST', body: JSON.stringify({ prompt }),
+    }),
   },
 
   // Teams

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { api, type ModelProviderConnection, type ModelProviderPreset } from '../../core/apiClient';
 import Card from '../../shared/components/Card';
 import { toast } from '../../shared/components/Toast';
+import AgentModelBindings from './AgentModelBindings';
 
 type Draft = { baseUrl: string; defaultModel: string; apiKey: string; enabled: boolean };
 
@@ -109,8 +110,9 @@ export default function ModelProviderSettingsPanel() {
       </div>
 
       {loading ? <p className="model-provider-state">正在加载服务商配置…</p> : (
-        <div className="model-provider-layout">
-          <div className="model-provider-list" role="list" aria-label="模型服务商">
+        <>
+          <div className="model-provider-layout">
+            <div className="model-provider-list" role="list" aria-label="模型服务商">
             {catalog.map((provider) => {
               const connection = connections.find((item) => item.providerCode === provider.providerCode);
               return (
@@ -121,9 +123,9 @@ export default function ModelProviderSettingsPanel() {
                 </button>
               );
             })}
-          </div>
+            </div>
 
-          {selected && draft && <Card title={selected.displayName} className="model-provider-editor">
+            {selected && draft && <Card title={selected.displayName} className="model-provider-editor">
             <div className="model-provider-meta">
               {selected.capabilities.map((capability) => <span key={capability}>{capabilityLabels[capability] ?? capability}</span>)}
               {saved?.lastTestStatus && <span data-status={saved.lastTestStatus}>{saved.lastTestStatus === 'passed' ? '最近测试通过' : '最近测试失败'}</span>}
@@ -145,8 +147,10 @@ export default function ModelProviderSettingsPanel() {
               <button type="button" className="fqp-btn fqp-btn-primary" disabled={testing || !saved?.hasApiKey && selected.requiresApiKey} onClick={() => void test()}>{testing ? '测试中…' : '测试连接'}</button>
             </div>
             {saved?.lastTestMessage && <p className="model-provider-test-message" data-status={saved.lastTestStatus ?? undefined}>{saved.lastTestMessage}</p>}
-          </Card>}
-        </div>
+            </Card>}
+          </div>
+          <AgentModelBindings providers={connections} />
+        </>
       )}
     </section>
   );
