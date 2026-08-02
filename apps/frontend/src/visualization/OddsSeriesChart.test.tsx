@@ -11,6 +11,10 @@ vi.mock('./odds/OddsHeatmapCard', () => ({
   default: ({ playType }: { playType: string }) => <div data-testid="odds-heatmap">{playType}</div>,
 }));
 
+vi.mock('./odds/ScoreOddsMatrixCard', () => ({
+  default: () => <div data-testid="odds-score-matrix" />,
+}));
+
 vi.mock('../shared/components/ChartCard', () => ({
   default: () => <div data-testid="legacy-echarts" />,
 }));
@@ -37,12 +41,13 @@ describe('OddsSeriesChart', () => {
     expect(screen.queryByTestId('odds-heatmap')).not.toBeInTheDocument();
   });
 
-  it('比分和半全场使用 ECharts 热力图', async () => {
+  it('比分使用比分矩阵，半全场保留热力图', async () => {
     render(
       <OddsSeriesChart data={[{ ...point, play_type: 'bf' }]} playType="bf" title="测试" subtitle="比分" />,
     );
 
-    expect(await screen.findByTestId('odds-heatmap')).toHaveTextContent('bf');
+    expect(await screen.findByTestId('odds-score-matrix')).toBeInTheDocument();
+    expect(screen.queryByTestId('odds-heatmap')).not.toBeInTheDocument();
     expect(screen.queryByTestId('odds-line')).not.toBeInTheDocument();
   });
 });

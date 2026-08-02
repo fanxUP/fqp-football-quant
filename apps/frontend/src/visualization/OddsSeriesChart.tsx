@@ -7,6 +7,7 @@ import { isDenseOddsPlay } from './odds/oddsChartData';
 
 const OddsLineSeriesCard = lazy(() => import('./odds/OddsLineSeriesCard'));
 const OddsHeatmapCard = lazy(() => import('./odds/OddsHeatmapCard'));
+const ScoreOddsMatrixCard = lazy(() => import('./odds/ScoreOddsMatrixCard'));
 
 interface OddsSeriesChartProps {
   data: OddsMovementPoint[];
@@ -18,7 +19,9 @@ interface OddsSeriesChartProps {
 }
 
 export default function OddsSeriesChart(props: OddsSeriesChartProps) {
-  const Chart = isDenseOddsPlay(props.playType) ? OddsHeatmapCard : OddsLineSeriesCard;
+  const Chart = props.playType === 'bf'
+    ? ScoreOddsMatrixCard
+    : isDenseOddsPlay(props.playType) ? OddsHeatmapCard : OddsLineSeriesCard;
 
   return (
     <Suspense
