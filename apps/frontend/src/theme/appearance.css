@@ -352,6 +352,18 @@
 .agent-model-binding strong, .agent-model-binding span { display: block; }
 .agent-model-binding strong { color: var(--fqp-text); font-size: 13px; }
 .agent-model-binding span { margin-top: 3px; color: var(--fqp-text-muted); font-size: 11px; }
+.agent-model-trial { display: grid; gap: 8px; margin-top: 16px; padding: 14px; border: 1px solid var(--fqp-border); border-radius: var(--fqp-radius-sm); background: var(--fqp-panel-2); }
+.agent-model-trial h4 { margin: 0; color: var(--fqp-text); font-size: 14px; }
+.agent-model-trial p { margin: 4px 0 0; }
+.agent-model-trial-input { min-height: 104px; resize: vertical; }
+.agent-model-trial-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.agent-model-trial-actions > span { color: var(--fqp-text-muted); font-family: var(--fqp-font-mono); font-size: 11px; }
+.agent-model-trial-empty { padding: 10px; border: 1px dashed var(--fqp-border); border-radius: var(--fqp-radius-xs); }
+.agent-model-reply { padding: 12px; border-left: 3px solid var(--fqp-accent, var(--fqp-red)); background: var(--fqp-panel); }
+.agent-model-reply > div { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.agent-model-reply strong { color: var(--fqp-text); font-size: 13px; }
+.agent-model-reply span { color: var(--fqp-text-muted); font-size: 11px; }
+.agent-model-reply pre { margin: 10px 0 0; overflow: auto; color: var(--fqp-text); font-family: inherit; font-size: 12px; line-height: 1.65; white-space: pre-wrap; word-break: break-word; }
 
 .local-settings-grid {
   display: grid;
@@ -382,6 +394,7 @@
   .theme-card-grid, .appearance-controls-grid, .local-settings-grid { grid-template-columns: 1fr; }
   .model-provider-layout { grid-template-columns: 1fr; }
   .agent-model-binding { align-items: flex-start; flex-direction: column; }
+  .agent-model-reply > div { align-items: flex-start; flex-direction: column; gap: 3px; }
   .appearance-select-grid { grid-template-columns: 1fr; }
   .appearance-switches { display: grid; }
   .appearance-actions { flex-wrap: wrap; }

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api, type AgentModelBinding, type ModelProviderConnection } from '../../core/apiClient';
 import { toast } from '../../shared/components/Toast';
+import AgentModelTrial from './AgentModelTrial';
 
 export default function AgentModelBindings({ providers }: { providers: ModelProviderConnection[] }) {
   const [bindings, setBindings] = useState<AgentModelBinding[]>([]);
@@ -44,5 +45,6 @@ export default function AgentModelBindings({ providers }: { providers: ModelProv
         </button>
       </div>)}
     </div>
+    <AgentModelTrial bindings={bindings} />
   </section>;
 }
