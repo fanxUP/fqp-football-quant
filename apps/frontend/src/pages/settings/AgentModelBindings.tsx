@@ -68,7 +68,12 @@ export default function AgentModelBindings({ providers }: { providers: ModelProv
         </div>
       </div>)}
     </div>
-    <AgentModelTrial bindings={bindings} onCompleted={() => setAuditVersion((version) => version + 1)} />
+    <AgentModelTrial
+      bindings={bindings.filter((binding) => binding.enabled && readyProviders.some(
+        (provider) => provider.providerCode === binding.providerCode,
+      ))}
+      onCompleted={() => setAuditVersion((version) => version + 1)}
+    />
     <ModelInvocationAudit refreshToken={auditVersion} />
   </section>;
 }
