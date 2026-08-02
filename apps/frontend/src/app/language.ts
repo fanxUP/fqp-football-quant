@@ -131,7 +131,6 @@ const ENGLISH_TEXT: Record<string, string> = {
   '单场': 'Single',
   '未开售': 'Not on sale',
   '即将开赛': 'Starting soon',
-  '对阵': 'vs',
   '对': 'vs',
   '让球数': 'Handicap',
   '全部游戏': 'All markets',

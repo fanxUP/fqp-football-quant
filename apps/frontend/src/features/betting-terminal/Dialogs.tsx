@@ -19,7 +19,7 @@ export function AllGamesDialog({ match, selections, onToggle, onClose, bettingCl
     <div className="sporttery-dialog-backdrop" role="presentation" onClick={onClose}>
       <section className="sporttery-dialog sporttery-play-dialog" role="dialog" aria-modal="true" aria-label={`${match.match_num_str} ${translate('全部游戏')}`} onClick={(event) => event.stopPropagation()}>
         <div className="sporttery-play-heading">{match.match_num_str}　{match.league_name}　{match.kickoff_time.slice(5, 16).replace('T', ' ')}</div>
-        <div className="sporttery-play-teams"><small>{translate('[主]')}</small>{match.home_team_name} <span>{translate('对阵')}</span> {match.away_team_name}</div>
+        <div className="sporttery-play-teams"><small>{translate('[主]')}</small>{match.home_team_name} <span className="fqp-versus">VS</span> {match.away_team_name}</div>
         <div className="sporttery-play-scroll">
           {PLAY_TYPES.map((playType) => {
             const market = match.odds[playType];
@@ -151,7 +151,7 @@ export function ConfirmationDialog(props: ConfirmationDialogProps) {
         <div className="sporttery-confirm-body">
           <p className="sporttery-saved">{translate('已保存到我的彩票')} · {props.ticketUid}</p>
           <p><strong>{new Set(props.selections.map((item) => item.match_id)).size} {translate('场')} / {props.selections.length} {translate('项')}</strong></p>
-          <ol>{props.selections.map((item) => <li key={selectionKey(item.match_id, item.play_type, item.option_code)}>{item.home_team} {translate('对阵')} {item.away_team} {playTypeLabel(item.play_type)} {optionLabel(item.play_type, item.option_code)} @{item.sp_value.toFixed(2)}</li>)}</ol>
+          <ol>{props.selections.map((item) => <li key={selectionKey(item.match_id, item.play_type, item.option_code)}>{item.home_team} VS {item.away_team} {playTypeLabel(item.play_type)} {optionLabel(item.play_type, item.option_code)} @{item.sp_value.toFixed(2)}</li>)}</ol>
           <p>{translate('过关方式')}：{formatPassTypes(props.passTypes)}<br />{translate('倍数')}：{props.multiple}{translate('倍')}<br />{translate('注数')}：{props.betCount}{translate('注')}<br />{translate('模拟金额')}：{props.stake.toFixed(2)}{translate('元')}<br />{translate('理论最高奖金')}：{props.prize.toFixed(2)}{translate('元')}</p>
         </div>
         <button type="button" className="sporttery-dialog-close" onClick={props.onClose}>{translate('完成')}</button>

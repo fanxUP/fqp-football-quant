@@ -52,7 +52,7 @@ export function ticketSourceLabel(ticket: BettingTicket): string {
 export function ticketPrimaryMatchLabel(ticket: BettingTicket): string {
   const first = ticket.items?.[0];
   if (!first) return `${ticket.matchCount || ticket.itemCount || 0} 场比赛`;
-  return `${first.homeTeam} 对阵 ${first.awayTeam}`;
+  return `${first.homeTeam} VS ${first.awayTeam}`;
 }
 
 export function ticketPrimaryMatchCode(ticket: BettingTicket): string {

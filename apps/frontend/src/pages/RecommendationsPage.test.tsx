@@ -156,10 +156,10 @@ describe('RecommendationsPage', () => {
     render(<RecommendationsPage embedded onMatchSelect={onMatchSelect} />);
 
     await waitFor(() => {
-      expect(screen.getByLabelText('上海海港 对阵 山东泰山')).toBeInTheDocument();
+      expect(screen.getByLabelText('上海海港 VS 山东泰山')).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByLabelText('上海海港 对阵 山东泰山'));
+    fireEvent.click(screen.getByLabelText('上海海港 VS 山东泰山'));
 
     expect(onMatchSelect).toHaveBeenCalledWith(expect.objectContaining({
       matchId: 901,
@@ -174,7 +174,7 @@ describe('RecommendationsPage', () => {
     const { container } = render(<RecommendationsPage embedded />);
 
     await waitFor(() => {
-      expect(screen.getByLabelText('上海海港 对阵 山东泰山')).toBeInTheDocument();
+      expect(screen.getByLabelText('上海海港 VS 山东泰山')).toBeInTheDocument();
     });
 
     const table = container.querySelector('table.recommendation-table');
@@ -187,7 +187,7 @@ describe('RecommendationsPage', () => {
     const { container } = render(<RecommendationsPage embedded />);
 
     await waitFor(() => {
-      expect(screen.getByLabelText('上海海港 对阵 山东泰山')).toBeInTheDocument();
+      expect(screen.getByLabelText('上海海港 VS 山东泰山')).toBeInTheDocument();
     });
 
     const teamStack = container.querySelector('.recommendation-team-stack');

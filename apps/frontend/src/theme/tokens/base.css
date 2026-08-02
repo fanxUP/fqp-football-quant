@@ -68,6 +68,24 @@
 .fqp-table th, .fqp-table td { padding: var(--fqp-table-padding-y) var(--fqp-table-padding-x); }
 .fqp-input, .fqp-select { min-height: var(--fqp-control-height); }
 
+.fqp-versus {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.9rem;
+  padding: 0.14rem 0.32rem;
+  border: 1px solid var(--fqp-border);
+  border-radius: var(--fqp-radius-xs);
+  color: var(--fqp-text-muted);
+  background: color-mix(in srgb, var(--fqp-panel) 78%, transparent);
+  font-family: var(--fqp-font-mono);
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  white-space: nowrap;
+}
+
 [data-radius='square'] {
   --fqp-radius-card: 2px;
   --fqp-radius-sm: 2px;

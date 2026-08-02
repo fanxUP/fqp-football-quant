@@ -61,7 +61,7 @@ interface RecommendationsPageProps {
 
 function RecommendationTeamStack({ homeTeam, awayTeam }: { homeTeam: string; awayTeam: string }) {
   return (
-    <div className="recommendation-team-stack" aria-label={`${homeTeam} 对阵 ${awayTeam}`}>
+    <div className="recommendation-team-stack" aria-label={`${homeTeam} VS ${awayTeam}`}>
       <div className="recommendation-team-row">
         <TeamLogo nameCn={homeTeam} size={24} showFallbackInitials={false} />
         <span>{homeTeam}</span>
@@ -644,7 +644,7 @@ export default function RecommendationsPage({ embedded = false, onMatchSelect }:
                       onClick={() => selectInsightItem(item)}
                     >
                       <span className="recommendation-insight-match" style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                        <span>{item.matchNum}</span><TeamName name={item.homeTeam} size={16} /><span>对阵</span><TeamName name={item.awayTeam} size={16} />
+                        <span>{item.matchNum}</span><TeamName name={item.homeTeam} size={16} /><span className="fqp-versus">VS</span><TeamName name={item.awayTeam} size={16} />
                       </span>
                       <span className="recommendation-insight-meta">
                         {item.bestPlayTypeName} · {item.bestOptionName}
@@ -672,7 +672,7 @@ export default function RecommendationsPage({ embedded = false, onMatchSelect }:
                       onClick={() => selectInsightItem(item)}
                     >
                       <span className="recommendation-insight-match" style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                        <span>{item.matchNum}</span><TeamName name={item.homeTeam} size={16} /><span>对阵</span><TeamName name={item.awayTeam} size={16} />
+                        <span>{item.matchNum}</span><TeamName name={item.homeTeam} size={16} /><span className="fqp-versus">VS</span><TeamName name={item.awayTeam} size={16} />
                       </span>
                       <span className="recommendation-insight-meta">
                         {item.directionCount} 个方向 · {item.options.length} 条信号

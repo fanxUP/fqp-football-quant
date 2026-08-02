@@ -211,7 +211,7 @@ export default function MatchDetailDrawer({ matchId, onClose }: MatchDetailDrawe
         </div>
         {entries.slice(0, 3).map((f, i) => (
           <div key={i} style={{ fontSize: '11px', color: 'var(--fqp-text-muted)' }}>
-            {fmtDate(f.date)} {f.is_home ? '主' : '客'} 对阵 {f.opponent}
+            {fmtDate(f.date)} {f.is_home ? '主' : '客'} VS {f.opponent}
             {f.goals_for != null && ` ${f.goals_for}:${f.goals_against}`}
           </div>
         ))}
@@ -235,7 +235,7 @@ export default function MatchDetailDrawer({ matchId, onClose }: MatchDetailDrawe
               fontWeight: 700, color: 'var(--fqp-accent)', minWidth: '44px', textAlign: 'center',
               fontSize: '13px',
             }}>
-              {m.home_goals != null ? `${m.home_goals}:${m.away_goals}` : '对阵'}
+              {m.home_goals != null ? `${m.home_goals}:${m.away_goals}` : 'VS'}
             </span>
             <span style={{ flex: 1, fontWeight: 500 }}>{m.away}</span>
             <span style={{ color: 'var(--fqp-text-muted)', fontSize: '11px', width: '60px', textAlign: 'right' }}>
@@ -496,7 +496,7 @@ export default function MatchDetailDrawer({ matchId, onClose }: MatchDetailDrawe
                 fontSize: '22px', fontWeight: 800,
                 color: 'var(--fqp-text-muted)', opacity: 0.4,
               }}>
-                对阵
+                VS
               </div>
             )}
           </div>
@@ -846,7 +846,7 @@ export default function MatchDetailDrawer({ matchId, onClose }: MatchDetailDrawe
           background: 'rgba(0,0,0,0.2)',
         }}>
           <span style={{ fontSize: '15px', fontWeight: 700 }}>
-            {data ? `${data.match.home_team_name} 对阵 ${data.match.away_team_name}` : '比赛详情'}
+            {data ? `${data.match.home_team_name} VS ${data.match.away_team_name}` : '比赛详情'}
           </span>
           <button
             onClick={doClose}

@@ -92,9 +92,9 @@ export default function MatchCard(props: MatchCardProps) {
       <div className="sporttery-teams-row">
         <span className="sporttery-home-tag">{translate('[主]')} ★</span>
         <div className="sporttery-teams">
-          <strong>{match.home_team_name}</strong><small>{translate('对阵')}</small><strong>{match.away_team_name}</strong><span aria-hidden="true"> ★</span>
+          <strong>{match.home_team_name}</strong><small className="fqp-versus">VS</small><strong>{match.away_team_name}</strong><span aria-hidden="true"> ★</span>
         </div>
-        <button type="button" className="sporttery-analyse" aria-label={`${translate('查看')}${match.home_team_name} ${translate('对阵')} ${match.away_team_name}${translate('分析')}`} onClick={() => props.onAnalyse(match)}>{translate('析')}</button>
+        <button type="button" className="sporttery-analyse" aria-label={`${translate('查看')}${match.home_team_name} VS ${match.away_team_name}${translate('分析')}`} onClick={() => props.onAnalyse(match)}>{translate('析')}</button>
       </div>
       <div className="sporttery-quick-games">
         <div className="sporttery-goal-stack" aria-label={translate('让球数')}>

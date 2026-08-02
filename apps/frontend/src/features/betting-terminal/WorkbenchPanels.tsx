@@ -53,7 +53,7 @@ export function RecommendationPanel(props: RecommendationPanelProps) {
               <article key={recommendation.prediction_id} className="betting-recommendation-card">
                 <div className="betting-recommendation-head">
                   <span>{recommendation.match_num_str || recommendation.league}</span>
-                  <strong>{recommendation.home_team} {translate('对阵')} {recommendation.away_team}</strong>
+                  <strong>{recommendation.home_team} VS {recommendation.away_team}</strong>
                 </div>
                 <div className="betting-recommendation-pick">
                   <span>{playTypeLabel(recommendation.play_type)}</span>
@@ -109,7 +109,7 @@ export function TicketPreview(props: TicketPreviewProps) {
           {props.selections.map((item) => (
             <article key={`${item.match_id}:${item.play_type}:${item.option_code}`} className="betting-slip-item">
               <span>{playTypeLabel(item.play_type)}</span>
-              <strong>{item.home_team} {translate('对阵')} {item.away_team}</strong>
+              <strong>{item.home_team} VS {item.away_team}</strong>
               <div className="betting-slip-pick"><span>{optionLabel(item.play_type, item.option_code)}</span><strong>@ {item.sp_value.toFixed(2)}</strong></div>
               <div className="betting-slip-basis">
                 <div><span>{translate('来源')}</span><strong>{item.basis?.source === 'recommendation' ? translate('推荐投注') : translate('手工选号')}</strong></div>

@@ -297,7 +297,7 @@ function AnalysisMatchDrawer({
         <div>
           <div className="analysis-match-meta">{selection.matchNum} · {selection.league}</div>
           <h2 style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <TeamName name={selection.homeTeam} size={28} /><span>对阵</span><TeamName name={selection.awayTeam} size={28} />
+            <TeamName name={selection.homeTeam} size={28} /><span className="fqp-versus">VS</span><TeamName name={selection.awayTeam} size={28} />
           </h2>
           <p>{selection.kickoffTime ? String(selection.kickoffTime).replace('T', ' ').slice(0, 16) : '—'} · {selection.scoreText ?? selection.matchStatus}</p>
         </div>
@@ -928,7 +928,7 @@ function ShapExplainTab({ initialMatchId }: { initialMatchId?: number | null }) 
       {matchId && probs && (
         <div style={{ animation: 'fqpSlideUpBounce 0.4s ease both' }}>
           {/* Prediction card */}
-          <Card title={`${homeTeam} 对阵 ${awayTeam}`} style={{ marginBottom: 20 }}>
+          <Card title={`${homeTeam} VS ${awayTeam}`} style={{ marginBottom: 20 }}>
             <div style={{ display: 'flex', gap: 32, flexWrap: 'wrap' }}>
               <div style={{ textAlign: 'center' }}>
                 <div style={{ fontSize: 12, color: 'var(--fqp-text-muted)' }}>主胜概率</div>

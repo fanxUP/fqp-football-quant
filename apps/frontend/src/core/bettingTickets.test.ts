@@ -113,7 +113,7 @@ describe('bettingTickets', () => {
     });
 
     expect(ticketPrimaryMatchCode(withItem)).toBe('周二001');
-    expect(ticketPrimaryMatchLabel(withItem)).toBe('阿森纳 对阵 切尔西');
+    expect(ticketPrimaryMatchLabel(withItem)).toBe('阿森纳 VS 切尔西');
     expect(ticketPrimaryMatchCode(ticket({ items: [] }))).toBe('比赛编号待补全');
     expect(ticketPrimaryMatchLabel(ticket({ matchCount: 2, itemCount: 2, items: [] }))).toBe('2 场比赛');
   });

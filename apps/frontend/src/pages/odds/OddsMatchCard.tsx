@@ -21,7 +21,7 @@ export default function OddsMatchCard({ match, playType, playLabel }: OddsMatchC
       <OddsSeriesChart
         data={match.series}
         playType={playType}
-        title={`[${match.official_match_code}] ${match.home_team_name} 对阵 ${match.away_team_name}`}
+        title={`[${match.official_match_code}] ${match.home_team_name} VS ${match.away_team_name}`}
         subtitle={`${match.league_name} · 开赛 ${kickoff} · ${playLabel} · ${captureText}`}
         emptyReason={capture?.failure_reason || `该比赛暂无${playLabel}赔率快照`}
         anomalyCount={match.anomalies.length}
