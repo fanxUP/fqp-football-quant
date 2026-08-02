@@ -1,5 +1,6 @@
 import { type FormEvent, useState, useEffect } from 'react';
 import { useAuth } from '../app/AuthContext';
+import { useLanguage } from '../app/LanguageContext';
 
 export default function LoginPage() {
   const [password, setPassword] = useState('');
@@ -8,6 +9,7 @@ export default function LoginPage() {
   const [visible, setVisible] = useState(false);
   const [showPw, setShowPw] = useState(false);
   const { login } = useAuth();
+  const { translate } = useLanguage();
 
   useEffect(() => {
     // Entrance animation
@@ -19,14 +21,14 @@ export default function LoginPage() {
     e.preventDefault();
     setError(null);
     if (!password) {
-      setError('请输入访问密码');
+      setError(translate('请输入访问密码'));
       return;
     }
     setLoading(true);
     try {
       await login(password);
     } catch (err) {
-      setError(err instanceof Error ? err.message : '登录失败');
+      setError(err instanceof Error ? err.message : translate('登录失败'));
     } finally {
       setLoading(false);
     }
@@ -52,7 +54,7 @@ export default function LoginPage() {
                 type={showPw ? 'text' : 'password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="请输入访问密码"
+                placeholder={translate('请输入访问密码')}
                 autoFocus
                 disabled={loading}
                 className="fqp-login-input"
@@ -75,7 +77,7 @@ export default function LoginPage() {
             disabled={loading}
             className="fqp-login-button"
           >
-            {loading ? '登录中...' : '登录'}
+            {loading ? translate('登录中...') : translate('登录')}
           </button>
         </form>
       </div>

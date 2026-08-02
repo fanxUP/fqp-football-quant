@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import LoadingSpinner from './LoadingSpinner';
 import EmptyState from './EmptyState';
+import { useLanguage } from '../../app/LanguageContext';
 
 const ROW_ENTER_DELAY_STEP_MS = 30;
 const ROW_ENTER_MAX_DELAY_MS = 300;
@@ -36,6 +37,7 @@ export default function DataTable<T = any>({
   rowKey,
   selectedRowKey,
 }: DataTableProps<T>) {
+  const { translate } = useLanguage();
   const [mounted, setMounted] = useState(false);
   useEffect(() => {
     requestAnimationFrame(() => setMounted(true));
@@ -48,11 +50,11 @@ export default function DataTable<T = any>({
   }, [rows.length]);
 
   if (loading) {
-    return <LoadingSpinner text="加载数据中..." />;
+    return <LoadingSpinner text={translate('加载数据中...')} />;
   }
 
   if (rows.length === 0) {
-    return <EmptyState icon="📋" title={emptyText} />;
+    return <EmptyState icon="📋" title={translate(emptyText)} />;
   }
 
   return (
@@ -67,7 +69,7 @@ export default function DataTable<T = any>({
           <tr>
             {columns.map((col) => (
               <th key={col.key} style={{ width: col.width, textAlign: col.align || 'left' }}>
-                {col.title}
+                {translate(col.title)}
               </th>
             ))}
           </tr>

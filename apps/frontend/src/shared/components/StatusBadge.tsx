@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useLanguage } from '../../app/LanguageContext';
 
 type StatusType = 'ok' | 'warning' | 'error' | 'info' | 'disabled';
 
@@ -9,6 +10,7 @@ interface StatusBadgeProps {
 }
 
 export default function StatusBadge({ status, label, dot = false }: StatusBadgeProps) {
+  const { translate } = useLanguage();
   const [mounted, setMounted] = useState(false);
   useEffect(() => {
     requestAnimationFrame(() => setMounted(true));
@@ -33,7 +35,7 @@ export default function StatusBadge({ status, label, dot = false }: StatusBadgeP
           }
         />
       )}
-      {label}
+      {translate(label)}
     </span>
   );
 }

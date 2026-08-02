@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useLanguage } from '../../app/LanguageContext';
 
 interface ErrorStateProps {
   message: string;
@@ -6,6 +7,7 @@ interface ErrorStateProps {
 }
 
 export default function ErrorState({ message, onRetry }: ErrorStateProps) {
+  const { translate } = useLanguage();
   const [mounted, setMounted] = useState(false);
   useEffect(() => {
     requestAnimationFrame(() => setMounted(true));
@@ -22,12 +24,12 @@ export default function ErrorState({ message, onRetry }: ErrorStateProps) {
         ⚠️
       </div>
       <div className="fqp-empty-title" style={{ color: 'var(--fqp-red-neon)' }}>
-        加载失败
+        {translate('加载失败')}
       </div>
-      <div className="fqp-empty-desc">{message}</div>
+      <div className="fqp-empty-desc">{translate(message)}</div>
       {onRetry && (
         <button className="fqp-btn fqp-btn-danger" onClick={onRetry} style={{ marginTop: '20px' }}>
-          重试
+          {translate('重试')}
         </button>
       )}
     </div>

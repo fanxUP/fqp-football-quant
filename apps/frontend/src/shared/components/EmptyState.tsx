@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
+import { useLanguage } from '../../app/LanguageContext';
 
 interface EmptyStateProps {
   icon?: string;
@@ -8,6 +9,7 @@ interface EmptyStateProps {
 }
 
 export default function EmptyState({ icon = '📭', title, description, action }: EmptyStateProps) {
+  const { translate } = useLanguage();
   const [mounted, setMounted] = useState(false);
   useEffect(() => {
     requestAnimationFrame(() => setMounted(true));
@@ -33,7 +35,7 @@ export default function EmptyState({ icon = '📭', title, description, action }
           transition: 'opacity 0.3s ease 0.1s, transform 0.3s ease 0.1s',
         }}
       >
-        {title}
+        {translate(title)}
       </div>
       {description && (
         <div
@@ -44,7 +46,7 @@ export default function EmptyState({ icon = '📭', title, description, action }
             transition: 'opacity 0.3s ease 0.2s, transform 0.3s ease 0.2s',
           }}
         >
-          {description}
+          {translate(description)}
         </div>
       )}
       {action && <div style={{ marginTop: '20px' }}>{action}</div>}

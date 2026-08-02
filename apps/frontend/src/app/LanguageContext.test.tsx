@@ -5,7 +5,7 @@ import { LanguageProvider, useLanguage } from './LanguageContext';
 import { LANGUAGE_STORAGE_KEY } from './language';
 
 function LanguageProbe() {
-  const { language, setLanguage } = useLanguage();
+  const { language, setLanguage, translate } = useLanguage();
   return (
     <label>
       Language
@@ -13,6 +13,7 @@ function LanguageProbe() {
         <option value="zh-CN">简体中文</option>
         <option value="en">English</option>
       </select>
+      <output>{translate('加载失败')}</output>
     </label>
   );
 }
@@ -34,5 +35,6 @@ describe('LanguageProvider', () => {
     await user.selectOptions(selector, 'en');
     expect(document.documentElement.lang).toBe('en');
     expect(localStorage.getItem(LANGUAGE_STORAGE_KEY)).toBe('en');
+    expect(screen.getByText('Failed to load')).toBeInTheDocument();
   });
 });

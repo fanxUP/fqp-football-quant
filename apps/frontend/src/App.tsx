@@ -1,6 +1,7 @@
 import { createRouter, navigate as routerNavigate, useRouter } from './core/router';
 import { ThemeProvider } from './app/ThemeContext';
 import { LanguageProvider } from './app/LanguageContext';
+import { useLanguage } from './app/LanguageContext';
 import { ToastProvider } from './shared/components/Toast';
 import { AuthProvider, useAuth } from './app/AuthContext';
 import Layout from './app/layout/Layout';
@@ -30,10 +31,11 @@ const OddsMovementPage = lazy(() => import('./pages/OddsMovementPage'));
 const UpsetsPage = lazy(() => import('./pages/UpsetsPage'));
 
 function RedirectTo({ path, text = '正在进入页面...' }: { path: string; text?: string }) {
+  const { translate } = useLanguage();
   useEffect(() => {
     routerNavigate(path);
   }, [path]);
-  return <LoadingSpinner text={text} size="lg" />;
+  return <LoadingSpinner text={translate(text)} size="lg" />;
 }
 
 // ---- Route table ----
@@ -76,6 +78,7 @@ createRouter(routes);
 // ---- Page outlet ----
 function PageOutlet() {
   const { currentPath, params } = useRouter();
+  const { translate } = useLanguage();
 
   // Find matching route
   const routeParts = currentPath.split('/').filter(Boolean);
@@ -91,7 +94,7 @@ function PageOutlet() {
     }
     if (match) {
       return (
-        <Suspense fallback={<LoadingSpinner text="加载页面..." size="lg" />}>
+        <Suspense fallback={<LoadingSpinner text={translate('加载页面...')} size="lg" />}>
           <div key={currentPath} className="fqp-page-transition">
             {route.render(params)}
           </div>
@@ -104,8 +107,8 @@ function PageOutlet() {
   return (
     <div className="fqp-empty-state">
       <div className="fqp-empty-icon">🔍</div>
-      <div className="fqp-empty-title">页面不存在</div>
-      <div className="fqp-empty-desc">路径: {currentPath}</div>
+      <div className="fqp-empty-title">{translate('页面不存在')}</div>
+      <div className="fqp-empty-desc">{translate('路径')}: {currentPath}</div>
     </div>
   );
 }
@@ -113,11 +116,12 @@ function PageOutlet() {
 // ---- Auth-aware content ----
 function AppContent() {
   const { user, isLoading } = useAuth();
+  const { translate } = useLanguage();
 
   if (isLoading) {
     return (
       <div className="fqp-loading-screen">
-        <LoadingSpinner text="加载中..." size="lg" />
+        <LoadingSpinner text={translate('加载中...')} size="lg" />
       </div>
     );
   }

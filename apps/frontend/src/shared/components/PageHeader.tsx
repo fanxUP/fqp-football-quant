@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
+import { useLanguage } from '../../app/LanguageContext';
 
 interface PageHeaderProps {
   title: string;
@@ -8,6 +9,7 @@ interface PageHeaderProps {
 }
 
 export default function PageHeader({ title, subtitle, lastUpdated, actions }: PageHeaderProps) {
+  const { translate } = useLanguage();
   const [mounted, setMounted] = useState(false);
   useEffect(() => {
     requestAnimationFrame(() => setMounted(true));
@@ -24,7 +26,7 @@ export default function PageHeader({ title, subtitle, lastUpdated, actions }: Pa
             transition: 'opacity 0.4s ease, transform 0.4s ease',
           }}
         >
-          {title}
+          {translate(title)}
         </h1>
         {(subtitle || lastUpdated) && (
           <div
@@ -35,9 +37,9 @@ export default function PageHeader({ title, subtitle, lastUpdated, actions }: Pa
               transition: 'opacity 0.4s ease 0.1s, transform 0.4s ease 0.1s',
             }}
           >
-            {subtitle}
+            {subtitle && translate(subtitle)}
             {subtitle && lastUpdated ? ' · ' : ''}
-            {lastUpdated ? `最后更新: ${lastUpdated}` : ''}
+            {lastUpdated ? `${translate('最后更新')}: ${lastUpdated}` : ''}
           </div>
         )}
       </div>
