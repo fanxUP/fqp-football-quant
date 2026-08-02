@@ -7,6 +7,7 @@ from typing import Any
 
 
 PLAY_TYPES = ("spf", "rqspf", "zjq", "bf", "bqc")
+_WIN_DRAW_LOSS_ORDER = {"h": 0, "3": 0, "d": 1, "1": 1, "a": 2, "0": 2}
 
 
 def _new_markets() -> dict[str, dict[str, Any]]:
@@ -19,6 +20,14 @@ def _new_markets() -> dict[str, dict[str, Any]]:
         }
         for play_type in PLAY_TYPES
     }
+
+
+def _option_sort_key(play_type: str, option_code: object) -> tuple[int, str]:
+    """Keep win/draw/loss markets in the Sporttery home-draw-away order."""
+    code = str(option_code).lower()
+    if play_type in {"spf", "rqspf"}:
+        return (_WIN_DRAW_LOSS_ORDER.get(code, 99), code)
+    return (0, code)
 
 
 def build_time_machine_matches(
@@ -85,6 +94,6 @@ def build_time_machine_matches(
         )
 
     for match in matches.values():
-        for market in match["odds"].values():
-            market["options"].sort(key=lambda item: item["option_code"])
+        for play_type, market in match["odds"].items():
+            market["options"].sort(key=lambda item: _option_sort_key(play_type, item["option_code"]))
     return list(matches.values())
