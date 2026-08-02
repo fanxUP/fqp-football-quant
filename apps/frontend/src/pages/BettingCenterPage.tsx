@@ -54,12 +54,6 @@ export default function BettingCenterPage({ initialTab = 'bet-slip' }: BettingCe
         className="betting-center-tabs"
         role="tablist"
         aria-label="投注中心视图"
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
-          gap: '8px',
-          margin: '16px 0',
-        }}
       >
         {TABS.map((tab) => {
           const selected = tab.code === activeTab;
@@ -69,20 +63,14 @@ export default function BettingCenterPage({ initialTab = 'bet-slip' }: BettingCe
               type="button"
               role="tab"
               aria-selected={selected}
-              className="fqp-btn"
+              className="fqp-btn betting-center-tab"
+              data-active={selected}
               onClick={() => switchTab(tab.code)}
-              style={{
-                minHeight: '64px',
-                padding: '10px 12px',
-                textAlign: 'left',
-                borderColor: selected ? 'var(--fqp-accent)' : 'var(--fqp-border)',
-                background: selected ? 'rgba(34, 197, 94, 0.12)' : 'var(--fqp-card-bg)',
-              }}
             >
-              <span className="betting-center-tab-label" style={{ display: 'block', fontWeight: 700, color: 'var(--fqp-text)' }}>
+              <span className="betting-center-tab-label">
                 {tab.label}
               </span>
-              <span className="betting-center-tab-description" style={{ display: 'block', marginTop: '4px', fontSize: '12px', color: 'var(--fqp-text-muted)' }}>
+              <span className="betting-center-tab-description">
                 {tab.description}
               </span>
             </button>

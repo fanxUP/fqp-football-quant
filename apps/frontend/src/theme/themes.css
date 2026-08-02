@@ -1285,6 +1285,47 @@
   }
 }
 
+.betting-center-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 16px 0;
+}
+
+.betting-center-tab {
+  min-width: 0;
+  min-height: 72px;
+  padding: 10px 12px;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 4px;
+  text-align: left;
+  white-space: normal;
+  border-color: var(--fqp-border);
+  background: var(--fqp-card-bg);
+}
+
+.betting-center-tab[data-active='true'] {
+  border-color: var(--fqp-accent);
+  background: rgba(34, 197, 94, 0.12);
+}
+
+.betting-center-tab-label {
+  display: block;
+  color: var(--fqp-text);
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.betting-center-tab-description {
+  display: block;
+  color: var(--fqp-text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
 @media (max-width: 760px) {
   .fqp-main:has(.betting-center-page) {
     padding: 56px 0 0;
@@ -1314,6 +1355,7 @@
   .betting-center-page > .betting-center-tabs > button {
     min-height: 42px !important;
     padding: 7px 8px !important;
+    align-items: center;
     text-align: center !important;
   }
 
