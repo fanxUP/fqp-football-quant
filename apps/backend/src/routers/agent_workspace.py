@@ -39,6 +39,12 @@ class WorkspaceTaskRequest(BaseModel):
 
 class WorkspaceTaskReviewRequest(BaseModel):
     reviewed: bool
+    reviewNote: str | None = Field(default=None, max_length=2000)
+
+    @field_validator("reviewNote")
+    @classmethod
+    def normalize_review_note(cls, value: str | None) -> str | None:
+        return value.strip() or None if value else None
 
 
 @router.post("")
@@ -96,7 +102,7 @@ def get_tasks(
 def update_task_review(task_id: int, body: WorkspaceTaskReviewRequest):
     try:
         with get_db() as conn:
-            task = set_workspace_task_reviewed(conn, task_id, body.reviewed)
+            task = set_workspace_task_reviewed(conn, task_id, body.reviewed, body.reviewNote)
     except AgentWorkspaceError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return {"task": task}

@@ -12,11 +12,11 @@ class AgentWorkspaceError(ValueError):
 def _serialize(row: tuple[Any, ...], *, include_content: bool = True) -> dict[str, Any]:
     task = {
         "id": row[0], "title": row[1], "agentCode": row[2], "providerCode": row[3],
-        "model": row[4], "reviewedAt": row[5].isoformat() if row[5] else None,
-        "createdAt": row[6].isoformat() if row[6] else None,
+        "model": row[4], "reviewNote": row[5], "reviewedAt": row[6].isoformat() if row[6] else None,
+        "createdAt": row[7].isoformat() if row[7] else None,
     }
     if include_content:
-        task.update({"prompt": row[7], "response": row[8]})
+        task.update({"prompt": row[8], "response": row[9]})
     return task
 
 
@@ -28,7 +28,7 @@ def create_workspace_task(
             """INSERT INTO agent_workspace_tasks
                    (title, agent_code, provider_code, model, prompt, response)
                VALUES (%s, %s, %s, %s, %s, %s)
-               RETURNING id, title, agent_code, provider_code, model, reviewed_at, created_at, prompt, response""",
+               RETURNING id, title, agent_code, provider_code, model, review_note, reviewed_at, created_at, prompt, response""",
             (title, agent_code, provider_code, model, prompt, response),
         )
         row = cur.fetchone()
@@ -40,7 +40,7 @@ def list_workspace_tasks(conn: Any, limit: int = 20) -> list[dict[str, Any]]:
     safe_limit = max(1, min(limit, 50))
     with conn.cursor() as cur:
         cur.execute(
-            """SELECT id, title, agent_code, provider_code, model, reviewed_at, created_at, prompt, response
+            """SELECT id, title, agent_code, provider_code, model, review_note, reviewed_at, created_at, prompt, response
                FROM agent_workspace_tasks ORDER BY created_at DESC, id DESC LIMIT %s""",
             (safe_limit,),
         )
@@ -68,7 +68,7 @@ def list_workspace_task_page(
         cur.execute(f"SELECT COUNT(*) FROM agent_workspace_tasks{where_clause}", filter_params)
         total = cur.fetchone()[0]
         cur.execute(
-            f"""SELECT id, title, agent_code, provider_code, model, reviewed_at, created_at, prompt, response
+            f"""SELECT id, title, agent_code, provider_code, model, review_note, reviewed_at, created_at, prompt, response
                 FROM agent_workspace_tasks{where_clause}
                 ORDER BY created_at DESC, id DESC LIMIT %s OFFSET %s""",
             (*filter_params, safe_limit, safe_offset),
@@ -77,14 +77,17 @@ def list_workspace_task_page(
     return [_serialize(row) for row in rows], total
 
 
-def set_workspace_task_reviewed(conn: Any, task_id: int, reviewed: bool) -> dict[str, Any]:
+def set_workspace_task_reviewed(
+    conn: Any, task_id: int, reviewed: bool, review_note: str | None = None,
+) -> dict[str, Any]:
     with conn.cursor() as cur:
         cur.execute(
             """UPDATE agent_workspace_tasks
-               SET reviewed_at = CASE WHEN %s THEN NOW() ELSE NULL END
+               SET reviewed_at = CASE WHEN %s THEN NOW() ELSE NULL END,
+                   review_note = CASE WHEN %s THEN %s ELSE NULL END
                WHERE id = %s
-               RETURNING id, title, agent_code, provider_code, model, reviewed_at, created_at, prompt, response""",
-            (reviewed, task_id),
+               RETURNING id, title, agent_code, provider_code, model, review_note, reviewed_at, created_at, prompt, response""",
+            (reviewed, reviewed, review_note, task_id),
         )
         row = cur.fetchone()
     if not row:

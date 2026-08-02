@@ -110,10 +110,10 @@ export default function AgentWorkspace() {
     finally { setLoadingMoreTasks(false); }
   };
 
-  const setReviewed = async (task: AgentWorkspaceTask) => {
+  const setReviewed = async (task: AgentWorkspaceTask, reviewNote?: string) => {
     setBusyTaskId(task.id);
     try {
-      await api.agentWorkspace.setReviewed(task.id, !task.reviewedAt);
+      await api.agentWorkspace.setReviewed(task.id, !task.reviewedAt, reviewNote);
       await loadTasks(reviewFilter);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '更新确认状态失败');
@@ -175,6 +175,6 @@ export default function AgentWorkspace() {
     </div>}
     <AgentWorkspaceArchive tasks={tasks} totalItems={taskTotal} hasMore={hasMoreTasks} loadingMore={loadingMoreTasks}
       reviewFilter={reviewFilter} busyTaskId={busyTaskId} onReviewFilterChange={(value) => void changeReviewFilter(value)} onLoadMore={() => void loadMoreTasks()}
-      onSetReviewed={(task) => void setReviewed(task)} onRemove={(task) => void removeTask(task)} />
+      onSetReviewed={(task, reviewNote) => void setReviewed(task, reviewNote)} onRemove={(task) => void removeTask(task)} />
   </section>;
 }

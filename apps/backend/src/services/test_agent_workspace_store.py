@@ -47,7 +47,7 @@ class _Connection:
 
 
 def _task_row(reviewed_at=None):
-    return (7, "结构化复盘", "review_agent", "openai", "gpt-5-mini", reviewed_at,
+    return (7, "结构化复盘", "review_agent", "openai", "gpt-5-mini", "已核对来源", reviewed_at,
             datetime(2026, 8, 2, tzinfo=UTC), "材料", "结果")
 
 
@@ -58,6 +58,7 @@ def test_workspace_tasks_return_untrusted_content_as_plain_data() -> None:
 
     assert tasks[0]["prompt"] == "材料"
     assert tasks[0]["response"] == "结果"
+    assert tasks[0]["reviewNote"] == "已核对来源"
     assert tasks[0]["reviewedAt"] is None
     assert conn.queries[-1][1] == (50,)
 
@@ -76,11 +77,11 @@ def test_workspace_task_page_uses_fixed_status_clause_and_parameterized_paging()
 def test_workspace_review_uses_parameterized_update() -> None:
     conn = _Connection(row=_task_row(datetime(2026, 8, 2, tzinfo=UTC)))
 
-    task = set_workspace_task_reviewed(conn, 7, True)
+    task = set_workspace_task_reviewed(conn, 7, True, "已核验数据来源")
 
     assert task["reviewedAt"] == "2026-08-02T00:00:00+00:00"
     assert conn.committed
-    assert conn.queries[-1][1] == (True, 7)
+    assert conn.queries[-1][1] == (True, True, "已核验数据来源", 7)
 
 
 def test_workspace_review_rejects_missing_task() -> None:

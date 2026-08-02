@@ -85,6 +85,7 @@ export interface AgentWorkspaceTask {
   agentCode: string;
   providerCode: string;
   model: string;
+  reviewNote: string | null;
   prompt: string;
   response: string;
   reviewedAt: string | null;
@@ -275,9 +276,9 @@ export const api = {
       request<{ task: AgentWorkspaceTask }>('/api/agent-workspace/tasks', {
         method: 'POST', body: JSON.stringify(payload),
       }),
-    setReviewed: (taskId: number, reviewed: boolean) =>
+    setReviewed: (taskId: number, reviewed: boolean, reviewNote?: string) =>
       request<{ task: AgentWorkspaceTask }>(`/api/agent-workspace/tasks/${taskId}`, {
-        method: 'PATCH', body: JSON.stringify({ reviewed }),
+        method: 'PATCH', body: JSON.stringify({ reviewed, reviewNote }),
       }),
     remove: (taskId: number) => request<void>(`/api/agent-workspace/tasks/${taskId}`, { method: 'DELETE' }),
   },

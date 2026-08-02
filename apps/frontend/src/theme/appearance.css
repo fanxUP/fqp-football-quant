@@ -433,6 +433,11 @@
 .agent-workspace-archive-content { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--fqp-border); }
 .agent-workspace-archive-content h4 { margin: 0 0 6px; color: var(--fqp-text-muted); font-size: 11px; }
 .agent-workspace-archive-content pre { margin: 0 0 12px; color: var(--fqp-text); font-family: inherit; font-size: 12px; line-height: 1.65; white-space: pre-wrap; word-break: break-word; }
+.agent-workspace-review-note { margin: 12px 0 0; color: var(--fqp-text-muted); font-size: 12px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
+.agent-workspace-review-note b { color: var(--fqp-text); }
+.agent-workspace-review-input { margin-top: 12px; }
+.agent-workspace-review-input .fqp-label { display: block; margin-bottom: 6px; }
+.agent-workspace-review-input textarea { min-height: 72px; resize: vertical; }
 .agent-workspace-archive-item footer { align-items: center; margin-top: 12px; }
 .agent-workspace-archive-item footer > span { color: var(--fqp-text-muted); font-size: 11px; }
 .agent-workspace-archive-item footer > span[data-reviewed='true'] { color: var(--fqp-success); }
