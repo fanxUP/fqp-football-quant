@@ -80,10 +80,11 @@ def get_tasks(
     limit: int = Query(20, ge=1, le=50),
     offset: int = Query(0, ge=0),
     review_status: Literal["all", "pending", "reviewed"] = Query("all", alias="reviewStatus"),
+    query: str = Query("", alias="q", max_length=120),
 ):
     with get_db() as conn:
         tasks, total_items = list_workspace_task_page(
-            conn, limit=limit, offset=offset, review_status=review_status,
+            conn, limit=limit, offset=offset, review_status=review_status, query=query.strip(),
         )
     # Keep `total` for existing clients; pagination is additive for new clients.
     return {

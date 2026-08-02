@@ -49,7 +49,7 @@ def list_workspace_tasks(conn: Any, limit: int = 20) -> list[dict[str, Any]]:
 
 
 def list_workspace_task_page(
-    conn: Any, *, limit: int = 20, offset: int = 0, review_status: str = "all"
+    conn: Any, *, limit: int = 20, offset: int = 0, review_status: str = "all", query: str = ""
 ) -> tuple[list[dict[str, Any]], int]:
     """Return a bounded archive page and its matching total.
 
@@ -58,20 +58,24 @@ def list_workspace_task_page(
     """
     safe_limit = max(1, min(limit, 50))
     safe_offset = max(0, offset)
-    clauses = {
-        "all": ("", ()),
-        "pending": (" WHERE reviewed_at IS NULL", ()),
-        "reviewed": (" WHERE reviewed_at IS NOT NULL", ()),
-    }
-    where_clause, filter_params = clauses.get(review_status, clauses["all"])
+    clauses = {"pending": "reviewed_at IS NULL", "reviewed": "reviewed_at IS NOT NULL"}
+    conditions = [clauses[review_status]] if review_status in clauses else []
+    filter_params: list[str] = []
+    if query:
+        conditions.append(
+            "concat_ws(' ', title, agent_code, provider_code, model, prompt, response, COALESCE(review_note, '')) ILIKE %s"
+        )
+        filter_params.append(f"%{query}%")
+    where_clause = f" WHERE {' AND '.join(conditions)}" if conditions else ""
+    query_params = tuple(filter_params)
     with conn.cursor() as cur:
-        cur.execute(f"SELECT COUNT(*) FROM agent_workspace_tasks{where_clause}", filter_params)
+        cur.execute(f"SELECT COUNT(*) FROM agent_workspace_tasks{where_clause}", query_params)
         total = cur.fetchone()[0]
         cur.execute(
             f"""SELECT id, title, agent_code, provider_code, model, review_note, reviewed_at, created_at, prompt, response
                 FROM agent_workspace_tasks{where_clause}
                 ORDER BY created_at DESC, id DESC LIMIT %s OFFSET %s""",
-            (*filter_params, safe_limit, safe_offset),
+            (*query_params, safe_limit, safe_offset),
         )
         rows = cur.fetchall()
     return [_serialize(row) for row in rows], total

@@ -74,6 +74,18 @@ def test_workspace_task_page_uses_fixed_status_clause_and_parameterized_paging()
     assert conn.queries[1][1] == (50, 4)
 
 
+def test_workspace_task_page_parameterizes_full_archive_keyword() -> None:
+    conn = _Connection(rows=[_task_row()], row=(1,))
+
+    tasks, total = list_workspace_task_page(conn, query="' OR 1=1 --")
+
+    assert tasks[0]["id"] == 7
+    assert total == 1
+    assert "ILIKE %s" in conn.queries[0][0]
+    assert conn.queries[0][1] == ("%' OR 1=1 --%",)
+    assert conn.queries[1][1] == ("%' OR 1=1 --%", 20, 0)
+
+
 def test_workspace_review_uses_parameterized_update() -> None:
     conn = _Connection(row=_task_row(datetime(2026, 8, 2, tzinfo=UTC)))
 

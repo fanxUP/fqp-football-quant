@@ -418,7 +418,7 @@
 .agent-workspace-archive h3 { margin: 0; color: var(--fqp-text); font-size: 16px; }
 .agent-workspace-archive > div > p { margin: 5px 0 0; color: var(--fqp-text-muted); font-size: 12px; }
 .agent-workspace-archive-empty { margin: 12px 0 0; padding: 12px; border: 1px dashed var(--fqp-border); border-radius: var(--fqp-radius-xs); color: var(--fqp-text-muted); font-size: 12px; }
-.agent-workspace-archive-filters { display: grid; grid-template-columns: minmax(0, 1fr) 160px; align-items: end; gap: 12px; margin-top: 14px; }
+.agent-workspace-archive-filters { display: grid; grid-template-columns: minmax(0, 1fr) 160px auto; align-items: end; gap: 12px; margin-top: 14px; }
 .agent-workspace-archive-filters .fqp-label { display: block; margin: 0 0 6px; }
 .agent-workspace-archive-filters .fqp-input { min-width: 0; }
 .agent-workspace-archive-count { margin: 10px 0 0; color: var(--fqp-text-muted); font-size: 11px; }

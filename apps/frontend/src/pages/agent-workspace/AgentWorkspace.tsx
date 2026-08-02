@@ -28,13 +28,15 @@ export default function AgentWorkspace() {
   const [running, setRunning] = useState(false);
   const [tasks, setTasks] = useState<AgentWorkspaceTask[]>([]);
   const [reviewFilter, setReviewFilter] = useState<'all' | 'reviewed' | 'pending'>('all');
+  const [archiveQuery, setArchiveQuery] = useState('');
+  const [activeArchiveQuery, setActiveArchiveQuery] = useState('');
   const [taskTotal, setTaskTotal] = useState(0);
   const [hasMoreTasks, setHasMoreTasks] = useState(false);
   const [loadingMoreTasks, setLoadingMoreTasks] = useState(false);
   const [busyTaskId, setBusyTaskId] = useState<number | null>(null);
 
-  const loadTasks = useCallback(async (nextReviewFilter: 'all' | 'reviewed' | 'pending', offset = 0) => {
-    const result = await api.agentWorkspace.list({ limit: 20, offset, reviewStatus: nextReviewFilter });
+  const loadTasks = useCallback(async (nextReviewFilter: 'all' | 'reviewed' | 'pending', offset = 0, query = '') => {
+    const result = await api.agentWorkspace.list({ limit: 20, offset, reviewStatus: nextReviewFilter, query });
     setTasks((current) => offset === 0 ? result.tasks : [...current, ...result.tasks]);
     setTaskTotal(result.pagination.totalItems);
     setHasMoreTasks(result.pagination.hasMore);
@@ -84,7 +86,7 @@ export default function AgentWorkspace() {
         title: taskTitle.trim() || selectedTemplate.label,
         prompt: `${selectedTemplate.prompt}${materialText}`,
       });
-      await loadTasks(reviewFilter);
+      await loadTasks(reviewFilter, 0, activeArchiveQuery);
       setMaterial('');
       setTaskTitle('');
       toast.success('分析已归档，等待人工核验');
@@ -98,14 +100,14 @@ export default function AgentWorkspace() {
   const changeReviewFilter = async (nextReviewFilter: 'all' | 'reviewed' | 'pending') => {
     setReviewFilter(nextReviewFilter);
     setLoadingMoreTasks(true);
-    try { await loadTasks(nextReviewFilter); }
+    try { await loadTasks(nextReviewFilter, 0, activeArchiveQuery); }
     catch (error) { toast.error(error instanceof Error ? error.message : '归档任务加载失败'); }
     finally { setLoadingMoreTasks(false); }
   };
 
   const loadMoreTasks = async () => {
     setLoadingMoreTasks(true);
-    try { await loadTasks(reviewFilter, tasks.length); }
+    try { await loadTasks(reviewFilter, tasks.length, activeArchiveQuery); }
     catch (error) { toast.error(error instanceof Error ? error.message : '归档任务加载失败'); }
     finally { setLoadingMoreTasks(false); }
   };
@@ -114,7 +116,7 @@ export default function AgentWorkspace() {
     setBusyTaskId(task.id);
     try {
       await api.agentWorkspace.setReviewed(task.id, !task.reviewedAt, reviewNote);
-      await loadTasks(reviewFilter);
+      await loadTasks(reviewFilter, 0, activeArchiveQuery);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '更新确认状态失败');
     } finally { setBusyTaskId(null); }
@@ -125,11 +127,22 @@ export default function AgentWorkspace() {
     setBusyTaskId(task.id);
     try {
       await api.agentWorkspace.remove(task.id);
-      await loadTasks(reviewFilter);
+      await loadTasks(reviewFilter, 0, activeArchiveQuery);
       toast.success('归档任务已删除');
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '删除归档任务失败');
     } finally { setBusyTaskId(null); }
+  };
+
+  const searchArchive = async () => {
+    const nextQuery = archiveQuery.trim();
+    setLoadingMoreTasks(true);
+    try {
+      await loadTasks(reviewFilter, 0, nextQuery);
+      setActiveArchiveQuery(nextQuery);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '归档任务检索失败');
+    } finally { setLoadingMoreTasks(false); }
   };
 
   if (loading) return <section className="agent-workspace" aria-busy="true"><p>正在加载可用的智能代理…</p></section>;
@@ -174,7 +187,8 @@ export default function AgentWorkspace() {
       </aside>
     </div>}
     <AgentWorkspaceArchive tasks={tasks} totalItems={taskTotal} hasMore={hasMoreTasks} loadingMore={loadingMoreTasks}
-      reviewFilter={reviewFilter} busyTaskId={busyTaskId} onReviewFilterChange={(value) => void changeReviewFilter(value)} onLoadMore={() => void loadMoreTasks()}
+      reviewFilter={reviewFilter} query={archiveQuery} activeQuery={activeArchiveQuery} busyTaskId={busyTaskId}
+      onQueryChange={setArchiveQuery} onSearch={() => void searchArchive()} onReviewFilterChange={(value) => void changeReviewFilter(value)} onLoadMore={() => void loadMoreTasks()}
       onSetReviewed={(task, reviewNote) => void setReviewed(task, reviewNote)} onRemove={(task) => void removeTask(task)} />
   </section>;
 }

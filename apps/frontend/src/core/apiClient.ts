@@ -267,10 +267,10 @@ export const api = {
   },
 
   agentWorkspace: {
-    list: ({ limit = 20, offset = 0, reviewStatus = 'all' }: {
-      limit?: number; offset?: number; reviewStatus?: 'all' | 'pending' | 'reviewed';
+    list: ({ limit = 20, offset = 0, reviewStatus = 'all', query = '' }: {
+      limit?: number; offset?: number; reviewStatus?: 'all' | 'pending' | 'reviewed'; query?: string;
     } = {}) => request<{ tasks: AgentWorkspaceTask[]; total: number; pagination: AgentWorkspaceTaskPage }>(
-      `/api/agent-workspace/tasks?limit=${limit}&offset=${offset}&reviewStatus=${reviewStatus}`,
+      `/api/agent-workspace/tasks?limit=${limit}&offset=${offset}&reviewStatus=${reviewStatus}&q=${encodeURIComponent(query)}`,
     ),
     create: (payload: { agentCode: string; title: string; prompt: string }) =>
       request<{ task: AgentWorkspaceTask }>('/api/agent-workspace/tasks', {
