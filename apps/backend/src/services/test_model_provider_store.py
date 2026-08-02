@@ -31,6 +31,8 @@ def test_provider_catalog_exposes_current_presets_and_official_documentation() -
     assert catalog["moonshot"]["defaultBaseUrl"] == "https://api.moonshot.ai/v1"
     assert catalog["perplexity"]["defaultBaseUrl"] == "https://api.perplexity.ai"
     assert catalog["gemini"]["defaultModel"] == "gemini-3.6-flash"
+    assert catalog["xiaomi"]["defaultBaseUrl"] == "https://api.xiaomimimo.com/v1"
+    assert catalog["xiaomi"]["recommendedModels"] == ("mimo-v2.5-pro", "mimo-v2.5")
     assert catalog["openrouter"]["recommendedModels"][1] == "anthropic/claude-opus-4.6"
     assert catalog["siliconflow"]["defaultBaseUrl"] == "https://api.siliconflow.com/v1"
     assert catalog["minimax"]["recommendedModels"][0] == "MiniMax-M2.7"

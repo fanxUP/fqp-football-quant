@@ -78,6 +78,16 @@ PROVIDERS: dict[str, ProviderDefinition] = {
         ("analysis", "coding", "vision"),
         "https://help.aliyun.com/zh/model-studio/base-url",
     ),
+    "xiaomi": ProviderDefinition(
+        "xiaomi",
+        "小米 MiMo",
+        "openai",
+        "https://api.xiaomimimo.com/v1",
+        "mimo-v2.5-pro",
+        ("mimo-v2.5-pro", "mimo-v2.5"),
+        ("analysis", "coding", "vision"),
+        "https://mimo.mi.com/docs/quick-start/summary/model",
+    ),
     "openrouter": ProviderDefinition(
         "openrouter",
         "OpenRouter",
