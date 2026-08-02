@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { api, type AgentWorkspaceReviewEvent, type AgentWorkspaceTask } from '../../core/apiClient';
 import { toast } from '../../shared/components/Toast';
 import { downloadTaskMarkdown, formatTime } from './archiveHelpers';
@@ -15,6 +15,10 @@ export default function AgentWorkspaceArchiveItem({ task, busy, onSetReviewed, o
   const [history, setHistory] = useState<AgentWorkspaceReviewEvent[] | null>(null);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const reviewed = Boolean(task.reviewedAt);
+  useEffect(() => {
+    setReviewNote(task.reviewNote ?? '');
+  }, [task.id, task.reviewNote, task.reviewedAt]);
+
   const loadHistory = async () => {
     setLoadingHistory(true);
     try { setHistory((await api.agentWorkspace.reviewHistory(task.id)).events); }

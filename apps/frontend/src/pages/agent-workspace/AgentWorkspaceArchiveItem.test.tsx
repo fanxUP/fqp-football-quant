@@ -67,4 +67,21 @@ describe('AgentWorkspaceArchiveItem', () => {
 
     expect(onSetReviewed).toHaveBeenCalledWith(expect.objectContaining({ id: 24 }), '来源已复核。');
   });
+
+  it('撤销确认后的服务端状态会清空旧核验备注', () => {
+    const { rerender } = render(
+      <AgentWorkspaceArchiveItem task={task} busy={false} onSetReviewed={vi.fn()} onRemove={vi.fn()} />,
+    );
+
+    rerender(
+      <AgentWorkspaceArchiveItem
+        task={{ ...task, reviewedAt: null, reviewNote: null }}
+        busy={false}
+        onSetReviewed={vi.fn()}
+        onRemove={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByLabelText('核验备注（可选）')).toHaveValue('');
+  });
 });
