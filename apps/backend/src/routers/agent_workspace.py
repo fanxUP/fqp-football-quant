@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from time import perf_counter
 from typing import Literal
+from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, Path, Query
 from pydantic import BaseModel, Field, field_validator
@@ -19,7 +20,7 @@ from apps.backend.src.services.agent_workspace_store import (
 )
 from apps.backend.src.services.model_gateway import ModelGatewayError, invoke_agent_model
 from apps.backend.src.services.model_invocation_audit import record_model_invocation
-from apps.backend.src.services.model_provider_store import ProviderConfigError
+from apps.backend.src.services.model_provider_store import AGENT_MODEL_OPTIONS, ProviderConfigError
 
 router = APIRouter(prefix="/api/agent-workspace/tasks", tags=["agent-workspace"])
 
@@ -48,32 +49,73 @@ class WorkspaceTaskReviewRequest(BaseModel):
         return value.strip() or None if value else None
 
 
-@router.post("")
-def create_task(body: WorkspaceTaskRequest):
-    """Run exactly one manually requested analysis and archive its untrusted text result."""
+class WorkspaceComparisonRequest(WorkspaceTaskRequest):
+    target_agent_codes: list[str] = Field(alias="targetAgentCodes", max_length=3)
+
+    @field_validator("target_agent_codes")
+    @classmethod
+    def require_distinct_targets(cls, value: list[str]) -> list[str]:
+        if len(value) < 2:
+            raise ValueError("至少选择两个已启用模型")
+        if len(set(value)) != len(value):
+            raise ValueError("对比模型不能重复")
+        if any(agent_code not in AGENT_MODEL_OPTIONS for agent_code in value):
+            raise ValueError("包含不支持的智能代理")
+        return value
+
+
+def _run_workspace_task(
+    *, agent_code: str, title: str, prompt: str, comparison_id: str | None = None,
+) -> dict:
     started_at = perf_counter()
     try:
         with get_db() as conn:
-            result = invoke_agent_model(conn, body.agentCode, body.prompt)
+            result = invoke_agent_model(conn, agent_code, prompt)
             task = create_workspace_task(
-                conn, title=body.title, agent_code=body.agentCode,
+                conn, title=title, agent_code=agent_code,
                 provider_code=result.provider_code, model=result.model,
-                prompt=body.prompt, response=result.content[:12000],
+                prompt=prompt, response=result.content[:12000], comparison_id=comparison_id,
             )
             record_model_invocation(
-                conn, agent_code=body.agentCode, provider_code=result.provider_code, model=result.model,
-                status="succeeded", prompt_length=len(body.prompt), response_length=len(result.content),
+                conn, agent_code=agent_code, provider_code=result.provider_code, model=result.model,
+                status="succeeded", prompt_length=len(prompt), response_length=len(result.content),
                 duration_ms=round((perf_counter() - started_at) * 1000),
             )
+            return task
     except (ProviderConfigError, ModelGatewayError) as exc:
         with get_db() as conn:
             record_model_invocation(
-                conn, agent_code=body.agentCode, provider_code=None, model=None, status="failed",
-                prompt_length=len(body.prompt), response_length=0,
+                conn, agent_code=agent_code, provider_code=None, model=None, status="failed",
+                prompt_length=len(prompt), response_length=0,
                 duration_ms=round((perf_counter() - started_at) * 1000), error_code="MODEL_CALL_FAILED",
             )
+        raise
+
+
+@router.post("")
+def create_task(body: WorkspaceTaskRequest):
+    """Run exactly one manually requested analysis and archive its untrusted text result."""
+    try:
+        task = _run_workspace_task(agent_code=body.agentCode, title=body.title, prompt=body.prompt)
+    except (ProviderConfigError, ModelGatewayError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return {"task": task}
+
+
+@router.post("/comparisons")
+def create_comparison(body: WorkspaceComparisonRequest):
+    """Run up to three manual, independently auditable analyses of the same material."""
+    comparison_id = str(uuid4())
+    tasks: list[dict] = []
+    failures: list[dict[str, str]] = []
+    for agent_code in body.target_agent_codes:
+        try:
+            tasks.append(_run_workspace_task(
+                agent_code=agent_code, title=body.title, prompt=body.prompt, comparison_id=comparison_id,
+            ))
+        except (ProviderConfigError, ModelGatewayError) as exc:
+            failures.append({"agentCode": agent_code, "message": str(exc)})
+    return {"comparisonId": comparison_id, "tasks": tasks, "failures": failures}
 
 
 @router.get("")

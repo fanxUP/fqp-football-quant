@@ -92,6 +92,7 @@ export interface AgentWorkspaceTask {
   response: string;
   reviewedAt: string | null;
   createdAt: string | null;
+  comparisonId?: string | null;
 }
 
 export interface AgentWorkspaceTaskPage {
@@ -285,6 +286,10 @@ export const api = {
       request<{ task: AgentWorkspaceTask }>('/api/agent-workspace/tasks', {
         method: 'POST', body: JSON.stringify(payload),
       }),
+    compare: (payload: { agentCode: string; title: string; prompt: string; targetAgentCodes: string[] }) =>
+      request<{ comparisonId: string; tasks: AgentWorkspaceTask[]; failures: { agentCode: string; message: string }[] }>(
+        '/api/agent-workspace/tasks/comparisons', { method: 'POST', body: JSON.stringify(payload) },
+      ),
     setReviewed: (taskId: number, reviewed: boolean, reviewNote?: string) =>
       request<{ task: AgentWorkspaceTask }>(`/api/agent-workspace/tasks/${taskId}`, {
         method: 'PATCH', body: JSON.stringify({ reviewed, reviewNote }),

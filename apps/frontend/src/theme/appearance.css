@@ -403,6 +403,12 @@
 .agent-workspace-template { padding: 7px 10px; border: 1px solid var(--fqp-border); border-radius: var(--fqp-radius-xs); background: var(--fqp-panel-2); color: var(--fqp-text); cursor: pointer; font-size: 12px; }
 .agent-workspace-template:hover, .agent-workspace-template[data-selected='true'] { border-color: var(--fqp-accent, var(--fqp-red)); color: var(--fqp-accent, var(--fqp-red)); }
 .agent-workspace-template:focus-visible { outline: 2px solid var(--fqp-accent, var(--fqp-red)); outline-offset: 2px; }
+.agent-workspace-comparison-toggle { display: flex; align-items: center; gap: 8px; color: var(--fqp-text); font-size: 13px; font-weight: 600; cursor: pointer; }
+.agent-workspace-comparison-toggle input, .agent-workspace-comparison-targets input { accent-color: var(--fqp-accent, var(--fqp-red)); }
+.agent-workspace-comparison-targets { display: grid; gap: 8px; margin: 0 0 8px; padding: 12px; border: 1px solid var(--fqp-border); border-radius: var(--fqp-radius-sm); background: var(--fqp-panel-2); }
+.agent-workspace-comparison-targets legend { padding: 0 4px; color: var(--fqp-text); font-size: 12px; font-weight: 700; }
+.agent-workspace-comparison-targets label { display: flex; align-items: flex-start; gap: 8px; color: var(--fqp-text-muted); font-size: 12px; line-height: 1.5; cursor: pointer; }
+.agent-workspace-comparison-targets p { margin: 2px 0 0; color: var(--fqp-text-muted); font-size: 11px; line-height: 1.6; }
 .agent-workspace-input { min-height: 220px; resize: vertical; }
 .agent-workspace-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .agent-workspace-actions > span { color: var(--fqp-text-muted); font-family: var(--fqp-font-mono); font-size: 11px; }

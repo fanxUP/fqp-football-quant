@@ -12,6 +12,7 @@ from apps.backend.src.services.agent_workspace_store import (
     set_workspace_task_reviewed,
 )
 from apps.backend.src.app import create_app
+from apps.backend.src.routers.agent_workspace import WorkspaceComparisonRequest
 
 
 class _Cursor:
@@ -50,7 +51,7 @@ class _Connection:
 
 def _task_row(reviewed_at=None):
     return (7, "结构化复盘", "review_agent", "openai", "gpt-5-mini", "已核对来源", reviewed_at,
-            datetime(2026, 8, 2, tzinfo=UTC), "材料", "结果")
+            datetime(2026, 8, 2, tzinfo=UTC), "材料", "结果", "comparison-001")
 
 
 def test_workspace_tasks_return_untrusted_content_as_plain_data() -> None:
@@ -62,6 +63,7 @@ def test_workspace_tasks_return_untrusted_content_as_plain_data() -> None:
     assert tasks[0]["response"] == "结果"
     assert tasks[0]["reviewNote"] == "已核对来源"
     assert tasks[0]["reviewedAt"] is None
+    assert tasks[0]["comparisonId"] == "comparison-001"
     assert conn.queries[-1][1] == (50,)
 
 
@@ -126,3 +128,24 @@ def test_workspace_task_routes_reject_non_positive_task_ids_at_the_api_boundary(
     ):
         parameter = next(item for item in paths[path][method]["parameters"] if item["name"] == "task_id")
         assert parameter["schema"]["minimum"] == 1
+
+
+def test_workspace_comparison_requires_two_distinct_agent_bindings() -> None:
+    with pytest.raises(ValueError, match="至少选择两个"):
+        WorkspaceComparisonRequest.model_validate({
+            "agentCode": "review_agent", "title": "对比", "prompt": "材料",
+            "targetAgentCodes": ["review_agent"],
+        })
+
+    request = WorkspaceComparisonRequest.model_validate({
+        "agentCode": "review_agent", "title": "对比", "prompt": "材料",
+        "targetAgentCodes": ["review_agent", "doc_agent"],
+    })
+
+    assert request.target_agent_codes == ["review_agent", "doc_agent"]
+
+    with pytest.raises(ValueError, match="不支持"):
+        WorkspaceComparisonRequest.model_validate({
+            "agentCode": "review_agent", "title": "对比", "prompt": "材料",
+            "targetAgentCodes": ["review_agent", "unknown_agent"],
+        })

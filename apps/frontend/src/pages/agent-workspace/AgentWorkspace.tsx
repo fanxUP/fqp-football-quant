@@ -26,6 +26,8 @@ export default function AgentWorkspace() {
   const [taskTitle, setTaskTitle] = useState('');
   const [material, setMaterial] = useState('');
   const [running, setRunning] = useState(false);
+  const [comparisonMode, setComparisonMode] = useState(false);
+  const [comparisonAgentCodes, setComparisonAgentCodes] = useState<string[]>([]);
   const [tasks, setTasks] = useState<AgentWorkspaceTask[]>([]);
   const [reviewFilter, setReviewFilter] = useState<'all' | 'reviewed' | 'pending'>('all');
   const [archiveQuery, setArchiveQuery] = useState('');
@@ -55,6 +57,7 @@ export default function AgentWorkspace() {
   const selected = availableBindings.find((binding) => binding.agentCode === agentCode) ?? availableBindings[0];
   const templates = selected ? taskTemplates[selected.agentCode] ?? [] : [];
   const selectedTemplate = templates.find((template) => template.label === templateLabel) ?? templates[0];
+  const comparisonTargets = availableBindings.filter((binding) => comparisonAgentCodes.includes(binding.agentCode));
   const taskStats = useMemo(() => ({
     total: tasks.length,
     pending: tasks.filter((task) => !task.reviewedAt).length,
@@ -69,9 +72,25 @@ export default function AgentWorkspace() {
     setMaterial('');
   };
 
+  const toggleComparisonMode = (enabled: boolean) => {
+    setComparisonMode(enabled);
+    setComparisonAgentCodes(enabled && selected ? [selected.agentCode] : []);
+  };
+
+  const toggleComparisonTarget = (targetAgentCode: string) => {
+    setComparisonAgentCodes((current) => current.includes(targetAgentCode)
+      ? current.filter((item) => item !== targetAgentCode)
+      : current.length < 3 ? [...current, targetAgentCode] : current,
+    );
+  };
+
   const run = async () => {
     if (!selected || !selectedTemplate) {
       toast.error('请先在模型接入中启用并测试一个智能代理');
+      return;
+    }
+    if (comparisonMode && comparisonTargets.length < 2) {
+      toast.error('多模型对比至少选择两个已启用模型');
       return;
     }
     const materialText = material.trim();
@@ -81,15 +100,22 @@ export default function AgentWorkspace() {
     }
     setRunning(true);
     try {
-      await api.agentWorkspace.create({
+      const payload = {
         agentCode: selected.agentCode,
         title: taskTitle.trim() || selectedTemplate.label,
         prompt: `${selectedTemplate.prompt}${materialText}`,
-      });
+      };
+      if (comparisonMode) {
+        const result = await api.agentWorkspace.compare({ ...payload, targetAgentCodes: comparisonTargets.map((item) => item.agentCode) });
+        const failed = result.failures.length;
+        toast.success(failed ? `已归档 ${result.tasks.length} 份结果，${failed} 个模型调用失败` : `已归档 ${result.tasks.length} 份对比结果，等待人工核验`);
+      } else {
+        await api.agentWorkspace.create(payload);
+        toast.success('分析已归档，等待人工核验');
+      }
       await loadTasks(reviewFilter, 0, activeArchiveQuery);
       setMaterial('');
       setTaskTitle('');
-      toast.success('分析已归档，等待人工核验');
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '模型任务执行失败');
     } finally {
@@ -149,7 +175,7 @@ export default function AgentWorkspace() {
 
   return <section className="agent-workspace" aria-labelledby="agent-workspace-title">
     <div className="agent-workspace-heading">
-      <div><span className="appearance-eyebrow">V2 · 人工任务工作流</span><h2 id="agent-workspace-title">新建分析任务</h2></div>
+      <div><span className="appearance-eyebrow">V3 · 人工多模型对比</span><h2 id="agent-workspace-title">新建分析任务</h2></div>
       <span className="agent-workspace-safety">不自动执行 · 不写入业务数据</span>
     </div>
     <div className="agent-workspace-stats" aria-label="归档任务概览">
@@ -161,11 +187,23 @@ export default function AgentWorkspace() {
       <div className="agent-workspace-form">
         <label className="fqp-label" htmlFor="workspace-agent">任务职责</label>
         <select id="workspace-agent" className="fqp-input" value={selected?.agentCode ?? ''}
-          onChange={(event) => { setAgentCode(event.target.value); setTemplateLabel(''); setTaskTitle(''); setMaterial(''); }}>
+          onChange={(event) => { setAgentCode(event.target.value); setTemplateLabel(''); setTaskTitle(''); setMaterial(''); setComparisonAgentCodes(comparisonMode ? [event.target.value] : []); }}>
           {availableBindings.map((binding) => <option key={binding.agentCode} value={binding.agentCode}>
             {binding.agentName} · {binding.providerName} · {binding.model}
           </option>)}
         </select>
+        <label className="agent-workspace-comparison-toggle"><input type="checkbox" checked={comparisonMode}
+          onChange={(event) => toggleComparisonMode(event.target.checked)} />多模型对比</label>
+        {comparisonMode && <fieldset className="agent-workspace-comparison-targets">
+          <legend>对比对象（2–3 个）</legend>
+          {availableBindings.map((binding) => <label key={binding.agentCode}>
+            <input type="checkbox" checked={comparisonAgentCodes.includes(binding.agentCode)}
+              disabled={!comparisonAgentCodes.includes(binding.agentCode) && comparisonAgentCodes.length >= 3}
+              onChange={() => toggleComparisonTarget(binding.agentCode)} />
+            {binding.agentName} · {binding.providerName} · {binding.model}
+          </label>)}
+          <p>将对同一材料分别发起 {comparisonTargets.length} 次手动调用；结果独立归档，不会执行任何业务操作。</p>
+        </fieldset>}
         <div className="agent-workspace-template-list" aria-label="任务模板">
           {templates.map((template) => <button type="button" key={template.label}
             className="agent-workspace-template" data-selected={(selectedTemplate?.label === template.label) || undefined}
@@ -178,7 +216,7 @@ export default function AgentWorkspace() {
         <textarea id="workspace-material" className="fqp-input agent-workspace-input" maxLength={8000}
           value={material} onChange={(event) => setMaterial(event.target.value)}
           placeholder="选择任务模板后，粘贴需要分析的事实、数据摘要或草稿。" />
-        <div className="agent-workspace-actions"><span>{material.length}/8000</span><button type="button" className="fqp-btn fqp-btn-primary" disabled={running} onClick={() => void run()}>{running ? '分析中…' : '运行分析'}</button></div>
+        <div className="agent-workspace-actions"><span>{material.length}/8000</span><button type="button" className="fqp-btn fqp-btn-primary" disabled={running} onClick={() => void run()}>{running ? '分析中…' : comparisonMode ? `运行 ${comparisonTargets.length} 模型对比` : '运行分析'}</button></div>
       </div>
       <aside className="agent-workspace-brief" aria-label="任务边界">
         <h3>本次任务</h3>
