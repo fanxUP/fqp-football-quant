@@ -95,6 +95,16 @@ describe('DataHealthPage', () => {
     expect(screen.queryByText('系统运行正常')).not.toBeInTheDocument();
   });
 
+  it('keeps platform and technology proper names in English for the Simplified Chinese UI', async () => {
+    render(<DataHealthPage />);
+
+    expect(await screen.findByText('Service Name')).toBeInTheDocument();
+    expect(screen.getByText('Frontend Version')).toBeInTheDocument();
+    expect(screen.getByText('Phase 8 — Red-Black Tech')).toBeInTheDocument();
+    expect(screen.getByText('Configuration Mode')).toBeInTheDocument();
+    expect(screen.getByText('Local Service Stack — PostgreSQL')).toBeInTheDocument();
+  });
+
   it('shows distinct source roles and current normalized task status', async () => {
     mockPipeline.mockResolvedValue({
       sources: [

@@ -302,16 +302,16 @@ export default function DataHealthPage() {
       <Card title="服务信息" style={{ marginBottom: '20px' }}>
         <div style={{ display: 'flex', gap: '32px', flexWrap: 'wrap' }}>
           <div>
-            <div className="fqp-label">服务名称</div>
+            <div className="fqp-label">Service Name</div>
             <div>{health?.service || '—'}</div>
           </div>
           <div>
-            <div className="fqp-label">前端版本</div>
-            <div>第 8 阶段 — 红黑科技</div>
+            <div className="fqp-label">Frontend Version</div>
+            <div>Phase 8 — Red-Black Tech</div>
           </div>
           <div>
-            <div className="fqp-label">部署模式</div>
-            <div>本地服务栈 — PostgreSQL</div>
+            <div className="fqp-label">Configuration Mode</div>
+            <div>Local Service Stack — PostgreSQL</div>
           </div>
           <div>
             <div className="fqp-label">调度任务</div>
