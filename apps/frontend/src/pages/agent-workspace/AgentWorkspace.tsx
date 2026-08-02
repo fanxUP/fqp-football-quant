@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { api, type AgentModelBinding } from '../../core/apiClient';
+import { api, type AgentModelBinding, type AgentWorkspaceTask } from '../../core/apiClient';
 import { toast } from '../../shared/components/Toast';
-
-type ModelReply = { agentCode: string; providerCode: string; model: string; content: string };
+import AgentWorkspaceArchive from './AgentWorkspaceArchive';
 
 const taskTemplates: Record<string, { label: string; prompt: string; output: string }[]> = {
   orchestrator_agent: [
@@ -26,11 +25,12 @@ export default function AgentWorkspace() {
   const [templateLabel, setTemplateLabel] = useState('');
   const [material, setMaterial] = useState('');
   const [running, setRunning] = useState(false);
-  const [reply, setReply] = useState<ModelReply | null>(null);
+  const [tasks, setTasks] = useState<AgentWorkspaceTask[]>([]);
+  const [busyTaskId, setBusyTaskId] = useState<number | null>(null);
 
   useEffect(() => {
-    api.modelProviders.bindings()
-      .then((result) => setBindings(result.bindings))
+    Promise.all([api.modelProviders.bindings(), api.agentWorkspace.list()])
+      .then(([bindingResult, taskResult]) => { setBindings(bindingResult.bindings); setTasks(taskResult.tasks); })
       .catch((error: Error) => toast.error(`智能工作台加载失败：${error.message}`))
       .finally(() => setLoading(false));
   }, []);
@@ -60,14 +60,42 @@ export default function AgentWorkspace() {
       return;
     }
     setRunning(true);
-    setReply(null);
     try {
-      setReply(await api.modelProviders.invokeBinding(selected.agentCode, `${selectedTemplate.prompt}${materialText}`));
+      const result = await api.agentWorkspace.create({
+        agentCode: selected.agentCode,
+        title: selectedTemplate.label,
+        prompt: `${selectedTemplate.prompt}${materialText}`,
+      });
+      setTasks((current) => [result.task, ...current]);
+      setMaterial('');
+      toast.success('分析已归档，等待人工核验');
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '模型任务执行失败');
     } finally {
       setRunning(false);
     }
+  };
+
+  const setReviewed = async (task: AgentWorkspaceTask) => {
+    setBusyTaskId(task.id);
+    try {
+      const result = await api.agentWorkspace.setReviewed(task.id, !task.reviewedAt);
+      setTasks((current) => current.map((item) => item.id === task.id ? result.task : item));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '更新确认状态失败');
+    } finally { setBusyTaskId(null); }
+  };
+
+  const removeTask = async (task: AgentWorkspaceTask) => {
+    if (!window.confirm(`确认删除“${task.title}”的归档任务吗？此操作无法恢复。`)) return;
+    setBusyTaskId(task.id);
+    try {
+      await api.agentWorkspace.remove(task.id);
+      setTasks((current) => current.filter((item) => item.id !== task.id));
+      toast.success('归档任务已删除');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '删除归档任务失败');
+    } finally { setBusyTaskId(null); }
   };
 
   if (loading) return <section className="agent-workspace" aria-busy="true"><p>正在加载可用的智能代理…</p></section>;
@@ -83,7 +111,7 @@ export default function AgentWorkspace() {
       <div className="agent-workspace-form">
         <label className="fqp-label" htmlFor="workspace-agent">任务职责</label>
         <select id="workspace-agent" className="fqp-input" value={selected?.agentCode ?? ''}
-          onChange={(event) => { setAgentCode(event.target.value); setTemplateLabel(''); setMaterial(''); setReply(null); }}>
+          onChange={(event) => { setAgentCode(event.target.value); setTemplateLabel(''); setMaterial(''); }}>
           {availableBindings.map((binding) => <option key={binding.agentCode} value={binding.agentCode}>
             {binding.agentName} · {binding.providerName} · {binding.model}
           </option>)}
@@ -105,9 +133,6 @@ export default function AgentWorkspace() {
         <p>模型输出可能出错。请人工核验后，再自行使用其中的结论。</p>
       </aside>
     </div>}
-    {reply && <div className="agent-workspace-result" role="status" aria-live="polite">
-      <div><strong>分析结果</strong><span>{reply.providerCode} · {reply.model} · 非可信内容</span></div><pre>{reply.content}</pre>
-      <p>本结果未保存，关闭或刷新页面后会清除。</p>
-    </div>}
+    <AgentWorkspaceArchive tasks={tasks} busyTaskId={busyTaskId} onSetReviewed={(task) => void setReviewed(task)} onRemove={(task) => void removeTask(task)} />
   </section>;
 }

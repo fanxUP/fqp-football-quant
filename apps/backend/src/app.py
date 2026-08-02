@@ -9,6 +9,7 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 from apps.backend.src.auth import AuthMiddleware
 from apps.backend.src.routers import (
     agents,
+    agent_workspace,
     analysis,
     auth_router,
     backtests,
@@ -64,6 +65,7 @@ def create_app() -> FastAPI:
     app.include_router(predictions.router)
     app.include_router(tickets.router)
     app.include_router(agents.router)
+    app.include_router(agent_workspace.router)
     app.include_router(enrichment.router)
     app.include_router(ops.router)
     app.include_router(model_providers.router)

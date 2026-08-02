@@ -1,0 +1,73 @@
+"""Persistence for explicitly created, human-reviewed agent workspace tasks."""
+
+from __future__ import annotations
+
+from typing import Any
+
+
+class AgentWorkspaceError(ValueError):
+    """Raised when a workspace task cannot be safely read or changed."""
+
+
+def _serialize(row: tuple[Any, ...], *, include_content: bool = True) -> dict[str, Any]:
+    task = {
+        "id": row[0], "title": row[1], "agentCode": row[2], "providerCode": row[3],
+        "model": row[4], "reviewedAt": row[5].isoformat() if row[5] else None,
+        "createdAt": row[6].isoformat() if row[6] else None,
+    }
+    if include_content:
+        task.update({"prompt": row[7], "response": row[8]})
+    return task
+
+
+def create_workspace_task(
+    conn: Any, *, title: str, agent_code: str, provider_code: str, model: str, prompt: str, response: str
+) -> dict[str, Any]:
+    with conn.cursor() as cur:
+        cur.execute(
+            """INSERT INTO agent_workspace_tasks
+                   (title, agent_code, provider_code, model, prompt, response)
+               VALUES (%s, %s, %s, %s, %s, %s)
+               RETURNING id, title, agent_code, provider_code, model, reviewed_at, created_at, prompt, response""",
+            (title, agent_code, provider_code, model, prompt, response),
+        )
+        row = cur.fetchone()
+    conn.commit()
+    return _serialize(row)
+
+
+def list_workspace_tasks(conn: Any, limit: int = 20) -> list[dict[str, Any]]:
+    safe_limit = max(1, min(limit, 50))
+    with conn.cursor() as cur:
+        cur.execute(
+            """SELECT id, title, agent_code, provider_code, model, reviewed_at, created_at, prompt, response
+               FROM agent_workspace_tasks ORDER BY created_at DESC, id DESC LIMIT %s""",
+            (safe_limit,),
+        )
+        rows = cur.fetchall()
+    return [_serialize(row) for row in rows]
+
+
+def set_workspace_task_reviewed(conn: Any, task_id: int, reviewed: bool) -> dict[str, Any]:
+    with conn.cursor() as cur:
+        cur.execute(
+            """UPDATE agent_workspace_tasks
+               SET reviewed_at = CASE WHEN %s THEN NOW() ELSE NULL END
+               WHERE id = %s
+               RETURNING id, title, agent_code, provider_code, model, reviewed_at, created_at, prompt, response""",
+            (reviewed, task_id),
+        )
+        row = cur.fetchone()
+    if not row:
+        raise AgentWorkspaceError("任务不存在或已删除")
+    conn.commit()
+    return _serialize(row)
+
+
+def delete_workspace_task(conn: Any, task_id: int) -> None:
+    with conn.cursor() as cur:
+        cur.execute("DELETE FROM agent_workspace_tasks WHERE id = %s", (task_id,))
+        deleted = cur.rowcount
+    if not deleted:
+        raise AgentWorkspaceError("任务不存在或已删除")
+    conn.commit()

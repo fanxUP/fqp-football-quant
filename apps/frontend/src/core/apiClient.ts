@@ -79,6 +79,18 @@ export interface ModelInvocationAudit {
   createdAt: string | null;
 }
 
+export interface AgentWorkspaceTask {
+  id: number;
+  title: string;
+  agentCode: string;
+  providerCode: string;
+  model: string;
+  prompt: string;
+  response: string;
+  reviewedAt: string | null;
+  createdAt: string | null;
+}
+
 // ---- Base request ----
 
 const TIMEOUT_MS = 15_000;
@@ -244,6 +256,21 @@ export const api = {
     invocations: (limit = 30) => request<{ invocations: ModelInvocationAudit[]; total: number }>(
       `/api/model-providers/invocations?limit=${limit}`,
     ),
+  },
+
+  agentWorkspace: {
+    list: (limit = 20) => request<{ tasks: AgentWorkspaceTask[]; total: number }>(
+      `/api/agent-workspace/tasks?limit=${limit}`,
+    ),
+    create: (payload: { agentCode: string; title: string; prompt: string }) =>
+      request<{ task: AgentWorkspaceTask }>('/api/agent-workspace/tasks', {
+        method: 'POST', body: JSON.stringify(payload),
+      }),
+    setReviewed: (taskId: number, reviewed: boolean) =>
+      request<{ task: AgentWorkspaceTask }>(`/api/agent-workspace/tasks/${taskId}`, {
+        method: 'PATCH', body: JSON.stringify({ reviewed }),
+      }),
+    remove: (taskId: number) => request<void>(`/api/agent-workspace/tasks/${taskId}`, { method: 'DELETE' }),
   },
 
   // Teams
