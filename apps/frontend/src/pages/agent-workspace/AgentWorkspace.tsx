@@ -23,6 +23,7 @@ export default function AgentWorkspace() {
   const [loading, setLoading] = useState(true);
   const [agentCode, setAgentCode] = useState('');
   const [templateLabel, setTemplateLabel] = useState('');
+  const [taskTitle, setTaskTitle] = useState('');
   const [material, setMaterial] = useState('');
   const [running, setRunning] = useState(false);
   const [tasks, setTasks] = useState<AgentWorkspaceTask[]>([]);
@@ -41,11 +42,17 @@ export default function AgentWorkspace() {
   const selected = availableBindings.find((binding) => binding.agentCode === agentCode) ?? availableBindings[0];
   const templates = selected ? taskTemplates[selected.agentCode] ?? [] : [];
   const selectedTemplate = templates.find((template) => template.label === templateLabel) ?? templates[0];
+  const taskStats = useMemo(() => ({
+    total: tasks.length,
+    pending: tasks.filter((task) => !task.reviewedAt).length,
+    reviewed: tasks.filter((task) => Boolean(task.reviewedAt)).length,
+  }), [tasks]);
 
   const chooseTemplate = (label: string) => {
     const template = templates.find((item) => item.label === label);
     if (!template) return;
     setTemplateLabel(template.label);
+    setTaskTitle(template.label);
     setMaterial('');
   };
 
@@ -63,11 +70,12 @@ export default function AgentWorkspace() {
     try {
       const result = await api.agentWorkspace.create({
         agentCode: selected.agentCode,
-        title: selectedTemplate.label,
+        title: taskTitle.trim() || selectedTemplate.label,
         prompt: `${selectedTemplate.prompt}${materialText}`,
       });
       setTasks((current) => [result.task, ...current]);
       setMaterial('');
+      setTaskTitle('');
       toast.success('分析已归档，等待人工核验');
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '模型任务执行失败');
@@ -105,13 +113,16 @@ export default function AgentWorkspace() {
       <div><span className="appearance-eyebrow">V2 · 人工任务工作流</span><h2 id="agent-workspace-title">新建分析任务</h2></div>
       <span className="agent-workspace-safety">不自动执行 · 不写入业务数据</span>
     </div>
+    <div className="agent-workspace-stats" aria-label="归档任务概览">
+      <span><b>{taskStats.total}</b>归档任务</span><span><b>{taskStats.pending}</b>待人工确认</span><span><b>{taskStats.reviewed}</b>已人工确认</span>
+    </div>
     {availableBindings.length === 0 ? <div className="agent-workspace-empty" role="status">
       <strong>暂无可用模型</strong><p>请先在“模型接入”中保存服务商、完成连通性测试，并为至少一个 Agent 开启调用。</p>
     </div> : <div className="agent-workspace-grid">
       <div className="agent-workspace-form">
         <label className="fqp-label" htmlFor="workspace-agent">任务职责</label>
         <select id="workspace-agent" className="fqp-input" value={selected?.agentCode ?? ''}
-          onChange={(event) => { setAgentCode(event.target.value); setTemplateLabel(''); setMaterial(''); }}>
+          onChange={(event) => { setAgentCode(event.target.value); setTemplateLabel(''); setTaskTitle(''); setMaterial(''); }}>
           {availableBindings.map((binding) => <option key={binding.agentCode} value={binding.agentCode}>
             {binding.agentName} · {binding.providerName} · {binding.model}
           </option>)}
@@ -121,6 +132,9 @@ export default function AgentWorkspace() {
             className="agent-workspace-template" data-selected={(selectedTemplate?.label === template.label) || undefined}
             onClick={() => chooseTemplate(template.label)}>{template.label}</button>)}
         </div>
+        <label className="fqp-label" htmlFor="workspace-title">归档标题</label>
+        <input id="workspace-title" className="fqp-input" maxLength={120} value={taskTitle}
+          onChange={(event) => setTaskTitle(event.target.value)} placeholder={`默认：${selectedTemplate?.label ?? '任务名称'}`} />
         <label className="fqp-label" htmlFor="workspace-material">任务材料</label>
         <textarea id="workspace-material" className="fqp-input agent-workspace-input" maxLength={8000}
           value={material} onChange={(event) => setMaterial(event.target.value)}

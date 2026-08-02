@@ -388,6 +388,9 @@
 .agent-workspace-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
 .agent-workspace-heading h2 { margin: 4px 0 0; color: var(--fqp-text); font-size: 22px; }
 .agent-workspace-safety { flex: none; padding: 7px 10px; border: 1px solid var(--fqp-border); border-radius: var(--fqp-radius-sm); color: var(--fqp-text-muted); font-size: 11px; }
+.agent-workspace-stats { display: flex; flex-wrap: wrap; gap: 8px 20px; margin-top: 16px; padding: 10px 12px; border: 1px solid var(--fqp-border); border-radius: var(--fqp-radius-sm); background: var(--fqp-panel-2); }
+.agent-workspace-stats span { color: var(--fqp-text-muted); font-size: 12px; }
+.agent-workspace-stats b { margin-right: 5px; color: var(--fqp-text); font-family: var(--fqp-font-mono); font-size: 14px; }
 .agent-workspace-grid { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(220px, .8fr); gap: 16px; margin-top: 20px; }
 .agent-workspace-form { display: grid; gap: 8px; }
 .agent-workspace-template-list { display: flex; flex-wrap: wrap; gap: 8px; margin: 2px 0 8px; }
