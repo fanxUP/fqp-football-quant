@@ -173,7 +173,7 @@ def _map_agent_ticket(row: tuple) -> dict:
         "betCount": int(row[11] or 1) if len(row) > 11 else 1,
         "matchCount": int(row[9] or 0),
         "stake": stake,
-        "maxPrize": None,
+        "maxPrize": float(row[13]) if len(row) > 13 and row[13] is not None else None,
         "settledAmount": None,
         "profitLoss": None,
         "roi": None,
@@ -736,7 +736,7 @@ def _collect_betting_tickets(conn, limit: int) -> list[dict]:
                    st.strategy_pool, st.risk_level, st.ticket_status,
                    st.created_at, st.pass_type, st.ticket_type,
                    COUNT(sti.id) AS item_count, st.multiple, st.bet_count,
-                   st.ledger_ticket_no
+                   st.ledger_ticket_no, st.max_return
             FROM simulation_tickets st
             JOIN simulation_ticket_items sti ON sti.ticket_id = st.id
             WHERE st.ticket_status IN ('generated', 'activated', 'settled')

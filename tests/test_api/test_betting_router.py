@@ -81,6 +81,7 @@ def test_map_agent_ticket_uses_agent_recommendation_source():
         1,
         1,
         "20260707002",
+        850.0,
     )
 
     ticket = betting._map_agent_ticket(row)
@@ -91,6 +92,7 @@ def test_map_agent_ticket_uses_agent_recommendation_source():
     assert ticket["date"] == "2026-07-07"
     assert ticket["ticketNumber"] == "20260707002"
     assert ticket["expectedValue"] == 0.1234
+    assert ticket["maxPrize"] == 850.0
 
 
 def test_attach_agent_ticket_items_uses_actual_ticket_play_type():
