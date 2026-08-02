@@ -35,7 +35,7 @@ export interface RuntimeModule {
 export interface ModelProviderPreset {
   providerCode: string;
   displayName: string;
-  protocol: 'openai' | 'anthropic' | 'gemini' | 'ollama';
+  protocol: 'openai' | 'anthropic' | 'gemini' | 'ollama' | 'perplexity';
   defaultBaseUrl: string;
   defaultModel: string;
   recommendedModels: string[];

@@ -29,7 +29,7 @@ def test_agent_instruction_is_fixed_and_unknown_agent_is_rejected() -> None:
         get_agent_system_instruction("prediction_agent")
 
 
-@pytest.mark.parametrize("protocol", ["openai", "ollama"])
+@pytest.mark.parametrize("protocol", ["openai", "ollama", "perplexity"])
 def test_openai_compatible_payload_includes_system_boundary(protocol: str) -> None:
     client = FakeClient()
     response = _request_completion(client, _binding(protocol), "key", "用户任务", "固定边界")
@@ -38,6 +38,8 @@ def test_openai_compatible_payload_includes_system_boundary(protocol: str) -> No
     assert client.kwargs["json"]["messages"] == [
         {"role": "system", "content": "固定边界"}, {"role": "user", "content": "用户任务"},
     ]
+    expected_endpoint = "/api/chat" if protocol == "ollama" else "/chat/completions"
+    assert client.args[0].endswith(expected_endpoint)
 
 
 @pytest.mark.parametrize("protocol", ["anthropic", "gemini"])

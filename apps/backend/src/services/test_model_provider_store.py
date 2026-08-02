@@ -27,8 +27,12 @@ def test_provider_catalog_exposes_current_presets_and_official_documentation() -
 
     assert catalog["deepseek"]["defaultBaseUrl"] == "https://api.deepseek.com"
     assert catalog["deepseek"]["recommendedModels"] == ("deepseek-v4-flash", "deepseek-v4-pro")
+    assert catalog["zhipu"]["defaultModel"] == "glm-5.2"
+    assert catalog["moonshot"]["defaultBaseUrl"] == "https://api.moonshot.ai/v1"
+    assert catalog["perplexity"]["defaultBaseUrl"] == "https://api.perplexity.ai"
     assert catalog["gemini"]["defaultModel"] == "gemini-3.6-flash"
-    assert catalog["groq"]["defaultBaseUrl"] == "https://api.groq.com/openai/v1"
+    assert catalog["openrouter"]["recommendedModels"][1] == "anthropic/claude-opus-4.6"
+    assert catalog["siliconflow"]["defaultBaseUrl"] == "https://api.siliconflow.com/v1"
     assert catalog["minimax"]["recommendedModels"][0] == "MiniMax-M2.7"
     assert catalog["xai"]["documentationUrl"].startswith("https://docs.x.ai/")
 

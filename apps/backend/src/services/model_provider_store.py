@@ -43,8 +43,8 @@ PROVIDERS: dict[str, ProviderDefinition] = {
         "Anthropic",
         "anthropic",
         "https://api.anthropic.com/v1",
-        "claude-sonnet-4-5",
-        ("claude-sonnet-4-5", "claude-haiku-4-5"),
+        "claude-sonnet-4-6",
+        ("claude-opus-4-6", "claude-sonnet-4-6", "claude-haiku-4-5"),
         ("analysis", "coding", "vision"),
         "https://docs.anthropic.com/en/api/models-list",
     ),
@@ -84,7 +84,7 @@ PROVIDERS: dict[str, ProviderDefinition] = {
         "openai",
         "https://openrouter.ai/api/v1",
         "openai/gpt-5.2",
-        ("openai/gpt-5.2", "anthropic/claude-sonnet-4.5", "google/gemini-3.6-flash-preview"),
+        ("openai/gpt-5.2", "anthropic/claude-opus-4.6", "google/gemini-3.6-flash"),
         ("analysis", "coding", "vision"),
         "https://openrouter.ai/docs/quickstart",
     ),
@@ -92,7 +92,7 @@ PROVIDERS: dict[str, ProviderDefinition] = {
         "siliconflow",
         "硅基流动",
         "openai",
-        "https://api.siliconflow.cn/v1",
+        "https://api.siliconflow.com/v1",
         "deepseek-ai/DeepSeek-V3",
         ("deepseek-ai/DeepSeek-V3", "deepseek-ai/DeepSeek-R1", "Qwen/Qwen3-32B"),
         ("analysis", "coding"),
@@ -102,21 +102,21 @@ PROVIDERS: dict[str, ProviderDefinition] = {
         "zhipu",
         "智谱 AI（GLM）",
         "openai",
-        "https://open.bigmodel.cn/api/paas/v4",
-        "glm-4.7",
-        ("glm-4.7", "glm-4.5-air", "glm-4.5-flash"),
-        ("analysis", "coding", "vision"),
-        "https://open.bigmodel.cn/dev/api",
+        "https://api.z.ai/api/paas/v4",
+        "glm-5.2",
+        ("glm-5.2", "glm-5.1", "glm-5", "glm-4.7"),
+        ("analysis", "coding"),
+        "https://docs.z.ai/guides/llm/glm-5.2",
     ),
     "moonshot": ProviderDefinition(
         "moonshot",
         "Moonshot AI（月之暗面）",
         "openai",
-        "https://api.moonshot.cn/v1",
-        "kimi-k2.5",
-        ("kimi-k2.5", "kimi-k2-turbo-preview", "moonshot-v1-32k"),
-        ("analysis", "coding"),
-        "https://platform.moonshot.cn/docs/api-reference",
+        "https://api.moonshot.ai/v1",
+        "kimi-k3",
+        ("kimi-k3", "kimi-k2.7-code", "kimi-k2.7-code-highspeed", "kimi-k2.6"),
+        ("analysis", "coding", "vision"),
+        "https://platform.kimi.ai/docs/overview",
     ),
     "minimax": ProviderDefinition(
         "minimax",
@@ -151,12 +151,12 @@ PROVIDERS: dict[str, ProviderDefinition] = {
     "perplexity": ProviderDefinition(
         "perplexity",
         "Perplexity",
-        "openai",
-        "https://api.perplexity.ai/v1",
-        "sonar",
-        ("sonar", "sonar-pro"),
+        "perplexity",
+        "https://api.perplexity.ai",
+        "sonar-pro",
+        ("sonar", "sonar-pro", "sonar-reasoning-pro", "sonar-deep-research"),
         ("analysis",),
-        "https://docs.perplexity.ai/docs/agent-api/openai-compatibility",
+        "https://docs.perplexity.ai/docs/sonar/openai-compatibility",
     ),
     "ollama": ProviderDefinition(
         "ollama",
@@ -449,6 +449,8 @@ def _probe_provider(
                 response = client.get(
                     f"{base_url}/models", headers={**headers, "anthropic-version": "2023-06-01"}
                 )
+            elif provider.protocol == "perplexity":
+                response = client.get(f"{base_url}/v1/models", headers=headers)
             else:
                 response = client.get(f"{base_url}/models", headers=headers)
     except httpx.HTTPError as exc:
