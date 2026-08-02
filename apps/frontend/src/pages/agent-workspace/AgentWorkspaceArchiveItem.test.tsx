@@ -114,4 +114,10 @@ describe('AgentWorkspaceArchiveItem', () => {
     await waitFor(() => expect(apiMocks.comparison).toHaveBeenCalledWith('comparison-001'));
     expect(await screen.findByText('第二个模型的分析。')).toBeInTheDocument();
   });
+
+  it('显示业务解读任务的可追溯来源', () => {
+    render(<AgentWorkspaceArchiveItem task={{ ...task, sourceType: 'pre_match', sourceRef: '42' }} busy={false} onSetReviewed={vi.fn()} onRemove={vi.fn()} />);
+
+    expect(screen.getByText('来源：赛前单场 · 42')).toBeInTheDocument();
+  });
 });

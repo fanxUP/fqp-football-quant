@@ -10,6 +10,10 @@ interface Props {
   onRemove: (task: AgentWorkspaceTask) => void;
 }
 
+const sourceLabels: Record<string, string> = {
+  pre_match: '赛前单场', post_daily: '赛后日报', post_weekly: '赛后周报', post_monthly: '赛后月报',
+};
+
 export default function AgentWorkspaceArchiveItem({ task, busy, onSetReviewed, onRemove }: Props) {
   const [reviewNote, setReviewNote] = useState(task.reviewNote ?? '');
   const [history, setHistory] = useState<AgentWorkspaceReviewEvent[] | null>(null);
@@ -73,7 +77,7 @@ export default function AgentWorkspaceArchiveItem({ task, busy, onSetReviewed, o
   };
 
   return <article className="agent-workspace-archive-item">
-    <header><div><strong>{task.title}</strong><span>{task.agentCode} · {task.providerCode} · {task.model}{task.comparisonId ? ' · 多模型对比' : ''}</span></div><time>{formatTime(task.createdAt)}</time></header>
+    <header><div><strong>{task.title}</strong><span>{task.agentCode} · {task.providerCode} · {task.model}{task.comparisonId ? ' · 多模型对比' : ''}</span>{task.sourceType && task.sourceRef && <span>来源：{sourceLabels[task.sourceType] ?? task.sourceType} · {task.sourceRef}</span>}</div><time>{formatTime(task.createdAt)}</time></header>
     <details><summary>查看任务材料与分析结果</summary><div className="agent-workspace-archive-content"><h4>任务材料</h4><pre>{task.prompt}</pre><h4>分析结果</h4><pre>{task.response}</pre></div></details>
     {reviewed && task.reviewNote && <p className="agent-workspace-review-note"><b>核验备注：</b>{task.reviewNote}</p>}
     {!reviewed && <div className="agent-workspace-review-input"><label className="fqp-label" htmlFor={`workspace-review-note-${task.id}`}>核验备注（可选）</label>
