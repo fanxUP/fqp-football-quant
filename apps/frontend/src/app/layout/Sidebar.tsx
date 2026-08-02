@@ -4,6 +4,8 @@ import { api } from '../../core/apiClient';
 import { getSidebarPanels, type SidebarPanel } from '../../panelRegistry';
 import { useLocalSettings } from '../../shared/hooks/useLocalSettings';
 import { useTheme } from '../ThemeContext';
+import { useLanguage } from '../LanguageContext';
+import { shellText, sidebarGroupLabel, sidebarPanelLabel } from '../language';
 
 const SIDEBAR_GROUP_ORDER = ['核心闭环', '研究优化', '策略实验', '系统管理'];
 const SIDEBAR_GROUP_FALLBACK: Record<string, string> = {
@@ -55,6 +57,8 @@ export function normalizeSidebarIcon(icon: string): string {
 export default function Sidebar({ isOpen = false, onClose }: SidebarProps) {
   const { currentPath, navigate } = useRouter();
   const { theme, toggleTheme } = useTheme();
+  const { language } = useLanguage();
+  const text = shellText(language);
   const { settings } = useLocalSettings();
   const disabledModules = new Set(settings.disabledModules);
   const localSidebarPanels = getSidebarPanels(disabledModules);
@@ -102,8 +106,8 @@ export default function Sidebar({ isOpen = false, onClose }: SidebarProps) {
           });
           if (groupPanels.length === 0) return null;
           return (
-            <section key={groupName} className="fqp-nav-group" aria-label={groupName}>
-              <div className="fqp-nav-group-title">{groupName}</div>
+            <section key={groupName} className="fqp-nav-group" aria-label={sidebarGroupLabel(language, groupName)}>
+              <div className="fqp-nav-group-title">{sidebarGroupLabel(language, groupName)}</div>
               {groupPanels.map((item) => {
                 const isActive =
                   item.routePath === '/'
@@ -120,7 +124,7 @@ export default function Sidebar({ isOpen = false, onClose }: SidebarProps) {
                     <span className="fqp-nav-icon" aria-hidden="true">
                       {normalizeSidebarIcon(item.icon)}
                     </span>
-                    <span>{item.panelName}</span>
+                    <span>{sidebarPanelLabel(language, item.panelCode, item.panelName)}</span>
                   </button>
                 );
               })}
@@ -132,7 +136,7 @@ export default function Sidebar({ isOpen = false, onClose }: SidebarProps) {
       {/* Theme toggle */}
       <button type="button" className="fqp-theme-toggle" onClick={toggleTheme}>
         <span className="fqp-nav-icon">{theme === 'polar-lab' ? '🌙' : '☀️'}</span>
-        <span>{theme === 'polar-lab' ? '切换黑红主题' : '切换极地浅色'}</span>
+        <span>{theme === 'polar-lab' ? text.darkTheme : text.lightTheme}</span>
       </button>
     </aside>
   );

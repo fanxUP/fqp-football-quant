@@ -1,5 +1,6 @@
 import { createRouter, navigate as routerNavigate, useRouter } from './core/router';
 import { ThemeProvider } from './app/ThemeContext';
+import { LanguageProvider } from './app/LanguageContext';
 import { ToastProvider } from './shared/components/Toast';
 import { AuthProvider, useAuth } from './app/AuthContext';
 import Layout from './app/layout/Layout';
@@ -146,12 +147,14 @@ function AppContent() {
 // ---- App root ----
 export default function App() {
   return (
-    <ThemeProvider>
-      <ToastProvider>
-        <AuthProvider>
-          <AppContent />
-        </AuthProvider>
-      </ToastProvider>
-    </ThemeProvider>
+    <LanguageProvider>
+      <ThemeProvider>
+        <ToastProvider>
+          <AuthProvider>
+            <AppContent />
+          </AuthProvider>
+        </ToastProvider>
+      </ThemeProvider>
+    </LanguageProvider>
   );
 }

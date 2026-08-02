@@ -2034,6 +2034,44 @@ body {
   top: 16px;
   right: 24px;
   z-index: 20;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.fqp-language-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 38px;
+  padding: 0 10px;
+  background: color-mix(in srgb, var(--fqp-panel) 88%, transparent);
+  border: 1px solid color-mix(in srgb, var(--fqp-text-muted) 36%, var(--fqp-border));
+  border-radius: var(--fqp-radius-sm);
+  color: var(--fqp-text-muted);
+  box-shadow: 0 5px 16px color-mix(in srgb, var(--fqp-bg) 46%, transparent);
+}
+
+.fqp-language-select:focus-within {
+  border-color: var(--fqp-accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--fqp-accent) 22%, transparent);
+}
+
+.fqp-language-select select {
+  min-width: 78px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--fqp-text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.fqp-language-select option {
+  background: var(--fqp-panel);
+  color: var(--fqp-text);
 }
 
 .fqp-logout-btn {
@@ -2073,4 +2111,6 @@ body {
 @media (max-width: 720px) {
   .fqp-top-actions { top: 10px; right: 12px; }
   .fqp-logout-btn { padding: 8px 10px; font-size: 13px; }
+  .fqp-language-select { min-height: 34px; padding: 0 8px; }
+  .fqp-language-select select { min-width: 70px; font-size: 12px; }
 }

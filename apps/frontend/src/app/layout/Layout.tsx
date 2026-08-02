@@ -1,6 +1,8 @@
 import { useState, useCallback, type ReactNode } from 'react';
 import Sidebar from './Sidebar';
 import { useAuth } from '../AuthContext';
+import { useLanguage } from '../LanguageContext';
+import { LANGUAGE_OPTIONS, shellText, type AppLanguage } from '../language';
 
 interface LayoutProps {
   children: ReactNode;
@@ -9,6 +11,8 @@ interface LayoutProps {
 export default function Layout({ children }: LayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { logout } = useAuth();
+  const { language, setLanguage } = useLanguage();
+  const text = shellText(language);
 
   const openSidebar = useCallback(() => setSidebarOpen(true), []);
   const closeSidebar = useCallback(() => setSidebarOpen(false), []);
@@ -19,7 +23,7 @@ export default function Layout({ children }: LayoutProps) {
       <button
         className="fqp-hamburger"
         onClick={openSidebar}
-        aria-label="打开菜单"
+        aria-label={text.openMenu}
       >
         <span />
         <span />
@@ -33,10 +37,20 @@ export default function Layout({ children }: LayoutProps) {
 
       <Sidebar isOpen={sidebarOpen} onClose={closeSidebar} />
 
-      <div className="fqp-top-actions" aria-label="账户操作">
+      <div className="fqp-top-actions" aria-label={text.accountActions}>
+        <label className="fqp-language-select">
+          <span aria-hidden="true">🌐</span>
+          <select
+            aria-label={text.language}
+            value={language}
+            onChange={(event) => setLanguage(event.target.value as AppLanguage)}
+          >
+            {LANGUAGE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          </select>
+        </label>
         <button type="button" className="fqp-logout-btn" onClick={() => logout()}>
           <span aria-hidden="true">🚪</span>
-          <span>退出登录</span>
+          <span>{text.logout}</span>
         </button>
       </div>
 

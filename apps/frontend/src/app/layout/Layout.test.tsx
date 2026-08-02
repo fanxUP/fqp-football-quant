@@ -49,6 +49,16 @@ describe('Layout', () => {
       expect(container.querySelector('.fqp-top-actions .fqp-logout-btn')).toBeTruthy();
     });
 
+    it('renders a Simplified Chinese language selector before logout by default', () => {
+      const { container } = render(<Layout><div /></Layout>);
+
+      const languageSelector = screen.getByRole('combobox', { name: '界面语言' });
+      expect(languageSelector).toHaveValue('zh-CN');
+      expect(screen.getByRole('option', { name: '简体中文' })).toBeTruthy();
+      expect(screen.getByRole('option', { name: 'English' })).toBeTruthy();
+      expect(container.querySelector('.fqp-top-actions .fqp-language-select + .fqp-logout-btn')).toBeTruthy();
+    });
+
     it('renders children inside the main area', () => {
       render(
         <Layout>
