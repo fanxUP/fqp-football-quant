@@ -53,6 +53,7 @@ WITH ticket_shapes AS (
        AND COUNT(*) > SUM(multiple) / 50
 ), ranked AS (
     SELECT shape.*,
+           grouped.total_multiple AS total_multiple,
            grouped.total_multiple / 50 AS target_count,
            grouped.total_stake,
            grouped.total_estimated_return,

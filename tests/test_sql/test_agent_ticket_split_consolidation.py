@@ -10,3 +10,4 @@ def test_equivalent_agent_ticket_fragments_are_consolidated_into_50x_tickets():
     assert "simulation_ticket_items" in source
     assert "ticket_settlements" in source
     assert "multiple = 50" in source
+    assert "grouped.total_multiple AS total_multiple" in source
