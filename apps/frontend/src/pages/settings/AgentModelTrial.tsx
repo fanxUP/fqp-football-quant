@@ -9,7 +9,7 @@ type ModelReply = {
   content: string;
 };
 
-export default function AgentModelTrial({ bindings }: { bindings: AgentModelBinding[] }) {
+export default function AgentModelTrial({ bindings, onCompleted }: { bindings: AgentModelBinding[]; onCompleted: () => void }) {
   const availableBindings = bindings.filter((binding) => binding.enabled && binding.providerEnabled);
   const [agentCode, setAgentCode] = useState('');
   const [prompt, setPrompt] = useState('');
@@ -32,8 +32,10 @@ export default function AgentModelTrial({ bindings }: { bindings: AgentModelBind
     try {
       const result = await api.modelProviders.invokeBinding(selected.agentCode, prompt.trim());
       setReply(result);
+      onCompleted();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '模型试运行失败');
+      onCompleted();
     } finally {
       setRunning(false);
     }

@@ -66,6 +66,18 @@ export interface AgentModelBinding {
   updatedAt: string | null;
 }
 
+export interface ModelInvocationAudit {
+  agentCode: string;
+  providerCode: string | null;
+  model: string | null;
+  status: 'succeeded' | 'failed';
+  promptLength: number;
+  responseLength: number;
+  durationMs: number;
+  errorCode: string | null;
+  createdAt: string | null;
+}
+
 // ---- Base request ----
 
 const TIMEOUT_MS = 15_000;
@@ -228,6 +240,9 @@ export const api = {
     }>(`/api/model-providers/agent-bindings/${encodeURIComponent(agentCode)}/invoke`, {
       method: 'POST', body: JSON.stringify({ prompt }),
     }),
+    invocations: (limit = 30) => request<{ invocations: ModelInvocationAudit[]; total: number }>(
+      `/api/model-providers/invocations?limit=${limit}`,
+    ),
   },
 
   // Teams

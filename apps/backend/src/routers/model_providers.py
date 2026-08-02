@@ -2,11 +2,17 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from time import perf_counter
+
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from apps.backend.src.db import get_db
 from apps.backend.src.services.model_gateway import ModelGatewayError, invoke_agent_model
+from apps.backend.src.services.model_invocation_audit import (
+    list_model_invocations,
+    record_model_invocation,
+)
 from apps.backend.src.services.model_provider_store import (
     ProviderConfigError,
     list_agent_model_bindings,
@@ -74,12 +80,32 @@ def put_agent_binding(agent_code: str, body: AgentBindingRequest):
 @router.post("/agent-bindings/{agent_code}/invoke")
 def invoke_agent_binding(agent_code: str, body: AgentInvokeRequest):
     """Explicit manual call only; it is never part of the recommendation scheduler."""
+    started_at = perf_counter()
     try:
         with get_db() as conn:
             result = invoke_agent_model(conn, agent_code, body.prompt)
+            record_model_invocation(
+                conn, agent_code=agent_code, provider_code=result.provider_code, model=result.model,
+                status="succeeded", prompt_length=len(body.prompt), response_length=len(result.content),
+                duration_ms=round((perf_counter() - started_at) * 1000),
+            )
     except (ProviderConfigError, ModelGatewayError) as exc:
+        with get_db() as conn:
+            record_model_invocation(
+                conn, agent_code=agent_code, provider_code=None, model=None, status="failed",
+                prompt_length=len(body.prompt), response_length=0,
+                duration_ms=round((perf_counter() - started_at) * 1000), error_code="MODEL_CALL_FAILED",
+            )
         _raise_config_error(exc)
     return {"agentCode": agent_code, "providerCode": result.provider_code, "model": result.model, "content": result.content}
+
+
+@router.get("/invocations")
+def get_model_invocations(limit: int = Query(30, ge=1, le=50)):
+    """Return recent metadata-only manual-call audit entries."""
+    with get_db() as conn:
+        invocations = list_model_invocations(conn, limit)
+    return {"invocations": invocations, "total": len(invocations)}
 
 
 @router.put("/{provider_code}")

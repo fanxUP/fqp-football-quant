@@ -2,10 +2,12 @@ import { useEffect, useState } from 'react';
 import { api, type AgentModelBinding, type ModelProviderConnection } from '../../core/apiClient';
 import { toast } from '../../shared/components/Toast';
 import AgentModelTrial from './AgentModelTrial';
+import ModelInvocationAudit from './ModelInvocationAudit';
 
 export default function AgentModelBindings({ providers }: { providers: ModelProviderConnection[] }) {
   const [bindings, setBindings] = useState<AgentModelBinding[]>([]);
   const [saving, setSaving] = useState<string | null>(null);
+  const [auditVersion, setAuditVersion] = useState(0);
 
   useEffect(() => {
     api.modelProviders.bindings()
@@ -45,6 +47,7 @@ export default function AgentModelBindings({ providers }: { providers: ModelProv
         </button>
       </div>)}
     </div>
-    <AgentModelTrial bindings={bindings} />
+    <AgentModelTrial bindings={bindings} onCompleted={() => setAuditVersion((version) => version + 1)} />
+    <ModelInvocationAudit refreshToken={auditVersion} />
   </section>;
 }

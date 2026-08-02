@@ -364,6 +364,17 @@
 .agent-model-reply strong { color: var(--fqp-text); font-size: 13px; }
 .agent-model-reply span { color: var(--fqp-text-muted); font-size: 11px; }
 .agent-model-reply pre { margin: 10px 0 0; overflow: auto; color: var(--fqp-text); font-family: inherit; font-size: 12px; line-height: 1.65; white-space: pre-wrap; word-break: break-word; }
+.model-invocation-audit { display: grid; gap: 8px; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--fqp-border); }
+.model-invocation-audit h4 { margin: 0; color: var(--fqp-text); font-size: 14px; }
+.model-invocation-audit p { margin: 4px 0 0; }
+.model-invocation-list { display: grid; gap: 6px; }
+.model-invocation-item { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border: 1px solid var(--fqp-border); border-radius: var(--fqp-radius-xs); background: var(--fqp-panel-2); }
+.model-invocation-item strong, .model-invocation-item span { display: block; }
+.model-invocation-item strong { color: var(--fqp-text); font-size: 12px; }
+.model-invocation-item span { margin-top: 2px; color: var(--fqp-text-muted); font-size: 11px; }
+.model-invocation-meta { text-align: right; }
+.model-invocation-meta b { color: var(--fqp-success); font-size: 11px; }
+.model-invocation-meta b[data-status='failed'] { color: var(--fqp-red); }
 
 .local-settings-grid {
   display: grid;
@@ -395,6 +406,8 @@
   .model-provider-layout { grid-template-columns: 1fr; }
   .agent-model-binding { align-items: flex-start; flex-direction: column; }
   .agent-model-reply > div { align-items: flex-start; flex-direction: column; gap: 3px; }
+  .model-invocation-item { align-items: flex-start; flex-direction: column; }
+  .model-invocation-meta { text-align: left; }
   .appearance-select-grid { grid-template-columns: 1fr; }
   .appearance-switches { display: grid; }
   .appearance-actions { flex-wrap: wrap; }
