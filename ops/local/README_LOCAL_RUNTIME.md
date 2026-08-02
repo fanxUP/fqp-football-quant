@@ -10,6 +10,8 @@ cp .env.local.example .env.local
 ./ops/local/manage_local_stack.sh start
 ```
 
+首次打开前端会进入登录页，初始密码为 `admin123`。请登录后在系统设置中修改密码；公开模板仅供首次启动，生产环境应使用私有 `.env.local`。
+
 ## 管理命令
 
 ```bash
@@ -30,7 +32,7 @@ cp .env.local.example .env.local
 ```bash
 tail -f .runtime/local-stack.launchd.err.log
 tail -f .runtime/local-stack.launchd.out.log
-curl -f http://127.0.0.1:8006/health
+curl -f http://127.0.0.1:8080/health
 curl -f http://127.0.0.1:8066/
 ```
 
