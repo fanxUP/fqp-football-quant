@@ -1,7 +1,7 @@
 """Session-based authentication for FQP.
 
 Uses Redis for session storage and bcrypt for password verification.
-Controlled by FQP_AUTH_MODE env var: "none" bypasses all checks.
+FQP_AUTH_MODE defaults to "session"; "none" is an explicit local-only bypass.
 """
 
 from __future__ import annotations
@@ -88,7 +88,8 @@ class AuthMiddleware(BaseHTTPMiddleware):
         super().__init__(app)
 
     async def dispatch(self, request: Request, call_next: Any) -> Response:
-        auth_mode = os.getenv("FQP_AUTH_MODE", "none")
+        # Fail closed: a missing environment variable must not expose protected APIs.
+        auth_mode = os.getenv("FQP_AUTH_MODE", "session")
 
         # Mode: none — bypass all auth checks
         if auth_mode == "none":

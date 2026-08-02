@@ -69,3 +69,12 @@ class TestAuthEndpoints:
                 resp = await ac.get("/api/modules")
                 assert resp.status_code == 401
                 assert resp.json()["detail"] == "未登录"
+
+    async def test_missing_auth_mode_fails_closed(self):
+        """A missing configuration must keep sensitive APIs protected."""
+        with patch.dict(os.environ, {}, clear=True):
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as ac:
+                resp = await ac.get("/api/model-providers")
+                assert resp.status_code == 401
+                assert resp.json()["detail"] == "未登录"
