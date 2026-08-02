@@ -57,6 +57,7 @@ cp .env.local.example .env.local
 - Redis：`127.0.0.1:6379`
 - 本机运行统一使用 Python 3.14 和 Node.js。
 - `.env.local` 只保存在本机，不提交 GitHub。
+- 使用“系统设置 → 模型接入中心”前，请在 `.env.local` 配置随机且不少于 32 个字符的 `FQP_PROVIDER_ENCRYPTION_KEY`；它只用于加密数据库中的 API 密钥，不能在后续运行中随意更换。
 - 初始登录密码：`admin123`。首次登录后请在系统设置中立即修改；生产部署必须改用私有 `.env.local`，不要继续使用该公开默认密码。
 
 查看、重启与停止：

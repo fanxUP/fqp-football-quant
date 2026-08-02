@@ -32,6 +32,29 @@ export interface RuntimeModule {
   panels: string[];
 }
 
+export interface ModelProviderPreset {
+  providerCode: string;
+  displayName: string;
+  protocol: 'openai' | 'anthropic' | 'gemini' | 'ollama';
+  defaultBaseUrl: string;
+  defaultModel: string;
+  capabilities: string[];
+  requiresApiKey: boolean;
+}
+
+export interface ModelProviderConnection {
+  providerCode: string;
+  displayName: string;
+  baseUrl: string;
+  defaultModel: string;
+  enabled: boolean;
+  hasApiKey: boolean;
+  updatedAt: string | null;
+  lastTestAt: string | null;
+  lastTestStatus: 'passed' | 'failed' | null;
+  lastTestMessage: string | null;
+}
+
 // ---- Base request ----
 
 const TIMEOUT_MS = 15_000;
@@ -162,6 +185,28 @@ export const api = {
           body: JSON.stringify(payload),
         },
       ),
+  },
+
+  modelProviders: {
+    catalog: () => request<{ providers: ModelProviderPreset[] }>('/api/model-providers/catalog'),
+    list: () => request<{ providers: ModelProviderConnection[] }>('/api/model-providers'),
+    save: (providerCode: string, payload: {
+      providerCode: string;
+      displayName?: string;
+      baseUrl?: string;
+      defaultModel: string;
+      apiKey?: string;
+      enabled: boolean;
+    }) => request<{ provider: ModelProviderConnection }>(`/api/model-providers/${encodeURIComponent(providerCode)}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    }),
+    test: (providerCode: string) => request<{
+      providerCode: string;
+      status: 'passed' | 'failed';
+      message: string;
+      testedAt: string;
+    }>(`/api/model-providers/${encodeURIComponent(providerCode)}/test`, { method: 'POST' }),
   },
 
   // Teams

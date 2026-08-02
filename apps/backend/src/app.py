@@ -19,6 +19,7 @@ from apps.backend.src.routers import (
     health,
     official,
     ops,
+    model_providers,
     pool,
     predictions,
     simulator,
@@ -65,6 +66,7 @@ def create_app() -> FastAPI:
     app.include_router(agents.router)
     app.include_router(enrichment.router)
     app.include_router(ops.router)
+    app.include_router(model_providers.router)
     app.include_router(backtests.router)
     app.include_router(pool.router)
     app.include_router(analysis.router)
