@@ -232,8 +232,13 @@ def test_virtual_recommendations_spend_the_full_daily_budget_on_sellable_singles
         entry["ticket"]["strategy_pool"] == "agent_virtual_recommendation" for entry in tickets
     )
     assert all(entry["ticket"]["ticket_type"] == "virtual_recommendation" for entry in tickets)
-    assert all(entry["ticket"]["multiple"] <= 99 for entry in tickets)
+    assert [entry["ticket"]["multiple"] for entry in tickets] == [50, 50, 50, 50, 50]
+    assert [entry["ticket"]["suggested_stake"] for entry in tickets] == [100.0] * 5
     assert all(entry["items"] == [candidates[0]] for entry in tickets)
+
+
+def test_virtual_recommendations_split_99x_into_two_physical_tickets():
+    assert recommendation._stake_chunks(198.0) == [100.0, 98.0]
 
 
 def test_virtual_recommendations_use_two_match_pass_when_single_is_unavailable():

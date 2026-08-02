@@ -148,6 +148,19 @@ class TestStoreCommitteeVote:
 
 
 class TestStoreSimulationTicket:
+    def test_rejects_single_ticket_multiple_above_official_limit(self):
+        mock_conn, mock_cur = _mock_conn()
+
+        result = store_simulation_ticket(
+            mock_conn,
+            {"suggested_stake": 198.0, "multiple": 99},
+            [{"match_id": 101}],
+        )
+
+        assert result is None
+        mock_conn.rollback.assert_called_once()
+        mock_cur.execute.assert_not_called()
+
     def test_rejects_ticket_without_items_before_writing(self):
         mock_conn, mock_cur = _mock_conn()
 

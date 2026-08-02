@@ -16,6 +16,8 @@ from typing import Any
 from scripts.agents.human_review_gate import assert_recommendation_publishable
 from scripts.business_time import business_now
 
+MAX_SINGLE_TICKET_MULTIPLE = 50
+
 
 def _now() -> str:
     return business_now().replace(tzinfo=None).isoformat(timespec="seconds")
@@ -177,6 +179,14 @@ def store_simulation_ticket(conn: Any, ticket: dict, items: list[dict]) -> int |
     if not items:
         conn.rollback()
         return None
+    try:
+        multiple = int(ticket.get("multiple", 1))
+    except (TypeError, ValueError):
+        conn.rollback()
+        return None
+    if not 1 <= multiple <= MAX_SINGLE_TICKET_MULTIPLE:
+        conn.rollback()
+        return None
 
     with conn.cursor() as cur:
         # 1. Get today's budget plan
@@ -208,7 +218,7 @@ def store_simulation_ticket(conn: Any, ticket: dict, items: list[dict]) -> int |
                 "ticket_type": ticket.get("ticket_type", "single"),
                 "pass_type": ticket.get("pass_type", "single"),
                 "suggested_stake": ticket["suggested_stake"],
-                "multiple": ticket.get("multiple", 1),
+                "multiple": multiple,
                 "estimated_return": ticket.get("estimated_return"),
                 "max_return": ticket.get("max_return"),
                 "expected_value": ticket.get("expected_value"),

@@ -22,15 +22,15 @@ from apps.backend.src.db import get_db
 from scripts.agents.task_queue import finish_tracked_job, start_tracked_job
 from scripts.competition_storage import AGENT_DAILY_BUDGET
 from scripts.daily_decision_storage import upsert_agent_daily_decision
-from scripts.model_storage import store_simulation_ticket
+from scripts.model_storage import MAX_SINGLE_TICKET_MULTIPLE, store_simulation_ticket
 from scripts.recommendation_prediction_loader import load_actionable_predictions
 from scripts.sporttery_sales import get_sporttery_sales_window
 
 ALL_MODELS = ["market_baseline", "elo_rating", "dixon_coles", "maher_poisson"]
 MIN_EVIDENCE_QUALITY = 30
 STAKE_UNIT = 2.0
-MAX_OFFICIAL_MULTIPLE = 99
-MAX_TICKET_STAKE = STAKE_UNIT * MAX_OFFICIAL_MULTIPLE
+# 体彩单张票最多 50 倍。日预算可分拆为多张票，不限制推荐计划的总倍投。
+MAX_TICKET_STAKE = STAKE_UNIT * MAX_SINGLE_TICKET_MULTIPLE
 MAX_DAILY_SELECTIONS = 5
 
 
