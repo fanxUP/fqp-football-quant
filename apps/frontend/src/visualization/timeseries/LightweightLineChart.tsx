@@ -220,6 +220,7 @@ export default function LightweightLineChart({
         data-zoom-enabled={interactionsEnabled}
         tabIndex={0}
         onClick={enableInteractions}
+        onMouseLeave={() => setInteractionsEnabled(false)}
         onKeyDown={(event) => {
           if (event.key === 'Enter' || event.key === ' ') {
             event.preventDefault();

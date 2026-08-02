@@ -107,5 +107,13 @@ describe('LightweightLineChart', () => {
       handleScroll: expect.objectContaining({ mouseWheel: true }),
     }));
     expect(setData).toHaveBeenCalledTimes(2);
+
+    fireEvent.mouseLeave(screen.getByRole('img', { name: '胜平负赔率走势' }));
+
+    expect(createChart).toHaveBeenLastCalledWith(expect.anything(), expect.objectContaining({
+      handleScale: expect.objectContaining({ mouseWheel: false }),
+      handleScroll: expect.objectContaining({ mouseWheel: false }),
+    }));
+    expect(setData).toHaveBeenCalledTimes(3);
   });
 });
