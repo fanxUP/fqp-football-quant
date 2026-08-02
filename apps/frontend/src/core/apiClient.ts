@@ -38,7 +38,9 @@ export interface ModelProviderPreset {
   protocol: 'openai' | 'anthropic' | 'gemini' | 'ollama';
   defaultBaseUrl: string;
   defaultModel: string;
+  recommendedModels: string[];
   capabilities: string[];
+  documentationUrl: string;
   requiresApiKey: boolean;
 }
 

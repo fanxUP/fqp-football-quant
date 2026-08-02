@@ -133,7 +133,17 @@ export default function ModelProviderSettingsPanel() {
             <label className="fqp-label" htmlFor="model-base-url">服务地址</label>
             <input id="model-base-url" className="fqp-input" value={draft.baseUrl} onChange={(event) => updateDraft({ baseUrl: event.target.value })} />
             <label className="fqp-label" htmlFor="model-default">默认模型</label>
-            <input id="model-default" className="fqp-input" value={draft.defaultModel} onChange={(event) => updateDraft({ defaultModel: event.target.value })} placeholder="例如 gpt-5-mini" />
+            <input id="model-default" className="fqp-input" value={draft.defaultModel} onChange={(event) => updateDraft({ defaultModel: event.target.value })} placeholder="例如 gpt-5.2" list="model-recommendations" />
+            <datalist id="model-recommendations">
+              {selected.recommendedModels.map((model) => <option key={model} value={model} />)}
+            </datalist>
+            {selected.recommendedModels.length > 0 && <div className="model-provider-models" aria-label="推荐模型">
+              <span>推荐模型</span>
+              <div>
+                {selected.recommendedModels.map((model) => <button key={model} type="button" className="model-provider-model"
+                  data-selected={draft.defaultModel === model} onClick={() => updateDraft({ defaultModel: model })}>{model}</button>)}
+              </div>
+            </div>}
             {selected.requiresApiKey && <>
               <label className="fqp-label" htmlFor="model-api-key">API 密钥 {saved?.hasApiKey ? '（已保存；留空则保持不变）' : ''}</label>
               <input id="model-api-key" className="fqp-input" type="password" autoComplete="off" value={draft.apiKey} onChange={(event) => updateDraft({ apiKey: event.target.value })} placeholder={saved?.hasApiKey ? '留空则保留已保存密钥' : '仅在保存时上传到服务器'} />
@@ -147,6 +157,7 @@ export default function ModelProviderSettingsPanel() {
               <button type="button" className="fqp-btn fqp-btn-primary" disabled={testing || !saved?.hasApiKey && selected.requiresApiKey} onClick={() => void test()}>{testing ? '测试中…' : '测试连接'}</button>
             </div>
             {saved?.lastTestMessage && <p className="model-provider-test-message" data-status={saved.lastTestStatus ?? undefined}>{saved.lastTestMessage}</p>}
+            <a className="model-provider-docs" href={selected.documentationUrl} target="_blank" rel="noreferrer">查看官方接入文档 ↗</a>
             </Card>}
           </div>
           <AgentModelBindings providers={connections} />

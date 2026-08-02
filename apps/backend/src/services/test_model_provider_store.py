@@ -8,6 +8,7 @@ from apps.backend.src.services.model_provider_store import (
     ProviderConfigError,
     _cipher,
     list_agent_model_bindings,
+    provider_catalog,
     save_provider_config,
     validate_provider_input,
 )
@@ -19,6 +20,15 @@ def test_provider_input_uses_preset_defaults() -> None:
     assert provider.code == "openai"
     assert base_url == "https://api.openai.com/v1"
     assert model == "gpt-5-mini"
+
+
+def test_provider_catalog_exposes_current_presets_and_official_documentation() -> None:
+    catalog = {item["providerCode"]: item for item in provider_catalog()}
+
+    assert catalog["gemini"]["defaultModel"] == "gemini-3.6-flash"
+    assert catalog["groq"]["defaultBaseUrl"] == "https://api.groq.com/openai/v1"
+    assert catalog["minimax"]["recommendedModels"][0] == "MiniMax-M2.7"
+    assert catalog["xai"]["documentationUrl"].startswith("https://docs.x.ai/")
 
 
 def test_provider_input_rejects_unsafe_base_url() -> None:

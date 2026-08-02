@@ -21,7 +21,9 @@ class ProviderDefinition:
     protocol: str
     default_base_url: str
     default_model: str
+    recommended_models: tuple[str, ...]
     capabilities: tuple[str, ...]
+    documentation_url: str
     requires_api_key: bool = True
 
 
@@ -31,8 +33,10 @@ PROVIDERS: dict[str, ProviderDefinition] = {
         "OpenAI",
         "openai",
         "https://api.openai.com/v1",
-        "gpt-5-mini",
+        "gpt-5.2",
+        ("gpt-5.2", "gpt-5-mini"),
         ("analysis", "coding", "vision"),
+        "https://platform.openai.com/docs/api-reference/models",
     ),
     "anthropic": ProviderDefinition(
         "anthropic",
@@ -40,15 +44,19 @@ PROVIDERS: dict[str, ProviderDefinition] = {
         "anthropic",
         "https://api.anthropic.com/v1",
         "claude-sonnet-4-5",
+        ("claude-sonnet-4-5", "claude-haiku-4-5"),
         ("analysis", "coding", "vision"),
+        "https://docs.anthropic.com/en/api/models-list",
     ),
     "gemini": ProviderDefinition(
         "gemini",
         "Google Gemini",
         "gemini",
         "https://generativelanguage.googleapis.com/v1beta",
-        "gemini-2.5-flash",
+        "gemini-3.6-flash",
+        ("gemini-3.6-flash", "gemini-3.5-flash", "gemini-2.5-pro", "gemini-2.5-flash"),
         ("analysis", "vision"),
+        "https://ai.google.dev/gemini-api/docs/models",
     ),
     "deepseek": ProviderDefinition(
         "deepseek",
@@ -56,23 +64,29 @@ PROVIDERS: dict[str, ProviderDefinition] = {
         "openai",
         "https://api.deepseek.com/v1",
         "deepseek-chat",
+        ("deepseek-chat", "deepseek-reasoner"),
         ("analysis", "coding"),
+        "https://api-docs.deepseek.com/quick_start/pricing",
     ),
     "qwen": ProviderDefinition(
         "qwen",
         "阿里云百炼（通义千问）",
         "openai",
         "https://dashscope.aliyuncs.com/compatible-mode/v1",
-        "qwen-plus",
-        ("analysis", "coding"),
+        "qwen3.7-plus",
+        ("qwen3.7-max", "qwen3.7-plus", "qwen3.6-plus"),
+        ("analysis", "coding", "vision"),
+        "https://help.aliyun.com/zh/model-studio/base-url",
     ),
     "openrouter": ProviderDefinition(
         "openrouter",
         "OpenRouter",
         "openai",
         "https://openrouter.ai/api/v1",
-        "openai/gpt-5-mini",
+        "openai/gpt-5.2",
+        ("openai/gpt-5.2", "anthropic/claude-sonnet-4.5", "google/gemini-3.6-flash-preview"),
         ("analysis", "coding", "vision"),
+        "https://openrouter.ai/docs/quickstart",
     ),
     "siliconflow": ProviderDefinition(
         "siliconflow",
@@ -80,7 +94,69 @@ PROVIDERS: dict[str, ProviderDefinition] = {
         "openai",
         "https://api.siliconflow.cn/v1",
         "deepseek-ai/DeepSeek-V3",
+        ("deepseek-ai/DeepSeek-V3", "deepseek-ai/DeepSeek-R1", "Qwen/Qwen3-32B"),
         ("analysis", "coding"),
+        "https://docs.siliconflow.cn/cn/api-reference/chat-completions/chat-completions",
+    ),
+    "zhipu": ProviderDefinition(
+        "zhipu",
+        "智谱 AI（GLM）",
+        "openai",
+        "https://open.bigmodel.cn/api/paas/v4",
+        "glm-4.7",
+        ("glm-4.7", "glm-4.5-air", "glm-4.5-flash"),
+        ("analysis", "coding", "vision"),
+        "https://open.bigmodel.cn/dev/api",
+    ),
+    "moonshot": ProviderDefinition(
+        "moonshot",
+        "Moonshot AI（月之暗面）",
+        "openai",
+        "https://api.moonshot.cn/v1",
+        "kimi-k2.5",
+        ("kimi-k2.5", "kimi-k2-turbo-preview", "moonshot-v1-32k"),
+        ("analysis", "coding"),
+        "https://platform.moonshot.cn/docs/api-reference",
+    ),
+    "minimax": ProviderDefinition(
+        "minimax",
+        "MiniMax",
+        "openai",
+        "https://api.minimaxi.com/v1",
+        "MiniMax-M2.7",
+        ("MiniMax-M2.7", "MiniMax-M2.7-highspeed", "MiniMax-M2.5"),
+        ("analysis", "coding"),
+        "https://platform.minimaxi.com/docs/api-reference/text-chat-openai",
+    ),
+    "groq": ProviderDefinition(
+        "groq",
+        "Groq",
+        "openai",
+        "https://api.groq.com/openai/v1",
+        "openai/gpt-oss-120b",
+        ("openai/gpt-oss-120b", "openai/gpt-oss-20b", "qwen/qwen3.6-27b"),
+        ("analysis", "coding"),
+        "https://console.groq.com/docs/openai",
+    ),
+    "xai": ProviderDefinition(
+        "xai",
+        "xAI（Grok）",
+        "openai",
+        "https://api.x.ai/v1",
+        "grok-4.3-latest",
+        ("grok-4.3-latest", "grok-latest", "grok-420-reasoning"),
+        ("analysis", "coding", "vision"),
+        "https://docs.x.ai/developers/rest-api-reference/inference/chat",
+    ),
+    "perplexity": ProviderDefinition(
+        "perplexity",
+        "Perplexity",
+        "openai",
+        "https://api.perplexity.ai/v1",
+        "sonar",
+        ("sonar", "sonar-pro"),
+        ("analysis",),
+        "https://docs.perplexity.ai/docs/agent-api/openai-compatibility",
     ),
     "ollama": ProviderDefinition(
         "ollama",
@@ -88,11 +164,14 @@ PROVIDERS: dict[str, ProviderDefinition] = {
         "ollama",
         "http://127.0.0.1:11434",
         "qwen3:8b",
+        ("qwen3:8b", "llama3.3:70b", "deepseek-r1:8b"),
         ("analysis", "coding"),
+        "https://docs.ollama.com/api",
         False,
     ),
     "openai_compatible": ProviderDefinition(
-        "openai_compatible", "自定义 OpenAI 兼容服务", "openai", "", "", ("analysis", "coding")
+        "openai_compatible", "自定义 OpenAI 兼容服务", "openai", "", "",
+        (), ("analysis", "coding"), "https://platform.openai.com/docs/api-reference/chat",
     ),
 }
 
@@ -389,7 +468,9 @@ def provider_catalog() -> list[dict[str, Any]]:
             "protocol": item.protocol,
             "defaultBaseUrl": item.default_base_url,
             "defaultModel": item.default_model,
+            "recommendedModels": item.recommended_models,
             "capabilities": item.capabilities,
+            "documentationUrl": item.documentation_url,
             "requiresApiKey": item.requires_api_key,
         }
         for item in PROVIDERS.values()
