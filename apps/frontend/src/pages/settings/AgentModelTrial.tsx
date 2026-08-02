@@ -9,6 +9,21 @@ type ModelReply = {
   content: string;
 };
 
+const promptTemplates: Record<string, { label: string; prompt: string }[]> = {
+  orchestrator_agent: [
+    { label: '拆解任务', prompt: '请将以下任务拆解为可审计的执行步骤，列出依赖、风险与验收标准：\n\n' },
+    { label: '梳理风险', prompt: '请评估以下工作项的执行风险，按高、中、低分级，并给出不涉及实际操作的缓解建议：\n\n' },
+  ],
+  review_agent: [
+    { label: '结构化复盘', prompt: '请基于以下材料进行复盘，分别列出已知事实、合理假设、数据缺口和待验证项：\n\n' },
+    { label: '检查缺口', prompt: '请检查以下结论是否有证据缺口或逻辑跳跃，并给出需要补充验证的信息：\n\n' },
+  ],
+  doc_agent: [
+    { label: '整理说明', prompt: '请将以下内容整理为中文说明文档，包含标题、摘要、要点和待确认事项：\n\n' },
+    { label: '生成摘要', prompt: '请将以下内容压缩为面向项目使用者的简明摘要，保留事实与不确定性：\n\n' },
+  ],
+};
+
 export default function AgentModelTrial({ bindings, onCompleted }: { bindings: AgentModelBinding[]; onCompleted: () => void }) {
   const availableBindings = bindings.filter((binding) => binding.enabled && binding.providerEnabled);
   const [agentCode, setAgentCode] = useState('');
@@ -17,6 +32,7 @@ export default function AgentModelTrial({ bindings, onCompleted }: { bindings: A
   const [reply, setReply] = useState<ModelReply | null>(null);
 
   const selected = availableBindings.find((binding) => binding.agentCode === agentCode) ?? availableBindings[0];
+  const templates = selected ? promptTemplates[selected.agentCode] ?? [] : [];
 
   const run = async () => {
     if (!selected) {
@@ -54,6 +70,13 @@ export default function AgentModelTrial({ bindings, onCompleted }: { bindings: A
           {binding.agentName} · {binding.providerName} · {binding.model}
         </option>)}
       </select>
+      <div className="agent-model-template-group" aria-label="快捷任务模板">
+        <span>快捷模板</span>
+        <div className="agent-model-template-list">
+          {templates.map((template) => <button key={template.label} type="button" className="agent-model-template"
+            onClick={() => setPrompt(template.prompt)}>{template.label}</button>)}
+        </div>
+      </div>
       <label className="fqp-label" htmlFor="agent-model-trial-prompt">试运行内容</label>
       <textarea id="agent-model-trial-prompt" className="fqp-input agent-model-trial-input" maxLength={8000}
         value={prompt} onChange={(event) => setPrompt(event.target.value)}
