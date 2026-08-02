@@ -57,9 +57,7 @@ ALIASES = {
 }
 
 
-def _upsert_alias(
-    cur: Any, team_id: int, source_name: str, alias_name: str
-) -> tuple[int, int]:
+def _upsert_alias(cur: Any, team_id: int, source_name: str, alias_name: str) -> tuple[int, int]:
     cur.execute(
         """
         INSERT INTO team_aliases (

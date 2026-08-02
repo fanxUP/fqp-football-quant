@@ -11,8 +11,8 @@ from apps.backend.src.auth import (
     COOKIE_NAME,
     create_session,
     destroy_session,
-    verify_password,
     validate_session,
+    verify_password,
 )
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -85,6 +85,7 @@ async def change_password(body: ChangePasswordRequest, request: Request) -> dict
         raise HTTPException(status_code=400, detail="密码至少4位")
 
     import bcrypt
+
     new_hash = bcrypt.hashpw(body.new_password.encode("utf-8"), bcrypt.gensalt(rounds=12)).decode()
 
     # Update .env.local

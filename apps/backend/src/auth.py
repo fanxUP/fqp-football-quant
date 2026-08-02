@@ -40,7 +40,7 @@ def verify_password(password: str) -> bool:
         return False
     try:
         return bcrypt.checkpw(password.encode("utf-8"), stored_hash.encode("utf-8"))
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         return False
 
 
@@ -63,7 +63,8 @@ async def create_session(response: Response) -> str:
 async def validate_session(session_id: str) -> str | None:
     """Validate a session ID. Returns username if valid, None otherwise."""
     r = await get_redis()
-    user: str | None = await r.get(f"session:{session_id}")
+    raw_user = await r.get(f"session:{session_id}")
+    user: str | None = raw_user.decode() if isinstance(raw_user, bytes) else raw_user
     if user is not None:
         # Refresh TTL on each access
         await r.expire(f"session:{session_id}", SESSION_TTL)

@@ -8,9 +8,9 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 
 from apps.backend.src.auth import AuthMiddleware
 from apps.backend.src.routers import (
-    auth_router,
     agents,
     analysis,
+    auth_router,
     backtests,
     betting,
     competition,

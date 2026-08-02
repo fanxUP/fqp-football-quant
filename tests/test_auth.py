@@ -15,7 +15,13 @@ from main import app
 class TestPasswordVerification:
     def test_random_hash_rejects_wrong_password(self):
         """verify_password returns False for wrong password with a random hash."""
-        with patch.dict(os.environ, {"FQP_ADMIN_PASSWORD_HASH": "$2b$12$LJ3m4ys3Lk0TSwHnbfOMiOXPm1Qlq5y0q5z5q5z5q5z5q5z5q5z5O"}, clear=False):
+        with patch.dict(
+            os.environ,
+            {
+                "FQP_ADMIN_PASSWORD_HASH": "$2b$12$LJ3m4ys3Lk0TSwHnbfOMiOXPm1Qlq5y0q5z5q5z5q5z5q5z5q5z5O"
+            },
+            clear=False,
+        ):
             assert not verify_password("wrong")
 
     def test_wrong_password(self):
@@ -30,6 +36,7 @@ class TestPasswordVerification:
     def test_known_hash(self):
         """Verify that password 123 matches a known hash."""
         import bcrypt
+
         expected = bcrypt.hashpw(b"123", bcrypt.gensalt(rounds=4))
         with patch.dict(os.environ, {"FQP_ADMIN_PASSWORD_HASH": expected.decode()}, clear=False):
             assert verify_password("123")

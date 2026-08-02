@@ -19,9 +19,6 @@ def test_tag_errors_uses_atomic_upsert_for_concurrent_runs():
 
     query = " ".join(write_cursor.execute.call_args.args[0].split())
     params = write_cursor.execute.call_args.args[1]
-    assert (
-        "ON CONFLICT (prediction_id) WHERE prediction_id IS NOT NULL DO UPDATE"
-        in query
-    )
+    assert "ON CONFLICT (prediction_id) WHERE prediction_id IS NOT NULL DO UPDATE" in query
     assert params["tag"] == "赔率过热、模型概率偏高"
     assert result["tagged"] == 1

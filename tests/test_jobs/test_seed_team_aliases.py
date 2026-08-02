@@ -20,8 +20,7 @@ def test_verified_api_alias_is_repointed_to_current_sporttery_team():
         if "INSERT INTO team_aliases" in call.args[0]
     )
     assert (
-        "ON CONFLICT (source_name, alias_name) DO UPDATE SET "
-        "team_id = EXCLUDED.team_id"
+        "ON CONFLICT (source_name, alias_name) DO UPDATE SET team_id = EXCLUDED.team_id"
     ) in insert_query
     assert result["aliases_added"] == 0
     assert result["aliases_updated"] > 0

@@ -9,6 +9,7 @@ import Sidebar, { normalizeSidebarIcon } from './Sidebar';
 let mockTheme = 'redline-quant';
 const mockToggleTheme = vi.fn();
 const mockNavigate = vi.fn();
+const mockLogout = vi.fn();
 const { mockRuntimePanels } = vi.hoisted(() => ({
   mockRuntimePanels: vi.fn(),
 }));
@@ -16,6 +17,10 @@ let mockCurrentPath = '/';
 
 vi.mock('../../app/ThemeContext', () => ({
   useTheme: () => ({ theme: mockTheme, toggleTheme: mockToggleTheme }),
+}));
+
+vi.mock('../AuthContext', () => ({
+  useAuth: () => ({ user: 'admin', isLoading: false, login: vi.fn(), logout: mockLogout }),
 }));
 
 vi.mock('../../core/router', () => ({

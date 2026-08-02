@@ -3,6 +3,11 @@ import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import App from './App';
 
+vi.mock('./app/AuthContext', () => ({
+  AuthProvider: ({ children }: { children: ReactNode }) => children,
+  useAuth: () => ({ user: 'admin', isLoading: false, login: vi.fn(), logout: vi.fn() }),
+}));
+
 vi.mock('./app/layout/Layout', () => ({
   default: ({ children }: { children: ReactNode }) => <main>{children}</main>,
 }));

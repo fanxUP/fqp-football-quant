@@ -130,13 +130,15 @@ describe('UpsetsPage', () => {
   it('使用联赛折叠菜单整理冷门比赛', async () => {
     render(<UpsetsPage />);
 
+    // 顶部「全部冷门」平铺列表默认展示所有比赛
+    expect(await screen.findByText('主队 1:2 客队')).toBeInTheDocument();
+
+    // 联赛分组默认全部收起，点击后展开
     const leagueButton = await screen.findByRole('button', { name: '测试联赛，1场' });
-    expect(leagueButton).toHaveAttribute('aria-expanded', 'true');
-    expect(screen.getByText('主队 1:2 客队')).toBeInTheDocument();
+    expect(leagueButton).toHaveAttribute('aria-expanded', 'false');
 
     fireEvent.click(leagueButton);
-    expect(leagueButton).toHaveAttribute('aria-expanded', 'false');
-    expect(screen.queryByText('主队 1:2 客队')).not.toBeInTheDocument();
+    expect(leagueButton).toHaveAttribute('aria-expanded', 'true');
 
     fireEvent.click(screen.getByRole('button', { name: '全部展开' }));
     expect(leagueButton).toHaveAttribute('aria-expanded', 'true');

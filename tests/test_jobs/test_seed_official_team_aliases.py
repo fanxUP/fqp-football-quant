@@ -33,8 +33,7 @@ def test_official_and_sporttery_aliases_share_exact_team_identity():
     assert "ta.source_name = 'sporttery'" in identity_query
     assert alias_sources == {"official_standings", "sporttery"}
     assert (
-        "ON CONFLICT (source_name, alias_name) DO UPDATE SET "
-        "team_id = EXCLUDED.team_id"
+        "ON CONFLICT (source_name, alias_name) DO UPDATE SET team_id = EXCLUDED.team_id"
     ) in insert_query
     assert result["aliases_inserted"] == 0
     assert result["aliases_updated"] > 0
