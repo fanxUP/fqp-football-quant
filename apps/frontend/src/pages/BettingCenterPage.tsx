@@ -3,6 +3,7 @@ import PageHeader from '../shared/components/PageHeader';
 import BettingTerminalPage from './BettingTerminalPage';
 import TicketsPage from './TicketsPage';
 import CompetitionPage from './CompetitionPage';
+import { useLanguage } from '../app/LanguageContext';
 
 type BettingTab = 'bet-slip' | 'tickets' | 'competition';
 
@@ -23,6 +24,7 @@ function readTabFromHash(): BettingTab | null {
 }
 
 export default function BettingCenterPage({ initialTab = 'bet-slip' }: BettingCenterPageProps) {
+  const { translate } = useLanguage();
   const [activeTab, setActiveTab] = useState<BettingTab>(() => readTabFromHash() ?? initialTab);
 
   useEffect(() => {
@@ -41,14 +43,14 @@ export default function BettingCenterPage({ initialTab = 'bet-slip' }: BettingCe
   return (
     <div className="betting-center-page">
       <PageHeader
-        title="投注中心"
-        subtitle="投注台生成票，彩票管理票，比赛结果看结算与盈亏"
+        title={translate('投注中心')}
+        subtitle={translate('投注台生成票，彩票管理票，比赛结果看结算与盈亏')}
       />
 
       <div
         className="betting-center-tabs"
         role="tablist"
-        aria-label="投注中心视图"
+        aria-label={translate('投注中心视图')}
       >
         {TABS.map((tab) => {
           const selected = tab.code === activeTab;
@@ -63,13 +65,13 @@ export default function BettingCenterPage({ initialTab = 'bet-slip' }: BettingCe
               onClick={() => switchTab(tab.code)}
             >
               <span className="betting-center-tab-label">
-                {tab.label}
+                {translate(tab.label)}
               </span>
               <span className="betting-center-tab-description">
-                {tab.description}
+                {translate(tab.description)}
               </span>
               <span className="betting-center-tab-action" aria-hidden="true">
-                点击进入 <span>→</span>
+                {translate('点击进入')} <span>→</span>
               </span>
             </button>
           );

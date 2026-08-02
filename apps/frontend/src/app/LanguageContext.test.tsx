@@ -14,6 +14,7 @@ function LanguageProbe() {
         <option value="en">English</option>
       </select>
       <output>{translate('加载失败')}</output>
+      <output>{translate('投注台')}</output>
     </label>
   );
 }
@@ -36,5 +37,6 @@ describe('LanguageProvider', () => {
     expect(document.documentElement.lang).toBe('en');
     expect(localStorage.getItem(LANGUAGE_STORAGE_KEY)).toBe('en');
     expect(screen.getByText('Failed to load')).toBeInTheDocument();
+    expect(screen.getByText('Betting terminal')).toBeInTheDocument();
   });
 });
