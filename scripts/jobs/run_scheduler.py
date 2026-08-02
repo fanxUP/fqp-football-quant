@@ -11,7 +11,7 @@ from __future__ import annotations
 import os
 import time
 from collections.abc import Callable
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from datetime import time as clock_time
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -22,6 +22,10 @@ OFFICIAL_SCHEDULE_CRON = {"minute": "10,40"}
 # Run five minutes after each schedule refresh so newly sellable matches have
 # official markets and odds available before the prediction snapshot is written.
 MODEL_PREDICTION_CRON = {"minute": "15,45"}
+# The full-season calibration can make many official requests. If its primary
+# run is interrupted by a transient upstream TLS/network failure, make only one
+# delayed retry rather than polling or repeatedly re-running the whole catalog.
+SEASON_RECONCILIATION_RETRY_TIME = clock_time(hour=1, minute=5)
 STARTUP_RECOVERY_JOB_CODES = (
     "seed_agent_registry",
     "seed_api_football_registry",
@@ -92,6 +96,53 @@ def _official_source_enabled() -> bool:
 def _odds_dispatch_owner() -> str:
     """Keep the Worker as the single high-frequency odds dispatcher."""
     return os.getenv("FQP_ODDS_DISPATCH_OWNER", "scheduler").lower()
+
+
+def _should_retry_season_reconciliation(
+    now: datetime, status: str | None, finished_at: datetime | None
+) -> bool:
+    """Allow one same-day retry only after the primary calibration failed."""
+    if str(status or "").lower() not in {"failed", "error"} or finished_at is None:
+        return False
+    if finished_at.tzinfo is None:
+        finished_at = finished_at.replace(tzinfo=UTC)
+    else:
+        finished_at = finished_at.astimezone(UTC)
+    return finished_at.astimezone(now.tzinfo).date() == now.date()
+
+
+def _last_season_reconciliation_run() -> tuple[str | None, datetime | None]:
+    """Read the primary run outcome without creating a retry audit row."""
+    from apps.backend.src.db import get_db
+
+    with get_db() as conn, conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT status, finished_at
+            FROM ai_job_runs
+            WHERE job_code = %s
+            ORDER BY id DESC
+            LIMIT 1
+            """,
+            ("reconcile_event_seasons",),
+        )
+        row = cur.fetchone()
+    return (str(row[0]), row[1]) if row else (None, None)
+
+
+def _run_season_reconciliation_retry() -> None:
+    """Run the single delayed retry only when today's primary run failed."""
+    now = _business_now()
+    status, finished_at = _last_season_reconciliation_run()
+    if not _should_retry_season_reconciliation(now, status, finished_at):
+        print("[scheduler] season reconciliation retry skipped: primary run is not failed today")
+        return
+    _audited_job(
+        "reconcile_event_seasons",
+        "赛事中心赛季校准（补跑）",
+        "crawler_agent",
+        lambda: __import__("scripts.jobs.reconcile_event_seasons", fromlist=["run"]).run(),
+    )()
 
 
 def _audited_job(
@@ -245,6 +296,16 @@ def main() -> None:
                 hour=0,
                 minute=5,
                 id="reconcile_event_seasons",
+            )
+
+            # One guarded retry an hour later handles temporary upstream TLS
+            # failures without increasing normal-day traffic.
+            scheduler.add_job(
+                _run_season_reconciliation_retry,
+                "cron",
+                hour=SEASON_RECONCILIATION_RETRY_TIME.hour,
+                minute=SEASON_RECONCILIATION_RETRY_TIME.minute,
+                id="reconcile_event_seasons_retry",
             )
 
             # Every 30 min: refresh official matches, sale states, and pool permissions.

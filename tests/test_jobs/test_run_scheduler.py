@@ -1,5 +1,5 @@
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, time as clock_time, timedelta
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -7,11 +7,13 @@ from apps.backend.src.services.pipeline_status import JOB_DEFINITIONS
 from scripts.jobs.run_scheduler import (
     MODEL_PREDICTION_CRON,
     OFFICIAL_SCHEDULE_CRON,
+    SEASON_RECONCILIATION_RETRY_TIME,
     STARTUP_RECOVERY_JOB_CODES,
     _audited_job,
     _business_now,
     _odds_dispatch_owner,
     _scheduler_timezone_name,
+    _should_retry_season_reconciliation,
     _should_run_recommendation_catchup,
 )
 
@@ -99,6 +101,27 @@ def test_scheduler_reconciles_numbered_event_seasons_before_schedule_refresh():
     assert source.index('id="reconcile_event_seasons"') < source.index(
         'id="crawl_official_schedule"'
     )
+
+
+def test_season_reconciliation_retry_is_limited_to_one_delayed_daily_run():
+    source = Path("scripts/jobs/run_scheduler.py").read_text()
+
+    assert SEASON_RECONCILIATION_RETRY_TIME == clock_time(hour=1, minute=5)
+    assert 'id="reconcile_event_seasons_retry"' in source
+
+
+def test_season_reconciliation_retry_requires_a_failed_primary_run_today():
+    now = datetime.fromisoformat("2026-08-02T01:05:00+08:00")
+
+    assert _should_retry_season_reconciliation(
+        now, "failed", datetime.fromisoformat("2026-08-02T00:05:20+08:00")
+    ) is True
+    assert _should_retry_season_reconciliation(
+        now, "completed", datetime.fromisoformat("2026-08-02T00:05:20+08:00")
+    ) is False
+    assert _should_retry_season_reconciliation(
+        now, "failed", datetime.fromisoformat("2026-08-01T00:05:20+08:00")
+    ) is False
 
 
 def test_scheduler_refreshes_official_schedule_metadata_every_30_minutes():
