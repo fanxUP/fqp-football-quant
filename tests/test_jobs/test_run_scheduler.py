@@ -211,6 +211,11 @@ def test_naive_bayes_shadow_training_runs_after_random_forest_without_promotion(
     )
 
 
+def test_svm_shadow_training_runs_after_naive_bayes_without_promotion():
+    source = Path("scripts/jobs/run_scheduler.py").read_text()
+    assert source.index('id="train_naive_bayes_shadow"') < source.index('id="train_svm_shadow"')
+
+
 def test_scheduler_detects_upsets_after_results_and_ticket_settlement():
     source = Path("scripts/jobs/run_scheduler.py").read_text()
 

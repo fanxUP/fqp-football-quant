@@ -27,6 +27,7 @@ PREDICTION_MODEL_CODES = (
     "bayesian_form",
     "random_forest_shadow",
     "naive_bayes_shadow",
+    "svm_shadow",
 )
 
 # Play type display names

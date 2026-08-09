@@ -47,6 +47,7 @@ from scripts.poisson_model import (
 from scripts.random_forest_shadow_model import (
     load_probabilities as load_random_forest_shadow_probabilities,
 )
+from scripts.svm_shadow_model import load_probabilities as load_svm_shadow_probabilities
 from scripts.xgboost_shadow_model import load_probabilities as load_xgboost_shadow_probabilities
 
 # Dixon-Coles rho — hardcoded until historical results enable MLE.
@@ -178,6 +179,12 @@ def _load_naive_bayes_shadow_probabilities(
     return load_naive_bayes_shadow_probabilities(
         model_parameters.get("naive_bayes_shadow"), feature_snapshot
     )
+
+
+def _load_svm_shadow_probabilities(
+    model_parameters: dict[str, dict[str, Any]], feature_snapshot: dict[str, Any]
+) -> dict[str, float] | None:
+    return load_svm_shadow_probabilities(model_parameters.get("svm_shadow"), feature_snapshot)
 
 
 def _load_bayesian_form_probabilities(
@@ -776,6 +783,14 @@ def _predict_match_play_type(
         naive_bayes_1x2 = dict(market_probs)
 
     try:
+        trained_svm = _load_svm_shadow_probabilities(model_parameters, feature_snapshot or {})
+        svm_is_independent = trained_svm is not None
+        svm_1x2 = trained_svm or dict(market_probs)
+    except Exception:
+        svm_is_independent = False
+        svm_1x2 = dict(market_probs)
+
+    try:
         trained_bayesian_form = _load_bayesian_form_probabilities(conn, mid, feature_snapshot)
         bayesian_form_is_independent = trained_bayesian_form is not None
         bayesian_form_1x2 = trained_bayesian_form or dict(market_probs)
@@ -801,6 +816,7 @@ def _predict_match_play_type(
         "bayesian_form": (bayesian_form_1x2, bayesian_form_1x2),
         "random_forest_shadow": (random_forest_1x2, random_forest_1x2),
         "naive_bayes_shadow": (naive_bayes_1x2, naive_bayes_1x2),
+        "svm_shadow": (svm_1x2, svm_1x2),
     }
     model_independence = {
         "market_baseline": False,
@@ -814,6 +830,7 @@ def _predict_match_play_type(
         "bayesian_form": bayesian_form_is_independent,
         "random_forest_shadow": random_forest_is_independent,
         "naive_bayes_shadow": naive_bayes_is_independent,
+        "svm_shadow": svm_is_independent,
     }
 
     total_p = derived_predictions
@@ -858,6 +875,7 @@ def _predict_match_play_type(
                     bayesian_form_1x2.get(opt_code, 0),
                     random_forest_1x2.get(opt_code, 0),
                     naive_bayes_1x2.get(opt_code, 0),
+                    svm_1x2.get(opt_code, 0),
                 ]
             )
 
@@ -918,6 +936,7 @@ def _predict_match_play_type(
                     "bayesian_form_based": model_name == "bayesian_form",
                     "random_forest_shadow_based": model_name == "random_forest_shadow",
                     "naive_bayes_shadow_based": model_name == "naive_bayes_shadow",
+                    "svm_shadow_based": model_name == "svm_shadow",
                     "rollout_mode": rollout_modes.get(model_name, "live"),
                     "model_independent": model_independence[model_name],
                     "feature_adjustment": {

@@ -832,6 +832,11 @@ def main() -> None:
                 "cron", hour=23, minute=56, id="train_naive_bayes_shadow",
             )
 
+            scheduler.add_job(
+                _audited_job("train_svm_shadow", "支持向量机特征模型影子训练", "model_agent", lambda: __import__("scripts.jobs.train_svm_shadow", fromlist=["run"]).run()),
+                "cron", hour=23, minute=59, id="train_svm_shadow",
+            )
+
             # Weekly on Sunday at 04:00: run full backtest
             scheduler.add_job(
                 _audited_job(
