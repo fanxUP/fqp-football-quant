@@ -13,6 +13,7 @@ from apps.backend.src.services.agent_workspace_store import (
 )
 from apps.backend.src.services.model_gateway import invoke_agent_model
 from apps.backend.src.services.model_invocation_audit import record_model_invocation
+from apps.backend.src.services.model_provider_store import list_agent_model_bindings
 
 POST_MATCH_REPORT_AGENT = "post_match_report_agent"
 POST_MATCH_REPORT_AUTOMATION_KEY = "post_match_report"
@@ -28,6 +29,51 @@ def is_post_match_report_automation_enabled(conn: Any) -> bool:
         )
         row = cur.fetchone()
     return bool(row and row[0])
+
+
+def get_post_match_report_automation(conn: Any) -> dict[str, Any]:
+    """Expose only safe automation status and the selected Agent readiness."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT enabled FROM report_automation_settings WHERE setting_key = %s",
+            (POST_MATCH_REPORT_AUTOMATION_KEY,),
+        )
+        row = cur.fetchone()
+    binding = next(
+        (
+            item for item in list_agent_model_bindings(conn)
+            if item["agentCode"] == POST_MATCH_REPORT_AGENT
+        ),
+        None,
+    )
+    return {
+        "enabled": bool(row and row[0]),
+        "agentCode": POST_MATCH_REPORT_AGENT,
+        "agentReady": bool(
+            binding
+            and binding["enabled"]
+            and binding["providerEnabled"]
+            and binding["providerTestStatus"] == "passed"
+        ),
+        "providerName": binding["providerName"] if binding else None,
+        "model": binding["model"] if binding else None,
+    }
+
+
+def set_post_match_report_automation(conn: Any, enabled: bool) -> dict[str, Any]:
+    """Persist explicit opt-in only when the dedicated Agent is ready."""
+    current = get_post_match_report_automation(conn)
+    if enabled and not current["agentReady"]:
+        raise ValueError("请先启用并测试自动赛后报告 Agent")
+    with conn.cursor() as cur:
+        cur.execute(
+            """INSERT INTO report_automation_settings (setting_key, enabled, updated_at)
+               VALUES (%s, %s, now())
+               ON CONFLICT (setting_key) DO UPDATE SET enabled = EXCLUDED.enabled, updated_at = now()""",
+            (POST_MATCH_REPORT_AUTOMATION_KEY, enabled),
+        )
+    conn.commit()
+    return {**current, "enabled": enabled}
 
 
 def _build_prompt(source_type: str, source_ref: str, snapshot: Mapping[str, Any]) -> str:

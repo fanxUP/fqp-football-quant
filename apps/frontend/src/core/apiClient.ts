@@ -83,6 +83,14 @@ export interface ModelInvocationAudit {
   createdAt: string | null;
 }
 
+export interface ReportAutomationState {
+  enabled: boolean;
+  agentCode: string;
+  agentReady: boolean;
+  providerName: string | null;
+  model: string | null;
+}
+
 export interface AgentWorkspaceTask {
   id: number;
   title: string;
@@ -298,6 +306,13 @@ export const api = {
     invocations: (limit = 30) => request<{ invocations: ModelInvocationAudit[]; total: number }>(
       `/api/model-providers/invocations?limit=${limit}`,
     ),
+  },
+
+  reportAutomation: {
+    get: () => request<{ automation: ReportAutomationState }>('/api/report-automation'),
+    save: (enabled: boolean) => request<{ automation: ReportAutomationState }>('/api/report-automation', {
+      method: 'PUT', body: JSON.stringify({ enabled }),
+    }),
   },
 
   agentWorkspace: {

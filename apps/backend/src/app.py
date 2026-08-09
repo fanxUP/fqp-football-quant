@@ -24,6 +24,7 @@ from apps.backend.src.routers import (
     ops,
     pool,
     predictions,
+    report_automation,
     simulator,
     teams,
     tickets,
@@ -69,6 +70,7 @@ def create_app() -> FastAPI:
     app.include_router(agents.router)
     app.include_router(agent_workspace.router)
     app.include_router(agent_interpretations.router)
+    app.include_router(report_automation.router)
     app.include_router(enrichment.router)
     app.include_router(ops.router)
     app.include_router(model_providers.router)

@@ -15,6 +15,7 @@ import BusinessInterpretationPanel from './agent-workspace/BusinessInterpretatio
 import PlayTypeWinRateChart from './reviews/PlayTypeWinRateChart';
 import RealProfitLossChart from './reviews/RealProfitLossChart';
 import MatchReviewCards from './reviews/MatchReviewCards';
+import ReportAutomationPanel from './reviews/ReportAutomationPanel';
 
 type TabKey = 'daily' | 'weekly' | 'monthly' | 'settlements' | 'errors';
 
@@ -28,6 +29,7 @@ export default function ReviewsPage({ embedded = false }: ReviewsPageProps) {
   return (
     <div>
       {!embedded && <PageHeader title="复盘与报告" subtitle="基于已结算彩票、官方赛果与归档预测的只读复盘" />}
+      {!embedded && <ReportAutomationPanel />}
       <div className="fqp-tabs">
         {([
           ['daily', '日报'],
