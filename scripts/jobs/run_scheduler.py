@@ -857,6 +857,11 @@ def main() -> None:
                 "cron", hour=0, minute=11, id="train_adaboost_shadow",
             )
 
+            scheduler.add_job(
+                _audited_job("train_lda_shadow", "LDA 特征模型影子训练", "model_agent", lambda: __import__("scripts.jobs.train_lda_shadow", fromlist=["run"]).run()),
+                "cron", hour=0, minute=14, id="train_lda_shadow",
+            )
+
             # Weekly on Sunday at 04:00: run full backtest
             scheduler.add_job(
                 _audited_job(

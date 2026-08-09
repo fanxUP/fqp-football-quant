@@ -134,6 +134,9 @@ JOB_DEFINITIONS: dict[str, JobDefinition] = {
     "train_adaboost_shadow": JobDefinition(
         "AdaBoost 特征模型影子训练", "每日 00:11", "model", max_age=timedelta(hours=30)
     ),
+    "train_lda_shadow": JobDefinition(
+        "LDA 特征模型影子训练", "每日 00:14", "model", max_age=timedelta(hours=30)
+    ),
     "backtest": JobDefinition(
         "全量回测执行", "每周日 04:07", "model", ("run_backtest",), timedelta(days=8)
     ),

@@ -192,6 +192,14 @@ def test_scheduler_registers_adaboost_after_hist_gradient_boosting() -> None:
     assert JOB_DEFINITIONS["train_adaboost_shadow"].schedule == "每日 00:11"
 
 
+def test_scheduler_registers_lda_after_adaboost() -> None:
+    source = Path("scripts/jobs/run_scheduler.py").read_text()
+
+    assert 'id="train_lda_shadow"' in source
+    assert source.index('id="train_adaboost_shadow"') < source.index('id="train_lda_shadow"')
+    assert JOB_DEFINITIONS["train_lda_shadow"].schedule == "每日 00:14"
+
+
 def test_probability_calibration_is_scheduled_after_metrics_as_shadow_only():
     source = Path("scripts/jobs/run_scheduler.py").read_text()
 

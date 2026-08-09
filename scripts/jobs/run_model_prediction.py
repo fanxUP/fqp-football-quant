@@ -34,6 +34,7 @@ from scripts.glicko2_model import predict_1x2 as glicko2_predict_1x2
 from scripts.hist_gradient_boosting_shadow_model import (
     load_probabilities as load_hist_gradient_boosting_shadow_probabilities,
 )
+from scripts.lda_shadow_model import load_probabilities as load_lda_shadow_probabilities
 from scripts.logistic_shadow_model import load_probabilities as load_logistic_shadow_probabilities
 from scripts.market_metric_validation import MarketMetricValidationError, validate_market
 from scripts.model_storage import store_committee_vote, store_model_prediction
@@ -226,6 +227,14 @@ def _load_adaboost_shadow_probabilities(
 ) -> dict[str, float] | None:
     """Use AdaBoost only after its persisted temporal validation exists."""
     return load_adaboost_shadow_probabilities(model_parameters.get("adaboost_shadow"), feature_snapshot)
+
+
+def _load_lda_shadow_probabilities(
+    model_parameters: dict[str, dict[str, Any]],
+    feature_snapshot: dict[str, Any] | None,
+) -> dict[str, float] | None:
+    """Use LDA only after its persisted temporal validation exists."""
+    return load_lda_shadow_probabilities(model_parameters.get("lda_shadow"), feature_snapshot)
 
 
 def _load_naive_bayes_shadow_probabilities(
@@ -890,6 +899,14 @@ def _predict_match_play_type(
         adaboost_1x2 = dict(market_probs)
 
     try:
+        trained_lda = _load_lda_shadow_probabilities(model_parameters, feature_snapshot)
+        lda_is_independent = trained_lda is not None
+        lda_1x2 = trained_lda or dict(market_probs)
+    except Exception:
+        lda_is_independent = False
+        lda_1x2 = dict(market_probs)
+
+    try:
         trained_naive_bayes = _load_naive_bayes_shadow_probabilities(model_parameters, feature_snapshot)
         naive_bayes_is_independent = trained_naive_bayes is not None
         naive_bayes_1x2 = trained_naive_bayes or dict(market_probs)
@@ -934,6 +951,7 @@ def _predict_match_play_type(
         "extra_trees_shadow": (extra_trees_1x2, extra_trees_1x2),
         "hist_gradient_boosting_shadow": (hist_gradient_boosting_1x2, hist_gradient_boosting_1x2),
         "adaboost_shadow": (adaboost_1x2, adaboost_1x2),
+        "lda_shadow": (lda_1x2, lda_1x2),
         "naive_bayes_shadow": (naive_bayes_1x2, naive_bayes_1x2),
         "svm_shadow": (svm_1x2, svm_1x2),
     }
@@ -952,6 +970,7 @@ def _predict_match_play_type(
         "extra_trees_shadow": extra_trees_is_independent,
         "hist_gradient_boosting_shadow": hist_gradient_boosting_is_independent,
         "adaboost_shadow": adaboost_is_independent,
+        "lda_shadow": lda_is_independent,
         "naive_bayes_shadow": naive_bayes_is_independent,
         "svm_shadow": svm_is_independent,
     }
@@ -1001,6 +1020,7 @@ def _predict_match_play_type(
                     extra_trees_1x2.get(opt_code, 0),
                     hist_gradient_boosting_1x2.get(opt_code, 0),
                     adaboost_1x2.get(opt_code, 0),
+                    lda_1x2.get(opt_code, 0),
                     naive_bayes_1x2.get(opt_code, 0),
                     svm_1x2.get(opt_code, 0),
                 ]
@@ -1066,6 +1086,7 @@ def _predict_match_play_type(
                     "extra_trees_shadow_based": model_name == "extra_trees_shadow",
                     "hist_gradient_boosting_shadow_based": model_name == "hist_gradient_boosting_shadow",
                     "adaboost_shadow_based": model_name == "adaboost_shadow",
+                    "lda_shadow_based": model_name == "lda_shadow",
                     "naive_bayes_shadow_based": model_name == "naive_bayes_shadow",
                     "svm_shadow_based": model_name == "svm_shadow",
                     "rollout_mode": rollout_modes.get(model_name, "live"),

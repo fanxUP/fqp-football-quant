@@ -11,6 +11,7 @@ export const MODEL_NAME_LABELS: Record<string, string> = {
   extra_trees_shadow: '极端随机树赛前特征模型',
   hist_gradient_boosting_shadow: '直方图梯度提升赛前特征模型',
   adaboost_shadow: 'AdaBoost 赛前特征模型',
+  lda_shadow: '线性判别分析（LDA）赛前特征模型',
 };
 
 export function modelNameLabel(code: string): string {

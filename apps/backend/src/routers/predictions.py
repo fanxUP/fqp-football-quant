@@ -29,6 +29,7 @@ PREDICTION_MODEL_CODES = (
     "extra_trees_shadow",
     "hist_gradient_boosting_shadow",
     "adaboost_shadow",
+    "lda_shadow",
     "naive_bayes_shadow",
     "svm_shadow",
     "negative_binomial_shadow",
