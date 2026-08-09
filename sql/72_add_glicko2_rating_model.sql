@@ -36,6 +36,11 @@ CREATE TABLE IF NOT EXISTS glicko2_update_logs (
     processed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+GRANT SELECT, INSERT, UPDATE, DELETE ON team_glicko2_ratings TO fqp;
+GRANT SELECT, INSERT, UPDATE, DELETE ON glicko2_update_logs TO fqp;
+GRANT USAGE, SELECT ON SEQUENCE team_glicko2_ratings_id_seq TO fqp;
+GRANT USAGE, SELECT ON SEQUENCE glicko2_update_logs_id_seq TO fqp;
+
 INSERT INTO model_versions (model_name, model_type, version, description, parameters_json, is_active)
 VALUES (
     'glicko2_rating',
