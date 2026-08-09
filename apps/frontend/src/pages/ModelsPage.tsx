@@ -10,6 +10,7 @@ import { modelNameLabel, optionLabel, playTypeLabel } from '../shared/constants'
 import TeamName from '../shared/components/TeamName';
 import ModelPerformanceCharts from '../visualization/ModelPerformanceCharts';
 import PredictionModelOverviewPanel from './PredictionModelOverviewPanel';
+import ModelPredictionGroups from './ModelPredictionGroups';
 
 export default function ModelsPage() {
   const [predictions, setPredictions] = useState<Prediction[]>([]);
@@ -332,13 +333,7 @@ export default function ModelsPage() {
         <ErrorState message={error} onRetry={() => window.location.reload()} />
       ) : (
         <Card style={{ padding: 0, overflow: 'hidden' }}>
-          <DataTable
-            columns={columns}
-            rows={predictions}
-            loading={loading}
-            emptyText="暂无模型预测数据，请先运行模型计算任务"
-            rowKey={(r) => String(r.id)}
-          />
+          {loading ? <DataTable columns={columns} rows={[]} loading /> : <ModelPredictionGroups columns={columns} predictions={predictions} />}
         </Card>
       )}
     </div>
