@@ -36,6 +36,13 @@ def test_periodic_reviews_generate_weekly_and_monthly_upset_reports():
     assert 'report_type="monthly"' in source
 
 
+def test_periodic_reviews_request_one_automatic_interpretation_per_completed_period():
+    source = Path("scripts/jobs/generate_periodic_reviews.py").read_text()
+
+    assert 'source_type="post_weekly"' in source
+    assert 'source_type="post_monthly"' in source
+
+
 def test_weekly_review_defers_without_writing_business_review(monkeypatch) -> None:
     from scripts.jobs import generate_periodic_reviews
 

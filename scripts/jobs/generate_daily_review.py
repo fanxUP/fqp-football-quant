@@ -11,6 +11,7 @@ from typing import Any
 
 from apps.backend.src.db import get_db
 from apps.backend.src.services.match_review import build_match_review_cards
+from apps.backend.src.services.report_automation import maybe_generate_post_match_report
 from apps.backend.src.services.report_snapshot import build_daily_report_snapshot
 from scripts.agents.task_queue import finish_tracked_job, start_tracked_job
 from scripts.business_time import business_yesterday
@@ -270,30 +271,38 @@ def _run_impl(review_date: str | None = None, dry_run: bool = False) -> dict[str
             start=date,
             end=date,
         )
+        source_snapshot = build_daily_report_snapshot(
+            review={
+                "reviewId": review_id,
+                "reviewDate": date,
+                "officialMatchCount": official_count,
+                "analyzableMatchCount": analyzable_count,
+                "recommendedMatchCount": recommended_count,
+                "simulationTicketCount": sim_ticket_count,
+                "realTicketCount": real_ticket_count,
+                "simulationProfitLoss": sim_pl,
+                "realProfitLoss": real_pl,
+                "simulationRoi": sim_roi,
+                "realRoi": real_roi,
+                "summary": summary,
+            },
+            upset_report=upset_report,
+            match_cards=build_match_review_cards(conn, date),
+        )
         upsert_report_generation_run(
             conn,
             report_type="daily",
             period_key=date,
             status="completed",
             readiness=readiness,
-            snapshot=build_daily_report_snapshot(
-                review={
-                    "reviewId": review_id,
-                    "reviewDate": date,
-                    "officialMatchCount": official_count,
-                    "analyzableMatchCount": analyzable_count,
-                    "recommendedMatchCount": recommended_count,
-                    "simulationTicketCount": sim_ticket_count,
-                    "realTicketCount": real_ticket_count,
-                    "simulationProfitLoss": sim_pl,
-                    "realProfitLoss": real_pl,
-                    "simulationRoi": sim_roi,
-                    "realRoi": real_roi,
-                    "summary": summary,
-                },
-                upset_report=upset_report,
-                match_cards=build_match_review_cards(conn, date),
-            ),
+            snapshot=source_snapshot,
+        )
+        maybe_generate_post_match_report(
+            conn,
+            source_type="post_daily",
+            source_ref=date,
+            title=f"自动赛后日报：{date}",
+            snapshot=source_snapshot,
         )
 
     return {

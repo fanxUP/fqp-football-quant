@@ -6,6 +6,7 @@ from datetime import date, timedelta
 from typing import Any
 
 from apps.backend.src.db import get_db
+from apps.backend.src.services.report_automation import maybe_generate_post_match_report
 from scripts.business_time import business_today
 from scripts.jobs.report_generation import (
     assess_periodic_report_readiness,
@@ -144,19 +145,27 @@ def run_weekly(
             start=start,
             end=end,
         )
+        source_snapshot = {
+            "reviewId": review_id,
+            "weekStart": start,
+            "weekEnd": end,
+            "aggregate": aggregate,
+            "upsetReport": upset_report,
+        }
         upsert_report_generation_run(
             conn,
             report_type="weekly",
             period_key=start,
             status="completed",
             readiness=readiness,
-            snapshot={
-                "reviewId": review_id,
-                "weekStart": start,
-                "weekEnd": end,
-                "aggregate": aggregate,
-                "upsetReport": upset_report,
-            },
+            snapshot=source_snapshot,
+        )
+        maybe_generate_post_match_report(
+            conn,
+            source_type="post_weekly",
+            source_ref=start,
+            title=f"自动赛后周报：{start} 至 {end}",
+            snapshot=source_snapshot,
         )
 
     return {
@@ -242,18 +251,26 @@ def run_monthly(month: str | None = None, dry_run: bool = False) -> dict[str, An
             start=month_start,
             end=month_end.isoformat(),
         )
+        source_snapshot = {
+            "reviewId": review_id,
+            "month": target_month,
+            "aggregate": aggregate,
+            "upsetReport": upset_report,
+        }
         upsert_report_generation_run(
             conn,
             report_type="monthly",
             period_key=target_month,
             status="completed",
             readiness=readiness,
-            snapshot={
-                "reviewId": review_id,
-                "month": target_month,
-                "aggregate": aggregate,
-                "upsetReport": upset_report,
-            },
+            snapshot=source_snapshot,
+        )
+        maybe_generate_post_match_report(
+            conn,
+            source_type="post_monthly",
+            source_ref=target_month,
+            title=f"自动赛后月报：{target_month}",
+            snapshot=source_snapshot,
         )
 
     return {

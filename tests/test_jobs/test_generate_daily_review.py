@@ -51,6 +51,11 @@ def test_daily_review_only_counts_prematch_features_and_predictions(mock_conn):
                 }
             ],
         ),
+        patch.object(
+            generate_daily_review,
+            "maybe_generate_post_match_report",
+            return_value={"status": "skipped", "reason": "automation_disabled"},
+        ) as automatic_report,
     ):
         generate_daily_review._run_impl(review_date="2026-07-14")
 
@@ -76,3 +81,5 @@ def test_daily_review_only_counts_prematch_features_and_predictions(mock_conn):
     assert archived_match["modelSignals"] == [{"modelName": "Poisson"}]
     assert archived_match["oddsSignals"] == [{"spValue": 1.9}]
     assert archived_match["evidenceStatus"] == "未查到可靠资料"
+    assert automatic_report.call_args.kwargs["source_type"] == "post_daily"
+    assert automatic_report.call_args.kwargs["source_ref"] == "2026-07-14"

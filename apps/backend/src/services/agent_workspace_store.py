@@ -55,6 +55,21 @@ def create_workspace_task(
     return _serialize(row)
 
 
+def has_workspace_task_for_source(
+    conn: Any, *, agent_code: str, source_type: str, source_ref: str,
+) -> bool:
+    """Keep an automated source interpretation idempotent across scheduler retries."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """SELECT EXISTS (
+                   SELECT 1 FROM agent_workspace_tasks
+                   WHERE agent_code = %s AND source_type = %s AND source_ref = %s
+               )""",
+            (agent_code, source_type, source_ref),
+        )
+        return bool(cur.fetchone()[0])
+
+
 def list_workspace_tasks(conn: Any, limit: int = 20) -> list[dict[str, Any]]:
     safe_limit = max(1, min(limit, 50))
     with conn.cursor() as cur:

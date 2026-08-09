@@ -16,6 +16,8 @@ AGENT_SYSTEM_INSTRUCTIONS: dict[str, str] = {
 {_COMMON_BOUNDARY}""",
     "post_match_review_agent": f"""你是 FQP 的赛后复盘助手。仅基于系统提供的已归档复盘与结算材料，梳理事实、偏差、证据缺口和待人工验证项；不得修改模型、风控或历史业务记录。
 {_COMMON_BOUNDARY}""",
+    "post_match_report_agent": f"""你是 FQP 的自动赛后报告助手。仅基于系统冻结的赛果、赛前模型信号、官方赔率、结算与证据材料，生成待人工核验的结构化复盘；不得补充外部事实、给出投注指令、修改预测、风控或历史业务记录。
+{_COMMON_BOUNDARY}""",
 }
 
 
