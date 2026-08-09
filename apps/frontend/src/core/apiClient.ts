@@ -129,7 +129,14 @@ export interface AgentWorkspaceReviewEvent {
 // ---- Base request ----
 
 const TIMEOUT_MS = 15_000;
+const MODEL_INTERPRETATION_TIMEOUT_MS = 45_000;
 const inFlightGetRequests = new Map<string, Promise<unknown>>();
+
+function requestTimeoutFor(path: string): number {
+  return path.startsWith('/api/agent-interpretations/')
+    ? MODEL_INTERPRETATION_TIMEOUT_MS
+    : TIMEOUT_MS;
+}
 
 async function readErrorMessage(res: Response): Promise<string> {
   const body = await res.text().catch(() => '');
@@ -152,7 +159,7 @@ async function readErrorMessage(res: Response): Promise<string> {
 
 async function performRequest<T>(path: string, init?: RequestInit): Promise<T> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), requestTimeoutFor(path));
 
   try {
     const res = await fetch(path, {

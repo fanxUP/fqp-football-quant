@@ -4,6 +4,7 @@ import { api } from './apiClient';
 describe('api client GET request coalescing', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.useRealTimers();
   });
 
   it('shares an in-flight GET request and allows a fresh request after completion', async () => {
@@ -70,5 +71,19 @@ describe('api client GET request coalescing', () => {
       '/api/agent-workspace/tasks/24/reviews',
       expect.objectContaining({ headers: expect.objectContaining({ 'Content-Type': 'application/json' }) }),
     );
+  });
+
+  it('keeps model interpretation calls open beyond the standard request timeout', async () => {
+    vi.useFakeTimers();
+    let signal: AbortSignal | undefined;
+    vi.stubGlobal('fetch', vi.fn((_path: string, init?: RequestInit) => {
+      signal = init?.signal as AbortSignal;
+      return new Promise(() => undefined);
+    }));
+
+    void api.agentInterpretations.postMatch('post_daily', '2026-08-09');
+    await vi.advanceTimersByTimeAsync(15_000);
+
+    expect(signal?.aborted).toBe(false);
   });
 });
