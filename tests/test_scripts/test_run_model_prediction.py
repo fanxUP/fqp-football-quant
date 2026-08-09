@@ -9,6 +9,7 @@ from zoneinfo import ZoneInfo
 from scripts.feature_adjustment import GoalRateAdjustment
 from scripts.jobs.run_model_prediction import (
     _load_bayesian_form_probabilities,
+    _load_extra_trees_shadow_probabilities,
     _load_logistic_shadow_probabilities,
     _load_trained_bivariate_shared_component,
     _load_trained_elo_probabilities,
@@ -33,6 +34,13 @@ def test_xgboost_shadow_requires_a_verified_profile_before_predicting() -> None:
 def test_logistic_shadow_requires_a_verified_profile_before_predicting() -> None:
     assert _load_logistic_shadow_probabilities(
         {"logistic_shadow": {"rollout_mode": "shadow"}},
+        {"data_completeness_score": 0.9},
+    ) is None
+
+
+def test_extra_trees_shadow_requires_a_verified_profile_before_predicting() -> None:
+    assert _load_extra_trees_shadow_probabilities(
+        {"extra_trees_shadow": {"rollout_mode": "shadow"}},
         {"data_completeness_score": 0.9},
     ) is None
 

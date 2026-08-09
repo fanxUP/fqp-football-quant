@@ -24,6 +24,9 @@ from scripts.business_time import business_now
 from scripts.derived_play_predictions import store_derived_play_predictions
 from scripts.dixon_coles_model import dixon_coles_matrix
 from scripts.elo_model import run_elo_1x2_prediction
+from scripts.extra_trees_shadow_model import (
+    load_probabilities as load_extra_trees_shadow_probabilities,
+)
 from scripts.feature_adjustment import GoalRateAdjustment, adjust_goal_rates
 from scripts.glicko2_model import Glicko2Rating
 from scripts.glicko2_model import predict_1x2 as glicko2_predict_1x2
@@ -190,6 +193,16 @@ def _load_random_forest_shadow_probabilities(
     """Use random forest only after its persisted temporal validation exists."""
     return load_random_forest_shadow_probabilities(
         model_parameters.get("random_forest_shadow"), feature_snapshot
+    )
+
+
+def _load_extra_trees_shadow_probabilities(
+    model_parameters: dict[str, dict[str, Any]],
+    feature_snapshot: dict[str, Any] | None,
+) -> dict[str, float] | None:
+    """Use extra trees only after its persisted temporal validation exists."""
+    return load_extra_trees_shadow_probabilities(
+        model_parameters.get("extra_trees_shadow"), feature_snapshot
     )
 
 
@@ -827,6 +840,16 @@ def _predict_match_play_type(
         random_forest_1x2 = dict(market_probs)
 
     try:
+        trained_extra_trees = _load_extra_trees_shadow_probabilities(
+            model_parameters, feature_snapshot
+        )
+        extra_trees_is_independent = trained_extra_trees is not None
+        extra_trees_1x2 = trained_extra_trees or dict(market_probs)
+    except Exception:
+        extra_trees_is_independent = False
+        extra_trees_1x2 = dict(market_probs)
+
+    try:
         trained_naive_bayes = _load_naive_bayes_shadow_probabilities(model_parameters, feature_snapshot)
         naive_bayes_is_independent = trained_naive_bayes is not None
         naive_bayes_1x2 = trained_naive_bayes or dict(market_probs)
@@ -868,6 +891,7 @@ def _predict_match_play_type(
         "logistic_shadow": (logistic_1x2, logistic_1x2),
         "bayesian_form": (bayesian_form_1x2, bayesian_form_1x2),
         "random_forest_shadow": (random_forest_1x2, random_forest_1x2),
+        "extra_trees_shadow": (extra_trees_1x2, extra_trees_1x2),
         "naive_bayes_shadow": (naive_bayes_1x2, naive_bayes_1x2),
         "svm_shadow": (svm_1x2, svm_1x2),
     }
@@ -883,6 +907,7 @@ def _predict_match_play_type(
         "logistic_shadow": logistic_is_independent,
         "bayesian_form": bayesian_form_is_independent,
         "random_forest_shadow": random_forest_is_independent,
+        "extra_trees_shadow": extra_trees_is_independent,
         "naive_bayes_shadow": naive_bayes_is_independent,
         "svm_shadow": svm_is_independent,
     }
@@ -929,6 +954,7 @@ def _predict_match_play_type(
                     logistic_1x2.get(opt_code, 0),
                     bayesian_form_1x2.get(opt_code, 0),
                     random_forest_1x2.get(opt_code, 0),
+                    extra_trees_1x2.get(opt_code, 0),
                     naive_bayes_1x2.get(opt_code, 0),
                     svm_1x2.get(opt_code, 0),
                 ]
@@ -991,6 +1017,7 @@ def _predict_match_play_type(
                     "logistic_shadow_based": model_name == "logistic_shadow",
                     "bayesian_form_based": model_name == "bayesian_form",
                     "random_forest_shadow_based": model_name == "random_forest_shadow",
+                    "extra_trees_shadow_based": model_name == "extra_trees_shadow",
                     "naive_bayes_shadow_based": model_name == "naive_bayes_shadow",
                     "svm_shadow_based": model_name == "svm_shadow",
                     "rollout_mode": rollout_modes.get(model_name, "live"),

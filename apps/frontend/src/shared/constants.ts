@@ -8,6 +8,7 @@ export const MODEL_NAME_LABELS: Record<string, string> = {
   dixon_coles: '迪克森-科尔斯比分模型',
   maher_poisson: '马赫泊松进球模型',
   negative_binomial_shadow: '负二项进球模型',
+  extra_trees_shadow: '极端随机树赛前特征模型',
 };
 
 export function modelNameLabel(code: string): string {

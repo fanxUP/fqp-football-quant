@@ -125,6 +125,9 @@ JOB_DEFINITIONS: dict[str, JobDefinition] = {
     "train_negative_binomial_shadow": JobDefinition(
         "负二项进球模型影子训练", "每日 00:02", "model", max_age=timedelta(hours=30)
     ),
+    "train_extra_trees_shadow": JobDefinition(
+        "极端随机树特征模型影子训练", "每日 00:05", "model", max_age=timedelta(hours=30)
+    ),
     "backtest": JobDefinition(
         "全量回测执行", "每周日 04:07", "model", ("run_backtest",), timedelta(days=8)
     ),

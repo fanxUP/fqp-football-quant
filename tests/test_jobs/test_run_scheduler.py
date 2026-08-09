@@ -168,6 +168,14 @@ def test_scheduler_updates_glicko2_after_elo_ratings():
     assert JOB_DEFINITIONS["update_glicko2_ratings"].schedule == "每日 01:10"
 
 
+def test_scheduler_registers_extra_trees_after_existing_shadow_training() -> None:
+    source = Path("scripts/jobs/run_scheduler.py").read_text()
+
+    assert 'id="train_extra_trees_shadow"' in source
+    assert source.index('id="train_negative_binomial_shadow"') < source.index('id="train_extra_trees_shadow"')
+    assert JOB_DEFINITIONS["train_extra_trees_shadow"].schedule == "每日 00:05"
+
+
 def test_probability_calibration_is_scheduled_after_metrics_as_shadow_only():
     source = Path("scripts/jobs/run_scheduler.py").read_text()
 

@@ -26,6 +26,7 @@ PREDICTION_MODEL_CODES = (
     "logistic_shadow",
     "bayesian_form",
     "random_forest_shadow",
+    "extra_trees_shadow",
     "naive_bayes_shadow",
     "svm_shadow",
     "negative_binomial_shadow",

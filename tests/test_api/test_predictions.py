@@ -317,7 +317,7 @@ class TestPredictionModelOverviewEndpoint:
 
         assert response.status_code == 200
         data = response.json()
-        assert data["total"] == 13
+        assert data["total"] == 14
         assert [item["code"] for item in data["models"]] == [
             "market_baseline",
             "elo_rating",
@@ -329,6 +329,7 @@ class TestPredictionModelOverviewEndpoint:
             "logistic_shadow",
             "bayesian_form",
             "random_forest_shadow",
+            "extra_trees_shadow",
             "naive_bayes_shadow",
             "svm_shadow",
             "negative_binomial_shadow",
