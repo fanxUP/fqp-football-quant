@@ -21,6 +21,7 @@ const MODEL_DEFINITIONS: ModelDefinition[] = [
   { code: 'bivariate_poisson', title: '双变量泊松进球模型', summary: '在双方预期进球上加入经历史赛果拟合的共享进球成分，刻画比分的相关性。', output: '带比分相关性的胜平负概率。', cadence: '每周随历史赛果重新拟合。', condition: '依赖已收敛的马赫泊松参数与足够历史赛果。', role: '当前处于影子验证，只记录评估结果，不参与推荐委员会。' },
   { code: 'xgboost_shadow', title: 'XGBoost 赛前特征模型', summary: '学习赛前阵容、休息、伤停、天气、战意和数据完整度等结构化特征的非线性关系。', output: '胜平负概率。', cadence: '每日在官方结算后重新训练。', condition: '至少 100 场训练样本和 25 场后续留出验证样本。', role: '当前处于影子验证，只记录独立留出评估，不参与推荐委员会、投注或风控。' },
   { code: 'logistic_shadow', title: '逻辑回归赛前特征模型', summary: '将赛前阵容、休息、伤停、天气和战意等特征作正则化线性组合，作为可解释基准。', output: '胜平负概率。', cadence: '每日在官方结算后重新训练。', condition: '至少 100 场训练样本和 25 场后续留出验证样本。', role: '当前处于影子验证，只用于和非线性模型交叉评估，不参与推荐委员会、投注或风控。' },
+  { code: 'bayesian_form', title: '贝叶斯近期状态模型', summary: '对双方最近已结算赛果作贝叶斯收缩，保留主客方向并避免少量样本导致极端概率。', output: '胜平负概率。', cadence: '每次赛前预测时读取截至开赛前的官方已结算赛果。', condition: '双方各至少 6 场有效历史，最多采用最近 12 场。', role: '当前处于影子验证，只用于交叉评估，不参与推荐委员会、投注或风控。' },
 ];
 
 function formatTime(value: string | null) {

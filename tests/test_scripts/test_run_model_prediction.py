@@ -8,6 +8,7 @@ from zoneinfo import ZoneInfo
 
 from scripts.feature_adjustment import GoalRateAdjustment
 from scripts.jobs.run_model_prediction import (
+    _load_bayesian_form_probabilities,
     _load_logistic_shadow_probabilities,
     _load_trained_bivariate_shared_component,
     _load_trained_elo_probabilities,
@@ -33,6 +34,19 @@ def test_logistic_shadow_requires_a_verified_profile_before_predicting() -> None
         {"logistic_shadow": {"rollout_mode": "shadow"}},
         {"data_completeness_score": 0.9},
     ) is None
+
+
+def test_bayesian_form_requires_both_teams_to_have_settled_history() -> None:
+    conn = MagicMock()
+    cursor = conn.cursor.return_value.__enter__.return_value
+    cursor.fetchall.return_value = [(1, "3")] * 6 + [(2, "0")] * 5
+
+    assert _load_bayesian_form_probabilities(
+        conn, 101, {"home_team_id": 10, "away_team_id": 20}
+    ) is None
+    query = cursor.execute.call_args.args[0]
+    assert "m.kickoff_time < current_match.kickoff_time" in query
+    assert "r.result_status IN ('final', 'confirmed')" in query
 
 
 def test_xgboost_shadow_prediction_never_enters_committee_votes() -> None:

@@ -18,6 +18,7 @@ from typing import Any
 
 from apps.backend.src.db import get_db
 from scripts.agents.task_queue import finish_tracked_job, start_tracked_job
+from scripts.bayesian_form_model import probabilities_from_team_outcomes
 from scripts.bivariate_poisson_model import bivariate_score_matrix
 from scripts.business_time import business_now
 from scripts.derived_play_predictions import store_derived_play_predictions
@@ -153,6 +154,69 @@ def _load_logistic_shadow_probabilities(
     return load_logistic_shadow_probabilities(
         model_parameters.get("logistic_shadow"), feature_snapshot
     )
+
+
+def _load_bayesian_form_probabilities(
+    conn: Any,
+    match_id: int,
+    feature_snapshot: dict[str, Any] | None,
+) -> dict[str, float] | None:
+    """Use official settled results strictly before this match's kickoff time."""
+    if not feature_snapshot:
+        return None
+    home_team_id = feature_snapshot.get("home_team_id")
+    away_team_id = feature_snapshot.get("away_team_id")
+    if not home_team_id or not away_team_id:
+        return None
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            WITH current_match AS (
+                SELECT kickoff_time FROM official_matches WHERE id = %s
+            ), requested(team_id, team_order) AS (
+                VALUES (%s, 1), (%s, 2)
+            ), historical AS (
+                SELECT m.kickoff_time,
+                       home_team.id AS home_team_id,
+                       away_team.id AS away_team_id,
+                       r.full_home_goals,
+                       r.full_away_goals
+                FROM official_matches m
+                JOIN official_results r ON r.match_id = m.id
+                JOIN LATERAL (
+                    SELECT id FROM teams WHERE team_name_cn = m.home_team_name ORDER BY id LIMIT 1
+                ) home_team ON true
+                JOIN LATERAL (
+                    SELECT id FROM teams WHERE team_name_cn = m.away_team_name ORDER BY id LIMIT 1
+                ) away_team ON true
+                CROSS JOIN current_match
+                WHERE m.kickoff_time < current_match.kickoff_time
+                  AND r.result_status IN ('final', 'confirmed')
+                  AND r.full_home_goals IS NOT NULL
+                  AND r.full_away_goals IS NOT NULL
+            ), recent AS (
+                SELECT requested.team_order,
+                       CASE
+                           WHEN historical.home_team_id = requested.team_id
+                             THEN CASE WHEN historical.full_home_goals > historical.full_away_goals THEN '3'
+                                       WHEN historical.full_home_goals = historical.full_away_goals THEN '1' ELSE '0' END
+                           ELSE CASE WHEN historical.full_away_goals > historical.full_home_goals THEN '3'
+                                     WHEN historical.full_away_goals = historical.full_home_goals THEN '1' ELSE '0' END
+                       END AS outcome_code,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY requested.team_order ORDER BY historical.kickoff_time DESC
+                       ) AS recency
+                FROM requested
+                JOIN historical ON requested.team_id IN (historical.home_team_id, historical.away_team_id)
+            )
+            SELECT team_order, outcome_code FROM recent WHERE recency <= 12 ORDER BY team_order, recency
+            """,
+            (match_id, home_team_id, away_team_id),
+        )
+        rows = cur.fetchall()
+    home_outcomes = [str(row[1]) for row in rows if int(row[0]) == 1]
+    away_outcomes = [str(row[1]) for row in rows if int(row[0]) == 2]
+    return probabilities_from_team_outcomes(home_outcomes, away_outcomes)
 
 
 def _now() -> str:
@@ -669,6 +733,14 @@ def _predict_match_play_type(
         logistic_is_independent = False
         logistic_1x2 = dict(market_probs)
 
+    try:
+        trained_bayesian_form = _load_bayesian_form_probabilities(conn, mid, feature_snapshot)
+        bayesian_form_is_independent = trained_bayesian_form is not None
+        bayesian_form_1x2 = trained_bayesian_form or dict(market_probs)
+    except Exception:
+        bayesian_form_is_independent = False
+        bayesian_form_1x2 = dict(market_probs)
+
     rollout_modes = {
         name: str(parameters.get("rollout_mode") or "live")
         for name, parameters in model_parameters.items()
@@ -684,6 +756,7 @@ def _predict_match_play_type(
         "bivariate_poisson": (raw_bivariate_probs, bivariate_probs),
         "xgboost_shadow": (xgboost_1x2, xgboost_1x2),
         "logistic_shadow": (logistic_1x2, logistic_1x2),
+        "bayesian_form": (bayesian_form_1x2, bayesian_form_1x2),
     }
     model_independence = {
         "market_baseline": False,
@@ -694,6 +767,7 @@ def _predict_match_play_type(
         "bivariate_poisson": bivariate_is_independent,
         "xgboost_shadow": xgboost_is_independent,
         "logistic_shadow": logistic_is_independent,
+        "bayesian_form": bayesian_form_is_independent,
     }
 
     total_p = derived_predictions
@@ -735,6 +809,7 @@ def _predict_match_play_type(
                     bivariate_probs.get(opt_code, 0),
                     xgboost_1x2.get(opt_code, 0),
                     logistic_1x2.get(opt_code, 0),
+                    bayesian_form_1x2.get(opt_code, 0),
                 ]
             )
 
@@ -792,6 +867,7 @@ def _predict_match_play_type(
                     "bivariate_poisson_based": model_name == "bivariate_poisson",
                     "xgboost_shadow_based": model_name == "xgboost_shadow",
                     "logistic_shadow_based": model_name == "logistic_shadow",
+                    "bayesian_form_based": model_name == "bayesian_form",
                     "rollout_mode": rollout_modes.get(model_name, "live"),
                     "model_independent": model_independence[model_name],
                     "feature_adjustment": {

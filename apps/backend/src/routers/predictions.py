@@ -24,6 +24,7 @@ PREDICTION_MODEL_CODES = (
     "bivariate_poisson",
     "xgboost_shadow",
     "logistic_shadow",
+    "bayesian_form",
 )
 
 # Play type display names
