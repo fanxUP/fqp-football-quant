@@ -1,7 +1,45 @@
 from contextlib import contextmanager
 from pathlib import Path
 
-from scripts.jobs.generate_periodic_reviews import _aggregate_review_rows
+from scripts.jobs.generate_periodic_reviews import (
+    _aggregate_review_rows,
+    _load_completed_daily_snapshots,
+)
+
+
+def test_periodic_review_loads_only_completed_daily_snapshots() -> None:
+    class Cursor:
+        def __init__(self) -> None:
+            self.query = ""
+            self.params: tuple[object, ...] = ()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args) -> None:
+            return None
+
+        def execute(self, query: str, params: tuple[object, ...]) -> None:
+            self.query = query
+            self.params = params
+
+        def fetchall(self):
+            return [("2026-08-09", {"researchMetrics": {"matchCount": 2}})]
+
+    class Connection:
+        def __init__(self) -> None:
+            self.cursor_instance = Cursor()
+
+        def cursor(self) -> Cursor:
+            return self.cursor_instance
+
+    conn = Connection()
+    snapshots = _load_completed_daily_snapshots(conn, "2026-08-03", "2026-08-09")
+
+    assert "report_type = 'daily'" in conn.cursor_instance.query
+    assert "status = 'completed'" in conn.cursor_instance.query
+    assert conn.cursor_instance.params == ("2026-08-03", "2026-08-09")
+    assert snapshots == [{"periodKey": "2026-08-09", "researchMetrics": {"matchCount": 2}}]
 
 
 def test_periodic_review_uses_weighted_roi_and_true_drawdown():

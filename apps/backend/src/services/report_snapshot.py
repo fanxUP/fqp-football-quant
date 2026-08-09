@@ -94,6 +94,61 @@ def build_daily_research_metrics(
     }
 
 
+def build_periodic_research_metrics(
+    daily_snapshots: Sequence[Mapping[str, Any]],
+) -> dict[str, Any]:
+    """Aggregate already-frozen daily research metrics for a closed period.
+
+    The aggregation remains descriptive: it reports historical coverage and
+    signal characteristics, and does not re-score a prediction or alter facts.
+    Older daily snapshots without ``researchMetrics`` remain valid inputs.
+    """
+    metric_rows = [
+        row.get("researchMetrics")
+        for row in daily_snapshots
+        if isinstance(row.get("researchMetrics"), Mapping)
+    ]
+    match_count = sum(int(_number(row.get("matchCount")) or 0) for row in metric_rows)
+    signal_count = sum(int(_number(row.get("signalCount")) or 0) for row in metric_rows)
+    signal_match_count = sum(
+        int(_number(row.get("signalMatchCount")) or 0) for row in metric_rows
+    )
+    evidence_match_count = sum(
+        int(_number(row.get("evidenceMatchCount")) or 0) for row in metric_rows
+    )
+
+    def weighted_average(key: str) -> float | None:
+        weighted = [
+            (value, int(_number(row.get("signalCount")) or 0))
+            for row in metric_rows
+            if (value := _number(row.get(key))) is not None
+            and int(_number(row.get("signalCount")) or 0) > 0
+        ]
+        total_weight = sum(weight for _value, weight in weighted)
+        return (
+            round(sum(value * weight for value, weight in weighted) / total_weight, 4)
+            if total_weight
+            else None
+        )
+
+    return {
+        "dailyReportCount": len(daily_snapshots),
+        "researchMetricDayCount": len(metric_rows),
+        "matchCount": match_count,
+        "signalCount": signal_count,
+        "signalMatchCount": signal_match_count,
+        "signalCoverageRate": round(signal_match_count / match_count, 4) if match_count else 0.0,
+        "evidenceMatchCount": evidence_match_count,
+        "evidenceCoverageRate": (
+            round(evidence_match_count / match_count, 4) if match_count else 0.0
+        ),
+        "averageModelProbability": weighted_average("averageModelProbability"),
+        "averageMarketProbability": weighted_average("averageMarketProbability"),
+        "averageEdge": weighted_average("averageEdge"),
+        "averageEv": weighted_average("averageEv"),
+    }
+
+
 def build_daily_report_snapshot(
     *,
     review: Mapping[str, Any],

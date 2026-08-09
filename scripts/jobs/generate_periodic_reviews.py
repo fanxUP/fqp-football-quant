@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import json
 from datetime import date, timedelta
 from typing import Any
 
 from apps.backend.src.db import get_db
 from apps.backend.src.services.report_automation import maybe_generate_post_match_report
+from apps.backend.src.services.report_snapshot import build_periodic_research_metrics
 from scripts.business_time import business_today
 from scripts.jobs.report_generation import (
     assess_periodic_report_readiness,
@@ -75,6 +77,29 @@ def _aggregate_review_rows(rows: list[tuple]) -> dict[str, float | int]:
     }
 
 
+def _load_completed_daily_snapshots(conn: Any, start: str, end: str) -> list[dict[str, Any]]:
+    """Read immutable daily snapshots that make up a closed report period."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT period_key, source_snapshot_json
+            FROM report_generation_runs
+            WHERE report_type = 'daily'
+              AND status = 'completed'
+              AND period_key::date BETWEEN %s AND %s
+            ORDER BY period_key ASC
+            """,
+            (start, end),
+        )
+        rows = cur.fetchall()
+    snapshots: list[dict[str, Any]] = []
+    for period_key, raw_snapshot in rows:
+        snapshot = json.loads(raw_snapshot) if isinstance(raw_snapshot, str) else raw_snapshot
+        if isinstance(snapshot, dict):
+            snapshots.append({"periodKey": str(period_key), **snapshot})
+    return snapshots
+
+
 def run_weekly(
     week_start: str | None = None,
     week_end: str | None = None,
@@ -124,6 +149,8 @@ def run_weekly(
                 (start, end),
             )
             aggregate = _aggregate_review_rows(cur.fetchall())
+        daily_snapshots = _load_completed_daily_snapshots(conn, start, end)
+        research_metrics = build_periodic_research_metrics(daily_snapshots)
 
         data = {
             "week_start": start,
@@ -150,6 +177,8 @@ def run_weekly(
             "weekStart": start,
             "weekEnd": end,
             "aggregate": aggregate,
+            "researchMetrics": research_metrics,
+            "dailyReportRefs": [snapshot["periodKey"] for snapshot in daily_snapshots],
             "upsetReport": upset_report,
         }
         upsert_report_generation_run(
@@ -229,6 +258,8 @@ def run_monthly(month: str | None = None, dry_run: bool = False) -> dict[str, An
                 (target_month,),
             )
             aggregate = _aggregate_review_rows(cur.fetchall())
+        daily_snapshots = _load_completed_daily_snapshots(conn, month_start, month_end.isoformat())
+        research_metrics = build_periodic_research_metrics(daily_snapshots)
 
         data = {
             "month": target_month,
@@ -255,6 +286,8 @@ def run_monthly(month: str | None = None, dry_run: bool = False) -> dict[str, An
             "reviewId": review_id,
             "month": target_month,
             "aggregate": aggregate,
+            "researchMetrics": research_metrics,
+            "dailyReportRefs": [snapshot["periodKey"] for snapshot in daily_snapshots],
             "upsetReport": upset_report,
         }
         upsert_report_generation_run(
