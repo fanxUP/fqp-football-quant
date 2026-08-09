@@ -395,7 +395,19 @@ export interface CalibrationProfile {
 
 export interface CalibrationProfilesResponse {
   profiles: CalibrationProfile[];
+  trends: CalibrationTrend[];
   policy: { sampleThreshold: number; improvementThreshold: number; affectsDecisionPath: false };
+}
+
+export interface CalibrationTrend {
+  modelCode: string;
+  status: 'improving' | 'weakening' | 'stable' | 'insufficient_history';
+  label: string;
+  latestLogLoss: number;
+  previousLogLoss: number | null;
+  logLossChange: number | null;
+  profileCount: number;
+  affectsDecisionPath: false;
 }
 
 // ---- Stage 4: Recommendation tickets ----

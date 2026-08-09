@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../core/apiClient';
-import type { CalibrationProfile, PredictionModelRuntimeState } from '../core/types';
+import type { CalibrationProfile, CalibrationTrend, PredictionModelRuntimeState } from '../core/types';
 
 type ModelDefinition = {
   code: string;
@@ -35,13 +35,20 @@ export default function PredictionModelOverviewPanel() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [calibrationProfiles, setCalibrationProfiles] = useState<CalibrationProfile[]>([]);
+  const [calibrationTrends, setCalibrationTrends] = useState<CalibrationTrend[]>([]);
 
   const load = () => {
     setLoading(true);
     setError(false);
     api.calibrationProfiles()
-      .then((profiles) => setCalibrationProfiles(profiles.profiles))
-      .catch(() => setCalibrationProfiles([]));
+      .then((profiles) => {
+        setCalibrationProfiles(profiles.profiles);
+        setCalibrationTrends(profiles.trends);
+      })
+      .catch(() => {
+        setCalibrationProfiles([]);
+        setCalibrationTrends([]);
+      });
     api.modelOverview()
       .then((overview) => setStates(overview.models))
       .catch(() => setError(true))
@@ -50,6 +57,7 @@ export default function PredictionModelOverviewPanel() {
 
   useEffect(() => { load(); }, []);
   const stateByCode = new Map(states.map((state) => [state.code, state]));
+  const calibrationTrendByCode = new Map(calibrationTrends.map((trend) => [trend.modelCode, trend]));
 
   return (
     <section className="prediction-model-overview" aria-labelledby="prediction-model-overview-title">
@@ -72,6 +80,7 @@ export default function PredictionModelOverviewPanel() {
             <strong>{MODEL_DEFINITIONS.find((model) => model.code === profile.modelCode)?.title ?? profile.modelCode}</strong>
             <span>{profile.sampleCount} 场</span>
             <span>{profile.logLossBefore.toFixed(3)} → {profile.logLossAfter.toFixed(3)}</span>
+            {calibrationTrendByCode.get(profile.modelCode) && <span className="prediction-calibration-trend" data-status={calibrationTrendByCode.get(profile.modelCode)?.status}>{calibrationTrendByCode.get(profile.modelCode)?.label}</span>}
             <span className="prediction-calibration-review" data-status={profile.review.status}>{profile.review.label}</span>
           </div>)}
         </div>

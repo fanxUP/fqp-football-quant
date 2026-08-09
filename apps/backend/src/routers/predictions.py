@@ -9,6 +9,7 @@ from scripts.calibration_review import (
     MANUAL_REVIEW_IMPROVEMENT_THRESHOLD,
     MANUAL_REVIEW_SAMPLE_THRESHOLD,
     review_calibration_profile,
+    review_calibration_trend,
 )
 from scripts.sporttery_sales import get_sporttery_sales_window
 
@@ -520,6 +521,7 @@ def get_calibration_profiles(limit: int = Query(12, ge=1, le=60)):
             rows = cur.fetchall()
 
     profiles = []
+    profiles_by_model: dict[str, list[dict[str, object]]] = {}
     for row in rows:
         raw = {
             "sample_count": int(row[5]),
@@ -527,8 +529,7 @@ def get_calibration_profiles(limit: int = Query(12, ge=1, le=60)):
             "log_loss_after": float(row[7]),
         }
         parameters = row[4] or {}
-        profiles.append(
-            {
+        profile = {
                 "modelCode": row[0],
                 "playType": row[1],
                 "methodName": row[2],
@@ -542,9 +543,17 @@ def get_calibration_profiles(limit: int = Query(12, ge=1, le=60)):
                 "createdAt": row[10].isoformat() if row[10] else None,
                 "review": review_calibration_profile(raw),
             }
+        profiles.append(profile)
+        profiles_by_model.setdefault(row[0], []).append(
+            {"created_at": profile["createdAt"], "log_loss_after": raw["log_loss_after"]}
         )
+    trends = [
+        {"modelCode": model_code, **review_calibration_trend(model_profiles)}
+        for model_code, model_profiles in profiles_by_model.items()
+    ]
     return {
         "profiles": profiles,
+        "trends": trends,
         "policy": {
             "sampleThreshold": MANUAL_REVIEW_SAMPLE_THRESHOLD,
             "improvementThreshold": MANUAL_REVIEW_IMPROVEMENT_THRESHOLD,
