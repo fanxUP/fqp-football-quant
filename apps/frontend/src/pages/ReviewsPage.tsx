@@ -79,23 +79,6 @@ function DailyReviewsTab() {
       .catch((e) => { setError(e instanceof ApiError ? e.message : '加载失败'); setLoading(false); });
   }, []);
 
-  const columns: Column<DailyReview>[] = [
-    { key: 'review_date', title: '日期' },
-    { key: 'official_match_count', title: '官方场次', render: (v) => <span className="fqp-mono">{String(v)}</span> },
-    { key: 'analyzable_match_count', title: '可分析', render: (v) => <span className="fqp-mono">{String(v)}</span> },
-    { key: 'simulation_ticket_count', title: '投注票', render: (v) => <span className="fqp-mono">{String(v)}</span> },
-    { key: 'real_ticket_count', title: '彩票', render: (v) => <span className="fqp-mono">{String(v)}</span> },
-    {
-      key: 'real_profit_loss',
-      title: '实盘盈亏',
-      render: (v) => {
-        const val = Number(v);
-        const color = val > 0 ? 'var(--fqp-success)' : val < 0 ? 'var(--fqp-red-neon)' : 'var(--fqp-text-muted)';
-        return <span className="fqp-mono" style={{ color }}>{val >= 0 ? '+' : ''}{val.toFixed(2)}</span>;
-      },
-    },
-  ];
-
   // ---- Error distribution treemap ----
   const errorDistOption = (() => {
     // Count matches with losses (negative profit) vs wins
@@ -165,14 +148,27 @@ function DailyReviewsTab() {
 
       <PlayTypeWinRateChart data={playTypeData} loading={loading} />
 
-      <DataTable
-        columns={columns}
-        rows={reviews}
-        loading={loading}
-        emptyText="暂无日报数据，官方赛果与相关票据结算完成后自动生成"
-        onRowClick={(row) => setExpandedDate(expandedDate === row.review_date ? null : row.review_date)}
-        rowKey={(r) => r.review_date}
-      />
+      {!loading && (reviews.length ? (
+        <Card style={{ marginTop: '16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+            <label htmlFor="daily-review-date" style={{ fontWeight: 700 }}>日期索引</label>
+            <select
+              id="daily-review-date"
+              value={expandedDate ?? ''}
+              onChange={(event) => setExpandedDate(event.target.value || null)}
+              style={{ minWidth: '180px' }}
+            >
+              <option value="">选择日期查看日报</option>
+              {reviews.map((review) => (
+                <option key={review.review_date} value={review.review_date}>{review.review_date}</option>
+              ))}
+            </select>
+            <span style={{ color: 'var(--fqp-text-muted)', fontSize: '13px' }}>近 30 日期数：{reviews.length}</span>
+          </div>
+        </Card>
+      ) : (
+        <EmptyState title="暂无日报数据" description="官方赛果与相关票据结算完成后将自动生成。" />
+      ))}
       {expandedDate && (
         <Card title={`📅 ${expandedDate} 日报详情`} style={{ marginTop: '16px', animation: 'fqpSlideUpBounce 0.4s ease both' }}>
           {(() => {
