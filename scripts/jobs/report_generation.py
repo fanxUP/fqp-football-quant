@@ -1,0 +1,182 @@
+"""Readiness and immutable run storage for automated review reports.
+
+This module deliberately reads only official results and ticket settlement
+state.  It never writes predictions, recommendations, risk decisions, or
+ticket business facts.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+from datetime import datetime, timedelta
+from typing import Any
+
+from scripts.business_time import business_now
+
+POST_MATCH_WINDOW = timedelta(hours=4)
+
+
+def _business_now_naive(now: datetime | None) -> datetime:
+    """Use Asia/Shanghai for live runs while keeping unit-test inputs intuitive."""
+    if now is not None and now.tzinfo is None:
+        return now
+    return business_now(now).replace(tzinfo=None)
+
+
+def assess_daily_report_readiness(
+    conn: Any,
+    review_date: str,
+    *,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    """Return whether a daily report has complete official and settlement facts."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT COUNT(*) AS official_match_count,
+                   COUNT(*) FILTER (
+                     WHERE result.result_status IN ('confirmed', 'void', 'refund', 'refunded')
+                   ) AS confirmed_result_count,
+                   MAX(match.kickoff_time) AS latest_kickoff_time
+            FROM official_matches match
+            LEFT JOIN official_results result ON result.match_id = match.id
+            WHERE match.business_date = %s
+            """,
+            (review_date,),
+        )
+        official_match_count, confirmed_result_count, latest_kickoff_time = cur.fetchone()
+
+        cur.execute(
+            """
+            WITH relevant_tickets AS (
+                SELECT 'simulation'::text AS ticket_source, ticket.id AS ticket_id
+                FROM simulation_tickets ticket
+                JOIN simulation_ticket_items item ON item.ticket_id = ticket.id
+                JOIN official_matches match ON match.id = item.match_id
+                WHERE match.business_date = %s
+                  AND ticket.ticket_status IN ('generated', 'activated', 'settled')
+                GROUP BY ticket.id
+                UNION
+                SELECT 'real'::text AS ticket_source, ticket.id AS ticket_id
+                FROM real_tickets ticket
+                JOIN real_ticket_items item ON item.real_ticket_id = ticket.id
+                JOIN official_matches match ON match.id = item.match_id
+                WHERE match.business_date = %s
+                  AND ticket.confirm_status = 'confirmed'
+                GROUP BY ticket.id
+            )
+            SELECT COUNT(*) AS unsettled_ticket_count
+            FROM relevant_tickets relevant
+            WHERE NOT EXISTS (
+                SELECT 1
+                FROM ticket_settlements settlement
+                WHERE settlement.ticket_source = relevant.ticket_source
+                  AND settlement.ticket_id = relevant.ticket_id
+            )
+            """,
+            (review_date, review_date),
+        )
+        unsettled_ticket_count = cur.fetchone()[0]
+
+    total = int(official_match_count or 0)
+    confirmed = int(confirmed_result_count or 0)
+    unsettled = int(unsettled_ticket_count or 0)
+    if total == 0:
+        return {
+            "canGenerate": False,
+            "status": "skipped",
+            "reasonCodes": ["NO_OFFICIAL_MATCHES"],
+            "officialMatchCount": 0,
+            "confirmedResultCount": 0,
+            "unsettledTicketCount": 0,
+            "latestKickoffTime": None,
+            "eligibleAt": None,
+        }
+
+    eligible_at = latest_kickoff_time + POST_MATCH_WINDOW if latest_kickoff_time else None
+    reason_codes: list[str] = []
+    if confirmed < total:
+        reason_codes.append("OFFICIAL_RESULT_PENDING")
+    if unsettled:
+        reason_codes.append("TICKET_SETTLEMENT_PENDING")
+    if eligible_at and _business_now_naive(now) < eligible_at:
+        reason_codes.append("POST_MATCH_WINDOW_OPEN")
+
+    return {
+        "canGenerate": not reason_codes,
+        "status": "ready" if not reason_codes else "waiting",
+        "reasonCodes": reason_codes,
+        "officialMatchCount": total,
+        "confirmedResultCount": confirmed,
+        "unsettledTicketCount": unsettled,
+        "latestKickoffTime": latest_kickoff_time.isoformat() if latest_kickoff_time else None,
+        "eligibleAt": eligible_at.isoformat() if eligible_at else None,
+    }
+
+
+def has_completed_report_generation_run(
+    conn: Any,
+    *,
+    report_type: str,
+    period_key: str,
+) -> bool:
+    """Keep an automatically completed period immutable on later scheduler checks."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT EXISTS (
+                SELECT 1 FROM report_generation_runs
+                WHERE report_type = %s AND period_key = %s AND status = 'completed'
+            )
+            """,
+            (report_type, period_key),
+        )
+        return bool(cur.fetchone()[0])
+
+
+def upsert_report_generation_run(
+    conn: Any,
+    *,
+    report_type: str,
+    period_key: str,
+    status: str,
+    readiness: dict[str, Any],
+    snapshot: dict[str, Any] | None = None,
+) -> None:
+    """Persist a traceable report lifecycle record without altering business facts."""
+    snapshot_json = json.dumps(snapshot, ensure_ascii=False, default=str, sort_keys=True)
+    snapshot_hash = hashlib.sha256(snapshot_json.encode("utf-8")).hexdigest() if snapshot else None
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO report_generation_runs (
+                report_type, period_key, status, readiness_json, source_snapshot_json,
+                source_snapshot_hash, completed_at, updated_at
+            ) VALUES (%s, %s, %s, %s::jsonb, %s::jsonb, %s,
+                      CASE WHEN %s = 'completed' THEN now() ELSE NULL END, now())
+            ON CONFLICT (report_type, period_key) DO UPDATE SET
+                status = EXCLUDED.status,
+                readiness_json = EXCLUDED.readiness_json,
+                source_snapshot_json = CASE
+                    WHEN EXCLUDED.source_snapshot_json = '{}'::jsonb
+                    THEN report_generation_runs.source_snapshot_json
+                    ELSE EXCLUDED.source_snapshot_json
+                END,
+                source_snapshot_hash = COALESCE(
+                    EXCLUDED.source_snapshot_hash, report_generation_runs.source_snapshot_hash
+                ),
+                completed_at = COALESCE(EXCLUDED.completed_at, report_generation_runs.completed_at),
+                updated_at = now()
+            """,
+            (
+                report_type,
+                period_key,
+                status,
+                json.dumps(readiness, ensure_ascii=False, default=str),
+                snapshot_json,
+                snapshot_hash,
+                status,
+            ),
+        )
+    conn.commit()

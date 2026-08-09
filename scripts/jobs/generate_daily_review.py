@@ -12,6 +12,11 @@ from typing import Any
 from apps.backend.src.db import get_db
 from scripts.agents.task_queue import finish_tracked_job, start_tracked_job
 from scripts.business_time import business_yesterday
+from scripts.jobs.report_generation import (
+    assess_daily_report_readiness,
+    has_completed_report_generation_run,
+    upsert_report_generation_run,
+)
 from scripts.real_ticket_storage import upsert_daily_review
 from scripts.review_generator import daily_summary
 from scripts.upset.reports import generate_report
@@ -48,6 +53,31 @@ def _run_impl(review_date: str | None = None, dry_run: bool = False) -> dict[str
     date = review_date or _yesterday()
 
     with get_db() as conn:
+        readiness = assess_daily_report_readiness(conn, date)
+        if has_completed_report_generation_run(
+            conn,
+            report_type="daily",
+            period_key=date,
+        ):
+            return {
+                "status": "skipped",
+                "review_date": date,
+                "reason": "already_completed",
+            }
+        if not readiness["canGenerate"]:
+            upsert_report_generation_run(
+                conn,
+                report_type="daily",
+                period_key=date,
+                status=readiness["status"],
+                readiness=readiness,
+            )
+            return {
+                "status": readiness["status"],
+                "review_date": date,
+                "readiness": readiness,
+            }
+
         # 1. Count official matches for the date
         with conn.cursor() as cur:
             cur.execute(
@@ -240,6 +270,30 @@ def _run_impl(review_date: str | None = None, dry_run: bool = False) -> dict[str
             start=date,
             end=date,
         )
+        upsert_report_generation_run(
+            conn,
+            report_type="daily",
+            period_key=date,
+            status="completed",
+            readiness=readiness,
+            snapshot={
+                "dailyReview": {
+                    "reviewId": review_id,
+                    "reviewDate": date,
+                    "officialMatchCount": official_count,
+                    "analyzableMatchCount": analyzable_count,
+                    "recommendedMatchCount": recommended_count,
+                    "simulationTicketCount": sim_ticket_count,
+                    "realTicketCount": real_ticket_count,
+                    "simulationProfitLoss": sim_pl,
+                    "realProfitLoss": real_pl,
+                    "simulationRoi": sim_roi,
+                    "realRoi": real_roi,
+                    "summary": summary,
+                },
+                "upsetReport": upset_report,
+            },
+        )
 
     return {
         "status": "ok",
@@ -260,7 +314,8 @@ def run(review_date: str | None = None, dry_run: bool = False) -> dict[str, Any]
     )
     try:
         result = _run_impl(review_date=review_date, dry_run=dry_run)
-        finish_tracked_job(run_id, result.get("status", "completed"), {"result": result})
+        tracked_status = "ok" if result.get("status") in {"ok", "waiting", "skipped"} else "failed"
+        finish_tracked_job(run_id, tracked_status, {"result": result})
         return result
     except Exception as exc:
         finish_tracked_job(run_id, "failed", error=str(exc))

@@ -22,6 +22,10 @@ OFFICIAL_SCHEDULE_CRON = {"minute": "10,40"}
 # Run five minutes after each schedule refresh so newly sellable matches have
 # official markets and odds available before the prediction snapshot is written.
 MODEL_PREDICTION_CRON = {"minute": "15,45"}
+# Daily reports are completion-driven.  The lightweight readiness check repeats
+# every 30 minutes during the review window and writes only after the official
+# result, the post-match evidence window, and related ticket settlement agree.
+DAILY_REPORT_CHECK_CRON = {"hour": "6-23", "minute": "15,45"}
 # The full-season calibration can make many official requests. If its primary
 # run is interrupted by a transient upstream TLS/network failure, make only one
 # delayed retry rather than polling or repeatedly re-running the whole catalog.
@@ -643,7 +647,7 @@ def main() -> None:
                 id="generate_upset_reviews",
             )
 
-            # Daily at 08:00: generate review for the previous business day
+            # Completion-driven daily review checks for the previous business day.
             scheduler.add_job(
                 _audited_job(
                     "generate_daily_review",
@@ -654,8 +658,7 @@ def main() -> None:
                     ).run(),
                 ),
                 "cron",
-                hour=8,
-                minute=0,
+                **DAILY_REPORT_CHECK_CRON,
                 id="generate_daily_review",
             )
 
