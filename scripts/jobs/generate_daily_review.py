@@ -10,6 +10,8 @@ from datetime import UTC, datetime
 from typing import Any
 
 from apps.backend.src.db import get_db
+from apps.backend.src.services.match_review import build_match_review_cards
+from apps.backend.src.services.report_snapshot import build_daily_report_snapshot
 from scripts.agents.task_queue import finish_tracked_job, start_tracked_job
 from scripts.business_time import business_yesterday
 from scripts.jobs.report_generation import (
@@ -240,30 +242,28 @@ def _run_impl(review_date: str | None = None, dry_run: bool = False) -> dict[str
         )
 
         # 14. Upsert daily review
-        review_id = upsert_daily_review(
-            conn,
-            {
-                "review_date": date,
-                "official_match_count": official_count,
-                "analyzable_match_count": analyzable_count,
-                "recommended_match_count": recommended_count,
-                "simulation_ticket_count": sim_ticket_count,
-                "real_ticket_count": real_ticket_count,
-                "suggested_stake": suggested_stake,
-                "actual_stake": actual_stake,
-                "simulation_prize": sim_prize,
-                "real_prize": real_prize,
-                "simulation_profit_loss": sim_pl,
-                "real_profit_loss": real_pl,
-                "simulation_roi": sim_roi,
-                "real_roi": real_roi,
-                "budget_usage_rate": budget_usage_rate,
-                "max_single_ticket_loss": max_loss,
-                "max_single_match_exposure": 0,
-                "summary_text": summary,
-                "next_day_adjustment": "",
-            },
-        )
+        review_payload = {
+            "review_date": date,
+            "official_match_count": official_count,
+            "analyzable_match_count": analyzable_count,
+            "recommended_match_count": recommended_count,
+            "simulation_ticket_count": sim_ticket_count,
+            "real_ticket_count": real_ticket_count,
+            "suggested_stake": suggested_stake,
+            "actual_stake": actual_stake,
+            "simulation_prize": sim_prize,
+            "real_prize": real_prize,
+            "simulation_profit_loss": sim_pl,
+            "real_profit_loss": real_pl,
+            "simulation_roi": sim_roi,
+            "real_roi": real_roi,
+            "budget_usage_rate": budget_usage_rate,
+            "max_single_ticket_loss": max_loss,
+            "max_single_match_exposure": 0,
+            "summary_text": summary,
+            "next_day_adjustment": "",
+        }
+        review_id = upsert_daily_review(conn, review_payload)
         upset_report = generate_report(
             conn,
             report_type="daily",
@@ -276,8 +276,8 @@ def _run_impl(review_date: str | None = None, dry_run: bool = False) -> dict[str
             period_key=date,
             status="completed",
             readiness=readiness,
-            snapshot={
-                "dailyReview": {
+            snapshot=build_daily_report_snapshot(
+                review={
                     "reviewId": review_id,
                     "reviewDate": date,
                     "officialMatchCount": official_count,
@@ -291,8 +291,9 @@ def _run_impl(review_date: str | None = None, dry_run: bool = False) -> dict[str
                     "realRoi": real_roi,
                     "summary": summary,
                 },
-                "upsetReport": upset_report,
-            },
+                upset_report=upset_report,
+                match_cards=build_match_review_cards(conn, date),
+            ),
         )
 
     return {

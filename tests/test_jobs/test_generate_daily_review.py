@@ -31,8 +31,26 @@ def test_daily_review_only_counts_prematch_features_and_predictions(mock_conn):
             return_value={"canGenerate": True, "status": "ready"},
         ),
         patch.object(generate_daily_review, "has_completed_report_generation_run", return_value=False),
-        patch.object(generate_daily_review, "upsert_report_generation_run"),
+        patch.object(
+            generate_daily_review,
+            "upsert_report_generation_run",
+        ) as generation_run,
         patch.object(generate_daily_review, "generate_report", return_value={}),
+        patch.object(
+            generate_daily_review,
+            "build_match_review_cards",
+            return_value=[
+                {
+                    "matchId": 12,
+                    "officialCode": "周一001",
+                    "result": {"homeGoals": 1, "awayGoals": 0},
+                    "modelSignals": [{"modelName": "Poisson"}],
+                    "oddsSignals": [{"spValue": 1.9}],
+                    "evidence": [],
+                    "evidenceStatus": "未查到可靠资料",
+                }
+            ],
+        ),
     ):
         generate_daily_review._run_impl(review_date="2026-07-14")
 
@@ -52,3 +70,9 @@ def test_daily_review_only_counts_prematch_features_and_predictions(mock_conn):
     )
     assert "JOIN official_matches m ON m.id =" in error_query
     assert "m.business_date = %s" in error_query
+    completed_call = generation_run.call_args_list[-1].kwargs
+    archived_match = completed_call["snapshot"]["matches"][0]
+    assert archived_match["result"] == {"homeGoals": 1, "awayGoals": 0}
+    assert archived_match["modelSignals"] == [{"modelName": "Poisson"}]
+    assert archived_match["oddsSignals"] == [{"spValue": 1.9}]
+    assert archived_match["evidenceStatus"] == "未查到可靠资料"
