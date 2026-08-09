@@ -78,7 +78,7 @@ export default function PredictionModelOverviewPanel() {
         <div className="prediction-calibration-history" role="list">
           {calibrationProfiles.map((profile) => <div className="prediction-calibration-history-row" role="listitem" key={`${profile.modelCode}-${profile.version}`}>
             <strong>{MODEL_DEFINITIONS.find((model) => model.code === profile.modelCode)?.title ?? profile.modelCode}</strong>
-            <span>{profile.sampleCount} 场</span>
+            <span>验证 {profile.sampleCount} 场</span>
             <span>{profile.logLossBefore.toFixed(3)} → {profile.logLossAfter.toFixed(3)}</span>
             {calibrationTrendByCode.get(profile.modelCode) && <span className="prediction-calibration-trend" data-status={calibrationTrendByCode.get(profile.modelCode)?.status}>{calibrationTrendByCode.get(profile.modelCode)?.label}</span>}
             {calibrationTrendByCode.get(profile.modelCode) && <span className="prediction-calibration-comparison" data-status={calibrationTrendByCode.get(profile.modelCode)?.comparison.status}>{calibrationTrendByCode.get(profile.modelCode)?.comparison.label}</span>}
@@ -106,7 +106,7 @@ export default function PredictionModelOverviewPanel() {
             </div>}
             {!loading && state?.calibration && <div className="prediction-model-calibration" role="status">
               <strong>概率校准：影子验证</strong>
-              <span>样本 {state.calibration.sampleCount} 场</span>
+              <span>验证样本 {state.calibration.sampleCount} 场</span>
               <span>温度 {state.calibration.temperature.toFixed(2)}</span>
               <span>对数损失 {state.calibration.logLossBefore.toFixed(3)} → {state.calibration.logLossAfter.toFixed(3)}</span>
             </div>}

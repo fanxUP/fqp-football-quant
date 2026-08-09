@@ -94,3 +94,49 @@ def fit_temperature_scaling(
         "log_loss_after": round(best_loss, 6),
         "improved": best_loss < baseline - 1e-12,
     }
+
+
+def evaluate_temperature_scaling_temporal_holdout(
+    samples: list[tuple[dict[str, float], str]],
+    minimum_training_samples: int = 100,
+    minimum_validation_samples: int = 25,
+    holdout_ratio: float = 0.20,
+) -> dict[str, Any] | None:
+    """Fit on earlier samples and score the chosen temperature on later samples.
+
+    ``samples`` must be in chronological order.  The returned loss values are
+    exclusively from the later validation segment, so they are suitable for
+    advisory shadow review and cannot overstate the in-sample fit.
+    """
+    if not 0 < holdout_ratio < 1:
+        raise ValueError("留出比例必须介于 0 和 1 之间")
+    validation_count = max(minimum_validation_samples, math.ceil(len(samples) * holdout_ratio))
+    training_count = len(samples) - validation_count
+    if training_count < minimum_training_samples or validation_count < minimum_validation_samples:
+        return None
+
+    training_samples = samples[:training_count]
+    validation_samples = samples[training_count:]
+    fitted = fit_temperature_scaling(training_samples, minimum_samples=minimum_training_samples)
+    if fitted is None:
+        return None
+    try:
+        baseline = multiclass_log_loss(validation_samples)
+        calibrated = [
+            (apply_temperature_scaling(probabilities, float(fitted["temperature"])), actual)
+            for probabilities, actual in validation_samples
+        ]
+        calibrated_loss = multiclass_log_loss(calibrated)
+    except ValueError:
+        return None
+
+    return {
+        "method_name": "temperature_scaling_temporal_holdout_v1",
+        "temperature": fitted["temperature"],
+        "sample_count": validation_count,
+        "training_sample_count": training_count,
+        "validation_sample_count": validation_count,
+        "log_loss_before": round(baseline, 6),
+        "log_loss_after": round(calibrated_loss, 6),
+        "improved": calibrated_loss < baseline - 1e-12,
+    }

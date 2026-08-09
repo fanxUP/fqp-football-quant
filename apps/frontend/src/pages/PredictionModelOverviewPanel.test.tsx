@@ -73,6 +73,7 @@ describe('PredictionModelOverviewPanel', () => {
     expect(screen.getByText(/概率校准：影子验证/)).toBeInTheDocument();
     expect(screen.getByText(/对数损失 1.024 → 1.001/)).toBeInTheDocument();
     expect(await screen.findByText('概率校准监测')).toBeInTheDocument();
+    expect(screen.getByText('验证 320 场')).toBeInTheDocument();
     expect(screen.getByText('具备人工评审基础')).toBeInTheDocument();
     expect(screen.getByText('近期改善')).toBeInTheDocument();
     expect(screen.getByText('样本可比')).toBeInTheDocument();
