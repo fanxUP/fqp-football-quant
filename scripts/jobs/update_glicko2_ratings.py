@@ -32,7 +32,8 @@ def run(dry_run: bool = False) -> dict[str, Any]:
                 ) away_team ON true
                 LEFT JOIN glicko2_update_logs processed ON processed.match_id = m.id
                 WHERE r.full_home_goals IS NOT NULL AND r.full_away_goals IS NOT NULL
-                  AND m.match_status = 'Settled' AND processed.id IS NULL
+                  AND m.kickoff_time < timezone('Asia/Shanghai', NOW())
+                  AND processed.id IS NULL
                 ORDER BY m.kickoff_time ASC, m.id ASC
             """
         )

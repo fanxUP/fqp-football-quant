@@ -35,3 +35,20 @@ def test_glicko2_job_uses_canonical_team_mapping_and_continues_after_one_failure
     assert result["updated"] == 1
     assert result["errors"] == 1
     conn.rollback.assert_called_once()
+
+
+def test_glicko2_job_uses_confirmed_scores_instead_of_legacy_match_status() -> None:
+    conn = MagicMock()
+    cur = MagicMock()
+    conn.cursor.return_value = cur
+    cur.fetchall.return_value = []
+
+    with (
+        patch("scripts.jobs.update_glicko2_ratings.get_db", return_value=_db_context(conn)),
+        patch("scripts.jobs.update_glicko2_ratings.ensure_official_match_teams", return_value=0),
+    ):
+        run()
+
+    query = " ".join(cur.execute.call_args.args[0].split())
+    assert "m.kickoff_time < timezone('Asia/Shanghai', NOW())" in query
+    assert "m.match_status = 'Settled'" not in query
