@@ -7,6 +7,12 @@ export const MODEL_NAME_LABELS: Record<string, string> = {
   market_baseline: '市场赔率基准',
   dixon_coles: '迪克森-科尔斯比分模型',
   maher_poisson: '马赫泊松进球模型',
+  glicko2_rating: 'Glicko-2 强度评级',
+  bivariate_poisson: '双变量泊松进球模型',
+  xgboost_shadow: 'XGBoost 赛前特征模型',
+  logistic_shadow: '逻辑回归赛前特征模型',
+  bayesian_form: '贝叶斯近期状态模型',
+  random_forest_shadow: '随机森林赛前特征模型',
   negative_binomial_shadow: '负二项进球模型',
   extra_trees_shadow: '极端随机树赛前特征模型',
   hist_gradient_boosting_shadow: '直方图梯度提升赛前特征模型',
@@ -14,6 +20,8 @@ export const MODEL_NAME_LABELS: Record<string, string> = {
   lda_shadow: '线性判别分析（LDA）赛前特征模型',
   knn_shadow: 'KNN 近邻赛前特征模型',
   mlp_shadow: 'MLP 赛前特征模型',
+  naive_bayes_shadow: '朴素贝叶斯赛前特征模型',
+  svm_shadow: '支持向量机赛前特征模型',
 };
 
 export function modelNameLabel(code: string): string {
