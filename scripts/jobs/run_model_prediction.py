@@ -71,10 +71,24 @@ MIN_GLICKO2_MATCHES = 8
 MAX_GLICKO2_DEVIATION = 160.0
 MIN_BIVARIATE_TRAINING_MATCHES = 100
 MIN_NEGATIVE_BINOMIAL_TRAINING_MATCHES = 100
+# model_predictions.fair_odds is NUMERIC(10,4), whose largest valid value is
+# 999999.9999. Keep a pathological near-zero probability from aborting a full
+# scheduled prediction batch.
+MAX_STORABLE_FAIR_ODDS = 999_999.9999
 
 # Option code mapping: odds_conversion uses "3"/"1"/"0", snapshots use "h"/"d"/"a"
 OPTION_MAP = {"h": "3", "d": "1", "a": "0"}
 OPTION_REVERSE = {"3": "h", "1": "d", "0": "a"}
+
+
+def _safe_fair_odds(model_probability: float) -> float | None:
+    """Return a database-safe fair odd, or omit an unrepresentable value."""
+    if not math.isfinite(model_probability) or model_probability <= 0:
+        return None
+    fair_odds = 1.0 / model_probability
+    if not math.isfinite(fair_odds) or fair_odds > MAX_STORABLE_FAIR_ODDS:
+        return None
+    return round(fair_odds, 4)
 
 
 @dataclass(frozen=True)
@@ -1028,7 +1042,7 @@ def _predict_match_play_type(
             raw_model_p = raw_probs.get(opt_code, model_p)
             market_p = market_probs.get(opt_code, 0.0)
 
-            fair_odds = (1.0 / model_p) if model_p and model_p > 0 else None
+            fair_odds = _safe_fair_odds(model_p)
             metric = option_metrics[opt_code]
             stored_model_p = round(model_p, 6)
             stored_market_p = round(market_p, 6)
@@ -1073,7 +1087,7 @@ def _predict_match_play_type(
                 "probability_upper_bound": round(min(1, model_p + uncertainty * 2), 6),
                 "uncertainty_score": round(uncertainty, 6),
                 "adjusted_probability": round(model_p, 6),
-                "fair_odds": round(fair_odds, 4) if fair_odds else None,
+                "fair_odds": fair_odds,
                 "ev": round(stored_model_p * odds_dict[opt_code] - 1.0, 6),
                 "break_even_probability": stored_break_even,
                 "market_edge": round(stored_model_p - stored_market_p, 6),

@@ -25,6 +25,7 @@ from scripts.jobs.run_model_prediction import (
     _now,
     _predict_match_play_type,
     _run_impl,
+    _safe_fair_odds,
     run,
 )
 
@@ -34,6 +35,13 @@ def test_xgboost_shadow_requires_a_verified_profile_before_predicting() -> None:
         {"xgboost_shadow": {"rollout_mode": "shadow"}},
         {"data_completeness_score": 0.9},
     ) is None
+
+
+def test_fair_odds_omits_values_outside_database_precision() -> None:
+    """A near-zero probability must not abort the whole scheduled batch."""
+    assert _safe_fair_odds(0.5) == 2.0
+    assert _safe_fair_odds(0.000001) is None
+    assert _safe_fair_odds(0.0000009) is None
 
 
 def test_logistic_shadow_requires_a_verified_profile_before_predicting() -> None:
