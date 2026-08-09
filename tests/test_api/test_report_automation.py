@@ -44,3 +44,19 @@ def test_report_automation_archive_rejects_unknown_business_source(client) -> No
     response = client.get("/api/report-automation/archive/other/2026-08-03")
 
     assert response.status_code == 422
+
+
+def test_report_automation_snapshot_exposes_only_safe_frozen_report_metrics(client, monkeypatch) -> None:
+    report = {
+        "sourceType": "post_daily",
+        "sourceRef": "2026-08-09",
+        "schemaVersion": 2,
+        "researchMetrics": {"matchCount": 3, "averageEdge": 0.06},
+        "dailyReview": {"actualStake": 100, "realProfitLoss": 20},
+    }
+    monkeypatch.setattr(report_automation, "get_report_snapshot_for_source", lambda _conn, **_kwargs: report)
+
+    response = client.get("/api/report-automation/snapshot/post_daily/2026-08-09")
+
+    assert response.status_code == 200
+    assert response.json() == {"report": report}

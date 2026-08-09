@@ -28,6 +28,7 @@ vi.mock('./reviews/RealProfitLossChart', () => ({ default: () => <div /> }));
 vi.mock('./reviews/MatchReviewCards', () => ({ default: () => <div>单场复盘</div> }));
 vi.mock('./reviews/ReportAutomationPanel', () => ({ default: () => <div /> }));
 vi.mock('./reviews/AutomaticReportArchivePanel', () => ({ default: () => <div>自动赛后报告</div> }));
+vi.mock('./reviews/ReportResearchSummary', () => ({ default: () => <div>量化复盘指标</div> }));
 
 describe('ReviewsPage', () => {
   beforeEach(() => {
@@ -48,6 +49,7 @@ describe('ReviewsPage', () => {
     fireEvent.change(await screen.findByLabelText('日期索引'), { target: { value: '2026-08-09' } });
 
     expect(await screen.findByText('自动赛后报告')).toBeInTheDocument();
+    expect(screen.getByText('量化复盘指标')).toBeInTheDocument();
     expect(screen.queryByText('旧日报摘要，不应再展示')).not.toBeInTheDocument();
     expect(screen.queryByText('赛后复盘解读')).not.toBeInTheDocument();
     expect(screen.queryByText('单场复盘')).not.toBeInTheDocument();

@@ -15,6 +15,7 @@ import PlayTypeWinRateChart from './reviews/PlayTypeWinRateChart';
 import RealProfitLossChart from './reviews/RealProfitLossChart';
 import ReportAutomationPanel from './reviews/ReportAutomationPanel';
 import AutomaticReportArchivePanel from './reviews/AutomaticReportArchivePanel';
+import ReportResearchSummary from './reviews/ReportResearchSummary';
 
 type TabKey = 'daily' | 'weekly' | 'monthly' | 'settlements' | 'errors';
 
@@ -182,6 +183,7 @@ function DailyReviewsTab() {
                   <div>预算使用率: {(review.budget_usage_rate * 100).toFixed(0)}%</div>
                   <div>最大单票亏损: ¥{review.max_single_ticket_loss.toFixed(2)}</div>
                 </div>
+                <ReportResearchSummary sourceType="post_daily" sourceRef={review.review_date} />
                 <AutomaticReportArchivePanel sourceType="post_daily" sourceRef={review.review_date} />
               </div>
             );
@@ -219,6 +221,7 @@ function WeeklyReviewsTab() {
       {expandedId != null && (() => {
         const review = reviews.find((item) => item.id === expandedId);
         return review ? <Card title={`📅 ${review.week_start} 至 ${review.week_end} 周报详情`} style={{ marginTop: '16px' }}>
+          <ReportResearchSummary sourceType="post_weekly" sourceRef={review.week_start} />
           <AutomaticReportArchivePanel sourceType="post_weekly" sourceRef={review.week_start} />
         </Card> : null;
       })()}
@@ -252,6 +255,7 @@ function MonthlyReviewsTab() {
       {expandedId != null && (() => {
         const review = reviews.find((item) => item.id === expandedId);
         return review ? <Card title={`📅 ${String(review.review_month ?? review.month ?? review.id)} 月报详情`} style={{ marginTop: '16px' }}>
+          <ReportResearchSummary sourceType="post_monthly" sourceRef={review.review_month} />
           <AutomaticReportArchivePanel sourceType="post_monthly" sourceRef={review.review_month} />
         </Card> : null;
       })()}

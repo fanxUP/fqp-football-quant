@@ -107,6 +107,27 @@ export interface AgentWorkspaceTask {
   sourceRef?: string | null;
 }
 
+export interface ReportResearchMetrics {
+  matchCount: number;
+  signalCount: number;
+  signalCoverageRate: number;
+  evidenceCoverageRate: number;
+  averageModelProbability: number | null;
+  averageMarketProbability: number | null;
+  averageEdge: number | null;
+  averageEv: number | null;
+}
+
+export interface ReportResearchSnapshot {
+  sourceType: 'post_daily' | 'post_weekly' | 'post_monthly';
+  sourceRef: string;
+  schemaVersion: number;
+  researchMetrics: ReportResearchMetrics | null;
+  dailyReview?: Record<string, number | string | null> | null;
+  aggregate?: Record<string, number | string | null> | null;
+  dailyReportRefs?: string[];
+}
+
 export interface AgentWorkspaceTaskPage {
   offset: number;
   limit: number;
@@ -316,6 +337,10 @@ export const api = {
     archive: (sourceType: 'post_daily' | 'post_weekly' | 'post_monthly', sourceRef: string) =>
       request<{ task: AgentWorkspaceTask | null }>(
         `/api/report-automation/archive/${sourceType}/${encodeURIComponent(sourceRef)}`,
+      ),
+    snapshot: (sourceType: 'post_daily' | 'post_weekly' | 'post_monthly', sourceRef: string) =>
+      request<{ report: ReportResearchSnapshot | null }>(
+        `/api/report-automation/snapshot/${sourceType}/${encodeURIComponent(sourceRef)}`,
       ),
   },
 
