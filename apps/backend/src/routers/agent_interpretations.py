@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from time import perf_counter
-from typing import Annotated, Literal
+from typing import Annotated
 
 from fastapi import APIRouter, Body, HTTPException, Path
 from pydantic import BaseModel, Field, field_validator
@@ -11,7 +11,6 @@ from pydantic import BaseModel, Field, field_validator
 from apps.backend.src.db import get_db
 from apps.backend.src.services.agent_interpretation import (
     InterpretationSourceError,
-    build_post_match_source,
     build_pre_match_source,
 )
 from apps.backend.src.services.agent_workspace_store import create_workspace_task
@@ -60,19 +59,6 @@ def interpret_pre_match(
     try:
         with get_db() as conn:
             source = build_pre_match_source(conn, match_id, body.focusQuestion)
-    except InterpretationSourceError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    return _run(source)
-
-
-@router.post("/post-match/{source_type}/{source_ref}")
-def interpret_post_match(
-    source_type: Literal["post_daily", "post_weekly", "post_monthly"], source_ref: str,
-    body: InterpretationRequest,
-):
-    try:
-        with get_db() as conn:
-            source = build_post_match_source(conn, source_type, source_ref, body.focusQuestion)
     except InterpretationSourceError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return _run(source)

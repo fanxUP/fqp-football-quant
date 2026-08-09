@@ -4,9 +4,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from typing import Any, Literal
-
-InterpretationSourceType = Literal["pre_match", "post_daily", "post_weekly", "post_monthly"]
+from typing import Any
 
 
 class InterpretationSourceError(ValueError):
@@ -15,7 +13,7 @@ class InterpretationSourceError(ValueError):
 
 @dataclass(frozen=True)
 class InterpretationSource:
-    source_type: InterpretationSourceType
+    source_type: str
     source_ref: str
     title: str
     agent_code: str
@@ -27,9 +25,6 @@ def build_interpretation_prompt(
 ) -> str:
     labels = {
         "pre_match": "赛前单场解读",
-        "post_daily": "赛后日报复盘",
-        "post_weekly": "赛后周报复盘",
-        "post_monthly": "赛后月报复盘",
     }
     if source_type not in labels:
         raise InterpretationSourceError("不支持的解读来源")
@@ -80,23 +75,3 @@ def build_pre_match_source(conn: Any, match_id: int, focus_question: str | None)
         "有效模型预测": [{"模型": row[0], "玩法": row[1], "选项": row[2], "模型概率": row[3], "市场概率": row[4], "公平赔率": row[5], "EV": row[6], "置信度": row[7], "预测时间": row[8]} for row in predictions],
     }
     return InterpretationSource("pre_match", str(match_id), title, "pre_match_interpretation_agent", build_interpretation_prompt("pre_match", title, snapshot, focus_question))
-
-
-def build_post_match_source(
-    conn: Any, source_type: InterpretationSourceType, source_ref: str, focus_question: str | None,
-) -> InterpretationSource:
-    tables = {
-        "post_daily": ("daily_reviews", "review_date", "日报"),
-        "post_weekly": ("weekly_reviews", "id", "周报"),
-        "post_monthly": ("monthly_reviews", "id", "月报"),
-    }
-    if source_type not in tables:
-        raise InterpretationSourceError("不支持的赛后复盘来源")
-    table, key, label = tables[source_type]
-    with conn.cursor() as cur:
-        cur.execute(f"SELECT to_jsonb(review) FROM {table} review WHERE {key} = %s LIMIT 1", (source_ref,))
-        row = cur.fetchone()
-    if not row:
-        raise InterpretationSourceError(f"{label}不存在")
-    title = f"赛后复盘解读：{label} {source_ref}"
-    return InterpretationSource(source_type, source_ref, title, "post_match_review_agent", build_interpretation_prompt(source_type, title, {label: row[0]}, focus_question))

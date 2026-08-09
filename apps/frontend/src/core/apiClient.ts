@@ -353,9 +353,6 @@ export const api = {
     preMatch: (matchId: number, focusQuestion = '') => request<{ task: AgentWorkspaceTask; agentCode: string; providerCode: string; model: string }>(
       `/api/agent-interpretations/pre-match/${matchId}`, { method: 'POST', body: JSON.stringify({ focusQuestion }) },
     ),
-    postMatch: (sourceType: 'post_daily' | 'post_weekly' | 'post_monthly', sourceRef: string, focusQuestion = '') => request<{ task: AgentWorkspaceTask; agentCode: string; providerCode: string; model: string }>(
-      `/api/agent-interpretations/post-match/${sourceType}/${encodeURIComponent(sourceRef)}`, { method: 'POST', body: JSON.stringify({ focusQuestion }) },
-    ),
   },
 
   // Teams

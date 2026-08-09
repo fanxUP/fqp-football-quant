@@ -81,7 +81,7 @@ describe('api client GET request coalescing', () => {
       return new Promise(() => undefined);
     }));
 
-    void api.agentInterpretations.postMatch('post_daily', '2026-08-09');
+    void api.agentInterpretations.preMatch(42);
     await vi.advanceTimersByTimeAsync(15_000);
 
     expect(signal?.aborted).toBe(false);

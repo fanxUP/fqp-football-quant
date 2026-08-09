@@ -8,19 +8,19 @@ from apps.backend.src.routers import agent_interpretations
 from apps.backend.src.services.agent_interpretation import (
     InterpretationSource,
     InterpretationSourceError,
-    build_post_match_source,
     build_pre_match_source,
 )
-from apps.backend.src.services.model_gateway import ModelGatewayError, ModelReply
+from apps.backend.src.services.model_gateway import ModelReply
 
 
-def _source(source_type: str = "pre_match", source_ref: str = "42") -> InterpretationSource:
-    agent_code = (
-        "pre_match_interpretation_agent"
-        if source_type == "pre_match"
-        else "post_match_review_agent"
-    )
-    return InterpretationSource(source_type, source_ref, "解读标题", agent_code, "后端冻结材料")
+def _source(source_ref: str = "42") -> InterpretationSource:
+    return InterpretationSource("pre_match", source_ref, "解读标题", "pre_match_interpretation_agent", "后端冻结材料")
+
+
+def test_post_match_manual_interpretation_route_is_not_exposed() -> None:
+    paths = {route.path for route in agent_interpretations.router.routes}
+
+    assert "/api/agent-interpretations/post-match/{source_type}/{source_ref}" not in paths
 
 
 def test_pre_match_interpretation_archives_server_source_and_invokes_once(client, monkeypatch) -> None:
@@ -63,31 +63,6 @@ def test_interpretation_returns_not_found_without_model_call_when_source_is_miss
     assert response.status_code == 404
     assert response.json()["detail"] == "官方比赛不存在"
     invoke.assert_not_called()
-
-
-def test_post_match_interpretation_records_failure_without_archiving_business_data(client, monkeypatch) -> None:
-    connection = MagicMock()
-    connection.__enter__.return_value = connection
-    monkeypatch.setattr(agent_interpretations, "get_db", lambda: connection)
-    monkeypatch.setattr(
-        agent_interpretations,
-        "build_post_match_source",
-        lambda *_: _source("post_daily", "2026-08-02"),
-    )
-    invoke = MagicMock(side_effect=ModelGatewayError("该智能代理未启用模型调用"))
-    monkeypatch.setattr(agent_interpretations, "invoke_agent_model", invoke)
-    archive = MagicMock()
-    monkeypatch.setattr(agent_interpretations, "create_workspace_task", archive)
-    audit = MagicMock()
-    monkeypatch.setattr(agent_interpretations, "record_model_invocation", audit)
-
-    response = client.post("/api/agent-interpretations/post-match/post_daily/2026-08-02", json={})
-
-    assert response.status_code == 422
-    assert response.json()["detail"] == "该智能代理未启用模型调用"
-    invoke.assert_called_once()
-    archive.assert_not_called()
-    assert audit.call_args.kwargs["status"] == "failed"
 
 
 class _Cursor:
@@ -134,17 +109,3 @@ def test_pre_match_snapshot_contains_only_server_read_business_material() -> Non
     assert "1.86" in source.prompt
     assert "baseline" in source.prompt
     assert "关注主胜" in source.prompt
-
-
-def test_post_match_snapshot_uses_the_requested_archive_only() -> None:
-    source = build_post_match_source(
-        _Connection([({"review_date": "2026-08-02", "roi": 0.1},)]),
-        "post_daily",
-        "2026-08-02",
-        None,
-    )
-
-    assert source.source_type == "post_daily"
-    assert source.source_ref == "2026-08-02"
-    assert source.agent_code == "post_match_review_agent"
-    assert '"roi":0.1' in source.prompt
