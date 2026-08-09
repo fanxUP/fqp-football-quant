@@ -29,8 +29,8 @@ vi.mock('../../app/ThemeContext', () => ({
 
 // ----- Mock Card wrapper ----------------------------------------------------
 vi.mock('./Card', () => ({
-  default: ({ children }: { children: React.ReactNode }) => (
-    <div data-testid="card-wrapper">
+  default: ({ children, className }: { children: React.ReactNode; className?: string }) => (
+    <div data-testid="card-wrapper" className={className}>
       <div data-testid="card-body">{children}</div>
     </div>
   ),
@@ -82,6 +82,11 @@ describe('ChartCard', () => {
       );
       const chartDiv = container.querySelector('[style*="height: 300px"]');
       expect(chartDiv).toBeTruthy();
+    });
+
+    it('uses the TradingView frame variant for time-series reporting', () => {
+      render(<ChartCard title="盈亏走势" option={baseOption} variant="trading" />);
+      expect(screen.getByTestId('card-wrapper')).toHaveClass('chart-frame--trading');
     });
   });
 

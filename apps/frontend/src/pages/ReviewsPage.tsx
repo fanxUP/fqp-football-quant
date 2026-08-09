@@ -12,6 +12,7 @@ import ErrorState from '../shared/components/ErrorState';
 import StatusBadge from '../shared/components/StatusBadge';
 import { formatTimestamp } from '../shared/utils';
 import BusinessInterpretationPanel from './agent-workspace/BusinessInterpretationPanel';
+import { asTradingViewChart } from './reviews/tradingViewOptions';
 
 type TabKey = 'daily' | 'weekly' | 'monthly' | 'settlements' | 'errors';
 
@@ -104,10 +105,9 @@ function DailyReviewsTab() {
       return cum;
     });
 
-    return {
+    return asTradingViewChart({
       tooltip: {
         trigger: 'axis' as const,
-        axisPointer: { type: 'shadow' as const },
       },
       legend: {
         data: ['日盈亏', '累计盈亏'],
@@ -131,14 +131,12 @@ function DailyReviewsTab() {
           name: '日盈亏 (¥)',
           nameTextStyle: { fontSize: 11 },
           axisLabel: { fontSize: 11 },
-          splitLine: { lineStyle: { color: 'var(--fqp-border-subtle)' } },
         },
         {
           type: 'value' as const,
           name: '累计 (¥)',
           nameTextStyle: { fontSize: 11 },
           axisLabel: { fontSize: 11 },
-          splitLine: { show: false },
         },
       ],
       series: [
@@ -159,10 +157,11 @@ function DailyReviewsTab() {
           lineStyle: { color: '#3b82f6', width: 2 },
           itemStyle: { color: '#3b82f6' },
           symbol: 'none',
-          smooth: true,
+          smooth: false,
+          areaStyle: { color: 'rgba(59, 130, 246, 0.10)' },
         },
       ],
-    };
+    });
   })();
 
   // ---- Error distribution treemap ----
@@ -229,16 +228,15 @@ function DailyReviewsTab() {
         name: pt,
         type: 'line' as const,
         data,
-        smooth: true,
-        symbol: 'circle',
-        symbolSize: 5,
+        smooth: false,
+        symbol: 'none',
         lineStyle: { width: 2, color: colors[i % colors.length] },
         itemStyle: { color: colors[i % colors.length] },
         connectNulls: true,
       };
     });
 
-    return {
+    return asTradingViewChart({
       tooltip: {
         trigger: 'axis' as const,
         formatter: (params: { seriesName: string; value: number | null; marker: string }[]) => {
@@ -272,10 +270,9 @@ function DailyReviewsTab() {
         axisLabel: { fontSize: 11, formatter: '{value}%' },
         min: 0,
         max: 100,
-        splitLine: { lineStyle: { color: 'var(--fqp-border-subtle)' } },
       },
       series,
-    };
+    });
   })();
 
   if (error) return <ErrorState message={error} onRetry={() => window.location.reload()} />;
@@ -286,14 +283,26 @@ function DailyReviewsTab() {
       {!loading && (
         <div className="fqp-grid-2" style={{ marginBottom: '16px' }}>
           {plChartOption ? (
-            <ChartCard title="实盘盈亏走势" option={plChartOption} height={300} />
+            <ChartCard
+              title="实盘盈亏走势"
+              subtitle="日盈亏 · 累计盈亏"
+              option={plChartOption}
+              height={300}
+              variant="trading"
+            />
           ) : (
             <Card title="实盘盈亏走势">
               <div style={{ padding: '40px 0', textAlign: 'center', color: 'var(--fqp-text-muted)' }}>暂无数据</div>
             </Card>
           )}
           {errorDistOption ? (
-            <ChartCard title="盈亏天数分布" option={errorDistOption} height={300} />
+            <ChartCard
+              title="盈亏天数分布"
+              subtitle="按已结算日统计"
+              option={errorDistOption}
+              height={300}
+              variant="trading"
+            />
           ) : (
             <Card title="盈亏天数分布">
               <div style={{ padding: '40px 0', textAlign: 'center', color: 'var(--fqp-text-muted)' }}>暂无数据</div>
@@ -306,8 +315,10 @@ function DailyReviewsTab() {
       {!loading && playTypeWinRateOption && (
         <ChartCard
           title="各玩法胜率走势"
+          subtitle="按结算日期滚动统计"
           option={playTypeWinRateOption}
           height={320}
+          variant="trading"
         />
       )}
 

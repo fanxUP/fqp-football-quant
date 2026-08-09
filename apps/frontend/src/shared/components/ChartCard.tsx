@@ -14,6 +14,8 @@ interface ChartCardProps {
   emptyReason?: string;
   error?: string | null;
   updatedAt?: string;
+  /** Financial time-series visual treatment, scoped to reporting pages. */
+  variant?: 'default' | 'trading';
 }
 
 interface RenderConfig {
@@ -47,6 +49,7 @@ export default function ChartCard({
   emptyReason,
   error,
   updatedAt,
+  variant = 'default',
 }: ChartCardProps) {
   const chartRef = useRef<HTMLDivElement>(null);
   const instanceRef = useRef<ECharts | null>(null);
@@ -134,6 +137,7 @@ export default function ChartCard({
       emptyReason={emptyReason}
       error={effectiveError}
       height={height}
+      variant={variant}
     >
       <div
         ref={chartRef}

@@ -12,6 +12,7 @@ interface ChartFrameProps {
   error?: string | null;
   height?: number;
   controls?: ReactNode;
+  variant?: 'default' | 'trading';
   children: ReactNode;
 }
 
@@ -25,6 +26,7 @@ export default function ChartFrame({
   error,
   height = 300,
   controls,
+  variant = 'default',
   children,
 }: ChartFrameProps) {
   let body = children;
@@ -53,7 +55,7 @@ export default function ChartFrame({
   }
 
   return (
-    <Card className="chart-frame">
+    <Card className={`chart-frame${variant === 'trading' ? ' chart-frame--trading' : ''}`}>
       <header className="chart-frame-header">
         <div className="chart-frame-heading">
           <h3>{title}</h3>
