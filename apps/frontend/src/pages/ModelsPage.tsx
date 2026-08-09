@@ -9,6 +9,7 @@ import ErrorState from '../shared/components/ErrorState';
 import { modelNameLabel, optionLabel, playTypeLabel } from '../shared/constants';
 import TeamName from '../shared/components/TeamName';
 import ModelPerformanceCharts from '../visualization/ModelPerformanceCharts';
+import PredictionModelOverviewPanel from './PredictionModelOverviewPanel';
 
 export default function ModelsPage() {
   const [predictions, setPredictions] = useState<Prediction[]>([]);
@@ -167,6 +168,8 @@ export default function ModelsPage() {
         title="模型表现"
         subtitle="按独立比赛评估模型，并区分基础模型概率与特征修正后的最终概率"
       />
+
+      <PredictionModelOverviewPanel />
 
       {/* Stat cards — staggered entrance */}
       <div className="fqp-grid-4" style={{ marginBottom: '24px' }}>

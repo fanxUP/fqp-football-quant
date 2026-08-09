@@ -353,6 +353,22 @@ export interface Prediction {
   away_team: string;
 }
 
+export interface PredictionModelRuntimeState {
+  code: string;
+  isActive: boolean;
+  version: string | null;
+  versionCreatedAt: string | null;
+  trainingStartDate: string | null;
+  trainingEndDate: string | null;
+  validPredictionMatchCount: number;
+  latestPredictionAt: string | null;
+}
+
+export interface PredictionModelOverview {
+  models: PredictionModelRuntimeState[];
+  total: number;
+}
+
 // ---- Stage 4: Recommendation tickets ----
 
 export interface SimulationTicket {

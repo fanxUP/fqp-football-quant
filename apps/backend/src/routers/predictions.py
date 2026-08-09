@@ -9,6 +9,13 @@ from scripts.sporttery_sales import get_sporttery_sales_window
 
 router = APIRouter(tags=["predictions"])
 
+PREDICTION_MODEL_CODES = (
+    "market_baseline",
+    "elo_rating",
+    "maher_poisson",
+    "dixon_coles",
+)
+
 # Play type display names
 PLAY_TYPE_NAMES: dict[str, str] = {
     "spf": "胜平负",
@@ -391,6 +398,70 @@ def list_model_versions(limit: int = Query(50)):
         ],
         "total": len(rows),
     }
+
+
+@router.get("/api/models/overview")
+def get_prediction_model_overview():
+    """Return read-only runtime state for the supported prediction models."""
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                WITH current_versions AS (
+                    SELECT DISTINCT ON (model_name)
+                           id, model_name, version, is_active,
+                           training_start_date, training_end_date, created_at
+                    FROM model_versions
+                    WHERE model_name = ANY(%s)
+                    ORDER BY model_name, is_active DESC, created_at DESC, id DESC
+                )
+                SELECT cv.model_name, cv.id, cv.version, cv.is_active,
+                       cv.training_start_date, cv.training_end_date, cv.created_at,
+                       COUNT(DISTINCT mp.match_id) FILTER (
+                           WHERE mp.validation_status = 'valid'
+                       ) AS valid_prediction_match_count,
+                       MAX(mp.predict_time) FILTER (
+                           WHERE mp.validation_status = 'valid'
+                       ) AS latest_prediction_at
+                FROM current_versions cv
+                LEFT JOIN model_predictions mp ON mp.model_version_id = cv.id
+                GROUP BY cv.model_name, cv.id, cv.version, cv.is_active,
+                         cv.training_start_date, cv.training_end_date, cv.created_at
+                """,
+                (list(PREDICTION_MODEL_CODES),),
+            )
+            rows = cur.fetchall()
+
+    states = {
+        row[0]: {
+            "code": row[0],
+            "isActive": bool(row[3]),
+            "version": row[2],
+            "versionCreatedAt": row[6].isoformat() if row[6] else None,
+            "trainingStartDate": str(row[4]) if row[4] else None,
+            "trainingEndDate": str(row[5]) if row[5] else None,
+            "validPredictionMatchCount": int(row[7] or 0),
+            "latestPredictionAt": row[8].isoformat() if row[8] else None,
+        }
+        for row in rows
+    }
+    models = [
+        states.get(
+            code,
+            {
+                "code": code,
+                "isActive": False,
+                "version": None,
+                "versionCreatedAt": None,
+                "trainingStartDate": None,
+                "trainingEndDate": None,
+                "validPredictionMatchCount": 0,
+                "latestPredictionAt": None,
+            },
+        )
+        for code in PREDICTION_MODEL_CODES
+    ]
+    return {"models": models, "total": len(models)}
 
 
 @router.post("/api/recommendations/generate")

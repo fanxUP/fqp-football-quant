@@ -268,6 +268,64 @@ class TestModelVersionsEndpoint:
         assert version["training_window_end"] == "2026-07-21"
 
 
+class TestPredictionModelOverviewEndpoint:
+    def test_returns_current_runtime_state_for_each_supported_prediction_model(self, client):
+        now = datetime(2026, 8, 9, 6, 30)
+        mock_conn = MagicMock()
+        mock_cur = MagicMock()
+        mock_conn.__enter__.return_value = mock_conn
+        mock_conn.cursor.return_value.__enter__.return_value = mock_cur
+        mock_cur.fetchall.return_value = [
+            (
+                "market_baseline",
+                1,
+                "1.0.0",
+                True,
+                date(2026, 7, 1),
+                None,
+                now,
+                18,
+                now,
+            ),
+            (
+                "elo_rating",
+                4,
+                "1.0.0",
+                True,
+                None,
+                None,
+                now,
+                16,
+                now,
+            ),
+        ]
+
+        with patch("apps.backend.src.routers.predictions.get_db", return_value=mock_conn):
+            response = client.get("/api/models/overview")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["total"] == 4
+        assert [item["code"] for item in data["models"]] == [
+            "market_baseline",
+            "elo_rating",
+            "maher_poisson",
+            "dixon_coles",
+        ]
+        assert data["models"][0] == {
+            "code": "market_baseline",
+            "isActive": True,
+            "version": "1.0.0",
+            "versionCreatedAt": "2026-08-09T06:30:00",
+            "trainingStartDate": "2026-07-01",
+            "trainingEndDate": None,
+            "validPredictionMatchCount": 18,
+            "latestPredictionAt": "2026-08-09T06:30:00",
+        }
+        assert data["models"][2]["isActive"] is False
+        assert data["models"][2]["validPredictionMatchCount"] == 0
+
+
 class TestTicketsEndpoint:
     def test_returns_empty_when_no_tickets(self, client):
         mock_conn = MagicMock()

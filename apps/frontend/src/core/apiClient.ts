@@ -425,6 +425,9 @@ export const api = {
       `/api/predictions${qs({ match_id: params?.match_id, limit: params?.limit ?? 50 })}`,
     ),
 
+  modelOverview: () =>
+    request<import('./types').PredictionModelOverview>('/api/models/overview'),
+
   // Live recommendations
   liveRecommendations: (params?: { limit?: number; min_ev?: number; min_confidence?: number }) =>
     request<{ status: string; recommendations: import('./types').LiveRecommendation[]; total: number; sales_window?: import('./types').SportterySalesWindow }>(
