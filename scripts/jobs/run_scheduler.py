@@ -26,6 +26,19 @@ MODEL_PREDICTION_CRON = {"minute": "15,45"}
 # every 30 minutes during the review window and writes only after the official
 # result, the post-match evidence window, and related ticket settlement agree.
 DAILY_REPORT_CHECK_CRON = {"hour": "6-23", "minute": "15,45"}
+# Start weekly/monthly reports only after the daily completion window.  A small
+# bounded retry window absorbs late official-result publication without polling
+# continuously; completed runs stay immutable in report_generation_runs.
+WEEKLY_REPORT_CHECK_CRON = {
+    "day_of_week": "mon-tue",
+    "hour": "12,14,16,18,20,22",
+    "minute": "0",
+}
+MONTHLY_REPORT_CHECK_CRON = {
+    "day": "2-5",
+    "hour": "12,14,16,18,20,22",
+    "minute": "0",
+}
 # The full-season calibration can make many official requests. If its primary
 # run is interrupted by a transient upstream TLS/network failure, make only one
 # delayed retry rather than polling or repeatedly re-running the whole catalog.
@@ -662,7 +675,7 @@ def main() -> None:
                 id="generate_daily_review",
             )
 
-            # Weekly at Monday 09:00: generate the previous week's review
+            # Start the previous-week report after its daily reports are ready.
             scheduler.add_job(
                 _audited_job(
                     "generate_weekly_review",
@@ -673,13 +686,11 @@ def main() -> None:
                     ).run_weekly(),
                 ),
                 "cron",
-                day_of_week="mon",
-                hour=9,
-                minute=0,
+                **WEEKLY_REPORT_CHECK_CRON,
                 id="generate_weekly_review",
             )
 
-            # Monthly at day 1 10:00: generate the previous month's review
+            # Start the previous-month report after its daily reports are ready.
             scheduler.add_job(
                 _audited_job(
                     "generate_monthly_review",
@@ -690,9 +701,7 @@ def main() -> None:
                     ).run_monthly(),
                 ),
                 "cron",
-                day=1,
-                hour=10,
-                minute=0,
+                **MONTHLY_REPORT_CHECK_CRON,
                 id="generate_monthly_review",
             )
 

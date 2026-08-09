@@ -1,7 +1,7 @@
-"""Daily review generation job.
+"""Completion-driven daily review generation job.
 
-Aggregates the previous day's activity into the daily_reviews table.
-Runs at 23:30 daily — reviews yesterday's data (today incomplete).
+Aggregates the previous business day's activity only after official results,
+ticket settlement, and its post-match evidence window are ready.
 """
 
 from __future__ import annotations

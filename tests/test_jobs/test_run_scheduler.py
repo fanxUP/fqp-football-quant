@@ -7,9 +7,11 @@ from unittest.mock import MagicMock, patch
 from apps.backend.src.services.pipeline_status import JOB_DEFINITIONS
 from scripts.jobs.run_scheduler import (
     MODEL_PREDICTION_CRON,
+    MONTHLY_REPORT_CHECK_CRON,
     OFFICIAL_SCHEDULE_CRON,
     SEASON_RECONCILIATION_RETRY_TIME,
     STARTUP_RECOVERY_JOB_CODES,
+    WEEKLY_REPORT_CHECK_CRON,
     _audited_job,
     _business_now,
     _odds_dispatch_owner,
@@ -158,6 +160,23 @@ def test_scheduler_runs_model_predictions_after_each_schedule_refresh():
 
     assert MODEL_PREDICTION_CRON == {"minute": "15,45"}
     assert "**MODEL_PREDICTION_CRON" in source
+
+
+def test_scheduler_retries_periodic_reports_after_daily_reports_can_complete():
+    source = Path("scripts/jobs/run_scheduler.py").read_text()
+
+    assert WEEKLY_REPORT_CHECK_CRON == {
+        "day_of_week": "mon-tue",
+        "hour": "12,14,16,18,20,22",
+        "minute": "0",
+    }
+    assert MONTHLY_REPORT_CHECK_CRON == {
+        "day": "2-5",
+        "hour": "12,14,16,18,20,22",
+        "minute": "0",
+    }
+    assert "**WEEKLY_REPORT_CHECK_CRON" in source
+    assert "**MONTHLY_REPORT_CHECK_CRON" in source
 
 
 def test_scheduler_updates_glicko2_after_elo_ratings():

@@ -3,7 +3,10 @@ from __future__ import annotations
 from contextlib import contextmanager
 from datetime import datetime
 
-from scripts.jobs.report_generation import assess_daily_report_readiness
+from scripts.jobs.report_generation import (
+    assess_daily_report_readiness,
+    assess_periodic_report_readiness,
+)
 
 
 class _Cursor:
@@ -93,6 +96,58 @@ def test_daily_report_skips_empty_official_day() -> None:
     readiness = assess_daily_report_readiness(_EmptyConnection(), "2026-08-09")
 
     assert readiness["canGenerate"] is False
+    assert readiness["status"] == "skipped"
+    assert readiness["reasonCodes"] == ["NO_OFFICIAL_MATCHES"]
+
+
+def test_periodic_report_waits_for_every_official_day_daily_report() -> None:
+    class _PeriodicCursor(_Cursor):
+        def execute(self, query: str, _params: tuple[object, ...]) -> None:
+            if "completed_daily_report_count" in query:
+                self._row = (3, 2, ["2026-08-04"])
+            else:
+                raise AssertionError(f"Unexpected query: {query}")
+
+    class _PeriodicConnection:
+        def cursor(self) -> _PeriodicCursor:
+            return _PeriodicCursor()
+
+    readiness = assess_periodic_report_readiness(
+        _PeriodicConnection(),
+        start="2026-08-03",
+        end="2026-08-09",
+    )
+
+    assert readiness == {
+        "canGenerate": False,
+        "status": "waiting",
+        "reasonCodes": ["DAILY_REPORT_PENDING"],
+        "officialDayCount": 3,
+        "completedDailyReportCount": 2,
+        "pendingDailyReportDates": ["2026-08-04"],
+        "periodStart": "2026-08-03",
+        "periodEnd": "2026-08-09",
+    }
+
+
+def test_periodic_report_skips_period_without_official_matches() -> None:
+    class _EmptyPeriodicCursor(_Cursor):
+        def execute(self, query: str, _params: tuple[object, ...]) -> None:
+            if "completed_daily_report_count" in query:
+                self._row = (0, 0, [])
+            else:
+                raise AssertionError(f"Unexpected query: {query}")
+
+    class _EmptyPeriodicConnection:
+        def cursor(self) -> _EmptyPeriodicCursor:
+            return _EmptyPeriodicCursor()
+
+    readiness = assess_periodic_report_readiness(
+        _EmptyPeriodicConnection(),
+        start="2026-07-01",
+        end="2026-07-31",
+    )
+
     assert readiness["status"] == "skipped"
     assert readiness["reasonCodes"] == ["NO_OFFICIAL_MATCHES"]
 

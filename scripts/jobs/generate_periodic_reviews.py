@@ -7,6 +7,11 @@ from typing import Any
 
 from apps.backend.src.db import get_db
 from scripts.business_time import business_today
+from scripts.jobs.report_generation import (
+    assess_periodic_report_readiness,
+    has_completed_report_generation_run,
+    upsert_report_generation_run,
+)
 from scripts.real_ticket_storage import upsert_monthly_review, upsert_weekly_review
 from scripts.review_generator import monthly_summary, weekly_summary
 from scripts.upset.reports import generate_report
@@ -81,6 +86,32 @@ def run_weekly(
     start, end = (week_start, week_end) if week_start and week_end else _previous_week()
 
     with get_db() as conn:
+        readiness = assess_periodic_report_readiness(conn, start=start, end=end)
+        if has_completed_report_generation_run(
+            conn,
+            report_type="weekly",
+            period_key=start,
+        ):
+            return {
+                "status": "skipped",
+                "week_start": start,
+                "week_end": end,
+                "reason": "already_completed",
+            }
+        if not readiness["canGenerate"]:
+            upsert_report_generation_run(
+                conn,
+                report_type="weekly",
+                period_key=start,
+                status=readiness["status"],
+                readiness=readiness,
+            )
+            return {
+                "status": readiness["status"],
+                "week_start": start,
+                "week_end": end,
+                "readiness": readiness,
+            }
         with conn.cursor() as cur:
             cur.execute(
                 """
@@ -113,6 +144,20 @@ def run_weekly(
             start=start,
             end=end,
         )
+        upsert_report_generation_run(
+            conn,
+            report_type="weekly",
+            period_key=start,
+            status="completed",
+            readiness=readiness,
+            snapshot={
+                "reviewId": review_id,
+                "weekStart": start,
+                "weekEnd": end,
+                "aggregate": aggregate,
+                "upsetReport": upset_report,
+            },
+        )
 
     return {
         "status": "ok",
@@ -130,7 +175,40 @@ def run_monthly(month: str | None = None, dry_run: bool = False) -> dict[str, An
 
     target_month = month or _previous_month()
 
+    month_start = f"{target_month}-01"
+    month_end = (date.fromisoformat(month_start).replace(day=28) + timedelta(days=4)).replace(
+        day=1
+    ) - timedelta(days=1)
+
     with get_db() as conn:
+        readiness = assess_periodic_report_readiness(
+            conn,
+            start=month_start,
+            end=month_end.isoformat(),
+        )
+        if has_completed_report_generation_run(
+            conn,
+            report_type="monthly",
+            period_key=target_month,
+        ):
+            return {
+                "status": "skipped",
+                "month": target_month,
+                "reason": "already_completed",
+            }
+        if not readiness["canGenerate"]:
+            upsert_report_generation_run(
+                conn,
+                report_type="monthly",
+                period_key=target_month,
+                status=readiness["status"],
+                readiness=readiness,
+            )
+            return {
+                "status": readiness["status"],
+                "month": target_month,
+                "readiness": readiness,
+            }
         with conn.cursor() as cur:
             cur.execute(
                 """
@@ -158,15 +236,24 @@ def run_monthly(month: str | None = None, dry_run: bool = False) -> dict[str, An
         }
         data["summary_text"] = monthly_summary(data)
         review_id = upsert_monthly_review(conn, data)
-        month_start = f"{target_month}-01"
-        month_end = (date.fromisoformat(month_start).replace(day=28) + timedelta(days=4)).replace(
-            day=1
-        ) - timedelta(days=1)
         upset_report = generate_report(
             conn,
             report_type="monthly",
             start=month_start,
             end=month_end.isoformat(),
+        )
+        upsert_report_generation_run(
+            conn,
+            report_type="monthly",
+            period_key=target_month,
+            status="completed",
+            readiness=readiness,
+            snapshot={
+                "reviewId": review_id,
+                "month": target_month,
+                "aggregate": aggregate,
+                "upsetReport": upset_report,
+            },
         )
 
     return {

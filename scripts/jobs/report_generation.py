@@ -115,6 +115,67 @@ def assess_daily_report_readiness(
     }
 
 
+def assess_periodic_report_readiness(
+    conn: Any,
+    *,
+    start: str,
+    end: str,
+) -> dict[str, Any]:
+    """Require a completed daily report for every official-match day in a period."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            WITH official_days AS (
+                SELECT DISTINCT business_date
+                FROM official_matches
+                WHERE business_date BETWEEN %s AND %s
+            ), completed_daily_runs AS (
+                SELECT period_key::date AS review_date
+                FROM report_generation_runs
+                WHERE report_type = 'daily' AND status = 'completed'
+            )
+            SELECT COUNT(*) AS official_day_count,
+                   COUNT(completed.review_date) AS completed_daily_report_count,
+                   COALESCE(
+                       array_agg(official.business_date::text ORDER BY official.business_date)
+                       FILTER (WHERE completed.review_date IS NULL),
+                       ARRAY[]::text[]
+                   ) AS pending_daily_report_dates
+            FROM official_days official
+            LEFT JOIN completed_daily_runs completed
+              ON completed.review_date = official.business_date
+            """,
+            (start, end),
+        )
+        official_day_count, completed_daily_report_count, pending_dates = cur.fetchone()
+
+    total = int(official_day_count or 0)
+    completed = int(completed_daily_report_count or 0)
+    pending = [str(value) for value in (pending_dates or [])]
+    if total == 0:
+        return {
+            "canGenerate": False,
+            "status": "skipped",
+            "reasonCodes": ["NO_OFFICIAL_MATCHES"],
+            "officialDayCount": 0,
+            "completedDailyReportCount": 0,
+            "pendingDailyReportDates": [],
+            "periodStart": start,
+            "periodEnd": end,
+        }
+
+    return {
+        "canGenerate": completed == total,
+        "status": "ready" if completed == total else "waiting",
+        "reasonCodes": [] if completed == total else ["DAILY_REPORT_PENDING"],
+        "officialDayCount": total,
+        "completedDailyReportCount": completed,
+        "pendingDailyReportDates": pending,
+        "periodStart": start,
+        "periodEnd": end,
+    }
+
+
 def has_completed_report_generation_run(
     conn: Any,
     *,
