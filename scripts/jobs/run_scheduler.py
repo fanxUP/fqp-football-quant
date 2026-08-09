@@ -160,6 +160,7 @@ def _audited_job(
         "collect_upset_provider_evidence",
         "collect_weather",
         "run_model_prediction",
+        "train_probability_calibration",
         "run_recommendation_candidate",
         "generate_daily_review",
         "validate_evidence_chain",
@@ -753,6 +754,23 @@ def main() -> None:
                 hour=23,
                 minute=40,
                 id="compute_evaluation_metrics",
+            )
+
+            # Daily after settled-metric aggregation: fit shadow-only 1x2
+            # calibration profiles. This never changes prediction or decision data.
+            scheduler.add_job(
+                _audited_job(
+                    "train_probability_calibration",
+                    "概率校准影子评估",
+                    "model_agent",
+                    lambda: __import__(
+                        "scripts.jobs.train_probability_calibration", fromlist=["run"]
+                    ).run(),
+                ),
+                "cron",
+                hour=23,
+                minute=42,
+                id="train_probability_calibration",
             )
 
             # Weekly on Sunday at 04:00: run full backtest

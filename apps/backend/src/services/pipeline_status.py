@@ -104,6 +104,9 @@ JOB_DEFINITIONS: dict[str, JobDefinition] = {
     "compute_evaluation_metrics": JobDefinition(
         "模型评估指标计算", "每日 23:40", "model", max_age=timedelta(hours=30)
     ),
+    "train_probability_calibration": JobDefinition(
+        "概率校准影子评估", "每日 23:42", "model", max_age=timedelta(hours=30)
+    ),
     "backtest": JobDefinition(
         "全量回测执行", "每周日 04:07", "model", ("run_backtest",), timedelta(days=8)
     ),

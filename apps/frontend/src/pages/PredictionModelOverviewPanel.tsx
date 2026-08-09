@@ -73,6 +73,12 @@ export default function PredictionModelOverviewPanel() {
             {!loading && state && <div className="prediction-model-runtime">
               <span>版本 {state.version ?? '—'}</span><span>{state.validPredictionMatchCount} 场有效预测</span><span>最近：{formatTime(state.latestPredictionAt)}</span>
             </div>}
+            {!loading && state?.calibration && <div className="prediction-model-calibration" role="status">
+              <strong>概率校准：影子验证</strong>
+              <span>样本 {state.calibration.sampleCount} 场</span>
+              <span>温度 {state.calibration.temperature.toFixed(2)}</span>
+              <span>对数损失 {state.calibration.logLossBefore.toFixed(3)} → {state.calibration.logLossAfter.toFixed(3)}</span>
+            </div>}
           </article>;
         })}
       </div>

@@ -286,6 +286,12 @@ class TestPredictionModelOverviewEndpoint:
                 now,
                 18,
                 now,
+                "temperature_scaling_v1",
+                240,
+                1.024,
+                1.001,
+                1.15,
+                date(2026, 8, 8),
             ),
             (
                 "elo_rating",
@@ -297,6 +303,12 @@ class TestPredictionModelOverviewEndpoint:
                 now,
                 16,
                 now,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
             ),
         ]
 
@@ -323,9 +335,19 @@ class TestPredictionModelOverviewEndpoint:
             "trainingEndDate": None,
             "validPredictionMatchCount": 18,
             "latestPredictionAt": "2026-08-09T06:30:00",
+            "calibration": {
+                "methodName": "temperature_scaling_v1",
+                "sampleCount": 240,
+                "logLossBefore": 1.024,
+                "logLossAfter": 1.001,
+                "temperature": 1.15,
+                "trainingEndDate": "2026-08-08",
+                "rolloutMode": "shadow",
+            },
         }
         assert data["models"][2]["isActive"] is False
         assert data["models"][2]["validPredictionMatchCount"] == 0
+        assert data["models"][2]["calibration"] is None
 
 
 class TestTicketsEndpoint:

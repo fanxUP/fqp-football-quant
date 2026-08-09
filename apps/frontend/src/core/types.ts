@@ -362,6 +362,15 @@ export interface PredictionModelRuntimeState {
   trainingEndDate: string | null;
   validPredictionMatchCount: number;
   latestPredictionAt: string | null;
+  calibration: {
+    methodName: string;
+    sampleCount: number;
+    logLossBefore: number;
+    logLossAfter: number;
+    temperature: number;
+    trainingEndDate: string | null;
+    rolloutMode: 'shadow';
+  } | null;
 }
 
 export interface PredictionModelOverview {

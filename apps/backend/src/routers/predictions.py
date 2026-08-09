@@ -416,6 +416,15 @@ def get_prediction_model_overview():
                     FROM model_versions
                     WHERE model_name = ANY(%s)
                     ORDER BY model_name, is_active DESC, created_at DESC, id DESC
+                ), current_calibrations AS (
+                    SELECT DISTINCT ON (model_name, play_type)
+                           model_name, play_type, method_name, sample_count,
+                           log_loss_before, log_loss_after,
+                           (parameters_json ->> 'temperature')::numeric AS temperature,
+                           training_end_date
+                    FROM probability_calibration_profiles
+                    WHERE is_active = true
+                    ORDER BY model_name, play_type, created_at DESC, id DESC
                 )
                 SELECT cv.model_name, cv.id, cv.version, cv.is_active,
                        cv.training_start_date, cv.training_end_date, cv.created_at,
@@ -424,11 +433,17 @@ def get_prediction_model_overview():
                        ) AS valid_prediction_match_count,
                        MAX(mp.predict_time) FILTER (
                            WHERE mp.validation_status = 'valid'
-                       ) AS latest_prediction_at
+                       ) AS latest_prediction_at,
+                       cp.method_name, cp.sample_count, cp.log_loss_before,
+                       cp.log_loss_after, cp.temperature, cp.training_end_date
                 FROM current_versions cv
                 LEFT JOIN model_predictions mp ON mp.model_version_id = cv.id
+                LEFT JOIN current_calibrations cp
+                  ON cp.model_name = cv.model_name AND cp.play_type = 'spf'
                 GROUP BY cv.model_name, cv.id, cv.version, cv.is_active,
-                         cv.training_start_date, cv.training_end_date, cv.created_at
+                         cv.training_start_date, cv.training_end_date, cv.created_at,
+                         cp.method_name, cp.sample_count, cp.log_loss_before,
+                         cp.log_loss_after, cp.temperature, cp.training_end_date
                 """,
                 (list(PREDICTION_MODEL_CODES),),
             )
@@ -444,6 +459,19 @@ def get_prediction_model_overview():
             "trainingEndDate": str(row[5]) if row[5] else None,
             "validPredictionMatchCount": int(row[7] or 0),
             "latestPredictionAt": row[8].isoformat() if row[8] else None,
+            "calibration": (
+                {
+                    "methodName": row[9],
+                    "sampleCount": int(row[10]),
+                    "logLossBefore": float(row[11]),
+                    "logLossAfter": float(row[12]),
+                    "temperature": float(row[13]),
+                    "trainingEndDate": str(row[14]) if row[14] else None,
+                    "rolloutMode": "shadow",
+                }
+                if len(row) > 14 and row[9] is not None
+                else None
+            ),
         }
         for row in rows
     }
@@ -459,6 +487,7 @@ def get_prediction_model_overview():
                 "trainingEndDate": None,
                 "validPredictionMatchCount": 0,
                 "latestPredictionAt": None,
+                "calibration": None,
             },
         )
         for code in PREDICTION_MODEL_CODES

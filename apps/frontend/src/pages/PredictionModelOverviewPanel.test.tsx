@@ -17,35 +17,39 @@ describe('PredictionModelOverviewPanel', () => {
           code: 'market_baseline', isActive: true, version: '1.0.0',
           versionCreatedAt: '2026-08-09T06:30:00', trainingStartDate: null,
           trainingEndDate: null, validPredictionMatchCount: 18,
-          latestPredictionAt: '2026-08-09T06:30:00',
+          latestPredictionAt: '2026-08-09T06:30:00', calibration: {
+            methodName: 'temperature_scaling_v1', sampleCount: 240,
+            logLossBefore: 1.024, logLossAfter: 1.001, temperature: 1.15,
+            trainingEndDate: '2026-08-08', rolloutMode: 'shadow',
+          },
         },
         {
           code: 'elo_rating', isActive: false, version: null,
           versionCreatedAt: null, trainingStartDate: null, trainingEndDate: null,
-          validPredictionMatchCount: 0, latestPredictionAt: null,
+          validPredictionMatchCount: 0, latestPredictionAt: null, calibration: null,
         },
         {
           code: 'maher_poisson', isActive: true, version: 'mle-1',
           versionCreatedAt: '2026-08-09T06:30:00', trainingStartDate: '2024-01-01',
           trainingEndDate: '2026-08-01', validPredictionMatchCount: 12,
-          latestPredictionAt: '2026-08-09T06:30:00',
+          latestPredictionAt: '2026-08-09T06:30:00', calibration: null,
         },
         {
           code: 'dixon_coles', isActive: true, version: 'mle-1',
           versionCreatedAt: '2026-08-09T06:30:00', trainingStartDate: '2024-01-01',
           trainingEndDate: '2026-08-01', validPredictionMatchCount: 12,
-          latestPredictionAt: '2026-08-09T06:30:00',
+          latestPredictionAt: '2026-08-09T06:30:00', calibration: null,
         },
         {
           code: 'glicko2_rating', isActive: true, version: '1.0.0',
           versionCreatedAt: '2026-08-09T06:30:00', trainingStartDate: null,
-          trainingEndDate: null, validPredictionMatchCount: 0, latestPredictionAt: null,
+          trainingEndDate: null, validPredictionMatchCount: 0, latestPredictionAt: null, calibration: null,
         },
         {
           code: 'bivariate_poisson', isActive: true, version: '1.0.0',
           versionCreatedAt: '2026-08-09T06:30:00', trainingStartDate: '2024-01-01',
           trainingEndDate: '2026-08-01', validPredictionMatchCount: 0,
-          latestPredictionAt: null,
+          latestPredictionAt: null, calibration: null,
         },
       ],
     });
@@ -61,6 +65,8 @@ describe('PredictionModelOverviewPanel', () => {
     expect(screen.getByText('双变量泊松进球模型')).toBeInTheDocument();
     expect(screen.getAllByText('已启用')[0]).toHaveAttribute('data-status', 'enabled');
     expect(screen.getByText('未启用')).toHaveAttribute('data-status', 'disabled');
+    expect(screen.getByText(/概率校准：影子验证/)).toBeInTheDocument();
+    expect(screen.getByText(/对数损失 1.024 → 1.001/)).toBeInTheDocument();
     expect(screen.getByText(/单一模型不会直接生成投注推荐/)).toBeInTheDocument();
   });
 });

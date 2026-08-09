@@ -168,6 +168,17 @@ def test_scheduler_updates_glicko2_after_elo_ratings():
     assert JOB_DEFINITIONS["update_glicko2_ratings"].schedule == "每日 01:10"
 
 
+def test_probability_calibration_is_scheduled_after_metrics_as_shadow_only():
+    source = Path("scripts/jobs/run_scheduler.py").read_text()
+
+    assert 'id="train_probability_calibration"' in source
+    assert "概率校准影子评估" in source
+    assert source.index('id="compute_evaluation_metrics"') < source.index(
+        'id="train_probability_calibration"'
+    )
+    assert JOB_DEFINITIONS["train_probability_calibration"].schedule == "每日 23:42"
+
+
 def test_scheduler_detects_upsets_after_results_and_ticket_settlement():
     source = Path("scripts/jobs/run_scheduler.py").read_text()
 
