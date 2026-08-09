@@ -15,6 +15,7 @@ PREDICTION_MODEL_CODES = (
     "maher_poisson",
     "dixon_coles",
     "glicko2_rating",
+    "bivariate_poisson",
 )
 
 # Play type display names

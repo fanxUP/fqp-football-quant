@@ -4,7 +4,26 @@ from unittest.mock import MagicMock, patch
 
 from psycopg2.extras import Json
 
-from scripts.mle_trainer import _load_match_data, run
+from scripts.mle_trainer import _load_match_data, fit_bivariate_poisson_shared, run
+
+
+def test_bivariate_trainer_fits_a_safe_shared_component_from_settled_results() -> None:
+    conn = MagicMock()
+    maher = {
+        "attack": {10: 0.2, 20: -0.1},
+        "defense": {10: -0.1, 20: 0.2},
+        "home_advantage": 0.2,
+        "league_intercept": 0.1,
+    }
+    with patch(
+        "scripts.mle_trainer._load_match_data",
+        return_value=([10, 20], {10: 0, 20: 1}, [0, 1, 0], [1, 0, 1], [1, 0, 2], [1, 0, 1]),
+    ):
+        result = fit_bivariate_poisson_shared(conn, maher)
+
+    assert result["converged"] is True
+    assert result["n_matches"] == 3
+    assert 0 <= result["shared_goal_component"] < 0.3
 
 
 def test_mle_run_adapts_parameter_dicts_for_jsonb_without_missing_updated_at_column():
@@ -25,6 +44,12 @@ def test_mle_run_adapts_parameter_dicts_for_jsonb_without_missing_updated_at_col
             "converged": True,
         },
         "dixon_coles_rho": {"rho": -0.08, "nll": 5.0, "n_low_score_matches": 6},
+        "bivariate_poisson": {
+            "shared_goal_component": 0.1,
+            "n_matches": 20,
+            "converged": True,
+            "nll": 10.0,
+        },
     }
 
     with (
@@ -34,11 +59,11 @@ def test_mle_run_adapts_parameter_dicts_for_jsonb_without_missing_updated_at_col
         result = run()
 
     assert result["status"] == "ok"
-    assert cur.execute.call_count == 3
+    assert cur.execute.call_count == 5
     for call in cur.execute.call_args_list:
         query = call.args[0]
         assert "updated_at" not in query
-    insert_calls = cur.execute.call_args_list[1:]
+    insert_calls = cur.execute.call_args_list[2:]
     assert all(isinstance(call.args[1][5], Json) for call in insert_calls)
     conn.commit.assert_called_once()
 
@@ -121,6 +146,12 @@ def test_mle_run_creates_new_active_versions_without_overwriting_history():
             "training_end_date": date(2026, 7, 21),
         },
         "dixon_coles_rho": {"rho": -0.08, "nll": 5.0, "n_low_score_matches": 6},
+        "bivariate_poisson": {
+            "shared_goal_component": 0.1,
+            "n_matches": 20,
+            "converged": True,
+            "nll": 10.0,
+        },
     }
 
     with (
@@ -132,12 +163,17 @@ def test_mle_run_creates_new_active_versions_without_overwriting_history():
     assert result["status"] == "ok"
     queries = [" ".join(call.args[0].split()) for call in cur.execute.call_args_list]
     assert queries[0].startswith("UPDATE model_versions SET is_active = false")
-    assert sum(query.startswith("INSERT INTO model_versions") for query in queries) == 2
-    assert all("training_start_date" in query for query in queries[1:])
-    assert all("training_end_date" in query for query in queries[1:])
-    assert all("is_active" in query for query in queries[1:])
-    insert_params = [call.args[1] for call in cur.execute.call_args_list[1:]]
-    assert {params[0] for params in insert_params} == {"maher_poisson", "dixon_coles"}
+    assert queries[1].startswith("UPDATE model_versions SET is_active = false")
+    assert sum(query.startswith("INSERT INTO model_versions") for query in queries) == 3
+    assert all("training_start_date" in query for query in queries[2:])
+    assert all("training_end_date" in query for query in queries[2:])
+    assert all("is_active" in query for query in queries[2:])
+    insert_params = [call.args[1] for call in cur.execute.call_args_list[2:]]
+    assert {params[0] for params in insert_params} == {
+        "maher_poisson",
+        "dixon_coles",
+        "bivariate_poisson",
+    }
     assert len({params[2] for params in insert_params}) == 1
     assert all(params[3] == date(2025, 1, 1) for params in insert_params)
     assert all(params[4] == date(2026, 7, 21) for params in insert_params)

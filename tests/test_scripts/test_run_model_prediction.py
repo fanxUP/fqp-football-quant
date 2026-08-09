@@ -8,6 +8,7 @@ from zoneinfo import ZoneInfo
 
 from scripts.feature_adjustment import GoalRateAdjustment
 from scripts.jobs.run_model_prediction import (
+    _load_trained_bivariate_shared_component,
     _load_trained_elo_probabilities,
     _load_trained_glicko2_probabilities,
     _load_trained_goal_rates,
@@ -16,6 +17,75 @@ from scripts.jobs.run_model_prediction import (
     _run_impl,
     run,
 )
+
+
+def test_bivariate_component_requires_converged_history_and_valid_goal_rates() -> None:
+    params = {
+        "bivariate_poisson": {
+            "shared_goal_component": 0.14,
+            "n_matches": 300,
+            "converged": True,
+        }
+    }
+    goal_rates = type("GoalRates", (), {"home_lambda": 1.4, "away_lambda": 1.0})()
+
+    assert _load_trained_bivariate_shared_component(params, goal_rates) == 0.14
+    params["bivariate_poisson"]["converged"] = False
+    assert _load_trained_bivariate_shared_component(params, goal_rates) is None
+
+
+def test_bivariate_shadow_prediction_never_enters_committee_votes() -> None:
+    conn = MagicMock()
+    cursor = conn.cursor.return_value.__enter__.return_value
+    cursor.fetchall.side_effect = [
+        [(11, "h", 2.1), (12, "d", 3.2), (13, "a", 3.6)],
+        [],
+    ]
+    parameters = {
+        "maher_poisson": {
+            "attack": {"10": 0.35, "20": -0.15},
+            "defense": {"10": -0.10, "20": 0.20},
+            "team_match_counts": {"10": 12, "20": 9},
+            "home_advantage": 0.25,
+            "league_intercept": 0.10,
+            "n_matches": 100,
+            "converged": True,
+        },
+        "bivariate_poisson": {
+            "shared_goal_component": 0.12,
+            "n_matches": 300,
+            "converged": True,
+            "rollout_mode": "shadow",
+        },
+    }
+
+    with (
+        patch(
+            "scripts.jobs.run_model_prediction._latest_feature_snapshot",
+            return_value={"id": 88, "home_team_id": 10, "away_team_id": 20},
+        ),
+        patch("scripts.jobs.run_model_prediction.store_derived_play_predictions", return_value=0),
+        patch("scripts.jobs.run_model_prediction.store_model_prediction") as store_prediction,
+        patch("scripts.jobs.run_model_prediction.store_committee_vote") as store_vote,
+    ):
+        _predict_match_play_type(
+            conn=conn,
+            mid=101,
+            home_team_name="主队",
+            away_team_name="客队",
+            play_type="spf",
+            active_models={"bivariate_poisson": 6},
+            rho=-0.08,
+            mle_rho=None,
+            predict_time="2026-08-09T14:00:00",
+            model_parameters=parameters,
+        )
+
+    stored = [call.args[1] for call in store_prediction.call_args_list]
+    assert len(stored) == 3
+    assert all(item["uncertainty_reason"]["bivariate_poisson_based"] is True for item in stored)
+    assert all(item["uncertainty_reason"]["model_independent"] is True for item in stored)
+    store_vote.assert_not_called()
 
 
 def test_trained_maher_parameters_produce_independent_team_goal_rates() -> None:

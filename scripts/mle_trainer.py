@@ -33,6 +33,7 @@ if _PROJECT_ROOT not in sys.path:
 import numpy as np  # noqa: E402
 from psycopg2.extras import Json  # noqa: E402
 
+from scripts.bivariate_poisson_model import bivariate_score_probability  # noqa: E402
 from scripts.business_time import business_now  # noqa: E402
 from scripts.poisson_model import poisson_pmf  # noqa: E402
 
@@ -504,11 +505,81 @@ def fit_dixon_coles_rho(
     }
 
 
+def fit_bivariate_poisson_shared(
+    conn: Any,
+    maher_params: dict[str, Any],
+    league_id: int | None = None,
+) -> dict[str, Any]:
+    """Fit one conservative shared-goal component from settled official results.
+
+    The marginal rates are supplied by the converged Maher model.  Searching a
+    small bounded grid keeps this extra shadow parameter auditable and avoids
+    unstable optimization on sparse competitions.
+    """
+    if "error" in maher_params:
+        return {"error": "no valid maher params", "n_matches": 0}
+    team_ids, _team_to_idx, home_idx, away_idx, home_goals, away_goals = _load_match_data(
+        conn,
+        league_id=league_id,
+    )
+    if not home_goals:
+        return {"error": "no settled matches", "n_matches": 0}
+
+    attack = maher_params["attack"]
+    defense = maher_params["defense"]
+    home_advantage = float(maher_params["home_advantage"])
+    intercept = float(maher_params["league_intercept"])
+    goal_rates: list[tuple[float, float]] = []
+    for home_team_idx, away_team_idx in zip(home_idx, away_idx, strict=True):
+        home_team_id = team_ids[home_team_idx]
+        away_team_id = team_ids[away_team_idx]
+        lambda_home = math.exp(
+            float(attack[home_team_id]) + float(defense[away_team_id]) + home_advantage + intercept
+        )
+        lambda_away = math.exp(
+            float(attack[away_team_id]) + float(defense[home_team_id]) + intercept
+        )
+        goal_rates.append((lambda_home, lambda_away))
+
+    # One component for all matches.  0.25 goals is deliberately a conservative
+    # ceiling, and 50% of the smallest marginal leaves all match PMFs valid.
+    upper_bound = min(0.25, min(min(rates) for rates in goal_rates) * 0.5)
+    if upper_bound <= 0:
+        return {"error": "invalid fitted goal rates", "n_matches": len(home_goals)}
+
+    candidates = np.linspace(0.0, upper_bound, num=26)
+    best_component = 0.0
+    best_nll = float("inf")
+    for component in candidates:
+        nll = 0.0
+        for lambda_pair, home_score, away_score in zip(
+            goal_rates, home_goals, away_goals, strict=True
+        ):
+            probability = bivariate_score_probability(
+                home_score,
+                away_score,
+                lambda_pair[0],
+                lambda_pair[1],
+                float(component),
+            )
+            nll -= math.log(max(probability, 1e-12))
+        if nll < best_nll:
+            best_component = float(component)
+            best_nll = nll
+    return {
+        "shared_goal_component": round(best_component, 5),
+        "n_matches": len(home_goals),
+        "nll": round(best_nll, 2),
+        "converged": True,
+        "search_upper_bound": round(upper_bound, 5),
+    }
+
+
 def fit_all_models(
     conn: Any,
     league_id: int | None = None,
 ) -> dict[str, Any]:
-    """完整训练流水线：Poisson → Dixon-Coles ρ。
+    """完整训练流水线：Poisson → Dixon-Coles → 双变量泊松。
 
     Returns:
         {"maher_poisson": {...}, "dixon_coles_rho": {...}}
@@ -518,10 +589,15 @@ def fit_all_models(
         return {"maher_poisson": maher, "dixon_coles_rho": {"error": "cascade"}}
 
     dc_rho = fit_dixon_coles_rho(conn, maher, league_id=league_id)
+    bivariate = fit_bivariate_poisson_shared(conn, maher, league_id=league_id)
     training_start_date, training_end_date = _load_training_window(conn)
     maher["training_start_date"] = training_start_date
     maher["training_end_date"] = training_end_date
-    return {"maher_poisson": maher, "dixon_coles_rho": dc_rho}
+    return {
+        "maher_poisson": maher,
+        "dixon_coles_rho": dc_rho,
+        "bivariate_poisson": bivariate,
+    }
 
 
 # —— Job entry point ——
@@ -542,6 +618,7 @@ def run(dry_run: bool = False) -> dict[str, Any]:
 
         maher = result["maher_poisson"]
         dc = result["dixon_coles_rho"]
+        bivariate = result.get("bivariate_poisson", {})
 
         if not maher.get("converged", False):
             return {
@@ -575,7 +652,7 @@ def run(dry_run: bool = False) -> dict[str, Any]:
             "n_matches": dc.get("n_total_matches", 0),
             "maher_converged": maher.get("converged", False),
         }
-        versions = (
+        versions: tuple[tuple[str, str, Json, str], ...] = (
             (
                 "maher_poisson",
                 "score_distribution",
@@ -589,6 +666,22 @@ def run(dry_run: bool = False) -> dict[str, Any]:
                 "Dixon-Coles low-score adjustment fitted from settled official match history.",
             ),
         )
+        if bivariate.get("converged") is True:
+            cur.execute(
+                """UPDATE model_versions
+                   SET is_active = false
+                   WHERE model_name = 'bivariate_poisson'"""
+            )
+            bivariate_params = dict(bivariate)
+            bivariate_params["rollout_mode"] = "shadow"
+            versions += (
+                (
+                    "bivariate_poisson",
+                    "correlated_score_distribution",
+                    Json(bivariate_params),
+                    "Bivariate Poisson shared-goal component fitted from settled official match history; shadow mode.",
+                ),
+            )
         for model_name, model_type, parameters, description in versions:
             cur.execute(
                 """INSERT INTO model_versions (
@@ -620,6 +713,11 @@ def run(dry_run: bool = False) -> dict[str, Any]:
             "dixon_coles": {
                 "rho": dc.get("rho", -0.08),
                 "n_low_score_matches": dc.get("n_low_score_matches", 0),
+            },
+            "bivariate_poisson": {
+                "shared_goal_component": bivariate.get("shared_goal_component"),
+                "n_matches": bivariate.get("n_matches", 0),
+                "converged": bivariate.get("converged", False),
             },
             "model_version": version,
             "training_start_date": str(training_start_date) if training_start_date else None,

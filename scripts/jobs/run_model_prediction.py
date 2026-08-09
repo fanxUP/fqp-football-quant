@@ -18,6 +18,7 @@ from typing import Any
 
 from apps.backend.src.db import get_db
 from scripts.agents.task_queue import finish_tracked_job, start_tracked_job
+from scripts.bivariate_poisson_model import bivariate_score_matrix
 from scripts.business_time import business_now
 from scripts.derived_play_predictions import store_derived_play_predictions
 from scripts.dixon_coles_model import dixon_coles_matrix
@@ -47,6 +48,7 @@ MIN_ELO_MATCHES = 5
 MIN_MAHER_MATCHES = 5
 MIN_GLICKO2_MATCHES = 8
 MAX_GLICKO2_DEVIATION = 160.0
+MIN_BIVARIATE_TRAINING_MATCHES = 100
 
 # Option code mapping: odds_conversion uses "3"/"1"/"0", snapshots use "h"/"d"/"a"
 OPTION_MAP = {"h": "3", "d": "1", "a": "0"}
@@ -109,6 +111,26 @@ def _load_trained_goal_rates(
         minimum_team_matches=minimum_team_matches,
         training_matches=int(parameters.get("n_matches") or 0),
     )
+
+
+def _load_trained_bivariate_shared_component(
+    model_parameters: dict[str, dict[str, Any]],
+    goal_rates: TrainedGoalRates | Any | None,
+) -> float | None:
+    """Return a fitted shared-goal rate only when it is safe for both teams."""
+    parameters = model_parameters.get("bivariate_poisson")
+    if not parameters or parameters.get("converged") is not True or goal_rates is None:
+        return None
+    if int(parameters.get("n_matches") or 0) < MIN_BIVARIATE_TRAINING_MATCHES:
+        return None
+    try:
+        component = float(parameters["shared_goal_component"])
+        limiting_rate = min(float(goal_rates.home_lambda), float(goal_rates.away_lambda))
+    except (KeyError, TypeError, ValueError):
+        return None
+    if not math.isfinite(component) or component < 0 or component >= limiting_rate:
+        return None
+    return component
 
 
 def _now() -> str:
@@ -470,6 +492,8 @@ def _predict_match_play_type(
     raw_poisson_matrix = None
     dc_matrix = None
     raw_dc_matrix = None
+    bivariate_matrix = None
+    raw_bivariate_matrix = None
     feature_adjustment = GoalRateAdjustment(1.3, 1.1, False, 0.0, 1.0, [])
     trained_goal_rates = _load_trained_goal_rates(model_parameters, feature_snapshot)
     try:
@@ -504,6 +528,41 @@ def _predict_match_play_type(
             raw_poisson_matrix = poisson_matrix
         except Exception:
             pass
+
+    # Bivariate Poisson preserves the trained Maher marginal rates and adds a
+    # fitted shared-goal component. It remains an independently tracked shadow
+    # model until its evaluation gates are explicitly promoted.
+    trained_bivariate_component = _load_trained_bivariate_shared_component(
+        model_parameters, trained_goal_rates
+    )
+    bivariate_is_independent = trained_bivariate_component is not None
+    try:
+        if trained_bivariate_component is not None:
+            raw_bivariate_matrix = bivariate_score_matrix(
+                raw_lam_h, raw_lam_a, trained_bivariate_component
+            )
+            adjusted_component = min(
+                trained_bivariate_component,
+                min(lam_h, lam_a) * 0.95,
+            )
+            bivariate_matrix = bivariate_score_matrix(lam_h, lam_a, adjusted_component)
+            raw_bivariate_probs = (
+                derive_handicap(raw_bivariate_matrix, handicap)
+                if play_type == "rqspf" and handicap is not None
+                else derive_1x2(raw_bivariate_matrix)
+            )
+            bivariate_probs = (
+                derive_handicap(bivariate_matrix, handicap)
+                if play_type == "rqspf" and handicap is not None
+                else derive_1x2(bivariate_matrix)
+            )
+        else:
+            raw_bivariate_probs = dict(market_probs)
+            bivariate_probs = dict(market_probs)
+    except (ArithmeticError, ValueError):
+        bivariate_is_independent = False
+        raw_bivariate_probs = dict(market_probs)
+        bivariate_probs = dict(market_probs)
 
     # 5. Dixon-Coles model
     try:
@@ -579,6 +638,7 @@ def _predict_match_play_type(
         "dixon_coles": (raw_dc_probs, dc_probs),
         "elo_rating": (elo_1x2, elo_1x2),
         "glicko2_rating": (glicko2_1x2, glicko2_1x2),
+        "bivariate_poisson": (raw_bivariate_probs, bivariate_probs),
     }
     model_independence = {
         "market_baseline": False,
@@ -586,6 +646,7 @@ def _predict_match_play_type(
         "dixon_coles": trained_goal_rates is not None and mle_rho is not None,
         "elo_rating": elo_is_independent,
         "glicko2_rating": glicko2_is_independent,
+        "bivariate_poisson": bivariate_is_independent,
     }
 
     total_p = derived_predictions
@@ -624,6 +685,7 @@ def _predict_match_play_type(
                     dc_probs.get(opt_code, 0),
                     elo_1x2.get(opt_code, 0),
                     glicko2_1x2.get(opt_code, 0),
+                    bivariate_probs.get(opt_code, 0),
                 ]
             )
 
@@ -678,6 +740,7 @@ def _predict_match_play_type(
                     else None,
                     "elo_based": model_name == "elo_rating",
                     "glicko2_based": model_name == "glicko2_rating",
+                    "bivariate_poisson_based": model_name == "bivariate_poisson",
                     "rollout_mode": rollout_modes.get(model_name, "live"),
                     "model_independent": model_independence[model_name],
                     "feature_adjustment": {
