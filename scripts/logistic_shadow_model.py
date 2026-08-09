@@ -44,7 +44,7 @@ def fit_temporal_holdout(
 
     classifier = Pipeline(
         [
-            ("imputer", SimpleImputer(strategy="median")),
+            ("imputer", SimpleImputer(strategy="median", keep_empty_features=True)),
             ("scaler", StandardScaler()),
             (
                 "classifier",

@@ -42,6 +42,7 @@ def test_temporal_holdout_reports_only_later_validation_loss() -> None:
     classifier, profile = fit_temporal_holdout(rows, labels, ("first", "second"))
 
     assert classifier is not None
+    assert classifier.named_steps["imputer"].keep_empty_features is True
     assert profile.training_matches == 120
     assert profile.validation_matches == 30
     assert profile.validation_log_loss > 0
