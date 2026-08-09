@@ -160,6 +160,14 @@ def test_scheduler_runs_model_predictions_after_each_schedule_refresh():
     assert "**MODEL_PREDICTION_CRON" in source
 
 
+def test_scheduler_updates_glicko2_after_elo_ratings():
+    source = Path("scripts/jobs/run_scheduler.py").read_text()
+
+    assert 'id="update_glicko2_ratings"' in source
+    assert source.index('id="update_elo_ratings"') < source.index('id="update_glicko2_ratings"')
+    assert JOB_DEFINITIONS["update_glicko2_ratings"].schedule == "每日 01:10"
+
+
 def test_scheduler_detects_upsets_after_results_and_ticket_settlement():
     source = Path("scripts/jobs/run_scheduler.py").read_text()
 

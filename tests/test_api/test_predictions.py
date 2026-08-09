@@ -305,12 +305,13 @@ class TestPredictionModelOverviewEndpoint:
 
         assert response.status_code == 200
         data = response.json()
-        assert data["total"] == 4
+        assert data["total"] == 5
         assert [item["code"] for item in data["models"]] == [
             "market_baseline",
             "elo_rating",
             "maher_poisson",
             "dixon_coles",
+            "glicko2_rating",
         ]
         assert data["models"][0] == {
             "code": "market_baseline",

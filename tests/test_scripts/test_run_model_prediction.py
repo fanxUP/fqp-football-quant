@@ -9,6 +9,7 @@ from zoneinfo import ZoneInfo
 from scripts.feature_adjustment import GoalRateAdjustment
 from scripts.jobs.run_model_prediction import (
     _load_trained_elo_probabilities,
+    _load_trained_glicko2_probabilities,
     _load_trained_goal_rates,
     _now,
     _predict_match_play_type,
@@ -94,6 +95,21 @@ def test_trained_elo_uses_snapshot_home_and_away_team_order() -> None:
 
     assert probabilities is not None
     assert probabilities["0"] > probabilities["3"]
+    assert cursor.execute.call_args.args[1] == (10, 20)
+
+
+def test_glicko2_requires_sufficient_history_and_low_rating_deviation() -> None:
+    conn = MagicMock()
+    cursor = conn.cursor.return_value.__enter__.return_value
+    cursor.fetchall.return_value = [(1650, 80, 0.06, 12), (1500, 90, 0.06, 14)]
+
+    probabilities = _load_trained_glicko2_probabilities(
+        conn,
+        {"home_team_id": 10, "away_team_id": 20},
+    )
+
+    assert probabilities is not None
+    assert probabilities["3"] > probabilities["0"]
     assert cursor.execute.call_args.args[1] == (10, 20)
 
 

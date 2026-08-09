@@ -11,7 +11,7 @@ vi.mock('../core/apiClient', () => ({
 describe('PredictionModelOverviewPanel', () => {
   beforeEach(() => {
     apiMocks.modelOverview.mockResolvedValue({
-      total: 4,
+      total: 5,
       models: [
         {
           code: 'market_baseline', isActive: true, version: '1.0.0',
@@ -36,16 +36,22 @@ describe('PredictionModelOverviewPanel', () => {
           trainingEndDate: '2026-08-01', validPredictionMatchCount: 12,
           latestPredictionAt: '2026-08-09T06:30:00',
         },
+        {
+          code: 'glicko2_rating', isActive: true, version: '1.0.0',
+          versionCreatedAt: '2026-08-09T06:30:00', trainingStartDate: null,
+          trainingEndDate: null, validPredictionMatchCount: 0, latestPredictionAt: null,
+        },
       ],
     });
   });
 
-  it('说明四个预测模型，并呈现运行状态和推荐边界', async () => {
+  it('说明五个预测模型，并呈现运行状态和推荐边界', async () => {
     render(<PredictionModelOverviewPanel />);
 
     expect(await screen.findByRole('heading', { name: '预测模型说明' })).toBeInTheDocument();
-    expect(screen.getAllByRole('article')).toHaveLength(4);
+    expect(screen.getAllByRole('article')).toHaveLength(5);
     expect(screen.getByText('市场赔率基准')).toBeInTheDocument();
+    expect(screen.getByText('Glicko-2 强度评级')).toBeInTheDocument();
     expect(screen.getAllByText('已启用')[0]).toHaveAttribute('data-status', 'enabled');
     expect(screen.getByText('未启用')).toHaveAttribute('data-status', 'disabled');
     expect(screen.getByText(/单一模型不会直接生成投注推荐/)).toBeInTheDocument();

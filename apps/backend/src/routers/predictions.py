@@ -14,6 +14,7 @@ PREDICTION_MODEL_CODES = (
     "elo_rating",
     "maher_poisson",
     "dixon_coles",
+    "glicko2_rating",
 )
 
 # Play type display names

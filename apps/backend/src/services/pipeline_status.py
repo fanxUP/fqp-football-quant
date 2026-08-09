@@ -69,6 +69,9 @@ JOB_DEFINITIONS: dict[str, JobDefinition] = {
     "update_elo_ratings": JobDefinition(
         "Elo评分更新", "每日 01:00", "model", max_age=timedelta(hours=30)
     ),
+    "update_glicko2_ratings": JobDefinition(
+        "Glicko-2评分更新", "每日 01:10", "model", max_age=timedelta(hours=30)
+    ),
     "model_prediction": JobDefinition(
         "模型预测执行",
         "每30分钟（官方赛程刷新后5分钟）",

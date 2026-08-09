@@ -526,6 +526,23 @@ def main() -> None:
                 id="update_elo_ratings",
             )
 
+            # Daily after Elo: update rating uncertainty without delaying the
+            # continuous pre-match prediction cadence.
+            scheduler.add_job(
+                _audited_job(
+                    "update_glicko2_ratings",
+                    "Glicko-2评分更新",
+                    "model_agent",
+                    lambda: __import__(
+                        "scripts.jobs.update_glicko2_ratings", fromlist=["run"]
+                    ).run(),
+                ),
+                "cron",
+                hour=1,
+                minute=10,
+                id="update_glicko2_ratings",
+            )
+
             # Every 30 minutes: persist a pre-match prediction history snapshot.
             scheduler.add_job(
                 _audited_job(

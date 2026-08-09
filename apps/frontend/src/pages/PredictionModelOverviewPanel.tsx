@@ -17,6 +17,7 @@ const MODEL_DEFINITIONS: ModelDefinition[] = [
   { code: 'elo_rating', title: 'Elo 实力评分', summary: '根据已结算赛果持续更新球队长期实力评分，并计入主场因素。', output: '胜平负概率。', cadence: '每日按新结算的官方赛果更新。', condition: '双方球队各至少需要 5 场有效历史。', role: '长期实力信号，避免单场结果过度影响判断。' },
   { code: 'maher_poisson', title: '马赫泊松进球模型', summary: '拟合球队进攻、防守、联赛平均进球与主场优势，估算双方预期进球。', output: '胜平负、比分、总进球数、半全场概率。', cadence: '每周用已结算官方赛果重新训练。', condition: '双方均需有足够历史样本与赛前特征。', role: '比分分布的基础模型，可解释预期进球来源。' },
   { code: 'dixon_coles', title: '迪克森-科尔斯比分模型', summary: '在泊松比分矩阵上修正低比分与平局附近的相关性。', output: '胜平负、比分、总进球数、半全场概率。', cadence: '随马赫泊松训练结果同步更新。', condition: '依赖有效的预期进球与历史低比分样本。', role: '专门校正 0–0、1–0、0–1、1–1 等低比分概率。' },
+  { code: 'glicko2_rating', title: 'Glicko-2 强度评级', summary: '在球队评分外记录评分偏差和波动率，识别新赛季与样本不足的实力不确定性。', output: '带不确定性收缩的胜平负概率。', cadence: '每日按新结算的官方赛果更新。', condition: '双方各至少 8 场历史，且评分偏差处于稳定区间。', role: '当前处于影子验证，不参与推荐委员会，达到评估门槛后再单独启用。' },
 ];
 
 function formatTime(value: string | null) {
@@ -74,7 +75,7 @@ export default function PredictionModelOverviewPanel() {
           </article>;
         })}
       </div>
-      <div className="prediction-model-flow" aria-label="预测到推荐的流程">官方赔率与历史赛果 <b>→</b> 四模型预测 <b>→</b> 共识、分歧与风控 <b>→</b> 推荐候选</div>
+      <div className="prediction-model-flow" aria-label="预测到推荐的流程">官方赔率与历史赛果 <b>→</b> 多模型预测 <b>→</b> 共识、分歧与风控 <b>→</b> 推荐候选</div>
     </section>
   );
 }

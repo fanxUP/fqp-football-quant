@@ -23,6 +23,8 @@ from scripts.derived_play_predictions import store_derived_play_predictions
 from scripts.dixon_coles_model import dixon_coles_matrix
 from scripts.elo_model import run_elo_1x2_prediction
 from scripts.feature_adjustment import GoalRateAdjustment, adjust_goal_rates
+from scripts.glicko2_model import Glicko2Rating
+from scripts.glicko2_model import predict_1x2 as glicko2_predict_1x2
 from scripts.market_metric_validation import MarketMetricValidationError, validate_market
 from scripts.model_storage import store_committee_vote, store_model_prediction
 from scripts.odds_conversion import (
@@ -43,6 +45,8 @@ from scripts.poisson_model import (
 DEFAULT_RHO = -0.08
 MIN_ELO_MATCHES = 5
 MIN_MAHER_MATCHES = 5
+MIN_GLICKO2_MATCHES = 8
+MAX_GLICKO2_DEVIATION = 160.0
 
 # Option code mapping: odds_conversion uses "3"/"1"/"0", snapshots use "h"/"d"/"a"
 OPTION_MAP = {"h": "3", "d": "1", "a": "0"}
@@ -178,6 +182,53 @@ def _load_trained_elo_probabilities(
     if len(rows) != 2 or any(row[0] is None or int(row[1] or 0) < MIN_ELO_MATCHES for row in rows):
         return None
     return run_elo_1x2_prediction(float(rows[0][0]), float(rows[1][0]))
+
+
+def _load_trained_glicko2_probabilities(
+    conn: Any,
+    feature_snapshot: dict[str, Any] | None,
+) -> dict[str, float] | None:
+    """Return an uncertainty-aware rating signal only after both teams stabilize."""
+    if not feature_snapshot:
+        return None
+    home_team_id = feature_snapshot.get("home_team_id")
+    away_team_id = feature_snapshot.get("away_team_id")
+    if not home_team_id or not away_team_id:
+        return None
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT latest.rating, latest.rating_deviation, latest.volatility, latest.matches_played
+            FROM (VALUES (%s, 1), (%s, 2)) AS requested(team_id, team_order)
+            LEFT JOIN LATERAL (
+                SELECT rating, rating_deviation, volatility, matches_played
+                FROM team_glicko2_ratings
+                WHERE team_id = requested.team_id
+                ORDER BY season DESC NULLS LAST, updated_at DESC
+                LIMIT 1
+            ) latest ON true
+            ORDER BY requested.team_order
+            """,
+            (home_team_id, away_team_id),
+        )
+        rows = cur.fetchall()
+    if len(rows) != 2 or any(
+        row[0] is None
+        or int(row[3] or 0) < MIN_GLICKO2_MATCHES
+        or float(row[1] or MAX_GLICKO2_DEVIATION + 1) > MAX_GLICKO2_DEVIATION
+        for row in rows
+    ):
+        return None
+    states = [
+        Glicko2Rating(
+            rating=float(row[0]),
+            deviation=float(row[1]),
+            volatility=float(row[2]),
+            matches_played=int(row[3]),
+        )
+        for row in rows
+    ]
+    return glicko2_predict_1x2(states[0], states[1])
 
 
 def _run_impl(match_id: int | None = None, dry_run: bool = False) -> dict[str, Any]:
@@ -505,18 +556,36 @@ def _predict_match_play_type(
         elo_is_independent = False
         elo_1x2 = dict(market_probs)
 
-    # 6. Write predictions per model
+    # 6. Glicko-2 applies a stronger data-quality threshold than Elo because
+    # it exposes rating uncertainty. An unavailable state remains a benchmark,
+    # never an independent committee vote.
+    try:
+        trained_glicko2 = _load_trained_glicko2_probabilities(conn, feature_snapshot)
+        glicko2_is_independent = trained_glicko2 is not None
+        glicko2_1x2 = trained_glicko2 or dict(market_probs)
+    except Exception:
+        glicko2_is_independent = False
+        glicko2_1x2 = dict(market_probs)
+
+    rollout_modes = {
+        name: str(parameters.get("rollout_mode") or "live")
+        for name, parameters in model_parameters.items()
+    }
+
+    # 7. Write predictions per model
     model_results = {
         "market_baseline": (market_probs, market_probs),
         "maher_poisson": (raw_poisson_probs, poisson_probs),
         "dixon_coles": (raw_dc_probs, dc_probs),
         "elo_rating": (elo_1x2, elo_1x2),
+        "glicko2_rating": (glicko2_1x2, glicko2_1x2),
     }
     model_independence = {
         "market_baseline": False,
         "maher_poisson": trained_goal_rates is not None,
         "dixon_coles": trained_goal_rates is not None and mle_rho is not None,
         "elo_rating": elo_is_independent,
+        "glicko2_rating": glicko2_is_independent,
     }
 
     total_p = derived_predictions
@@ -554,6 +623,7 @@ def _predict_match_play_type(
                     poisson_probs.get(opt_code, 0),
                     dc_probs.get(opt_code, 0),
                     elo_1x2.get(opt_code, 0),
+                    glicko2_1x2.get(opt_code, 0),
                 ]
             )
 
@@ -607,6 +677,8 @@ def _predict_match_play_type(
                     if trained_goal_rates is not None
                     else None,
                     "elo_based": model_name == "elo_rating",
+                    "glicko2_based": model_name == "glicko2_rating",
+                    "rollout_mode": rollout_modes.get(model_name, "live"),
                     "model_independent": model_independence[model_name],
                     "feature_adjustment": {
                         "version": feature_adjustment.version,
@@ -625,7 +697,7 @@ def _predict_match_play_type(
         # Committee votes represent independent model opinions. Market-seeded
         # fallbacks remain available as benchmark predictions but must never
         # enter committee or recommendation decision paths.
-        if not model_independence[model_name]:
+        if not model_independence[model_name] or rollout_modes.get(model_name) == "shadow":
             continue
 
         for opt_code in ("3", "1", "0"):
