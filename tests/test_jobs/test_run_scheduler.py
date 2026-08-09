@@ -179,6 +179,13 @@ def test_probability_calibration_is_scheduled_after_metrics_as_shadow_only():
     assert JOB_DEFINITIONS["train_probability_calibration"].schedule == "每日 23:42"
 
 
+def test_xgboost_shadow_training_runs_after_calibration_without_decision_promotion():
+    source = Path("scripts/jobs/run_scheduler.py").read_text()
+
+    assert 'id="train_xgboost_shadow"' in source
+    assert source.index('id="train_probability_calibration"') < source.index('id="train_xgboost_shadow"')
+
+
 def test_scheduler_detects_upsets_after_results_and_ticket_settlement():
     source = Path("scripts/jobs/run_scheduler.py").read_text()
 

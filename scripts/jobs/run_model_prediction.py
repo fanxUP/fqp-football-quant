@@ -39,6 +39,7 @@ from scripts.poisson_model import (
     estimate_lambdas_from_odds,
     score_matrix,
 )
+from scripts.xgboost_shadow_model import load_probabilities as load_xgboost_shadow_probabilities
 
 # Dixon-Coles rho — hardcoded until historical results enable MLE.
 # Negative means low scores (0:0, 1:0, 0:1, 1:1) are less common than
@@ -131,6 +132,16 @@ def _load_trained_bivariate_shared_component(
     if not math.isfinite(component) or component < 0 or component >= limiting_rate:
         return None
     return component
+
+
+def _load_xgboost_shadow_probabilities(
+    model_parameters: dict[str, dict[str, Any]],
+    feature_snapshot: dict[str, Any] | None,
+) -> dict[str, float] | None:
+    """Use XGBoost only after a persisted temporal-validation profile exists."""
+    return load_xgboost_shadow_probabilities(
+        model_parameters.get("xgboost_shadow"), feature_snapshot
+    )
 
 
 def _now() -> str:
@@ -626,6 +637,17 @@ def _predict_match_play_type(
         glicko2_is_independent = False
         glicko2_1x2 = dict(market_probs)
 
+    # XGBoost is trained solely from pre-kickoff feature snapshots and must
+    # carry a persisted temporal-validation profile. It stays shadow-only even
+    # when that profile is available.
+    try:
+        trained_xgboost = _load_xgboost_shadow_probabilities(model_parameters, feature_snapshot)
+        xgboost_is_independent = trained_xgboost is not None
+        xgboost_1x2 = trained_xgboost or dict(market_probs)
+    except Exception:
+        xgboost_is_independent = False
+        xgboost_1x2 = dict(market_probs)
+
     rollout_modes = {
         name: str(parameters.get("rollout_mode") or "live")
         for name, parameters in model_parameters.items()
@@ -639,6 +661,7 @@ def _predict_match_play_type(
         "elo_rating": (elo_1x2, elo_1x2),
         "glicko2_rating": (glicko2_1x2, glicko2_1x2),
         "bivariate_poisson": (raw_bivariate_probs, bivariate_probs),
+        "xgboost_shadow": (xgboost_1x2, xgboost_1x2),
     }
     model_independence = {
         "market_baseline": False,
@@ -647,6 +670,7 @@ def _predict_match_play_type(
         "elo_rating": elo_is_independent,
         "glicko2_rating": glicko2_is_independent,
         "bivariate_poisson": bivariate_is_independent,
+        "xgboost_shadow": xgboost_is_independent,
     }
 
     total_p = derived_predictions
@@ -686,6 +710,7 @@ def _predict_match_play_type(
                     elo_1x2.get(opt_code, 0),
                     glicko2_1x2.get(opt_code, 0),
                     bivariate_probs.get(opt_code, 0),
+                    xgboost_1x2.get(opt_code, 0),
                 ]
             )
 
@@ -741,6 +766,7 @@ def _predict_match_play_type(
                     "elo_based": model_name == "elo_rating",
                     "glicko2_based": model_name == "glicko2_rating",
                     "bivariate_poisson_based": model_name == "bivariate_poisson",
+                    "xgboost_shadow_based": model_name == "xgboost_shadow",
                     "rollout_mode": rollout_modes.get(model_name, "live"),
                     "model_independent": model_independence[model_name],
                     "feature_adjustment": {

@@ -19,6 +19,7 @@ const MODEL_DEFINITIONS: ModelDefinition[] = [
   { code: 'dixon_coles', title: '迪克森-科尔斯比分模型', summary: '在泊松比分矩阵上修正低比分与平局附近的相关性。', output: '胜平负、比分、总进球数、半全场概率。', cadence: '随马赫泊松训练结果同步更新。', condition: '依赖有效的预期进球与历史低比分样本。', role: '专门校正 0–0、1–0、0–1、1–1 等低比分概率。' },
   { code: 'glicko2_rating', title: 'Glicko-2 强度评级', summary: '在球队评分外记录评分偏差和波动率，识别新赛季与样本不足的实力不确定性。', output: '带不确定性收缩的胜平负概率。', cadence: '每日按新结算的官方赛果更新。', condition: '双方各至少 8 场历史，且评分偏差处于稳定区间。', role: '当前处于影子验证，不参与推荐委员会，达到评估门槛后再单独启用。' },
   { code: 'bivariate_poisson', title: '双变量泊松进球模型', summary: '在双方预期进球上加入经历史赛果拟合的共享进球成分，刻画比分的相关性。', output: '带比分相关性的胜平负概率。', cadence: '每周随历史赛果重新拟合。', condition: '依赖已收敛的马赫泊松参数与足够历史赛果。', role: '当前处于影子验证，只记录评估结果，不参与推荐委员会。' },
+  { code: 'xgboost_shadow', title: 'XGBoost 赛前特征模型', summary: '学习赛前阵容、休息、伤停、天气、战意和数据完整度等结构化特征的非线性关系。', output: '胜平负概率。', cadence: '每日在官方结算后重新训练。', condition: '至少 100 场训练样本和 25 场后续留出验证样本。', role: '当前处于影子验证，只记录独立留出评估，不参与推荐委员会、投注或风控。' },
 ];
 
 function formatTime(value: string | null) {

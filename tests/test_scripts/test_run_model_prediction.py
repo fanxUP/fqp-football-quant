@@ -12,11 +12,57 @@ from scripts.jobs.run_model_prediction import (
     _load_trained_elo_probabilities,
     _load_trained_glicko2_probabilities,
     _load_trained_goal_rates,
+    _load_xgboost_shadow_probabilities,
     _now,
     _predict_match_play_type,
     _run_impl,
     run,
 )
+
+
+def test_xgboost_shadow_requires_a_verified_profile_before_predicting() -> None:
+    assert _load_xgboost_shadow_probabilities(
+        {"xgboost_shadow": {"rollout_mode": "shadow"}},
+        {"data_completeness_score": 0.9},
+    ) is None
+
+
+def test_xgboost_shadow_prediction_never_enters_committee_votes() -> None:
+    conn = MagicMock()
+    cursor = conn.cursor.return_value.__enter__.return_value
+    cursor.fetchall.side_effect = [[(11, "h", 2.1), (12, "d", 3.2), (13, "a", 3.6)], []]
+
+    with (
+        patch(
+            "scripts.jobs.run_model_prediction._latest_feature_snapshot",
+            return_value={"id": 88, "home_team_id": 10, "away_team_id": 20},
+        ),
+        patch("scripts.jobs.run_model_prediction.store_derived_play_predictions", return_value=0),
+        patch(
+            "scripts.jobs.run_model_prediction._load_xgboost_shadow_probabilities",
+            return_value={"3": 0.52, "1": 0.28, "0": 0.20},
+        ),
+        patch("scripts.jobs.run_model_prediction.store_model_prediction") as store_prediction,
+        patch("scripts.jobs.run_model_prediction.store_committee_vote") as store_vote,
+    ):
+        _predict_match_play_type(
+            conn=conn,
+            mid=101,
+            home_team_name="主队",
+            away_team_name="客队",
+            play_type="spf",
+            active_models={"xgboost_shadow": 7},
+            rho=-0.08,
+            mle_rho=None,
+            predict_time="2026-08-09T14:00:00",
+            model_parameters={"xgboost_shadow": {"rollout_mode": "shadow"}},
+        )
+
+    stored = [call.args[1] for call in store_prediction.call_args_list]
+    assert len(stored) == 3
+    assert all(item["uncertainty_reason"]["xgboost_shadow_based"] is True for item in stored)
+    assert all(item["uncertainty_reason"]["model_independent"] is True for item in stored)
+    store_vote.assert_not_called()
 
 
 def test_bivariate_component_requires_converged_history_and_valid_goal_rates() -> None:

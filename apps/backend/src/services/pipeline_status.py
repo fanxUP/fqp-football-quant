@@ -107,6 +107,9 @@ JOB_DEFINITIONS: dict[str, JobDefinition] = {
     "train_probability_calibration": JobDefinition(
         "概率校准影子评估", "每日 23:42", "model", max_age=timedelta(hours=30)
     ),
+    "train_xgboost_shadow": JobDefinition(
+        "XGBoost 特征模型影子训练", "每日 23:47", "model", max_age=timedelta(hours=30)
+    ),
     "backtest": JobDefinition(
         "全量回测执行", "每周日 04:07", "model", ("run_backtest",), timedelta(days=8)
     ),

@@ -773,6 +773,23 @@ def main() -> None:
                 id="train_probability_calibration",
             )
 
+            # Train the pre-match feature classifier after daily settlement.
+            # It stores a shadow profile only and cannot promote itself.
+            scheduler.add_job(
+                _audited_job(
+                    "train_xgboost_shadow",
+                    "XGBoost 特征模型影子训练",
+                    "model_agent",
+                    lambda: __import__(
+                        "scripts.jobs.train_xgboost_shadow", fromlist=["run"]
+                    ).run(),
+                ),
+                "cron",
+                hour=23,
+                minute=47,
+                id="train_xgboost_shadow",
+            )
+
             # Weekly on Sunday at 04:00: run full backtest
             scheduler.add_job(
                 _audited_job(

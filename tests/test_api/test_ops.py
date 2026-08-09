@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock, patch
 
-from apps.backend.src.services.pipeline_status import _is_stale
+from apps.backend.src.services.pipeline_status import JOB_DEFINITIONS, _is_stale
 
 
 def test_pipeline_treats_missing_and_future_timestamps_as_stale():
@@ -436,7 +436,9 @@ class TestOpsPipeline:
         monthly = next(job for job in data["jobs"] if job["code"] == "generate_monthly_review")
         assert monthly["status"] == "pending"
         assert monthly["finished_at"] is None
-        assert len(data["jobs"]) == 30
+        xgboost = next(job for job in data["jobs"] if job["code"] == "train_xgboost_shadow")
+        assert xgboost["schedule"] == "每日 23:47"
+        assert len(data["jobs"]) == len(JOB_DEFINITIONS)
 
     def test_pipeline_surfaces_feature_quality_degradation_from_job_output(self, client):
         mock_conn, mock_cur = _mock_db_conn()
