@@ -8,6 +8,7 @@ from zoneinfo import ZoneInfo
 
 from scripts.feature_adjustment import GoalRateAdjustment
 from scripts.jobs.run_model_prediction import (
+    _load_adaboost_shadow_probabilities,
     _load_bayesian_form_probabilities,
     _load_extra_trees_shadow_probabilities,
     _load_hist_gradient_boosting_shadow_probabilities,
@@ -49,6 +50,13 @@ def test_extra_trees_shadow_requires_a_verified_profile_before_predicting() -> N
 def test_hist_gradient_boosting_shadow_requires_a_verified_profile_before_predicting() -> None:
     assert _load_hist_gradient_boosting_shadow_probabilities(
         {"hist_gradient_boosting_shadow": {"rollout_mode": "shadow"}},
+        {"data_completeness_score": 0.9},
+    ) is None
+
+
+def test_adaboost_shadow_requires_a_verified_profile_before_predicting() -> None:
+    assert _load_adaboost_shadow_probabilities(
+        {"adaboost_shadow": {"rollout_mode": "shadow"}},
         {"data_completeness_score": 0.9},
     ) is None
 

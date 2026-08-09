@@ -82,7 +82,7 @@ describe('PredictionModelOverviewPanel', () => {
     render(<PredictionModelOverviewPanel />);
 
     expect(await screen.findByRole('heading', { name: '预测模型说明' })).toBeInTheDocument();
-    expect(screen.getAllByRole('article')).toHaveLength(15);
+    expect(screen.getAllByRole('article')).toHaveLength(16);
     expect(screen.getByRole('heading', { name: '市场赔率基准' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Glicko-2 强度评级' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: '双变量泊松进球模型' })).toBeInTheDocument();
@@ -92,6 +92,7 @@ describe('PredictionModelOverviewPanel', () => {
     expect(screen.getByRole('heading', { name: '随机森林赛前特征模型' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: '极端随机树赛前特征模型' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: '直方图梯度提升赛前特征模型' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'AdaBoost 赛前特征模型' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: '朴素贝叶斯赛前特征模型' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: '支持向量机赛前特征模型' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: '负二项进球模型' })).toBeInTheDocument();
