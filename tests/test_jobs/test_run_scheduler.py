@@ -200,6 +200,14 @@ def test_scheduler_registers_lda_after_adaboost() -> None:
     assert JOB_DEFINITIONS["train_lda_shadow"].schedule == "每日 00:14"
 
 
+def test_scheduler_registers_knn_after_lda() -> None:
+    source = Path("scripts/jobs/run_scheduler.py").read_text()
+
+    assert 'id="train_knn_shadow"' in source
+    assert source.index('id="train_lda_shadow"') < source.index('id="train_knn_shadow"')
+    assert JOB_DEFINITIONS["train_knn_shadow"].schedule == "每日 00:17"
+
+
 def test_probability_calibration_is_scheduled_after_metrics_as_shadow_only():
     source = Path("scripts/jobs/run_scheduler.py").read_text()
 

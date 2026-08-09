@@ -30,6 +30,7 @@ PREDICTION_MODEL_CODES = (
     "hist_gradient_boosting_shadow",
     "adaboost_shadow",
     "lda_shadow",
+    "knn_shadow",
     "naive_bayes_shadow",
     "svm_shadow",
     "negative_binomial_shadow",

@@ -862,6 +862,11 @@ def main() -> None:
                 "cron", hour=0, minute=14, id="train_lda_shadow",
             )
 
+            scheduler.add_job(
+                _audited_job("train_knn_shadow", "KNN 特征模型影子训练", "model_agent", lambda: __import__("scripts.jobs.train_knn_shadow", fromlist=["run"]).run()),
+                "cron", hour=0, minute=17, id="train_knn_shadow",
+            )
+
             # Weekly on Sunday at 04:00: run full backtest
             scheduler.add_job(
                 _audited_job(
