@@ -29,6 +29,7 @@ const AnalysisPage = lazy(() => import('./pages/AnalysisPage'));
 const BettingCenterPage = lazy(() => import('./pages/BettingCenterPage'));
 const OddsMovementPage = lazy(() => import('./pages/OddsMovementPage'));
 const UpsetsPage = lazy(() => import('./pages/UpsetsPage'));
+const ReviewsPage = lazy(() => import('./pages/ReviewsPage'));
 
 function RedirectTo({ path, text = '正在进入页面...' }: { path: string; text?: string }) {
   const { translate } = useLanguage();
@@ -50,7 +51,8 @@ const routes = [
   { path: '/tickets', render: () => <BettingCenterPage initialTab="tickets" /> },
   { path: '/tickets/new', render: () => <RedirectTo path="/betting?tab=bet-slip" /> },
   { path: '/tickets/:id', render: () => <RedirectTo path="/betting?tab=tickets" /> },
-  { path: '/reviews', render: () => <RedirectTo path="/analysis?section=reviews" /> },
+  { path: '/reviews', render: () => <RedirectTo path="/reports" /> },
+  { path: '/reports', render: () => <ReviewsPage /> },
   { path: '/models', render: () => <ModelsPage /> },
   { path: '/data-health', render: () => <DataHealthPage /> },
   { path: '/events', render: () => <EventsPage /> },
@@ -61,7 +63,12 @@ const routes = [
   { path: '/agents', render: () => <AgentPanel /> },
   { path: '/backtest', render: () => <BacktestPage /> },
   { path: '/pool', render: () => <PoolPage /> },
-  { path: '/analysis', render: () => <AnalysisPage /> },
+  {
+    path: '/analysis',
+    render: () => new URLSearchParams(window.location.hash.split('?')[1] ?? '').get('section') === 'reviews'
+      ? <RedirectTo path="/reports" />
+      : <AnalysisPage />,
+  },
   { path: '/feature-snapshots', render: () => <AnalysisPage standaloneSection="features" /> },
   { path: '/simulator', render: () => <RedirectTo path="/betting?tab=bet-slip" text="正在进入投注中心..." /> },
   { path: '/simulator/history/:id', render: () => <RedirectTo path="/betting?tab=tickets" text="正在进入投注中心..." /> },

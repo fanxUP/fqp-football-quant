@@ -14,7 +14,8 @@ export type PanelType =
   | 'workflow'
   | 'admin'
   | 'agent'
-  | 'simulation';
+  | 'simulation'
+  | 'reporting';
 
 export interface NavigationGroup {
   groupCode: string;
@@ -130,6 +131,17 @@ export const MODULE_REGISTRY: ModuleManifest[] = [
     required: true,
     panels: ['betting_center'],
     dependencies: ['recommendation_core'],
+  },
+  {
+    moduleCode: 'review_reporting_module',
+    moduleName: '复盘与报告',
+    description: '汇总已结算彩票、官方赛果与归档预测，生成日报、周报、月报与错因分析',
+    version: '1.0.0',
+    category: 'core_loop',
+    status: 'active',
+    required: false,
+    panels: ['review_reports'],
+    dependencies: ['official_data_core', 'betting_center_module'],
   },
   {
     moduleCode: 'multidim_feature_module',
@@ -302,6 +314,18 @@ export const PANEL_REGISTRY: PanelManifest[] = [
     menuGroup: '核心闭环',
     icon: '🎫',
     order: 60,
+    permissions: [],
+  },
+  {
+    panelCode: 'review_reports',
+    moduleCode: 'review_reporting_module',
+    panelName: '复盘与报告',
+    panelType: 'reporting',
+    routePath: '/reports',
+    componentName: 'ReviewsPage',
+    menuGroup: '核心闭环',
+    icon: '🗂️',
+    order: 65,
     permissions: [],
   },
   {

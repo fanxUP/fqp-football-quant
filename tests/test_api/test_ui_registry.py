@@ -20,7 +20,7 @@ def test_modules_endpoint_reads_final_registry(client, tmp_path, monkeypatch):
 
     assert resp.status_code == 200
     data = resp.json()
-    assert data["total"] == 13
+    assert data["total"] == 14
     modules = {module["moduleCode"]: module for module in data["modules"]}
     assert modules["official_data_core"] == {
         "moduleCode": "official_data_core",
@@ -43,13 +43,14 @@ def test_ui_panels_endpoint_reads_final_registry_in_order(client, tmp_path, monk
 
     assert resp.status_code == 200
     data = resp.json()
-    assert data["total"] == 17
+    assert data["total"] == 18
     assert [panel["panelName"] for panel in data["panels"]] == [
         "今日驾驶舱",
         "比赛中心",
         "赛事中心",
         "赔率走势",
         "投注中心",
+        "复盘与报告",
         "今日决策分析",
         "特征数据健康",
         "模型表现",

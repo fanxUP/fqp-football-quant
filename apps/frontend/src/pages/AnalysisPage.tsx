@@ -19,7 +19,6 @@ import Card from '../shared/components/Card';
 import ChartCard from '../shared/components/ChartCard';
 import ErrorState from '../shared/components/ErrorState';
 import RecommendationsPage, { type RecommendationMatchSelection } from './RecommendationsPage';
-import ReviewsPage from './ReviewsPage';
 import TeamName from '../shared/components/TeamName';
 import FeatureSnapshotPanel from '../features/analysis/FeatureSnapshotPanel';
 import BusinessInterpretationPanel from './agent-workspace/BusinessInterpretationPanel';
@@ -30,7 +29,7 @@ import { optionLabel, playTypeLabel } from '../shared/constants';
 // ---------------------------------------------------------------------------
 
 type ModelTabKey = 'compare' | 'importance' | 'shap' | 'condition';
-type AnalysisSectionKey = 'pre_match' | 'features' | 'explanations' | 'reviews';
+type AnalysisSectionKey = 'pre_match' | 'features' | 'explanations';
 
 const MODEL_TABS: { key: ModelTabKey; label: string; icon: string }[] = [
   { key: 'compare', label: '模型对比', icon: '📊' },
@@ -43,7 +42,6 @@ const ANALYSIS_SECTIONS: { key: AnalysisSectionKey; label: string; shortLabel: s
   { key: 'pre_match', label: '赛前分析', shortLabel: '赛前', metricLabel: '分析' },
   { key: 'features', label: '特征数据健康', shortLabel: '特征', metricLabel: '数据' },
   { key: 'explanations', label: '推荐解释', shortLabel: '解释', metricLabel: '模型' },
-  { key: 'reviews', label: '复盘分析', shortLabel: '复盘', metricLabel: '结果' },
 ];
 
 function readInitialSection(): AnalysisSectionKey {
@@ -52,7 +50,7 @@ function readInitialSection(): AnalysisSectionKey {
   const value = new URLSearchParams(query).get('section');
   if (value === 'recommendations') return 'pre_match';
   if (value === 'models') return 'explanations';
-  return value === 'pre_match' || value === 'features' || value === 'explanations' || value === 'reviews'
+  return value === 'pre_match' || value === 'features' || value === 'explanations'
     ? value
     : 'pre_match';
 }
@@ -1245,7 +1243,6 @@ export default function AnalysisPage({ standaloneSection }: { standaloneSection?
       <div key={activeSection} className="fqp-anim-fadeIn">
         {activeSection === 'pre_match' && <RecommendationsPage embedded onMatchSelect={setSelectedMatch} />}
         {activeSection === 'features' && <FeatureSnapshotPanel />}
-        {activeSection === 'reviews' && <ReviewsPage embedded />}
         {activeSection === 'explanations' && (
           <>
             <div style={{ display: 'flex', gap: 4, marginBottom: 24, borderBottom: '1px solid var(--fqp-border)', paddingBottom: 0 }}>

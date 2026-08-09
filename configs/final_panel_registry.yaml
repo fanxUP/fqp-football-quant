@@ -34,6 +34,13 @@ panels:
     order: 60
     visible: true
     icon: ticket
+  - panel_id: review_reports
+    name: 复盘与报告
+    route: /reports
+    module_id: review_reporting_module
+    order: 65
+    visible: true
+    icon: 🗂️
   - panel_id: deep_analysis
     name: 今日决策分析
     route: /analysis

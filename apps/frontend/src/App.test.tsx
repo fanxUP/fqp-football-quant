@@ -1,4 +1,4 @@
-import { render, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import App from './App';
@@ -31,6 +31,7 @@ vi.mock('./pages/BacktestPage', () => ({ default: () => <div>Backtest</div> }));
 vi.mock('./pages/PoolPage', () => ({ default: () => <div>Pool</div> }));
 vi.mock('./pages/AnalysisPage', () => ({ default: () => <div>Analysis</div> }));
 vi.mock('./pages/OddsMovementPage', () => ({ default: () => <div>Odds</div> }));
+vi.mock('./pages/ReviewsPage', () => ({ default: () => <div>Review reports</div> }));
 
 describe('App legacy route redirects', () => {
   beforeEach(() => {
@@ -52,7 +53,8 @@ describe('App legacy route redirects', () => {
     ['#/tickets/42', '#/betting?tab=tickets'],
     ['#/competition/history', '#/betting?tab=competition'],
     ['#/recommendations', '#/analysis?section=pre_match'],
-    ['#/reviews', '#/analysis?section=reviews'],
+    ['#/reviews', '#/reports'],
+    ['#/analysis?section=reviews', '#/reports'],
   ])('redirects legacy route %s to its unified workspace', async (from, to) => {
     window.location.hash = from;
 
@@ -61,5 +63,13 @@ describe('App legacy route redirects', () => {
     await waitFor(() => {
       expect(window.location.hash).toBe(to);
     });
+  });
+
+  it('opens review reports as an independent page', async () => {
+    window.location.hash = '#/reports';
+
+    render(<App />);
+
+    expect(await screen.findByText('Review reports')).toBeInTheDocument();
   });
 });

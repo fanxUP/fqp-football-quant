@@ -24,7 +24,7 @@ export default function ReviewsPage({ embedded = false }: ReviewsPageProps) {
 
   return (
     <div>
-      {!embedded && <PageHeader title="复盘中心" />}
+      {!embedded && <PageHeader title="复盘与报告" subtitle="基于已结算彩票、官方赛果与归档预测的只读复盘" />}
       <div className="fqp-tabs">
         {([
           ['daily', '日报'],
