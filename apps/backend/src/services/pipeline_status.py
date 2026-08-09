@@ -116,6 +116,9 @@ JOB_DEFINITIONS: dict[str, JobDefinition] = {
     "train_random_forest_shadow": JobDefinition(
         "随机森林特征模型影子训练", "每日 23:53", "model", max_age=timedelta(hours=30)
     ),
+    "train_naive_bayes_shadow": JobDefinition(
+        "朴素贝叶斯特征模型影子训练", "每日 23:56", "model", max_age=timedelta(hours=30)
+    ),
     "backtest": JobDefinition(
         "全量回测执行", "每周日 04:07", "model", ("run_backtest",), timedelta(days=8)
     ),

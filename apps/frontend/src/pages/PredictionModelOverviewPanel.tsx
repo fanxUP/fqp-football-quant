@@ -23,6 +23,7 @@ const MODEL_DEFINITIONS: ModelDefinition[] = [
   { code: 'logistic_shadow', title: '逻辑回归赛前特征模型', summary: '将赛前阵容、休息、伤停、天气和战意等特征作正则化线性组合，作为可解释基准。', output: '胜平负概率。', cadence: '每日在官方结算后重新训练。', condition: '至少 100 场训练样本和 25 场后续留出验证样本。', role: '当前处于影子验证，只用于和非线性模型交叉评估，不参与推荐委员会、投注或风控。' },
   { code: 'bayesian_form', title: '贝叶斯近期状态模型', summary: '对双方最近已结算赛果作贝叶斯收缩，保留主客方向并避免少量样本导致极端概率。', output: '胜平负概率。', cadence: '每次赛前预测时读取截至开赛前的官方已结算赛果。', condition: '双方各至少 6 场有效历史，最多采用最近 12 场。', role: '当前处于影子验证，只用于交叉评估，不参与推荐委员会、投注或风控。' },
   { code: 'random_forest_shadow', title: '随机森林赛前特征模型', summary: '通过多棵决策树学习赛前阵容、休息、伤停、天气与战意的非线性交互。', output: '胜平负概率。', cadence: '每日在官方结算后重新训练。', condition: '至少 100 场训练样本和 25 场后续留出验证样本。', role: '当前处于影子验证，只用于与线性、梯度提升模型交叉评估，不参与推荐委员会、投注或风控。' },
+  { code: 'naive_bayes_shadow', title: '朴素贝叶斯赛前特征模型', summary: '以各赛前特征的类别条件分布形成轻量概率基准，用于发现复杂模型的过拟合偏差。', output: '胜平负概率。', cadence: '每日在官方结算后重新训练。', condition: '至少 100 场训练样本和 25 场后续留出验证样本。', role: '当前处于影子验证，只用于交叉评估，不参与推荐委员会、投注或风控。' },
 ];
 
 function formatTime(value: string | null) {

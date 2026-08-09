@@ -82,7 +82,7 @@ describe('PredictionModelOverviewPanel', () => {
     render(<PredictionModelOverviewPanel />);
 
     expect(await screen.findByRole('heading', { name: '预测模型说明' })).toBeInTheDocument();
-    expect(screen.getAllByRole('article')).toHaveLength(10);
+    expect(screen.getAllByRole('article')).toHaveLength(11);
     expect(screen.getByRole('heading', { name: '市场赔率基准' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Glicko-2 强度评级' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: '双变量泊松进球模型' })).toBeInTheDocument();
@@ -90,6 +90,7 @@ describe('PredictionModelOverviewPanel', () => {
     expect(screen.getByRole('heading', { name: '逻辑回归赛前特征模型' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: '贝叶斯近期状态模型' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: '随机森林赛前特征模型' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '朴素贝叶斯赛前特征模型' })).toBeInTheDocument();
     expect(screen.getAllByText('已启用')[0]).toHaveAttribute('data-status', 'enabled');
     expect(screen.getByText('未启用')).toHaveAttribute('data-status', 'disabled');
     expect(screen.getByText(/概率校准：影子验证/)).toBeInTheDocument();

@@ -822,6 +822,16 @@ def main() -> None:
                 id="train_random_forest_shadow",
             )
 
+            scheduler.add_job(
+                _audited_job(
+                    "train_naive_bayes_shadow", "朴素贝叶斯特征模型影子训练", "model_agent",
+                    lambda: __import__(
+                        "scripts.jobs.train_naive_bayes_shadow", fromlist=["run"]
+                    ).run(),
+                ),
+                "cron", hour=23, minute=56, id="train_naive_bayes_shadow",
+            )
+
             # Weekly on Sunday at 04:00: run full backtest
             scheduler.add_job(
                 _audited_job(
