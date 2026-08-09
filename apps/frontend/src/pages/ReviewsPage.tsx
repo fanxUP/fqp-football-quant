@@ -13,6 +13,7 @@ import StatusBadge from '../shared/components/StatusBadge';
 import { formatTimestamp } from '../shared/utils';
 import BusinessInterpretationPanel from './agent-workspace/BusinessInterpretationPanel';
 import { asTradingViewChart } from './reviews/tradingViewOptions';
+import PlayTypeWinRateChart from './reviews/PlayTypeWinRateChart';
 
 type TabKey = 'daily' | 'weekly' | 'monthly' | 'settlements' | 'errors';
 
@@ -207,74 +208,6 @@ function DailyReviewsTab() {
     };
   })();
 
-  // ---- Play-type win-rate line chart ----
-  const playTypeWinRateOption = (() => {
-    if (playTypeData.length === 0) return null;
-
-    // Unique play types and dates
-    const playTypes = [...new Set(playTypeData.map((r) => r.play_type))].sort();
-    const dates = [...new Set(playTypeData.map((r) => r.settle_date))].sort();
-
-    // Color palette for play types
-    const colors = ['#22c55e', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316'];
-
-    // Build series: one line per play type
-    const series = playTypes.map((pt, i) => {
-      const data = dates.map((d) => {
-        const row = playTypeData.find((r) => r.settle_date === d && r.play_type === pt);
-        return row ? +(row.win_rate * 100).toFixed(1) : null;
-      });
-      return {
-        name: pt,
-        type: 'line' as const,
-        data,
-        smooth: false,
-        symbol: 'none',
-        lineStyle: { width: 2, color: colors[i % colors.length] },
-        itemStyle: { color: colors[i % colors.length] },
-        connectNulls: true,
-      };
-    });
-
-    return asTradingViewChart({
-      tooltip: {
-        trigger: 'axis' as const,
-        formatter: (params: { seriesName: string; value: number | null; marker: string }[]) => {
-          const lines = params
-            .filter((p) => p.value !== null)
-            .map((p) => `${p.marker} ${p.seriesName}: ${p.value}%`);
-          return lines.length ? lines.join('<br/>') : '';
-        },
-      },
-      legend: {
-        data: playTypes,
-        bottom: 0,
-        textStyle: { fontSize: 11 },
-      },
-      grid: {
-        left: '3%',
-        right: '4%',
-        bottom: '14%',
-        top: '10px',
-        containLabel: true,
-      },
-      xAxis: {
-        type: 'category' as const,
-        data: dates.map((d) => d.slice(5)),
-        axisLabel: { rotate: 45, fontSize: 11 },
-      },
-      yAxis: {
-        type: 'value' as const,
-        name: '胜率 (%)',
-        nameTextStyle: { fontSize: 11 },
-        axisLabel: { fontSize: 11, formatter: '{value}%' },
-        min: 0,
-        max: 100,
-      },
-      series,
-    });
-  })();
-
   if (error) return <ErrorState message={error} onRetry={() => window.location.reload()} />;
 
   return (
@@ -311,16 +244,7 @@ function DailyReviewsTab() {
         </div>
       )}
 
-      {/* Play-type win-rate line chart */}
-      {!loading && playTypeWinRateOption && (
-        <ChartCard
-          title="各玩法胜率走势"
-          subtitle="按结算日期滚动统计"
-          option={playTypeWinRateOption}
-          height={320}
-          variant="trading"
-        />
-      )}
+      <PlayTypeWinRateChart data={playTypeData} loading={loading} />
 
       <DataTable
         columns={columns}
