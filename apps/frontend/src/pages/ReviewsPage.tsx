@@ -12,8 +12,8 @@ import ErrorState from '../shared/components/ErrorState';
 import StatusBadge from '../shared/components/StatusBadge';
 import { formatTimestamp } from '../shared/utils';
 import BusinessInterpretationPanel from './agent-workspace/BusinessInterpretationPanel';
-import { asTradingViewChart } from './reviews/tradingViewOptions';
 import PlayTypeWinRateChart from './reviews/PlayTypeWinRateChart';
+import RealProfitLossChart from './reviews/RealProfitLossChart';
 
 type TabKey = 'daily' | 'weekly' | 'monthly' | 'settlements' | 'errors';
 
@@ -94,77 +94,6 @@ function DailyReviewsTab() {
     },
   ];
 
-  // ---- P&L bar chart ----
-  const plChartOption = (() => {
-    if (reviews.length === 0) return null;
-    const sorted = [...reviews].sort((a, b) => a.review_date.localeCompare(b.review_date));
-    const dates = sorted.map((r) => r.review_date.slice(5));
-    const profits = sorted.map((r) => r.real_profit_loss);
-    let cum = 0;
-    const cumulative = sorted.map((r) => {
-      cum += r.real_profit_loss;
-      return cum;
-    });
-
-    return asTradingViewChart({
-      tooltip: {
-        trigger: 'axis' as const,
-      },
-      legend: {
-        data: ['日盈亏', '累计盈亏'],
-        top: 0,
-      },
-      grid: {
-        left: '3%',
-        right: '4%',
-        bottom: '12%',
-        top: '40px',
-        containLabel: true,
-      },
-      xAxis: {
-        type: 'category' as const,
-        data: dates,
-        axisLabel: { rotate: 45, fontSize: 11 },
-      },
-      yAxis: [
-        {
-          type: 'value' as const,
-          name: '日盈亏 (¥)',
-          nameTextStyle: { fontSize: 11 },
-          axisLabel: { fontSize: 11 },
-        },
-        {
-          type: 'value' as const,
-          name: '累计 (¥)',
-          nameTextStyle: { fontSize: 11 },
-          axisLabel: { fontSize: 11 },
-        },
-      ],
-      series: [
-        {
-          name: '日盈亏',
-          type: 'bar',
-          data: profits,
-          itemStyle: {
-            color: (params: { value: number }) =>
-              (params.value >= 0 ? '#22c55e' : '#ef4444'),
-          },
-        },
-        {
-          name: '累计盈亏',
-          type: 'line',
-          yAxisIndex: 1,
-          data: cumulative,
-          lineStyle: { color: '#3b82f6', width: 2 },
-          itemStyle: { color: '#3b82f6' },
-          symbol: 'none',
-          smooth: false,
-          areaStyle: { color: 'rgba(59, 130, 246, 0.10)' },
-        },
-      ],
-    });
-  })();
-
   // ---- Error distribution treemap ----
   const errorDistOption = (() => {
     // Count matches with losses (negative profit) vs wins
@@ -215,19 +144,7 @@ function DailyReviewsTab() {
       {/* Charts */}
       {!loading && (
         <div className="fqp-grid-2" style={{ marginBottom: '16px' }}>
-          {plChartOption ? (
-            <ChartCard
-              title="实盘盈亏走势"
-              subtitle="日盈亏 · 累计盈亏"
-              option={plChartOption}
-              height={300}
-              variant="trading"
-            />
-          ) : (
-            <Card title="实盘盈亏走势">
-              <div style={{ padding: '40px 0', textAlign: 'center', color: 'var(--fqp-text-muted)' }}>暂无数据</div>
-            </Card>
-          )}
+          <RealProfitLossChart reviews={reviews} loading={loading} />
           {errorDistOption ? (
             <ChartCard
               title="盈亏天数分布"
