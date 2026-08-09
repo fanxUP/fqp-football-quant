@@ -135,4 +135,13 @@ describe('ModelsPage', () => {
     fireEvent.click(groups[0].querySelector('summary')!);
     expect(groups[0].open).toBe(true);
   });
+
+  it('评估指标接口失败时明确显示错误，而不是误报需要结算数据', async () => {
+    apiMocks.evaluationSummary.mockRejectedValue(new Error('服务暂不可用'));
+
+    render(<ModelsPage />);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('评估指标加载失败，请稍后重试');
+    expect(screen.queryByText('需要结算数据')).not.toBeInTheDocument();
+  });
 });

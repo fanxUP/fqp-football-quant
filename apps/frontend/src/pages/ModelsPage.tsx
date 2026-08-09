@@ -25,6 +25,7 @@ export default function ModelsPage() {
   });
   const [loading, setLoading] = useState(true);
   const [evalLoading, setEvalLoading] = useState(true);
+  const [evalError, setEvalError] = useState<string | null>(null);
   const [historyLoading, setHistoryLoading] = useState(true);
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -63,6 +64,7 @@ export default function ModelsPage() {
         setEvalLoading(false);
       })
       .catch(() => {
+        setEvalError('评估指标加载失败，请稍后重试');
         setEvalLoading(false);
       });
   }, []);
@@ -220,6 +222,10 @@ export default function ModelsPage() {
       <Card title="评估指标" style={{ marginBottom: '20px' }}>
         {evalLoading ? (
           <div style={{ color: 'var(--fqp-text-muted)', padding: '16px 0' }}>加载评估数据...</div>
+        ) : evalError ? (
+          <div role="alert" style={{ color: 'var(--fqp-red-neon)', padding: '16px 0' }}>
+            {evalError}
+          </div>
         ) : evalModels.length === 0 ? (
           <div style={{ display: 'flex', gap: '32px', flexWrap: 'wrap' }}>
             {[
