@@ -11,7 +11,6 @@ import EmptyState from '../shared/components/EmptyState';
 import ErrorState from '../shared/components/ErrorState';
 import StatusBadge from '../shared/components/StatusBadge';
 import { formatTimestamp } from '../shared/utils';
-import BusinessInterpretationPanel from './agent-workspace/BusinessInterpretationPanel';
 import PlayTypeWinRateChart from './reviews/PlayTypeWinRateChart';
 import RealProfitLossChart from './reviews/RealProfitLossChart';
 import MatchReviewCards from './reviews/MatchReviewCards';
@@ -182,16 +181,12 @@ function DailyReviewsTab() {
             if (!review) return null;
             return (
               <div style={{ fontSize: '14px', lineHeight: '2', whiteSpace: 'pre-wrap' }}>
-                {review.summary_text || '暂无摘要文本'}
                 <div style={{ marginTop: '16px', display: 'flex', gap: '24px', flexWrap: 'wrap', fontSize: '13px', color: 'var(--fqp-text-muted)' }}>
                   <div>建议投入: ¥{review.suggested_stake.toFixed(0)}</div>
                   <div>实际投入: ¥{review.actual_stake.toFixed(0)}</div>
                   <div>预算使用率: {(review.budget_usage_rate * 100).toFixed(0)}%</div>
                   <div>最大单票亏损: ¥{review.max_single_ticket_loss.toFixed(2)}</div>
                 </div>
-                <BusinessInterpretationPanel title="赛后复盘解读" onRun={(focusQuestion) =>
-                  api.agentInterpretations.postMatch('post_daily', review.review_date, focusQuestion)
-                } />
                 <AutomaticReportArchivePanel sourceType="post_daily" sourceRef={review.review_date} />
                 <MatchReviewCards reviewDate={review.review_date} />
               </div>
@@ -219,14 +214,6 @@ function WeeklyReviewsTab() {
   const columns: Column<WeeklyReview>[] = [
     { key: 'week_start', title: '周开始' },
     { key: 'week_end', title: '周结束' },
-    {
-      key: 'summary_text',
-      title: '摘要',
-      render: (v) => {
-        const s = String(v || '');
-        return s.length > 80 ? s.slice(0, 80) + '...' : s;
-      },
-    },
     { key: 'created_at', title: '生成时间', render: (v) => formatTimestamp(v) },
   ];
 
@@ -238,10 +225,6 @@ function WeeklyReviewsTab() {
       {expandedId != null && (() => {
         const review = reviews.find((item) => item.id === expandedId);
         return review ? <Card title={`📅 ${review.week_start} 至 ${review.week_end} 周报详情`} style={{ marginTop: '16px' }}>
-          <div style={{ whiteSpace: 'pre-wrap' }}>{review.summary_text || '暂无摘要文本'}</div>
-          <BusinessInterpretationPanel title="赛后复盘解读" onRun={(focusQuestion) =>
-            api.agentInterpretations.postMatch('post_weekly', String(review.id), focusQuestion)
-          } />
           <AutomaticReportArchivePanel sourceType="post_weekly" sourceRef={review.week_start} />
         </Card> : null;
       })()}
@@ -264,14 +247,6 @@ function MonthlyReviewsTab() {
 
   const columns: Column<MonthlyReview>[] = [
     { key: 'review_month', title: '月份' },
-    {
-      key: 'summary_text',
-      title: '摘要',
-      render: (v) => {
-        const s = String(v || '');
-        return s.length > 100 ? s.slice(0, 100) + '...' : s;
-      },
-    },
     { key: 'created_at', title: '生成时间', render: (v) => formatTimestamp(v) },
   ];
 
@@ -283,10 +258,6 @@ function MonthlyReviewsTab() {
       {expandedId != null && (() => {
         const review = reviews.find((item) => item.id === expandedId);
         return review ? <Card title={`📅 ${String(review.review_month ?? review.month ?? review.id)} 月报详情`} style={{ marginTop: '16px' }}>
-          <div style={{ whiteSpace: 'pre-wrap' }}>{review.summary_text || '暂无摘要文本'}</div>
-          <BusinessInterpretationPanel title="赛后复盘解读" onRun={(focusQuestion) =>
-            api.agentInterpretations.postMatch('post_monthly', String(review.id), focusQuestion)
-          } />
           <AutomaticReportArchivePanel sourceType="post_monthly" sourceRef={review.review_month} />
         </Card> : null;
       })()}
