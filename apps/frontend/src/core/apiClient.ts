@@ -15,6 +15,7 @@ import type {
   ErrorAnalysis,
   ErrorSummary,
   PlayTypeWinRate,
+  MatchReviewCard,
   BacktestRun,
   BacktestWindow,
   BacktestResult,
@@ -463,6 +464,11 @@ export const api = {
 
     dailyByDate: (date: string) =>
       request<DailyReview>(`/api/reviews/daily/${encodeURIComponent(date)}`),
+
+    matchCards: (date: string) =>
+      request<{ date: string; cards: MatchReviewCard[]; total: number }>(
+        `/api/reviews/match-cards?date=${encodeURIComponent(date)}`,
+      ),
 
     playTypeWinRate: (days?: number) =>
       request<{ status: string; data: PlayTypeWinRate[] }>(

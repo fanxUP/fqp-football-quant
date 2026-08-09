@@ -14,6 +14,7 @@ import { formatTimestamp } from '../shared/utils';
 import BusinessInterpretationPanel from './agent-workspace/BusinessInterpretationPanel';
 import PlayTypeWinRateChart from './reviews/PlayTypeWinRateChart';
 import RealProfitLossChart from './reviews/RealProfitLossChart';
+import MatchReviewCards from './reviews/MatchReviewCards';
 
 type TabKey = 'daily' | 'weekly' | 'monthly' | 'settlements' | 'errors';
 
@@ -188,6 +189,7 @@ function DailyReviewsTab() {
                 <BusinessInterpretationPanel title="赛后复盘解读" onRun={(focusQuestion) =>
                   api.agentInterpretations.postMatch('post_daily', review.review_date, focusQuestion)
                 } />
+                <MatchReviewCards reviewDate={review.review_date} />
               </div>
             );
           })()}

@@ -11,6 +11,7 @@ from pathlib import Path
 from fastapi import APIRouter, File, HTTPException, Query, UploadFile
 
 from apps.backend.src.db import get_db
+from apps.backend.src.services.match_review import build_match_review_cards
 from scripts.ocr_ticket_parser import (
     process_ticket_image,
     result_to_dict,
@@ -176,6 +177,14 @@ def get_daily_review(date: str):
     if not review:
         return {"status": "not_found"}
     return review
+
+
+@router.get("/api/reviews/match-cards")
+def list_match_review_cards(date: str = Query(..., pattern=r"^\d{4}-\d{2}-\d{2}$")):
+    """Return read-only completed-match cards for one official business date."""
+    with get_db() as conn:
+        cards = build_match_review_cards(conn, date)
+    return {"date": date, "cards": cards, "total": len(cards)}
 
 
 @router.get("/api/reviews/play-type-winrate")
