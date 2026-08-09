@@ -13,7 +13,6 @@ import StatusBadge from '../shared/components/StatusBadge';
 import { formatTimestamp } from '../shared/utils';
 import PlayTypeWinRateChart from './reviews/PlayTypeWinRateChart';
 import RealProfitLossChart from './reviews/RealProfitLossChart';
-import MatchReviewCards from './reviews/MatchReviewCards';
 import ReportAutomationPanel from './reviews/ReportAutomationPanel';
 import AutomaticReportArchivePanel from './reviews/AutomaticReportArchivePanel';
 
@@ -188,7 +187,6 @@ function DailyReviewsTab() {
                   <div>最大单票亏损: ¥{review.max_single_ticket_loss.toFixed(2)}</div>
                 </div>
                 <AutomaticReportArchivePanel sourceType="post_daily" sourceRef={review.review_date} />
-                <MatchReviewCards reviewDate={review.review_date} />
               </div>
             );
           })()}
