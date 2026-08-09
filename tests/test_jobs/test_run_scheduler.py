@@ -216,6 +216,16 @@ def test_svm_shadow_training_runs_after_naive_bayes_without_promotion():
     assert source.index('id="train_naive_bayes_shadow"') < source.index('id="train_svm_shadow"')
 
 
+def test_negative_binomial_shadow_training_runs_after_svm_without_promotion():
+    source = Path("scripts/jobs/run_scheduler.py").read_text()
+
+    assert 'id="train_negative_binomial_shadow"' in source
+    assert source.index('id="train_svm_shadow"') < source.index(
+        'id="train_negative_binomial_shadow"'
+    )
+    assert JOB_DEFINITIONS["train_negative_binomial_shadow"].schedule == "每日 00:02"
+
+
 def test_scheduler_detects_upsets_after_results_and_ticket_settlement():
     source = Path("scripts/jobs/run_scheduler.py").read_text()
 

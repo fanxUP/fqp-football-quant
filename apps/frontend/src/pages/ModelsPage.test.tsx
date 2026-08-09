@@ -6,11 +6,15 @@ const apiMocks = vi.hoisted(() => ({
   predictions: vi.fn(),
   evaluationSummary: vi.fn(),
   performanceHistory: vi.fn(),
+  modelOverview: vi.fn(),
+  calibrationProfiles: vi.fn(),
 }));
 
 vi.mock('../core/apiClient', () => ({
   api: {
     predictions: apiMocks.predictions,
+    modelOverview: apiMocks.modelOverview,
+    calibrationProfiles: apiMocks.calibrationProfiles,
     analysis: {
       evaluationSummary: apiMocks.evaluationSummary,
       performanceHistory: apiMocks.performanceHistory,
@@ -77,12 +81,17 @@ describe('ModelsPage', () => {
       points: [],
       samples: [],
     });
+    apiMocks.modelOverview.mockResolvedValue({ total: 0, models: [] });
+    apiMocks.calibrationProfiles.mockResolvedValue({
+      profiles: [], trends: [],
+      policy: { sampleThreshold: 300, improvementThreshold: 0.005, affectsDecisionPath: false },
+    });
   });
 
   it('将模型内部代码统一显示为易懂的中文名称', async () => {
     render(<ModelsPage />);
 
-    expect(await screen.findAllByText('Elo 实力评分')).toHaveLength(3);
+    expect(await screen.findAllByText('Elo 实力评分')).toHaveLength(1);
     expect(screen.getByText('主胜')).toBeInTheDocument();
     expect(screen.getByText('原始概率')).toBeInTheDocument();
     expect(screen.getByText('最终概率')).toBeInTheDocument();

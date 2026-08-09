@@ -33,6 +33,7 @@ from scripts.model_storage import store_committee_vote, store_model_prediction
 from scripts.naive_bayes_shadow_model import (
     load_probabilities as load_naive_bayes_shadow_probabilities,
 )
+from scripts.negative_binomial_model import negative_binomial_score_matrix
 from scripts.odds_conversion import (
     full_debias_pipeline,
     normalize_probabilities,
@@ -59,6 +60,7 @@ MIN_MAHER_MATCHES = 5
 MIN_GLICKO2_MATCHES = 8
 MAX_GLICKO2_DEVIATION = 160.0
 MIN_BIVARIATE_TRAINING_MATCHES = 100
+MIN_NEGATIVE_BINOMIAL_TRAINING_MATCHES = 100
 
 # Option code mapping: odds_conversion uses "3"/"1"/"0", snapshots use "h"/"d"/"a"
 OPTION_MAP = {"h": "3", "d": "1", "a": "0"}
@@ -141,6 +143,24 @@ def _load_trained_bivariate_shared_component(
     if not math.isfinite(component) or component < 0 or component >= limiting_rate:
         return None
     return component
+
+
+def _load_trained_negative_binomial_dispersion(
+    model_parameters: dict[str, dict[str, Any]], goal_rates: TrainedGoalRates | Any | None
+) -> float | None:
+    """Use fitted over-dispersion only with a converged historical goal-rate model."""
+    parameters = model_parameters.get("negative_binomial_shadow")
+    if not parameters or parameters.get("converged") is not True or goal_rates is None:
+        return None
+    if int(parameters.get("n_matches") or 0) < MIN_NEGATIVE_BINOMIAL_TRAINING_MATCHES:
+        return None
+    try:
+        dispersion = float(parameters["dispersion"])
+    except (KeyError, TypeError, ValueError):
+        return None
+    if not math.isfinite(dispersion) or not 0.05 <= dispersion <= 100.0:
+        return None
+    return dispersion
 
 
 def _load_xgboost_shadow_probabilities(
@@ -611,6 +631,8 @@ def _predict_match_play_type(
     raw_dc_matrix = None
     bivariate_matrix = None
     raw_bivariate_matrix = None
+    negative_binomial_matrix = None
+    raw_negative_binomial_matrix = None
     feature_adjustment = GoalRateAdjustment(1.3, 1.1, False, 0.0, 1.0, [])
     trained_goal_rates = _load_trained_goal_rates(model_parameters, feature_snapshot)
     try:
@@ -680,6 +702,36 @@ def _predict_match_play_type(
         bivariate_is_independent = False
         raw_bivariate_probs = dict(market_probs)
         bivariate_probs = dict(market_probs)
+
+    trained_negative_binomial_dispersion = _load_trained_negative_binomial_dispersion(
+        model_parameters, trained_goal_rates
+    )
+    negative_binomial_is_independent = trained_negative_binomial_dispersion is not None
+    try:
+        if trained_negative_binomial_dispersion is not None:
+            raw_negative_binomial_matrix = negative_binomial_score_matrix(
+                raw_lam_h, raw_lam_a, trained_negative_binomial_dispersion
+            )
+            negative_binomial_matrix = negative_binomial_score_matrix(
+                lam_h, lam_a, trained_negative_binomial_dispersion
+            )
+            raw_negative_binomial_probs = (
+                derive_handicap(raw_negative_binomial_matrix, handicap)
+                if play_type == "rqspf" and handicap is not None
+                else derive_1x2(raw_negative_binomial_matrix)
+            )
+            negative_binomial_probs = (
+                derive_handicap(negative_binomial_matrix, handicap)
+                if play_type == "rqspf" and handicap is not None
+                else derive_1x2(negative_binomial_matrix)
+            )
+        else:
+            raw_negative_binomial_probs = dict(market_probs)
+            negative_binomial_probs = dict(market_probs)
+    except (ArithmeticError, ValueError):
+        negative_binomial_is_independent = False
+        raw_negative_binomial_probs = dict(market_probs)
+        negative_binomial_probs = dict(market_probs)
 
     # 5. Dixon-Coles model
     try:
@@ -811,6 +863,7 @@ def _predict_match_play_type(
         "elo_rating": (elo_1x2, elo_1x2),
         "glicko2_rating": (glicko2_1x2, glicko2_1x2),
         "bivariate_poisson": (raw_bivariate_probs, bivariate_probs),
+        "negative_binomial_shadow": (raw_negative_binomial_probs, negative_binomial_probs),
         "xgboost_shadow": (xgboost_1x2, xgboost_1x2),
         "logistic_shadow": (logistic_1x2, logistic_1x2),
         "bayesian_form": (bayesian_form_1x2, bayesian_form_1x2),
@@ -825,6 +878,7 @@ def _predict_match_play_type(
         "elo_rating": elo_is_independent,
         "glicko2_rating": glicko2_is_independent,
         "bivariate_poisson": bivariate_is_independent,
+        "negative_binomial_shadow": negative_binomial_is_independent,
         "xgboost_shadow": xgboost_is_independent,
         "logistic_shadow": logistic_is_independent,
         "bayesian_form": bayesian_form_is_independent,
@@ -870,6 +924,7 @@ def _predict_match_play_type(
                     elo_1x2.get(opt_code, 0),
                     glicko2_1x2.get(opt_code, 0),
                     bivariate_probs.get(opt_code, 0),
+                    negative_binomial_probs.get(opt_code, 0),
                     xgboost_1x2.get(opt_code, 0),
                     logistic_1x2.get(opt_code, 0),
                     bayesian_form_1x2.get(opt_code, 0),
@@ -931,6 +986,7 @@ def _predict_match_play_type(
                     "elo_based": model_name == "elo_rating",
                     "glicko2_based": model_name == "glicko2_rating",
                     "bivariate_poisson_based": model_name == "bivariate_poisson",
+                    "negative_binomial_shadow_based": model_name == "negative_binomial_shadow",
                     "xgboost_shadow_based": model_name == "xgboost_shadow",
                     "logistic_shadow_based": model_name == "logistic_shadow",
                     "bayesian_form_based": model_name == "bayesian_form",

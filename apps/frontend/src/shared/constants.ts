@@ -7,6 +7,7 @@ export const MODEL_NAME_LABELS: Record<string, string> = {
   market_baseline: '市场赔率基准',
   dixon_coles: '迪克森-科尔斯比分模型',
   maher_poisson: '马赫泊松进球模型',
+  negative_binomial_shadow: '负二项进球模型',
 };
 
 export function modelNameLabel(code: string): string {

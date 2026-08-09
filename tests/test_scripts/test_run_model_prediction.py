@@ -14,6 +14,7 @@ from scripts.jobs.run_model_prediction import (
     _load_trained_elo_probabilities,
     _load_trained_glicko2_probabilities,
     _load_trained_goal_rates,
+    _load_trained_negative_binomial_dispersion,
     _load_xgboost_shadow_probabilities,
     _now,
     _predict_match_play_type,
@@ -100,6 +101,21 @@ def test_bivariate_component_requires_converged_history_and_valid_goal_rates() -
     assert _load_trained_bivariate_shared_component(params, goal_rates) == 0.14
     params["bivariate_poisson"]["converged"] = False
     assert _load_trained_bivariate_shared_component(params, goal_rates) is None
+
+
+def test_negative_binomial_shadow_requires_converged_history_and_goal_rates() -> None:
+    params = {
+        "negative_binomial_shadow": {
+            "dispersion": 0.7,
+            "n_matches": 240,
+            "converged": True,
+            "rollout_mode": "shadow",
+        }
+    }
+
+    assert _load_trained_negative_binomial_dispersion(params, object()) == 0.7
+    params["negative_binomial_shadow"]["converged"] = False
+    assert _load_trained_negative_binomial_dispersion(params, object()) is None
 
 
 def test_bivariate_shadow_prediction_never_enters_committee_votes() -> None:

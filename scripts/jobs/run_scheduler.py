@@ -837,6 +837,11 @@ def main() -> None:
                 "cron", hour=23, minute=59, id="train_svm_shadow",
             )
 
+            scheduler.add_job(
+                _audited_job("train_negative_binomial_shadow", "负二项进球模型影子训练", "model_agent", lambda: __import__("scripts.jobs.train_negative_binomial_shadow", fromlist=["run"]).run()),
+                "cron", hour=0, minute=2, id="train_negative_binomial_shadow",
+            )
+
             # Weekly on Sunday at 04:00: run full backtest
             scheduler.add_job(
                 _audited_job(
