@@ -374,6 +374,7 @@ class TestCalibrationProfilesEndpoint:
         assert data["profiles"][0]["temperature"] == 1.15
         assert data["trends"][0]["modelCode"] == "market_baseline"
         assert data["trends"][0]["status"] == "insufficient_history"
+        assert data["trends"][0]["comparison"]["status"] == "insufficient_history"
         assert data["trends"][0]["affectsDecisionPath"] is False
         sql = mock_cur.execute.call_args.args[0]
         assert "probability_calibration_profiles" in sql

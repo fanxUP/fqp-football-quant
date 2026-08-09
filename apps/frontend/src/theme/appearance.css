@@ -329,10 +329,12 @@
 .prediction-calibration-monitor h3 { margin: 0; color: var(--fqp-text); font-size: 14px; }
 .prediction-calibration-monitor p { margin: 6px 0 0; color: var(--fqp-text-muted); font-size: 12px; line-height: 1.55; }
 .prediction-calibration-history { display: grid; gap: 6px; margin-top: 12px; }
-.prediction-calibration-history-row { display: grid; grid-template-columns: minmax(130px, 1fr) auto minmax(120px, auto) auto auto; align-items: center; gap: 10px; padding: 8px 10px; border-radius: var(--fqp-radius-xs); background: var(--fqp-panel); color: var(--fqp-text-muted); font-size: 11px; }
+.prediction-calibration-history-row { display: grid; grid-template-columns: minmax(130px, 1fr) auto minmax(120px, auto) auto auto auto; align-items: center; gap: 10px; padding: 8px 10px; border-radius: var(--fqp-radius-xs); background: var(--fqp-panel); color: var(--fqp-text-muted); font-size: 11px; }
 .prediction-calibration-history-row strong { color: var(--fqp-text); font-size: 12px; }
 .prediction-calibration-review { padding: 3px 7px; border: 1px solid var(--fqp-border); border-radius: var(--fqp-radius-xs); white-space: nowrap; }
 .prediction-calibration-trend { padding: 3px 7px; border: 1px solid var(--fqp-border); border-radius: var(--fqp-radius-xs); white-space: nowrap; }
+.prediction-calibration-comparison { color: var(--fqp-text-muted); white-space: nowrap; }
+.prediction-calibration-comparison[data-status='sample_changed'] { color: var(--fqp-warning); }
 .prediction-calibration-trend[data-status='improving'] { border-color: var(--fqp-success); color: var(--fqp-success); background: color-mix(in srgb, var(--fqp-success) 12%, transparent); }
 .prediction-calibration-trend[data-status='weakening'] { border-color: var(--fqp-red); color: var(--fqp-red); background: color-mix(in srgb, var(--fqp-red) 12%, transparent); }
 .prediction-calibration-review[data-status='ready_for_manual_review'] { border-color: var(--fqp-warning); color: var(--fqp-warning); background: color-mix(in srgb, var(--fqp-warning) 12%, transparent); }

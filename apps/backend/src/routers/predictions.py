@@ -545,7 +545,11 @@ def get_calibration_profiles(limit: int = Query(12, ge=1, le=60)):
             }
         profiles.append(profile)
         profiles_by_model.setdefault(row[0], []).append(
-            {"created_at": profile["createdAt"], "log_loss_after": raw["log_loss_after"]}
+            {
+                "created_at": profile["createdAt"],
+                "log_loss_after": raw["log_loss_after"],
+                "sample_count": raw["sample_count"],
+            }
         )
     trends = [
         {"modelCode": model_code, **review_calibration_trend(model_profiles)}

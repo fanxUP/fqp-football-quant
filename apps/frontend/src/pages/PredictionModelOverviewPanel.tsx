@@ -81,6 +81,7 @@ export default function PredictionModelOverviewPanel() {
             <span>{profile.sampleCount} 场</span>
             <span>{profile.logLossBefore.toFixed(3)} → {profile.logLossAfter.toFixed(3)}</span>
             {calibrationTrendByCode.get(profile.modelCode) && <span className="prediction-calibration-trend" data-status={calibrationTrendByCode.get(profile.modelCode)?.status}>{calibrationTrendByCode.get(profile.modelCode)?.label}</span>}
+            {calibrationTrendByCode.get(profile.modelCode) && <span className="prediction-calibration-comparison" data-status={calibrationTrendByCode.get(profile.modelCode)?.comparison.status}>{calibrationTrendByCode.get(profile.modelCode)?.comparison.label}</span>}
             <span className="prediction-calibration-review" data-status={profile.review.status}>{profile.review.label}</span>
           </div>)}
         </div>

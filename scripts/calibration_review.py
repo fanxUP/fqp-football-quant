@@ -7,6 +7,7 @@ from typing import Any
 MANUAL_REVIEW_SAMPLE_THRESHOLD = 300
 MANUAL_REVIEW_IMPROVEMENT_THRESHOLD = 0.005
 TREND_STABILITY_THRESHOLD = 0.002
+COMPARABLE_SAMPLE_RATIO_MINIMUM = 0.8
 
 
 def review_calibration_profile(profile: dict[str, Any]) -> dict[str, Any]:
@@ -39,10 +40,19 @@ def review_calibration_trend(profiles: list[dict[str, Any]]) -> dict[str, Any]:
             "previousLogLoss": None,
             "logLossChange": None,
             "profileCount": 1,
+            "comparison": {
+                "status": "insufficient_history",
+                "label": "历史不足",
+                "sampleRatio": None,
+            },
             "affectsDecisionPath": False,
         }
 
     previous_loss = float(ordered[-2]["log_loss_after"])
+    previous_samples = int(ordered[-2]["sample_count"])
+    latest_samples = int(ordered[-1]["sample_count"])
+    sample_ratio = round(latest_samples / previous_samples, 6)
+    comparable = COMPARABLE_SAMPLE_RATIO_MINIMUM <= sample_ratio <= (1 / COMPARABLE_SAMPLE_RATIO_MINIMUM)
     change = round(latest_loss - previous_loss, 6)
     if change <= -TREND_STABILITY_THRESHOLD:
         status, label = "improving", "近期改善"
@@ -57,5 +67,10 @@ def review_calibration_trend(profiles: list[dict[str, Any]]) -> dict[str, Any]:
         "previousLogLoss": previous_loss,
         "logLossChange": change,
         "profileCount": len(ordered),
+        "comparison": {
+            "status": "comparable" if comparable else "sample_changed",
+            "label": "样本可比" if comparable else "样本变化较大",
+            "sampleRatio": sample_ratio,
+        },
         "affectsDecisionPath": False,
     }

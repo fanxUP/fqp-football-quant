@@ -407,6 +407,11 @@ export interface CalibrationTrend {
   previousLogLoss: number | null;
   logLossChange: number | null;
   profileCount: number;
+  comparison: {
+    status: 'comparable' | 'sample_changed' | 'insufficient_history';
+    label: string;
+    sampleRatio: number | null;
+  };
   affectsDecisionPath: false;
 }
 

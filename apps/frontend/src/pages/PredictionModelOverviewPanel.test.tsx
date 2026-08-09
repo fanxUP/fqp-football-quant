@@ -12,7 +12,7 @@ describe('PredictionModelOverviewPanel', () => {
   beforeEach(() => {
     apiMocks.calibrationProfiles.mockResolvedValue({
       policy: { sampleThreshold: 300, improvementThreshold: 0.005, affectsDecisionPath: false },
-      trends: [{ modelCode: 'market_baseline', status: 'improving', label: '近期改善', latestLogLoss: 1.02, previousLogLoss: 1.04, logLossChange: -0.02, profileCount: 2, affectsDecisionPath: false }],
+      trends: [{ modelCode: 'market_baseline', status: 'improving', label: '近期改善', latestLogLoss: 1.02, previousLogLoss: 1.04, logLossChange: -0.02, profileCount: 2, comparison: { status: 'comparable', label: '样本可比', sampleRatio: 1.067 }, affectsDecisionPath: false }],
       profiles: [{ modelCode: 'market_baseline', sampleCount: 320, logLossBefore: 1.04, logLossAfter: 1.02, temperature: 1.15, createdAt: '2026-08-09T23:42:00', review: { status: 'ready_for_manual_review', label: '可人工评审', affectsDecisionPath: false } }],
     });
     apiMocks.modelOverview.mockResolvedValue({
@@ -75,6 +75,7 @@ describe('PredictionModelOverviewPanel', () => {
     expect(await screen.findByText('概率校准监测')).toBeInTheDocument();
     expect(screen.getByText('可人工评审')).toBeInTheDocument();
     expect(screen.getByText('近期改善')).toBeInTheDocument();
+    expect(screen.getByText('样本可比')).toBeInTheDocument();
     expect(screen.getByText(/单一模型不会直接生成投注推荐/)).toBeInTheDocument();
   });
 });
