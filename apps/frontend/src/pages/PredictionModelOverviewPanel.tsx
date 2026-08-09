@@ -73,7 +73,7 @@ export default function PredictionModelOverviewPanel() {
       {!loading && calibrationProfiles.length > 0 && <section className="prediction-calibration-monitor" aria-labelledby="prediction-calibration-monitor-title">
         <div>
           <h3 id="prediction-calibration-monitor-title">概率校准监测</h3>
-          <p>仅用于影子评估；达到门槛仍需人工复核，不会自动影响预测、推荐或风控。</p>
+          <p>仅用于影子评估；单次结果达到门槛仅表示具备人工评审基础，还须至少两期样本可比的校准记录，并且不会自动影响预测、推荐或风控。</p>
         </div>
         <div className="prediction-calibration-history" role="list">
           {calibrationProfiles.map((profile) => <div className="prediction-calibration-history-row" role="listitem" key={`${profile.modelCode}-${profile.version}`}>

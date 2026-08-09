@@ -20,7 +20,7 @@ def review_calibration_profile(profile: dict[str, Any]) -> dict[str, Any]:
     )
     return {
         "status": "ready_for_manual_review" if ready else "observing",
-        "label": "可人工评审" if ready else "持续观察",
+        "label": "具备人工评审基础" if ready else "持续观察",
         "sampleThreshold": MANUAL_REVIEW_SAMPLE_THRESHOLD,
         "improvementThreshold": MANUAL_REVIEW_IMPROVEMENT_THRESHOLD,
         "logLossImprovement": round(improvement, 6),

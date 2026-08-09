@@ -8,7 +8,7 @@ def test_marks_profile_ready_for_manual_review_only_after_conservative_gate():
 
     assert review == {
         "status": "ready_for_manual_review",
-        "label": "可人工评审",
+        "label": "具备人工评审基础",
         "sampleThreshold": 300,
         "improvementThreshold": 0.005,
         "logLossImprovement": 0.02,
