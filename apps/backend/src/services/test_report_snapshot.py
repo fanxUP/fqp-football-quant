@@ -3,7 +3,15 @@ from apps.backend.src.services.report_snapshot import build_daily_report_snapsho
 
 def test_daily_report_snapshot_freezes_match_result_prematch_signals_and_evidence() -> None:
     snapshot = build_daily_report_snapshot(
-        review={"reviewId": 8, "reviewDate": "2026-08-09", "summary": "已结算"},
+        review={
+            "reviewId": 8,
+            "reviewDate": "2026-08-09",
+            "summary": "已结算",
+            "actualStake": 200,
+            "realPrize": 260,
+            "realProfitLoss": 60,
+            "realRoi": 0.3,
+        },
         upset_report={"upsetCount": 1},
         match_cards=[
             {
@@ -14,7 +22,10 @@ def test_daily_report_snapshot_freezes_match_result_prematch_signals_and_evidenc
                 "awayTeamName": "客队",
                 "kickoffTime": "2026-08-09T18:00:00",
                 "result": {"homeGoals": 2, "awayGoals": 1, "status": "confirmed"},
-                "modelSignals": [{"modelName": "Poisson", "playType": "spf", "optionCode": "h"}],
+                "modelSignals": [{
+                    "modelName": "Poisson", "playType": "spf", "optionCode": "h",
+                    "modelProbability": 0.62, "marketProbability": 0.55, "ev": 0.12,
+                }],
                 "oddsSignals": [{"playType": "spf", "optionCode": "h", "spValue": 1.8}],
                 "evidence": [{"sourceName": "官方来源", "headline": "赛后信息"}],
                 "evidenceStatus": "已收录",
@@ -35,7 +46,7 @@ def test_daily_report_snapshot_freezes_match_result_prematch_signals_and_evidenc
         ],
     )
 
-    assert snapshot["schemaVersion"] == 1
+    assert snapshot["schemaVersion"] == 2
     assert snapshot["dailyReview"]["reviewId"] == 8
     assert snapshot["upsetReport"] == {"upsetCount": 1}
     assert snapshot["matches"][0]["result"]["homeGoals"] == 2
@@ -43,3 +54,19 @@ def test_daily_report_snapshot_freezes_match_result_prematch_signals_and_evidenc
     assert snapshot["matches"][0]["oddsSignals"][0]["spValue"] == 1.8
     assert snapshot["matches"][0]["evidence"][0]["sourceName"] == "官方来源"
     assert snapshot["matches"][1]["evidenceStatus"] == "未查到可靠资料"
+    assert snapshot["researchMetrics"] == {
+        "matchCount": 2,
+        "signalMatchCount": 1,
+        "signalCoverageRate": 0.5,
+        "evidenceMatchCount": 1,
+        "evidenceCoverageRate": 0.5,
+        "signalCount": 1,
+        "averageModelProbability": 0.62,
+        "averageMarketProbability": 0.55,
+        "averageEdge": 0.07,
+        "averageEv": 0.12,
+        "actualStake": 200.0,
+        "realPrize": 260.0,
+        "realProfitLoss": 60.0,
+        "realRoi": 0.3,
+    }

@@ -18,8 +18,8 @@ def test_settlement_roi_uses_total_profit_over_total_stake():
 def test_daily_review_only_counts_prematch_features_and_predictions(mock_conn):
     conn, cur = mock_conn
     conn.__enter__.return_value = conn
-    cur.fetchone.side_effect = [(3,), (2,), (2,), (0,), (0,), (0,), (0,), (0,)]
-    cur.fetchall.side_effect = [[], []]
+    cur.fetchone.side_effect = [(3,), (2,), (2,), (0,), (0,), (100,), (200,), (0,)]
+    cur.fetchall.side_effect = [[("real", 200, 260, 60, 0.3)], []]
 
     with (
         patch.object(generate_daily_review, "get_db", return_value=conn),
@@ -81,5 +81,10 @@ def test_daily_review_only_counts_prematch_features_and_predictions(mock_conn):
     assert archived_match["modelSignals"] == [{"modelName": "Poisson"}]
     assert archived_match["oddsSignals"] == [{"spValue": 1.9}]
     assert archived_match["evidenceStatus"] == "未查到可靠资料"
+    metrics = completed_call["snapshot"]["researchMetrics"]
+    assert metrics["actualStake"] == 200.0
+    assert metrics["realPrize"] == 260.0
+    assert metrics["realProfitLoss"] == 60.0
+    assert metrics["realRoi"] == 0.3
     assert automatic_report.call_args.kwargs["source_type"] == "post_daily"
     assert automatic_report.call_args.kwargs["source_ref"] == "2026-07-14"

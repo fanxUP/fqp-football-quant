@@ -1,7 +1,21 @@
 from unittest.mock import MagicMock
 
 from apps.backend.src.services.model_gateway import ModelGatewayError, ModelReply
-from apps.backend.src.services.report_automation import maybe_generate_post_match_report
+from apps.backend.src.services.report_automation import (
+    _build_prompt,
+    maybe_generate_post_match_report,
+)
+
+
+def test_automatic_report_prompt_requires_auditable_research_sections() -> None:
+    prompt = _build_prompt(
+        "post_daily",
+        "2026-08-09",
+        {"researchMetrics": {"realProfitLoss": 20}},
+    )
+
+    for heading in ("## 一、已确认事实", "## 二、模型与市场", "## 三、结果与盈亏", "## 四、异常与证据缺口", "## 五、待人工核验"):
+        assert heading in prompt
 
 
 def test_automatic_report_does_not_call_model_when_automation_is_disabled(monkeypatch) -> None:
