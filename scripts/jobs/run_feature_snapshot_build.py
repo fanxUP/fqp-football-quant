@@ -36,6 +36,7 @@ from scripts.features.build_basic_features import (
     compute_rest_days,
     compute_team_form,
 )
+from scripts.features.build_upset_risk import load_pre_kickoff_upset_risk
 
 
 def _now() -> str:
@@ -167,7 +168,7 @@ def _run_impl(match_id: int | None = None, dry_run: bool = False) -> dict[str, A
 
     business_now = _business_now_naive()
     snap_time = business_now.isoformat(timespec="seconds")
-    feature_version = "v2_enriched"
+    feature_version = "v3_upset_risk"
 
     with get_db() as conn:
         # ---------------------------------------------------------------
@@ -412,7 +413,30 @@ def _run_impl(match_id: int | None = None, dry_run: bool = False) -> dict[str, A
                     print(f"[snapshot] tournament error match {mid}: {e}")
 
                 # ---------------------------------------------------
-                # 12. Compute upgraded completeness
+                # 12. Cold-result research feature. It reads only settled
+                # history before this match's kickoff to prevent label leakage.
+                try:
+                    upset_risk = load_pre_kickoff_upset_risk(
+                        conn,
+                        league_name=match_data["league_name"],
+                        home_team_id=home_id,
+                        away_team_id=away_id,
+                        kickoff_time=kt,
+                    )
+                except Exception as e:
+                    conn.rollback()
+                    print(f"[snapshot] upset-risk error match {mid}: {e}")
+                    upset_risk = {
+                        "upset_risk_score": None,
+                        "league_upset_rate": None,
+                        "home_team_upset_rate": None,
+                        "away_team_upset_rate": None,
+                        "upset_risk_confidence": None,
+                        "upset_risk_sample_size": 0,
+                    }
+
+                # ---------------------------------------------------
+                # 13. Compute upgraded completeness
                 # ---------------------------------------------------
                 dims = {
                     "odds": has_odds,
@@ -443,7 +467,7 @@ def _run_impl(match_id: int | None = None, dry_run: bool = False) -> dict[str, A
                     dim_stats[d] += dimension_coverage[d]
 
                 # ---------------------------------------------------
-                # 13. Assemble full 49-column snapshot
+                # 14. Assemble full feature snapshot
                 # ---------------------------------------------------
                 snapshot = {
                     "match_id": mid,
@@ -523,6 +547,8 @@ def _run_impl(match_id: int | None = None, dry_run: bool = False) -> dict[str, A
                     "tournament_incentive_risk_score": tournament.get(
                         "tournament_incentive_risk_score"
                     ),
+                    # Cold-result research (history only; never current result)
+                    **upset_risk,
                     # Data quality
                     "data_completeness_score": completeness["data_completeness_score"],
                     "source_confidence_score": completeness["source_confidence_score"],
@@ -541,6 +567,7 @@ def _run_impl(match_id: int | None = None, dry_run: bool = False) -> dict[str, A
                             for dimension, coverage in dimension_coverage.items()
                         },
                         "odds_implied": probs,
+                        "upset_risk": upset_risk,
                         "source": "sporttery.cn",
                         "enrichment_sources": [
                             "api-football" if (has_injury or has_lineup) else None,

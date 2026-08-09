@@ -93,6 +93,9 @@ def store_match_feature_snapshot(conn: Any, snapshot: dict) -> int | None:
             home_rest_days, away_rest_days, rest_days_diff,
             -- motivation
             home_motivation_score, away_motivation_score, motivation_diff,
+            -- cold-result research, strictly pre-kickoff history
+            upset_risk_score, league_upset_rate,
+            home_team_upset_rate, away_team_upset_rate, upset_risk_confidence,
             -- data quality
             data_completeness_score, source_confidence_score, uncertainty_score,
             raw_feature_refs, created_at
@@ -105,6 +108,8 @@ def store_match_feature_snapshot(conn: Any, snapshot: dict) -> int | None:
             %(home_defense_strength_score)s, %(away_defense_strength_score)s,
             %(home_rest_days)s, %(away_rest_days)s, %(rest_days_diff)s,
             %(home_motivation_score)s, %(away_motivation_score)s, %(motivation_diff)s,
+            %(upset_risk_score)s, %(league_upset_rate)s,
+            %(home_team_upset_rate)s, %(away_team_upset_rate)s, %(upset_risk_confidence)s,
             %(data_completeness_score)s, %(source_confidence_score)s, %(uncertainty_score)s,
             %(raw_feature_refs)s, now()
         )
@@ -134,6 +139,11 @@ def store_match_feature_snapshot(conn: Any, snapshot: dict) -> int | None:
                 "home_motivation_score": snapshot.get("home_motivation_score"),
                 "away_motivation_score": snapshot.get("away_motivation_score"),
                 "motivation_diff": snapshot.get("motivation_diff"),
+                "upset_risk_score": snapshot.get("upset_risk_score"),
+                "league_upset_rate": snapshot.get("league_upset_rate"),
+                "home_team_upset_rate": snapshot.get("home_team_upset_rate"),
+                "away_team_upset_rate": snapshot.get("away_team_upset_rate"),
+                "upset_risk_confidence": snapshot.get("upset_risk_confidence"),
                 "data_completeness_score": snapshot.get("data_completeness_score"),
                 "source_confidence_score": snapshot.get("source_confidence_score"),
                 "uncertainty_score": snapshot.get("uncertainty_score"),
