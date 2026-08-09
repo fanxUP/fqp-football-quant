@@ -807,6 +807,21 @@ def main() -> None:
                 id="train_logistic_shadow",
             )
 
+            scheduler.add_job(
+                _audited_job(
+                    "train_random_forest_shadow",
+                    "随机森林特征模型影子训练",
+                    "model_agent",
+                    lambda: __import__(
+                        "scripts.jobs.train_random_forest_shadow", fromlist=["run"]
+                    ).run(),
+                ),
+                "cron",
+                hour=23,
+                minute=53,
+                id="train_random_forest_shadow",
+            )
+
             # Weekly on Sunday at 04:00: run full backtest
             scheduler.add_job(
                 _audited_job(

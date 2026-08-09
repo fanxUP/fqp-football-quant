@@ -25,6 +25,7 @@ PREDICTION_MODEL_CODES = (
     "xgboost_shadow",
     "logistic_shadow",
     "bayesian_form",
+    "random_forest_shadow",
 )
 
 # Play type display names

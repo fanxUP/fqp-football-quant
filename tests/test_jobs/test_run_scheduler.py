@@ -193,6 +193,15 @@ def test_logistic_shadow_training_runs_after_xgboost_without_decision_promotion(
     assert source.index('id="train_xgboost_shadow"') < source.index('id="train_logistic_shadow"')
 
 
+def test_random_forest_shadow_training_runs_after_logistic_without_decision_promotion():
+    source = Path("scripts/jobs/run_scheduler.py").read_text()
+
+    assert 'id="train_random_forest_shadow"' in source
+    assert source.index('id="train_logistic_shadow"') < source.index(
+        'id="train_random_forest_shadow"'
+    )
+
+
 def test_scheduler_detects_upsets_after_results_and_ticket_settlement():
     source = Path("scripts/jobs/run_scheduler.py").read_text()
 

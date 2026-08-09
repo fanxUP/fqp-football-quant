@@ -41,6 +41,9 @@ from scripts.poisson_model import (
     estimate_lambdas_from_odds,
     score_matrix,
 )
+from scripts.random_forest_shadow_model import (
+    load_probabilities as load_random_forest_shadow_probabilities,
+)
 from scripts.xgboost_shadow_model import load_probabilities as load_xgboost_shadow_probabilities
 
 # Dixon-Coles rho — hardcoded until historical results enable MLE.
@@ -153,6 +156,16 @@ def _load_logistic_shadow_probabilities(
     """Use logistic regression only after persisted temporal validation exists."""
     return load_logistic_shadow_probabilities(
         model_parameters.get("logistic_shadow"), feature_snapshot
+    )
+
+
+def _load_random_forest_shadow_probabilities(
+    model_parameters: dict[str, dict[str, Any]],
+    feature_snapshot: dict[str, Any] | None,
+) -> dict[str, float] | None:
+    """Use random forest only after its persisted temporal validation exists."""
+    return load_random_forest_shadow_probabilities(
+        model_parameters.get("random_forest_shadow"), feature_snapshot
     )
 
 
@@ -734,6 +747,16 @@ def _predict_match_play_type(
         logistic_1x2 = dict(market_probs)
 
     try:
+        trained_random_forest = _load_random_forest_shadow_probabilities(
+            model_parameters, feature_snapshot
+        )
+        random_forest_is_independent = trained_random_forest is not None
+        random_forest_1x2 = trained_random_forest or dict(market_probs)
+    except Exception:
+        random_forest_is_independent = False
+        random_forest_1x2 = dict(market_probs)
+
+    try:
         trained_bayesian_form = _load_bayesian_form_probabilities(conn, mid, feature_snapshot)
         bayesian_form_is_independent = trained_bayesian_form is not None
         bayesian_form_1x2 = trained_bayesian_form or dict(market_probs)
@@ -757,6 +780,7 @@ def _predict_match_play_type(
         "xgboost_shadow": (xgboost_1x2, xgboost_1x2),
         "logistic_shadow": (logistic_1x2, logistic_1x2),
         "bayesian_form": (bayesian_form_1x2, bayesian_form_1x2),
+        "random_forest_shadow": (random_forest_1x2, random_forest_1x2),
     }
     model_independence = {
         "market_baseline": False,
@@ -768,6 +792,7 @@ def _predict_match_play_type(
         "xgboost_shadow": xgboost_is_independent,
         "logistic_shadow": logistic_is_independent,
         "bayesian_form": bayesian_form_is_independent,
+        "random_forest_shadow": random_forest_is_independent,
     }
 
     total_p = derived_predictions
@@ -810,6 +835,7 @@ def _predict_match_play_type(
                     xgboost_1x2.get(opt_code, 0),
                     logistic_1x2.get(opt_code, 0),
                     bayesian_form_1x2.get(opt_code, 0),
+                    random_forest_1x2.get(opt_code, 0),
                 ]
             )
 
@@ -868,6 +894,7 @@ def _predict_match_play_type(
                     "xgboost_shadow_based": model_name == "xgboost_shadow",
                     "logistic_shadow_based": model_name == "logistic_shadow",
                     "bayesian_form_based": model_name == "bayesian_form",
+                    "random_forest_shadow_based": model_name == "random_forest_shadow",
                     "rollout_mode": rollout_modes.get(model_name, "live"),
                     "model_independent": model_independence[model_name],
                     "feature_adjustment": {
