@@ -28,3 +28,19 @@ def test_report_automation_update_requires_a_ready_agent(client, monkeypatch) ->
 
     assert response.status_code == 422
     assert response.json()["detail"] == "请先启用并测试自动赛后报告 Agent"
+
+
+def test_report_automation_archive_exposes_only_the_matching_automatic_report(client, monkeypatch) -> None:
+    task = {"id": 21, "sourceType": "post_weekly", "sourceRef": "2026-08-03", "response": "仅供人工核验"}
+    monkeypatch.setattr(report_automation, "get_workspace_task_for_source", lambda _conn, **_kwargs: task)
+
+    response = client.get("/api/report-automation/archive/post_weekly/2026-08-03")
+
+    assert response.status_code == 200
+    assert response.json() == {"task": task}
+
+
+def test_report_automation_archive_rejects_unknown_business_source(client) -> None:
+    response = client.get("/api/report-automation/archive/other/2026-08-03")
+
+    assert response.status_code == 422

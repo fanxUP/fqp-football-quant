@@ -313,6 +313,10 @@ export const api = {
     save: (enabled: boolean) => request<{ automation: ReportAutomationState }>('/api/report-automation', {
       method: 'PUT', body: JSON.stringify({ enabled }),
     }),
+    archive: (sourceType: 'post_daily' | 'post_weekly' | 'post_monthly', sourceRef: string) =>
+      request<{ task: AgentWorkspaceTask | null }>(
+        `/api/report-automation/archive/${sourceType}/${encodeURIComponent(sourceRef)}`,
+      ),
   },
 
   agentWorkspace: {

@@ -70,6 +70,22 @@ def has_workspace_task_for_source(
         return bool(cur.fetchone()[0])
 
 
+def get_workspace_task_for_source(
+    conn: Any, *, agent_code: str, source_type: str, source_ref: str,
+) -> dict[str, Any] | None:
+    """Read one immutable archived result for a fixed business report source."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """SELECT id, title, agent_code, provider_code, model, review_note, reviewed_at, created_at, prompt, response, comparison_id, source_type, source_ref
+               FROM agent_workspace_tasks
+               WHERE agent_code = %s AND source_type = %s AND source_ref = %s
+               ORDER BY created_at DESC, id DESC LIMIT 1""",
+            (agent_code, source_type, source_ref),
+        )
+        row = cur.fetchone()
+    return _serialize(row) if row else None
+
+
 def list_workspace_tasks(conn: Any, limit: int = 20) -> list[dict[str, Any]]:
     safe_limit = max(1, min(limit, 50))
     with conn.cursor() as cur:

@@ -16,6 +16,7 @@ import PlayTypeWinRateChart from './reviews/PlayTypeWinRateChart';
 import RealProfitLossChart from './reviews/RealProfitLossChart';
 import MatchReviewCards from './reviews/MatchReviewCards';
 import ReportAutomationPanel from './reviews/ReportAutomationPanel';
+import AutomaticReportArchivePanel from './reviews/AutomaticReportArchivePanel';
 
 type TabKey = 'daily' | 'weekly' | 'monthly' | 'settlements' | 'errors';
 
@@ -191,6 +192,7 @@ function DailyReviewsTab() {
                 <BusinessInterpretationPanel title="赛后复盘解读" onRun={(focusQuestion) =>
                   api.agentInterpretations.postMatch('post_daily', review.review_date, focusQuestion)
                 } />
+                <AutomaticReportArchivePanel sourceType="post_daily" sourceRef={review.review_date} />
                 <MatchReviewCards reviewDate={review.review_date} />
               </div>
             );
@@ -240,6 +242,7 @@ function WeeklyReviewsTab() {
           <BusinessInterpretationPanel title="赛后复盘解读" onRun={(focusQuestion) =>
             api.agentInterpretations.postMatch('post_weekly', String(review.id), focusQuestion)
           } />
+          <AutomaticReportArchivePanel sourceType="post_weekly" sourceRef={review.week_start} />
         </Card> : null;
       })()}
     </>
@@ -284,6 +287,7 @@ function MonthlyReviewsTab() {
           <BusinessInterpretationPanel title="赛后复盘解读" onRun={(focusQuestion) =>
             api.agentInterpretations.postMatch('post_monthly', String(review.id), focusQuestion)
           } />
+          <AutomaticReportArchivePanel sourceType="post_monthly" sourceRef={review.review_month} />
         </Card> : null;
       })()}
     </>

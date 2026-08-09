@@ -1,0 +1,7 @@
+.automatic-report-archive { margin-top: 1rem; padding: 1rem; border: 1px solid var(--fqp-border); border-left: 3px solid var(--fqp-accent, var(--fqp-red)); border-radius: var(--fqp-radius-sm); background: var(--fqp-panel-2); }
+.automatic-report-archive-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
+.automatic-report-archive h3 { margin: 0; color: var(--fqp-text); font-size: .9375rem; }
+.automatic-report-archive-heading p, .automatic-report-archive-safety, .automatic-report-archive-status { margin: .35rem 0 0; color: var(--fqp-text-muted); font-size: .75rem; line-height: 1.6; }
+.automatic-report-archive-safety { color: var(--fqp-accent, var(--fqp-red)); }
+.automatic-report-archive pre { margin: .75rem 0 0; overflow: auto; color: var(--fqp-text); font-family: inherit; font-size: .8125rem; line-height: 1.7; white-space: pre-wrap; word-break: break-word; }
+@media (max-width: 640px) { .automatic-report-archive-heading { display: grid; } .automatic-report-archive-heading .fqp-btn { justify-self: start; } }

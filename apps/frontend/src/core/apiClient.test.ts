@@ -86,4 +86,21 @@ describe('api client GET request coalescing', () => {
 
     expect(signal?.aborted).toBe(false);
   });
+
+  it('reads an automatic report archive by its fixed business source', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ task: { id: 21, response: '仅供人工核验' } }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(api.reportAutomation.archive('post_monthly', '2026-08')).resolves.toEqual({
+      task: { id: 21, response: '仅供人工核验' },
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/report-automation/archive/post_monthly/2026-08',
+      expect.objectContaining({ headers: expect.objectContaining({ 'Content-Type': 'application/json' }) }),
+    );
+  });
 });

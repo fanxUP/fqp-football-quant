@@ -10,6 +10,7 @@ from apps.backend.src.services.agent_workspace_store import (
     AgentWorkspaceError,
     create_workspace_task,
     get_workspace_comparison,
+    get_workspace_task_for_source,
     list_workspace_comparison_tasks,
     list_workspace_task_page,
     list_workspace_task_review_events,
@@ -72,6 +73,22 @@ def test_workspace_tasks_return_untrusted_content_as_plain_data() -> None:
     assert tasks[0]["sourceType"] == "pre_match"
     assert tasks[0]["sourceRef"] == "42"
     assert conn.queries[-1][1] == (50,)
+
+
+def test_workspace_source_lookup_returns_only_the_dedicated_automatic_report() -> None:
+    conn = _Connection(row=_task_row())
+
+    task = get_workspace_task_for_source(
+        conn,
+        agent_code="post_match_report_agent",
+        source_type="post_daily",
+        source_ref="2026-08-09",
+    )
+
+    assert task is not None
+    assert task["response"] == "结果"
+    assert "agent_code = %s" in conn.queries[0][0]
+    assert conn.queries[0][1] == ("post_match_report_agent", "post_daily", "2026-08-09")
 
 
 def test_workspace_task_page_uses_fixed_status_clause_and_parameterized_paging() -> None:
