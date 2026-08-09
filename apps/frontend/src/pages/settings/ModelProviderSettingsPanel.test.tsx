@@ -57,4 +57,10 @@ describe('ModelProviderSettingsPanel', () => {
 
     expect(await screen.findByRole('checkbox', { name: /启用此服务商/ })).toBeChecked();
   });
+
+  it('为已启用服务商提供主题可区分的状态标签', async () => {
+    render(<ModelProviderSettingsPanel />);
+
+    expect(await screen.findByText('已启用')).toHaveAttribute('data-status', 'enabled');
+  });
 });

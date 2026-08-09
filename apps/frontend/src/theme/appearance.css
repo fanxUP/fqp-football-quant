@@ -334,7 +334,19 @@
 .model-provider-item[data-selected='true'] { border-color: var(--fqp-accent, var(--fqp-red)); background: var(--fqp-hover-bg); }
 .model-provider-item:focus-visible { outline: 2px solid var(--fqp-accent, var(--fqp-red)); outline-offset: 2px; }
 .model-provider-item strong { font-size: 13px; }
-.model-provider-item span { color: var(--fqp-text-muted); font-size: 11px; }
+.model-provider-item span {
+  padding: 3px 7px;
+  border: 1px solid var(--fqp-border);
+  border-radius: var(--fqp-radius-xs);
+  color: var(--fqp-text-muted);
+  font-size: 11px;
+  line-height: 1.2;
+}
+.model-provider-item span[data-status='enabled'] {
+  border-color: var(--fqp-success);
+  background: color-mix(in srgb, var(--fqp-success) 14%, transparent);
+  color: var(--fqp-success);
+}
 .model-provider-editor .fqp-label { display: block; margin: 14px 0 6px; }
 .model-provider-meta { display: flex; flex-wrap: wrap; gap: 6px; }
 .model-provider-meta span { padding: 3px 7px; border: 1px solid var(--fqp-border); border-radius: var(--fqp-radius-xs); color: var(--fqp-text-muted); font-size: 11px; }

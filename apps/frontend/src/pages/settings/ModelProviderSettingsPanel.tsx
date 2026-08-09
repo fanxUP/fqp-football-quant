@@ -116,11 +116,13 @@ export default function ModelProviderSettingsPanel() {
             <div className="model-provider-list" role="list" aria-label="模型服务商">
             {catalog.map((provider) => {
               const connection = connections.find((item) => item.providerCode === provider.providerCode);
+              const connectionStatus = connection?.enabled ? 'enabled' : connection?.hasApiKey ? 'saved' : 'unconfigured';
+              const connectionLabel = connection?.enabled ? '已启用' : connection?.hasApiKey ? '已保存' : '未配置';
               return (
                 <button key={provider.providerCode} type="button" className="model-provider-item"
                   data-selected={provider.providerCode === selectedCode} onClick={() => chooseProvider(provider)}>
                   <strong>{provider.displayName}</strong>
-                  <span>{connection?.enabled ? '已启用' : connection?.hasApiKey ? '已保存' : '未配置'}</span>
+                  <span data-status={connectionStatus}>{connectionLabel}</span>
                 </button>
               );
             })}
