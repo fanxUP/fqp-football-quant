@@ -1,5 +1,6 @@
 # 数据与运行时
 /data/
+/var/model_artifacts/
 backups/
 *.log
 
