@@ -26,6 +26,7 @@ from scripts.elo_model import run_elo_1x2_prediction
 from scripts.feature_adjustment import GoalRateAdjustment, adjust_goal_rates
 from scripts.glicko2_model import Glicko2Rating
 from scripts.glicko2_model import predict_1x2 as glicko2_predict_1x2
+from scripts.logistic_shadow_model import load_probabilities as load_logistic_shadow_probabilities
 from scripts.market_metric_validation import MarketMetricValidationError, validate_market
 from scripts.model_storage import store_committee_vote, store_model_prediction
 from scripts.odds_conversion import (
@@ -141,6 +142,16 @@ def _load_xgboost_shadow_probabilities(
     """Use XGBoost only after a persisted temporal-validation profile exists."""
     return load_xgboost_shadow_probabilities(
         model_parameters.get("xgboost_shadow"), feature_snapshot
+    )
+
+
+def _load_logistic_shadow_probabilities(
+    model_parameters: dict[str, dict[str, Any]],
+    feature_snapshot: dict[str, Any] | None,
+) -> dict[str, float] | None:
+    """Use logistic regression only after persisted temporal validation exists."""
+    return load_logistic_shadow_probabilities(
+        model_parameters.get("logistic_shadow"), feature_snapshot
     )
 
 
@@ -648,6 +659,16 @@ def _predict_match_play_type(
         xgboost_is_independent = False
         xgboost_1x2 = dict(market_probs)
 
+    # Logistic regression is the transparent counterpart to the nonlinear
+    # feature model. It remains shadow-only even when its profile is valid.
+    try:
+        trained_logistic = _load_logistic_shadow_probabilities(model_parameters, feature_snapshot)
+        logistic_is_independent = trained_logistic is not None
+        logistic_1x2 = trained_logistic or dict(market_probs)
+    except Exception:
+        logistic_is_independent = False
+        logistic_1x2 = dict(market_probs)
+
     rollout_modes = {
         name: str(parameters.get("rollout_mode") or "live")
         for name, parameters in model_parameters.items()
@@ -662,6 +683,7 @@ def _predict_match_play_type(
         "glicko2_rating": (glicko2_1x2, glicko2_1x2),
         "bivariate_poisson": (raw_bivariate_probs, bivariate_probs),
         "xgboost_shadow": (xgboost_1x2, xgboost_1x2),
+        "logistic_shadow": (logistic_1x2, logistic_1x2),
     }
     model_independence = {
         "market_baseline": False,
@@ -671,6 +693,7 @@ def _predict_match_play_type(
         "glicko2_rating": glicko2_is_independent,
         "bivariate_poisson": bivariate_is_independent,
         "xgboost_shadow": xgboost_is_independent,
+        "logistic_shadow": logistic_is_independent,
     }
 
     total_p = derived_predictions
@@ -711,6 +734,7 @@ def _predict_match_play_type(
                     glicko2_1x2.get(opt_code, 0),
                     bivariate_probs.get(opt_code, 0),
                     xgboost_1x2.get(opt_code, 0),
+                    logistic_1x2.get(opt_code, 0),
                 ]
             )
 
@@ -767,6 +791,7 @@ def _predict_match_play_type(
                     "glicko2_based": model_name == "glicko2_rating",
                     "bivariate_poisson_based": model_name == "bivariate_poisson",
                     "xgboost_shadow_based": model_name == "xgboost_shadow",
+                    "logistic_shadow_based": model_name == "logistic_shadow",
                     "rollout_mode": rollout_modes.get(model_name, "live"),
                     "model_independent": model_independence[model_name],
                     "feature_adjustment": {

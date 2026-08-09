@@ -23,6 +23,7 @@ PREDICTION_MODEL_CODES = (
     "glicko2_rating",
     "bivariate_poisson",
     "xgboost_shadow",
+    "logistic_shadow",
 )
 
 # Play type display names

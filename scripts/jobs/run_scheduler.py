@@ -790,6 +790,23 @@ def main() -> None:
                 id="train_xgboost_shadow",
             )
 
+            # Train the interpretable feature baseline after XGBoost. Like the
+            # nonlinear model, this remains an evaluation-only shadow signal.
+            scheduler.add_job(
+                _audited_job(
+                    "train_logistic_shadow",
+                    "逻辑回归特征模型影子训练",
+                    "model_agent",
+                    lambda: __import__(
+                        "scripts.jobs.train_logistic_shadow", fromlist=["run"]
+                    ).run(),
+                ),
+                "cron",
+                hour=23,
+                minute=50,
+                id="train_logistic_shadow",
+            )
+
             # Weekly on Sunday at 04:00: run full backtest
             scheduler.add_job(
                 _audited_job(

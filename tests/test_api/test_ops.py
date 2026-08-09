@@ -438,6 +438,8 @@ class TestOpsPipeline:
         assert monthly["finished_at"] is None
         xgboost = next(job for job in data["jobs"] if job["code"] == "train_xgboost_shadow")
         assert xgboost["schedule"] == "每日 23:47"
+        logistic = next(job for job in data["jobs"] if job["code"] == "train_logistic_shadow")
+        assert logistic["schedule"] == "每日 23:50"
         assert len(data["jobs"]) == len(JOB_DEFINITIONS)
 
     def test_pipeline_surfaces_feature_quality_degradation_from_job_output(self, client):

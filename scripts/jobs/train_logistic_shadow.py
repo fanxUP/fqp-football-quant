@@ -1,4 +1,4 @@
-"""Train the XGBoost pre-match model as a non-decision shadow signal."""
+"""Train the logistic pre-match model as a non-decision shadow signal."""
 
 from __future__ import annotations
 
@@ -11,13 +11,11 @@ from psycopg2.extras import Json
 from apps.backend.src.db import get_db
 from scripts.agents.task_queue import finish_tracked_job, start_tracked_job
 from scripts.feature_importance import FEATURE_COLUMNS
+from scripts.logistic_shadow_model import fit_temporal_holdout
 from scripts.prematch_feature_dataset import load_settled_pre_kickoff_dataset
-from scripts.xgboost_shadow_model import fit_temporal_holdout
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-ARTIFACT_RELATIVE_PATH = "var/model_artifacts/xgboost_shadow_v1.json"
-
-
+ARTIFACT_RELATIVE_PATH = "var/model_artifacts/logistic_shadow_v1.joblib"
 load_training_dataset = load_settled_pre_kickoff_dataset
 
 
@@ -33,12 +31,12 @@ def _store_profile(conn: Any, parameters: dict[str, Any], dates: list[str]) -> N
             SET parameters_json = %s,
                 training_start_date = %s,
                 training_end_date = %s
-            WHERE model_name = 'xgboost_shadow' AND is_active = true
+            WHERE model_name = 'logistic_shadow' AND is_active = true
             """,
             (Json(parameters), dates[0][:10], dates[-1][:10]),
         )
         if cur.rowcount != 1:
-            raise RuntimeError("xgboost shadow model version is not available")
+            raise RuntimeError("logistic shadow model version is not available")
     conn.commit()
 
 
@@ -52,10 +50,12 @@ def _run_with_connection(conn: Any) -> dict[str, Any]:
     except ValueError as exc:
         return {"status": "skipped", "reason": str(exc), "sample_count": len(labels)}
 
+    import joblib
+
     artifact_path = _artifact_path()
     artifact_path.parent.mkdir(parents=True, exist_ok=True)
     temporary_path = artifact_path.with_name(f"{artifact_path.stem}.tmp{artifact_path.suffix}")
-    classifier.save_model(str(temporary_path))
+    joblib.dump(classifier, temporary_path)
     os.replace(temporary_path, artifact_path)
 
     parameters = {
@@ -80,9 +80,9 @@ def _run_with_connection(conn: Any) -> dict[str, Any]:
 def run(dry_run: bool = False) -> dict[str, Any]:
     """Train only after official settlement; never promotes or changes decisions."""
     if dry_run:
-        return {"status": "dry_run", "message": "xgboost shadow training (dry run)"}
+        return {"status": "dry_run", "message": "logistic shadow training (dry run)"}
     run_id = start_tracked_job(
-        "train_xgboost_shadow",
+        "train_logistic_shadow",
         "model_agent",
         {"rollout_mode": "shadow"},
         dependencies=["feature_snapshot_build", "settle_tickets"],

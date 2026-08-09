@@ -16,7 +16,7 @@ describe('PredictionModelOverviewPanel', () => {
       profiles: [{ modelCode: 'market_baseline', sampleCount: 320, logLossBefore: 1.04, logLossAfter: 1.02, temperature: 1.15, createdAt: '2026-08-09T23:42:00', review: { status: 'ready_for_manual_review', label: '具备人工评审基础', affectsDecisionPath: false } }],
     });
     apiMocks.modelOverview.mockResolvedValue({
-      total: 7,
+      total: 8,
       models: [
         {
           code: 'market_baseline', isActive: true, version: '1.0.0',
@@ -62,19 +62,26 @@ describe('PredictionModelOverviewPanel', () => {
           trainingEndDate: null, validPredictionMatchCount: 0,
           latestPredictionAt: null, calibration: null,
         },
+        {
+          code: 'logistic_shadow', isActive: true, version: '1.0.0',
+          versionCreatedAt: '2026-08-09T06:30:00', trainingStartDate: null,
+          trainingEndDate: null, validPredictionMatchCount: 0,
+          latestPredictionAt: null, calibration: null,
+        },
       ],
     });
   });
 
-  it('说明七个预测模型，并呈现运行状态和推荐边界', async () => {
+  it('说明八个预测模型，并呈现运行状态和推荐边界', async () => {
     render(<PredictionModelOverviewPanel />);
 
     expect(await screen.findByRole('heading', { name: '预测模型说明' })).toBeInTheDocument();
-    expect(screen.getAllByRole('article')).toHaveLength(7);
+    expect(screen.getAllByRole('article')).toHaveLength(8);
     expect(screen.getByRole('heading', { name: '市场赔率基准' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Glicko-2 强度评级' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: '双变量泊松进球模型' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'XGBoost 赛前特征模型' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '逻辑回归赛前特征模型' })).toBeInTheDocument();
     expect(screen.getAllByText('已启用')[0]).toHaveAttribute('data-status', 'enabled');
     expect(screen.getByText('未启用')).toHaveAttribute('data-status', 'disabled');
     expect(screen.getByText(/概率校准：影子验证/)).toBeInTheDocument();
