@@ -350,6 +350,33 @@ class TestPredictionModelOverviewEndpoint:
         assert data["models"][2]["calibration"] is None
 
 
+class TestCalibrationProfilesEndpoint:
+    def test_returns_read_only_history_and_manual_review_gate(self, client):
+        mock_conn = MagicMock()
+        mock_cur = MagicMock()
+        mock_conn.__enter__.return_value = mock_conn
+        mock_conn.cursor.return_value.__enter__.return_value = mock_cur
+        mock_cur.fetchall.return_value = [
+            (
+                "market_baseline", "spf", "temperature_scaling_v1", "temperature-20260809T234200",
+                {"temperature": 1.15}, 320, 1.04, 1.02, date(2026, 8, 9), True,
+                datetime(2026, 8, 9, 23, 42),
+            ),
+        ]
+
+        with patch("apps.backend.src.routers.predictions.get_db", return_value=mock_conn):
+            response = client.get("/api/models/calibration-profiles?limit=6")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["policy"]["affectsDecisionPath"] is False
+        assert data["profiles"][0]["review"]["status"] == "ready_for_manual_review"
+        assert data["profiles"][0]["temperature"] == 1.15
+        sql = mock_cur.execute.call_args.args[0]
+        assert "probability_calibration_profiles" in sql
+        assert "LIMIT %s" in sql
+
+
 class TestTicketsEndpoint:
     def test_returns_empty_when_no_tickets(self, client):
         mock_conn = MagicMock()

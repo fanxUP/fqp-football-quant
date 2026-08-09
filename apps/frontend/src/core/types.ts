@@ -378,6 +378,26 @@ export interface PredictionModelOverview {
   total: number;
 }
 
+export interface CalibrationProfile {
+  modelCode: string;
+  playType: string;
+  methodName: string;
+  version: string;
+  temperature: number;
+  sampleCount: number;
+  logLossBefore: number;
+  logLossAfter: number;
+  trainingEndDate: string | null;
+  isActive: boolean;
+  createdAt: string | null;
+  review: { status: 'observing' | 'ready_for_manual_review'; label: string; affectsDecisionPath: false };
+}
+
+export interface CalibrationProfilesResponse {
+  profiles: CalibrationProfile[];
+  policy: { sampleThreshold: number; improvementThreshold: number; affectsDecisionPath: false };
+}
+
 // ---- Stage 4: Recommendation tickets ----
 
 export interface SimulationTicket {

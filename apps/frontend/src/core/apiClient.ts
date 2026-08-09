@@ -428,6 +428,9 @@ export const api = {
   modelOverview: () =>
     request<import('./types').PredictionModelOverview>('/api/models/overview'),
 
+  calibrationProfiles: () =>
+    request<import('./types').CalibrationProfilesResponse>('/api/models/calibration-profiles'),
+
   // Live recommendations
   liveRecommendations: (params?: { limit?: number; min_ev?: number; min_confidence?: number }) =>
     request<{ status: string; recommendations: import('./types').LiveRecommendation[]; total: number; sales_window?: import('./types').SportterySalesWindow }>(

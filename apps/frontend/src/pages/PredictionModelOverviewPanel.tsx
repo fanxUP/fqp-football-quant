@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../core/apiClient';
-import type { PredictionModelRuntimeState } from '../core/types';
+import type { CalibrationProfile, PredictionModelRuntimeState } from '../core/types';
 
 type ModelDefinition = {
   code: string;
@@ -34,11 +34,18 @@ export default function PredictionModelOverviewPanel() {
   const [states, setStates] = useState<PredictionModelRuntimeState[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const [calibrationProfiles, setCalibrationProfiles] = useState<CalibrationProfile[]>([]);
 
   const load = () => {
     setLoading(true);
     setError(false);
-    api.modelOverview().then((result) => setStates(result.models)).catch(() => setError(true)).finally(() => setLoading(false));
+    api.calibrationProfiles()
+      .then((profiles) => setCalibrationProfiles(profiles.profiles))
+      .catch(() => setCalibrationProfiles([]));
+    api.modelOverview()
+      .then((overview) => setStates(overview.models))
+      .catch(() => setError(true))
+      .finally(() => setLoading(false));
   };
 
   useEffect(() => { load(); }, []);
@@ -55,6 +62,20 @@ export default function PredictionModelOverviewPanel() {
         {error && <button type="button" className="fqp-btn fqp-btn-secondary" onClick={load}>重试状态加载</button>}
       </div>
       {error && <p className="prediction-model-runtime-message" role="status">运行状态暂时无法加载，以下模型说明仍可查看。</p>}
+      {!loading && calibrationProfiles.length > 0 && <section className="prediction-calibration-monitor" aria-labelledby="prediction-calibration-monitor-title">
+        <div>
+          <h3 id="prediction-calibration-monitor-title">概率校准监测</h3>
+          <p>仅用于影子评估；达到门槛仍需人工复核，不会自动影响预测、推荐或风控。</p>
+        </div>
+        <div className="prediction-calibration-history" role="list">
+          {calibrationProfiles.map((profile) => <div className="prediction-calibration-history-row" role="listitem" key={`${profile.modelCode}-${profile.version}`}>
+            <strong>{MODEL_DEFINITIONS.find((model) => model.code === profile.modelCode)?.title ?? profile.modelCode}</strong>
+            <span>{profile.sampleCount} 场</span>
+            <span>{profile.logLossBefore.toFixed(3)} → {profile.logLossAfter.toFixed(3)}</span>
+            <span className="prediction-calibration-review" data-status={profile.review.status}>{profile.review.label}</span>
+          </div>)}
+        </div>
+      </section>}
       <div className="prediction-model-card-grid" aria-busy={loading}>
         {MODEL_DEFINITIONS.map((model) => {
           const state = stateByCode.get(model.code);

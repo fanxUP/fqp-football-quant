@@ -5,6 +5,11 @@ from __future__ import annotations
 from fastapi import APIRouter, Query
 
 from apps.backend.src.db import get_db
+from scripts.calibration_review import (
+    MANUAL_REVIEW_IMPROVEMENT_THRESHOLD,
+    MANUAL_REVIEW_SAMPLE_THRESHOLD,
+    review_calibration_profile,
+)
 from scripts.sporttery_sales import get_sporttery_sales_window
 
 router = APIRouter(tags=["predictions"])
@@ -493,6 +498,59 @@ def get_prediction_model_overview():
         for code in PREDICTION_MODEL_CODES
     ]
     return {"models": models, "total": len(models)}
+
+
+@router.get("/api/models/calibration-profiles")
+def get_calibration_profiles(limit: int = Query(12, ge=1, le=60)):
+    """Return calibration history and advisory review status without promotion."""
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT model_name, play_type, method_name, calibration_version,
+                       parameters_json, sample_count, log_loss_before, log_loss_after,
+                       training_end_date, is_active, created_at
+                FROM probability_calibration_profiles
+                WHERE play_type = 'spf'
+                ORDER BY created_at DESC, id DESC
+                LIMIT %s
+                """,
+                (limit,),
+            )
+            rows = cur.fetchall()
+
+    profiles = []
+    for row in rows:
+        raw = {
+            "sample_count": int(row[5]),
+            "log_loss_before": float(row[6]),
+            "log_loss_after": float(row[7]),
+        }
+        parameters = row[4] or {}
+        profiles.append(
+            {
+                "modelCode": row[0],
+                "playType": row[1],
+                "methodName": row[2],
+                "version": row[3],
+                "temperature": float(parameters["temperature"]),
+                "sampleCount": raw["sample_count"],
+                "logLossBefore": raw["log_loss_before"],
+                "logLossAfter": raw["log_loss_after"],
+                "trainingEndDate": str(row[8]) if row[8] else None,
+                "isActive": bool(row[9]),
+                "createdAt": row[10].isoformat() if row[10] else None,
+                "review": review_calibration_profile(raw),
+            }
+        )
+    return {
+        "profiles": profiles,
+        "policy": {
+            "sampleThreshold": MANUAL_REVIEW_SAMPLE_THRESHOLD,
+            "improvementThreshold": MANUAL_REVIEW_IMPROVEMENT_THRESHOLD,
+            "affectsDecisionPath": False,
+        },
+    }
 
 
 @router.post("/api/recommendations/generate")
