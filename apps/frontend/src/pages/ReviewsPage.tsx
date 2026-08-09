@@ -168,7 +168,7 @@ function DailyReviewsTab() {
         columns={columns}
         rows={reviews}
         loading={loading}
-        emptyText="暂无日报数据，每日 23:30 自动生成"
+        emptyText="暂无日报数据，官方赛果与相关票据结算完成后自动生成"
         onRowClick={(row) => setExpandedDate(expandedDate === row.review_date ? null : row.review_date)}
         rowKey={(r) => r.review_date}
       />
