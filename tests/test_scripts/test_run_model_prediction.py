@@ -15,6 +15,7 @@ from scripts.jobs.run_model_prediction import (
     _load_knn_shadow_probabilities,
     _load_lda_shadow_probabilities,
     _load_logistic_shadow_probabilities,
+    _load_mlp_shadow_probabilities,
     _load_trained_bivariate_shared_component,
     _load_trained_elo_probabilities,
     _load_trained_glicko2_probabilities,
@@ -75,6 +76,10 @@ def test_knn_shadow_requires_a_verified_profile_before_predicting() -> None:
         {"knn_shadow": {"rollout_mode": "shadow"}},
         {"data_completeness_score": 0.9},
     ) is None
+
+
+def test_mlp_shadow_requires_a_verified_profile_before_predicting() -> None:
+    assert _load_mlp_shadow_probabilities({'mlp_shadow': {'rollout_mode': 'shadow'}}, {'data_completeness_score': 0.9}) is None
 
 
 def test_bayesian_form_requires_both_teams_to_have_settled_history() -> None:

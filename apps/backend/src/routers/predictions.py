@@ -31,6 +31,7 @@ PREDICTION_MODEL_CODES = (
     "adaboost_shadow",
     "lda_shadow",
     "knn_shadow",
+    "mlp_shadow",
     "naive_bayes_shadow",
     "svm_shadow",
     "negative_binomial_shadow",

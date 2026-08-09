@@ -317,7 +317,7 @@ class TestPredictionModelOverviewEndpoint:
 
         assert response.status_code == 200
         data = response.json()
-        assert data["total"] == 18
+        assert data["total"] == 19
         assert [item["code"] for item in data["models"]] == [
             "market_baseline",
             "elo_rating",
@@ -334,6 +334,7 @@ class TestPredictionModelOverviewEndpoint:
             "adaboost_shadow",
             "lda_shadow",
             "knn_shadow",
+            "mlp_shadow",
             "naive_bayes_shadow",
             "svm_shadow",
             "negative_binomial_shadow",

@@ -13,6 +13,7 @@ export const MODEL_NAME_LABELS: Record<string, string> = {
   adaboost_shadow: 'AdaBoost 赛前特征模型',
   lda_shadow: '线性判别分析（LDA）赛前特征模型',
   knn_shadow: 'KNN 近邻赛前特征模型',
+  mlp_shadow: 'MLP 赛前特征模型',
 };
 
 export function modelNameLabel(code: string): string {

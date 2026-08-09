@@ -38,6 +38,7 @@ from scripts.knn_shadow_model import load_probabilities as load_knn_shadow_proba
 from scripts.lda_shadow_model import load_probabilities as load_lda_shadow_probabilities
 from scripts.logistic_shadow_model import load_probabilities as load_logistic_shadow_probabilities
 from scripts.market_metric_validation import MarketMetricValidationError, validate_market
+from scripts.mlp_shadow_model import load_probabilities as load_mlp_shadow_probabilities
 from scripts.model_storage import store_committee_vote, store_model_prediction
 from scripts.naive_bayes_shadow_model import (
     load_probabilities as load_naive_bayes_shadow_probabilities,
@@ -244,6 +245,9 @@ def _load_knn_shadow_probabilities(
 ) -> dict[str, float] | None:
     """Use KNN only after its persisted temporal validation exists."""
     return load_knn_shadow_probabilities(model_parameters.get("knn_shadow"), feature_snapshot)
+
+def _load_mlp_shadow_probabilities(model_parameters: dict[str, dict[str, Any]], feature_snapshot: dict[str, Any] | None) -> dict[str, float] | None:
+    return load_mlp_shadow_probabilities(model_parameters.get("mlp_shadow"), feature_snapshot)
 
 
 def _load_naive_bayes_shadow_probabilities(
@@ -922,6 +926,11 @@ def _predict_match_play_type(
     except Exception:
         knn_is_independent = False
         knn_1x2 = dict(market_probs)
+    try:
+        trained_mlp = _load_mlp_shadow_probabilities(model_parameters, feature_snapshot)
+        mlp_is_independent, mlp_1x2 = trained_mlp is not None, trained_mlp or dict(market_probs)
+    except Exception:
+        mlp_is_independent, mlp_1x2 = False, dict(market_probs)
 
     try:
         trained_naive_bayes = _load_naive_bayes_shadow_probabilities(model_parameters, feature_snapshot)
@@ -970,6 +979,7 @@ def _predict_match_play_type(
         "adaboost_shadow": (adaboost_1x2, adaboost_1x2),
         "lda_shadow": (lda_1x2, lda_1x2),
         "knn_shadow": (knn_1x2, knn_1x2),
+        "mlp_shadow": (mlp_1x2, mlp_1x2),
         "naive_bayes_shadow": (naive_bayes_1x2, naive_bayes_1x2),
         "svm_shadow": (svm_1x2, svm_1x2),
     }
@@ -990,6 +1000,7 @@ def _predict_match_play_type(
         "adaboost_shadow": adaboost_is_independent,
         "lda_shadow": lda_is_independent,
         "knn_shadow": knn_is_independent,
+        "mlp_shadow": mlp_is_independent,
         "naive_bayes_shadow": naive_bayes_is_independent,
         "svm_shadow": svm_is_independent,
     }
@@ -1041,6 +1052,7 @@ def _predict_match_play_type(
                     adaboost_1x2.get(opt_code, 0),
                     lda_1x2.get(opt_code, 0),
                     knn_1x2.get(opt_code, 0),
+                    mlp_1x2.get(opt_code, 0),
                     naive_bayes_1x2.get(opt_code, 0),
                     svm_1x2.get(opt_code, 0),
                 ]
@@ -1108,6 +1120,7 @@ def _predict_match_play_type(
                     "adaboost_shadow_based": model_name == "adaboost_shadow",
                     "lda_shadow_based": model_name == "lda_shadow",
                     "knn_shadow_based": model_name == "knn_shadow",
+                    "mlp_shadow_based": model_name == "mlp_shadow",
                     "naive_bayes_shadow_based": model_name == "naive_bayes_shadow",
                     "svm_shadow_based": model_name == "svm_shadow",
                     "rollout_mode": rollout_modes.get(model_name, "live"),
