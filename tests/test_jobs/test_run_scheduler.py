@@ -176,6 +176,14 @@ def test_scheduler_registers_extra_trees_after_existing_shadow_training() -> Non
     assert JOB_DEFINITIONS["train_extra_trees_shadow"].schedule == "每日 00:05"
 
 
+def test_scheduler_registers_hist_gradient_boosting_after_extra_trees() -> None:
+    source = Path("scripts/jobs/run_scheduler.py").read_text()
+
+    assert 'id="train_hist_gradient_boosting_shadow"' in source
+    assert source.index('id="train_extra_trees_shadow"') < source.index('id="train_hist_gradient_boosting_shadow"')
+    assert JOB_DEFINITIONS["train_hist_gradient_boosting_shadow"].schedule == "每日 00:08"
+
+
 def test_probability_calibration_is_scheduled_after_metrics_as_shadow_only():
     source = Path("scripts/jobs/run_scheduler.py").read_text()
 

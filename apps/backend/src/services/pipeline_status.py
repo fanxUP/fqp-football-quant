@@ -128,6 +128,9 @@ JOB_DEFINITIONS: dict[str, JobDefinition] = {
     "train_extra_trees_shadow": JobDefinition(
         "极端随机树特征模型影子训练", "每日 00:05", "model", max_age=timedelta(hours=30)
     ),
+    "train_hist_gradient_boosting_shadow": JobDefinition(
+        "直方图梯度提升特征模型影子训练", "每日 00:08", "model", max_age=timedelta(hours=30)
+    ),
     "backtest": JobDefinition(
         "全量回测执行", "每周日 04:07", "model", ("run_backtest",), timedelta(days=8)
     ),

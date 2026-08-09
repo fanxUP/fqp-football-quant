@@ -847,6 +847,11 @@ def main() -> None:
                 "cron", hour=0, minute=5, id="train_extra_trees_shadow",
             )
 
+            scheduler.add_job(
+                _audited_job("train_hist_gradient_boosting_shadow", "直方图梯度提升特征模型影子训练", "model_agent", lambda: __import__("scripts.jobs.train_hist_gradient_boosting_shadow", fromlist=["run"]).run()),
+                "cron", hour=0, minute=8, id="train_hist_gradient_boosting_shadow",
+            )
+
             # Weekly on Sunday at 04:00: run full backtest
             scheduler.add_job(
                 _audited_job(
