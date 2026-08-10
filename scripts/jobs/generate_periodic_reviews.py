@@ -8,6 +8,7 @@ from typing import Any
 
 from apps.backend.src.db import get_db
 from apps.backend.src.services.report_automation import maybe_generate_post_match_report
+from apps.backend.src.services.report_performance import build_periodic_performance
 from apps.backend.src.services.report_snapshot import (
     build_periodic_research_breakdowns,
     build_periodic_research_metrics,
@@ -155,6 +156,7 @@ def run_weekly(
         daily_snapshots = _load_completed_daily_snapshots(conn, start, end)
         research_metrics = build_periodic_research_metrics(daily_snapshots)
         research_breakdowns = build_periodic_research_breakdowns(daily_snapshots)
+        performance = build_periodic_performance(daily_snapshots)
 
         data = {
             "week_start": start,
@@ -177,12 +179,14 @@ def run_weekly(
             end=end,
         )
         source_snapshot = {
+            "schemaVersion": 4,
             "reviewId": review_id,
             "weekStart": start,
             "weekEnd": end,
             "aggregate": aggregate,
             "researchMetrics": research_metrics,
             "researchBreakdowns": research_breakdowns,
+            **performance,
             "dailyReportRefs": [snapshot["periodKey"] for snapshot in daily_snapshots],
             "upsetReport": upset_report,
         }
@@ -266,6 +270,7 @@ def run_monthly(month: str | None = None, dry_run: bool = False) -> dict[str, An
         daily_snapshots = _load_completed_daily_snapshots(conn, month_start, month_end.isoformat())
         research_metrics = build_periodic_research_metrics(daily_snapshots)
         research_breakdowns = build_periodic_research_breakdowns(daily_snapshots)
+        performance = build_periodic_performance(daily_snapshots)
 
         data = {
             "month": target_month,
@@ -277,7 +282,9 @@ def run_monthly(month: str | None = None, dry_run: bool = False) -> dict[str, An
             "longest_losing_streak": aggregate["longest_losing_streak"],
             "best_strategy_pool": "待样本积累",
             "worst_strategy_pool": "待样本积累",
-            "model_calibration_score": 0,
+            "model_calibration_score": performance["performanceMetrics"][
+                "calibrationError"
+            ],
             "next_month_plan": "控制单日预算，优先提升官方赔率与特征快照完整率。",
         }
         data["summary_text"] = monthly_summary(data)
@@ -289,11 +296,13 @@ def run_monthly(month: str | None = None, dry_run: bool = False) -> dict[str, An
             end=month_end.isoformat(),
         )
         source_snapshot = {
+            "schemaVersion": 4,
             "reviewId": review_id,
             "month": target_month,
             "aggregate": aggregate,
             "researchMetrics": research_metrics,
             "researchBreakdowns": research_breakdowns,
+            **performance,
             "dailyReportRefs": [snapshot["periodKey"] for snapshot in daily_snapshots],
             "upsetReport": upset_report,
         }

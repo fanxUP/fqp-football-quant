@@ -18,6 +18,30 @@ def test_automatic_report_prompt_requires_auditable_research_sections() -> None:
         assert heading in prompt
 
 
+def test_automatic_report_prompt_prefers_compact_performance_digest_over_match_dump() -> None:
+    prompt = _build_prompt(
+        "post_daily",
+        "2026-08-09",
+        {
+            "performanceMetrics": {
+                "brierScore": 0.22,
+                "logLoss": 0.71,
+                "averageClv": 0.03,
+                "calibrationError": 0.04,
+            },
+            "performanceBreakdowns": {"models": [{"key": "Elo", "hitRate": 0.6}]},
+            "errorAnalysis": {"byType": [{"code": "DRAW_UNDERESTIMATED", "count": 2}]},
+            "strategySummary": {"actions": ["复核平局先验"]},
+            "matches": [{"raw": "oversized-match-data" * 1000}],
+        },
+    )
+
+    assert "Brier Score、Log Loss、概率校准、CLV" in prompt
+    assert '"averageClv": 0.03' in prompt
+    assert '"DRAW_UNDERESTIMATED"' in prompt
+    assert "oversized-match-data" not in prompt
+
+
 def test_automatic_report_does_not_call_model_when_automation_is_disabled(monkeypatch) -> None:
     invoke = MagicMock()
     monkeypatch.setattr(

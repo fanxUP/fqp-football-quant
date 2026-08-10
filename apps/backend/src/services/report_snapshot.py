@@ -7,6 +7,8 @@ from collections.abc import Mapping, Sequence
 from copy import deepcopy
 from typing import Any
 
+from apps.backend.src.services.report_performance import build_daily_performance
+
 _MATCH_CARD_FIELDS = (
     "matchId",
     "officialCode",
@@ -280,8 +282,15 @@ def build_daily_report_snapshot(
         {field: deepcopy(card.get(field)) for field in _MATCH_CARD_FIELDS}
         for card in match_cards
     ]
+    performance = build_daily_performance(match_cards)
+    upset_metrics = upset_report.get("metrics") if isinstance(upset_report, Mapping) else None
+    upset_summary = (
+        deepcopy(dict(upset_metrics.get("upsets") or {}))
+        if isinstance(upset_metrics, Mapping)
+        else {}
+    )
     return {
-        "schemaVersion": 3,
+        "schemaVersion": 4,
         "sourceNotice": (
             "比赛、赛果、赛前模型信号和官方赔率均由后端只读归档；"
             "证据缺失时明确标记为未查到可靠资料。"
@@ -289,6 +298,8 @@ def build_daily_report_snapshot(
         "dailyReview": deepcopy(dict(review)),
         "researchMetrics": build_daily_research_metrics(review, match_cards),
         "researchBreakdowns": build_daily_research_breakdowns(match_cards),
+        **performance,
         "matches": matches,
         "upsetReport": deepcopy(dict(upset_report)),
+        "upsetSummary": upset_summary,
     }

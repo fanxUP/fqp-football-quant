@@ -141,7 +141,7 @@ def test_daily_report_snapshot_freezes_match_result_prematch_signals_and_evidenc
         ],
     )
 
-    assert snapshot["schemaVersion"] == 3
+    assert snapshot["schemaVersion"] == 4
     assert snapshot["dailyReview"]["reviewId"] == 8
     assert snapshot["upsetReport"] == {"upsetCount": 1}
     assert snapshot["matches"][0]["result"]["homeGoals"] == 2
@@ -165,3 +165,35 @@ def test_daily_report_snapshot_freezes_match_result_prematch_signals_and_evidenc
         "realProfitLoss": 60.0,
         "realRoi": 0.3,
     }
+
+
+def test_daily_snapshot_embeds_true_performance_and_deterministic_review_summary() -> None:
+    snapshot = build_daily_report_snapshot(
+        review={},
+        upset_report={"metrics": {"upsets": {"count": 1, "rate": 0.5}}},
+        match_cards=[{
+            "matchId": 201,
+            "leagueName": "英超",
+            "kickoffTime": "2026-08-09T18:00:00",
+            "result": {"spfResult": "3", "status": "confirmed"},
+            "modelSignals": [
+                {"modelName": "Elo", "playType": "spf", "optionCode": "3", "modelProbability": 0.6, "marketProbability": 0.5},
+                {"modelName": "Elo", "playType": "spf", "optionCode": "1", "modelProbability": 0.25, "marketProbability": 0.28},
+                {"modelName": "Elo", "playType": "spf", "optionCode": "0", "modelProbability": 0.15, "marketProbability": 0.22},
+            ],
+            "oddsSignals": [
+                {"playType": "spf", "optionCode": "3", "spValue": 2.0},
+                {"playType": "spf", "optionCode": "1", "spValue": 3.2},
+                {"playType": "spf", "optionCode": "0", "spValue": 3.8},
+            ],
+            "evidence": [],
+        }],
+    )
+
+    assert snapshot["schemaVersion"] == 4
+    assert snapshot["performanceMetrics"]["sampleCount"] == 1
+    assert snapshot["performanceMetrics"]["hitRate"] == 1.0
+    assert snapshot["performanceBreakdowns"]["models"][0]["key"] == "Elo"
+    assert snapshot["evidenceSummary"]["missingMatchCount"] == 1
+    assert snapshot["strategySummary"]["safetyNotice"].startswith("该总结只用于人工研究复盘")
+    assert snapshot["upsetSummary"] == {"count": 1, "rate": 0.5}

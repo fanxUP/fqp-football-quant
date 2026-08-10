@@ -20,6 +20,33 @@ POST_MATCH_REPORT_AUTOMATION_KEY = "post_match_report"
 _MAX_SNAPSHOT_CHARS = 6_000
 
 
+def _report_digest(snapshot: Mapping[str, Any]) -> dict[str, Any]:
+    """Keep the model prompt focused on compact, already-derived report facts."""
+    digest = {
+        key: snapshot.get(key)
+        for key in (
+            "schemaVersion",
+            "dailyReview",
+            "aggregate",
+            "researchMetrics",
+            "performanceMetrics",
+            "performanceBreakdowns",
+            "evidenceSummary",
+            "strategySummary",
+            "upsetSummary",
+            "dailyReportRefs",
+        )
+        if snapshot.get(key) is not None
+    }
+    errors = snapshot.get("errorAnalysis")
+    if isinstance(errors, Mapping):
+        digest["errorAnalysis"] = {
+            "errorCount": errors.get("errorCount"),
+            "byType": errors.get("byType") or [],
+        }
+    return digest
+
+
 def is_post_match_report_automation_enabled(conn: Any) -> bool:
     """Return False until an administrator explicitly enables the automation."""
     with conn.cursor() as cur:
@@ -77,7 +104,9 @@ def set_post_match_report_automation(conn: Any, enabled: bool) -> dict[str, Any]
 
 
 def _build_prompt(source_type: str, source_ref: str, snapshot: Mapping[str, Any]) -> str:
-    material = json.dumps(snapshot, ensure_ascii=False, default=str, sort_keys=True)
+    material = json.dumps(
+        _report_digest(snapshot), ensure_ascii=False, default=str, sort_keys=True
+    )
     truncated = len(material) > _MAX_SNAPSHOT_CHARS
     material = material[:_MAX_SNAPSHOT_CHARS]
     return (
@@ -86,11 +115,12 @@ def _build_prompt(source_type: str, source_ref: str, snapshot: Mapping[str, Any]
         "## 一、已确认事实\n"
         "仅列出官方赛果、已结算数据和快照内的覆盖率，不做推断。\n"
         "## 二、模型与市场\n"
-        "说明模型概率、市场概率、Edge、EV 与冷门信号；将信号和事实分开。\n"
+        "说明模型概率、市场概率、Edge、EV 与冷门信号；"
+        "必须解读 Brier Score、Log Loss、概率校准、CLV，且将信号和事实分开。\n"
         "## 三、结果与盈亏\n"
         "说明模拟与实盘的投入、返还、盈亏、ROI、回撤或样本不足；不得提供投注指令。\n"
         "## 四、异常与证据缺口\n"
-        "列出赛果、赔率、模型或新闻证据的缺失与异常；没有时明确写无。\n"
+        "列出赛果、赔率、模型、错因或新闻证据的缺失与异常；没有时明确写无。\n"
         "## 五、待人工核验\n"
         "列出需人工比对的项目；不得新增外部事实、不得修改模型或业务记录。\n"
         "模型输出仅供人工核验。\n"
