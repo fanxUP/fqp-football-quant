@@ -55,6 +55,7 @@ def get_report_snapshot_for_source(
         "sourceRef": source_ref,
         "schemaVersion": snapshot.get("schemaVersion", 1),
         "researchMetrics": snapshot.get("researchMetrics"),
+        "researchBreakdowns": snapshot.get("researchBreakdowns"),
         "upsetReport": snapshot.get("upsetReport"),
     }
     if source_type == "post_daily":

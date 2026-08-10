@@ -8,7 +8,10 @@ from typing import Any
 
 from apps.backend.src.db import get_db
 from apps.backend.src.services.report_automation import maybe_generate_post_match_report
-from apps.backend.src.services.report_snapshot import build_periodic_research_metrics
+from apps.backend.src.services.report_snapshot import (
+    build_periodic_research_breakdowns,
+    build_periodic_research_metrics,
+)
 from scripts.business_time import business_today
 from scripts.jobs.report_generation import (
     assess_periodic_report_readiness,
@@ -151,6 +154,7 @@ def run_weekly(
             aggregate = _aggregate_review_rows(cur.fetchall())
         daily_snapshots = _load_completed_daily_snapshots(conn, start, end)
         research_metrics = build_periodic_research_metrics(daily_snapshots)
+        research_breakdowns = build_periodic_research_breakdowns(daily_snapshots)
 
         data = {
             "week_start": start,
@@ -178,6 +182,7 @@ def run_weekly(
             "weekEnd": end,
             "aggregate": aggregate,
             "researchMetrics": research_metrics,
+            "researchBreakdowns": research_breakdowns,
             "dailyReportRefs": [snapshot["periodKey"] for snapshot in daily_snapshots],
             "upsetReport": upset_report,
         }
@@ -260,6 +265,7 @@ def run_monthly(month: str | None = None, dry_run: bool = False) -> dict[str, An
             aggregate = _aggregate_review_rows(cur.fetchall())
         daily_snapshots = _load_completed_daily_snapshots(conn, month_start, month_end.isoformat())
         research_metrics = build_periodic_research_metrics(daily_snapshots)
+        research_breakdowns = build_periodic_research_breakdowns(daily_snapshots)
 
         data = {
             "month": target_month,
@@ -287,6 +293,7 @@ def run_monthly(month: str | None = None, dry_run: bool = False) -> dict[str, An
             "month": target_month,
             "aggregate": aggregate,
             "researchMetrics": research_metrics,
+            "researchBreakdowns": research_breakdowns,
             "dailyReportRefs": [snapshot["periodKey"] for snapshot in daily_snapshots],
             "upsetReport": upset_report,
         }

@@ -23,6 +23,11 @@ describe('ReportResearchSummary', () => {
           averageEv: 0.12,
         },
         dailyReview: { actualStake: 100, realPrize: 120, realProfitLoss: 20, realRoi: 0.2 },
+        researchBreakdowns: {
+          models: [{ key: 'Poisson', signalCount: 3, matchCount: 2, averageModelProbability: 0.65, averageMarketProbability: 0.55, averageEdge: 0.1, averageEv: 0.2 }],
+          playTypes: [],
+          leagues: [],
+        },
       },
     });
   });
@@ -35,6 +40,8 @@ describe('ReportResearchSummary', () => {
     expect(screen.getByText('+¥20.00')).toBeInTheDocument();
     expect(screen.getByText('平均 Edge')).toBeInTheDocument();
     expect(screen.getByText('6.00%')).toBeInTheDocument();
+    expect(screen.getByText('模型信号分布')).toBeInTheDocument();
+    expect(screen.getByText('Poisson')).toBeInTheDocument();
     expect(apiMocks.snapshot).toHaveBeenCalledWith('post_daily', '2026-08-09');
   });
 

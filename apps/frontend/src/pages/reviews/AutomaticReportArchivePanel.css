@@ -16,4 +16,10 @@
 .automatic-report-research-grid dt, .automatic-report-research-grid dd { margin: 0; }
 .automatic-report-research-grid dd { margin-top: .25rem; color: var(--fqp-text); font-weight: 700; font-variant-numeric: tabular-nums; }
 .automatic-report-profit { color: var(--fqp-success) !important; }
+.automatic-report-breakdowns { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: .75rem; margin-top: 1rem; }
+.automatic-report-breakdown { min-width: 0; padding-top: .75rem; border-top: 1px solid var(--fqp-border); }
+.automatic-report-breakdown h4 { margin: 0 0 .5rem; color: var(--fqp-text); font-size: .8125rem; }
+.automatic-report-breakdown ul { display: grid; gap: .375rem; margin: 0; padding: 0; list-style: none; }
+.automatic-report-breakdown li { display: grid; gap: .125rem; padding: .5rem; border-radius: var(--fqp-radius-sm); background: var(--fqp-bg); color: var(--fqp-text-muted); font-size: .75rem; line-height: 1.5; }
+.automatic-report-breakdown strong { color: var(--fqp-text); font-size: .8125rem; }
 @media (max-width: 640px) { .automatic-report-research-heading { align-items: flex-start; flex-direction: column; gap: .25rem; } }

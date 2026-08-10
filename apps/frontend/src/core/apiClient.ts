@@ -118,11 +118,28 @@ export interface ReportResearchMetrics {
   averageEv: number | null;
 }
 
+export interface ReportResearchBreakdownRow {
+  key: string;
+  signalCount: number;
+  matchCount: number;
+  averageModelProbability: number | null;
+  averageMarketProbability: number | null;
+  averageEdge: number | null;
+  averageEv: number | null;
+}
+
+export interface ReportResearchBreakdowns {
+  models: ReportResearchBreakdownRow[];
+  playTypes: ReportResearchBreakdownRow[];
+  leagues: ReportResearchBreakdownRow[];
+}
+
 export interface ReportResearchSnapshot {
   sourceType: 'post_daily' | 'post_weekly' | 'post_monthly';
   sourceRef: string;
   schemaVersion: number;
   researchMetrics: ReportResearchMetrics | null;
+  researchBreakdowns?: ReportResearchBreakdowns | null;
   dailyReview?: Record<string, number | string | null> | null;
   aggregate?: Record<string, number | string | null> | null;
   dailyReportRefs?: string[];

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api, type ReportResearchSnapshot } from '../../core/apiClient';
+import { api, type ReportResearchBreakdownRow, type ReportResearchSnapshot } from '../../core/apiClient';
 import './AutomaticReportArchivePanel.css';
 
 type ReportSourceType = 'post_daily' | 'post_weekly' | 'post_monthly';
@@ -16,6 +16,20 @@ function currency(value: unknown, signed = false): string {
 
 function financeSnapshot(report: ReportResearchSnapshot): Record<string, number | string | null> {
   return report.dailyReview ?? report.aggregate ?? {};
+}
+
+function SignalBreakdown({ title, rows }: { title: string; rows: ReportResearchBreakdownRow[] }) {
+  if (!rows.length) return null;
+  return <section className="automatic-report-breakdown" aria-label={title}>
+    <h4>{title}</h4>
+    <ul>
+      {rows.map((row) => <li key={row.key}>
+        <strong>{row.key}</strong>
+        <span>{row.signalCount} 条信号 · {row.matchCount} 场比赛</span>
+        <span>平均 Edge {percent(row.averageEdge)} · 平均 EV {percent(row.averageEv)}</span>
+      </li>)}
+    </ul>
+  </section>;
 }
 
 export default function ReportResearchSummary({
@@ -69,5 +83,10 @@ export default function ReportResearchSummary({
         <dd className={label === '实际盈亏' ? 'automatic-report-profit' : undefined}>{value}</dd>
       </div>)}
     </dl>
+    {report.researchBreakdowns && <div className="automatic-report-breakdowns">
+      <SignalBreakdown title="模型信号分布" rows={report.researchBreakdowns.models} />
+      <SignalBreakdown title="玩法信号分布" rows={report.researchBreakdowns.playTypes} />
+      <SignalBreakdown title="联赛信号分布" rows={report.researchBreakdowns.leagues} />
+    </div>}
   </section>;
 }

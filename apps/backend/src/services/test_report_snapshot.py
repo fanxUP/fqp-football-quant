@@ -1,7 +1,44 @@
 from apps.backend.src.services.report_snapshot import (
     build_daily_report_snapshot,
+    build_periodic_research_breakdowns,
     build_periodic_research_metrics,
 )
+
+
+def test_daily_research_metrics_groups_frozen_signals_by_model_play_and_league() -> None:
+    snapshot = build_daily_report_snapshot(
+        review={},
+        upset_report={},
+        match_cards=[
+            {
+                "leagueName": "英超",
+                "modelSignals": [
+                    {"modelName": "Poisson", "playType": "spf", "modelProbability": 0.6, "marketProbability": 0.5, "ev": 0.1},
+                    {"modelName": "Elo", "playType": "rqspf", "modelProbability": 0.7, "marketProbability": 0.6, "ev": 0.2},
+                ],
+            },
+            {
+                "leagueName": "英超",
+                "modelSignals": [
+                    {"modelName": "Poisson", "playType": "spf", "modelProbability": 0.8, "marketProbability": 0.6, "ev": 0.3},
+                ],
+            },
+        ],
+    )
+
+    assert snapshot["researchBreakdowns"] == {
+        "models": [
+            {"key": "Poisson", "signalCount": 2, "matchCount": 2, "averageModelProbability": 0.7, "averageMarketProbability": 0.55, "averageEdge": 0.15, "averageEv": 0.2},
+            {"key": "Elo", "signalCount": 1, "matchCount": 1, "averageModelProbability": 0.7, "averageMarketProbability": 0.6, "averageEdge": 0.1, "averageEv": 0.2},
+        ],
+        "playTypes": [
+            {"key": "spf", "signalCount": 2, "matchCount": 2, "averageModelProbability": 0.7, "averageMarketProbability": 0.55, "averageEdge": 0.15, "averageEv": 0.2},
+            {"key": "rqspf", "signalCount": 1, "matchCount": 1, "averageModelProbability": 0.7, "averageMarketProbability": 0.6, "averageEdge": 0.1, "averageEv": 0.2},
+        ],
+        "leagues": [
+            {"key": "英超", "signalCount": 3, "matchCount": 2, "averageModelProbability": 0.7, "averageMarketProbability": 0.5667, "averageEdge": 0.1333, "averageEv": 0.2},
+        ],
+    }
 
 
 def test_periodic_research_metrics_weights_signal_quality_by_signal_count() -> None:
@@ -37,6 +74,25 @@ def test_periodic_research_metrics_weights_signal_quality_by_signal_count() -> N
         "averageMarketProbability": 0.6,
         "averageEdge": 0.1,
         "averageEv": 0.2333,
+    }
+
+
+def test_periodic_research_breakdowns_merge_daily_frozen_rows() -> None:
+    breakdowns = build_periodic_research_breakdowns([
+        {"researchBreakdowns": {"models": [
+            {"key": "Poisson", "signalCount": 2, "matchCount": 2, "averageModelProbability": 0.6, "averageMarketProbability": 0.5, "averageEdge": 0.1, "averageEv": 0.2},
+        ]}},
+        {"researchBreakdowns": {"models": [
+            {"key": "Poisson", "signalCount": 1, "matchCount": 1, "averageModelProbability": 0.9, "averageMarketProbability": 0.7, "averageEdge": 0.2, "averageEv": 0.4},
+        ]}},
+    ])
+
+    assert breakdowns == {
+        "models": [
+            {"key": "Poisson", "signalCount": 3, "matchCount": 3, "averageModelProbability": 0.7, "averageMarketProbability": 0.5667, "averageEdge": 0.1333, "averageEv": 0.2667},
+        ],
+        "playTypes": [],
+        "leagues": [],
     }
 
 
@@ -85,7 +141,7 @@ def test_daily_report_snapshot_freezes_match_result_prematch_signals_and_evidenc
         ],
     )
 
-    assert snapshot["schemaVersion"] == 2
+    assert snapshot["schemaVersion"] == 3
     assert snapshot["dailyReview"]["reviewId"] == 8
     assert snapshot["upsetReport"] == {"upsetCount": 1}
     assert snapshot["matches"][0]["result"]["homeGoals"] == 2
