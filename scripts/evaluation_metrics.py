@@ -378,11 +378,18 @@ def run(dry_run: bool = False) -> dict[str, Any]:
                 ORDER BY odds.match_id, odds.play_type, odds.option_code,
                          odds.snapshot_time DESC, odds.id DESC
             ), closing_market AS (
-                SELECT match_id, play_type, option_code, sp_value,
+                SELECT match_id, play_type,
+                       CASE
+                           WHEN odds.option_code = 'h' THEN '3'
+                           WHEN odds.option_code = 'd' THEN '1'
+                           WHEN odds.option_code = 'a' THEN '0'
+                           ELSE odds.option_code
+                       END AS option_code,
+                       sp_value,
                        (1 / sp_value) / SUM(1 / sp_value) OVER (
                            PARTITION BY match_id, play_type
                        ) AS closing_probability
-                FROM closing_odds
+                FROM closing_odds odds
             )
             SELECT
                 mp.match_id,

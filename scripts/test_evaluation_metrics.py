@@ -1,6 +1,10 @@
 from __future__ import annotations
 
-from scripts.evaluation_metrics import compute_match_metrics
+from contextlib import contextmanager
+from typing import Any
+
+from apps.backend.src import db
+from scripts.evaluation_metrics import compute_match_metrics, run
 
 
 def test_match_metrics_persists_selected_clv_against_true_closing_market() -> None:
@@ -22,3 +26,34 @@ def test_match_metrics_persists_selected_clv_against_true_closing_market() -> No
     assert metrics["official_sp"] == 2.0
     assert metrics["fair_odds"] == 1.6667
     assert metrics["ev"] == 0.2
+
+
+def test_run_normalizes_official_spf_option_codes_before_clv_join(monkeypatch: Any) -> None:
+    class _Cursor:
+        query = ""
+
+        def execute(self, query: str) -> None:
+            self.query = query
+
+        def fetchall(self) -> list[tuple]:
+            return []
+
+    class _Connection:
+        cursor_instance = _Cursor()
+
+        def cursor(self) -> _Cursor:
+            return self.cursor_instance
+
+    connection = _Connection()
+
+    @contextmanager
+    def _get_db():
+        yield connection
+
+    monkeypatch.setattr(db, "get_db", _get_db)
+
+    assert run() == {"status": "ok", "evaluated": 0, "note": "no new predictions to evaluate"}
+    query = connection.cursor_instance.query
+    assert "WHEN odds.option_code = 'h' THEN '3'" in query
+    assert "WHEN odds.option_code = 'd' THEN '1'" in query
+    assert "WHEN odds.option_code = 'a' THEN '0'" in query
