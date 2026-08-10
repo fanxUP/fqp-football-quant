@@ -14,6 +14,8 @@ class _Cursor:
         return None
 
     def execute(self, query: str, _params) -> None:
+        if "factor_value_json->>'summary'" in query:
+            assert "factor_value_json->>'summary' AS summary" in query
         if "FROM model_predictions" in query:
             self._rows = [(7, "Elo", "spf", "home_win", 0.62, 0.55, 0.12, 0.78, "2026-08-09T10:00:00")]
         elif "FROM official_odds_snapshots" in query:

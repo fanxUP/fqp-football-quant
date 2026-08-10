@@ -79,7 +79,7 @@ def build_match_review_cards(conn: Any, review_date: str) -> list[dict[str, Any]
                           COALESCE(
                               evidence.factor_value_json->>'text', evidence.factor_code
                           ) AS headline,
-                          evidence.factor_value_json->>'summary',
+                          evidence.factor_value_json->>'summary' AS summary,
                           evidence.verification_status,
                           ROW_NUMBER() OVER (
                               PARTITION BY event.match_id, evidence.evidence_phase
