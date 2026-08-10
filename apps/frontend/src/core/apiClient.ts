@@ -198,6 +198,8 @@ export interface ReportResearchSnapshot {
   sourceType: 'post_daily' | 'post_weekly' | 'post_monthly';
   sourceRef: string;
   schemaVersion: number;
+  snapshotRevision?: number;
+  interpretationRequiresRefresh?: boolean;
   researchMetrics: ReportResearchMetrics | null;
   researchBreakdowns?: ReportResearchBreakdowns | null;
   performanceMetrics?: ReportPerformanceMetrics | null;

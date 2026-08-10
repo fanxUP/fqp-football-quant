@@ -241,3 +241,70 @@ def upsert_report_generation_run(
             ),
         )
     conn.commit()
+
+
+def replace_completed_report_snapshot_with_revision(
+    conn: Any,
+    *,
+    report_type: str,
+    period_key: str,
+    snapshot: dict[str, Any],
+    reason: str,
+) -> dict[str, Any]:
+    """Archive the current immutable snapshot before a traceable backfill.
+
+    The business review row and every prediction, ticket, settlement and risk
+    fact remain untouched.  Only the derived report snapshot is superseded.
+    """
+    snapshot_json = json.dumps(snapshot, ensure_ascii=False, default=str, sort_keys=True)
+    snapshot_hash = hashlib.sha256(snapshot_json.encode("utf-8")).hexdigest()
+    with conn.cursor() as cur:
+        cur.execute(
+            """SELECT source_snapshot_json, source_snapshot_hash
+               FROM report_generation_runs
+               WHERE report_type = %s AND period_key = %s AND status = 'completed'
+               FOR UPDATE""",
+            (report_type, period_key),
+        )
+        current = cur.fetchone()
+        if not current:
+            raise ValueError("找不到已完成的自动报告快照")
+        previous_snapshot, previous_hash = current
+        cur.execute(
+            """SELECT COALESCE(MAX(revision), 0) + 1
+               FROM report_generation_revisions
+               WHERE report_type = %s AND period_key = %s""",
+            (report_type, period_key),
+        )
+        revision = int(cur.fetchone()[0])
+        cur.execute(
+            """INSERT INTO report_generation_revisions (
+                   report_type, period_key, revision, previous_snapshot_json,
+                   previous_snapshot_hash, replacement_snapshot_hash, reason
+               ) VALUES (%s, %s, %s, %s::jsonb, %s, %s, %s)""",
+            (
+                report_type,
+                period_key,
+                revision,
+                json.dumps(previous_snapshot, ensure_ascii=False, default=str),
+                previous_hash,
+                snapshot_hash,
+                reason,
+            ),
+        )
+        cur.execute(
+            """UPDATE report_generation_runs
+               SET source_snapshot_json = %s::jsonb,
+                   source_snapshot_hash = %s,
+                   updated_at = now()
+               WHERE report_type = %s AND period_key = %s AND status = 'completed'""",
+            (snapshot_json, snapshot_hash, report_type, period_key),
+        )
+    conn.commit()
+    return {
+        "reportType": report_type,
+        "periodKey": period_key,
+        "revision": revision,
+        "previousSnapshotHash": previous_hash,
+        "snapshotHash": snapshot_hash,
+    }

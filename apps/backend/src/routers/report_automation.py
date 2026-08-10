@@ -40,9 +40,15 @@ def get_report_snapshot_for_source(
     with conn.cursor() as cur:
         cur.execute(
             """
-            SELECT source_snapshot_json
-            FROM report_generation_runs
-            WHERE report_type = %s AND period_key = %s AND status = 'completed'
+            SELECT run.source_snapshot_json,
+                   COALESCE((
+                       SELECT MAX(revision.revision)
+                       FROM report_generation_revisions revision
+                       WHERE revision.report_type = run.report_type
+                         AND revision.period_key = run.period_key
+                   ), 0) AS snapshot_revision
+            FROM report_generation_runs run
+            WHERE run.report_type = %s AND run.period_key = %s AND run.status = 'completed'
             """,
             (report_type, source_ref),
         )
@@ -54,6 +60,7 @@ def get_report_snapshot_for_source(
         "sourceType": source_type,
         "sourceRef": source_ref,
         "schemaVersion": snapshot.get("schemaVersion", 1),
+        "snapshotRevision": int(row[1] or 0),
         "researchMetrics": snapshot.get("researchMetrics"),
         "researchBreakdowns": snapshot.get("researchBreakdowns"),
         "performanceMetrics": snapshot.get("performanceMetrics"),
@@ -63,6 +70,10 @@ def get_report_snapshot_for_source(
         "upsetSummary": snapshot.get("upsetSummary"),
         "upsetReport": snapshot.get("upsetReport"),
     }
+    backfill = snapshot.get("backfill")
+    report["interpretationRequiresRefresh"] = bool(
+        isinstance(backfill, dict) and backfill.get("interpretationRequiresRefresh")
+    )
     error_analysis = snapshot.get("errorAnalysis")
     if isinstance(error_analysis, dict):
         report["errorAnalysis"] = {

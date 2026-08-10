@@ -6,6 +6,7 @@ from datetime import datetime
 from scripts.jobs.report_generation import (
     assess_daily_report_readiness,
     assess_periodic_report_readiness,
+    replace_completed_report_snapshot_with_revision,
 )
 
 
@@ -257,3 +258,55 @@ def test_daily_review_does_not_overwrite_completed_snapshot(monkeypatch) -> None
         "review_date": "2026-08-09",
         "reason": "already_completed",
     }
+
+
+def test_snapshot_backfill_archives_old_snapshot_before_replacing_completed_run() -> None:
+    class _RevisionCursor:
+        def __init__(self) -> None:
+            self.row: tuple[object, ...] | None = None
+            self.statements: list[str] = []
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args) -> None:
+            return None
+
+        def execute(self, query: str, _params: tuple[object, ...]) -> None:
+            self.statements.append(query)
+            if "FOR UPDATE" in query:
+                self.row = ({"schemaVersion": 3}, "old-hash")
+            elif "MAX(revision)" in query:
+                self.row = (2,)
+            else:
+                self.row = None
+
+        def fetchone(self):
+            return self.row
+
+    class _RevisionConnection:
+        def __init__(self) -> None:
+            self.cursor_instance = _RevisionCursor()
+            self.committed = False
+
+        def cursor(self):
+            return self.cursor_instance
+
+        def commit(self) -> None:
+            self.committed = True
+
+    conn = _RevisionConnection()
+    result = replace_completed_report_snapshot_with_revision(
+        conn,
+        report_type="daily",
+        period_key="2026-08-09",
+        snapshot={"schemaVersion": 4, "performanceMetrics": {"sampleCount": 3}},
+        reason="升级真实表现指标",
+    )
+
+    assert result["revision"] == 2
+    assert result["previousSnapshotHash"] == "old-hash"
+    assert len(result["snapshotHash"]) == 64
+    assert any("INSERT INTO report_generation_revisions" in query for query in conn.cursor_instance.statements)
+    assert any("UPDATE report_generation_runs" in query for query in conn.cursor_instance.statements)
+    assert conn.committed is True

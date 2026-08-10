@@ -149,6 +149,9 @@ def compute_match_metrics(
     market_probs: dict[str, float],
     actual: str,
     model_name: str = "unknown",
+    *,
+    closing_market_probs: dict[str, float] | None = None,
+    closing_odds: dict[str, float] | None = None,
 ) -> dict[str, Any]:
     """计算单场比赛的所有评估指标。
 
@@ -160,19 +163,48 @@ def compute_match_metrics(
     rps = rps_score(probs, actual)
 
     clv_scores = {}
+    closing_edges = {}
     gaps = {}
     for opt in ["3", "1", "0"]:
         mp = probs.get(opt, 0.0)
         mrk = market_probs.get(opt, 0.0)
-        clv_scores[f"clv_{opt}"] = round(clv(mp, mrk), 6)
+        closing_probability = (closing_market_probs or {}).get(opt)
+        clv_scores[f"clv_{opt}"] = (
+            round(closing_probability - mrk, 6)
+            if closing_probability is not None
+            else None
+        )
+        closing_edges[f"closing_edge_{opt}"] = (
+            round(mp - closing_probability, 6)
+            if closing_probability is not None
+            else None
+        )
         gaps[f"gap_{opt}"] = round(probability_gap(mp, mrk), 6)
+
+    selected = max(probs, key=lambda option: (probs[option], option))
+    selected_odds = (closing_odds or {}).get(selected)
+    selected_probability = (closing_market_probs or {}).get(selected)
 
     return {
         "model_name": model_name,
+        "option_code": selected,
+        "model_probability": probs[selected],
+        "market_probability": market_probs.get(selected),
+        "closing_market_probability": selected_probability,
+        "probability_gap": (
+            round(probs[selected] - selected_probability, 6)
+            if selected_probability is not None
+            else None
+        ),
+        "clv_score": clv_scores[f"clv_{selected}"],
+        "official_sp": selected_odds,
+        "fair_odds": round(1 / probs[selected], 4) if probs[selected] > 0 else None,
+        "ev": round(probs[selected] * selected_odds - 1, 6) if selected_odds else None,
         "brier_score": round(bs, 6),
         "log_loss": round(ll, 6),
         "rps": round(rps, 6),
         **clv_scores,
+        **closing_edges,
         **gaps,
     }
 
@@ -256,34 +288,58 @@ def store_evaluation_metrics(
     stored = 0
     with conn.cursor() as cur:
         for m in metrics_batch:
-            try:
+            values = (
+                m.get("option_code", "3"),
+                m.get("official_sp"),
+                m.get("market_probability"),
+                m.get("model_probability"),
+                m.get("probability_gap"),
+                m.get("fair_odds"),
+                m.get("ev"),
+                m.get("clv_score"),
+                m.get("favourite_longshot_score"),
+                m.get("market_signal_level"),
+                m.get("brier_score"),
+                m.get("log_loss"),
+                m.get("rps"),
+                m.get("match_id"),
+                m.get("model_version_id"),
+                m.get("predict_time"),
+                m.get("play_type", "spf"),
+            )
+            cur.execute(
+                """UPDATE market_efficiency_metrics
+                   SET option_code=%s, official_sp=%s, market_probability=%s,
+                       model_probability=%s, probability_gap=%s, fair_odds=%s,
+                       ev=%s, clv_score=%s, favourite_longshot_score=%s,
+                       market_signal_level=%s, brier_score=%s, log_loss=%s, rps=%s
+                   WHERE match_id=%s AND model_version_id=%s
+                     AND snapshot_time=%s AND play_type=%s
+                   RETURNING id""",
+                values,
+            )
+            if cur.fetchone() is None:
                 cur.execute(
                     """INSERT INTO market_efficiency_metrics
-                       (match_id, model_version_id, snapshot_time,
-                        play_type, option_code,
-                        probability_gap, clv_score, favourite_longshot_score,
-                        market_signal_level,
-                        brier_score, log_loss, rps,
-                        created_at)
-                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())""",
+                       (match_id, model_version_id, snapshot_time, play_type, option_code,
+                        official_sp, market_probability, model_probability,
+                        probability_gap, fair_odds, ev, clv_score,
+                        favourite_longshot_score, market_signal_level,
+                        brier_score, log_loss, rps, created_at)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                               %s, %s, %s, %s, %s, NOW())""",
                     (
-                        m.get("match_id"),
-                        m.get("model_version_id"),
-                        m.get("predict_time"),
-                        m.get("play_type", "spf"),
-                        m.get("option_code", "3"),
-                        m.get("probability_gap"),
-                        m.get("clv_score"),
-                        m.get("favourite_longshot_score"),
-                        m.get("market_signal_level"),
-                        m.get("brier_score"),
-                        m.get("log_loss"),
-                        m.get("rps"),
+                        m.get("match_id"), m.get("model_version_id"),
+                        m.get("predict_time"), m.get("play_type", "spf"),
+                        m.get("option_code", "3"), m.get("official_sp"),
+                        m.get("market_probability"), m.get("model_probability"),
+                        m.get("probability_gap"), m.get("fair_odds"), m.get("ev"),
+                        m.get("clv_score"), m.get("favourite_longshot_score"),
+                        m.get("market_signal_level"), m.get("brier_score"),
+                        m.get("log_loss"), m.get("rps"),
                     ),
                 )
-                stored += 1
-            except Exception:
-                pass
+            stored += 1
     conn.commit()
     return stored
 
@@ -310,6 +366,24 @@ def run(dry_run: bool = False) -> dict[str, Any]:
 
         # 查找待评估的预测
         cur.execute("""
+            WITH closing_odds AS (
+                SELECT DISTINCT ON (odds.match_id, odds.play_type, odds.option_code)
+                    odds.match_id, odds.play_type, odds.option_code,
+                    odds.sp_value, odds.snapshot_time
+                FROM official_odds_snapshots odds
+                JOIN official_matches match ON match.id = odds.match_id
+                WHERE odds.is_open = true
+                  AND odds.sp_value > 1
+                  AND odds.snapshot_time <= COALESCE(match.sale_stop_time, match.kickoff_time)
+                ORDER BY odds.match_id, odds.play_type, odds.option_code,
+                         odds.snapshot_time DESC, odds.id DESC
+            ), closing_market AS (
+                SELECT match_id, play_type, option_code, sp_value,
+                       (1 / sp_value) / SUM(1 / sp_value) OVER (
+                           PARTITION BY match_id, play_type
+                       ) AS closing_probability
+                FROM closing_odds
+            )
             SELECT
                 mp.match_id,
                 mp.model_version_id,
@@ -318,6 +392,8 @@ def run(dry_run: bool = False) -> dict[str, Any]:
                 mp.market_probability,
                 mp.option_code,
                 mv.model_name,
+                closing.closing_probability,
+                closing.sp_value,
                 CASE
                     WHEN r.full_home_goals > r.full_away_goals THEN '3'
                     WHEN r.full_home_goals = r.full_away_goals THEN '1'
@@ -327,6 +403,10 @@ def run(dry_run: bool = False) -> dict[str, Any]:
             JOIN model_versions mv ON mv.id = mp.model_version_id
             JOIN official_results r ON r.match_id = mp.match_id
             JOIN official_matches m ON m.id = mp.match_id
+            LEFT JOIN closing_market closing
+              ON closing.match_id = mp.match_id
+             AND closing.play_type = mp.play_type
+             AND closing.option_code = mp.option_code
             WHERE m.match_status = 'Settled'
               AND r.full_home_goals IS NOT NULL
               AND r.result_status IN ('final', 'confirmed')
@@ -343,6 +423,8 @@ def run(dry_run: bool = False) -> dict[str, Any]:
                   WHERE mem.match_id = mp.match_id
                     AND mem.model_version_id = mp.model_version_id
                     AND mem.snapshot_time = mp.predict_time
+                    AND mem.brier_score IS NOT NULL
+                    AND mem.clv_score IS NOT NULL
               )
             ORDER BY mp.match_id, mp.model_version_id, mp.option_code
         """)
@@ -354,10 +436,18 @@ def run(dry_run: bool = False) -> dict[str, Any]:
         # 按 (match_id, model_version_id, predict_time) 分组
         from collections import defaultdict as dd
 
-        groups: dict[tuple, dict] = dd(lambda: {"probs": {}, "market_probs": {}, "actual": None})
+        groups: dict[tuple, dict] = dd(
+            lambda: {
+                "probs": {}, "market_probs": {}, "closing_probs": {},
+                "closing_odds": {}, "actual": None,
+            }
+        )
 
         for row in rows:
-            match_id, mv_id, pred_time, model_p, market_p, opt_code, model_name, actual = row
+            (
+                match_id, mv_id, pred_time, model_p, market_p, opt_code,
+                model_name, closing_probability, closing_odd, actual,
+            ) = row
             key = (match_id, mv_id, str(pred_time))
 
             g = groups[key]
@@ -367,6 +457,10 @@ def run(dry_run: bool = False) -> dict[str, Any]:
             g["model_name"] = model_name
             g["probs"][opt_code] = float(model_p)
             g["market_probs"][opt_code] = float(market_p)
+            if closing_probability is not None:
+                g["closing_probs"][opt_code] = float(closing_probability)
+            if closing_odd is not None:
+                g["closing_odds"][opt_code] = float(closing_odd)
             g["actual"] = actual
 
         # 计算指标
@@ -384,12 +478,13 @@ def run(dry_run: bool = False) -> dict[str, Any]:
                 g["market_probs"],
                 g["actual"],
                 g.get("model_name", "unknown"),
+                closing_market_probs=g["closing_probs"] if len(g["closing_probs"]) == 3 else None,
+                closing_odds=g["closing_odds"] if len(g["closing_odds"]) == 3 else None,
             )
             m["match_id"] = g["match_id"]
             m["model_version_id"] = g["model_version_id"]
             m["predict_time"] = g["predict_time"]
             m["play_type"] = "spf"
-            m["option_code"] = g.get("actual", "3")
 
             metrics_list.append(m)
 

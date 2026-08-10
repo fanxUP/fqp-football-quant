@@ -78,6 +78,11 @@ export default function ReportResearchSummary({
       <h3 id={`research-summary-${sourceType}-${sourceRef}`}>量化复盘指标</h3>
       <p>后端冻结数据 · 不参与预测或投注决策</p>
     </div>
+    {report.interpretationRequiresRefresh && Number(report.snapshotRevision) > 0 && (
+      <p className="automatic-report-revision-note" role="note">
+        该报告已完成第 {report.snapshotRevision} 次可追溯补跑；已归档的模型文字可能基于旧快照。
+      </p>
+    )}
     <dl className="automatic-report-research-grid">
       {cards.map(([label, value]) => <div key={label}>
         <dt>{label}</dt>

@@ -15,6 +15,8 @@ describe('ReportResearchSummary', () => {
         sourceType: 'post_daily',
         sourceRef: '2026-08-09',
         schemaVersion: 4,
+        snapshotRevision: 2,
+        interpretationRequiresRefresh: true,
         researchMetrics: {
           matchCount: 3,
           signalCoverageRate: 0.6667,
@@ -81,6 +83,7 @@ describe('ReportResearchSummary', () => {
     expect(screen.getByText('可靠新闻证据：0 条')).toBeInTheDocument();
     expect(screen.getByText('低估平局 · 2 次')).toBeInTheDocument();
     expect(screen.getByText('只用于人工研究复盘')).toBeInTheDocument();
+    expect(screen.getByText('该报告已完成第 2 次可追溯补跑；已归档的模型文字可能基于旧快照。')).toBeInTheDocument();
     expect(apiMocks.snapshot).toHaveBeenCalledWith('post_daily', '2026-08-09');
   });
 

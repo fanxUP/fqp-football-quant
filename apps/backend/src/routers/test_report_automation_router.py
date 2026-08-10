@@ -23,9 +23,10 @@ class _Cursor:
             "errorAnalysis": {"errorCount": 4, "items": [{"matchId": 99}]},
             "strategySummary": {"status": "review_required"},
             "upsetSummary": {"count": 1},
+            "backfill": {"interpretationRequiresRefresh": True},
             "performanceSeries": [{"matchId": 99}],
             "matches": [{"matchId": 99}],
-        },)
+        }, 2)
 
 
 class _Connection:
@@ -45,5 +46,7 @@ def test_snapshot_api_exposes_safe_performance_summary_without_raw_match_series(
     assert report["errorAnalysis"] == {"errorCount": 4, "byType": []}
     assert report["strategySummary"]["status"] == "review_required"
     assert report["upsetSummary"]["count"] == 1
+    assert report["snapshotRevision"] == 2
+    assert report["interpretationRequiresRefresh"] is True
     assert "performanceSeries" not in report
     assert "matches" not in report

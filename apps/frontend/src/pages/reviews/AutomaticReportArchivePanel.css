@@ -36,4 +36,5 @@
 .automatic-report-review-list ul { display: grid; gap: .375rem; margin: 0; padding-left: 1.125rem; color: var(--fqp-text-muted); font-size: .75rem; line-height: 1.6; }
 .automatic-report-review-list li span { display: block; }
 .automatic-report-safety-notice { margin: .75rem 0 0; color: var(--fqp-accent, var(--fqp-red)); font-size: .75rem; }
+.automatic-report-revision-note { margin: 0 0 .75rem; padding: .625rem .75rem; border-left: 3px solid var(--fqp-warning); background: var(--fqp-bg); color: var(--fqp-text-muted); font-size: .75rem; line-height: 1.6; }
 @media (max-width: 640px) { .automatic-report-subheading { align-items: flex-start; flex-direction: column; gap: .25rem; } }
