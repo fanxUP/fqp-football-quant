@@ -319,6 +319,7 @@ def _errors(samples: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
         probability = float(row.get("modelProbability") or 0)
         predicted = str(row.get("predictedOption") or "")
         actual = str(row.get("actualOption") or "")
+        code: str
         if probability >= 0.60:
             code = "MODEL_OVERCONFIDENCE"
         elif actual == "1" and predicted != "1":
@@ -340,7 +341,7 @@ def _errors(samples: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
             "modelProbability": probability,
             "suggestedAction": _ERROR_ACTIONS[code],
         })
-    counts = Counter(item["code"] for item in items)
+    counts: Counter[str] = Counter(str(item["code"]) for item in items)
     by_type = [
         {"code": code, "label": _ERROR_LABELS[code], "count": count, "suggestedAction": _ERROR_ACTIONS[code]}
         for code, count in sorted(counts.items(), key=lambda item: (-item[1], item[0]))

@@ -220,11 +220,11 @@ def build_periodic_research_metrics(
     signal characteristics, and does not re-score a prediction or alter facts.
     Older daily snapshots without ``researchMetrics`` remain valid inputs.
     """
-    metric_rows = [
-        row.get("researchMetrics")
-        for row in daily_snapshots
-        if isinstance(row.get("researchMetrics"), Mapping)
-    ]
+    metric_rows: list[Mapping[str, Any]] = []
+    for snapshot in daily_snapshots:
+        metrics = snapshot.get("researchMetrics")
+        if isinstance(metrics, Mapping):
+            metric_rows.append(metrics)
     match_count = sum(int(_number(row.get("matchCount")) or 0) for row in metric_rows)
     signal_count = sum(int(_number(row.get("signalCount")) or 0) for row in metric_rows)
     signal_match_count = sum(

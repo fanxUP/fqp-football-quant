@@ -72,10 +72,10 @@ def _period_bounds(report_type: str, period_key: str, snapshot: dict[str, Any]) 
         end = str(snapshot.get("weekEnd") or (date.fromisoformat(start) + timedelta(days=6)))
         return start, end
     start = f"{period_key}-01"
-    end = (date.fromisoformat(start).replace(day=28) + timedelta(days=4)).replace(
+    month_end = (date.fromisoformat(start).replace(day=28) + timedelta(days=4)).replace(
         day=1
     ) - timedelta(days=1)
-    return start, end.isoformat()
+    return start, month_end.isoformat()
 
 
 def run(*, limit: int = 100, dry_run: bool = False) -> dict[str, Any]:
