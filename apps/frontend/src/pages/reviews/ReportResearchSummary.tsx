@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api, type ReportResearchBreakdownRow, type ReportResearchSnapshot } from '../../core/apiClient';
+import ReportPerformanceSummary from './ReportPerformanceSummary';
 import './AutomaticReportArchivePanel.css';
 
 type ReportSourceType = 'post_daily' | 'post_weekly' | 'post_monthly';
@@ -83,6 +84,7 @@ export default function ReportResearchSummary({
         <dd className={label === '实际盈亏' ? 'automatic-report-profit' : undefined}>{value}</dd>
       </div>)}
     </dl>
+    <ReportPerformanceSummary report={report} />
     {report.researchBreakdowns && <div className="automatic-report-breakdowns">
       <SignalBreakdown title="模型信号分布" rows={report.researchBreakdowns.models} />
       <SignalBreakdown title="玩法信号分布" rows={report.researchBreakdowns.playTypes} />

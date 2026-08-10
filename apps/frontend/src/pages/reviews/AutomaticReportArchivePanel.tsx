@@ -9,18 +9,21 @@ export default function AutomaticReportArchivePanel({
 }: { sourceType: ReportSourceType; sourceRef: string }) {
   const [task, setTask] = useState<AgentWorkspaceTask | null>(null);
   const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     let active = true;
     setLoading(true);
+    setFailed(false);
     api.reportAutomation.archive(sourceType, sourceRef)
       .then((response) => { if (active) setTask(response.task); })
-      .catch(() => { if (active) setTask(null); })
+      .catch(() => { if (active) { setTask(null); setFailed(true); } })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [sourceType, sourceRef]);
 
   if (loading) return <p className="automatic-report-archive-status" role="status">正在读取自动赛后报告…</p>;
+  if (failed) return <p className="automatic-report-archive-status" role="alert">自动赛后报告读取失败，请稍后重试。</p>;
   if (!task) return <p className="automatic-report-archive-status">本期暂无自动赛后报告</p>;
 
   return <section className="automatic-report-archive" aria-labelledby={`automatic-report-${task.id}`}>

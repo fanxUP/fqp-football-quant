@@ -134,12 +134,78 @@ export interface ReportResearchBreakdowns {
   leagues: ReportResearchBreakdownRow[];
 }
 
+export interface ReportPerformanceMetrics {
+  sampleCount: number;
+  correctCount: number;
+  hitRate: number | null;
+  brierScore: number | null;
+  logLoss: number | null;
+  rps: number | null;
+  clvSampleCount: number;
+  averageClv: number | null;
+  averageClosingEdge: number | null;
+  averageClosingOdds: number | null;
+  pricedSampleCount: number;
+  unitStakeProfit: number;
+  unitStakeRoi: number | null;
+  calibrationError: number | null;
+  maximumCalibrationError: number | null;
+  maxLosingStreak: number;
+  currentStreakType: 'win' | 'loss' | null;
+  currentStreakCount: number;
+  calibrationBins: Array<{
+    lower: number;
+    upper: number;
+    sampleCount: number;
+    averageProbability: number;
+    actualRate: number;
+  }>;
+}
+
+export interface ReportPerformanceBreakdownRow extends ReportPerformanceMetrics {
+  key: string;
+}
+
+export interface ReportPerformanceBreakdowns {
+  models: ReportPerformanceBreakdownRow[];
+  playTypes: ReportPerformanceBreakdownRow[];
+  leagues: ReportPerformanceBreakdownRow[];
+}
+
+export interface ReportEvidenceSummary {
+  evidenceCount: number;
+  coveredMatchCount: number;
+  preMatchCount: number;
+  postMatchCount: number;
+  newsEvidenceCount: number;
+  officialOrVerifiedCount: number;
+  missingMatchCount: number;
+}
+
+export interface ReportErrorAnalysis {
+  errorCount: number;
+  byType: Array<{ code: string; label: string; count: number; suggestedAction: string }>;
+}
+
+export interface ReportStrategySummary {
+  status: 'review_required' | 'observed';
+  findings: string[];
+  actions: string[];
+  safetyNotice: string;
+}
+
 export interface ReportResearchSnapshot {
   sourceType: 'post_daily' | 'post_weekly' | 'post_monthly';
   sourceRef: string;
   schemaVersion: number;
   researchMetrics: ReportResearchMetrics | null;
   researchBreakdowns?: ReportResearchBreakdowns | null;
+  performanceMetrics?: ReportPerformanceMetrics | null;
+  performanceBreakdowns?: ReportPerformanceBreakdowns | null;
+  evidenceSummary?: ReportEvidenceSummary | null;
+  errorAnalysis?: ReportErrorAnalysis | null;
+  strategySummary?: ReportStrategySummary | null;
+  upsetSummary?: { count?: number; severe_count?: number; rate?: number } | null;
   dailyReview?: Record<string, number | string | null> | null;
   aggregate?: Record<string, number | string | null> | null;
   dailyReportRefs?: string[];

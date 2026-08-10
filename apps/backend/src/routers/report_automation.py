@@ -56,8 +56,19 @@ def get_report_snapshot_for_source(
         "schemaVersion": snapshot.get("schemaVersion", 1),
         "researchMetrics": snapshot.get("researchMetrics"),
         "researchBreakdowns": snapshot.get("researchBreakdowns"),
+        "performanceMetrics": snapshot.get("performanceMetrics"),
+        "performanceBreakdowns": snapshot.get("performanceBreakdowns"),
+        "evidenceSummary": snapshot.get("evidenceSummary"),
+        "strategySummary": snapshot.get("strategySummary"),
+        "upsetSummary": snapshot.get("upsetSummary"),
         "upsetReport": snapshot.get("upsetReport"),
     }
+    error_analysis = snapshot.get("errorAnalysis")
+    if isinstance(error_analysis, dict):
+        report["errorAnalysis"] = {
+            "errorCount": error_analysis.get("errorCount", 0),
+            "byType": error_analysis.get("byType") or [],
+        }
     if source_type == "post_daily":
         report["dailyReview"] = snapshot.get("dailyReview")
     else:

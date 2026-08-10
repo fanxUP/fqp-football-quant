@@ -32,4 +32,12 @@ describe('AutomaticReportArchivePanel', () => {
     await waitFor(() => expect(apiMocks.archive).toHaveBeenCalled());
     expect(screen.getByText('本期暂无自动赛后报告')).toBeInTheDocument();
   });
+
+  it('shows an explicit error when the archive request fails', async () => {
+    apiMocks.archive.mockRejectedValueOnce(new Error('network'));
+    render(<AutomaticReportArchivePanel sourceType="post_daily" sourceRef="2026-08-09" />);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('自动赛后报告读取失败，请稍后重试。');
+    expect(screen.queryByText('本期暂无自动赛后报告')).not.toBeInTheDocument();
+  });
 });
