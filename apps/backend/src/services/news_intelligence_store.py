@@ -225,11 +225,13 @@ def review_news_event(
         cur.execute(
             """
             UPDATE news_events
-            SET verification_status = %s, updated_at = NOW()
+            SET verification_status = %s,
+                verified_at = CASE WHEN %s = 'verified' THEN NOW() ELSE NULL END,
+                updated_at = NOW()
             WHERE id = %s
             RETURNING id, verification_status
             """,
-            (status, event_id),
+            (status, status, event_id),
         )
         row = cur.fetchone()
         if not row:
@@ -270,3 +272,64 @@ def set_news_source_enabled(conn: Any, *, source_id: int, enabled: bool) -> dict
         "lastSuccessAt": _iso(row[5]),
         "lastError": row[6],
     }
+
+
+def list_news_feature_snapshots(
+    conn: Any,
+    *,
+    match_id: int | None = None,
+    limit: int = 20,
+    offset: int = 0,
+) -> tuple[list[dict[str, Any]], int]:
+    filters: list[str] = []
+    params: dict[str, Any] = {"limit": limit, "offset": offset}
+    if match_id is not None:
+        filters.append("feature.match_id = %(match_id)s")
+        params["match_id"] = match_id
+    where = f"WHERE {' AND '.join(filters)}" if filters else ""
+    with conn.cursor() as cur:
+        cur.execute(
+            f"""
+            SELECT snapshot.id, feature.match_id, match.official_match_code,
+                   match.league_name, match.home_team_name, match.away_team_name,
+                   feature.snapshot_label, snapshot.snapshot_cutoff,
+                   feature.home_net_impact, feature.away_net_impact,
+                   feature.verified_event_count, feature.pending_event_count,
+                   feature.evidence_count, feature.coverage_score,
+                   feature.confidence_score, feature.feature_version
+            FROM match_news_features feature
+            JOIN match_news_snapshots snapshot ON snapshot.id = feature.snapshot_id
+            JOIN official_matches match ON match.id = feature.match_id
+            {where}
+            ORDER BY snapshot.snapshot_cutoff DESC, snapshot.id DESC
+            LIMIT %(limit)s OFFSET %(offset)s
+            """,
+            params,
+        )
+        rows = cur.fetchall()
+        cur.execute(
+            f"SELECT COUNT(*) FROM match_news_features feature {where}",
+            params,
+        )
+        total_row = cur.fetchone()
+    return [
+        {
+            "snapshotId": row[0],
+            "matchId": row[1],
+            "officialMatchCode": row[2],
+            "leagueName": row[3],
+            "homeTeamName": row[4],
+            "awayTeamName": row[5],
+            "snapshotLabel": row[6],
+            "snapshotCutoff": _iso(row[7]),
+            "homeNetImpact": float(row[8]),
+            "awayNetImpact": float(row[9]),
+            "verifiedEventCount": int(row[10]),
+            "pendingEventCount": int(row[11]),
+            "evidenceCount": int(row[12]),
+            "coverageScore": float(row[13]),
+            "confidenceScore": float(row[14]),
+            "featureVersion": row[15],
+        }
+        for row in rows
+    ], int(total_row[0] if total_row else 0)

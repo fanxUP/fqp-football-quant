@@ -3,6 +3,7 @@ import { api } from '../core/apiClient';
 import type {
   NewsArticleItem,
   NewsEventItem,
+  NewsFeatureSnapshotItem,
   NewsIntelligenceOverview,
   NewsSourceItem,
 } from '../features/news-intelligence/types';
@@ -47,6 +48,7 @@ export default function NewsIntelligencePage() {
   const [overview, setOverview] = useState<NewsIntelligenceOverview | null>(null);
   const [articles, setArticles] = useState<NewsArticleItem[]>([]);
   const [events, setEvents] = useState<NewsEventItem[]>([]);
+  const [features, setFeatures] = useState<NewsFeatureSnapshotItem[]>([]);
   const [sources, setSources] = useState<NewsSourceItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -60,14 +62,22 @@ export default function NewsIntelligencePage() {
       api.newsIntelligence.articles({ limit: 20 }),
       api.newsIntelligence.events({ limit: 20 }),
       api.newsIntelligence.sources(),
+      api.newsIntelligence.features({ limit: 12 }),
       api.newsIntelligence.experiments(),
     ])
-      .then(([overviewResponse, articleResponse, eventResponse, sourceResponse]) => {
+      .then(([
+        overviewResponse,
+        articleResponse,
+        eventResponse,
+        sourceResponse,
+        featureResponse,
+      ]) => {
         if (cancelled) return;
         setOverview(overviewResponse.overview);
         setArticles(articleResponse.items);
         setEvents(eventResponse.items);
         setSources(sourceResponse.sources);
+        setFeatures(featureResponse.items);
       })
       .catch((requestError) => {
         if (!cancelled) {
@@ -200,6 +210,35 @@ export default function NewsIntelligencePage() {
                     </button>
                   </div>
                 )}
+              </article>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      <Card title="时点特征快照">
+        {features.length === 0 ? (
+          <div className="fqp-empty-state">暂无已到时点的特征快照</div>
+        ) : (
+          <div className="news-intelligence-feature-grid">
+            {features.map((feature) => (
+              <article key={feature.snapshotId} className="news-intelligence-feature-card">
+                <div className="news-intelligence-event-heading">
+                  <StatusBadge status="info" label={feature.snapshotLabel} />
+                  <strong>{feature.officialMatchCode}</strong>
+                </div>
+                <div className="news-intelligence-feature-match">
+                  {feature.homeTeamName} VS {feature.awayTeamName}
+                </div>
+                <div className="news-intelligence-feature-values">
+                  <span>主队影响 <strong>{feature.homeNetImpact.toFixed(2)}</strong></span>
+                  <span>客队影响 <strong>{feature.awayNetImpact.toFixed(2)}</strong></span>
+                  <span>核验事件 <strong>{feature.verifiedEventCount}</strong></span>
+                  <span>证据 <strong>{feature.evidenceCount}</strong></span>
+                </div>
+                <div className="news-intelligence-meta">
+                  截止 {formatTime(feature.snapshotCutoff)} · {feature.featureVersion}
+                </div>
               </article>
             ))}
           </div>

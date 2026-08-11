@@ -65,3 +65,22 @@ export interface NewsEventItem {
   awayTeamName: string | null;
   sourceCount: number;
 }
+
+export interface NewsFeatureSnapshotItem {
+  snapshotId: number;
+  matchId: number;
+  officialMatchCode: string;
+  leagueName: string | null;
+  homeTeamName: string;
+  awayTeamName: string;
+  snapshotLabel: 'T24H' | 'T6H' | 'T90M' | 'T45M' | 'POST120';
+  snapshotCutoff: string;
+  homeNetImpact: number;
+  awayNetImpact: number;
+  verifiedEventCount: number;
+  pendingEventCount: number;
+  evidenceCount: number;
+  coverageScore: number;
+  confidenceScore: number;
+  featureVersion: string;
+}

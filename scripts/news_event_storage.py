@@ -112,7 +112,7 @@ def process_pending_news_articles(conn: Any, limit: int = 200) -> dict[str, Any]
             cur.execute(
                 """
                 UPDATE news_events event
-                SET verification_status = 'verified', updated_at = NOW()
+                SET verification_status = 'verified', verified_at = NOW(), updated_at = NOW()
                 WHERE event.id = %s
                   AND event.verification_status = 'pending'
                   AND (

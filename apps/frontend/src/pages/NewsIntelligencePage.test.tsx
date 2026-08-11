@@ -3,11 +3,12 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import NewsIntelligencePage from './NewsIntelligencePage';
 
-const { overview, articles, events, sources, experiments, verifyEvent, setSourceEnabled } = vi.hoisted(() => ({
+const { overview, articles, events, sources, features, experiments, verifyEvent, setSourceEnabled } = vi.hoisted(() => ({
   overview: vi.fn(),
   articles: vi.fn(),
   events: vi.fn(),
   sources: vi.fn(),
+  features: vi.fn(),
   experiments: vi.fn(),
   verifyEvent: vi.fn(),
   setSourceEnabled: vi.fn(),
@@ -15,7 +16,7 @@ const { overview, articles, events, sources, experiments, verifyEvent, setSource
 
 vi.mock('../core/apiClient', () => ({
   api: { newsIntelligence: {
-    overview, articles, events, sources, experiments, verifyEvent, setSourceEnabled,
+    overview, articles, events, sources, features, experiments, verifyEvent, setSourceEnabled,
   } },
 }));
 
@@ -71,6 +72,24 @@ describe('NewsIntelligencePage', () => {
       lastSuccessAt: null,
       lastError: null,
     }], total: 1 });
+    features.mockResolvedValue({ items: [{
+      snapshotId: 12,
+      matchId: 31,
+      officialMatchCode: '周一101',
+      leagueName: '测试联赛',
+      homeTeamName: '主队',
+      awayTeamName: '客队',
+      snapshotLabel: 'T45M',
+      snapshotCutoff: '2026-08-11T10:15:00+00:00',
+      homeNetImpact: -0.72,
+      awayNetImpact: 0.4,
+      verifiedEventCount: 2,
+      pendingEventCount: 0,
+      evidenceCount: 3,
+      coverageScore: 1,
+      confidenceScore: 0.9,
+      featureVersion: 'news-features-v1',
+    }], total: 1, limit: 12, offset: 0 });
     experiments.mockResolvedValue({ experiments: [], productionFeatureEnabled: false });
     verifyEvent.mockResolvedValue({ event: { id: 9, verificationStatus: 'verified', reviewNote: null } });
     setSourceEnabled.mockResolvedValue({ source: { id: 2, enabled: false } });
@@ -83,6 +102,8 @@ describe('NewsIntelligencePage', () => {
     expect(screen.getByText('12')).toBeInTheDocument();
     expect(screen.getByText('球队公告')).toBeInTheDocument();
     expect(screen.getByText('主力前锋伤缺')).toBeInTheDocument();
+    expect(screen.getByText('T45M')).toBeInTheDocument();
+    expect(screen.getByText('主队 VS 客队')).toBeInTheDocument();
     expect(screen.getByText('待核验')).toBeInTheDocument();
     expect(screen.getAllByText('S级')).toHaveLength(2);
     expect(screen.getByText('正式预测未启用新闻特征')).toBeInTheDocument();

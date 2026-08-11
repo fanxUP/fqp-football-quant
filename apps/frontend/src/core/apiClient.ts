@@ -479,6 +479,16 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify({ enabled }),
     }),
+    features: (params?: { matchId?: number; limit?: number; offset?: number }) => request<{
+      items: import('../features/news-intelligence/types').NewsFeatureSnapshotItem[];
+      total: number;
+      limit: number;
+      offset: number;
+    }>(`/api/news-intelligence/features${qs({
+      matchId: params?.matchId,
+      limit: params?.limit ?? 20,
+      offset: params?.offset ?? 0,
+    })}`),
     experiments: () => request<{ experiments: unknown[]; productionFeatureEnabled: boolean }>(
       '/api/news-intelligence/experiments',
     ),

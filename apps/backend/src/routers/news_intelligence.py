@@ -12,6 +12,7 @@ from apps.backend.src.services.news_intelligence_store import (
     get_news_overview,
     list_news_articles,
     list_news_events,
+    list_news_feature_snapshots,
     list_news_sources,
     review_news_event,
     set_news_source_enabled,
@@ -88,6 +89,22 @@ def match_timeline(match_id: int) -> dict[str, object]:
     with get_db() as conn:
         items, total = list_news_events(conn, match_id=match_id, limit=100, offset=0)
     return {"matchId": match_id, "items": items, "total": total}
+
+
+@router.get("/features")
+def features(
+    match_id: Annotated[int | None, Query(alias="matchId", ge=1)] = None,
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> dict[str, object]:
+    with get_db() as conn:
+        items, total = list_news_feature_snapshots(
+            conn,
+            match_id=match_id,
+            limit=limit,
+            offset=offset,
+        )
+    return {"items": items, "total": total, "limit": limit, "offset": offset}
 
 
 @router.get("/sources")

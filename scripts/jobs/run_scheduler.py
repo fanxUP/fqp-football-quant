@@ -29,6 +29,9 @@ NEWS_COLLECTION_CRON = {"hour": "0-22/2", "minute": 20}
 # Convert already stored articles into local structured events after collection.
 # This job performs no network or model calls.
 NEWS_EXTRACTION_CRON = {"minute": 25}
+# Capture feature states just after the nearest extraction window. The inserts
+# are immutable and idempotent, so missed schedules can be reconstructed later.
+NEWS_SNAPSHOT_CRON = {"minute": "12,27,42,57"}
 # Daily reports are completion-driven.  The lightweight readiness check repeats
 # every 30 minutes during the review window and writes only after the official
 # result, the post-match evidence window, and related ticket settlement agree.
@@ -916,6 +919,19 @@ def main() -> None:
                 "cron",
                 **NEWS_EXTRACTION_CRON,
                 id="extract_news_events",
+            )
+            scheduler.add_job(
+                _audited_job(
+                    "build_news_feature_snapshots",
+                    "新闻特征时点快照",
+                    "model_agent",
+                    lambda: __import__(
+                        "scripts.jobs.build_news_feature_snapshots", fromlist=["run"]
+                    ).run(),
+                ),
+                "cron",
+                **NEWS_SNAPSHOT_CRON,
+                id="build_news_feature_snapshots",
             )
 
             # Weekly on Sunday at 04:00: run full backtest

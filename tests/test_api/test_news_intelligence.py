@@ -107,3 +107,28 @@ def test_source_status_can_be_disabled_without_changing_credentials(client, monk
 
     assert response.status_code == 200
     assert response.json() == {"source": source}
+
+
+def test_news_feature_snapshots_are_read_only_and_versioned(client, monkeypatch) -> None:
+    features = [{
+        "snapshotId": 12,
+        "matchId": 31,
+        "officialMatchCode": "周一101",
+        "snapshotLabel": "T45M",
+        "snapshotCutoff": "2026-08-11T10:15:00+00:00",
+        "homeNetImpact": -0.72,
+        "awayNetImpact": 0.4,
+        "verifiedEventCount": 2,
+        "featureVersion": "news-features-v1",
+    }]
+    monkeypatch.setattr(
+        news_intelligence,
+        "list_news_feature_snapshots",
+        lambda _conn, **_kwargs: (features, 1),
+    )
+
+    response = client.get("/api/news-intelligence/features?matchId=31")
+
+    assert response.status_code == 200
+    assert response.json()["items"] == features
+    assert response.json()["total"] == 1
