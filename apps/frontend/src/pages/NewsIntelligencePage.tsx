@@ -9,6 +9,7 @@ import type {
   NewsShadowExperiment,
   NewsReleaseState,
 } from '../features/news-intelligence/types';
+import NewsScreeningStatus from '../features/news-intelligence/NewsScreeningStatus';
 import Card from '../shared/components/Card';
 import ErrorState from '../shared/components/ErrorState';
 import LoadingSpinner from '../shared/components/LoadingSpinner';
@@ -199,6 +200,8 @@ export default function NewsIntelligencePage() {
       </div>
 
       {actionError && <div className="news-intelligence-action-error">{actionError}</div>}
+
+      <NewsScreeningStatus overview={overview} formatTime={formatTime} />
 
       <Card title="结构化情报事件">
         {events.length === 0 ? (

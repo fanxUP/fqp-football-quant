@@ -7,6 +7,12 @@ export interface NewsIntelligenceOverview {
   healthySourceCount: number;
   lastCapturedAt: string | null;
   productionFeatureEnabled: boolean;
+  screeningCount: number;
+  aiScreeningCount: number;
+  modelFailureCount: number;
+  pendingReviewCount: number;
+  lastModelInvocationAt: string | null;
+  newsAgentReady: boolean;
 }
 
 export interface NewsArticleItem {

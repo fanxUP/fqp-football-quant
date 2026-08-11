@@ -18,6 +18,14 @@
   gap: 12px;
 }
 
+.news-intelligence-screening .news-intelligence-event-heading {
+  flex-wrap: wrap;
+}
+
+.news-intelligence-screening .news-intelligence-meta + .news-intelligence-meta {
+  margin-top: 0.5rem;
+}
+
 .news-intelligence-list {
   display: flex;
   flex-direction: column;

@@ -24,10 +24,26 @@ def get_news_overview(conn: Any) -> dict[str, Any]:
                 EXISTS (
                     SELECT 1 FROM news_feature_release_settings
                     WHERE id = 1 AND mode = 'production'
+                ),
+                (SELECT COUNT(*) FROM news_article_screenings),
+                (SELECT COUNT(*) FROM news_article_screenings WHERE screening_method = 'llm'),
+                (SELECT COUNT(*) FROM news_model_invocations WHERE status = 'failed'),
+                (SELECT COUNT(*) FROM news_article_screenings
+                 WHERE accepted AND requires_review),
+                (SELECT MAX(created_at) FROM news_model_invocations),
+                EXISTS (
+                    SELECT 1
+                    FROM llm_agent_bindings binding
+                    JOIN llm_provider_configs provider
+                      ON provider.provider_code = binding.provider_code
+                    WHERE binding.agent_code = 'news_extraction_agent'
+                      AND binding.enabled
+                      AND provider.enabled
+                      AND provider.last_test_status = 'passed'
                 )
             """
         )
-        row = cur.fetchone() or (0, 0, 0, 0, None, False)
+        row = cur.fetchone() or (0, 0, 0, 0, None, False, 0, 0, 0, 0, None, False)
     return {
         "articleCount": int(row[0] or 0),
         "linkedMatchCount": int(row[1] or 0),
@@ -35,6 +51,12 @@ def get_news_overview(conn: Any) -> dict[str, Any]:
         "healthySourceCount": int(row[3] or 0),
         "lastCapturedAt": _iso(row[4]),
         "productionFeatureEnabled": bool(row[5]),
+        "screeningCount": int(row[6] or 0),
+        "aiScreeningCount": int(row[7] or 0),
+        "modelFailureCount": int(row[8] or 0),
+        "pendingReviewCount": int(row[9] or 0),
+        "lastModelInvocationAt": _iso(row[10]),
+        "newsAgentReady": bool(row[11]),
     }
 
 

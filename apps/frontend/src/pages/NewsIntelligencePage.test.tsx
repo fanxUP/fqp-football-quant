@@ -33,6 +33,12 @@ describe('NewsIntelligencePage', () => {
       healthySourceCount: 2,
       lastCapturedAt: '2026-08-11T01:00:00+00:00',
       productionFeatureEnabled: false,
+      screeningCount: 10,
+      aiScreeningCount: 7,
+      modelFailureCount: 1,
+      pendingReviewCount: 2,
+      lastModelInvocationAt: '2026-08-11T01:05:00+00:00',
+      newsAgentReady: true,
     } });
     articles.mockResolvedValue({ items: [{
       id: 7,
@@ -148,6 +154,9 @@ describe('NewsIntelligencePage', () => {
     expect(screen.getByText('待核验')).toBeInTheDocument();
     expect(screen.getAllByText('S级')).toHaveLength(2);
     expect(screen.getByText('正式预测未启用新闻特征')).toBeInTheDocument();
+    expect(screen.getByText('AI 筛选 Agent 已就绪')).toBeInTheDocument();
+    expect(screen.getByText(/模型筛选 7/)).toBeInTheDocument();
+    expect(screen.getByText(/回退 1 次/)).toBeInTheDocument();
   });
 
   it('可人工确认结构化事件并停用信源', async () => {
