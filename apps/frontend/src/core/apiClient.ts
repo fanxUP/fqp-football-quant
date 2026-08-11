@@ -429,6 +429,31 @@ export const api = {
       ),
   },
 
+  newsIntelligence: {
+    overview: () => request<{ overview: import('../features/news-intelligence/types').NewsIntelligenceOverview }>(
+      '/api/news-intelligence/overview',
+    ),
+    events: (params?: { matchId?: number; sourceLevel?: string; limit?: number; offset?: number }) =>
+      request<{
+        items: import('../features/news-intelligence/types').NewsArticleItem[];
+        total: number;
+        limit: number;
+        offset: number;
+      }>(`/api/news-intelligence/events${qs({
+        matchId: params?.matchId,
+        sourceLevel: params?.sourceLevel,
+        limit: params?.limit ?? 20,
+        offset: params?.offset ?? 0,
+      })}`),
+    sources: () => request<{
+      sources: import('../features/news-intelligence/types').NewsSourceItem[];
+      total: number;
+    }>('/api/news-intelligence/sources'),
+    experiments: () => request<{ experiments: unknown[]; productionFeatureEnabled: boolean }>(
+      '/api/news-intelligence/experiments',
+    ),
+  },
+
   agentWorkspace: {
     list: ({ limit = 20, offset = 0, reviewStatus = 'all', query = '' }: {
       limit?: number; offset?: number; reviewStatus?: 'all' | 'pending' | 'reviewed'; query?: string;

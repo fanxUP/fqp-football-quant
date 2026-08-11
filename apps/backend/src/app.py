@@ -20,6 +20,7 @@ from apps.backend.src.routers import (
     enrichment,
     health,
     model_providers,
+    news_intelligence,
     official,
     ops,
     pool,
@@ -74,6 +75,7 @@ def create_app() -> FastAPI:
     app.include_router(enrichment.router)
     app.include_router(ops.router)
     app.include_router(model_providers.router)
+    app.include_router(news_intelligence.router)
     app.include_router(backtests.router)
     app.include_router(pool.router)
     app.include_router(analysis.router)

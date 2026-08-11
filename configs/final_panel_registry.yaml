@@ -83,6 +83,13 @@ panels:
     order: 120
     visible: true
     icon: 🧊
+  - panel_id: news_intelligence
+    name: 新闻情报
+    route: /news-intelligence
+    module_id: news_intelligence_module
+    order: 122
+    visible: true
+    icon: 📰
   - panel_id: backtest_lab
     name: 策略验证
     route: /backtest

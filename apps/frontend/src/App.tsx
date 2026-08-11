@@ -30,6 +30,7 @@ const BettingCenterPage = lazy(() => import('./pages/BettingCenterPage'));
 const OddsMovementPage = lazy(() => import('./pages/OddsMovementPage'));
 const UpsetsPage = lazy(() => import('./pages/UpsetsPage'));
 const ReviewsPage = lazy(() => import('./pages/ReviewsPage'));
+const NewsIntelligencePage = lazy(() => import('./pages/NewsIntelligencePage'));
 
 function RedirectTo({ path, text = '正在进入页面...' }: { path: string; text?: string }) {
   const { translate } = useLanguage();
@@ -78,6 +79,7 @@ const routes = [
   { path: '/competition/history', render: () => <RedirectTo path="/betting?tab=competition" text="正在进入投注中心..." /> },
   { path: '/odds', render: () => <OddsMovementPage /> },
   { path: '/upsets', render: () => <UpsetsPage /> },
+  { path: '/news-intelligence', render: () => <NewsIntelligencePage /> },
 ];
 
 createRouter(routes);

@@ -32,6 +32,7 @@ vi.mock('./pages/PoolPage', () => ({ default: () => <div>Pool</div> }));
 vi.mock('./pages/AnalysisPage', () => ({ default: () => <div>Analysis</div> }));
 vi.mock('./pages/OddsMovementPage', () => ({ default: () => <div>Odds</div> }));
 vi.mock('./pages/ReviewsPage', () => ({ default: () => <div>Review reports</div> }));
+vi.mock('./pages/NewsIntelligencePage', () => ({ default: () => <div>News intelligence</div> }));
 
 describe('App legacy route redirects', () => {
   beforeEach(() => {
@@ -71,5 +72,13 @@ describe('App legacy route redirects', () => {
     render(<App />);
 
     expect(await screen.findByText('Review reports')).toBeInTheDocument();
+  });
+
+  it('opens news intelligence as an independent page', async () => {
+    window.location.hash = '#/news-intelligence';
+
+    render(<App />);
+
+    expect(await screen.findByText('News intelligence')).toBeInTheDocument();
   });
 });

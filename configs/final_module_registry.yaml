@@ -62,6 +62,13 @@ modules:
     safe_disable: true
     depends_on: [official_data_core, betting_center_module, model_research_module]
     panels: [upset_research]
+  - module_id: news_intelligence_module
+    name: 新闻情报
+    category: research
+    required: false
+    safe_disable: true
+    depends_on: [official_data_core]
+    panels: [news_intelligence]
   - module_id: pool_lottery_module
     name: 传统足彩胜负彩任选九
     category: strategy_lab
