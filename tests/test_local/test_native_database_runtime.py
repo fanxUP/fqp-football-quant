@@ -25,7 +25,16 @@ def test_incremental_migrations_track_applied_files() -> None:
     assert "SELECT checksum_sha256" in script
     assert "WHERE filename = :'filename'" in script
     assert "FQP_PSQL_BIN" in script
+    assert "command -v psql" in script
     assert "docker compose" not in script
+
+
+def test_incremental_migrations_are_sorted_by_numeric_version() -> None:
+    script = (PROJECT_ROOT / "ops/local/apply_local_migrations.sh").read_text(encoding="utf-8")
+
+    assert "ordered_migrations" in script
+    assert "sort -n -k1,1" in script
+    assert script.count('for migration in "$PROJECT_ROOT"/sql/*.sql') == 1
 
 
 def test_native_database_sessions_store_utc_timestamps() -> None:

@@ -4,7 +4,11 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 ENV_FILE="$PROJECT_ROOT/.env.local"
-PSQL_BIN="${FQP_PSQL_BIN:-/opt/homebrew/opt/postgresql@18/bin/psql}"
+PSQL_BIN="${FQP_PSQL_BIN:-}"
+if [[ -z "$PSQL_BIN" ]]; then
+    PSQL_BIN="$(command -v psql || true)"
+fi
+PSQL_BIN="${PSQL_BIN:-/opt/homebrew/opt/postgresql@18/bin/psql}"
 
 # 01-32 predate the migration ledger and already form the baseline of existing
 # local databases. New numbered files are applied once and recorded below.
@@ -20,6 +24,16 @@ migration_checksum() {
     else
         shasum -a 256 "$1" | awk '{print $1}'
     fi
+}
+
+ordered_migrations() {
+    local migration filename version
+    for migration in "$PROJECT_ROOT"/sql/*.sql; do
+        filename="$(basename "$migration")"
+        [[ "$filename" =~ ^([0-9]+)_.*\.sql$ ]] || continue
+        version=$((10#${BASH_REMATCH[1]}))
+        printf '%s\t%s\n' "$version" "$migration"
+    done | sort -n -k1,1 | cut -f2-
 }
 
 [[ -f "$ENV_FILE" ]] || { echo "[fqp-db] missing $ENV_FILE" >&2; exit 1; }
@@ -52,22 +66,21 @@ CREATE TABLE IF NOT EXISTS local_schema_migrations (
 ALTER TABLE local_schema_migrations
     ADD COLUMN IF NOT EXISTS checksum_sha256 TEXT;
 SQL
-    for migration in "$PROJECT_ROOT"/sql/*.sql; do
+    while IFS= read -r migration; do
         filename="$(basename "$migration")"
         [[ "$filename" =~ ^([0-9]+)_.*\.sql$ ]] || continue
         version=$((10#${BASH_REMATCH[1]}))
         if (( version <= BASELINE_VERSION )); then
             printf "INSERT INTO local_schema_migrations (filename) VALUES ('%s') ON CONFLICT DO NOTHING;\n" "$filename"
         fi
-    done
+    done < <(ordered_migrations)
     printf 'COMMIT;\n'
 } | psql_exec -q
 
 # Existing ledgers predate checksums. Accept the current repository once as the
 # baseline, then fail closed whenever an applied migration is edited later.
-for migration in "$PROJECT_ROOT"/sql/*.sql; do
+while IFS= read -r migration; do
     filename="$(basename "$migration")"
-    [[ "$filename" =~ ^([0-9]+)_.*\.sql$ ]] || continue
     checksum="$(migration_checksum "$migration")"
     psql_exec -q -v filename="$filename" -v checksum="$checksum" <<'SQL'
 UPDATE local_schema_migrations
@@ -75,9 +88,9 @@ SET checksum_sha256 = :'checksum'
 WHERE filename = :'filename'
   AND checksum_sha256 IS NULL;
 SQL
-done
+done < <(ordered_migrations)
 
-for migration in "$PROJECT_ROOT"/sql/*.sql; do
+while IFS= read -r migration; do
     filename="$(basename "$migration")"
     [[ "$filename" =~ ^([0-9]+)_.*\.sql$ ]] || continue
     version=$((10#${BASH_REMATCH[1]}))
@@ -106,6 +119,6 @@ SQL
         printf "\nINSERT INTO local_schema_migrations (filename, checksum_sha256) VALUES ('%s', '%s');\n" "$filename" "$checksum"
         printf 'COMMIT;\n'
     } | psql_exec -q
-done
+done < <(ordered_migrations)
 
 echo "[fqp-db] incremental migrations are current"
