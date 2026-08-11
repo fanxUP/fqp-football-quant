@@ -333,3 +333,72 @@ def list_news_feature_snapshots(
         }
         for row in rows
     ], int(total_row[0] if total_row else 0)
+
+
+def get_news_shadow_experiment(conn: Any) -> dict[str, Any]:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT COUNT(*), AVG(baseline_brier), AVG(shadow_brier),
+                   AVG(baseline_log_loss), AVG(shadow_log_loss)
+            FROM news_shadow_evaluations
+            """
+        )
+        summary = cur.fetchone() or (0, None, None, None, None)
+        cur.execute(
+            """
+            SELECT model.model_name, model.version, shadow.shadow_version,
+                   COUNT(evaluation.id), AVG(evaluation.baseline_brier),
+                   AVG(evaluation.shadow_brier), AVG(evaluation.baseline_log_loss),
+                   AVG(evaluation.shadow_log_loss)
+            FROM news_shadow_predictions shadow
+            JOIN model_versions model ON model.id = shadow.baseline_model_version_id
+            LEFT JOIN news_shadow_evaluations evaluation
+                ON evaluation.shadow_prediction_id = shadow.id
+            GROUP BY model.model_name, model.version, shadow.shadow_version
+            ORDER BY COUNT(evaluation.id) DESC, model.model_name
+            """
+        )
+        model_rows = cur.fetchall()
+
+    def rounded(value: Any) -> float | None:
+        return round(float(value), 6) if value is not None else None
+
+    baseline_brier = rounded(summary[1])
+    shadow_brier = rounded(summary[2])
+    baseline_log_loss = rounded(summary[3])
+    shadow_log_loss = rounded(summary[4])
+    models = []
+    for row in model_rows:
+        model_baseline_brier = rounded(row[4])
+        model_shadow_brier = rounded(row[5])
+        models.append(
+            {
+                "modelName": row[0],
+                "modelVersion": row[1],
+                "shadowVersion": row[2],
+                "sampleSize": int(row[3] or 0),
+                "baselineBrier": model_baseline_brier,
+                "shadowBrier": model_shadow_brier,
+                "brierDelta": round(model_shadow_brier - model_baseline_brier, 6)
+                if model_shadow_brier is not None and model_baseline_brier is not None
+                else None,
+                "baselineLogLoss": rounded(row[6]),
+                "shadowLogLoss": rounded(row[7]),
+            }
+        )
+    return {
+        "sampleSize": int(summary[0] or 0),
+        "baselineBrier": baseline_brier,
+        "shadowBrier": shadow_brier,
+        "brierDelta": round(shadow_brier - baseline_brier, 6)
+        if shadow_brier is not None and baseline_brier is not None
+        else None,
+        "baselineLogLoss": baseline_log_loss,
+        "shadowLogLoss": shadow_log_loss,
+        "logLossDelta": round(shadow_log_loss - baseline_log_loss, 6)
+        if shadow_log_loss is not None and baseline_log_loss is not None
+        else None,
+        "productionFeatureEnabled": False,
+        "models": models,
+    }

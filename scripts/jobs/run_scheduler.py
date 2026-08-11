@@ -32,6 +32,8 @@ NEWS_EXTRACTION_CRON = {"minute": 25}
 # Capture feature states just after the nearest extraction window. The inserts
 # are immutable and idempotent, so missed schedules can be reconstructed later.
 NEWS_SNAPSHOT_CRON = {"minute": "12,27,42,57"}
+# Compare the latest frozen T-45 snapshot with the formal baseline once per hour.
+NEWS_SHADOW_CRON = {"minute": 32}
 # Daily reports are completion-driven.  The lightweight readiness check repeats
 # every 30 minutes during the review window and writes only after the official
 # result, the post-match evidence window, and related ticket settlement agree.
@@ -932,6 +934,19 @@ def main() -> None:
                 "cron",
                 **NEWS_SNAPSHOT_CRON,
                 id="build_news_feature_snapshots",
+            )
+            scheduler.add_job(
+                _audited_job(
+                    "run_news_shadow_model",
+                    "新闻影子模型评估",
+                    "model_agent",
+                    lambda: __import__(
+                        "scripts.jobs.run_news_shadow_model", fromlist=["run"]
+                    ).run(),
+                ),
+                "cron",
+                **NEWS_SHADOW_CRON,
+                id="run_news_shadow_model",
             )
 
             # Weekly on Sunday at 04:00: run full backtest

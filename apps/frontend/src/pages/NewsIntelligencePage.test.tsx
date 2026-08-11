@@ -90,7 +90,27 @@ describe('NewsIntelligencePage', () => {
       confidenceScore: 0.9,
       featureVersion: 'news-features-v1',
     }], total: 1, limit: 12, offset: 0 });
-    experiments.mockResolvedValue({ experiments: [], productionFeatureEnabled: false });
+    experiments.mockResolvedValue({ experiment: {
+      sampleSize: 120,
+      baselineBrier: 0.61,
+      shadowBrier: 0.59,
+      brierDelta: -0.02,
+      baselineLogLoss: 1.02,
+      shadowLogLoss: 0.99,
+      logLossDelta: -0.03,
+      productionFeatureEnabled: false,
+      models: [{
+        modelName: 'dixon_coles',
+        modelVersion: 'v1',
+        shadowVersion: 'news-shadow-v1',
+        sampleSize: 120,
+        baselineBrier: 0.61,
+        shadowBrier: 0.59,
+        brierDelta: -0.02,
+        baselineLogLoss: 1.02,
+        shadowLogLoss: 0.99,
+      }],
+    } });
     verifyEvent.mockResolvedValue({ event: { id: 9, verificationStatus: 'verified', reviewNote: null } });
     setSourceEnabled.mockResolvedValue({ source: { id: 2, enabled: false } });
   });
@@ -104,6 +124,9 @@ describe('NewsIntelligencePage', () => {
     expect(screen.getByText('主力前锋伤缺')).toBeInTheDocument();
     expect(screen.getByText('T45M')).toBeInTheDocument();
     expect(screen.getByText('主队 VS 客队')).toBeInTheDocument();
+    expect(screen.getByText('影子模型对比')).toBeInTheDocument();
+    expect(screen.getByText('0.6100')).toBeInTheDocument();
+    expect(screen.getByText('dixon_coles')).toBeInTheDocument();
     expect(screen.getByText('待核验')).toBeInTheDocument();
     expect(screen.getAllByText('S级')).toHaveLength(2);
     expect(screen.getByText('正式预测未启用新闻特征')).toBeInTheDocument();

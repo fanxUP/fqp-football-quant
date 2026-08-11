@@ -489,7 +489,9 @@ export const api = {
       limit: params?.limit ?? 20,
       offset: params?.offset ?? 0,
     })}`),
-    experiments: () => request<{ experiments: unknown[]; productionFeatureEnabled: boolean }>(
+    experiments: () => request<{
+      experiment: import('../features/news-intelligence/types').NewsShadowExperiment;
+    }>(
       '/api/news-intelligence/experiments',
     ),
   },

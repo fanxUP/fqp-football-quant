@@ -84,3 +84,27 @@ export interface NewsFeatureSnapshotItem {
   confidenceScore: number;
   featureVersion: string;
 }
+
+export interface NewsShadowModelMetric {
+  modelName: string;
+  modelVersion: string;
+  shadowVersion: string;
+  sampleSize: number;
+  baselineBrier: number | null;
+  shadowBrier: number | null;
+  brierDelta: number | null;
+  baselineLogLoss: number | null;
+  shadowLogLoss: number | null;
+}
+
+export interface NewsShadowExperiment {
+  sampleSize: number;
+  baselineBrier: number | null;
+  shadowBrier: number | null;
+  brierDelta: number | null;
+  baselineLogLoss: number | null;
+  shadowLogLoss: number | null;
+  logLossDelta: number | null;
+  productionFeatureEnabled: boolean;
+  models: NewsShadowModelMetric[];
+}

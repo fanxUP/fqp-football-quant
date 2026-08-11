@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field, field_validator
 from apps.backend.src.db import get_db
 from apps.backend.src.services.news_intelligence_store import (
     get_news_overview,
+    get_news_shadow_experiment,
     list_news_articles,
     list_news_events,
     list_news_feature_snapshots,
@@ -141,4 +142,6 @@ def verify_event(event_id: int, body: EventVerificationRequest) -> dict[str, obj
 
 @router.get("/experiments")
 def experiments() -> dict[str, object]:
-    return {"experiments": [], "productionFeatureEnabled": False}
+    with get_db() as conn:
+        experiment = get_news_shadow_experiment(conn)
+    return {"experiment": experiment}

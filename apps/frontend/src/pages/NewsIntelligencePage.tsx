@@ -6,6 +6,7 @@ import type {
   NewsFeatureSnapshotItem,
   NewsIntelligenceOverview,
   NewsSourceItem,
+  NewsShadowExperiment,
 } from '../features/news-intelligence/types';
 import Card from '../shared/components/Card';
 import ErrorState from '../shared/components/ErrorState';
@@ -44,11 +45,16 @@ function verificationBadge(status: NewsEventItem['verificationStatus']) {
   return 'warning' as const;
 }
 
+function formatMetric(value: number | null): string {
+  return value === null ? '样本不足' : value.toFixed(4);
+}
+
 export default function NewsIntelligencePage() {
   const [overview, setOverview] = useState<NewsIntelligenceOverview | null>(null);
   const [articles, setArticles] = useState<NewsArticleItem[]>([]);
   const [events, setEvents] = useState<NewsEventItem[]>([]);
   const [features, setFeatures] = useState<NewsFeatureSnapshotItem[]>([]);
+  const [experiment, setExperiment] = useState<NewsShadowExperiment | null>(null);
   const [sources, setSources] = useState<NewsSourceItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -71,6 +77,7 @@ export default function NewsIntelligencePage() {
         eventResponse,
         sourceResponse,
         featureResponse,
+        experimentResponse,
       ]) => {
         if (cancelled) return;
         setOverview(overviewResponse.overview);
@@ -78,6 +85,7 @@ export default function NewsIntelligencePage() {
         setEvents(eventResponse.items);
         setSources(sourceResponse.sources);
         setFeatures(featureResponse.items);
+        setExperiment(experimentResponse.experiment);
       })
       .catch((requestError) => {
         if (!cancelled) {
@@ -240,6 +248,28 @@ export default function NewsIntelligencePage() {
                   截止 {formatTime(feature.snapshotCutoff)} · {feature.featureVersion}
                 </div>
               </article>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      <Card title="影子模型对比">
+        <div className="news-intelligence-shadow-summary">
+          <div><span>已结算样本</span><strong>{experiment?.sampleSize ?? 0}</strong></div>
+          <div><span>基线 Brier</span><strong>{formatMetric(experiment?.baselineBrier ?? null)}</strong></div>
+          <div><span>新闻影子 Brier</span><strong>{formatMetric(experiment?.shadowBrier ?? null)}</strong></div>
+          <div><span>Brier 变化</span><strong>{formatMetric(experiment?.brierDelta ?? null)}</strong></div>
+        </div>
+        <div className="news-intelligence-meta">
+          数值越低越好。当前只做影子对比，不会改变正式预测、推荐、投注或风控。
+        </div>
+        {experiment && experiment.models.length > 0 && (
+          <div className="news-intelligence-model-list">
+            {experiment.models.map((model) => (
+              <div key={`${model.modelName}-${model.modelVersion}`}>
+                <strong>{model.modelName}</strong>
+                <span>{model.sampleSize} 场 · Brier {formatMetric(model.baselineBrier)} → {formatMetric(model.shadowBrier)}</span>
+              </div>
             ))}
           </div>
         )}

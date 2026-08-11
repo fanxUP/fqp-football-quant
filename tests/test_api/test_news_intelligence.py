@@ -132,3 +132,27 @@ def test_news_feature_snapshots_are_read_only_and_versioned(client, monkeypatch)
     assert response.status_code == 200
     assert response.json()["items"] == features
     assert response.json()["total"] == 1
+
+
+def test_news_shadow_experiment_returns_baseline_comparison(client, monkeypatch) -> None:
+    experiment = {
+        "sampleSize": 120,
+        "baselineBrier": 0.61,
+        "shadowBrier": 0.59,
+        "brierDelta": -0.02,
+        "baselineLogLoss": 1.02,
+        "shadowLogLoss": 0.99,
+        "logLossDelta": -0.03,
+        "productionFeatureEnabled": False,
+        "models": [],
+    }
+    monkeypatch.setattr(
+        news_intelligence,
+        "get_news_shadow_experiment",
+        lambda _conn: experiment,
+    )
+
+    response = client.get("/api/news-intelligence/experiments")
+
+    assert response.status_code == 200
+    assert response.json() == {"experiment": experiment}

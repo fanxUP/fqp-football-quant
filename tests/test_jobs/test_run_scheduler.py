@@ -10,6 +10,7 @@ from scripts.jobs.run_scheduler import (
     MONTHLY_REPORT_CHECK_CRON,
     NEWS_COLLECTION_CRON,
     NEWS_EXTRACTION_CRON,
+    NEWS_SHADOW_CRON,
     NEWS_SNAPSHOT_CRON,
     OFFICIAL_SCHEDULE_CRON,
     SEASON_RECONCILIATION_RETRY_TIME,
@@ -30,9 +31,11 @@ def test_news_jobs_use_staggered_conservative_intervals() -> None:
     assert NEWS_COLLECTION_CRON == {"hour": "0-22/2", "minute": 20}
     assert NEWS_EXTRACTION_CRON == {"minute": 25}
     assert NEWS_SNAPSHOT_CRON == {"minute": "12,27,42,57"}
+    assert NEWS_SHADOW_CRON == {"minute": 32}
     assert 'id="collect_news_intelligence"' in source
     assert 'id="extract_news_events"' in source
     assert 'id="build_news_feature_snapshots"' in source
+    assert 'id="run_news_shadow_model"' in source
     assert source.index('id="collect_news_intelligence"') < source.index(
         'id="extract_news_events"'
     )
