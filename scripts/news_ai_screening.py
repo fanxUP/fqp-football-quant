@@ -211,7 +211,7 @@ def screen_news_article(
     try:
         reply = invoke_model(prompt)
         payload = parse_news_screening_payload(reply.content)
-    except (ModelGatewayError, ValueError):
+    except ModelGatewayError, ValueError:
         duration_ms = round((perf_counter() - started_at) * 1_000)
         return _rule_result(
             article,
@@ -250,9 +250,7 @@ def screen_news_article(
     if not isinstance(available_at, datetime) or not isinstance(match_id, int):
         raise ValueError("新闻事件缺少有效的比赛或可用时间")
     verification_status = (
-        "verified"
-        if source_level in {"S", "A"} and not payload["requires_review"]
-        else "pending"
+        "verified" if source_level in {"S", "A"} and not payload["requires_review"] else "pending"
     )
     draft = EventDraft(
         event_type=payload["event_type"],

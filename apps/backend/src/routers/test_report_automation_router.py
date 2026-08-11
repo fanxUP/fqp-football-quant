@@ -14,19 +14,22 @@ class _Cursor:
         return None
 
     def fetchone(self):
-        return ({
-            "schemaVersion": 4,
-            "researchMetrics": {"matchCount": 3},
-            "performanceMetrics": {"sampleCount": 9, "hitRate": 0.5556},
-            "performanceBreakdowns": {"models": [{"key": "Elo", "sampleCount": 3}]},
-            "evidenceSummary": {"newsEvidenceCount": 0},
-            "errorAnalysis": {"errorCount": 4, "items": [{"matchId": 99}]},
-            "strategySummary": {"status": "review_required"},
-            "upsetSummary": {"count": 1},
-            "backfill": {"interpretationRequiresRefresh": True},
-            "performanceSeries": [{"matchId": 99}],
-            "matches": [{"matchId": 99}],
-        }, 2)
+        return (
+            {
+                "schemaVersion": 4,
+                "researchMetrics": {"matchCount": 3},
+                "performanceMetrics": {"sampleCount": 9, "hitRate": 0.5556},
+                "performanceBreakdowns": {"models": [{"key": "Elo", "sampleCount": 3}]},
+                "evidenceSummary": {"newsEvidenceCount": 0},
+                "errorAnalysis": {"errorCount": 4, "items": [{"matchId": 99}]},
+                "strategySummary": {"status": "review_required"},
+                "upsetSummary": {"count": 1},
+                "backfill": {"interpretationRequiresRefresh": True},
+                "performanceSeries": [{"matchId": 99}],
+                "matches": [{"matchId": 99}],
+            },
+            2,
+        )
 
 
 class _Connection:

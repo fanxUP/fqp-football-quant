@@ -69,7 +69,9 @@ def store_news_candidates(
         if not policy.enabled:
             filtered += 1
             continue
-        source_code = "publisher:" + hashlib.sha256(candidate.source_domain.encode()).hexdigest()[:24]
+        source_code = (
+            "publisher:" + hashlib.sha256(candidate.source_domain.encode()).hexdigest()[:24]
+        )
         content_hash = hashlib.sha256(
             f"{candidate.title}\n{candidate.description}".encode()
         ).hexdigest()

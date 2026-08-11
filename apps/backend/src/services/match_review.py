@@ -7,7 +7,13 @@ from typing import Any
 
 
 def _as_text(value: Any) -> str | None:
-    return value.isoformat() if hasattr(value, "isoformat") else str(value) if value is not None else None
+    return (
+        value.isoformat()
+        if hasattr(value, "isoformat")
+        else str(value)
+        if value is not None
+        else None
+    )
 
 
 def build_match_review_cards(conn: Any, review_date: str) -> list[dict[str, Any]]:
@@ -102,58 +108,89 @@ def build_match_review_cards(conn: Any, review_date: str) -> list[dict[str, Any]
 
     prediction_map: dict[int, list[dict[str, Any]]] = defaultdict(list)
     for row in predictions:
-        prediction_map[row[0]].append({
-            "modelName": row[1], "playType": row[2], "optionCode": row[3],
-            "modelProbability": float(row[4]) if row[4] is not None else None,
-            "marketProbability": float(row[5]) if row[5] is not None else None,
-            "ev": float(row[6]) if row[6] is not None else None,
-            "confidenceScore": float(row[7]) if row[7] is not None else None,
-            "predictTime": _as_text(row[8]),
-        })
+        prediction_map[row[0]].append(
+            {
+                "modelName": row[1],
+                "playType": row[2],
+                "optionCode": row[3],
+                "modelProbability": float(row[4]) if row[4] is not None else None,
+                "marketProbability": float(row[5]) if row[5] is not None else None,
+                "ev": float(row[6]) if row[6] is not None else None,
+                "confidenceScore": float(row[7]) if row[7] is not None else None,
+                "predictTime": _as_text(row[8]),
+            }
+        )
     odds_map: dict[int, list[dict[str, Any]]] = defaultdict(list)
     for row in odds:
-        odds_map[row[0]].append({
-            "playType": row[1], "optionCode": row[2], "optionName": row[3],
-            "spValue": float(row[4]) if row[4] is not None else None,
-            "handicap": float(row[5]) if row[5] is not None else None,
-            "snapshotTime": _as_text(row[6]),
-        })
+        odds_map[row[0]].append(
+            {
+                "playType": row[1],
+                "optionCode": row[2],
+                "optionName": row[3],
+                "spValue": float(row[4]) if row[4] is not None else None,
+                "handicap": float(row[5]) if row[5] is not None else None,
+                "snapshotTime": _as_text(row[6]),
+            }
+        )
     evidence_map: dict[int, list[dict[str, Any]]] = defaultdict(list)
     for row in evidence_rows:
-        evidence_map[row[0]].append({
-            "phase": row[1], "sourceType": "external_reference", "sourceName": row[2],
-            "sourceReference": row[3], "sourceUrl": row[3], "publishedAt": _as_text(row[4]),
-            "capturedAt": _as_text(row[5]), "headline": row[6], "summary": row[7],
-            "reliability": row[8],
-        })
+        evidence_map[row[0]].append(
+            {
+                "phase": row[1],
+                "sourceType": "external_reference",
+                "sourceName": row[2],
+                "sourceReference": row[3],
+                "sourceUrl": row[3],
+                "publishedAt": _as_text(row[4]),
+                "capturedAt": _as_text(row[5]),
+                "headline": row[6],
+                "summary": row[7],
+                "reliability": row[8],
+            }
+        )
     for row in provider_evidence_rows:
         reference = str(row[3] or "")
-        evidence_map[row[0]].append({
-            "phase": row[1],
-            "sourceType": row[2],
-            "sourceName": "API-Football 比赛资料",
-            "sourceReference": reference or None,
-            "sourceUrl": reference if reference.startswith(("http://", "https://")) else None,
-            "publishedAt": _as_text(row[4]),
-            "capturedAt": _as_text(row[5]),
-            "headline": row[6],
-            "summary": row[7],
-            "reliability": "verified" if row[8] == "verified" else "unverified",
-        })
+        evidence_map[row[0]].append(
+            {
+                "phase": row[1],
+                "sourceType": row[2],
+                "sourceName": "API-Football 比赛资料",
+                "sourceReference": reference or None,
+                "sourceUrl": reference if reference.startswith(("http://", "https://")) else None,
+                "publishedAt": _as_text(row[4]),
+                "capturedAt": _as_text(row[5]),
+                "headline": row[6],
+                "summary": row[7],
+                "reliability": "verified" if row[8] == "verified" else "unverified",
+            }
+        )
 
     cards: list[dict[str, Any]] = []
     for row in matches:
         card_evidence = evidence_map[row[0]]
-        cards.append({
-            "matchId": row[0], "officialCode": row[1], "leagueName": row[2],
-            "homeTeamName": row[3], "awayTeamName": row[4], "kickoffTime": _as_text(row[5]),
-            "result": {
-                "homeGoals": row[7], "awayGoals": row[8], "spfResult": row[9],
-                "rqspfResult": row[10], "totalGoalsResult": row[11],
-                "scoreResult": row[12], "halfFullResult": row[13],
-                "status": row[14], "publishedAt": _as_text(row[15]),
-            },
-            "modelSignals": prediction_map[row[0]], "oddsSignals": odds_map[row[0]], "evidence": card_evidence,
-            "evidenceStatus": "已收录" if card_evidence else "未查到可靠资料",
-        })
+        cards.append(
+            {
+                "matchId": row[0],
+                "officialCode": row[1],
+                "leagueName": row[2],
+                "homeTeamName": row[3],
+                "awayTeamName": row[4],
+                "kickoffTime": _as_text(row[5]),
+                "result": {
+                    "homeGoals": row[7],
+                    "awayGoals": row[8],
+                    "spfResult": row[9],
+                    "rqspfResult": row[10],
+                    "totalGoalsResult": row[11],
+                    "scoreResult": row[12],
+                    "halfFullResult": row[13],
+                    "status": row[14],
+                    "publishedAt": _as_text(row[15]),
+                },
+                "modelSignals": prediction_map[row[0]],
+                "oddsSignals": odds_map[row[0]],
+                "evidence": card_evidence,
+                "evidenceStatus": "已收录" if card_evidence else "未查到可靠资料",
+            }
+        )
     return cards

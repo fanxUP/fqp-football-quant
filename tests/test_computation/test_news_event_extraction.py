@@ -32,15 +32,17 @@ def test_official_injury_notice_becomes_verified_negative_event() -> None:
 
 
 def test_rumour_source_is_capped_and_requires_review() -> None:
-    event = extract_rule_event({
-        "title": "Rumour: coach could rotate the whole team",
-        "description": "Unconfirmed social post",
-        "source_level": "D",
-        "available_at": datetime(2026, 8, 10, 8, tzinfo=UTC),
-        "match_id": 31,
-        "home_team_name": "Home Club",
-        "away_team_name": "Away Club",
-    })
+    event = extract_rule_event(
+        {
+            "title": "Rumour: coach could rotate the whole team",
+            "description": "Unconfirmed social post",
+            "source_level": "D",
+            "available_at": datetime(2026, 8, 10, 8, tzinfo=UTC),
+            "match_id": 31,
+            "home_team_name": "Home Club",
+            "away_team_name": "Away Club",
+        }
+    )
 
     assert event is not None
     assert event.event_type == "rotation"
@@ -49,15 +51,17 @@ def test_rumour_source_is_capped_and_requires_review() -> None:
 
 
 def test_unrelated_article_does_not_create_an_event() -> None:
-    event = extract_rule_event({
-        "title": "Supporters remember a classic match",
-        "description": "Historical feature",
-        "source_level": "B",
-        "available_at": datetime(2026, 8, 10, 8, tzinfo=UTC),
-        "match_id": 31,
-        "home_team_name": "Home Club",
-        "away_team_name": "Away Club",
-    })
+    event = extract_rule_event(
+        {
+            "title": "Supporters remember a classic match",
+            "description": "Historical feature",
+            "source_level": "B",
+            "available_at": datetime(2026, 8, 10, 8, tzinfo=UTC),
+            "match_id": 31,
+            "home_team_name": "Home Club",
+            "away_team_name": "Away Club",
+        }
+    )
 
     assert event is None
 

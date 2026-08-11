@@ -14,7 +14,13 @@ def test_automatic_report_prompt_requires_auditable_research_sections() -> None:
         {"researchMetrics": {"realProfitLoss": 20}},
     )
 
-    for heading in ("## 一、已确认事实", "## 二、模型与市场", "## 三、结果与盈亏", "## 四、异常与证据缺口", "## 五、待人工核验"):
+    for heading in (
+        "## 一、已确认事实",
+        "## 二、模型与市场",
+        "## 三、结果与盈亏",
+        "## 四、异常与证据缺口",
+        "## 五、待人工核验",
+    ):
         assert heading in prompt
 
 
@@ -77,7 +83,9 @@ def test_automatic_report_archives_one_enabled_call_with_source_reference(monkey
         lambda *_args, **_kwargs: archived,
     )
     audit = MagicMock()
-    monkeypatch.setattr("apps.backend.src.services.report_automation.record_model_invocation", audit)
+    monkeypatch.setattr(
+        "apps.backend.src.services.report_automation.record_model_invocation", audit
+    )
 
     result = maybe_generate_post_match_report(
         object(),
@@ -111,7 +119,9 @@ def test_automatic_report_failure_is_recorded_without_raising(monkeypatch) -> No
         lambda *_args: (_ for _ in ()).throw(ModelGatewayError("模型不可用")),
     )
     audit = MagicMock()
-    monkeypatch.setattr("apps.backend.src.services.report_automation.record_model_invocation", audit)
+    monkeypatch.setattr(
+        "apps.backend.src.services.report_automation.record_model_invocation", audit
+    )
 
     result = maybe_generate_post_match_report(
         object(), source_type="post_weekly", source_ref="2026-08-03", title="周报", snapshot={}

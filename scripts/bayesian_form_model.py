@@ -15,14 +15,13 @@ TEAM_OUTCOME_PRIOR = {"3": 1.3, "1": 1.2, "0": 1.0}
 def _posterior(outcomes: Sequence[str]) -> dict[str, float] | None:
     if len(outcomes) < MIN_TEAM_MATCHES:
         return None
-    counts = Counter(outcome for outcome in outcomes[:MAX_TEAM_MATCHES] if outcome in TEAM_OUTCOME_PRIOR)
+    counts = Counter(
+        outcome for outcome in outcomes[:MAX_TEAM_MATCHES] if outcome in TEAM_OUTCOME_PRIOR
+    )
     if sum(counts.values()) < MIN_TEAM_MATCHES:
         return None
     total = sum(TEAM_OUTCOME_PRIOR.values()) + sum(counts.values())
-    return {
-        code: (TEAM_OUTCOME_PRIOR[code] + counts[code]) / total
-        for code in ("3", "1", "0")
-    }
+    return {code: (TEAM_OUTCOME_PRIOR[code] + counts[code]) / total for code in ("3", "1", "0")}
 
 
 def probabilities_from_team_outcomes(
@@ -38,10 +37,7 @@ def probabilities_from_team_outcomes(
     if home is None or away is None:
         return None
     away_as_match = {"3": away["0"], "1": away["1"], "0": away["3"]}
-    raw = {
-        code: (home[code] ** 0.55) * (away_as_match[code] ** 0.45)
-        for code in ("3", "1", "0")
-    }
+    raw = {code: (home[code] ** 0.55) * (away_as_match[code] ** 0.45) for code in ("3", "1", "0")}
     total = sum(raw.values())
     home_win = round(raw["3"] / total, 8)
     draw = round(raw["1"] / total, 8)

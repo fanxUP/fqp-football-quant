@@ -202,7 +202,9 @@ def process_pending_news_articles(conn: Any, limit: int = 200) -> dict[str, Any]
                     event_id,
                     row[5],
                     draft.entity_role,
-                    row[6] if draft.entity_role == "home" else row[7]
+                    row[6]
+                    if draft.entity_role == "home"
+                    else row[7]
                     if draft.entity_role == "away"
                     else None,
                 ),

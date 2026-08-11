@@ -63,12 +63,8 @@ def build_feature_vector(events: list[dict[str, Any]]) -> dict[str, Any]:
     return {
         "featureVersion": FEATURE_VERSION,
         **impacts,
-        "homeNetImpact": round(
-            impacts["homePositiveImpact"] - impacts["homeNegativeImpact"], 6
-        ),
-        "awayNetImpact": round(
-            impacts["awayPositiveImpact"] - impacts["awayNegativeImpact"], 6
-        ),
+        "homeNetImpact": round(impacts["homePositiveImpact"] - impacts["homeNegativeImpact"], 6),
+        "awayNetImpact": round(impacts["awayPositiveImpact"] - impacts["awayNegativeImpact"], 6),
         "verifiedEventCount": verified,
         "pendingEventCount": pending,
         "evidenceCount": evidence_count,

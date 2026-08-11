@@ -30,7 +30,9 @@ def test_daily_review_only_counts_prematch_features_and_predictions(mock_conn):
             "assess_daily_report_readiness",
             return_value={"canGenerate": True, "status": "ready"},
         ),
-        patch.object(generate_daily_review, "has_completed_report_generation_run", return_value=False),
+        patch.object(
+            generate_daily_review, "has_completed_report_generation_run", return_value=False
+        ),
         patch.object(
             generate_daily_review,
             "upsert_report_generation_run",

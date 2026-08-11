@@ -1,6 +1,25 @@
 from scripts.news_release_gate import apply_overlay_rows
 
-ROW = (1, 31, 7, "spf", "3", 0.45, 0.4, 0.08, 0.8, 0.2, 11, 5, "主队", "客队", "联赛", None, 2.0, "dixon_coles")
+ROW = (
+    1,
+    31,
+    7,
+    "spf",
+    "3",
+    0.45,
+    0.4,
+    0.08,
+    0.8,
+    0.2,
+    11,
+    5,
+    "主队",
+    "客队",
+    "联赛",
+    None,
+    2.0,
+    "dixon_coles",
+)
 
 
 def test_shadow_mode_never_changes_formal_prediction_rows() -> None:

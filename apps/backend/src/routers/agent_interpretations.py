@@ -36,25 +36,52 @@ def _run(source):
         with get_db() as conn:
             result = invoke_agent_model(conn, source.agent_code, source.prompt)
             task = create_workspace_task(
-                conn, title=source.title, agent_code=source.agent_code, provider_code=result.provider_code,
-                model=result.model, prompt=source.prompt, response=result.content[:12_000],
-                source_type=source.source_type, source_ref=source.source_ref,
+                conn,
+                title=source.title,
+                agent_code=source.agent_code,
+                provider_code=result.provider_code,
+                model=result.model,
+                prompt=source.prompt,
+                response=result.content[:12_000],
+                source_type=source.source_type,
+                source_ref=source.source_ref,
             )
-            record_model_invocation(conn, agent_code=source.agent_code, provider_code=result.provider_code,
-                model=result.model, status="succeeded", prompt_length=len(source.prompt),
-                response_length=len(result.content), duration_ms=round((perf_counter() - started_at) * 1000))
-        return {"task": task, "agentCode": source.agent_code, "providerCode": result.provider_code, "model": result.model}
+            record_model_invocation(
+                conn,
+                agent_code=source.agent_code,
+                provider_code=result.provider_code,
+                model=result.model,
+                status="succeeded",
+                prompt_length=len(source.prompt),
+                response_length=len(result.content),
+                duration_ms=round((perf_counter() - started_at) * 1000),
+            )
+        return {
+            "task": task,
+            "agentCode": source.agent_code,
+            "providerCode": result.provider_code,
+            "model": result.model,
+        }
     except (ProviderConfigError, ModelGatewayError) as exc:
         with get_db() as conn:
-            record_model_invocation(conn, agent_code=source.agent_code, provider_code=None, model=None,
-                status="failed", prompt_length=len(source.prompt), response_length=0,
-                duration_ms=round((perf_counter() - started_at) * 1000), error_code="MODEL_CALL_FAILED")
+            record_model_invocation(
+                conn,
+                agent_code=source.agent_code,
+                provider_code=None,
+                model=None,
+                status="failed",
+                prompt_length=len(source.prompt),
+                response_length=0,
+                duration_ms=round((perf_counter() - started_at) * 1000),
+                error_code="MODEL_CALL_FAILED",
+            )
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.post("/pre-match/{match_id}")
 def interpret_pre_match(
-    body: Annotated[InterpretationRequest, Body()], match_id: int = Path(ge=1),
+    body: Annotated[InterpretationRequest, Body()],
+    match_id: int = Path(ge=1),
 ):
     try:
         with get_db() as conn:

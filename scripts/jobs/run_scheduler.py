@@ -804,9 +804,7 @@ def main() -> None:
                     "train_xgboost_shadow",
                     "XGBoost 特征模型影子训练",
                     "model_agent",
-                    lambda: __import__(
-                        "scripts.jobs.train_xgboost_shadow", fromlist=["run"]
-                    ).run(),
+                    lambda: __import__("scripts.jobs.train_xgboost_shadow", fromlist=["run"]).run(),
                 ),
                 "cron",
                 hour=23,
@@ -848,49 +846,129 @@ def main() -> None:
 
             scheduler.add_job(
                 _audited_job(
-                    "train_naive_bayes_shadow", "朴素贝叶斯特征模型影子训练", "model_agent",
+                    "train_naive_bayes_shadow",
+                    "朴素贝叶斯特征模型影子训练",
+                    "model_agent",
                     lambda: __import__(
                         "scripts.jobs.train_naive_bayes_shadow", fromlist=["run"]
                     ).run(),
                 ),
-                "cron", hour=23, minute=56, id="train_naive_bayes_shadow",
+                "cron",
+                hour=23,
+                minute=56,
+                id="train_naive_bayes_shadow",
             )
 
             scheduler.add_job(
-                _audited_job("train_svm_shadow", "支持向量机特征模型影子训练", "model_agent", lambda: __import__("scripts.jobs.train_svm_shadow", fromlist=["run"]).run()),
-                "cron", hour=23, minute=59, id="train_svm_shadow",
+                _audited_job(
+                    "train_svm_shadow",
+                    "支持向量机特征模型影子训练",
+                    "model_agent",
+                    lambda: __import__("scripts.jobs.train_svm_shadow", fromlist=["run"]).run(),
+                ),
+                "cron",
+                hour=23,
+                minute=59,
+                id="train_svm_shadow",
             )
 
             scheduler.add_job(
-                _audited_job("train_negative_binomial_shadow", "负二项进球模型影子训练", "model_agent", lambda: __import__("scripts.jobs.train_negative_binomial_shadow", fromlist=["run"]).run()),
-                "cron", hour=0, minute=2, id="train_negative_binomial_shadow",
+                _audited_job(
+                    "train_negative_binomial_shadow",
+                    "负二项进球模型影子训练",
+                    "model_agent",
+                    lambda: __import__(
+                        "scripts.jobs.train_negative_binomial_shadow", fromlist=["run"]
+                    ).run(),
+                ),
+                "cron",
+                hour=0,
+                minute=2,
+                id="train_negative_binomial_shadow",
             )
 
             scheduler.add_job(
-                _audited_job("train_extra_trees_shadow", "极端随机树特征模型影子训练", "model_agent", lambda: __import__("scripts.jobs.train_extra_trees_shadow", fromlist=["run"]).run()),
-                "cron", hour=0, minute=5, id="train_extra_trees_shadow",
+                _audited_job(
+                    "train_extra_trees_shadow",
+                    "极端随机树特征模型影子训练",
+                    "model_agent",
+                    lambda: __import__(
+                        "scripts.jobs.train_extra_trees_shadow", fromlist=["run"]
+                    ).run(),
+                ),
+                "cron",
+                hour=0,
+                minute=5,
+                id="train_extra_trees_shadow",
             )
 
             scheduler.add_job(
-                _audited_job("train_hist_gradient_boosting_shadow", "直方图梯度提升特征模型影子训练", "model_agent", lambda: __import__("scripts.jobs.train_hist_gradient_boosting_shadow", fromlist=["run"]).run()),
-                "cron", hour=0, minute=8, id="train_hist_gradient_boosting_shadow",
+                _audited_job(
+                    "train_hist_gradient_boosting_shadow",
+                    "直方图梯度提升特征模型影子训练",
+                    "model_agent",
+                    lambda: __import__(
+                        "scripts.jobs.train_hist_gradient_boosting_shadow", fromlist=["run"]
+                    ).run(),
+                ),
+                "cron",
+                hour=0,
+                minute=8,
+                id="train_hist_gradient_boosting_shadow",
             )
 
             scheduler.add_job(
-                _audited_job("train_adaboost_shadow", "AdaBoost 特征模型影子训练", "model_agent", lambda: __import__("scripts.jobs.train_adaboost_shadow", fromlist=["run"]).run()),
-                "cron", hour=0, minute=11, id="train_adaboost_shadow",
+                _audited_job(
+                    "train_adaboost_shadow",
+                    "AdaBoost 特征模型影子训练",
+                    "model_agent",
+                    lambda: __import__(
+                        "scripts.jobs.train_adaboost_shadow", fromlist=["run"]
+                    ).run(),
+                ),
+                "cron",
+                hour=0,
+                minute=11,
+                id="train_adaboost_shadow",
             )
 
             scheduler.add_job(
-                _audited_job("train_lda_shadow", "LDA 特征模型影子训练", "model_agent", lambda: __import__("scripts.jobs.train_lda_shadow", fromlist=["run"]).run()),
-                "cron", hour=0, minute=14, id="train_lda_shadow",
+                _audited_job(
+                    "train_lda_shadow",
+                    "LDA 特征模型影子训练",
+                    "model_agent",
+                    lambda: __import__("scripts.jobs.train_lda_shadow", fromlist=["run"]).run(),
+                ),
+                "cron",
+                hour=0,
+                minute=14,
+                id="train_lda_shadow",
             )
 
             scheduler.add_job(
-                _audited_job("train_knn_shadow", "KNN 特征模型影子训练", "model_agent", lambda: __import__("scripts.jobs.train_knn_shadow", fromlist=["run"]).run()),
-                "cron", hour=0, minute=17, id="train_knn_shadow",
+                _audited_job(
+                    "train_knn_shadow",
+                    "KNN 特征模型影子训练",
+                    "model_agent",
+                    lambda: __import__("scripts.jobs.train_knn_shadow", fromlist=["run"]).run(),
+                ),
+                "cron",
+                hour=0,
+                minute=17,
+                id="train_knn_shadow",
             )
-            scheduler.add_job(_audited_job("train_mlp_shadow", "MLP 特征模型影子训练", "model_agent", lambda: __import__("scripts.jobs.train_mlp_shadow", fromlist=["run"]).run()), "cron", hour=0, minute=20, id="train_mlp_shadow")
+            scheduler.add_job(
+                _audited_job(
+                    "train_mlp_shadow",
+                    "MLP 特征模型影子训练",
+                    "model_agent",
+                    lambda: __import__("scripts.jobs.train_mlp_shadow", fromlist=["run"]).run(),
+                ),
+                "cron",
+                hour=0,
+                minute=20,
+                id="train_mlp_shadow",
+            )
 
             # News Intelligence is isolated from prediction and betting. External
             # collection requires an explicit opt-in; deterministic extraction
@@ -914,9 +992,7 @@ def main() -> None:
                     "extract_news_events",
                     "新闻事件结构化",
                     "review_agent",
-                    lambda: __import__(
-                        "scripts.jobs.extract_news_events", fromlist=["run"]
-                    ).run(),
+                    lambda: __import__("scripts.jobs.extract_news_events", fromlist=["run"]).run(),
                 ),
                 "cron",
                 **NEWS_EXTRACTION_CRON,

@@ -48,7 +48,11 @@ class NewsArticleCandidate:
 def canonicalize_article_url(value: str) -> str:
     parsed = urlparse(value.strip())
     query = urlencode(
-        [(key, item) for key, item in parse_qsl(parsed.query) if key.lower() not in _TRACKING_PARAMS]
+        [
+            (key, item)
+            for key, item in parse_qsl(parsed.query)
+            if key.lower() not in _TRACKING_PARAMS
+        ]
     )
     return urlunparse((parsed.scheme.lower(), parsed.netloc.lower(), parsed.path, "", query, ""))
 

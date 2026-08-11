@@ -193,16 +193,18 @@ def test_daily_review_job_defers_without_writing_business_review(monkeypatch) ->
             "reasonCodes": ["OFFICIAL_RESULT_PENDING"],
         },
     }
-    assert writes == [{
-        "report_type": "daily",
-        "period_key": "2026-08-09",
-        "status": "waiting",
-        "readiness": {
-            "canGenerate": False,
+    assert writes == [
+        {
+            "report_type": "daily",
+            "period_key": "2026-08-09",
             "status": "waiting",
-            "reasonCodes": ["OFFICIAL_RESULT_PENDING"],
-        },
-    }]
+            "readiness": {
+                "canGenerate": False,
+                "status": "waiting",
+                "reasonCodes": ["OFFICIAL_RESULT_PENDING"],
+            },
+        }
+    ]
 
 
 def test_daily_review_tracks_waiting_as_successful_scheduler_check(monkeypatch) -> None:
@@ -248,7 +250,9 @@ def test_daily_review_does_not_overwrite_completed_snapshot(monkeypatch) -> None
     monkeypatch.setattr(
         generate_daily_review,
         "upsert_daily_review",
-        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("must not overwrite review")),
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("must not overwrite review")
+        ),
     )
 
     result = generate_daily_review._run_impl("2026-08-09")
@@ -307,6 +311,11 @@ def test_snapshot_backfill_archives_old_snapshot_before_replacing_completed_run(
     assert result["revision"] == 2
     assert result["previousSnapshotHash"] == "old-hash"
     assert len(result["snapshotHash"]) == 64
-    assert any("INSERT INTO report_generation_revisions" in query for query in conn.cursor_instance.statements)
-    assert any("UPDATE report_generation_runs" in query for query in conn.cursor_instance.statements)
+    assert any(
+        "INSERT INTO report_generation_revisions" in query
+        for query in conn.cursor_instance.statements
+    )
+    assert any(
+        "UPDATE report_generation_runs" in query for query in conn.cursor_instance.statements
+    )
     assert conn.committed is True

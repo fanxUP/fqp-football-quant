@@ -730,9 +730,7 @@ def get_evaluation_summary(conn: Any) -> dict[str, Any]:
                         else None
                     ),
                     "avg_closing_edge": (
-                        float(d["avg_closing_edge"])
-                        if d["avg_closing_edge"] is not None
-                        else None
+                        float(d["avg_closing_edge"]) if d["avg_closing_edge"] is not None else None
                     ),
                     "avg_odds_clv": None,
                     "paired_market_samples": int(d["paired_market_samples"] or 0),

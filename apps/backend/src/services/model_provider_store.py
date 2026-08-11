@@ -180,8 +180,14 @@ PROVIDERS: dict[str, ProviderDefinition] = {
         False,
     ),
     "openai_compatible": ProviderDefinition(
-        "openai_compatible", "自定义 OpenAI 兼容服务", "openai", "", "",
-        (), ("analysis", "coding"), "https://platform.openai.com/docs/api-reference/chat",
+        "openai_compatible",
+        "自定义 OpenAI 兼容服务",
+        "openai",
+        "",
+        "",
+        (),
+        ("analysis", "coding"),
+        "https://platform.openai.com/docs/api-reference/chat",
     ),
 }
 
@@ -295,7 +301,9 @@ def list_agent_model_bindings(conn: Any) -> list[dict[str, Any]]:
     ]
 
 
-def save_agent_model_binding(conn: Any, agent_code: str, provider_code: str, enabled: bool) -> dict[str, Any]:
+def save_agent_model_binding(
+    conn: Any, agent_code: str, provider_code: str, enabled: bool
+) -> dict[str, Any]:
     if agent_code not in AGENT_MODEL_OPTIONS:
         raise ProviderConfigError("该智能代理不允许配置外部模型")
     with conn.cursor() as cur:
@@ -344,9 +352,14 @@ def get_agent_model_binding(conn: Any, agent_code: str) -> dict[str, Any] | None
     if provider is None:
         return None
     return {
-        "agent_code": row[0], "provider_code": row[1], "enabled": row[2],
-        "base_url": row[3], "default_model": row[4], "api_key_encrypted": row[5],
-        "protocol": provider.protocol, "last_test_status": row[7],
+        "agent_code": row[0],
+        "provider_code": row[1],
+        "enabled": row[2],
+        "base_url": row[3],
+        "default_model": row[4],
+        "api_key_encrypted": row[5],
+        "protocol": provider.protocol,
+        "last_test_status": row[7],
     }
 
 
@@ -392,8 +405,17 @@ def save_provider_config(conn: Any, payload: dict[str, Any]) -> dict[str, Any]:
                RETURNING provider_code, display_name, base_url, default_model, enabled,
                          api_key_encrypted IS NOT NULL, updated_at, last_test_at,
                          last_test_status, last_test_message""",
-            (provider.code, display_name, base_url, model, enabled, encrypted,
-             connection_changed, connection_changed, connection_changed),
+            (
+                provider.code,
+                display_name,
+                base_url,
+                model,
+                enabled,
+                encrypted,
+                connection_changed,
+                connection_changed,
+                connection_changed,
+            ),
         )
         row = cur.fetchone()
     conn.commit()

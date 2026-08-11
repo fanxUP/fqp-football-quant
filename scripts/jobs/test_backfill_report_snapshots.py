@@ -13,9 +13,27 @@ def _daily_card() -> dict:
         "kickoffTime": "2026-08-09T18:00:00",
         "result": {"spfResult": "3", "status": "confirmed"},
         "modelSignals": [
-            {"modelName": "Elo", "playType": "spf", "optionCode": "3", "modelProbability": 0.6, "marketProbability": 0.5},
-            {"modelName": "Elo", "playType": "spf", "optionCode": "1", "modelProbability": 0.25, "marketProbability": 0.28},
-            {"modelName": "Elo", "playType": "spf", "optionCode": "0", "modelProbability": 0.15, "marketProbability": 0.22},
+            {
+                "modelName": "Elo",
+                "playType": "spf",
+                "optionCode": "3",
+                "modelProbability": 0.6,
+                "marketProbability": 0.5,
+            },
+            {
+                "modelName": "Elo",
+                "playType": "spf",
+                "optionCode": "1",
+                "modelProbability": 0.25,
+                "marketProbability": 0.28,
+            },
+            {
+                "modelName": "Elo",
+                "playType": "spf",
+                "optionCode": "0",
+                "modelProbability": 0.15,
+                "marketProbability": 0.22,
+            },
         ],
         "oddsSignals": [
             {"playType": "spf", "optionCode": "3", "spValue": 2.0},

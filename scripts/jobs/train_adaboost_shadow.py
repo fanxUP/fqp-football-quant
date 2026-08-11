@@ -57,7 +57,8 @@ def _run_with_connection(conn: Any) -> dict[str, Any]:
             raise RuntimeError("AdaBoost shadow model version is not available")
     conn.commit()
     return {
-        "status": "ok", "rollout_mode": "shadow",
+        "status": "ok",
+        "rollout_mode": "shadow",
         "training_matches": profile.training_matches,
         "validation_matches": profile.validation_matches,
         "validation_log_loss": round(profile.validation_log_loss, 6),
@@ -69,7 +70,9 @@ def run(dry_run: bool = False) -> dict[str, Any]:
     if dry_run:
         return {"status": "dry_run", "message": "AdaBoost shadow training (dry run)"}
     run_id = start_tracked_job(
-        "train_adaboost_shadow", "model_agent", {"rollout_mode": "shadow"},
+        "train_adaboost_shadow",
+        "model_agent",
+        {"rollout_mode": "shadow"},
         dependencies=["feature_snapshot_build", "settle_tickets"],
     )
     try:

@@ -61,19 +61,38 @@ def _request_completion(
     protocol, base_url, model = binding["protocol"], binding["base_url"], binding["default_model"]
     if protocol == "gemini":
         return client.post(
-            f"{base_url}/models/{model}:generateContent", params={"key": api_key},
-            json={"systemInstruction": {"parts": [{"text": system_instruction}]}, "contents": [{"parts": [{"text": prompt}]}]},
+            f"{base_url}/models/{model}:generateContent",
+            params={"key": api_key},
+            json={
+                "systemInstruction": {"parts": [{"text": system_instruction}]},
+                "contents": [{"parts": [{"text": prompt}]}],
+            },
         )
     if protocol == "anthropic":
         return client.post(
-            f"{base_url}/messages", headers={"x-api-key": api_key or "", "anthropic-version": "2023-06-01"},
-            json={"model": model, "max_tokens": 800, "system": system_instruction, "messages": [{"role": "user", "content": prompt}]},
+            f"{base_url}/messages",
+            headers={"x-api-key": api_key or "", "anthropic-version": "2023-06-01"},
+            json={
+                "model": model,
+                "max_tokens": 800,
+                "system": system_instruction,
+                "messages": [{"role": "user", "content": prompt}],
+            },
         )
     headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
     endpoint = "/api/chat" if protocol == "ollama" else "/chat/completions"
     return client.post(
-        f"{base_url}{endpoint}", headers=headers,
-        json={"model": model, "messages": [{"role": "system", "content": system_instruction}, {"role": "user", "content": prompt}], "stream": False, "max_tokens": 800},
+        f"{base_url}{endpoint}",
+        headers=headers,
+        json={
+            "model": model,
+            "messages": [
+                {"role": "system", "content": system_instruction},
+                {"role": "user", "content": prompt},
+            ],
+            "stream": False,
+            "max_tokens": 800,
+        },
     )
 
 

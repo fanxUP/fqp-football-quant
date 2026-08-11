@@ -39,7 +39,9 @@ def _require_historical_date(business_date: date) -> None:
 
 def _calculate(items: list[dict], pass_type: str, multiple: int) -> dict:
     pass_types = parse_pass_types(pass_type)
-    errors = [error for item_pass_type in pass_types for error in validate_items(items, item_pass_type)]
+    errors = [
+        error for item_pass_type in pass_types for error in validate_items(items, item_pass_type)
+    ]
     if errors:
         raise HTTPException(status_code=400, detail={"errors": errors})
     try:
@@ -73,10 +75,7 @@ def list_time_machine_dates(limit: int = Query(180, ge=1, le=365)):
         )
         rows = cur.fetchall()
     return {
-        "dates": [
-            {"businessDate": row[0].isoformat(), "matchCount": int(row[1])}
-            for row in rows
-        ]
+        "dates": [{"businessDate": row[0].isoformat(), "matchCount": int(row[1])} for row in rows]
     }
 
 

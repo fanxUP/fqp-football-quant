@@ -68,7 +68,8 @@ def get_post_match_report_automation(conn: Any) -> dict[str, Any]:
         row = cur.fetchone()
     binding = next(
         (
-            item for item in list_agent_model_bindings(conn)
+            item
+            for item in list_agent_model_bindings(conn)
             if item["agentCode"] == POST_MATCH_REPORT_AGENT
         ),
         None,
@@ -104,9 +105,7 @@ def set_post_match_report_automation(conn: Any, enabled: bool) -> dict[str, Any]
 
 
 def _build_prompt(source_type: str, source_ref: str, snapshot: Mapping[str, Any]) -> str:
-    material = json.dumps(
-        _report_digest(snapshot), ensure_ascii=False, default=str, sort_keys=True
-    )
+    material = json.dumps(_report_digest(snapshot), ensure_ascii=False, default=str, sort_keys=True)
     truncated = len(material) > _MAX_SNAPSHOT_CHARS
     material = material[:_MAX_SNAPSHOT_CHARS]
     return (

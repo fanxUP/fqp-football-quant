@@ -1,4 +1,5 @@
 """Train MLP as a non-decision shadow signal."""
+
 # ruff: noqa: E701, E702
 from __future__ import annotations
 
@@ -14,25 +15,68 @@ from scripts.feature_importance import FEATURE_COLUMNS
 from scripts.mlp_shadow_model import fit_temporal_holdout
 from scripts.prematch_feature_dataset import load_settled_pre_kickoff_dataset
 
-PROJECT_ROOT, ARTIFACT_RELATIVE_PATH = Path(__file__).resolve().parents[2], 'var/model_artifacts/mlp_shadow_v1.joblib'
+PROJECT_ROOT, ARTIFACT_RELATIVE_PATH = (
+    Path(__file__).resolve().parents[2],
+    "var/model_artifacts/mlp_shadow_v1.joblib",
+)
+
+
 def _run_with_connection(conn: Any) -> dict[str, Any]:
     dataset = load_settled_pre_kickoff_dataset(conn)
-    if dataset is None: return {'status': 'skipped', 'reason': 'no_settled_pre_match_feature_rows'}
+    if dataset is None:
+        return {"status": "skipped", "reason": "no_settled_pre_match_feature_rows"}
     features, labels, dates = dataset
-    try: classifier, profile = fit_temporal_holdout(features, labels, tuple(FEATURE_COLUMNS))
-    except ValueError as exc: return {'status': 'skipped', 'reason': str(exc), 'sample_count': len(labels)}
-    import joblib
-    path = PROJECT_ROOT / ARTIFACT_RELATIVE_PATH; path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name(f'{path.stem}.tmp{path.suffix}'); joblib.dump(classifier, temporary); os.replace(temporary, path)
-    parameters = {'rollout_mode':'shadow','artifact_path':ARTIFACT_RELATIVE_PATH,'feature_columns':list(profile.feature_columns),'training_matches':profile.training_matches,'validation_matches':profile.validation_matches,'validation_log_loss':round(profile.validation_log_loss,8),'evaluation_method':'temporal_holdout_v1'}
-    with conn.cursor() as cur:
-        cur.execute("UPDATE model_versions SET parameters_json=%s, training_start_date=%s, training_end_date=%s WHERE model_name='mlp_shadow' AND is_active=true", (Json(parameters), dates[0][:10], dates[-1][:10]))
-        if cur.rowcount != 1: raise RuntimeError('MLP shadow model version is not available')
-    conn.commit(); return {'status':'ok','rollout_mode':'shadow','training_matches':profile.training_matches,'validation_matches':profile.validation_matches,'validation_log_loss':round(profile.validation_log_loss,6)}
-def run(dry_run: bool=False) -> dict[str, Any]:
-    if dry_run: return {'status':'dry_run','message':'MLP shadow training (dry run)'}
-    run_id=start_tracked_job('train_mlp_shadow','model_agent',{'rollout_mode':'shadow'},dependencies=['feature_snapshot_build','settle_tickets'])
     try:
-        with get_db() as conn: result=_run_with_connection(conn)
-        finish_tracked_job(run_id,result['status'],{'result':result}); return result
-    except Exception as exc: finish_tracked_job(run_id,'failed',error=str(exc)); raise
+        classifier, profile = fit_temporal_holdout(features, labels, tuple(FEATURE_COLUMNS))
+    except ValueError as exc:
+        return {"status": "skipped", "reason": str(exc), "sample_count": len(labels)}
+    import joblib
+
+    path = PROJECT_ROOT / ARTIFACT_RELATIVE_PATH
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f"{path.stem}.tmp{path.suffix}")
+    joblib.dump(classifier, temporary)
+    os.replace(temporary, path)
+    parameters = {
+        "rollout_mode": "shadow",
+        "artifact_path": ARTIFACT_RELATIVE_PATH,
+        "feature_columns": list(profile.feature_columns),
+        "training_matches": profile.training_matches,
+        "validation_matches": profile.validation_matches,
+        "validation_log_loss": round(profile.validation_log_loss, 8),
+        "evaluation_method": "temporal_holdout_v1",
+    }
+    with conn.cursor() as cur:
+        cur.execute(
+            "UPDATE model_versions SET parameters_json=%s, training_start_date=%s, training_end_date=%s WHERE model_name='mlp_shadow' AND is_active=true",
+            (Json(parameters), dates[0][:10], dates[-1][:10]),
+        )
+        if cur.rowcount != 1:
+            raise RuntimeError("MLP shadow model version is not available")
+    conn.commit()
+    return {
+        "status": "ok",
+        "rollout_mode": "shadow",
+        "training_matches": profile.training_matches,
+        "validation_matches": profile.validation_matches,
+        "validation_log_loss": round(profile.validation_log_loss, 6),
+    }
+
+
+def run(dry_run: bool = False) -> dict[str, Any]:
+    if dry_run:
+        return {"status": "dry_run", "message": "MLP shadow training (dry run)"}
+    run_id = start_tracked_job(
+        "train_mlp_shadow",
+        "model_agent",
+        {"rollout_mode": "shadow"},
+        dependencies=["feature_snapshot_build", "settle_tickets"],
+    )
+    try:
+        with get_db() as conn:
+            result = _run_with_connection(conn)
+        finish_tracked_job(run_id, result["status"], {"result": result})
+        return result
+    except Exception as exc:
+        finish_tracked_job(run_id, "failed", error=str(exc))
+        raise

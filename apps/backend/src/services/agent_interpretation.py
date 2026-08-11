@@ -21,7 +21,10 @@ class InterpretationSource:
 
 
 def build_interpretation_prompt(
-    source_type: str, title: str, snapshot: dict[str, Any], focus_question: str | None,
+    source_type: str,
+    title: str,
+    snapshot: dict[str, Any],
+    focus_question: str | None,
 ) -> str:
     labels = {
         "pre_match": "赛前单场解读",
@@ -42,12 +45,15 @@ def build_interpretation_prompt(
     return prompt[:8_000]
 
 
-def build_pre_match_source(conn: Any, match_id: int, focus_question: str | None) -> InterpretationSource:
+def build_pre_match_source(
+    conn: Any, match_id: int, focus_question: str | None
+) -> InterpretationSource:
     with conn.cursor() as cur:
         cur.execute(
             """SELECT id, official_match_code, league_name, home_team_name, away_team_name,
                       kickoff_time, match_status, sale_status
-               FROM official_matches WHERE id = %s""", (match_id,),
+               FROM official_matches WHERE id = %s""",
+            (match_id,),
         )
         match = cur.fetchone()
         if not match:
@@ -55,7 +61,8 @@ def build_pre_match_source(conn: Any, match_id: int, focus_question: str | None)
         cur.execute(
             """SELECT DISTINCT ON (play_type, option_code) play_type, option_code, sp_value, handicap, snapshot_time
                FROM official_odds_snapshots WHERE match_id = %s AND is_open = true
-               ORDER BY play_type, option_code, snapshot_time DESC, id DESC""", (match_id,),
+               ORDER BY play_type, option_code, snapshot_time DESC, id DESC""",
+            (match_id,),
         )
         odds = cur.fetchall()
         cur.execute(
@@ -70,8 +77,39 @@ def build_pre_match_source(conn: Any, match_id: int, focus_question: str | None)
         predictions = cur.fetchall()
     title = f"赛前解读：{match[1] or match_id} {match[3]} vs {match[4]}"
     snapshot = {
-        "官方比赛": {"id": match[0], "编号": match[1], "联赛": match[2], "主队": match[3], "客队": match[4], "开赛时间": match[5], "状态": match[6], "销售状态": match[7]},
-        "官方赔率": [{"玩法": row[0], "选项": row[1], "赔率": row[2], "让球": row[3], "快照时间": row[4]} for row in odds],
-        "有效模型预测": [{"模型": row[0], "玩法": row[1], "选项": row[2], "模型概率": row[3], "市场概率": row[4], "公平赔率": row[5], "EV": row[6], "置信度": row[7], "预测时间": row[8]} for row in predictions],
+        "官方比赛": {
+            "id": match[0],
+            "编号": match[1],
+            "联赛": match[2],
+            "主队": match[3],
+            "客队": match[4],
+            "开赛时间": match[5],
+            "状态": match[6],
+            "销售状态": match[7],
+        },
+        "官方赔率": [
+            {"玩法": row[0], "选项": row[1], "赔率": row[2], "让球": row[3], "快照时间": row[4]}
+            for row in odds
+        ],
+        "有效模型预测": [
+            {
+                "模型": row[0],
+                "玩法": row[1],
+                "选项": row[2],
+                "模型概率": row[3],
+                "市场概率": row[4],
+                "公平赔率": row[5],
+                "EV": row[6],
+                "置信度": row[7],
+                "预测时间": row[8],
+            }
+            for row in predictions
+        ],
     }
-    return InterpretationSource("pre_match", str(match_id), title, "pre_match_interpretation_agent", build_interpretation_prompt("pre_match", title, snapshot, focus_question))
+    return InterpretationSource(
+        "pre_match",
+        str(match_id),
+        title,
+        "pre_match_interpretation_agent",
+        build_interpretation_prompt("pre_match", title, snapshot, focus_question),
+    )

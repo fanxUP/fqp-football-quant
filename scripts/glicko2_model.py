@@ -240,4 +240,8 @@ def update_glicko2_ratings(
             ),
         )
     conn.commit()
-    return {"match_id": match_id, "home_rating": home_after.rating, "away_rating": away_after.rating}
+    return {
+        "match_id": match_id,
+        "home_rating": home_after.rating,
+        "away_rating": away_after.rating,
+    }

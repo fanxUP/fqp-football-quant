@@ -42,13 +42,18 @@ def build_upset_risk_features(metrics: dict[str, Any] | None) -> dict[str, float
     league_matches = int(metrics.get("league_match_count") or 0)
     home_matches = int(metrics.get("home_match_count") or 0)
     away_matches = int(metrics.get("away_match_count") or 0)
-    league_rate = _smoothed_rate(int(metrics.get("league_upset_count") or 0), league_matches, global_rate)
+    league_rate = _smoothed_rate(
+        int(metrics.get("league_upset_count") or 0), league_matches, global_rate
+    )
     home_rate = _smoothed_rate(int(metrics.get("home_upset_count") or 0), home_matches, global_rate)
     away_rate = _smoothed_rate(int(metrics.get("away_upset_count") or 0), away_matches, global_rate)
-    confidence = sum(
-        min(sample / CONFIDENCE_TARGET_SAMPLE_SIZE, 1.0)
-        for sample in (league_matches, home_matches, away_matches)
-    ) / 3
+    confidence = (
+        sum(
+            min(sample / CONFIDENCE_TARGET_SAMPLE_SIZE, 1.0)
+            for sample in (league_matches, home_matches, away_matches)
+        )
+        / 3
+    )
     return {
         "upset_risk_score": round(0.5 * league_rate + 0.25 * home_rate + 0.25 * away_rate, 6),
         "league_upset_rate": round(league_rate, 6),

@@ -25,7 +25,11 @@ class FakeClient:
 
 
 def _binding(protocol: str) -> dict[str, str]:
-    return {"protocol": protocol, "base_url": "https://provider.example/v1", "default_model": "test-model"}
+    return {
+        "protocol": protocol,
+        "base_url": "https://provider.example/v1",
+        "default_model": "test-model",
+    }
 
 
 def test_agent_instruction_is_fixed_and_unknown_agent_is_rejected() -> None:
@@ -50,7 +54,8 @@ def test_openai_compatible_payload_includes_system_boundary(protocol: str) -> No
 
     assert response is client.response
     assert client.kwargs["json"]["messages"] == [
-        {"role": "system", "content": "固定边界"}, {"role": "user", "content": "用户任务"},
+        {"role": "system", "content": "固定边界"},
+        {"role": "user", "content": "用户任务"},
     ]
     expected_endpoint = "/api/chat" if protocol == "ollama" else "/chat/completions"
     assert client.args[0].endswith(expected_endpoint)

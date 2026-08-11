@@ -24,7 +24,16 @@ def record_model_invocation(
             """INSERT INTO llm_invocation_audits
                  (agent_code, provider_code, model, status, prompt_length, response_length, duration_ms, error_code)
                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
-            (agent_code, provider_code, model, status, prompt_length, response_length, duration_ms, error_code),
+            (
+                agent_code,
+                provider_code,
+                model,
+                status,
+                prompt_length,
+                response_length,
+                duration_ms,
+                error_code,
+            ),
         )
     if commit:
         conn.commit()

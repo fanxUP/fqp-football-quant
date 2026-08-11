@@ -181,7 +181,7 @@ def store_simulation_ticket(conn: Any, ticket: dict, items: list[dict]) -> int |
         return None
     try:
         multiple = int(ticket.get("multiple", 1))
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         conn.rollback()
         return None
     if not 1 <= multiple <= MAX_SINGLE_TICKET_MULTIPLE:

@@ -19,17 +19,19 @@ def test_news_overview_returns_read_only_operational_summary(client, monkeypatch
 
 
 def test_news_articles_are_filterable_by_official_match(client, monkeypatch) -> None:
-    items = [{
-        "id": 7,
-        "matchId": 31,
-        "officialMatchCode": "周一101",
-        "sourceName": "测试俱乐部官网",
-        "sourceLevel": "S",
-        "title": "球队公告",
-        "canonicalUrl": "https://club.example/news/7",
-        "publishedAt": "2026-08-10T08:00:00+00:00",
-        "availableAt": "2026-08-10T08:05:00+00:00",
-    }]
+    items = [
+        {
+            "id": 7,
+            "matchId": 31,
+            "officialMatchCode": "周一101",
+            "sourceName": "测试俱乐部官网",
+            "sourceLevel": "S",
+            "title": "球队公告",
+            "canonicalUrl": "https://club.example/news/7",
+            "publishedAt": "2026-08-10T08:00:00+00:00",
+            "availableAt": "2026-08-10T08:05:00+00:00",
+        }
+    ]
     monkeypatch.setattr(
         news_intelligence,
         "list_news_articles",
@@ -44,15 +46,17 @@ def test_news_articles_are_filterable_by_official_match(client, monkeypatch) -> 
 
 
 def test_news_sources_do_not_expose_provider_secrets(client, monkeypatch) -> None:
-    sources = [{
-        "id": 2,
-        "sourceCode": "club-official",
-        "sourceName": "俱乐部官网",
-        "sourceLevel": "S",
-        "enabled": True,
-        "lastSuccessAt": None,
-        "lastError": None,
-    }]
+    sources = [
+        {
+            "id": 2,
+            "sourceCode": "club-official",
+            "sourceName": "俱乐部官网",
+            "sourceLevel": "S",
+            "enabled": True,
+            "lastSuccessAt": None,
+            "lastError": None,
+        }
+    ]
     monkeypatch.setattr(news_intelligence, "list_news_sources", lambda _conn: sources)
 
     response = client.get("/api/news-intelligence/sources")
@@ -64,15 +68,17 @@ def test_news_sources_do_not_expose_provider_secrets(client, monkeypatch) -> Non
 
 
 def test_structured_news_events_expose_evidence_and_verification(client, monkeypatch) -> None:
-    events = [{
-        "id": 9,
-        "eventType": "injury",
-        "direction": "negative",
-        "verificationStatus": "verified",
-        "officialMatchCode": "周一101",
-        "summary": "主队核心球员确认缺阵",
-        "sourceCount": 2,
-    }]
+    events = [
+        {
+            "id": 9,
+            "eventType": "injury",
+            "direction": "negative",
+            "verificationStatus": "verified",
+            "officialMatchCode": "周一101",
+            "summary": "主队核心球员确认缺阵",
+            "sourceCount": 2,
+        }
+    ]
     monkeypatch.setattr(news_intelligence, "list_news_events", lambda _conn, **_kwargs: (events, 1))
 
     response = client.get("/api/news-intelligence/events?matchId=31")
@@ -101,7 +107,9 @@ def test_event_verification_is_an_explicit_human_action(client, monkeypatch) -> 
 
 def test_source_status_can_be_disabled_without_changing_credentials(client, monkeypatch) -> None:
     source = {"id": 2, "sourceName": "俱乐部官网", "enabled": False}
-    monkeypatch.setattr(news_intelligence, "set_news_source_enabled", lambda _conn, **_kwargs: source)
+    monkeypatch.setattr(
+        news_intelligence, "set_news_source_enabled", lambda _conn, **_kwargs: source
+    )
 
     response = client.patch("/api/news-intelligence/sources/2", json={"enabled": False})
 
@@ -110,17 +118,19 @@ def test_source_status_can_be_disabled_without_changing_credentials(client, monk
 
 
 def test_news_feature_snapshots_are_read_only_and_versioned(client, monkeypatch) -> None:
-    features = [{
-        "snapshotId": 12,
-        "matchId": 31,
-        "officialMatchCode": "周一101",
-        "snapshotLabel": "T45M",
-        "snapshotCutoff": "2026-08-11T10:15:00+00:00",
-        "homeNetImpact": -0.72,
-        "awayNetImpact": 0.4,
-        "verifiedEventCount": 2,
-        "featureVersion": "news-features-v1",
-    }]
+    features = [
+        {
+            "snapshotId": 12,
+            "matchId": 31,
+            "officialMatchCode": "周一101",
+            "snapshotLabel": "T45M",
+            "snapshotCutoff": "2026-08-11T10:15:00+00:00",
+            "homeNetImpact": -0.72,
+            "awayNetImpact": 0.4,
+            "verifiedEventCount": 2,
+            "featureVersion": "news-features-v1",
+        }
+    ]
     monkeypatch.setattr(
         news_intelligence,
         "list_news_feature_snapshots",
@@ -191,7 +201,9 @@ def test_news_release_promotion_rejects_unqualified_experiment(client, monkeypat
 
 def test_news_release_can_be_rolled_back_immediately(client, monkeypatch) -> None:
     release = {"mode": "shadow", "approvedShadowVersion": None}
-    monkeypatch.setattr(news_intelligence, "rollback_news_release", lambda _conn, **_kwargs: release)
+    monkeypatch.setattr(
+        news_intelligence, "rollback_news_release", lambda _conn, **_kwargs: release
+    )
 
     response = client.post(
         "/api/news-intelligence/release/rollback",

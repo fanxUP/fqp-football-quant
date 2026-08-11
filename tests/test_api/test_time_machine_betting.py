@@ -10,7 +10,16 @@ from apps.backend.src.services.time_machine_betting import build_time_machine_ma
 
 def test_time_machine_keeps_the_last_official_open_odds_before_sales_stop():
     matches = [
-        (101, "周日001", "挪超", "布兰", "瓦勒伦加", datetime(2026, 7, 26, 22), datetime(2026, 7, 26, 21, 30), {}),
+        (
+            101,
+            "周日001",
+            "挪超",
+            "布兰",
+            "瓦勒伦加",
+            datetime(2026, 7, 26, 22),
+            datetime(2026, 7, 26, 21, 30),
+            {},
+        ),
     ]
     odds = [
         (101, 7001, datetime(2026, 7, 26, 21, 20), "spf", "3", "主胜", 1.86, None, True),
@@ -28,7 +37,16 @@ def test_time_machine_keeps_the_last_official_open_odds_before_sales_stop():
 
 def test_time_machine_orders_win_draw_loss_as_home_draw_away():
     matches = [
-        (101, "周日001", "挪超", "布兰", "瓦勒伦加", datetime(2026, 7, 26, 22), datetime(2026, 7, 26, 21, 30), {}),
+        (
+            101,
+            "周日001",
+            "挪超",
+            "布兰",
+            "瓦勒伦加",
+            datetime(2026, 7, 26, 22),
+            datetime(2026, 7, 26, 21, 30),
+            {},
+        ),
     ]
     odds = [
         (101, 7001, datetime(2026, 7, 26, 21, 20), "spf", "a", "客胜", 3.20, None, True),
@@ -41,7 +59,9 @@ def test_time_machine_orders_win_draw_loss_as_home_draw_away():
     assert [item["option_code"] for item in result[0]["odds"]["spf"]["options"]] == ["h", "d", "a"]
 
 
-def test_time_machine_ticket_persists_historical_purchase_date_and_server_resolved_odds(monkeypatch):
+def test_time_machine_ticket_persists_historical_purchase_date_and_server_resolved_odds(
+    monkeypatch,
+):
     stored: dict[str, object] = {}
     stored_items: list[dict] = []
 
@@ -56,19 +76,36 @@ def test_time_machine_ticket_persists_historical_purchase_date_and_server_resolv
     monkeypatch.setattr(
         time_machine,
         "_resolve_selections",
-        lambda _conn, _request: [{
-            "match_id": 101, "official_match_code": "周日001", "play_type": "spf",
-            "option_code": "3", "option_name": "主胜", "sp_value": 1.86,
-            "odds_snapshot_id": 7001, "odds_snapshot_time": datetime(2026, 7, 26, 21, 20),
-            "odds_source": "official_pre_close", "is_single_allowed": True, "is_pass_allowed": True,
-        }],
+        lambda _conn, _request: [
+            {
+                "match_id": 101,
+                "official_match_code": "周日001",
+                "play_type": "spf",
+                "option_code": "3",
+                "option_name": "主胜",
+                "sp_value": 1.86,
+                "odds_snapshot_id": 7001,
+                "odds_snapshot_time": datetime(2026, 7, 26, 21, 20),
+                "odds_source": "official_pre_close",
+                "is_single_allowed": True,
+                "is_pass_allowed": True,
+            }
+        ],
     )
-    monkeypatch.setattr(time_machine, "create_real_ticket", lambda _conn, ticket: stored.update(ticket) or 77)
-    monkeypatch.setattr(time_machine, "create_real_ticket_items_batch", lambda _conn, _ticket_id, items: stored_items.extend(items) or [1])
+    monkeypatch.setattr(
+        time_machine, "create_real_ticket", lambda _conn, ticket: stored.update(ticket) or 77
+    )
+    monkeypatch.setattr(
+        time_machine,
+        "create_real_ticket_items_batch",
+        lambda _conn, _ticket_id, items: stored_items.extend(items) or [1],
+    )
 
     result = time_machine.create_time_machine_ticket(
         time_machine.CreateTimeMachineTicketRequest(
-            business_date=date(2026, 7, 26), pass_type="single", multiple=1,
+            business_date=date(2026, 7, 26),
+            pass_type="single",
+            multiple=1,
             selections=[{"match_id": 101, "play_type": "spf", "option_code": "3"}],
         )
     )

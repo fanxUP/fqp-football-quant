@@ -20,13 +20,19 @@ class _FakeClient:
 
 
 def test_newsapi_uses_everything_endpoint_and_header_key() -> None:
-    transport = _FakeClient({"articles": [{
-        "source": {"name": "Club Site"},
-        "title": "Team injury update",
-        "description": "Player unavailable",
-        "url": "https://club.example/news/1?utm_source=test",
-        "publishedAt": "2026-08-10T08:00:00Z",
-    }]})
+    transport = _FakeClient(
+        {
+            "articles": [
+                {
+                    "source": {"name": "Club Site"},
+                    "title": "Team injury update",
+                    "description": "Player unavailable",
+                    "url": "https://club.example/news/1?utm_source=test",
+                    "publishedAt": "2026-08-10T08:00:00Z",
+                }
+            ]
+        }
+    )
 
     articles = NewsApiClient("news-key", client=transport).search("Team injury")
 
@@ -37,14 +43,20 @@ def test_newsapi_uses_everything_endpoint_and_header_key() -> None:
 
 
 def test_gnews_uses_documented_search_endpoint_and_api_key_parameter() -> None:
-    transport = _FakeClient({"articles": [{
-        "source": {"name": "Sports Desk", "url": "https://sports.example"},
-        "title": "Confirmed lineup",
-        "description": "Starting XI",
-        "url": "https://sports.example/lineup/2",
-        "publishedAt": "2026-08-10T09:00:00Z",
-        "lang": "en",
-    }]})
+    transport = _FakeClient(
+        {
+            "articles": [
+                {
+                    "source": {"name": "Sports Desk", "url": "https://sports.example"},
+                    "title": "Confirmed lineup",
+                    "description": "Starting XI",
+                    "url": "https://sports.example/lineup/2",
+                    "publishedAt": "2026-08-10T09:00:00Z",
+                    "lang": "en",
+                }
+            ]
+        }
+    )
 
     articles = GNewsClient("gnews-key", client=transport).search("Confirmed lineup")
 
@@ -57,17 +69,21 @@ def test_gnews_uses_documented_search_endpoint_and_api_key_parameter() -> None:
 
 
 def test_guardian_uses_football_content_api_and_normalizes_results() -> None:
-    transport = _FakeClient({
-        "response": {
-            "results": [{
-                "id": "football/2026/aug/10/team-news",
-                "webTitle": "Team news confirmed",
-                "webUrl": "https://www.theguardian.com/football/2026/aug/10/team-news",
-                "webPublicationDate": "2026-08-10T10:00:00Z",
-                "fields": {"trailText": "<strong>Striker</strong> unavailable"},
-            }]
+    transport = _FakeClient(
+        {
+            "response": {
+                "results": [
+                    {
+                        "id": "football/2026/aug/10/team-news",
+                        "webTitle": "Team news confirmed",
+                        "webUrl": "https://www.theguardian.com/football/2026/aug/10/team-news",
+                        "webPublicationDate": "2026-08-10T10:00:00Z",
+                        "fields": {"trailText": "<strong>Striker</strong> unavailable"},
+                    }
+                ]
+            }
         }
-    })
+    )
 
     articles = GuardianClient("guardian-key", client=transport).search("Team news")
 

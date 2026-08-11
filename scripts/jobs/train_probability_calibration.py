@@ -44,7 +44,7 @@ def fit_profiles_from_prediction_rows(
             continue
         try:
             normalized = {code: float(probabilities[code]) for code in OUTCOME_CODES}
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             continue
         samples_by_model[model_name].append(
             (str(entry["kickoff_time"]), normalized, str(entry["actual"]))

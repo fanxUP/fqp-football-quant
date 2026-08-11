@@ -368,7 +368,9 @@ def list_predictions(
         "latest_predict_time": (
             summary_row[4].isoformat()
             if summary_row[4] is not None and hasattr(summary_row[4], "isoformat")
-            else str(summary_row[4]) if summary_row[4] is not None else None
+            else str(summary_row[4])
+            if summary_row[4] is not None
+            else None
         ),
     }
     return {
@@ -560,19 +562,19 @@ def get_calibration_profiles(limit: int = Query(12, ge=1, le=60)):
         }
         parameters = row[4] or {}
         profile = {
-                "modelCode": row[0],
-                "playType": row[1],
-                "methodName": row[2],
-                "version": row[3],
-                "temperature": float(parameters["temperature"]),
-                "sampleCount": raw["sample_count"],
-                "logLossBefore": raw["log_loss_before"],
-                "logLossAfter": raw["log_loss_after"],
-                "trainingEndDate": str(row[8]) if row[8] else None,
-                "isActive": bool(row[9]),
-                "createdAt": row[10].isoformat() if row[10] else None,
-                "review": review_calibration_profile(raw),
-            }
+            "modelCode": row[0],
+            "playType": row[1],
+            "methodName": row[2],
+            "version": row[3],
+            "temperature": float(parameters["temperature"]),
+            "sampleCount": raw["sample_count"],
+            "logLossBefore": raw["log_loss_before"],
+            "logLossAfter": raw["log_loss_after"],
+            "trainingEndDate": str(row[8]) if row[8] else None,
+            "isActive": bool(row[9]),
+            "createdAt": row[10].isoformat() if row[10] else None,
+            "review": review_calibration_profile(raw),
+        }
         profiles.append(profile)
         profiles_by_model.setdefault(row[0], []).append(
             {

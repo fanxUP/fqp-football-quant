@@ -31,10 +31,13 @@ from scripts.jobs.run_model_prediction import (
 
 
 def test_xgboost_shadow_requires_a_verified_profile_before_predicting() -> None:
-    assert _load_xgboost_shadow_probabilities(
-        {"xgboost_shadow": {"rollout_mode": "shadow"}},
-        {"data_completeness_score": 0.9},
-    ) is None
+    assert (
+        _load_xgboost_shadow_probabilities(
+            {"xgboost_shadow": {"rollout_mode": "shadow"}},
+            {"data_completeness_score": 0.9},
+        )
+        is None
+    )
 
 
 def test_fair_odds_omits_values_outside_database_precision() -> None:
@@ -45,49 +48,72 @@ def test_fair_odds_omits_values_outside_database_precision() -> None:
 
 
 def test_logistic_shadow_requires_a_verified_profile_before_predicting() -> None:
-    assert _load_logistic_shadow_probabilities(
-        {"logistic_shadow": {"rollout_mode": "shadow"}},
-        {"data_completeness_score": 0.9},
-    ) is None
+    assert (
+        _load_logistic_shadow_probabilities(
+            {"logistic_shadow": {"rollout_mode": "shadow"}},
+            {"data_completeness_score": 0.9},
+        )
+        is None
+    )
 
 
 def test_extra_trees_shadow_requires_a_verified_profile_before_predicting() -> None:
-    assert _load_extra_trees_shadow_probabilities(
-        {"extra_trees_shadow": {"rollout_mode": "shadow"}},
-        {"data_completeness_score": 0.9},
-    ) is None
+    assert (
+        _load_extra_trees_shadow_probabilities(
+            {"extra_trees_shadow": {"rollout_mode": "shadow"}},
+            {"data_completeness_score": 0.9},
+        )
+        is None
+    )
 
 
 def test_hist_gradient_boosting_shadow_requires_a_verified_profile_before_predicting() -> None:
-    assert _load_hist_gradient_boosting_shadow_probabilities(
-        {"hist_gradient_boosting_shadow": {"rollout_mode": "shadow"}},
-        {"data_completeness_score": 0.9},
-    ) is None
+    assert (
+        _load_hist_gradient_boosting_shadow_probabilities(
+            {"hist_gradient_boosting_shadow": {"rollout_mode": "shadow"}},
+            {"data_completeness_score": 0.9},
+        )
+        is None
+    )
 
 
 def test_adaboost_shadow_requires_a_verified_profile_before_predicting() -> None:
-    assert _load_adaboost_shadow_probabilities(
-        {"adaboost_shadow": {"rollout_mode": "shadow"}},
-        {"data_completeness_score": 0.9},
-    ) is None
+    assert (
+        _load_adaboost_shadow_probabilities(
+            {"adaboost_shadow": {"rollout_mode": "shadow"}},
+            {"data_completeness_score": 0.9},
+        )
+        is None
+    )
 
 
 def test_lda_shadow_requires_a_verified_profile_before_predicting() -> None:
-    assert _load_lda_shadow_probabilities(
-        {"lda_shadow": {"rollout_mode": "shadow"}},
-        {"data_completeness_score": 0.9},
-    ) is None
+    assert (
+        _load_lda_shadow_probabilities(
+            {"lda_shadow": {"rollout_mode": "shadow"}},
+            {"data_completeness_score": 0.9},
+        )
+        is None
+    )
 
 
 def test_knn_shadow_requires_a_verified_profile_before_predicting() -> None:
-    assert _load_knn_shadow_probabilities(
-        {"knn_shadow": {"rollout_mode": "shadow"}},
-        {"data_completeness_score": 0.9},
-    ) is None
+    assert (
+        _load_knn_shadow_probabilities(
+            {"knn_shadow": {"rollout_mode": "shadow"}},
+            {"data_completeness_score": 0.9},
+        )
+        is None
+    )
 
 
 def test_mlp_shadow_requires_a_verified_profile_before_predicting() -> None:
-    assert _load_mlp_shadow_probabilities({'mlp_shadow': {'rollout_mode': 'shadow'}}, {'data_completeness_score': 0.9}) is None
+    assert (
+        _load_mlp_shadow_probabilities(
+            {"mlp_shadow": {"rollout_mode": "shadow"}}, {"data_completeness_score": 0.9}
+        )
+        is None
+    )
 
 
 def test_bayesian_form_requires_both_teams_to_have_settled_history() -> None:
@@ -95,9 +121,10 @@ def test_bayesian_form_requires_both_teams_to_have_settled_history() -> None:
     cursor = conn.cursor.return_value.__enter__.return_value
     cursor.fetchall.return_value = [(1, "3")] * 6 + [(2, "0")] * 5
 
-    assert _load_bayesian_form_probabilities(
-        conn, 101, {"home_team_id": 10, "away_team_id": 20}
-    ) is None
+    assert (
+        _load_bayesian_form_probabilities(conn, 101, {"home_team_id": 10, "away_team_id": 20})
+        is None
+    )
     query = cursor.execute.call_args.args[0]
     assert "m.kickoff_time < current_match.kickoff_time" in query
     assert "r.result_status IN ('final', 'confirmed')" in query

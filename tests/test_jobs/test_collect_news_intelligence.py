@@ -11,10 +11,7 @@ from scripts.jobs.collect_news_intelligence import (
 
 
 def test_watch_query_is_bounded_for_gnews_and_uses_exact_team_phrases() -> None:
-    matches = [
-        {"home_team_name": f"主队{i}", "away_team_name": f"客队{i}"}
-        for i in range(30)
-    ]
+    matches = [{"home_team_name": f"主队{i}", "away_team_name": f"客队{i}"} for i in range(30)]
 
     query = build_watch_query(matches)
 

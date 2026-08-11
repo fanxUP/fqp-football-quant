@@ -36,10 +36,8 @@ def test_news_jobs_use_staggered_conservative_intervals() -> None:
     assert 'id="extract_news_events"' in source
     assert 'id="build_news_feature_snapshots"' in source
     assert 'id="run_news_shadow_model"' in source
-    assert source.index('id="collect_news_intelligence"') < source.index(
-        'id="extract_news_events"'
-    )
-    assert 'FQP_NEWS_COLLECTION_ENABLED' in source
+    assert source.index('id="collect_news_intelligence"') < source.index('id="extract_news_events"')
+    assert "FQP_NEWS_COLLECTION_ENABLED" in source
 
 
 def test_self_tracked_job_is_not_wrapped_again():
@@ -137,15 +135,24 @@ def test_season_reconciliation_retry_is_limited_to_one_delayed_daily_run():
 def test_season_reconciliation_retry_requires_a_failed_primary_run_today():
     now = datetime.fromisoformat("2026-08-02T01:05:00+08:00")
 
-    assert _should_retry_season_reconciliation(
-        now, "failed", datetime.fromisoformat("2026-08-02T00:05:20+08:00")
-    ) is True
-    assert _should_retry_season_reconciliation(
-        now, "completed", datetime.fromisoformat("2026-08-02T00:05:20+08:00")
-    ) is False
-    assert _should_retry_season_reconciliation(
-        now, "failed", datetime.fromisoformat("2026-08-01T00:05:20+08:00")
-    ) is False
+    assert (
+        _should_retry_season_reconciliation(
+            now, "failed", datetime.fromisoformat("2026-08-02T00:05:20+08:00")
+        )
+        is True
+    )
+    assert (
+        _should_retry_season_reconciliation(
+            now, "completed", datetime.fromisoformat("2026-08-02T00:05:20+08:00")
+        )
+        is False
+    )
+    assert (
+        _should_retry_season_reconciliation(
+            now, "failed", datetime.fromisoformat("2026-08-01T00:05:20+08:00")
+        )
+        is False
+    )
 
 
 def test_scheduler_refreshes_official_schedule_metadata_every_30_minutes():
@@ -212,7 +219,9 @@ def test_scheduler_registers_extra_trees_after_existing_shadow_training() -> Non
     source = Path("scripts/jobs/run_scheduler.py").read_text()
 
     assert 'id="train_extra_trees_shadow"' in source
-    assert source.index('id="train_negative_binomial_shadow"') < source.index('id="train_extra_trees_shadow"')
+    assert source.index('id="train_negative_binomial_shadow"') < source.index(
+        'id="train_extra_trees_shadow"'
+    )
     assert JOB_DEFINITIONS["train_extra_trees_shadow"].schedule == "每日 00:05"
 
 
@@ -220,7 +229,9 @@ def test_scheduler_registers_hist_gradient_boosting_after_extra_trees() -> None:
     source = Path("scripts/jobs/run_scheduler.py").read_text()
 
     assert 'id="train_hist_gradient_boosting_shadow"' in source
-    assert source.index('id="train_extra_trees_shadow"') < source.index('id="train_hist_gradient_boosting_shadow"')
+    assert source.index('id="train_extra_trees_shadow"') < source.index(
+        'id="train_hist_gradient_boosting_shadow"'
+    )
     assert JOB_DEFINITIONS["train_hist_gradient_boosting_shadow"].schedule == "每日 00:08"
 
 
@@ -228,7 +239,9 @@ def test_scheduler_registers_adaboost_after_hist_gradient_boosting() -> None:
     source = Path("scripts/jobs/run_scheduler.py").read_text()
 
     assert 'id="train_adaboost_shadow"' in source
-    assert source.index('id="train_hist_gradient_boosting_shadow"') < source.index('id="train_adaboost_shadow"')
+    assert source.index('id="train_hist_gradient_boosting_shadow"') < source.index(
+        'id="train_adaboost_shadow"'
+    )
     assert JOB_DEFINITIONS["train_adaboost_shadow"].schedule == "每日 00:11"
 
 
@@ -270,7 +283,9 @@ def test_xgboost_shadow_training_runs_after_calibration_without_decision_promoti
     source = Path("scripts/jobs/run_scheduler.py").read_text()
 
     assert 'id="train_xgboost_shadow"' in source
-    assert source.index('id="train_probability_calibration"') < source.index('id="train_xgboost_shadow"')
+    assert source.index('id="train_probability_calibration"') < source.index(
+        'id="train_xgboost_shadow"'
+    )
 
 
 def test_logistic_shadow_training_runs_after_xgboost_without_decision_promotion():

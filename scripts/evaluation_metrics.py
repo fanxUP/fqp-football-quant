@@ -171,14 +171,10 @@ def compute_match_metrics(
         mrk = market_probs.get(opt, 0.0)
         closing_probability = (closing_market_probs or {}).get(opt)
         clv_scores[f"clv_{opt}"] = (
-            round(closing_probability - mrk, 6)
-            if closing_probability is not None
-            else None
+            round(closing_probability - mrk, 6) if closing_probability is not None else None
         )
         closing_edges[f"closing_edge_{opt}"] = (
-            round(mp - closing_probability, 6)
-            if closing_probability is not None
-            else None
+            round(mp - closing_probability, 6) if closing_probability is not None else None
         )
         gaps[f"gap_{opt}"] = round(probability_gap(mp, mrk), 6)
 
@@ -333,14 +329,23 @@ def store_evaluation_metrics(
                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
                                %s, %s, %s, %s, %s, NOW())""",
                     (
-                        m.get("match_id"), m.get("model_version_id"),
-                        m.get("predict_time"), m.get("play_type", "spf"),
-                        m.get("option_code", "3"), m.get("official_sp"),
-                        m.get("market_probability"), m.get("model_probability"),
-                        m.get("probability_gap"), m.get("fair_odds"), m.get("ev"),
-                        m.get("clv_score"), m.get("favourite_longshot_score"),
-                        m.get("market_signal_level"), m.get("brier_score"),
-                        m.get("log_loss"), m.get("rps"),
+                        m.get("match_id"),
+                        m.get("model_version_id"),
+                        m.get("predict_time"),
+                        m.get("play_type", "spf"),
+                        m.get("option_code", "3"),
+                        m.get("official_sp"),
+                        m.get("market_probability"),
+                        m.get("model_probability"),
+                        m.get("probability_gap"),
+                        m.get("fair_odds"),
+                        m.get("ev"),
+                        m.get("clv_score"),
+                        m.get("favourite_longshot_score"),
+                        m.get("market_signal_level"),
+                        m.get("brier_score"),
+                        m.get("log_loss"),
+                        m.get("rps"),
                     ),
                 )
             stored += 1
@@ -449,15 +454,26 @@ def run(dry_run: bool = False) -> dict[str, Any]:
 
         groups: dict[tuple, dict] = dd(
             lambda: {
-                "probs": {}, "market_probs": {}, "closing_probs": {},
-                "closing_odds": {}, "actual": None,
+                "probs": {},
+                "market_probs": {},
+                "closing_probs": {},
+                "closing_odds": {},
+                "actual": None,
             }
         )
 
         for row in rows:
             (
-                match_id, mv_id, pred_time, model_p, market_p, opt_code,
-                model_name, closing_probability, closing_odd, actual,
+                match_id,
+                mv_id,
+                pred_time,
+                model_p,
+                market_p,
+                opt_code,
+                model_name,
+                closing_probability,
+                closing_odd,
+                actual,
             ) = row
             key = (match_id, mv_id, str(pred_time))
 

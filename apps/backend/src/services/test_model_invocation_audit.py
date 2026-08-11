@@ -55,19 +55,48 @@ def test_audit_persists_metadata_without_prompt_or_reply() -> None:
     assert conn.committed
     assert "prompt_body" not in conn.cursor_instance.statement.lower()
     assert "response_body" not in conn.cursor_instance.statement.lower()
-    assert conn.cursor_instance.params == ("doc_agent", "openai", "gpt-5-mini", "succeeded", 123, 456, 78, None)
+    assert conn.cursor_instance.params == (
+        "doc_agent",
+        "openai",
+        "gpt-5-mini",
+        "succeeded",
+        123,
+        456,
+        78,
+        None,
+    )
 
 
 def test_audit_list_returns_safe_public_shape() -> None:
-    conn = FakeConnection([
-        ("doc_agent", "openai", "gpt-5-mini", "succeeded", 10, 20, 30, None, datetime(2026, 8, 2, tzinfo=UTC)),
-    ])
+    conn = FakeConnection(
+        [
+            (
+                "doc_agent",
+                "openai",
+                "gpt-5-mini",
+                "succeeded",
+                10,
+                20,
+                30,
+                None,
+                datetime(2026, 8, 2, tzinfo=UTC),
+            ),
+        ]
+    )
 
     rows = list_model_invocations(conn, limit=999)
 
-    assert rows == [{
-        "agentCode": "doc_agent", "providerCode": "openai", "model": "gpt-5-mini", "status": "succeeded",
-        "promptLength": 10, "responseLength": 20, "durationMs": 30, "errorCode": None,
-        "createdAt": "2026-08-02T00:00:00+00:00",
-    }]
+    assert rows == [
+        {
+            "agentCode": "doc_agent",
+            "providerCode": "openai",
+            "model": "gpt-5-mini",
+            "status": "succeeded",
+            "promptLength": 10,
+            "responseLength": 20,
+            "durationMs": 30,
+            "errorCode": None,
+            "createdAt": "2026-08-02T00:00:00+00:00",
+        }
+    ]
     assert conn.cursor_instance.params == (50,)

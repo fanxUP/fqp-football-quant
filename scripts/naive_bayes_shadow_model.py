@@ -47,12 +47,17 @@ def fit_temporal_holdout(
     classifier.fit(rows[:training_matches], labels[:training_matches])
     loss = float(
         log_loss(
-            labels[training_matches:], classifier.predict_proba(rows[training_matches:]), labels=[0, 1, 2]
+            labels[training_matches:],
+            classifier.predict_proba(rows[training_matches:]),
+            labels=[0, 1, 2],
         )
     )
     return classifier, NaiveBayesShadowProfile(
-        artifact_path="", feature_columns=feature_columns, training_matches=training_matches,
-        validation_matches=validation_matches, validation_log_loss=loss,
+        artifact_path="",
+        feature_columns=feature_columns,
+        training_matches=training_matches,
+        validation_matches=validation_matches,
+        validation_log_loss=loss,
     )
 
 
@@ -68,13 +73,15 @@ def profile_from_parameters(parameters: dict[str, Any] | None) -> NaiveBayesShad
             validation_matches=int(parameters["validation_matches"]),
             validation_log_loss=float(parameters["validation_log_loss"]),
         )
-    except (KeyError, TypeError, ValueError):
+    except KeyError, TypeError, ValueError:
         return None
     if (
-        not profile.artifact_path or not profile.feature_columns
+        not profile.artifact_path
+        or not profile.feature_columns
         or profile.training_matches < MIN_TRAINING_MATCHES
         or profile.validation_matches < MIN_VALIDATION_MATCHES
-        or not math.isfinite(profile.validation_log_loss) or profile.validation_log_loss <= 0
+        or not math.isfinite(profile.validation_log_loss)
+        or profile.validation_log_loss <= 0
     ):
         return None
     return profile
@@ -90,8 +97,10 @@ def load_probabilities(
     try:
         import joblib
 
-        return probabilities_from_classifier(joblib.load(profile.artifact_path), profile, feature_snapshot)
-    except (ImportError, OSError, ValueError):
+        return probabilities_from_classifier(
+            joblib.load(profile.artifact_path), profile, feature_snapshot
+        )
+    except ImportError, OSError, ValueError:
         return None
 
 
@@ -103,13 +112,15 @@ def probabilities_from_classifier(
     for column in profile.feature_columns:
         try:
             values.append(float(feature_snapshot[column]))
-        except (KeyError, TypeError, ValueError):
+        except KeyError, TypeError, ValueError:
             values.append(math.nan)
     probabilities = classifier.predict_proba([values])
     classes = getattr(classifier, "classes_", None)
     if classes is None or len(probabilities) != 1 or len(probabilities[0]) != len(classes):
         return None
-    by_class = {int(key): float(value) for key, value in zip(classes, probabilities[0], strict=True)}
+    by_class = {
+        int(key): float(value) for key, value in zip(classes, probabilities[0], strict=True)
+    }
     result = {"0": by_class.get(0, 0.0), "1": by_class.get(1, 0.0), "3": by_class.get(2, 0.0)}
     total = sum(result.values())
     if not math.isfinite(total) or total <= 0 or any(value < 0 for value in result.values()):

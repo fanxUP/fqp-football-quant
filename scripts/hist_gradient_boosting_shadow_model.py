@@ -34,7 +34,9 @@ def fit_temporal_holdout(
     validation_matches = max(MIN_VALIDATION_MATCHES, math.ceil(len(rows) * 0.2))
     training_matches = len(rows) - validation_matches
     if training_matches < MIN_TRAINING_MATCHES:
-        raise ValueError("insufficient chronological samples for hist gradient boosting shadow training")
+        raise ValueError(
+            "insufficient chronological samples for hist gradient boosting shadow training"
+        )
 
     from sklearn.ensemble import HistGradientBoostingClassifier
     from sklearn.impute import SimpleImputer
@@ -85,7 +87,7 @@ def profile_from_parameters(
             validation_matches=int(parameters["validation_matches"]),
             validation_log_loss=float(parameters["validation_log_loss"]),
         )
-    except (KeyError, TypeError, ValueError):
+    except KeyError, TypeError, ValueError:
         return None
     if (
         not profile.artifact_path
@@ -110,8 +112,10 @@ def load_probabilities(
     try:
         import joblib
 
-        return probabilities_from_classifier(joblib.load(profile.artifact_path), profile, feature_snapshot)
-    except (ImportError, OSError, ValueError):
+        return probabilities_from_classifier(
+            joblib.load(profile.artifact_path), profile, feature_snapshot
+        )
+    except ImportError, OSError, ValueError:
         return None
 
 
@@ -125,7 +129,7 @@ def probabilities_from_classifier(
     for column in profile.feature_columns:
         try:
             values.append(float(feature_snapshot[column]))
-        except (KeyError, TypeError, ValueError):
+        except KeyError, TypeError, ValueError:
             values.append(math.nan)
     probabilities = classifier.predict_proba([values])
     classes = getattr(classifier, "classes_", None)

@@ -282,9 +282,7 @@ def run_monthly(month: str | None = None, dry_run: bool = False) -> dict[str, An
             "longest_losing_streak": aggregate["longest_losing_streak"],
             "best_strategy_pool": "待样本积累",
             "worst_strategy_pool": "待样本积累",
-            "model_calibration_score": performance["performanceMetrics"][
-                "calibrationError"
-            ],
+            "model_calibration_score": performance["performanceMetrics"]["calibrationError"],
             "next_month_plan": "控制单日预算，优先提升官方赔率与特征快照完整率。",
         }
         data["summary_text"] = monthly_summary(data)

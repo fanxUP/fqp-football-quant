@@ -48,26 +48,36 @@ def _card(
 
 
 def test_daily_performance_scores_true_outcomes_clv_calibration_and_breakdowns() -> None:
-    report = build_daily_performance([
-        _card(
-            match_id=1,
-            actual="3",
-            probabilities=(0.60, 0.25, 0.15),
-            market_probabilities=(0.50, 0.28, 0.22),
-            odds=(2.00, 3.20, 3.80),
-            evidence=[
-                {"phase": "pre_match", "sourceType": "official_news", "reliability": "official"},
-                {"phase": "post_match", "sourceType": "api_football_match_data", "reliability": "verified"},
-            ],
-        ),
-        _card(
-            match_id=2,
-            actual="0",
-            probabilities=(0.55, 0.25, 0.20),
-            market_probabilities=(0.48, 0.27, 0.25),
-            odds=(1.80, 3.40, 4.20),
-        ),
-    ])
+    report = build_daily_performance(
+        [
+            _card(
+                match_id=1,
+                actual="3",
+                probabilities=(0.60, 0.25, 0.15),
+                market_probabilities=(0.50, 0.28, 0.22),
+                odds=(2.00, 3.20, 3.80),
+                evidence=[
+                    {
+                        "phase": "pre_match",
+                        "sourceType": "official_news",
+                        "reliability": "official",
+                    },
+                    {
+                        "phase": "post_match",
+                        "sourceType": "api_football_match_data",
+                        "reliability": "verified",
+                    },
+                ],
+            ),
+            _card(
+                match_id=2,
+                actual="0",
+                probabilities=(0.55, 0.25, 0.20),
+                market_probabilities=(0.48, 0.27, 0.25),
+                odds=(1.80, 3.40, 4.20),
+            ),
+        ]
+    )
 
     metrics = report["performanceMetrics"]
     assert metrics["sampleCount"] == 2
@@ -104,29 +114,35 @@ def test_daily_performance_scores_true_outcomes_clv_calibration_and_breakdowns()
 
 
 def test_periodic_performance_merges_daily_results_without_re_scoring_business_facts() -> None:
-    first = build_daily_performance([
-        _card(
-            match_id=1,
-            actual="3",
-            probabilities=(0.60, 0.25, 0.15),
-            market_probabilities=(0.50, 0.28, 0.22),
-            odds=(2.00, 3.20, 3.80),
-        )
-    ])
-    second = build_daily_performance([
-        _card(
-            match_id=2,
-            actual="0",
-            probabilities=(0.55, 0.25, 0.20),
-            market_probabilities=(0.48, 0.27, 0.25),
-            odds=(1.80, 3.40, 4.20),
-        )
-    ])
+    first = build_daily_performance(
+        [
+            _card(
+                match_id=1,
+                actual="3",
+                probabilities=(0.60, 0.25, 0.15),
+                market_probabilities=(0.50, 0.28, 0.22),
+                odds=(2.00, 3.20, 3.80),
+            )
+        ]
+    )
+    second = build_daily_performance(
+        [
+            _card(
+                match_id=2,
+                actual="0",
+                probabilities=(0.55, 0.25, 0.20),
+                market_probabilities=(0.48, 0.27, 0.25),
+                odds=(1.80, 3.40, 4.20),
+            )
+        ]
+    )
 
-    periodic = build_periodic_performance([
-        {"periodKey": "2026-08-01", **first},
-        {"periodKey": "2026-08-02", **second},
-    ])
+    periodic = build_periodic_performance(
+        [
+            {"periodKey": "2026-08-01", **first},
+            {"periodKey": "2026-08-02", **second},
+        ]
+    )
 
     assert periodic["performanceMetrics"]["sampleCount"] == 2
     assert periodic["performanceMetrics"]["correctCount"] == 1

@@ -29,7 +29,11 @@ def _run_with_connection(conn: Any) -> dict[str, Any]:
     goal_counts = [int(goal) for row in rows for goal in row]
     dispersion = fit_goal_dispersion(goal_counts, minimum_samples=MINIMUM_SETTLED_MATCHES * 2)
     if dispersion is None:
-        return {"status": "skipped", "reason": "insufficient_overdispersed_official_results", "sample_count": len(rows)}
+        return {
+            "status": "skipped",
+            "reason": "insufficient_overdispersed_official_results",
+            "sample_count": len(rows),
+        }
     parameters = {
         "rollout_mode": "shadow",
         "converged": True,
@@ -46,7 +50,12 @@ def _run_with_connection(conn: Any) -> dict[str, Any]:
         if cur.rowcount != 1:
             raise RuntimeError("negative-binomial shadow model version is not available")
     conn.commit()
-    return {"status": "ok", "rollout_mode": "shadow", "training_matches": len(rows), "dispersion": round(dispersion, 6)}
+    return {
+        "status": "ok",
+        "rollout_mode": "shadow",
+        "training_matches": len(rows),
+        "dispersion": round(dispersion, 6),
+    }
 
 
 def run(dry_run: bool = False) -> dict[str, Any]:
@@ -54,7 +63,9 @@ def run(dry_run: bool = False) -> dict[str, Any]:
     if dry_run:
         return {"status": "dry_run", "message": "negative-binomial shadow training (dry run)"}
     run_id = start_tracked_job(
-        "train_negative_binomial_shadow", "model_agent", {"rollout_mode": "shadow"},
+        "train_negative_binomial_shadow",
+        "model_agent",
+        {"rollout_mode": "shadow"},
         dependencies=["settle_tickets"],
     )
     try:

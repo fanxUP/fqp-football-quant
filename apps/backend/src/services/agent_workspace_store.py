@@ -11,27 +11,41 @@ class AgentWorkspaceError(ValueError):
 
 def _serialize_review_event(row: tuple[Any, ...]) -> dict[str, Any]:
     return {
-        "id": row[0], "action": row[1], "reviewNote": row[2],
+        "id": row[0],
+        "action": row[1],
+        "reviewNote": row[2],
         "createdAt": row[3].isoformat() if row[3] else None,
     }
 
 
 def _serialize_comparison(row: tuple[Any, ...]) -> dict[str, Any]:
     return {
-        "id": str(row[0]), "requestedAgentCodes": row[1], "requestedCount": row[2],
-        "succeededCount": row[3], "failedCount": row[4], "status": row[5],
+        "id": str(row[0]),
+        "requestedAgentCodes": row[1],
+        "requestedCount": row[2],
+        "succeededCount": row[3],
+        "failedCount": row[4],
+        "status": row[5],
         "createdAt": row[6].isoformat() if row[6] else None,
         "completedAt": row[7].isoformat() if row[7] else None,
-        "reviewNote": row[8], "reviewedAt": row[9].isoformat() if row[9] else None,
+        "reviewNote": row[8],
+        "reviewedAt": row[9].isoformat() if row[9] else None,
     }
 
 
 def _serialize(row: tuple[Any, ...], *, include_content: bool = True) -> dict[str, Any]:
     task = {
-        "id": row[0], "title": row[1], "agentCode": row[2], "providerCode": row[3],
-        "model": row[4], "reviewNote": row[5], "reviewedAt": row[6].isoformat() if row[6] else None,
-        "createdAt": row[7].isoformat() if row[7] else None, "comparisonId": row[10],
-        "sourceType": row[11], "sourceRef": row[12],
+        "id": row[0],
+        "title": row[1],
+        "agentCode": row[2],
+        "providerCode": row[3],
+        "model": row[4],
+        "reviewNote": row[5],
+        "reviewedAt": row[6].isoformat() if row[6] else None,
+        "createdAt": row[7].isoformat() if row[7] else None,
+        "comparisonId": row[10],
+        "sourceType": row[11],
+        "sourceRef": row[12],
     }
     if include_content:
         task.update({"prompt": row[8], "response": row[9]})
@@ -39,8 +53,17 @@ def _serialize(row: tuple[Any, ...], *, include_content: bool = True) -> dict[st
 
 
 def create_workspace_task(
-    conn: Any, *, title: str, agent_code: str, provider_code: str, model: str, prompt: str, response: str,
-    comparison_id: str | None = None, source_type: str | None = None, source_ref: str | None = None,
+    conn: Any,
+    *,
+    title: str,
+    agent_code: str,
+    provider_code: str,
+    model: str,
+    prompt: str,
+    response: str,
+    comparison_id: str | None = None,
+    source_type: str | None = None,
+    source_ref: str | None = None,
 ) -> dict[str, Any]:
     with conn.cursor() as cur:
         cur.execute(
@@ -48,7 +71,17 @@ def create_workspace_task(
                    (title, agent_code, provider_code, model, prompt, response, comparison_id, source_type, source_ref)
                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                RETURNING id, title, agent_code, provider_code, model, review_note, reviewed_at, created_at, prompt, response, comparison_id, source_type, source_ref""",
-            (title, agent_code, provider_code, model, prompt, response, comparison_id, source_type, source_ref),
+            (
+                title,
+                agent_code,
+                provider_code,
+                model,
+                prompt,
+                response,
+                comparison_id,
+                source_type,
+                source_ref,
+            ),
         )
         row = cur.fetchone()
     conn.commit()
@@ -56,7 +89,11 @@ def create_workspace_task(
 
 
 def has_workspace_task_for_source(
-    conn: Any, *, agent_code: str, source_type: str, source_ref: str,
+    conn: Any,
+    *,
+    agent_code: str,
+    source_type: str,
+    source_ref: str,
 ) -> bool:
     """Keep an automated source interpretation idempotent across scheduler retries."""
     with conn.cursor() as cur:
@@ -71,7 +108,11 @@ def has_workspace_task_for_source(
 
 
 def get_workspace_task_for_source(
-    conn: Any, *, agent_code: str, source_type: str, source_ref: str,
+    conn: Any,
+    *,
+    agent_code: str,
+    source_type: str,
+    source_ref: str,
 ) -> dict[str, Any] | None:
     """Read one immutable archived result for a fixed business report source."""
     with conn.cursor() as cur:
@@ -112,7 +153,9 @@ def list_workspace_comparison_tasks(conn: Any, comparison_id: str) -> list[dict[
     return [_serialize(row) for row in rows]
 
 
-def create_workspace_comparison(conn: Any, comparison_id: str, agent_codes: list[str]) -> dict[str, Any]:
+def create_workspace_comparison(
+    conn: Any, comparison_id: str, agent_codes: list[str]
+) -> dict[str, Any]:
     with conn.cursor() as cur:
         cur.execute(
             """INSERT INTO agent_workspace_comparisons (id, requested_agent_codes, requested_count)
@@ -137,7 +180,11 @@ def get_workspace_comparison(conn: Any, comparison_id: str) -> dict[str, Any] | 
 
 
 def set_workspace_comparison_completed(
-    conn: Any, comparison_id: str, *, succeeded_count: int, failed_count: int,
+    conn: Any,
+    comparison_id: str,
+    *,
+    succeeded_count: int,
+    failed_count: int,
 ) -> dict[str, Any]:
     with conn.cursor() as cur:
         cur.execute(
@@ -154,7 +201,9 @@ def set_workspace_comparison_completed(
     return _serialize_comparison(row)
 
 
-def set_workspace_comparison_reviewed(conn: Any, comparison_id: str, review_note: str) -> dict[str, Any]:
+def set_workspace_comparison_reviewed(
+    conn: Any, comparison_id: str, review_note: str
+) -> dict[str, Any]:
     with conn.cursor() as cur:
         cur.execute(
             """UPDATE agent_workspace_comparisons
@@ -204,7 +253,10 @@ def list_workspace_task_page(
 
 
 def set_workspace_task_reviewed(
-    conn: Any, task_id: int, reviewed: bool, review_note: str | None = None,
+    conn: Any,
+    task_id: int,
+    reviewed: bool,
+    review_note: str | None = None,
 ) -> dict[str, Any]:
     with conn.cursor() as cur:
         cur.execute(
@@ -228,7 +280,9 @@ def set_workspace_task_reviewed(
     return _serialize(row)
 
 
-def list_workspace_task_review_events(conn: Any, task_id: int, limit: int = 50) -> list[dict[str, Any]]:
+def list_workspace_task_review_events(
+    conn: Any, task_id: int, limit: int = 50
+) -> list[dict[str, Any]]:
     safe_limit = max(1, min(limit, 100))
     with conn.cursor() as cur:
         cur.execute("SELECT 1 FROM agent_workspace_tasks WHERE id = %s", (task_id,))

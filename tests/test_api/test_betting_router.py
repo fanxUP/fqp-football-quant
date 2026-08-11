@@ -108,7 +108,18 @@ def test_attach_agent_ticket_items_uses_actual_ticket_play_type():
 
         def fetchall(self):
             return [
-                (31, 101, "周日214", "奥斯KFUM", "莫尔德", "bf", "other_a", "other_a", 20.0, "official"),
+                (
+                    31,
+                    101,
+                    "周日214",
+                    "奥斯KFUM",
+                    "莫尔德",
+                    "bf",
+                    "other_a",
+                    "other_a",
+                    20.0,
+                    "official",
+                ),
             ]
 
         def __enter__(self):

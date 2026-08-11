@@ -377,10 +377,22 @@ class TestPredictionModelOverviewEndpoint:
                     "zh-CN": "把体彩官方赔率换算为市场隐含胜平负概率。",
                     "en": "Converts official Sporttery odds into implied 1X2 probabilities.",
                 },
-                "output": {"zh-CN": "胜平负及市场派生概率。", "en": "1X2 and market-derived probabilities."},
-                "cadence": {"zh-CN": "随官方赔率快照更新。", "en": "Updates with official odds snapshots."},
-                "condition": {"zh-CN": "需要完整、在售的官方赔率。", "en": "Requires complete official odds on sale."},
-                "role": {"zh-CN": "市场参照，不作为独立信号。", "en": "Market reference, not an independent signal."},
+                "output": {
+                    "zh-CN": "胜平负及市场派生概率。",
+                    "en": "1X2 and market-derived probabilities.",
+                },
+                "cadence": {
+                    "zh-CN": "随官方赔率快照更新。",
+                    "en": "Updates with official odds snapshots.",
+                },
+                "condition": {
+                    "zh-CN": "需要完整、在售的官方赔率。",
+                    "en": "Requires complete official odds on sale.",
+                },
+                "role": {
+                    "zh-CN": "市场参照，不作为独立信号。",
+                    "en": "Market reference, not an independent signal.",
+                },
                 "stage": "baseline",
             },
         }
@@ -397,8 +409,16 @@ class TestCalibrationProfilesEndpoint:
         mock_conn.cursor.return_value.__enter__.return_value = mock_cur
         mock_cur.fetchall.return_value = [
             (
-                "market_baseline", "spf", "temperature_scaling_v1", "temperature-20260809T234200",
-                {"temperature": 1.15}, 320, 1.04, 1.02, date(2026, 8, 9), True,
+                "market_baseline",
+                "spf",
+                "temperature_scaling_v1",
+                "temperature-20260809T234200",
+                {"temperature": 1.15},
+                320,
+                1.04,
+                1.02,
+                date(2026, 8, 9),
+                True,
                 datetime(2026, 8, 9, 23, 42),
             ),
         ]

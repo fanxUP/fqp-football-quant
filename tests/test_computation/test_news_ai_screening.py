@@ -46,8 +46,7 @@ def test_model_rejection_is_archived_without_creating_an_event() -> None:
         return ModelReply(
             "openai",
             "gpt-5-mini",
-            '{"accepted":false,"reasonCode":"unrelated",'
-            '"requiresReview":false,"uncertainties":[]}',
+            '{"accepted":false,"reasonCode":"unrelated","requiresReview":false,"uncertainties":[]}',
         )
 
     result = screen_news_article(_article(), invoke_model=invoke)

@@ -30,7 +30,7 @@ def _number(value: Any) -> float | None:
         return None
     try:
         number = float(value)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return None
     return number if number == number and abs(number) != float("inf") else None
 
@@ -39,24 +39,28 @@ def _average(values: Sequence[float]) -> float | None:
     return round(sum(values) / len(values), 4) if values else None
 
 
-def _signal_breakdown_row(key: str, signals: Sequence[tuple[int, Mapping[str, Any]]]) -> dict[str, Any]:
+def _signal_breakdown_row(
+    key: str, signals: Sequence[tuple[int, Mapping[str, Any]]]
+) -> dict[str, Any]:
     """Return one factual signal group without deriving outcome quality."""
     model_probabilities = [
-        value for _match_id, signal in signals
+        value
+        for _match_id, signal in signals
         if (value := _number(signal.get("modelProbability"))) is not None
     ]
     market_probabilities = [
-        value for _match_id, signal in signals
+        value
+        for _match_id, signal in signals
         if (value := _number(signal.get("marketProbability"))) is not None
     ]
     edges = [
-        model - market for _match_id, signal in signals
+        model - market
+        for _match_id, signal in signals
         if (model := _number(signal.get("modelProbability"))) is not None
         and (market := _number(signal.get("marketProbability"))) is not None
     ]
     expected_values = [
-        value for _match_id, signal in signals
-        if (value := _number(signal.get("ev"))) is not None
+        value for _match_id, signal in signals if (value := _number(signal.get("ev"))) is not None
     ]
     return {
         "key": key,
@@ -96,15 +100,15 @@ def build_daily_research_breakdowns(
             if isinstance(league_name, str) and league_name:
                 leagues[league_name].append((match_index, signal))
     return {
-        "models": _sort_breakdown([
-            _signal_breakdown_row(key, signals) for key, signals in models.items()
-        ]),
-        "playTypes": _sort_breakdown([
-            _signal_breakdown_row(key, signals) for key, signals in play_types.items()
-        ]),
-        "leagues": _sort_breakdown([
-            _signal_breakdown_row(key, signals) for key, signals in leagues.items()
-        ]),
+        "models": _sort_breakdown(
+            [_signal_breakdown_row(key, signals) for key, signals in models.items()]
+        ),
+        "playTypes": _sort_breakdown(
+            [_signal_breakdown_row(key, signals) for key, signals in play_types.items()]
+        ),
+        "leagues": _sort_breakdown(
+            [_signal_breakdown_row(key, signals) for key, signals in leagues.items()]
+        ),
     }
 
 
@@ -138,17 +142,23 @@ def build_periodic_research_breakdowns(
                     and int(_number(row.get("signalCount")) or 0) > 0
                 ]
                 total_weight = sum(weight for _value, weight in weighted)
-                return round(sum(value * weight for value, weight in weighted) / total_weight, 4) if total_weight else None
+                return (
+                    round(sum(value * weight for value, weight in weighted) / total_weight, 4)
+                    if total_weight
+                    else None
+                )
 
-            merged_rows.append({
-                "key": key,
-                "signalCount": signal_count,
-                "matchCount": match_count,
-                "averageModelProbability": weighted_average("averageModelProbability"),
-                "averageMarketProbability": weighted_average("averageMarketProbability"),
-                "averageEdge": weighted_average("averageEdge"),
-                "averageEv": weighted_average("averageEv"),
-            })
+            merged_rows.append(
+                {
+                    "key": key,
+                    "signalCount": signal_count,
+                    "matchCount": match_count,
+                    "averageModelProbability": weighted_average("averageModelProbability"),
+                    "averageMarketProbability": weighted_average("averageMarketProbability"),
+                    "averageEdge": weighted_average("averageEdge"),
+                    "averageEv": weighted_average("averageEv"),
+                }
+            )
         result[category] = _sort_breakdown(merged_rows)
     return result
 
@@ -185,9 +195,7 @@ def build_daily_research_metrics(
         and (market := _number(signal.get("marketProbability"))) is not None
     ]
     expected_values = [
-        value
-        for signal in signals
-        if (value := _number(signal.get("ev"))) is not None
+        value for signal in signals if (value := _number(signal.get("ev"))) is not None
     ]
     match_count = len(match_cards)
     signal_match_count = sum(bool(card.get("modelSignals")) for card in match_cards)
@@ -198,7 +206,9 @@ def build_daily_research_metrics(
         "signalMatchCount": signal_match_count,
         "signalCoverageRate": round(signal_match_count / match_count, 4) if match_count else 0.0,
         "evidenceMatchCount": evidence_match_count,
-        "evidenceCoverageRate": round(evidence_match_count / match_count, 4) if match_count else 0.0,
+        "evidenceCoverageRate": round(evidence_match_count / match_count, 4)
+        if match_count
+        else 0.0,
         "signalCount": len(signals),
         "averageModelProbability": _average(model_probabilities),
         "averageMarketProbability": _average(market_probabilities),
@@ -227,9 +237,7 @@ def build_periodic_research_metrics(
             metric_rows.append(metrics)
     match_count = sum(int(_number(row.get("matchCount")) or 0) for row in metric_rows)
     signal_count = sum(int(_number(row.get("signalCount")) or 0) for row in metric_rows)
-    signal_match_count = sum(
-        int(_number(row.get("signalMatchCount")) or 0) for row in metric_rows
-    )
+    signal_match_count = sum(int(_number(row.get("signalMatchCount")) or 0) for row in metric_rows)
     evidence_match_count = sum(
         int(_number(row.get("evidenceMatchCount")) or 0) for row in metric_rows
     )
@@ -279,8 +287,7 @@ def build_daily_report_snapshot(
     This helper deliberately omits any mutable frontend input.
     """
     matches = [
-        {field: deepcopy(card.get(field)) for field in _MATCH_CARD_FIELDS}
-        for card in match_cards
+        {field: deepcopy(card.get(field)) for field in _MATCH_CARD_FIELDS} for card in match_cards
     ]
     performance = build_daily_performance(match_cards)
     upset_metrics = upset_report.get("metrics") if isinstance(upset_report, Mapping) else None

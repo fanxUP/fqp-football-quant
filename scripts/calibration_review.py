@@ -52,7 +52,9 @@ def review_calibration_trend(profiles: list[dict[str, Any]]) -> dict[str, Any]:
     previous_samples = int(ordered[-2]["sample_count"])
     latest_samples = int(ordered[-1]["sample_count"])
     sample_ratio = round(latest_samples / previous_samples, 6)
-    comparable = COMPARABLE_SAMPLE_RATIO_MINIMUM <= sample_ratio <= (1 / COMPARABLE_SAMPLE_RATIO_MINIMUM)
+    comparable = (
+        COMPARABLE_SAMPLE_RATIO_MINIMUM <= sample_ratio <= (1 / COMPARABLE_SAMPLE_RATIO_MINIMUM)
+    )
     change = round(latest_loss - previous_loss, 6)
     if change <= -TREND_STABILITY_THRESHOLD:
         status, label = "improving", "近期改善"

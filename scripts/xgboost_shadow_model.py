@@ -76,7 +76,7 @@ def profile_from_parameters(parameters: dict[str, Any] | None) -> XGBoostShadowP
         training_matches = int(parameters["training_matches"])
         validation_matches = int(parameters["validation_matches"])
         validation_log_loss = float(parameters["validation_log_loss"])
-    except (KeyError, TypeError, ValueError):
+    except KeyError, TypeError, ValueError:
         return None
     if (
         not artifact_path
@@ -110,7 +110,7 @@ def load_probabilities(
         classifier = xgb.XGBClassifier()
         classifier.load_model(profile.artifact_path)
         return probabilities_from_classifier(classifier, profile, feature_snapshot)
-    except (ImportError, OSError, ValueError):
+    except ImportError, OSError, ValueError:
         return None
 
 
@@ -125,7 +125,7 @@ def probabilities_from_classifier(
         value = feature_snapshot.get(column)
         try:
             numeric = float(value) if value is not None else math.nan
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             numeric = math.nan
         values.append(numeric)
 

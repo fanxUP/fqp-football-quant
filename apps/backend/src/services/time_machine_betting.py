@@ -30,7 +30,8 @@ def _option_sort_key(play_type: str, option_code: object) -> tuple[int, str]:
 
 
 def build_time_machine_matches(
-    match_rows: list[tuple], odds_rows: list[tuple],
+    match_rows: list[tuple],
+    odds_rows: list[tuple],
 ) -> list[dict[str, Any]]:
     """Build historical match cards using only snapshots captured before sale stop.
 
@@ -52,13 +53,25 @@ def build_time_machine_matches(
             "kickoff_time": kickoff.isoformat() if hasattr(kickoff, "isoformat") else str(kickoff),
             "match_status": "historical",
             "match_num_str": code,
-            "sale_stop_time": stop_at.isoformat() if hasattr(stop_at, "isoformat") else str(stop_at),
+            "sale_stop_time": stop_at.isoformat()
+            if hasattr(stop_at, "isoformat")
+            else str(stop_at),
             "odds": _new_markets(),
         }
 
     latest: dict[tuple[int, str, str], tuple] = {}
     for row in odds_rows:
-        match_id, snapshot_id, snapshot_time, play_type, option_code, option_name, sp_value, handicap, is_single = row
+        (
+            match_id,
+            snapshot_id,
+            snapshot_time,
+            play_type,
+            option_code,
+            option_name,
+            sp_value,
+            handicap,
+            is_single,
+        ) = row
         match_id = int(match_id)
         if match_id not in matches or play_type not in PLAY_TYPES:
             continue
@@ -66,13 +79,25 @@ def build_time_machine_matches(
             continue
         key = (match_id, str(play_type), str(option_code))
         existing = latest.get(key)
-        if existing is None or snapshot_time > existing[2] or (
-            snapshot_time == existing[2] and int(snapshot_id) > int(existing[1])
+        if (
+            existing is None
+            or snapshot_time > existing[2]
+            or (snapshot_time == existing[2] and int(snapshot_id) > int(existing[1]))
         ):
             latest[key] = row
 
     for row in latest.values():
-        match_id, snapshot_id, snapshot_time, play_type, option_code, option_name, sp_value, handicap, is_single = row
+        (
+            match_id,
+            snapshot_id,
+            snapshot_time,
+            play_type,
+            option_code,
+            option_name,
+            sp_value,
+            handicap,
+            is_single,
+        ) = row
         market = matches[int(match_id)]["odds"][str(play_type)]
         if handicap is not None:
             market["handicap"] = float(handicap)
@@ -94,5 +119,7 @@ def build_time_machine_matches(
 
     for match in matches.values():
         for play_type, market in match["odds"].items():
-            market["options"].sort(key=lambda item: _option_sort_key(play_type, item["option_code"]))
+            market["options"].sort(
+                key=lambda item: _option_sort_key(play_type, item["option_code"])
+            )
     return list(matches.values())

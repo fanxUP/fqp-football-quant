@@ -83,7 +83,7 @@ def profile_from_parameters(parameters: dict[str, Any] | None) -> RandomForestSh
             validation_matches=int(parameters["validation_matches"]),
             validation_log_loss=float(parameters["validation_log_loss"]),
         )
-    except (KeyError, TypeError, ValueError):
+    except KeyError, TypeError, ValueError:
         return None
     if (
         not profile.artifact_path
@@ -108,8 +108,10 @@ def load_probabilities(
     try:
         import joblib
 
-        return probabilities_from_classifier(joblib.load(profile.artifact_path), profile, feature_snapshot)
-    except (ImportError, OSError, ValueError):
+        return probabilities_from_classifier(
+            joblib.load(profile.artifact_path), profile, feature_snapshot
+        )
+    except ImportError, OSError, ValueError:
         return None
 
 
@@ -123,7 +125,7 @@ def probabilities_from_classifier(
     for column in profile.feature_columns:
         try:
             values.append(float(feature_snapshot[column]))
-        except (KeyError, TypeError, ValueError):
+        except KeyError, TypeError, ValueError:
             values.append(math.nan)
     probabilities = classifier.predict_proba([values])
     classes = getattr(classifier, "classes_", None)

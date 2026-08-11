@@ -122,16 +122,18 @@ def test_weekly_review_defers_without_writing_business_review(monkeypatch) -> No
             "reasonCodes": ["DAILY_REPORT_PENDING"],
         },
     }
-    assert writes == [{
-        "report_type": "weekly",
-        "period_key": "2026-08-03",
-        "status": "waiting",
-        "readiness": {
-            "canGenerate": False,
+    assert writes == [
+        {
+            "report_type": "weekly",
+            "period_key": "2026-08-03",
             "status": "waiting",
-            "reasonCodes": ["DAILY_REPORT_PENDING"],
-        },
-    }]
+            "readiness": {
+                "canGenerate": False,
+                "status": "waiting",
+                "reasonCodes": ["DAILY_REPORT_PENDING"],
+            },
+        }
+    ]
 
 
 def test_monthly_review_does_not_overwrite_completed_snapshot(monkeypatch) -> None:
@@ -155,7 +157,9 @@ def test_monthly_review_does_not_overwrite_completed_snapshot(monkeypatch) -> No
     monkeypatch.setattr(
         generate_periodic_reviews,
         "upsert_monthly_review",
-        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("must not overwrite review")),
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("must not overwrite review")
+        ),
     )
 
     result = generate_periodic_reviews.run_monthly("2026-07")

@@ -85,19 +85,35 @@ def invoke_agent_binding(agent_code: str, body: AgentInvokeRequest):
         with get_db() as conn:
             result = invoke_agent_model(conn, agent_code, body.prompt)
             record_model_invocation(
-                conn, agent_code=agent_code, provider_code=result.provider_code, model=result.model,
-                status="succeeded", prompt_length=len(body.prompt), response_length=len(result.content),
+                conn,
+                agent_code=agent_code,
+                provider_code=result.provider_code,
+                model=result.model,
+                status="succeeded",
+                prompt_length=len(body.prompt),
+                response_length=len(result.content),
                 duration_ms=round((perf_counter() - started_at) * 1000),
             )
     except (ProviderConfigError, ModelGatewayError) as exc:
         with get_db() as conn:
             record_model_invocation(
-                conn, agent_code=agent_code, provider_code=None, model=None, status="failed",
-                prompt_length=len(body.prompt), response_length=0,
-                duration_ms=round((perf_counter() - started_at) * 1000), error_code="MODEL_CALL_FAILED",
+                conn,
+                agent_code=agent_code,
+                provider_code=None,
+                model=None,
+                status="failed",
+                prompt_length=len(body.prompt),
+                response_length=0,
+                duration_ms=round((perf_counter() - started_at) * 1000),
+                error_code="MODEL_CALL_FAILED",
             )
         _raise_config_error(exc)
-    return {"agentCode": agent_code, "providerCode": result.provider_code, "model": result.model, "content": result.content}
+    return {
+        "agentCode": agent_code,
+        "providerCode": result.provider_code,
+        "model": result.model,
+        "content": result.content,
+    }
 
 
 @router.get("/invocations")

@@ -17,12 +17,14 @@ _EPSILON = 1e-12
 def _complete_distribution(probabilities: dict[str, float]) -> bool:
     try:
         values = [float(probabilities[code]) for code in OUTCOME_CODES]
-    except (KeyError, TypeError, ValueError):
+    except KeyError, TypeError, ValueError:
         return False
     return all(math.isfinite(value) and value > 0 for value in values)
 
 
-def apply_temperature_scaling(probabilities: dict[str, float], temperature: float) -> dict[str, float]:
+def apply_temperature_scaling(
+    probabilities: dict[str, float], temperature: float
+) -> dict[str, float]:
     """Return a normalized 1x2 distribution after temperature scaling.
 
     Temperature above one softens an overconfident distribution; below one

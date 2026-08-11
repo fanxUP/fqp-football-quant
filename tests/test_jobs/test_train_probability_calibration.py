@@ -8,7 +8,16 @@ def test_profile_fitting_groups_complete_settled_match_distributions_by_model() 
     outcomes = ["3", "1", "0", "3", "3", "1"]
     for match_id, actual in enumerate(outcomes, start=1):
         for option_code, probability in (("3", 0.80), ("1", 0.12), ("0", 0.08)):
-            rows.append(("elo_rating", match_id, option_code, probability, actual, f"2026-08-{match_id:02d}T20:00:00"))
+            rows.append(
+                (
+                    "elo_rating",
+                    match_id,
+                    option_code,
+                    probability,
+                    actual,
+                    f"2026-08-{match_id:02d}T20:00:00",
+                )
+            )
 
     profiles = fit_profiles_from_prediction_rows(
         rows,

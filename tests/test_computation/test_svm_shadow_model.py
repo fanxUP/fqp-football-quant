@@ -22,7 +22,9 @@ class _Classifier:
 def test_svm_keeps_official_1x2_mapping() -> None:
     profile = SvmShadowProfile("/tmp/svm.joblib", ("home", "away"), 160, 40, 1.0)
     assert probabilities_from_classifier(_Classifier(), profile, {"home": 0.7, "away": 0.3}) == {
-        "0": 0.1, "1": 0.3, "3": 0.6,
+        "0": 0.1,
+        "1": 0.3,
+        "3": 0.6,
     }
 
 

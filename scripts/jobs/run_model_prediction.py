@@ -162,7 +162,7 @@ def _load_trained_bivariate_shared_component(
     try:
         component = float(parameters["shared_goal_component"])
         limiting_rate = min(float(goal_rates.home_lambda), float(goal_rates.away_lambda))
-    except (KeyError, TypeError, ValueError):
+    except KeyError, TypeError, ValueError:
         return None
     if not math.isfinite(component) or component < 0 or component >= limiting_rate:
         return None
@@ -180,7 +180,7 @@ def _load_trained_negative_binomial_dispersion(
         return None
     try:
         dispersion = float(parameters["dispersion"])
-    except (KeyError, TypeError, ValueError):
+    except KeyError, TypeError, ValueError:
         return None
     if not math.isfinite(dispersion) or not 0.05 <= dispersion <= 100.0:
         return None
@@ -242,7 +242,9 @@ def _load_adaboost_shadow_probabilities(
     feature_snapshot: dict[str, Any] | None,
 ) -> dict[str, float] | None:
     """Use AdaBoost only after its persisted temporal validation exists."""
-    return load_adaboost_shadow_probabilities(model_parameters.get("adaboost_shadow"), feature_snapshot)
+    return load_adaboost_shadow_probabilities(
+        model_parameters.get("adaboost_shadow"), feature_snapshot
+    )
 
 
 def _load_lda_shadow_probabilities(
@@ -260,7 +262,10 @@ def _load_knn_shadow_probabilities(
     """Use KNN only after its persisted temporal validation exists."""
     return load_knn_shadow_probabilities(model_parameters.get("knn_shadow"), feature_snapshot)
 
-def _load_mlp_shadow_probabilities(model_parameters: dict[str, dict[str, Any]], feature_snapshot: dict[str, Any] | None) -> dict[str, float] | None:
+
+def _load_mlp_shadow_probabilities(
+    model_parameters: dict[str, dict[str, Any]], feature_snapshot: dict[str, Any] | None
+) -> dict[str, float] | None:
     return load_mlp_shadow_probabilities(model_parameters.get("mlp_shadow"), feature_snapshot)
 
 
@@ -769,7 +774,7 @@ def _predict_match_play_type(
         else:
             raw_bivariate_probs = dict(market_probs)
             bivariate_probs = dict(market_probs)
-    except (ArithmeticError, ValueError):
+    except ArithmeticError, ValueError:
         bivariate_is_independent = False
         raw_bivariate_probs = dict(market_probs)
         bivariate_probs = dict(market_probs)
@@ -799,7 +804,7 @@ def _predict_match_play_type(
         else:
             raw_negative_binomial_probs = dict(market_probs)
             negative_binomial_probs = dict(market_probs)
-    except (ArithmeticError, ValueError):
+    except ArithmeticError, ValueError:
         negative_binomial_is_independent = False
         raw_negative_binomial_probs = dict(market_probs)
         negative_binomial_probs = dict(market_probs)
@@ -947,7 +952,9 @@ def _predict_match_play_type(
         mlp_is_independent, mlp_1x2 = False, dict(market_probs)
 
     try:
-        trained_naive_bayes = _load_naive_bayes_shadow_probabilities(model_parameters, feature_snapshot)
+        trained_naive_bayes = _load_naive_bayes_shadow_probabilities(
+            model_parameters, feature_snapshot
+        )
         naive_bayes_is_independent = trained_naive_bayes is not None
         naive_bayes_1x2 = trained_naive_bayes or dict(market_probs)
     except Exception:
@@ -1130,7 +1137,8 @@ def _predict_match_play_type(
                     "bayesian_form_based": model_name == "bayesian_form",
                     "random_forest_shadow_based": model_name == "random_forest_shadow",
                     "extra_trees_shadow_based": model_name == "extra_trees_shadow",
-                    "hist_gradient_boosting_shadow_based": model_name == "hist_gradient_boosting_shadow",
+                    "hist_gradient_boosting_shadow_based": model_name
+                    == "hist_gradient_boosting_shadow",
                     "adaboost_shadow_based": model_name == "adaboost_shadow",
                     "lda_shadow_based": model_name == "lda_shadow",
                     "knn_shadow_based": model_name == "knn_shadow",

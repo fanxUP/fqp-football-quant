@@ -26,7 +26,10 @@ DIRECTIONS = {"positive", "negative", "neutral"}
 _RULES: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("suspension", ("suspended", "suspension", "match ban", "停赛", "禁赛")),
     ("return", ("returns from injury", "fit again", "back in training", "复出", "伤愈")),
-    ("official_lineup", ("confirmed lineup", "official lineup", "starting xi confirmed", "官方首发", "首发名单")),
+    (
+        "official_lineup",
+        ("confirmed lineup", "official lineup", "starting xi confirmed", "官方首发", "首发名单"),
+    ),
     ("expected_lineup", ("expected lineup", "predicted lineup", "预计首发")),
     ("rotation", ("rotate", "rotation", "rest players", "轮换", "轮休")),
     ("manager_change", ("sacked", "appointed head coach", "new manager", "主帅下课", "新任主帅")),
@@ -96,7 +99,11 @@ def extract_rule_event(article: dict[str, Any]) -> EventDraft | None:
     description = str(article.get("description") or "").strip()
     text = f"{title}\n{description}".casefold()
     event_type = next(
-        (candidate for candidate, keywords in _RULES if any(keyword in text for keyword in keywords)),
+        (
+            candidate
+            for candidate, keywords in _RULES
+            if any(keyword in text for keyword in keywords)
+        ),
         None,
     )
     if event_type is None:

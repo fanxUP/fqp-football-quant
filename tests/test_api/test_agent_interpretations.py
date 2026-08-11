@@ -14,7 +14,9 @@ from apps.backend.src.services.model_gateway import ModelReply
 
 
 def _source(source_ref: str = "42") -> InterpretationSource:
-    return InterpretationSource("pre_match", source_ref, "解读标题", "pre_match_interpretation_agent", "后端冻结材料")
+    return InterpretationSource(
+        "pre_match", source_ref, "解读标题", "pre_match_interpretation_agent", "后端冻结材料"
+    )
 
 
 def test_post_match_manual_interpretation_route_is_not_exposed() -> None:
@@ -23,7 +25,9 @@ def test_post_match_manual_interpretation_route_is_not_exposed() -> None:
     assert "/api/agent-interpretations/post-match/{source_type}/{source_ref}" not in paths
 
 
-def test_pre_match_interpretation_archives_server_source_and_invokes_once(client, monkeypatch) -> None:
+def test_pre_match_interpretation_archives_server_source_and_invokes_once(
+    client, monkeypatch
+) -> None:
     connection = MagicMock()
     connection.__enter__.return_value = connection
     archived = {"id": 8, "sourceType": "pre_match", "sourceRef": "42"}
@@ -31,11 +35,15 @@ def test_pre_match_interpretation_archives_server_source_and_invokes_once(client
     monkeypatch.setattr(agent_interpretations, "get_db", lambda: connection)
     monkeypatch.setattr(agent_interpretations, "build_pre_match_source", lambda *_: _source())
     monkeypatch.setattr(agent_interpretations, "invoke_agent_model", invoke)
-    monkeypatch.setattr(agent_interpretations, "create_workspace_task", lambda *_args, **_kwargs: archived)
+    monkeypatch.setattr(
+        agent_interpretations, "create_workspace_task", lambda *_args, **_kwargs: archived
+    )
     audit = MagicMock()
     monkeypatch.setattr(agent_interpretations, "record_model_invocation", audit)
 
-    response = client.post("/api/agent-interpretations/pre-match/42", json={"focusQuestion": "看赔率"})
+    response = client.post(
+        "/api/agent-interpretations/pre-match/42", json={"focusQuestion": "看赔率"}
+    )
 
     assert response.status_code == 200
     assert response.json() == {
@@ -48,7 +56,9 @@ def test_pre_match_interpretation_archives_server_source_and_invokes_once(client
     assert audit.call_args.kwargs["status"] == "succeeded"
 
 
-def test_interpretation_returns_not_found_without_model_call_when_source_is_missing(client, monkeypatch) -> None:
+def test_interpretation_returns_not_found_without_model_call_when_source_is_missing(
+    client, monkeypatch
+) -> None:
     monkeypatch.setattr(agent_interpretations, "get_db", MagicMock())
     monkeypatch.setattr(
         agent_interpretations,
@@ -94,11 +104,13 @@ class _Connection:
 
 
 def test_pre_match_snapshot_contains_only_server_read_business_material() -> None:
-    connection = _Connection([
-        (42, "周日001", "英超", "主队", "客队", "2026-08-02T12:00:00", "scheduled", "on_sale"),
-        [("SPF", "h", 1.86, None, "2026-08-02T10:00:00")],
-        [("baseline", "SPF", "h", 0.55, 0.50, 1.82, 0.02, 0.7, "2026-08-02T10:01:00")],
-    ])
+    connection = _Connection(
+        [
+            (42, "周日001", "英超", "主队", "客队", "2026-08-02T12:00:00", "scheduled", "on_sale"),
+            [("SPF", "h", 1.86, None, "2026-08-02T10:00:00")],
+            [("baseline", "SPF", "h", 0.55, 0.50, 1.82, 0.02, 0.7, "2026-08-02T10:01:00")],
+        ]
+    )
 
     source = build_pre_match_source(connection, 42, "关注主胜")
 

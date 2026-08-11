@@ -73,8 +73,16 @@ class _SavedKeyCursor:
         if "SELECT base_url" in self.connection.queries[-1][0]:
             return ("https://api.openai.com/v1", "gpt-5-mini", True)
         return (
-            "openai", "OpenAI", "https://api.openai.com/v1", "gpt-5-mini", True,
-            True, None, None, None, None,
+            "openai",
+            "OpenAI",
+            "https://api.openai.com/v1",
+            "gpt-5-mini",
+            True,
+            True,
+            None,
+            None,
+            None,
+            None,
         )
 
 
@@ -93,9 +101,14 @@ class _SavedKeyConnection:
 def test_provider_update_can_keep_encrypted_api_key() -> None:
     conn = _SavedKeyConnection()
 
-    result = save_provider_config(conn, {
-        "providerCode": "openai", "defaultModel": "gpt-5-mini", "enabled": True,
-    })
+    result = save_provider_config(
+        conn,
+        {
+            "providerCode": "openai",
+            "defaultModel": "gpt-5-mini",
+            "enabled": True,
+        },
+    )
 
     assert result["hasApiKey"] is True
     assert result["apiKeyMask"] == "••••••••••••"
@@ -105,10 +118,15 @@ def test_provider_update_can_keep_encrypted_api_key() -> None:
 def test_provider_update_invalidates_test_after_connection_change() -> None:
     conn = _SavedKeyConnection()
 
-    save_provider_config(conn, {
-        "providerCode": "openai", "baseUrl": "https://models.example.test/v1",
-        "defaultModel": "gpt-5-mini", "enabled": True,
-    })
+    save_provider_config(
+        conn,
+        {
+            "providerCode": "openai",
+            "baseUrl": "https://models.example.test/v1",
+            "defaultModel": "gpt-5-mini",
+            "enabled": True,
+        },
+    )
 
     query, params = conn.queries[-1]
     assert "last_test_status = CASE WHEN %s THEN NULL" in query
@@ -127,7 +145,16 @@ class _BindingCursor:
 
     def fetchall(self) -> list[tuple[object, ...]]:
         return [
-            ("review_agent", "openai", True, datetime.now(UTC), "OpenAI", "gpt-5-mini", True, "passed"),
+            (
+                "review_agent",
+                "openai",
+                True,
+                datetime.now(UTC),
+                "OpenAI",
+                "gpt-5-mini",
+                True,
+                "passed",
+            ),
         ]
 
 

@@ -13,14 +13,32 @@ def test_daily_research_metrics_groups_frozen_signals_by_model_play_and_league()
             {
                 "leagueName": "英超",
                 "modelSignals": [
-                    {"modelName": "Poisson", "playType": "spf", "modelProbability": 0.6, "marketProbability": 0.5, "ev": 0.1},
-                    {"modelName": "Elo", "playType": "rqspf", "modelProbability": 0.7, "marketProbability": 0.6, "ev": 0.2},
+                    {
+                        "modelName": "Poisson",
+                        "playType": "spf",
+                        "modelProbability": 0.6,
+                        "marketProbability": 0.5,
+                        "ev": 0.1,
+                    },
+                    {
+                        "modelName": "Elo",
+                        "playType": "rqspf",
+                        "modelProbability": 0.7,
+                        "marketProbability": 0.6,
+                        "ev": 0.2,
+                    },
                 ],
             },
             {
                 "leagueName": "英超",
                 "modelSignals": [
-                    {"modelName": "Poisson", "playType": "spf", "modelProbability": 0.8, "marketProbability": 0.6, "ev": 0.3},
+                    {
+                        "modelName": "Poisson",
+                        "playType": "spf",
+                        "modelProbability": 0.8,
+                        "marketProbability": 0.6,
+                        "ev": 0.3,
+                    },
                 ],
             },
         ],
@@ -28,38 +46,90 @@ def test_daily_research_metrics_groups_frozen_signals_by_model_play_and_league()
 
     assert snapshot["researchBreakdowns"] == {
         "models": [
-            {"key": "Poisson", "signalCount": 2, "matchCount": 2, "averageModelProbability": 0.7, "averageMarketProbability": 0.55, "averageEdge": 0.15, "averageEv": 0.2},
-            {"key": "Elo", "signalCount": 1, "matchCount": 1, "averageModelProbability": 0.7, "averageMarketProbability": 0.6, "averageEdge": 0.1, "averageEv": 0.2},
+            {
+                "key": "Poisson",
+                "signalCount": 2,
+                "matchCount": 2,
+                "averageModelProbability": 0.7,
+                "averageMarketProbability": 0.55,
+                "averageEdge": 0.15,
+                "averageEv": 0.2,
+            },
+            {
+                "key": "Elo",
+                "signalCount": 1,
+                "matchCount": 1,
+                "averageModelProbability": 0.7,
+                "averageMarketProbability": 0.6,
+                "averageEdge": 0.1,
+                "averageEv": 0.2,
+            },
         ],
         "playTypes": [
-            {"key": "spf", "signalCount": 2, "matchCount": 2, "averageModelProbability": 0.7, "averageMarketProbability": 0.55, "averageEdge": 0.15, "averageEv": 0.2},
-            {"key": "rqspf", "signalCount": 1, "matchCount": 1, "averageModelProbability": 0.7, "averageMarketProbability": 0.6, "averageEdge": 0.1, "averageEv": 0.2},
+            {
+                "key": "spf",
+                "signalCount": 2,
+                "matchCount": 2,
+                "averageModelProbability": 0.7,
+                "averageMarketProbability": 0.55,
+                "averageEdge": 0.15,
+                "averageEv": 0.2,
+            },
+            {
+                "key": "rqspf",
+                "signalCount": 1,
+                "matchCount": 1,
+                "averageModelProbability": 0.7,
+                "averageMarketProbability": 0.6,
+                "averageEdge": 0.1,
+                "averageEv": 0.2,
+            },
         ],
         "leagues": [
-            {"key": "英超", "signalCount": 3, "matchCount": 2, "averageModelProbability": 0.7, "averageMarketProbability": 0.5667, "averageEdge": 0.1333, "averageEv": 0.2},
+            {
+                "key": "英超",
+                "signalCount": 3,
+                "matchCount": 2,
+                "averageModelProbability": 0.7,
+                "averageMarketProbability": 0.5667,
+                "averageEdge": 0.1333,
+                "averageEv": 0.2,
+            },
         ],
     }
 
 
 def test_periodic_research_metrics_weights_signal_quality_by_signal_count() -> None:
-    metrics = build_periodic_research_metrics([
-        {
-            "periodKey": "2026-08-08",
-            "researchMetrics": {
-                "matchCount": 2, "signalCount": 2, "signalMatchCount": 1,
-                "evidenceMatchCount": 1, "averageModelProbability": 0.6,
-                "averageMarketProbability": 0.5, "averageEdge": 0.1, "averageEv": 0.2,
+    metrics = build_periodic_research_metrics(
+        [
+            {
+                "periodKey": "2026-08-08",
+                "researchMetrics": {
+                    "matchCount": 2,
+                    "signalCount": 2,
+                    "signalMatchCount": 1,
+                    "evidenceMatchCount": 1,
+                    "averageModelProbability": 0.6,
+                    "averageMarketProbability": 0.5,
+                    "averageEdge": 0.1,
+                    "averageEv": 0.2,
+                },
             },
-        },
-        {
-            "periodKey": "2026-08-09",
-            "researchMetrics": {
-                "matchCount": 3, "signalCount": 1, "signalMatchCount": 1,
-                "evidenceMatchCount": 3, "averageModelProbability": 0.9,
-                "averageMarketProbability": 0.8, "averageEdge": 0.1, "averageEv": 0.3,
+            {
+                "periodKey": "2026-08-09",
+                "researchMetrics": {
+                    "matchCount": 3,
+                    "signalCount": 1,
+                    "signalMatchCount": 1,
+                    "evidenceMatchCount": 3,
+                    "averageModelProbability": 0.9,
+                    "averageMarketProbability": 0.8,
+                    "averageEdge": 0.1,
+                    "averageEv": 0.3,
+                },
             },
-        },
-    ])
+        ]
+    )
 
     assert metrics == {
         "dailyReportCount": 2,
@@ -78,18 +148,52 @@ def test_periodic_research_metrics_weights_signal_quality_by_signal_count() -> N
 
 
 def test_periodic_research_breakdowns_merge_daily_frozen_rows() -> None:
-    breakdowns = build_periodic_research_breakdowns([
-        {"researchBreakdowns": {"models": [
-            {"key": "Poisson", "signalCount": 2, "matchCount": 2, "averageModelProbability": 0.6, "averageMarketProbability": 0.5, "averageEdge": 0.1, "averageEv": 0.2},
-        ]}},
-        {"researchBreakdowns": {"models": [
-            {"key": "Poisson", "signalCount": 1, "matchCount": 1, "averageModelProbability": 0.9, "averageMarketProbability": 0.7, "averageEdge": 0.2, "averageEv": 0.4},
-        ]}},
-    ])
+    breakdowns = build_periodic_research_breakdowns(
+        [
+            {
+                "researchBreakdowns": {
+                    "models": [
+                        {
+                            "key": "Poisson",
+                            "signalCount": 2,
+                            "matchCount": 2,
+                            "averageModelProbability": 0.6,
+                            "averageMarketProbability": 0.5,
+                            "averageEdge": 0.1,
+                            "averageEv": 0.2,
+                        },
+                    ]
+                }
+            },
+            {
+                "researchBreakdowns": {
+                    "models": [
+                        {
+                            "key": "Poisson",
+                            "signalCount": 1,
+                            "matchCount": 1,
+                            "averageModelProbability": 0.9,
+                            "averageMarketProbability": 0.7,
+                            "averageEdge": 0.2,
+                            "averageEv": 0.4,
+                        },
+                    ]
+                }
+            },
+        ]
+    )
 
     assert breakdowns == {
         "models": [
-            {"key": "Poisson", "signalCount": 3, "matchCount": 3, "averageModelProbability": 0.7, "averageMarketProbability": 0.5667, "averageEdge": 0.1333, "averageEv": 0.2667},
+            {
+                "key": "Poisson",
+                "signalCount": 3,
+                "matchCount": 3,
+                "averageModelProbability": 0.7,
+                "averageMarketProbability": 0.5667,
+                "averageEdge": 0.1333,
+                "averageEv": 0.2667,
+            },
         ],
         "playTypes": [],
         "leagues": [],
@@ -117,10 +221,16 @@ def test_daily_report_snapshot_freezes_match_result_prematch_signals_and_evidenc
                 "awayTeamName": "客队",
                 "kickoffTime": "2026-08-09T18:00:00",
                 "result": {"homeGoals": 2, "awayGoals": 1, "status": "confirmed"},
-                "modelSignals": [{
-                    "modelName": "Poisson", "playType": "spf", "optionCode": "h",
-                    "modelProbability": 0.62, "marketProbability": 0.55, "ev": 0.12,
-                }],
+                "modelSignals": [
+                    {
+                        "modelName": "Poisson",
+                        "playType": "spf",
+                        "optionCode": "h",
+                        "modelProbability": 0.62,
+                        "marketProbability": 0.55,
+                        "ev": 0.12,
+                    }
+                ],
                 "oddsSignals": [{"playType": "spf", "optionCode": "h", "spValue": 1.8}],
                 "evidence": [{"sourceName": "官方来源", "headline": "赛后信息"}],
                 "evidenceStatus": "已收录",
@@ -171,23 +281,43 @@ def test_daily_snapshot_embeds_true_performance_and_deterministic_review_summary
     snapshot = build_daily_report_snapshot(
         review={},
         upset_report={"metrics": {"upsets": {"count": 1, "rate": 0.5}}},
-        match_cards=[{
-            "matchId": 201,
-            "leagueName": "英超",
-            "kickoffTime": "2026-08-09T18:00:00",
-            "result": {"spfResult": "3", "status": "confirmed"},
-            "modelSignals": [
-                {"modelName": "Elo", "playType": "spf", "optionCode": "3", "modelProbability": 0.6, "marketProbability": 0.5},
-                {"modelName": "Elo", "playType": "spf", "optionCode": "1", "modelProbability": 0.25, "marketProbability": 0.28},
-                {"modelName": "Elo", "playType": "spf", "optionCode": "0", "modelProbability": 0.15, "marketProbability": 0.22},
-            ],
-            "oddsSignals": [
-                {"playType": "spf", "optionCode": "3", "spValue": 2.0},
-                {"playType": "spf", "optionCode": "1", "spValue": 3.2},
-                {"playType": "spf", "optionCode": "0", "spValue": 3.8},
-            ],
-            "evidence": [],
-        }],
+        match_cards=[
+            {
+                "matchId": 201,
+                "leagueName": "英超",
+                "kickoffTime": "2026-08-09T18:00:00",
+                "result": {"spfResult": "3", "status": "confirmed"},
+                "modelSignals": [
+                    {
+                        "modelName": "Elo",
+                        "playType": "spf",
+                        "optionCode": "3",
+                        "modelProbability": 0.6,
+                        "marketProbability": 0.5,
+                    },
+                    {
+                        "modelName": "Elo",
+                        "playType": "spf",
+                        "optionCode": "1",
+                        "modelProbability": 0.25,
+                        "marketProbability": 0.28,
+                    },
+                    {
+                        "modelName": "Elo",
+                        "playType": "spf",
+                        "optionCode": "0",
+                        "modelProbability": 0.15,
+                        "marketProbability": 0.22,
+                    },
+                ],
+                "oddsSignals": [
+                    {"playType": "spf", "optionCode": "3", "spValue": 2.0},
+                    {"playType": "spf", "optionCode": "1", "spValue": 3.2},
+                    {"playType": "spf", "optionCode": "0", "spValue": 3.8},
+                ],
+                "evidence": [],
+            }
+        ],
     )
 
     assert snapshot["schemaVersion"] == 4

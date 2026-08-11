@@ -62,7 +62,7 @@ def _number(value: Any) -> float | None:
         return None
     try:
         number = float(value)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return None
     return number if math.isfinite(number) else None
 
@@ -121,7 +121,10 @@ def _closing_market(card: Mapping[str, Any], play_type: str) -> dict[str, dict[s
 
 
 def _brier(probabilities: Mapping[str, float], actual: str) -> float:
-    return sum((probability - (1.0 if option == actual else 0.0)) ** 2 for option, probability in probabilities.items())
+    return sum(
+        (probability - (1.0 if option == actual else 0.0)) ** 2
+        for option, probability in probabilities.items()
+    )
 
 
 def _log_loss(probabilities: Mapping[str, float], actual: str) -> float:
@@ -196,28 +199,30 @@ def _sample_groups(card: Mapping[str, Any]) -> list[dict[str, Any]]:
         )
         unit_profit = (closing_odds - 1 if correct else -1.0) if closing_odds else None
         evidence = [row for row in (card.get("evidence") or []) if isinstance(row, Mapping)]
-        samples.append({
-            "matchId": card.get("matchId"),
-            "kickoffTime": card.get("kickoffTime"),
-            "leagueName": str(card.get("leagueName") or "未知联赛"),
-            "modelName": model,
-            "playType": play_type,
-            "predictedOption": predicted,
-            "actualOption": actual,
-            "modelProbability": round(probabilities[predicted], 8),
-            "predictionMarketProbability": prediction_market,
-            "closingProbability": closing_probability,
-            "closingOdds": closing_odds,
-            "clv": clv,
-            "closingEdge": closing_edge,
-            "ev": expected_values.get(predicted),
-            "isCorrect": correct,
-            "brierScore": _brier(probabilities, actual),
-            "logLoss": _log_loss(probabilities, actual),
-            "rps": _rps(probabilities, actual),
-            "unitStakeProfit": unit_profit,
-            "hasEvidence": bool(evidence),
-        })
+        samples.append(
+            {
+                "matchId": card.get("matchId"),
+                "kickoffTime": card.get("kickoffTime"),
+                "leagueName": str(card.get("leagueName") or "未知联赛"),
+                "modelName": model,
+                "playType": play_type,
+                "predictedOption": predicted,
+                "actualOption": actual,
+                "modelProbability": round(probabilities[predicted], 8),
+                "predictionMarketProbability": prediction_market,
+                "closingProbability": closing_probability,
+                "closingOdds": closing_odds,
+                "clv": clv,
+                "closingEdge": closing_edge,
+                "ev": expected_values.get(predicted),
+                "isCorrect": correct,
+                "brierScore": _brier(probabilities, actual),
+                "logLoss": _log_loss(probabilities, actual),
+                "rps": _rps(probabilities, actual),
+                "unitStakeProfit": unit_profit,
+                "hasEvidence": bool(evidence),
+            }
+        )
     return samples
 
 
@@ -228,7 +233,8 @@ def _calibration(samples: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     for lower in (0.0, 0.2, 0.4, 0.6, 0.8):
         upper = lower + 0.2
         rows = [
-            row for row in samples
+            row
+            for row in samples
             if (probability := _number(row.get("modelProbability"))) is not None
             and lower <= probability <= (upper if upper == 1.0 else upper - 1e-12)
         ]
@@ -239,13 +245,15 @@ def _calibration(samples: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
         error = abs(predicted - actual)
         total_error += error * len(rows)
         maximum_error = max(maximum_error, error)
-        bins.append({
-            "lower": lower,
-            "upper": round(upper, 1),
-            "sampleCount": len(rows),
-            "averageProbability": round(predicted, 6),
-            "actualRate": round(actual, 6),
-        })
+        bins.append(
+            {
+                "lower": lower,
+                "upper": round(upper, 1),
+                "sampleCount": len(rows),
+                "averageProbability": round(predicted, 6),
+                "actualRate": round(actual, 6),
+            }
+        )
     return {
         "bins": bins,
         "ece": round(total_error / len(samples), 6) if samples else None,
@@ -254,7 +262,15 @@ def _calibration(samples: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
 
 
 def _streaks(samples: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
-    ordered = sorted(samples, key=lambda row: (str(row.get("kickoffTime") or ""), str(row.get("matchId") or ""), str(row.get("modelName") or ""), str(row.get("playType") or "")))
+    ordered = sorted(
+        samples,
+        key=lambda row: (
+            str(row.get("kickoffTime") or ""),
+            str(row.get("matchId") or ""),
+            str(row.get("modelName") or ""),
+            str(row.get("playType") or ""),
+        ),
+    )
     longest_loss = 0
     current_loss = 0
     streak_type: str | None = None
@@ -288,11 +304,27 @@ def _metrics(samples: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
         "hitRate": round(correct_count / sample_count, 6) if sample_count else None,
         "brierScore": _average([float(row["brierScore"]) for row in samples]),
         "logLoss": _average([float(row["logLoss"]) for row in samples]),
-        "rps": _average([float(value) for row in samples if (value := _number(row.get("rps"))) is not None]),
+        "rps": _average(
+            [float(value) for row in samples if (value := _number(row.get("rps"))) is not None]
+        ),
         "clvSampleCount": sum(_number(row.get("clv")) is not None for row in samples),
-        "averageClv": _average([float(value) for row in samples if (value := _number(row.get("clv"))) is not None]),
-        "averageClosingEdge": _average([float(value) for row in samples if (value := _number(row.get("closingEdge"))) is not None]),
-        "averageClosingOdds": _average([float(value) for row in samples if (value := _number(row.get("closingOdds"))) is not None]),
+        "averageClv": _average(
+            [float(value) for row in samples if (value := _number(row.get("clv"))) is not None]
+        ),
+        "averageClosingEdge": _average(
+            [
+                float(value)
+                for row in samples
+                if (value := _number(row.get("closingEdge"))) is not None
+            ]
+        ),
+        "averageClosingOdds": _average(
+            [
+                float(value)
+                for row in samples
+                if (value := _number(row.get("closingOdds"))) is not None
+            ]
+        ),
         "pricedSampleCount": len(priced),
         "unitStakeProfit": unit_profit,
         "unitStakeRoi": round(unit_profit / len(priced), 6) if priced else None,
@@ -330,20 +362,27 @@ def _errors(samples: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
             code = "POSITIVE_EV_MISSED"
         else:
             code = "PREDICTION_MISS"
-        items.append({
-            "code": code,
-            "label": _ERROR_LABELS[code],
-            "matchId": row.get("matchId"),
-            "modelName": row.get("modelName"),
-            "playType": row.get("playType"),
-            "predictedOption": predicted,
-            "actualOption": actual,
-            "modelProbability": probability,
-            "suggestedAction": _ERROR_ACTIONS[code],
-        })
+        items.append(
+            {
+                "code": code,
+                "label": _ERROR_LABELS[code],
+                "matchId": row.get("matchId"),
+                "modelName": row.get("modelName"),
+                "playType": row.get("playType"),
+                "predictedOption": predicted,
+                "actualOption": actual,
+                "modelProbability": probability,
+                "suggestedAction": _ERROR_ACTIONS[code],
+            }
+        )
     counts: Counter[str] = Counter(str(item["code"]) for item in items)
     by_type = [
-        {"code": code, "label": _ERROR_LABELS[code], "count": count, "suggestedAction": _ERROR_ACTIONS[code]}
+        {
+            "code": code,
+            "label": _ERROR_LABELS[code],
+            "count": count,
+            "suggestedAction": _ERROR_ACTIONS[code],
+        }
         for code, count in sorted(counts.items(), key=lambda item: (-item[1], item[0]))
     ]
     return {"errorCount": len(items), "byType": by_type, "items": items[:50]}
@@ -370,12 +409,16 @@ def _evidence(cards: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
         "preMatchCount": sum(phase(row) in {"pre_match", "prematch"} for row in rows),
         "postMatchCount": sum(phase(row) in {"post_match", "postmatch"} for row in rows),
         "newsEvidenceCount": sum("news" in source(row) or "新闻" in source(row) for row in rows),
-        "officialOrVerifiedCount": sum(str(row.get("reliability") or "").lower() in {"official", "verified"} for row in rows),
+        "officialOrVerifiedCount": sum(
+            str(row.get("reliability") or "").lower() in {"official", "verified"} for row in rows
+        ),
         "missingMatchCount": max(0, len(cards) - covered),
     }
 
 
-def _strategy(metrics: Mapping[str, Any], errors: Mapping[str, Any], evidence: Mapping[str, Any]) -> dict[str, Any]:
+def _strategy(
+    metrics: Mapping[str, Any], errors: Mapping[str, Any], evidence: Mapping[str, Any]
+) -> dict[str, Any]:
     findings: list[str] = []
     actions: list[str] = []
     samples = int(metrics.get("sampleCount") or 0)
@@ -393,7 +436,9 @@ def _strategy(metrics: Mapping[str, Any], errors: Mapping[str, Any], evidence: M
         actions.append("本期没有可靠新闻来源，涉及阵容、伤停和赛后事件的解释必须保持未核验。")
     actions.append("仅在样本持续积累后复核模型，不根据单场输赢自动改动预测、投注或风控。")
     return {
-        "status": "review_required" if errors.get("errorCount") or evidence.get("missingMatchCount") else "observed",
+        "status": "review_required"
+        if errors.get("errorCount") or evidence.get("missingMatchCount")
+        else "observed",
         "findings": findings,
         "actions": actions,
         "safetyNotice": "该总结只用于人工研究复盘，不会自动修改模型、推荐、投注或风控。",
@@ -431,8 +476,13 @@ def build_periodic_performance(daily_snapshots: Sequence[Mapping[str, Any]]) -> 
     metrics = _metrics(samples)
     errors = _errors(samples)
     evidence_fields = (
-        "evidenceCount", "coveredMatchCount", "preMatchCount", "postMatchCount",
-        "newsEvidenceCount", "officialOrVerifiedCount", "missingMatchCount",
+        "evidenceCount",
+        "coveredMatchCount",
+        "preMatchCount",
+        "postMatchCount",
+        "newsEvidenceCount",
+        "officialOrVerifiedCount",
+        "missingMatchCount",
     )
     evidence = {
         field: sum(

@@ -66,8 +66,7 @@ def apply_approved_news_overlay(conn: Any, rows: list[tuple[Any, ...]]) -> list[
         )
         overlays = {
             (int(row[0]), int(row[1])): {
-                option: float(dict(row[3]).get(option, 0))
-                - float(dict(row[2]).get(option, 0))
+                option: float(dict(row[3]).get(option, 0)) - float(dict(row[2]).get(option, 0))
                 for option in ("3", "1", "0")
             }
             for row in cur.fetchall()

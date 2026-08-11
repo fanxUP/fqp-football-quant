@@ -10,7 +10,9 @@ from apps.backend.src.services.agent_interpretation import (
 
 def test_pre_match_prompt_preserves_server_snapshot_and_optional_question() -> None:
     prompt = build_interpretation_prompt(
-        source_type="pre_match", title="赛前解读：周日001", snapshot={"官方比赛": {"编号": "周日001"}},
+        source_type="pre_match",
+        title="赛前解读：周日001",
+        snapshot={"官方比赛": {"编号": "周日001"}},
         focus_question="为什么信号冲突？",
     )
 

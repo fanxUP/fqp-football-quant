@@ -13,9 +13,5 @@ def test_due_labels_include_only_cutoffs_that_have_passed() -> None:
 def test_post_match_label_waits_for_evidence_window() -> None:
     kickoff = datetime(2026, 8, 12, 12, 0, tzinfo=UTC)
 
-    assert "POST120" not in due_snapshot_labels(
-        kickoff, datetime(2026, 8, 12, 13, 59, tzinfo=UTC)
-    )
-    assert "POST120" in due_snapshot_labels(
-        kickoff, datetime(2026, 8, 12, 14, 0, tzinfo=UTC)
-    )
+    assert "POST120" not in due_snapshot_labels(kickoff, datetime(2026, 8, 12, 13, 59, tzinfo=UTC))
+    assert "POST120" in due_snapshot_labels(kickoff, datetime(2026, 8, 12, 14, 0, tzinfo=UTC))

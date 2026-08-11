@@ -122,8 +122,11 @@ def _map_real_ticket(ticket: dict) -> dict:
         "owner": owner,
         "kind": "real",
         "source": (
-            "time_machine" if source_type == "time_machine_manual"
-            else "ocr" if ticket.get("ocr_status") == "recognized" else "manual"
+            "time_machine"
+            if source_type == "time_machine_manual"
+            else "ocr"
+            if ticket.get("ocr_status") == "recognized"
+            else "manual"
         ),
         "status": _settlement_status(ticket.get("settlement_status")),
         "date": purchase_date,

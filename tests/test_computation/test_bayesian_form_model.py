@@ -17,7 +17,10 @@ def test_bayesian_form_combines_both_teams_and_preserves_1x2_mapping() -> None:
 
 
 def test_bayesian_form_rejects_short_team_histories() -> None:
-    assert probabilities_from_team_outcomes(
-        home_outcomes=["3"] * 5,
-        away_outcomes=["0"] * 6,
-    ) is None
+    assert (
+        probabilities_from_team_outcomes(
+            home_outcomes=["3"] * 5,
+            away_outcomes=["0"] * 6,
+        )
+        is None
+    )
