@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildModelPerformanceOverview, buildModelPerformanceSeries } from './modelPerformanceData';
+import { buildModelPerformanceSeries } from './modelPerformanceData';
 
 const points = [
   { date: '2026-07-11', play_type: 'all', model_name: 'elo_rating', hit_rate: 0.4, sample_size: 5 },
@@ -28,22 +28,5 @@ describe('buildModelPerformanceSeries', () => {
       ...points,
       { date: '2026-07-13', play_type: 'spf', model_name: 'elo_rating', hit_rate: Number.NaN, sample_size: 13 },
     ], 'bf')).toEqual([]);
-  });
-});
-
-describe('buildModelPerformanceOverview', () => {
-  it('按最新综合命中率排名并计算相对上一期变化', () => {
-    const overview = buildModelPerformanceOverview(points);
-
-    expect(overview.map((item) => item.modelName)).toEqual(['market_baseline', 'elo_rating']);
-    expect(overview[0]).toMatchObject({
-      rank: 1,
-      latestHitRate: 60,
-      latestSampleSize: 20,
-      changePercentagePoints: 10,
-      dateCount: 2,
-      insufficientHistory: true,
-    });
-    expect(overview[1].changePercentagePoints).toBe(15);
   });
 });

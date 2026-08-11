@@ -3,6 +3,10 @@
 }
 
 .model-performance-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
   margin-bottom: 12px;
 }
 
@@ -10,6 +14,9 @@
   margin: 0;
   font-size: 18px;
 }
+
+.model-chart-data { margin-top: 12px; border-top: 1px solid var(--fqp-border-light); padding-top: 10px; }
+.model-chart-data > summary { color: var(--fqp-text-muted); font-size: 11px; cursor: pointer; }
 
 .model-performance-heading p {
   margin: 4px 0 0;

@@ -42,7 +42,7 @@ describe('ModelSampleSufficiency', () => {
     const table = screen.getByRole('table', { name: '模型与玩法赛前有效样本量' });
     const tableView = within(table);
     expect(tableView.getByText('Elo 实力评分')).toBeInTheDocument();
-    expect(tableView.getByText('马赫泊松进球模型')).toBeInTheDocument();
+    expect(tableView.getByText('Maher Poisson 进球模型')).toBeInTheDocument();
     expect(tableView.getByText('105')).toBeInTheDocument();
     expect(tableView.getByText('样本较稳')).toBeInTheDocument();
     expect(tableView.getByText('29')).toBeInTheDocument();

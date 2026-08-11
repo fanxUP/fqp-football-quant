@@ -35,7 +35,7 @@ export default function ModelPredictionGroups({ columns, predictions }: ModelPre
         <details className="model-prediction-group" key={group.modelName}>
           <summary>
             <span className="model-prediction-group-title">
-              {modelNameLabel(group.modelName)}（{group.rows.length} 条）
+              {translate(modelNameLabel(group.modelName))}（{group.rows.length} {translate('条')}）
             </span>
             <span className="model-prediction-group-hint">{translate('展开预测明细')}</span>
           </summary>

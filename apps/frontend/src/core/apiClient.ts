@@ -637,7 +637,7 @@ export const api = {
 
   // Predictions
   predictions: (params?: { match_id?: number; limit?: number }) =>
-    request<{ predictions: Prediction[]; total: number }>(
+    request<{ predictions: Prediction[]; total: number; summary: import('./types').PredictionSummary }>(
       `/api/predictions${qs({ match_id: params?.match_id, limit: params?.limit ?? 50 })}`,
     ),
 

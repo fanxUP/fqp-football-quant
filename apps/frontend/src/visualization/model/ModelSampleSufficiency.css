@@ -2,6 +2,11 @@
   margin-bottom: 16px;
   padding: 18px 20px;
 }
+.model-sample-summary { display: flex; align-items: center; justify-content: space-between; cursor: pointer; list-style: none; }
+.model-sample-summary::-webkit-details-marker { display: none; }
+.model-sample-summary span { color: var(--fqp-text); font-size: 14px; font-weight: 650; }
+.model-sample-summary small { color: var(--fqp-text-muted); }
+.model-sample-panel[open] .model-sample-summary { margin-bottom: 14px; }
 
 .model-sample-header {
   display: flex;
@@ -88,6 +93,7 @@
   color: var(--fqp-text-muted);
   font-size: 10px;
 }
+.model-sample-cell small { margin-top: 2px; color: var(--fqp-text-muted); font-size: 9px; line-height: 1.3; white-space: normal; }
 
 .model-sample-cell.is-low {
   border-left-color: var(--fqp-warning);

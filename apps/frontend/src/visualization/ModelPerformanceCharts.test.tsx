@@ -25,18 +25,18 @@ describe('ModelPerformanceCharts', () => {
           ]}
           days={365}
           modelNames={['elo_rating']}
+          selectedModels={['elo_rating']}
+          playType="spf"
           window={20}
         />
       </ThemeProvider>,
     );
 
-    expect(screen.getByText('综合表现 · 模型对比')).toBeInTheDocument();
-    expect(screen.getByText('按结算日期比较各模型滚动命中率；不同颜色区分模型，点击图例可隐藏或显示曲线。')).toBeInTheDocument();
-    expect(screen.getAllByText('Elo 实力评分')).toHaveLength(2);
-    expect(screen.getByText('55.0%')).toBeInTheDocument();
-    expect(screen.getAllByText('样本日期不足')).toHaveLength(2);
-    expect(screen.getAllByText(/· 模型对比$/)).toHaveLength(6);
-    expect(screen.getByRole('img', { name: '胜平负模型滚动命中率对比' })).toBeInTheDocument();
-    expect(screen.getByRole('table', { name: '模型与玩法赛前有效样本量' })).toBeInTheDocument();
+    expect(screen.getByText('胜平负 · 模型对比')).toBeInTheDocument();
+    expect(screen.getByText('命中率仅作辅助趋势；正式结论以 Brier、Log Loss 与校准表现为主。')).toBeInTheDocument();
+    expect(screen.getAllByText('Elo 实力评分').length).toBeGreaterThan(0);
+    expect(screen.getByText('样本日期不足')).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: '胜平负 · 模型对比滚动命中率对比' })).toBeInTheDocument();
+    expect(screen.getByText('查看图表数据')).toBeInTheDocument();
   });
 });

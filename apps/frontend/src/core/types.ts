@@ -371,11 +371,36 @@ export interface PredictionModelRuntimeState {
     trainingEndDate: string | null;
     rolloutMode: 'shadow';
   } | null;
+  metadata: PredictionModelMetadata;
+}
+
+export interface LocalizedModelText {
+  'zh-CN': string;
+  en: string;
+}
+
+export interface PredictionModelMetadata {
+  title: LocalizedModelText;
+  summary: LocalizedModelText;
+  output: LocalizedModelText;
+  cadence: LocalizedModelText;
+  condition: LocalizedModelText;
+  role: LocalizedModelText;
+  stage: 'baseline' | 'production' | 'shadow';
 }
 
 export interface PredictionModelOverview {
   models: PredictionModelRuntimeState[];
   total: number;
+  catalogVersion: string;
+}
+
+export interface PredictionSummary {
+  total: number;
+  positive_ev_count: number;
+  avg_confidence: number | null;
+  model_count: number;
+  latest_predict_time: string | null;
 }
 
 export interface CalibrationProfile {
@@ -737,7 +762,13 @@ export interface EvalModelSummary {
   avg_brier: number;
   avg_logloss: number;
   avg_rps: number;
-  avg_clv: number | null;
+  avg_market_probability_move: number | null;
+  avg_closing_edge: number | null;
+  avg_odds_clv: number | null;
+  paired_market_samples: number;
+  brier_improvement_vs_market: number | null;
+  brier_improvement_ci_low: number | null;
+  brier_improvement_ci_high: number | null;
   sample_status: 'monitoring' | 'preliminary' | 'qualified';
   is_publishable: boolean;
 }
@@ -825,7 +856,9 @@ export interface ModelCompareItem {
   brier: number;
   log_loss: number;
   rps: number;
-  clv: number | null;
+  market_probability_move: number | null;
+  closing_edge: number | null;
+  odds_clv: number | null;
   flb_score: number | null;
   hit_rate?: number;
   roi?: number;

@@ -1,4 +1,5 @@
 import type { ModelPerformanceSample } from '../../core/types';
+import { useLanguage } from '../../app/LanguageContext';
 import { modelNameLabel, playTypeLabel } from '../../shared/constants';
 import { modelOrderIndex } from './modelVisuals';
 import './ModelSampleSufficiency.css';
@@ -23,10 +24,6 @@ interface ModelSampleSufficiencyProps {
   days: number;
 }
 
-function playTypeName(playType: string): string {
-  return playType === 'all' ? '综合' : playTypeLabel(playType);
-}
-
 export default function ModelSampleSufficiency({
   samples,
   modelNames,
@@ -38,30 +35,33 @@ export default function ModelSampleSufficiency({
     samples.map((sample) => [`${sample.model_name}:${sample.play_type}`, sample]),
   );
 
+  const { translate } = useLanguage();
+  const playTypeName = (playType: string) => playType === 'all' ? translate('综合') : translate(playTypeLabel(playType));
   return (
-    <section className="fqp-card model-sample-panel" aria-labelledby="model-sample-title">
+    <details className="fqp-card model-sample-panel">
+      <summary className="model-sample-summary"><span id="model-sample-title">{translate('赛前有效样本')}</span><small>{models.length} {translate('个模型')}</small></summary>
+      <section aria-labelledby="model-sample-title">
       <header className="model-sample-header">
         <div>
-          <h3 id="model-sample-title">赛前有效样本</h3>
           <p>
-            近 {days} 天、已结算且预测时间早于开赛的有效预测；每个模型×玩法每场只计一次，综合为各玩法合计。分级只衡量样本量，不代表模型有效。
+            {translate('近')} {days} {translate('天、已结算且预测时间早于开赛的有效预测；每个模型与玩法每场只计一次。分级只衡量样本量，不代表模型有效。')}
           </p>
         </div>
-        <div className="model-sample-legend" aria-label="样本量分级规则">
-          <span>&lt;30 观察中</span>
-          <span>30–99 初步可看</span>
-          <span>≥100 样本较稳</span>
+        <div className="model-sample-legend" aria-label={translate('样本量分级规则')}>
+          <span>&lt;30 {translate('观察中')}</span>
+          <span>30–99 {translate('初步可看')}</span>
+          <span>≥100 {translate('样本较稳')}</span>
         </div>
       </header>
 
       {models.length === 0 ? (
-        <div className="model-sample-empty" role="status">暂无可评估的赛前样本</div>
+        <div className="model-sample-empty" role="status">{translate('暂无可评估的赛前样本')}</div>
       ) : (
         <div className="model-sample-table-wrap">
-          <table className="model-sample-table" aria-label="模型与玩法赛前有效样本量">
+          <table className="model-sample-table" aria-label={translate('模型与玩法赛前有效样本量')}>
             <thead>
               <tr>
-                <th scope="col">模型</th>
+                <th scope="col">{translate('模型')}</th>
                 {SAMPLE_PLAY_TYPES.map((playType) => (
                   <th scope="col" key={playType}>{playTypeName(playType)}</th>
                 ))}
@@ -70,19 +70,20 @@ export default function ModelSampleSufficiency({
             <tbody>
               {models.map((modelName) => (
                 <tr key={modelName}>
-                  <th scope="row">{modelNameLabel(modelName)}</th>
+                  <th scope="row">{translate(modelNameLabel(modelName))}</th>
                   {SAMPLE_PLAY_TYPES.map((playType) => {
                     const sample = sampleMap.get(`${modelName}:${playType}`);
                     const total = sample?.total_samples ?? 0;
                     const level = sampleLevel(total);
                     const detail = sample
-                      ? `${sample.settled_dates} 个结算日期 · ${sample.first_date} 至 ${sample.last_date}`
-                      : '无已结算赛前预测';
+                      ? `${sample.settled_dates} ${translate('个结算日期')} · ${sample.first_date} ${translate('至')} ${sample.last_date}`
+                      : translate('无已结算赛前预测');
                     return (
                       <td key={playType}>
-                        <div className={`model-sample-cell is-${level.tone}`} title={detail}>
+                        <div className={`model-sample-cell is-${level.tone}`}>
                           <strong>{total}</strong>
-                          <span>{level.label}</span>
+                          <span>{translate(level.label)}</span>
+                          <small>{detail}</small>
                         </div>
                       </td>
                     );
@@ -93,6 +94,7 @@ export default function ModelSampleSufficiency({
           </table>
         </div>
       )}
-    </section>
+      </section>
+    </details>
   );
 }
