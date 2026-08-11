@@ -5,6 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Query
 
 from apps.backend.src.db import get_db
+from apps.backend.src.model_catalog import CATALOG_VERSION, MODEL_CODES, public_metadata
 from scripts.calibration_review import (
     MANUAL_REVIEW_IMPROVEMENT_THRESHOLD,
     MANUAL_REVIEW_SAMPLE_THRESHOLD,
@@ -14,28 +15,6 @@ from scripts.calibration_review import (
 from scripts.sporttery_sales import get_sporttery_sales_window
 
 router = APIRouter(tags=["predictions"])
-
-PREDICTION_MODEL_CODES = (
-    "market_baseline",
-    "elo_rating",
-    "maher_poisson",
-    "dixon_coles",
-    "glicko2_rating",
-    "bivariate_poisson",
-    "xgboost_shadow",
-    "logistic_shadow",
-    "bayesian_form",
-    "random_forest_shadow",
-    "extra_trees_shadow",
-    "hist_gradient_boosting_shadow",
-    "adaboost_shadow",
-    "lda_shadow",
-    "knn_shadow",
-    "mlp_shadow",
-    "naive_bayes_shadow",
-    "svm_shadow",
-    "negative_binomial_shadow",
-)
 
 # Play type display names
 PLAY_TYPE_NAMES: dict[str, str] = {
@@ -357,6 +336,41 @@ def list_predictions(
                     (limit,),
                 )
             rows = cur.fetchall()
+            aggregate_where = """
+                mp.validation_status = 'valid'
+                AND mp.predict_time < m.kickoff_time
+            """
+            aggregate_params: tuple[int, ...] = ()
+            if match_id:
+                aggregate_where += " AND mp.match_id = %s"
+                aggregate_params = (match_id,)
+            cur.execute(
+                f"""
+                SELECT
+                    COUNT(*) AS total,
+                    COUNT(*) FILTER (WHERE mp.ev > 0) AS positive_ev_count,
+                    AVG(mp.confidence_score) AS avg_confidence,
+                    COUNT(DISTINCT mv.model_name) AS model_count,
+                    MAX(mp.predict_time) AS latest_predict_time
+                FROM model_predictions mp
+                JOIN model_versions mv ON mv.id = mp.model_version_id
+                JOIN official_matches m ON m.id = mp.match_id
+                WHERE {aggregate_where}
+                """,
+                aggregate_params,
+            )
+            summary_row = cur.fetchone()
+    summary = {
+        "total": int(summary_row[0] or 0),
+        "positive_ev_count": int(summary_row[1] or 0),
+        "avg_confidence": float(summary_row[2]) if summary_row[2] is not None else None,
+        "model_count": int(summary_row[3] or 0),
+        "latest_predict_time": (
+            summary_row[4].isoformat()
+            if summary_row[4] is not None and hasattr(summary_row[4], "isoformat")
+            else str(summary_row[4]) if summary_row[4] is not None else None
+        ),
+    }
     return {
         "predictions": [
             {
@@ -380,7 +394,8 @@ def list_predictions(
             }
             for r in rows
         ],
-        "total": len(rows),
+        "total": summary["total"],
+        "summary": summary,
     }
 
 
@@ -464,7 +479,7 @@ def get_prediction_model_overview():
                          cp.method_name, cp.sample_count, cp.log_loss_before,
                          cp.log_loss_after, cp.temperature, cp.training_end_date
                 """,
-                (list(PREDICTION_MODEL_CODES),),
+                (list(MODEL_CODES),),
             )
             rows = cur.fetchall()
 
@@ -509,9 +524,11 @@ def get_prediction_model_overview():
                 "calibration": None,
             },
         )
-        for code in PREDICTION_MODEL_CODES
+        for code in MODEL_CODES
     ]
-    return {"models": models, "total": len(models)}
+    for model in models:
+        model["metadata"] = public_metadata(model["code"])
+    return {"models": models, "total": len(models), "catalogVersion": CATALOG_VERSION}
 
 
 @router.get("/api/models/calibration-profiles")

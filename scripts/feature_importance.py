@@ -23,68 +23,25 @@ from typing import Any
 
 import numpy as np
 
+from scripts.model_evaluation_scope import (
+    LATEST_METRICS_CTE as _LATEST_METRICS_CTE,
+)
+from scripts.model_evaluation_scope import (
+    LATEST_PREDICTIONS_CTE as _LATEST_PREDICTIONS_CTE,
+)
+from scripts.model_evaluation_scope import (
+    MARKET_BASELINE_BRIER_CTES,
+    MODEL_PUBLICATION_MIN_SAMPLES,
+)
+from scripts.model_evaluation_scope import (
+    model_sample_status as _model_sample_status,
+)
+
 _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _PROJECT_ROOT not in sys.path:
     sys.path.insert(0, _PROJECT_ROOT)
 
 MIN_FEATURE_MODEL_MATCHES = 100
-
-_LATEST_METRICS_CTE = """
-    WITH latest_metrics AS (
-        SELECT DISTINCT ON (source_mem.match_id, source_mem.model_version_id)
-            source_mem.*
-        FROM market_efficiency_metrics source_mem
-        JOIN official_matches source_match ON source_match.id = source_mem.match_id
-        JOIN official_results source_result ON source_result.match_id = source_mem.match_id
-        WHERE source_mem.brier_score IS NOT NULL
-          AND source_mem.play_type = 'spf'
-          AND source_mem.snapshot_time < source_match.kickoff_time
-          AND source_result.result_status IN ('final', 'confirmed')
-        ORDER BY source_mem.match_id,
-                 source_mem.model_version_id,
-                 source_mem.snapshot_time DESC,
-                 source_mem.id DESC
-    )
-"""
-
-MODEL_PRELIMINARY_MIN_SAMPLES = 30
-MODEL_PUBLICATION_MIN_SAMPLES = 100
-
-
-def _model_sample_status(sample_count: int) -> str:
-    if sample_count >= MODEL_PUBLICATION_MIN_SAMPLES:
-        return "qualified"
-    if sample_count >= MODEL_PRELIMINARY_MIN_SAMPLES:
-        return "preliminary"
-    return "monitoring"
-
-
-_LATEST_PREDICTIONS_CTE = """
-    WITH latest_predictions AS (
-        SELECT DISTINCT ON (
-            source_mp.match_id,
-            source_mp.model_version_id,
-            source_mp.play_type,
-            source_mp.option_code
-        ) source_mp.*
-        FROM model_predictions source_mp
-        JOIN official_matches source_match ON source_match.id = source_mp.match_id
-        JOIN official_results source_result ON source_result.match_id = source_mp.match_id
-        WHERE source_mp.predict_time < source_match.kickoff_time
-          AND source_mp.validation_status = 'valid'
-          AND COALESCE(
-              (source_mp.uncertainty_reason->>'model_independent')::boolean,
-              false
-          ) = true
-          AND source_result.result_status IN ('final', 'confirmed')
-        ORDER BY source_mp.match_id,
-                 source_mp.model_version_id,
-                 source_mp.play_type,
-                 source_mp.option_code,
-                 source_mp.predict_time DESC,
-                 source_mp.id DESC
-    )
-"""
 
 # ---------------------------------------------------------------------------
 # Feature column definitions — must match match_feature_snapshots table
@@ -619,18 +576,18 @@ def get_model_comparison_data(conn: Any) -> dict[str, Any]:
         cur.execute(f"""
             {_LATEST_METRICS_CTE}
             SELECT
-                mv.model_name,
-                COUNT(*) AS n_predictions,
+                mem.canonical_model_name AS model_name,
+                COUNT(DISTINCT mem.match_id) AS n_predictions,
                 AVG(mem.brier_score) AS avg_brier,
                 AVG(mem.log_loss) AS avg_log_loss,
                 AVG(mem.rps) AS avg_rps,
-                AVG(mem.clv_score) AS avg_clv,
+                AVG(mem.clv_score) AS avg_market_probability_move,
+                AVG(mem.probability_gap) AS avg_closing_edge,
                 AVG(mem.favourite_longshot_score) AS avg_flb_score
             FROM latest_metrics mem
-            JOIN model_versions mv ON mv.id = mem.model_version_id
             WHERE mem.brier_score IS NOT NULL
-            GROUP BY mv.model_name
-            ORDER BY mv.model_name
+            GROUP BY mem.canonical_model_name
+            ORDER BY mem.canonical_model_name
         """)
         columns = [desc[0] for desc in cur.description]
         for row in cur.fetchall():
@@ -642,7 +599,17 @@ def get_model_comparison_data(conn: Any) -> dict[str, Any]:
                 "brier": round(float(d["avg_brier"] or 0), 4),
                 "log_loss": round(float(d["avg_log_loss"] or 0), 4),
                 "rps": round(float(d["avg_rps"] or 0), 4),
-                "clv": round(float(d["avg_clv"]), 4) if d["avg_clv"] is not None else None,
+                "market_probability_move": (
+                    round(float(d["avg_market_probability_move"]), 4)
+                    if d["avg_market_probability_move"] is not None
+                    else None
+                ),
+                "closing_edge": (
+                    round(float(d["avg_closing_edge"]), 4)
+                    if d["avg_closing_edge"] is not None
+                    else None
+                ),
+                "odds_clv": None,
                 "flb_score": (
                     round(float(d["avg_flb_score"]), 4) if d["avg_flb_score"] is not None else None
                 ),
@@ -709,18 +676,41 @@ def get_evaluation_summary(conn: Any) -> dict[str, Any]:
     with conn.cursor() as cur:
         cur.execute(f"""
             {_LATEST_METRICS_CTE}
+            {MARKET_BASELINE_BRIER_CTES}
+            , paired_metrics AS (
+                SELECT
+                    mem.*,
+                    baseline.brier_score AS market_brier_score
+                FROM latest_metrics mem
+                LEFT JOIN market_baseline_scores baseline
+                  ON baseline.match_id = mem.match_id
+            )
             SELECT
-                mv.model_name,
-                COUNT(*) AS n,
+                mem.canonical_model_name AS model_name,
+                COUNT(DISTINCT mem.match_id) AS n,
                 ROUND(AVG(mem.brier_score)::numeric, 4) AS avg_brier,
                 ROUND(AVG(mem.log_loss)::numeric, 4) AS avg_logloss,
                 ROUND(AVG(mem.rps)::numeric, 4) AS avg_rps,
-                ROUND(AVG(mem.clv_score)::numeric, 4) AS avg_clv
-            FROM latest_metrics mem
-            JOIN model_versions mv ON mv.id = mem.model_version_id
+                ROUND(AVG(mem.clv_score)::numeric, 4) AS avg_market_probability_move,
+                ROUND(AVG(mem.probability_gap)::numeric, 4) AS avg_closing_edge,
+                NULL::numeric AS avg_odds_clv,
+                COUNT(mem.market_brier_score) AS paired_market_samples,
+                ROUND(AVG(mem.market_brier_score - mem.brier_score)::numeric, 4)
+                    AS brier_improvement_vs_market,
+                ROUND((
+                    AVG(mem.market_brier_score - mem.brier_score)
+                    - 1.96 * STDDEV_SAMP(mem.market_brier_score - mem.brier_score)
+                      / NULLIF(SQRT(COUNT(mem.market_brier_score)), 0)
+                )::numeric, 4) AS brier_improvement_ci_low,
+                ROUND((
+                    AVG(mem.market_brier_score - mem.brier_score)
+                    + 1.96 * STDDEV_SAMP(mem.market_brier_score - mem.brier_score)
+                      / NULLIF(SQRT(COUNT(mem.market_brier_score)), 0)
+                )::numeric, 4) AS brier_improvement_ci_high
+            FROM paired_metrics mem
             WHERE mem.brier_score IS NOT NULL
-            GROUP BY mv.model_name
-            ORDER BY avg_brier ASC
+            GROUP BY mem.canonical_model_name
+            ORDER BY brier_improvement_vs_market DESC NULLS LAST, avg_brier ASC
         """)
         columns = [desc[0] for desc in cur.description]
         models = []
@@ -734,7 +724,33 @@ def get_evaluation_summary(conn: Any) -> dict[str, Any]:
                     "avg_brier": float(d["avg_brier"] or 0),
                     "avg_logloss": float(d["avg_logloss"] or 0),
                     "avg_rps": float(d["avg_rps"] or 0),
-                    "avg_clv": float(d["avg_clv"]) if d["avg_clv"] is not None else None,
+                    "avg_market_probability_move": (
+                        float(d["avg_market_probability_move"])
+                        if d["avg_market_probability_move"] is not None
+                        else None
+                    ),
+                    "avg_closing_edge": (
+                        float(d["avg_closing_edge"])
+                        if d["avg_closing_edge"] is not None
+                        else None
+                    ),
+                    "avg_odds_clv": None,
+                    "paired_market_samples": int(d["paired_market_samples"] or 0),
+                    "brier_improvement_vs_market": (
+                        float(d["brier_improvement_vs_market"])
+                        if d["brier_improvement_vs_market"] is not None
+                        else None
+                    ),
+                    "brier_improvement_ci_low": (
+                        float(d["brier_improvement_ci_low"])
+                        if d["brier_improvement_ci_low"] is not None
+                        else None
+                    ),
+                    "brier_improvement_ci_high": (
+                        float(d["brier_improvement_ci_high"])
+                        if d["brier_improvement_ci_high"] is not None
+                        else None
+                    ),
                     "sample_status": _model_sample_status(sample_count),
                     "is_publishable": sample_count >= MODEL_PUBLICATION_MIN_SAMPLES,
                 }
@@ -792,9 +808,8 @@ def get_calibration_data(
                         ELSE 0
                     END AS is_correct
                 FROM latest_predictions mp
-                JOIN model_versions mv ON mv.id = mp.model_version_id
                 JOIN official_results r ON r.match_id = mp.match_id
-                WHERE mv.model_name = %s
+                WHERE mp.canonical_model_name = %s
                   AND mp.play_type = 'spf'
                   AND mp.model_probability IS NOT NULL
                 ORDER BY mp.predict_time DESC
@@ -865,16 +880,15 @@ def get_condition_performance(
                 {_LATEST_METRICS_CTE}
                 SELECT
                     m.league_name,
-                    mv.model_name,
+                    mem.canonical_model_name AS model_name,
                     COUNT(*) AS n,
                     ROUND(AVG(mem.brier_score)::numeric, 4) AS avg_brier,
                     ROUND(AVG(mem.log_loss)::numeric, 4) AS avg_logloss
                 FROM latest_metrics mem
-                JOIN model_versions mv ON mv.id = mem.model_version_id
                 JOIN official_matches m ON m.id = mem.match_id
                 WHERE mem.brier_score IS NOT NULL
                   AND m.league_name IS NOT NULL
-                GROUP BY m.league_name, mv.model_name
+                GROUP BY m.league_name, mem.canonical_model_name
                 HAVING COUNT(*) >= 5
                 ORDER BY m.league_name, avg_brier ASC
             """)
@@ -893,18 +907,17 @@ def get_condition_performance(
                         WHEN mp_home.market_probability < 0.70 THEN '中高概率 (55-70%)'
                         ELSE '高概率 (>70%)'
                     END AS odds_range,
-                    mv.model_name,
+                    mem.canonical_model_name AS model_name,
                     COUNT(*) AS n,
                     ROUND(AVG(mem.brier_score)::numeric, 4) AS avg_brier
                 FROM latest_metrics mem
-                JOIN model_versions mv ON mv.id = mem.model_version_id
                 JOIN model_predictions mp_home ON mp_home.match_id = mem.match_id
                     AND mp_home.model_version_id = mem.model_version_id
                     AND mp_home.play_type = mem.play_type
                     AND mp_home.option_code = '3'
                     AND mp_home.predict_time = mem.snapshot_time
                 WHERE mem.brier_score IS NOT NULL
-                GROUP BY odds_range, mv.model_name
+                GROUP BY odds_range, mem.canonical_model_name
                 HAVING COUNT(*) >= 3
                 ORDER BY odds_range, avg_brier ASC
             """)
@@ -922,18 +935,17 @@ def get_condition_performance(
                         WHEN mp_home.confidence_score < 0.7 THEN '中高信心 (50-70%)'
                         ELSE '高信心 (>70%)'
                     END AS confidence_range,
-                    mv.model_name,
+                    mem.canonical_model_name AS model_name,
                     COUNT(*) AS n,
                     ROUND(AVG(mem.brier_score)::numeric, 4) AS avg_brier
                 FROM latest_metrics mem
-                JOIN model_versions mv ON mv.id = mem.model_version_id
                 JOIN model_predictions mp_home ON mp_home.match_id = mem.match_id
                     AND mp_home.model_version_id = mem.model_version_id
                     AND mp_home.play_type = mem.play_type
                     AND mp_home.option_code = '3'
                     AND mp_home.predict_time = mem.snapshot_time
                 WHERE mem.brier_score IS NOT NULL
-                GROUP BY confidence_range, mv.model_name
+                GROUP BY confidence_range, mem.canonical_model_name
                 HAVING COUNT(*) >= 3
                 ORDER BY confidence_range, avg_brier ASC
             """)
@@ -962,7 +974,7 @@ def recommend_best_combos(conn: Any, min_samples: int = 5, top_n: int = 15) -> l
     sql = f"""
         {_LATEST_PREDICTIONS_CTE}
         SELECT
-            mv.model_name,
+            mp.canonical_model_name AS model_name,
             mp.play_type,
             COUNT(*) AS total,
             SUM(
@@ -988,11 +1000,10 @@ def recommend_best_combos(conn: Any, min_samples: int = 5, top_n: int = 15) -> l
                 )::numeric / NULLIF(COUNT(*), 0)::numeric, 4
             ) AS hit_rate
         FROM latest_predictions mp
-        JOIN model_versions mv ON mv.id = mp.model_version_id
         JOIN official_results r ON r.match_id = mp.match_id
         WHERE r.result_status = 'final'
           AND mp.play_type IN ('spf', 'rqspf', 'bf', 'zjq', 'bqc')
-        GROUP BY mv.model_name, mp.play_type
+        GROUP BY mp.canonical_model_name, mp.play_type
         HAVING COUNT(*) >= %(min_samples)s
         ORDER BY hit_rate DESC, total DESC
         LIMIT %(top_n)s

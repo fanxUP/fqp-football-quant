@@ -146,6 +146,7 @@ class TestPredictionsEndpoint:
         mock_conn.__enter__.return_value = mock_conn
         mock_conn.cursor.return_value.__enter__.return_value = mock_cur
         mock_cur.fetchall.return_value = []
+        mock_cur.fetchone.return_value = (0, 0, None, 0, None)
 
         with patch("apps.backend.src.routers.predictions.get_db", return_value=mock_conn):
             resp = client.get("/api/predictions?limit=10")
@@ -153,6 +154,13 @@ class TestPredictionsEndpoint:
         data = resp.json()
         assert data["total"] == 0
         assert data["predictions"] == []
+        assert data["summary"] == {
+            "total": 0,
+            "positive_ev_count": 0,
+            "avg_confidence": None,
+            "model_count": 0,
+            "latest_predict_time": None,
+        }
         sql = mock_cur.execute.call_args.args[0]
         assert "mp.predict_time < m.kickoff_time" in sql
         assert "mp.validation_status = 'valid'" in sql
@@ -184,12 +192,16 @@ class TestPredictionsEndpoint:
                 "利物浦",
             ),
         ]
+        mock_cur.fetchone.return_value = (4187, 1632, 0.714, 19, now)
 
         with patch("apps.backend.src.routers.predictions.get_db", return_value=mock_conn):
             resp = client.get("/api/predictions?limit=10")
         assert resp.status_code == 200
         data = resp.json()
-        assert data["total"] == 1
+        assert data["total"] == 4187
+        assert data["summary"]["positive_ev_count"] == 1632
+        assert data["summary"]["avg_confidence"] == 0.714
+        assert data["summary"]["model_count"] == 19
         p = data["predictions"][0]
         assert p["match_id"] == 101
         assert p["model_name"] == "xgboost_v2"
@@ -223,6 +235,7 @@ class TestPredictionsEndpoint:
                 "利物浦",
             ),
         ]
+        mock_cur.fetchone.return_value = (1, 0, None, 1, now)
 
         with patch("apps.backend.src.routers.predictions.get_db", return_value=mock_conn):
             resp = client.get("/api/predictions?limit=10")
@@ -317,6 +330,7 @@ class TestPredictionModelOverviewEndpoint:
 
         assert response.status_code == 200
         data = response.json()
+        assert data["catalogVersion"] == "2026-08-12"
         assert data["total"] == 19
         assert [item["code"] for item in data["models"]] == [
             "market_baseline",
@@ -356,6 +370,18 @@ class TestPredictionModelOverviewEndpoint:
                 "temperature": 1.15,
                 "trainingEndDate": "2026-08-08",
                 "rolloutMode": "shadow",
+            },
+            "metadata": {
+                "title": {"zh-CN": "市场赔率基准", "en": "Market odds baseline"},
+                "summary": {
+                    "zh-CN": "把体彩官方赔率换算为市场隐含胜平负概率。",
+                    "en": "Converts official Sporttery odds into implied 1X2 probabilities.",
+                },
+                "output": {"zh-CN": "胜平负及市场派生概率。", "en": "1X2 and market-derived probabilities."},
+                "cadence": {"zh-CN": "随官方赔率快照更新。", "en": "Updates with official odds snapshots."},
+                "condition": {"zh-CN": "需要完整、在售的官方赔率。", "en": "Requires complete official odds on sale."},
+                "role": {"zh-CN": "市场参照，不作为独立信号。", "en": "Market reference, not an independent signal."},
+                "stage": "baseline",
             },
         }
         assert data["models"][2]["isActive"] is False

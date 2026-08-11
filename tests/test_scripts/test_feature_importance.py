@@ -67,13 +67,19 @@ class EvaluationCursor:
                 ("avg_brier",),
                 ("avg_logloss",),
                 ("avg_rps",),
-                ("avg_clv",),
+                ("avg_market_probability_move",),
+                ("avg_closing_edge",),
+                ("avg_odds_clv",),
+                ("paired_market_samples",),
+                ("brier_improvement_vs_market",),
+                ("brier_improvement_ci_low",),
+                ("brier_improvement_ci_high",),
             ]
         return [("total_evaluated",), ("overall_brier",), ("overall_logloss",)]
 
     def fetchall(self):
         self._result_index = 1
-        return [("elo_rating", 12, 0.61, 1.01, 0.20, None)]
+        return [("elo_rating", 12, 0.61, 1.01, 0.20, 0.02, 0.03, None, 12, 0.04, 0.01, 0.07)]
 
     def fetchone(self):
         return (12, 0.61, 1.01)
@@ -109,7 +115,8 @@ class ComparisonCursor:
                 ("avg_brier",),
                 ("avg_log_loss",),
                 ("avg_rps",),
-                ("avg_clv",),
+                ("avg_market_probability_move",),
+                ("avg_closing_edge",),
                 ("avg_flb_score",),
             ]
         return [
@@ -124,7 +131,7 @@ class ComparisonCursor:
 
     def fetchall(self):
         if self.phase == 1:
-            return [("elo_rating", 2, 0.61, 1.01, 0.20, None, None)]
+            return [("elo_rating", 2, 0.61, 1.01, 0.20, None, None, None)]
         return []
 
 
@@ -258,13 +265,21 @@ def test_evaluation_summary_assigns_metrics_directly_to_their_model_version() ->
 
     assert result["models"][0]["n"] == 12
     summary_query = conn.cursor_instance.queries[0]
-    assert "DISTINCT ON (source_mem.match_id, source_mem.model_version_id)" in summary_query
-    assert "JOIN model_versions mv ON mv.id = mem.model_version_id" in summary_query
+    assert "DISTINCT ON (source_mem.match_id, source_mv.model_name)" in summary_query
+    assert "source_mv.model_name AS canonical_model_name" in summary_query
+    assert "COUNT(DISTINCT mem.match_id) AS n" in summary_query
+    assert "market_baseline_scores" in summary_query
+    assert "baseline.brier_score AS market_brier_score" in summary_query
     assert "JOIN model_predictions" not in summary_query
     assert "source_mem.snapshot_time < source_match.kickoff_time" in summary_query
     assert "source_mem.play_type = 'spf'" in summary_query
     assert "source_result.result_status IN ('final', 'confirmed')" in summary_query
-    assert result["models"][0]["avg_clv"] is None
+    assert result["models"][0]["avg_market_probability_move"] == 0.02
+    assert result["models"][0]["avg_closing_edge"] == 0.03
+    assert result["models"][0]["avg_odds_clv"] is None
+    assert result["models"][0]["brier_improvement_vs_market"] == 0.04
+    assert result["models"][0]["brier_improvement_ci_low"] == 0.01
+    assert result["models"][0]["brier_improvement_ci_high"] == 0.07
     assert result["models"][0]["sample_status"] == "monitoring"
     assert result["models"][0]["is_publishable"] is False
     assert result["overall"]["publication_min_samples"] == 100
@@ -278,12 +293,16 @@ def test_latest_prediction_scope_excludes_post_match_predictions() -> None:
     assert "source_mp.validation_status = 'valid'" in query
     assert "model_independent" in query
     assert "source_result.result_status IN ('final', 'confirmed')" in query
+    assert "DISTINCT ON ( source_mp.match_id, source_mv.model_name" in query
+    assert "source_mv.model_name AS canonical_model_name" in query
 
 
 def test_model_comparison_preserves_unavailable_metrics_as_null() -> None:
     result = feature_importance.get_model_comparison_data(ComparisonConnection())
 
-    assert result["models"][0]["clv"] is None
+    assert result["models"][0]["market_probability_move"] is None
+    assert result["models"][0]["closing_edge"] is None
+    assert result["models"][0]["odds_clv"] is None
     assert result["models"][0]["flb_score"] is None
 
 

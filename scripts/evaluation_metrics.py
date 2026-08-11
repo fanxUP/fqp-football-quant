@@ -3,9 +3,10 @@
 计算预测质量指标：
   1. Brier Score      — 均方误差 (多分类版本)
   2. Log Loss          — 交叉熵
-  3. CLV               — Closing Line Value (模型概率 vs 市场最终概率)
-  4. Calibration Error — 校准误差 (预测概率 vs 实际频率)
-  5. RPS               — Ranked Probability Score (有序分类)
+  3. 市场概率变化      — 收盘市场概率 vs 预测时市场概率
+  4. 模型收盘优势      — 模型概率 vs 收盘市场概率
+  5. Calibration Error — 校准误差 (预测概率 vs 实际频率)
+  6. RPS               — Ranked Probability Score (有序分类)
 
 存储到 market_efficiency_metrics 表（已在 sql/03 中创建）。
 """
@@ -155,8 +156,8 @@ def compute_match_metrics(
 ) -> dict[str, Any]:
     """计算单场比赛的所有评估指标。
 
-    Returns:
-        Dict with brier, log_loss, rps, clv (per option), probability_gap (per option)
+    ``clv_score`` is retained as a database compatibility field, but its
+    semantics are market probability movement rather than true odds CLV.
     """
     bs = brier_score(probs, actual)
     ll = log_loss_score(probs, actual)
@@ -197,6 +198,9 @@ def compute_match_metrics(
             else None
         ),
         "clv_score": clv_scores[f"clv_{selected}"],
+        "market_probability_move": clv_scores[f"clv_{selected}"],
+        "closing_edge": closing_edges[f"closing_edge_{selected}"],
+        "odds_clv": None,
         "official_sp": selected_odds,
         "fair_odds": round(1 / probs[selected], 4) if probs[selected] > 0 else None,
         "ev": round(probs[selected] * selected_odds - 1, 6) if selected_odds else None,

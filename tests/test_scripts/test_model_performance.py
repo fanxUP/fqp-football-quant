@@ -142,3 +142,4 @@ def test_model_performance_history_uses_top_pick_and_all_official_result_types()
     assert "ROWS BETWEEN %(preceding)s PRECEDING" in query
     assert "COUNT(*) AS total_samples" in query
     assert "COUNT(DISTINCT business_date) AS settled_dates" in query
+    assert "DISTINCT ON (match_id, model_name, play_type, option_code)" in query
