@@ -46,6 +46,9 @@
 - match_news_features：只包含数值化、可版本化特征。
 - news_feature_evaluations：影子模型评估结果。
 - news_ingestion_runs：供应商级采集审计。
+- news_source_policies：系统维护的域名、等级、语言和启停策略。
+- news_article_screenings：每篇文章与比赛的规则或 AI 筛选结果。
+- news_model_invocations：只保存调用状态、模型和请求/响应哈希的审计记录。
 
 ## 时间与防穿越规则
 
@@ -60,6 +63,18 @@
 - D：传闻或来源不明内容，只展示，不进入正式特征。
 
 聚合商不决定等级；同一文章由 URL 规范化和内容哈希去重。
+
+当前预置覆盖中国足协、FIFA、UEFA、AFC、英超、西甲、德甲、意甲、法甲、新华社、
+新浪体育、懂球帝、BBC Sport、The Guardian、Reuters、ESPN 和 Sky Sports 等域名。
+未知域名只能按 C 级进入待筛选材料，AI 无权提高信源等级。
+
+## AI 筛选
+
+- 仅当“新闻事件提取 Agent”已启用、服务商已启用且连接测试通过时调用。
+- 模型只能返回固定 JSON；未知字段、非法事件类型、比分预测或投注内容一律拒绝。
+- 模型调用失败或输出非法时回退到确定性规则，且不影响其他定时任务。
+- 模型拒绝的无关文章仍保存筛选记录，避免每次调度重复消耗额度。
+- 数据库不保存 API Key、完整提示词或完整回复，只保存规范化结果和 SHA-256 哈希。
 
 ## 结构化事件与特征
 
@@ -100,6 +115,8 @@
 4. P3：冻结快照、数值特征和现有 Feature Snapshot 接口。
 5. P4：新闻影子模型、评估面板和完整回放。
 6. P5：人工晋升、版本锁定和一键回退；未达标时保持影子状态。
+7. P6：来源策略、Guardian 适配器、逐来源失败隔离。
+8. P7：可选 AI 筛选、规则回退、调用审计和页面运行状态。
 
 每个切片必须先写失败测试，完成后运行对应测试和静态检查，用中文 Commit 提交。
 
@@ -125,5 +142,6 @@
 
 - NewsAPI Everything：https://newsapi.org/docs/endpoints/everything
 - GNews Search：https://docs.gnews.io/endpoints/search-endpoint
+- The Guardian Content API：https://open-platform.theguardian.com/documentation/search
 - API-Football：https://www.api-football.com/documentation
 - Sportmonks Fixtures：https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/fixtures

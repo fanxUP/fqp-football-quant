@@ -14,7 +14,8 @@
 | 自动报告 | `scripts/jobs/report_generation.py` | 使用冻结证据摘要，不重新抓取历史新闻 |
 | 调度审计 | `scripts/jobs/run_scheduler.py`、`ai_job_runs` | 新任务沿用单调度器与运行审计 |
 | 运维监控 | `apps/backend/src/services/pipeline_status.py` | 增加采集、快照和影子评估状态 |
-| 模型供应商 | `apps/backend/src/services/model_provider_store.py` | P2 可选复用已加密密钥与调用审计 |
+| 模型供应商 | `apps/backend/src/services/model_provider_store.py` | 复用加密密钥，由独立新闻提取 Agent 受控调用 |
+| 智能工作台 | `apps/backend/src/services/model_invocation_audit.py` | 展示元数据级调用审计，不保存新闻模型正文 |
 
 ## 禁止耦合
 
@@ -42,3 +43,10 @@ P4 之前 `run_model_prediction.py` 不读取新闻特征。P5 的人工晋升�
 - `news_feature_production_enabled`：控制已批准模型读取新闻特征，默认关闭。
 
 三个开关相互独立。生产特征开关不能由调度器、LLM 或评估任务自动打开。
+
+## 运行配置
+
+- `FQP_NEWS_COLLECTION_ENABLED=true` 才注册外部采集任务，默认关闭。
+- `NEWSAPI_API_KEY`、`GNEWS_API_KEY`、`GUARDIAN_API_KEY` 分别启用对应来源；可只配置其中一个。
+- 新闻事件提取 Agent 未就绪时继续使用规则；任一外部来源失败时其他来源继续运行。
+- 采集任务沿用两小时节奏，单次只覆盖未来 36 小时内的体彩官方编号比赛。
