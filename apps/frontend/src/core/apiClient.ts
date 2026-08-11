@@ -433,22 +433,52 @@ export const api = {
     overview: () => request<{ overview: import('../features/news-intelligence/types').NewsIntelligenceOverview }>(
       '/api/news-intelligence/overview',
     ),
-    events: (params?: { matchId?: number; sourceLevel?: string; limit?: number; offset?: number }) =>
+    articles: (params?: { matchId?: number; sourceLevel?: string; limit?: number; offset?: number }) =>
       request<{
         items: import('../features/news-intelligence/types').NewsArticleItem[];
         total: number;
         limit: number;
         offset: number;
-      }>(`/api/news-intelligence/events${qs({
+      }>(`/api/news-intelligence/articles${qs({
         matchId: params?.matchId,
         sourceLevel: params?.sourceLevel,
         limit: params?.limit ?? 20,
         offset: params?.offset ?? 0,
       })}`),
+    events: (params?: { matchId?: number; verificationStatus?: string; limit?: number; offset?: number }) =>
+      request<{
+        items: import('../features/news-intelligence/types').NewsEventItem[];
+        total: number;
+        limit: number;
+        offset: number;
+      }>(
+        `/api/news-intelligence/events${qs({
+          matchId: params?.matchId,
+          verificationStatus: params?.verificationStatus,
+          limit: params?.limit ?? 20,
+          offset: params?.offset ?? 0,
+        })}`,
+      ),
+    verifyEvent: (
+      eventId: number,
+      status: 'pending' | 'verified' | 'rejected',
+      reviewNote?: string,
+    ) => request<{
+      event: { id: number; verificationStatus: string; reviewNote: string | null };
+    }>(`/api/news-intelligence/events/${eventId}/verification`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status, reviewNote }),
+    }),
     sources: () => request<{
       sources: import('../features/news-intelligence/types').NewsSourceItem[];
       total: number;
     }>('/api/news-intelligence/sources'),
+    setSourceEnabled: (sourceId: number, enabled: boolean) => request<{
+      source: import('../features/news-intelligence/types').NewsSourceItem;
+    }>(`/api/news-intelligence/sources/${sourceId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ enabled }),
+    }),
     experiments: () => request<{ experiments: unknown[]; productionFeatureEnabled: boolean }>(
       '/api/news-intelligence/experiments',
     ),

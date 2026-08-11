@@ -191,6 +191,7 @@ AGENT_MODEL_OPTIONS: dict[str, str] = {
     "doc_agent": "文档 Agent",
     "pre_match_interpretation_agent": "赛前解读 Agent",
     "post_match_report_agent": "自动赛后报告 Agent",
+    "news_extraction_agent": "新闻事件提取 Agent",
 }
 
 

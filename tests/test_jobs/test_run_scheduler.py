@@ -8,6 +8,8 @@ from apps.backend.src.services.pipeline_status import JOB_DEFINITIONS
 from scripts.jobs.run_scheduler import (
     MODEL_PREDICTION_CRON,
     MONTHLY_REPORT_CHECK_CRON,
+    NEWS_COLLECTION_CRON,
+    NEWS_EXTRACTION_CRON,
     OFFICIAL_SCHEDULE_CRON,
     SEASON_RECONCILIATION_RETRY_TIME,
     STARTUP_RECOVERY_JOB_CODES,
@@ -19,6 +21,19 @@ from scripts.jobs.run_scheduler import (
     _should_retry_season_reconciliation,
     _should_run_recommendation_catchup,
 )
+
+
+def test_news_jobs_use_staggered_conservative_intervals() -> None:
+    source = Path("scripts/jobs/run_scheduler.py").read_text()
+
+    assert NEWS_COLLECTION_CRON == {"hour": "0-22/2", "minute": 20}
+    assert NEWS_EXTRACTION_CRON == {"minute": 25}
+    assert 'id="collect_news_intelligence"' in source
+    assert 'id="extract_news_events"' in source
+    assert source.index('id="collect_news_intelligence"') < source.index(
+        'id="extract_news_events"'
+    )
+    assert 'FQP_NEWS_COLLECTION_ENABLED' in source
 
 
 def test_self_tracked_job_is_not_wrapped_again():

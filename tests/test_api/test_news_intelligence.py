@@ -36,7 +36,7 @@ def test_news_articles_are_filterable_by_official_match(client, monkeypatch) -> 
         lambda _conn, **_kwargs: (items, 1),
     )
 
-    response = client.get("/api/news-intelligence/events?matchId=31&limit=20&offset=0")
+    response = client.get("/api/news-intelligence/articles?matchId=31&limit=20&offset=0")
 
     assert response.status_code == 200
     assert response.json()["items"] == items
@@ -61,3 +61,49 @@ def test_news_sources_do_not_expose_provider_secrets(client, monkeypatch) -> Non
     assert response.json() == {"sources": sources, "total": 1}
     assert "apiKey" not in response.text
     assert "secret" not in response.text.lower()
+
+
+def test_structured_news_events_expose_evidence_and_verification(client, monkeypatch) -> None:
+    events = [{
+        "id": 9,
+        "eventType": "injury",
+        "direction": "negative",
+        "verificationStatus": "verified",
+        "officialMatchCode": "周一101",
+        "summary": "主队核心球员确认缺阵",
+        "sourceCount": 2,
+    }]
+    monkeypatch.setattr(news_intelligence, "list_news_events", lambda _conn, **_kwargs: (events, 1))
+
+    response = client.get("/api/news-intelligence/events?matchId=31")
+
+    assert response.status_code == 200
+    assert response.json()["items"] == events
+    assert response.json()["total"] == 1
+
+
+def test_event_verification_is_an_explicit_human_action(client, monkeypatch) -> None:
+    event = {"id": 9, "verificationStatus": "verified", "reviewNote": "已核对俱乐部公告"}
+    monkeypatch.setattr(
+        news_intelligence,
+        "review_news_event",
+        lambda _conn, **_kwargs: event,
+    )
+
+    response = client.patch(
+        "/api/news-intelligence/events/9/verification",
+        json={"status": "verified", "reviewNote": "已核对俱乐部公告"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"event": event}
+
+
+def test_source_status_can_be_disabled_without_changing_credentials(client, monkeypatch) -> None:
+    source = {"id": 2, "sourceName": "俱乐部官网", "enabled": False}
+    monkeypatch.setattr(news_intelligence, "set_news_source_enabled", lambda _conn, **_kwargs: source)
+
+    response = client.patch("/api/news-intelligence/sources/2", json={"enabled": False})
+
+    assert response.status_code == 200
+    assert response.json() == {"source": source}

@@ -133,3 +133,140 @@ def list_news_articles(
         for row in rows
     ]
     return items, int(total_row[0] if total_row else 0)
+
+
+def list_news_events(
+    conn: Any,
+    *,
+    match_id: int | None = None,
+    verification_status: str | None = None,
+    limit: int = 20,
+    offset: int = 0,
+) -> tuple[list[dict[str, Any]], int]:
+    filters: list[str] = []
+    params: dict[str, Any] = {"limit": limit, "offset": offset}
+    if match_id is not None:
+        filters.append("entity.match_id = %(match_id)s")
+        params["match_id"] = match_id
+    if verification_status:
+        filters.append("event.verification_status = %(verification_status)s")
+        params["verification_status"] = verification_status
+    where = f"WHERE {' AND '.join(filters)}" if filters else ""
+    with conn.cursor() as cur:
+        cur.execute(
+            f"""
+            SELECT event.id, event.event_type, event.direction, event.title, event.summary,
+                   event.severity_score, event.confidence_score,
+                   event.match_relevance_score, event.verification_status,
+                   event.occurred_at, event.first_available_at,
+                   event.extraction_method, event.extraction_version,
+                   entity.match_id, match.official_match_code, match.league_name,
+                   match.home_team_name, match.away_team_name,
+                   COUNT(DISTINCT evidence.id) AS source_count
+            FROM news_events event
+            LEFT JOIN news_event_entities entity
+                ON entity.event_id = event.id AND entity.match_id IS NOT NULL
+            LEFT JOIN official_matches match ON match.id = entity.match_id
+            LEFT JOIN news_event_evidence evidence ON evidence.event_id = event.id
+            {where}
+            GROUP BY event.id, entity.match_id, match.official_match_code, match.league_name,
+                     match.home_team_name, match.away_team_name
+            ORDER BY event.first_available_at DESC, event.id DESC
+            LIMIT %(limit)s OFFSET %(offset)s
+            """,
+            params,
+        )
+        rows = cur.fetchall()
+        cur.execute(
+            f"""
+            SELECT COUNT(DISTINCT event.id)
+            FROM news_events event
+            LEFT JOIN news_event_entities entity
+                ON entity.event_id = event.id AND entity.match_id IS NOT NULL
+            {where}
+            """,
+            params,
+        )
+        total_row = cur.fetchone()
+    return [
+        {
+            "id": row[0],
+            "eventType": row[1],
+            "direction": row[2],
+            "title": row[3],
+            "summary": row[4],
+            "severityScore": float(row[5]),
+            "confidenceScore": float(row[6]),
+            "matchRelevanceScore": float(row[7]),
+            "verificationStatus": row[8],
+            "occurredAt": _iso(row[9]),
+            "firstAvailableAt": _iso(row[10]),
+            "extractionMethod": row[11],
+            "extractionVersion": row[12],
+            "matchId": row[13],
+            "officialMatchCode": row[14],
+            "leagueName": row[15],
+            "homeTeamName": row[16],
+            "awayTeamName": row[17],
+            "sourceCount": int(row[18] or 0),
+        }
+        for row in rows
+    ], int(total_row[0] if total_row else 0)
+
+
+def review_news_event(
+    conn: Any,
+    *,
+    event_id: int,
+    status: str,
+    review_note: str | None,
+) -> dict[str, Any]:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE news_events
+            SET verification_status = %s, updated_at = NOW()
+            WHERE id = %s
+            RETURNING id, verification_status
+            """,
+            (status, event_id),
+        )
+        row = cur.fetchone()
+        if not row:
+            raise ValueError("新闻事件不存在")
+        cur.execute(
+            """
+            INSERT INTO news_event_reviews (event_id, action, review_note)
+            VALUES (%s, %s, %s)
+            """,
+            (event_id, status, review_note),
+        )
+    conn.commit()
+    return {"id": row[0], "verificationStatus": row[1], "reviewNote": review_note}
+
+
+def set_news_source_enabled(conn: Any, *, source_id: int, enabled: bool) -> dict[str, Any]:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE news_sources
+            SET enabled = %s, updated_at = NOW()
+            WHERE id = %s
+            RETURNING id, source_code, source_name, source_level, enabled,
+                      last_success_at, last_error
+            """,
+            (enabled, source_id),
+        )
+        row = cur.fetchone()
+        if not row:
+            raise ValueError("新闻信源不存在")
+    conn.commit()
+    return {
+        "id": row[0],
+        "sourceCode": row[1],
+        "sourceName": row[2],
+        "sourceLevel": row[3],
+        "enabled": bool(row[4]),
+        "lastSuccessAt": _iso(row[5]),
+        "lastError": row[6],
+    }

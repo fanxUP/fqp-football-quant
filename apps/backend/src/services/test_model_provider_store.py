@@ -146,4 +146,5 @@ def test_agent_binding_exposes_provider_test_status() -> None:
 def test_interpretation_agents_are_independently_bindable() -> None:
     assert AGENT_MODEL_OPTIONS["pre_match_interpretation_agent"] == "赛前解读 Agent"
     assert AGENT_MODEL_OPTIONS["post_match_report_agent"] == "自动赛后报告 Agent"
+    assert AGENT_MODEL_OPTIONS["news_extraction_agent"] == "新闻事件提取 Agent"
     assert "post_match_review_agent" not in AGENT_MODEL_OPTIONS

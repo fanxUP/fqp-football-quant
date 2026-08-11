@@ -22,6 +22,13 @@ OFFICIAL_SCHEDULE_CRON = {"minute": "10,40"}
 # Run five minutes after each schedule refresh so newly sellable matches have
 # official markets and odds available before the prediction snapshot is written.
 MODEL_PREDICTION_CRON = {"minute": "15,45"}
+# Search aggregators at most once every two hours. The job is registered only
+# when the explicit collection flag is enabled, so a newly deployed server
+# never starts external news traffic by accident.
+NEWS_COLLECTION_CRON = {"hour": "0-22/2", "minute": 20}
+# Convert already stored articles into local structured events after collection.
+# This job performs no network or model calls.
+NEWS_EXTRACTION_CRON = {"minute": 25}
 # Daily reports are completion-driven.  The lightweight readiness check repeats
 # every 30 minutes during the review window and writes only after the official
 # result, the post-match evidence window, and related ticket settlement agree.
@@ -879,6 +886,37 @@ def main() -> None:
                 "cron", hour=0, minute=17, id="train_knn_shadow",
             )
             scheduler.add_job(_audited_job("train_mlp_shadow", "MLP 特征模型影子训练", "model_agent", lambda: __import__("scripts.jobs.train_mlp_shadow", fromlist=["run"]).run()), "cron", hour=0, minute=20, id="train_mlp_shadow")
+
+            # News Intelligence is isolated from prediction and betting. External
+            # collection requires an explicit opt-in; deterministic extraction
+            # only processes append-only local evidence.
+            if os.getenv("FQP_NEWS_COLLECTION_ENABLED", "false").lower() == "true":
+                scheduler.add_job(
+                    _audited_job(
+                        "collect_news_intelligence",
+                        "新闻情报采集",
+                        "crawler_agent",
+                        lambda: __import__(
+                            "scripts.jobs.collect_news_intelligence", fromlist=["run"]
+                        ).run(),
+                    ),
+                    "cron",
+                    **NEWS_COLLECTION_CRON,
+                    id="collect_news_intelligence",
+                )
+            scheduler.add_job(
+                _audited_job(
+                    "extract_news_events",
+                    "新闻事件结构化",
+                    "review_agent",
+                    lambda: __import__(
+                        "scripts.jobs.extract_news_events", fromlist=["run"]
+                    ).run(),
+                ),
+                "cron",
+                **NEWS_EXTRACTION_CRON,
+                id="extract_news_events",
+            )
 
             # Weekly on Sunday at 04:00: run full backtest
             scheduler.add_job(

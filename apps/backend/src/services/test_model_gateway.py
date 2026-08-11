@@ -36,6 +36,13 @@ def test_agent_instruction_is_fixed_and_unknown_agent_is_rejected() -> None:
         get_agent_system_instruction("prediction_agent")
 
 
+def test_news_extraction_agent_cannot_issue_predictions_or_bets() -> None:
+    instruction = get_agent_system_instruction("news_extraction_agent")
+
+    assert "不得预测胜平负" in instruction
+    assert "不得" in instruction and "投注" in instruction
+
+
 @pytest.mark.parametrize("protocol", ["openai", "ollama", "perplexity"])
 def test_openai_compatible_payload_includes_system_boundary(protocol: str) -> None:
     client = FakeClient()

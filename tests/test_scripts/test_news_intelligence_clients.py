@@ -1,0 +1,55 @@
+from __future__ import annotations
+
+from typing import Any
+
+import httpx
+
+from scripts.news_intelligence_clients import GNewsClient, NewsApiClient
+
+
+class _FakeClient:
+    def __init__(self, payload: dict[str, Any]) -> None:
+        self.payload = payload
+        self.url = ""
+        self.kwargs: dict[str, Any] = {}
+
+    def get(self, url: str, **kwargs: Any) -> httpx.Response:
+        self.url = url
+        self.kwargs = kwargs
+        return httpx.Response(200, json=self.payload, request=httpx.Request("GET", url))
+
+
+def test_newsapi_uses_everything_endpoint_and_header_key() -> None:
+    transport = _FakeClient({"articles": [{
+        "source": {"name": "Club Site"},
+        "title": "Team injury update",
+        "description": "Player unavailable",
+        "url": "https://club.example/news/1?utm_source=test",
+        "publishedAt": "2026-08-10T08:00:00Z",
+    }]})
+
+    articles = NewsApiClient("news-key", client=transport).search("Team injury")
+
+    assert transport.url == "https://newsapi.org/v2/everything"
+    assert transport.kwargs["headers"] == {"X-Api-Key": "news-key"}
+    assert transport.kwargs["params"]["q"] == "Team injury"
+    assert articles[0].canonical_url == "https://club.example/news/1"
+
+
+def test_gnews_uses_search_endpoint_and_header_key() -> None:
+    transport = _FakeClient({"articles": [{
+        "source": {"name": "Sports Desk", "url": "https://sports.example"},
+        "title": "Confirmed lineup",
+        "description": "Starting XI",
+        "url": "https://sports.example/lineup/2",
+        "publishedAt": "2026-08-10T09:00:00Z",
+        "lang": "en",
+    }]})
+
+    articles = GNewsClient("gnews-key", client=transport).search("Confirmed lineup")
+
+    assert transport.url == "https://gnews.io/api/v4/search"
+    assert transport.kwargs["headers"] == {"X-Api-Key": "gnews-key"}
+    assert transport.kwargs["params"]["sortby"] == "publishedAt"
+    assert transport.kwargs["params"]["max"] == 100
+    assert articles[0].source_domain == "sports.example"

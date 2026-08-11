@@ -41,3 +41,27 @@ export interface NewsSourceItem {
   lastSuccessAt: string | null;
   lastError: string | null;
 }
+
+export type NewsEventVerificationStatus = 'pending' | 'verified' | 'rejected' | 'conflicting';
+
+export interface NewsEventItem {
+  id: number;
+  eventType: string;
+  direction: 'positive' | 'negative' | 'neutral' | 'mixed';
+  title: string;
+  summary: string;
+  severityScore: number;
+  confidenceScore: number;
+  matchRelevanceScore: number;
+  verificationStatus: NewsEventVerificationStatus;
+  occurredAt: string | null;
+  firstAvailableAt: string;
+  extractionMethod: string;
+  extractionVersion: string;
+  matchId: number | null;
+  officialMatchCode: string | null;
+  leagueName: string | null;
+  homeTeamName: string | null;
+  awayTeamName: string | null;
+  sourceCount: number;
+}
