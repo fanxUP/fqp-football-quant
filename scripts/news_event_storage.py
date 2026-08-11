@@ -1,10 +1,98 @@
-"""Persistence for deterministic news-event extraction and corroboration."""
+"""Persistence for auditable news screening, extraction and corroboration."""
 
 from __future__ import annotations
 
 from typing import Any
 
-from scripts.news_event_extraction import extract_rule_event
+from psycopg2.extras import Json
+
+from apps.backend.src.services.model_gateway import invoke_agent_model
+from apps.backend.src.services.model_invocation_audit import record_model_invocation
+from apps.backend.src.services.model_provider_store import get_agent_model_binding
+from scripts.news_ai_screening import NewsScreeningResult, screen_news_article
+
+_NEWS_AGENT = "news_extraction_agent"
+
+
+def _ready_model_invoker(conn: Any):
+    binding = get_agent_model_binding(conn, _NEWS_AGENT)
+    if not binding or not binding["enabled"] or binding["last_test_status"] != "passed":
+        return None
+    return lambda prompt: invoke_agent_model(conn, _NEWS_AGENT, prompt)
+
+
+def _store_screening(
+    conn: Any,
+    *,
+    article_id: int,
+    match_id: int,
+    result: NewsScreeningResult,
+) -> int:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO news_article_screenings (
+                article_id, match_id, screening_method, accepted, reason_code,
+                relevance_score, requires_review, normalized_payload
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (article_id, match_id) DO UPDATE SET
+                screening_method = EXCLUDED.screening_method,
+                accepted = EXCLUDED.accepted,
+                reason_code = EXCLUDED.reason_code,
+                relevance_score = EXCLUDED.relevance_score,
+                requires_review = EXCLUDED.requires_review,
+                normalized_payload = EXCLUDED.normalized_payload
+            RETURNING id
+            """,
+            (
+                article_id,
+                match_id,
+                result.method,
+                result.accepted,
+                result.reason_code,
+                result.relevance_score,
+                result.requires_review,
+                Json(result.normalized_payload),
+            ),
+        )
+        screening_id = int(cur.fetchone()[0])
+        if result.prompt_sha256:
+            status = "failed" if result.error_code else "succeeded"
+            cur.execute(
+                """
+                INSERT INTO news_model_invocations (
+                    screening_id, article_id, match_id, provider_code, model, status,
+                    prompt_sha256, response_sha256, duration_ms, error_code
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    screening_id,
+                    article_id,
+                    match_id,
+                    result.provider_code,
+                    result.model,
+                    status,
+                    result.prompt_sha256,
+                    result.response_sha256,
+                    result.duration_ms,
+                    result.error_code,
+                ),
+            )
+            record_model_invocation(
+                conn,
+                agent_code=_NEWS_AGENT,
+                provider_code=result.provider_code,
+                model=result.model,
+                status=status,
+                prompt_length=0,
+                response_length=0,
+                duration_ms=result.duration_ms,
+                error_code=result.error_code,
+                commit=False,
+            )
+    return screening_id
 
 
 def process_pending_news_articles(conn: Any, limit: int = 200) -> dict[str, Any]:
@@ -19,8 +107,9 @@ def process_pending_news_articles(conn: Any, limit: int = 200) -> dict[str, Any]
             JOIN news_article_matches link ON link.article_id = article.id
             JOIN official_matches match ON match.id = link.match_id
             WHERE NOT EXISTS (
-                SELECT 1 FROM news_event_evidence evidence
-                WHERE evidence.article_id = article.id
+                SELECT 1 FROM news_article_screenings screening
+                WHERE screening.article_id = article.id
+                  AND screening.match_id = link.match_id
             )
             ORDER BY article.available_at, article.id
             LIMIT %s
@@ -29,11 +118,16 @@ def process_pending_news_articles(conn: Any, limit: int = 200) -> dict[str, Any]
         )
         rows = cur.fetchall()
 
+    invoke_model = _ready_model_invoker(conn)
     created = 0
     skipped = 0
     evidence_added = 0
+    model_screened = 0
+    model_failures = 0
+    rule_screened = 0
     for row in rows:
         article = {
+            "id": row[0],
             "title": row[1],
             "description": row[2],
             "available_at": row[3],
@@ -42,7 +136,17 @@ def process_pending_news_articles(conn: Any, limit: int = 200) -> dict[str, Any]
             "home_team_name": row[6],
             "away_team_name": row[7],
         }
-        draft = extract_rule_event(article)
+        result = screen_news_article(article, invoke_model=invoke_model)
+        screening_id = _store_screening(
+            conn,
+            article_id=row[0],
+            match_id=row[5],
+            result=result,
+        )
+        model_screened += int(result.method == "llm")
+        model_failures += int(result.method == "rule_fallback")
+        rule_screened += int(result.method in {"rule", "rule_fallback"})
+        draft = result.draft
         if draft is None:
             skipped += 1
             continue
@@ -52,9 +156,10 @@ def process_pending_news_articles(conn: Any, limit: int = 200) -> dict[str, Any]
                 INSERT INTO news_events (
                     event_fingerprint, event_type, direction, title, summary,
                     severity_score, confidence_score, verification_status,
-                    first_available_at, extraction_method, extraction_version
+                    first_available_at, extraction_method, extraction_version,
+                    match_relevance_score, extraction_metadata
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'rule', 'news-rule-v1')
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (event_fingerprint) DO UPDATE SET
                     severity_score = GREATEST(news_events.severity_score, EXCLUDED.severity_score),
                     confidence_score = GREATEST(news_events.confidence_score, EXCLUDED.confidence_score),
@@ -72,6 +177,16 @@ def process_pending_news_articles(conn: Any, limit: int = 200) -> dict[str, Any]
                     draft.confidence_score,
                     draft.verification_status,
                     draft.first_available_at,
+                    "llm" if result.method == "llm" else "rule",
+                    "news-llm-v1" if result.method == "llm" else "news-rule-v1",
+                    result.relevance_score,
+                    Json(
+                        {
+                            "screeningId": screening_id,
+                            "screeningMethod": result.method,
+                            "requiresReview": result.requires_review,
+                        }
+                    ),
                 ),
             )
             event_id, inserted = cur.fetchone()
@@ -104,7 +219,7 @@ def process_pending_news_articles(conn: Any, limit: int = 200) -> dict[str, Any]
                 (
                     event_id,
                     row[0],
-                    "verified" if row[4] in {"S", "A"} else "pending",
+                    draft.verification_status,
                     row[3],
                 ),
             )
@@ -144,4 +259,7 @@ def process_pending_news_articles(conn: Any, limit: int = 200) -> dict[str, Any]
         "eventsCreated": created,
         "evidenceAdded": evidence_added,
         "skipped": skipped,
+        "modelScreened": model_screened,
+        "modelFailures": model_failures,
+        "ruleScreened": rule_screened,
     }

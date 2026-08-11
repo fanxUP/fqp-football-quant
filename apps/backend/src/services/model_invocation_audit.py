@@ -16,6 +16,7 @@ def record_model_invocation(
     response_length: int,
     duration_ms: int,
     error_code: str | None = None,
+    commit: bool = True,
 ) -> None:
     """Persist call metadata only; request and response bodies never enter the database."""
     with conn.cursor() as cur:
@@ -25,7 +26,8 @@ def record_model_invocation(
                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
             (agent_code, provider_code, model, status, prompt_length, response_length, duration_ms, error_code),
         )
-    conn.commit()
+    if commit:
+        conn.commit()
 
 
 def list_model_invocations(conn: Any, limit: int = 30) -> list[dict[str, Any]]:
