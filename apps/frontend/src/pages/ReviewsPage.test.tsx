@@ -46,7 +46,7 @@ describe('ReviewsPage', () => {
   it('日报详情只展示核心指标和自动赛后报告，不再展示旧的单场复盘长表', async () => {
     render(<ReviewsPage />);
 
-    fireEvent.change(await screen.findByLabelText('日期索引'), { target: { value: '2026-08-09' } });
+    fireEvent.click(await screen.findByRole('button', { name: '查看 2026-08-09 日报' }));
 
     expect(await screen.findByText('自动赛后报告')).toBeInTheDocument();
     expect(screen.getByText('量化复盘指标')).toBeInTheDocument();

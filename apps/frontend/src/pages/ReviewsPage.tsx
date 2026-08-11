@@ -16,6 +16,7 @@ import RealProfitLossChart from './reviews/RealProfitLossChart';
 import ReportAutomationPanel from './reviews/ReportAutomationPanel';
 import AutomaticReportArchivePanel from './reviews/AutomaticReportArchivePanel';
 import ReportResearchSummary from './reviews/ReportResearchSummary';
+import ReviewDateIndex from './reviews/ReviewDateIndex';
 
 type TabKey = 'daily' | 'weekly' | 'monthly' | 'settlements' | 'errors';
 
@@ -151,21 +152,11 @@ function DailyReviewsTab() {
 
       {!loading && (reviews.length ? (
         <Card style={{ marginTop: '16px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-            <label htmlFor="daily-review-date" style={{ fontWeight: 700 }}>日期索引</label>
-            <select
-              id="daily-review-date"
-              value={expandedDate ?? ''}
-              onChange={(event) => setExpandedDate(event.target.value || null)}
-              style={{ minWidth: '180px' }}
-            >
-              <option value="">选择日期查看日报</option>
-              {reviews.map((review) => (
-                <option key={review.review_date} value={review.review_date}>{review.review_date}</option>
-              ))}
-            </select>
-            <span style={{ color: 'var(--fqp-text-muted)', fontSize: '13px' }}>近 30 日期数：{reviews.length}</span>
-          </div>
+          <ReviewDateIndex
+            dates={reviews.map((review) => review.review_date)}
+            selectedDate={expandedDate}
+            onSelect={setExpandedDate}
+          />
         </Card>
       ) : (
         <EmptyState title="暂无日报数据" description="官方赛果与相关票据结算完成后将自动生成。" />
