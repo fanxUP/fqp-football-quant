@@ -243,6 +243,7 @@ const ENGLISH_TEXT: Record<string, string> = {
   '观察区不参与最佳模型结论，避免小样本偶然波动造成误导。': 'The observation zone is excluded from best-model conclusions to avoid small-sample noise.',
   '观察区模型指标': 'Observation-zone model metrics',
   '模型表现曲线': 'Model performance trend',
+  '模型表现图表': 'Model performance charts',
   '命中率仅作辅助趋势；正式结论以 Brier、Log Loss 与校准表现为主。': 'Hit rate is a secondary trend only; formal conclusions use Brier, Log Loss and calibration.',
   '导出 CSV': 'Export CSV',
   '模型曲线加载失败': 'Model trend failed to load',

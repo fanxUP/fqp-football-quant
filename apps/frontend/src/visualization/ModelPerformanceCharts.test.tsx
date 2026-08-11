@@ -1,14 +1,17 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import ModelPerformanceCharts from './ModelPerformanceCharts';
 import { ThemeProvider } from '../app/ThemeContext';
 
 vi.mock('./timeseries/LightweightLineChart', () => ({
-  default: ({ ariaLabel }: { ariaLabel: string }) => <div role="img" aria-label={ariaLabel} />,
+  default: ({ ariaLabel, height }: { ariaLabel: string; height: number }) => (
+    <div role="img" aria-label={ariaLabel} data-height={height} />
+  ),
 }));
 
 describe('ModelPerformanceCharts', () => {
-  it('渲染综合视图、五种玩法和可读模型排名', () => {
+  it('用横向标签在单张加高图表中切换六种视图', () => {
+    const onPlayTypeChange = vi.fn();
     render(
       <ThemeProvider>
         <ModelPerformanceCharts
@@ -28,6 +31,7 @@ describe('ModelPerformanceCharts', () => {
           selectedModels={['elo_rating']}
           playType="spf"
           window={20}
+          onPlayTypeChange={onPlayTypeChange}
         />
       </ThemeProvider>,
     );
@@ -37,6 +41,18 @@ describe('ModelPerformanceCharts', () => {
     expect(screen.getAllByText('Elo 实力评分').length).toBeGreaterThan(0);
     expect(screen.getByText('样本日期不足')).toBeInTheDocument();
     expect(screen.getByRole('img', { name: '胜平负 · 模型对比滚动命中率对比' })).toBeInTheDocument();
+    expect(screen.getByRole('img')).toHaveAttribute('data-height', '500');
+    expect(screen.getAllByRole('img')).toHaveLength(1);
+    const tabs = screen.getByRole('tablist', { name: '模型表现图表' });
+    expect(tabs).toHaveTextContent('跨玩法概览');
+    expect(tabs).toHaveTextContent('胜平负');
+    expect(tabs).toHaveTextContent('让球胜平负');
+    expect(tabs).toHaveTextContent('比分');
+    expect(tabs).toHaveTextContent('总进球数');
+    expect(tabs).toHaveTextContent('半全场');
+    expect(screen.getByRole('tab', { name: '胜平负' })).toHaveAttribute('aria-selected', 'true');
+    fireEvent.click(screen.getByRole('tab', { name: '比分' }));
+    expect(onPlayTypeChange).toHaveBeenCalledWith('bf');
     expect(screen.getByText('查看图表数据')).toBeInTheDocument();
   });
 });

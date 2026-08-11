@@ -1,19 +1,13 @@
 import { useLanguage } from '../../app/LanguageContext';
-import { modelNameLabel, playTypeLabel } from '../../shared/constants';
-
-export type PerformancePlayType = 'spf' | 'rqspf' | 'bf' | 'zjq' | 'bqc' | 'all';
+import { modelNameLabel } from '../../shared/constants';
 
 interface ModelPerformanceToolbarProps {
   days: number;
-  playType: PerformancePlayType;
   modelNames: string[];
   selectedModels: string[];
   onDaysChange: (days: number) => void;
-  onPlayTypeChange: (playType: PerformancePlayType) => void;
   onSelectedModelsChange: (models: string[]) => void;
 }
-
-const PLAY_TYPES: PerformancePlayType[] = ['spf', 'rqspf', 'bf', 'zjq', 'bqc', 'all'];
 
 export default function ModelPerformanceToolbar(props: ModelPerformanceToolbarProps) {
   const { translate } = useLanguage();
@@ -28,11 +22,6 @@ export default function ModelPerformanceToolbar(props: ModelPerformanceToolbarPr
       <label>{translate('时间范围')}
         <select value={props.days} onChange={(event) => props.onDaysChange(Number(event.target.value))}>
           <option value={30}>{translate('近 30 天')}</option><option value={90}>{translate('近 90 天')}</option><option value={365}>{translate('近 365 天')}</option>
-        </select>
-      </label>
-      <label>{translate('玩法')}
-        <select value={props.playType} onChange={(event) => props.onPlayTypeChange(event.target.value as PerformancePlayType)}>
-          {PLAY_TYPES.map((playType) => <option value={playType} key={playType}>{playType === 'all' ? translate('跨玩法概览') : playTypeLabel(playType)}</option>)}
         </select>
       </label>
       <details className="model-filter-menu">

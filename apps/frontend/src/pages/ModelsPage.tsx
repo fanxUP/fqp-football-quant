@@ -14,8 +14,9 @@ import PredictionModelOverviewPanel from './PredictionModelOverviewPanel';
 import ModelPredictionGroups from './ModelPredictionGroups';
 import ModelDiagnosticsPanel from './models/ModelDiagnosticsPanel';
 import ModelEvaluationPanel from './models/ModelEvaluationPanel';
-import ModelPerformanceToolbar, { type PerformancePlayType } from './models/ModelPerformanceToolbar';
+import ModelPerformanceToolbar from './models/ModelPerformanceToolbar';
 import ModelStats from './models/ModelStats';
+import type { PerformancePlayType } from './models/modelPerformanceViews';
 import './ModelsPage.css';
 
 const EMPTY_HISTORY: ModelPerformanceHistory = { status: 'ok', metric: 'rolling_hit_rate', window: 20, days: 365, points: [], samples: [] };
@@ -83,9 +84,9 @@ export default function ModelsPage() {
     <div className="models-page">
       <PageHeader title="模型表现" subtitle="按独立比赛评估模型，正式结论与小样本观察严格分区" />
       <ModelStats summary={summary} loading={loading} />
-      <ModelPerformanceToolbar days={days} playType={playType} modelNames={modelNames} selectedModels={selectedModels} onDaysChange={setDays} onPlayTypeChange={setPlayType} onSelectedModelsChange={setSelectedModels} />
+      <ModelPerformanceToolbar days={days} modelNames={modelNames} selectedModels={selectedModels} onDaysChange={setDays} onSelectedModelsChange={setSelectedModels} />
       <ModelEvaluationPanel models={evalModels} loading={evalLoading} error={evalError} onRetry={loadEvaluation} />
-      <ModelPerformanceCharts points={performanceHistory.points} samples={performanceHistory.samples} days={performanceHistory.days} modelNames={modelNames} selectedModels={selectedModels} playType={playType} window={performanceHistory.window} loading={historyLoading} error={historyError} onRetry={loadHistory} />
+      <ModelPerformanceCharts points={performanceHistory.points} samples={performanceHistory.samples} days={performanceHistory.days} modelNames={modelNames} selectedModels={selectedModels} playType={playType} window={performanceHistory.window} loading={historyLoading} error={historyError} onRetry={loadHistory} onPlayTypeChange={setPlayType} />
       <ModelDiagnosticsPanel modelNames={modelNames} />
       <PredictionModelOverviewPanel />
       <section aria-labelledby="model-prediction-details-title">

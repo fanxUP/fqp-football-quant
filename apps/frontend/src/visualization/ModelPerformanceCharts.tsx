@@ -9,11 +9,15 @@ import LightweightLineChart, { type LightweightLineSeries } from './timeseries/L
 import { buildModelPerformanceSeries, type ModelPerformanceSeriesData } from './model/modelPerformanceData';
 import { getModelLineVisual } from './model/modelVisuals';
 import ModelSampleSufficiency from './model/ModelSampleSufficiency';
-import type { PerformancePlayType } from '../pages/models/ModelPerformanceToolbar';
+import {
+  MODEL_PERFORMANCE_VIEWS,
+  type PerformancePlayType,
+} from '../pages/models/modelPerformanceViews';
 import './ModelPerformanceCharts.css';
 
 const MIN_TREND_DATES = 8;
 const PERCENT_RANGE = [0, 100] as const;
+const MODEL_CHART_HEIGHT = 500;
 
 interface ModelPerformanceChartsProps {
   points: ModelPerformancePoint[];
@@ -26,6 +30,7 @@ interface ModelPerformanceChartsProps {
   loading?: boolean;
   error?: string | null;
   onRetry?: () => void;
+  onPlayTypeChange: (playType: PerformancePlayType) => void;
 }
 
 function addModelVisuals(series: ModelPerformanceSeriesData[]): LightweightLineSeries[] {
@@ -49,14 +54,20 @@ function AccessibleSeriesTable({ series }: { series: ModelPerformanceSeriesData[
   );
 }
 
-export default function ModelPerformanceCharts({ points, samples, days, modelNames, selectedModels, playType, window, loading = false, error, onRetry }: ModelPerformanceChartsProps) {
+function viewLabel(playType: PerformancePlayType, translate: (text: string) => string) {
+  return playType === 'all'
+    ? translate('跨玩法概览')
+    : translate(playTypeLabel(playType));
+}
+
+export default function ModelPerformanceCharts({ points, samples, days, modelNames, selectedModels, playType, window, loading = false, error, onRetry, onPlayTypeChange }: ModelPerformanceChartsProps) {
   const { theme } = useTheme();
   const { language, translate } = useLanguage();
   const selected = useMemo(() => new Set(selectedModels), [selectedModels]);
   const chartData = useMemo(() => buildModelPerformanceSeries(points.filter((point) => selected.has(point.model_name)), playType).map((item) => ({ ...item, name: translate(modelNameLabel(item.id)) })), [points, playType, selected, translate]);
   const renderSeries = useMemo(() => addModelVisuals(chartData), [chartData, theme]);
   const dateCount = Math.max(0, ...chartData.map((item) => item.dateCount));
-  const title = playType === 'all' ? translate('跨玩法概览') : `${playTypeLabel(playType)} · ${translate('模型对比')}`;
+  const title = playType === 'all' ? viewLabel(playType, translate) : `${viewLabel(playType, translate)} · ${translate('模型对比')}`;
   const ariaLabel = language === 'en' ? `${title} rolling hit-rate comparison` : `${title}滚动命中率对比`;
 
   return (
@@ -66,11 +77,29 @@ export default function ModelPerformanceCharts({ points, samples, days, modelNam
         {chartData.length > 0 && <button type="button" className="fqp-btn fqp-btn-secondary" onClick={() => downloadCsv(chartData, playType)}>{translate('导出 CSV')}</button>}
       </header>
       <ModelSampleSufficiency samples={samples} modelNames={modelNames.filter((model) => selected.has(model))} days={days} />
+      <div className="model-chart-tabs" role="tablist" aria-label={translate('模型表现图表')}>
+        {MODEL_PERFORMANCE_VIEWS.map((view) => (
+          <button
+            type="button"
+            role="tab"
+            id={`model-performance-tab-${view}`}
+            aria-selected={playType === view}
+            aria-controls="model-performance-chart-panel"
+            className={playType === view ? 'is-active' : ''}
+            key={view}
+            onClick={() => onPlayTypeChange(view)}
+          >
+            {viewLabel(view, translate)}
+          </button>
+        ))}
+      </div>
       {error ? <div className="model-panel-error fqp-card" role="alert"><span>{translate(error)}</span>{onRetry && <button type="button" className="fqp-btn fqp-btn-secondary" onClick={onRetry}>{translate('重试')}</button>}</div> : (
-        <ChartFrame title={title} subtitle={`${translate('最近')} ${window} ${translate('次预测的滚动命中率')} · ${dateCount} ${translate('个结算日期')} · %`} controls={dateCount > 0 && dateCount < MIN_TREND_DATES ? <span className="model-performance-sample-warning">{translate('样本日期不足')}</span> : undefined} height={340} loading={loading} empty={!loading && renderSeries.length === 0} emptyReason={translate('暂无已结算模型预测')}>
-          <LightweightLineChart series={renderSeries} ariaLabel={ariaLabel} height={340} valuePrecision={1} valueSuffix="%" valueRange={PERCENT_RANGE} />
-          <AccessibleSeriesTable series={chartData} />
-        </ChartFrame>
+        <div id="model-performance-chart-panel" role="tabpanel" aria-labelledby={`model-performance-tab-${playType}`}>
+          <ChartFrame title={title} subtitle={`${translate('最近')} ${window} ${translate('次预测的滚动命中率')} · ${dateCount} ${translate('个结算日期')} · %`} controls={dateCount > 0 && dateCount < MIN_TREND_DATES ? <span className="model-performance-sample-warning">{translate('样本日期不足')}</span> : undefined} height={MODEL_CHART_HEIGHT} loading={loading} empty={!loading && renderSeries.length === 0} emptyReason={translate('暂无已结算模型预测')}>
+            <LightweightLineChart series={renderSeries} ariaLabel={ariaLabel} height={MODEL_CHART_HEIGHT} valuePrecision={1} valueSuffix="%" valueRange={PERCENT_RANGE} />
+            <AccessibleSeriesTable series={chartData} />
+          </ChartFrame>
+        </div>
       )}
     </section>
   );
