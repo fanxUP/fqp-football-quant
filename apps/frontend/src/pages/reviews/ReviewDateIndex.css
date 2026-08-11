@@ -119,8 +119,9 @@
 
 .review-date-index-date time {
   color: var(--fqp-text);
-  font: 700 0.9375rem/1.2 var(--fqp-font-mono);
+  font: 700 0.8125rem/1.2 var(--fqp-font-mono);
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .review-date-index-date small {
@@ -148,6 +149,6 @@
   }
 
   .review-date-index-list {
-    grid-template-columns: repeat(7, minmax(4.75rem, 1fr));
+    grid-template-columns: repeat(7, minmax(6.25rem, 1fr));
   }
 }

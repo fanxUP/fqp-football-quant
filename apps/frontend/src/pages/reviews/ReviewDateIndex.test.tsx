@@ -16,6 +16,13 @@ const dates = [
 ];
 
 describe('ReviewDateIndex', () => {
+  it('日期按钮使用年-月-日完整格式', () => {
+    render(<ReviewDateIndex dates={dates} selectedDate={null} onSelect={vi.fn()} />);
+
+    expect(screen.getByText('2026-08-12')).toBeInTheDocument();
+    expect(screen.queryByText('08.12')).not.toBeInTheDocument();
+  });
+
   it('每次只展示一组七个日报日期，并可整周切换到更早日期', async () => {
     const user = userEvent.setup();
     render(<ReviewDateIndex dates={dates} selectedDate={null} onSelect={vi.fn()} />);

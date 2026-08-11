@@ -79,7 +79,7 @@ export default function ReviewDateIndex({ dates, selectedDate, onSelect }: Revie
                 onClick={() => onSelect(date)}
               >
                 <span>{isEnglish ? ENGLISH_WEEKDAYS[day] : CHINESE_WEEKDAYS[day]}</span>
-                <time dateTime={date}>{date.slice(5).replace('-', '.')}</time>
+                <time dateTime={date}>{date}</time>
                 {selected && <small>{isEnglish ? 'Selected' : '已选'}</small>}
               </button>
             );
