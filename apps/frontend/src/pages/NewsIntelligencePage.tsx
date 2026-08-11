@@ -7,6 +7,7 @@ import type {
   NewsIntelligenceOverview,
   NewsSourceItem,
   NewsShadowExperiment,
+  NewsReleaseState,
 } from '../features/news-intelligence/types';
 import Card from '../shared/components/Card';
 import ErrorState from '../shared/components/ErrorState';
@@ -55,6 +56,8 @@ export default function NewsIntelligencePage() {
   const [events, setEvents] = useState<NewsEventItem[]>([]);
   const [features, setFeatures] = useState<NewsFeatureSnapshotItem[]>([]);
   const [experiment, setExperiment] = useState<NewsShadowExperiment | null>(null);
+  const [release, setRelease] = useState<NewsReleaseState | null>(null);
+  const [releaseNote, setReleaseNote] = useState('');
   const [sources, setSources] = useState<NewsSourceItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -70,6 +73,7 @@ export default function NewsIntelligencePage() {
       api.newsIntelligence.sources(),
       api.newsIntelligence.features({ limit: 12 }),
       api.newsIntelligence.experiments(),
+      api.newsIntelligence.release(),
     ])
       .then(([
         overviewResponse,
@@ -78,6 +82,7 @@ export default function NewsIntelligencePage() {
         sourceResponse,
         featureResponse,
         experimentResponse,
+        releaseResponse,
       ]) => {
         if (cancelled) return;
         setOverview(overviewResponse.overview);
@@ -86,6 +91,7 @@ export default function NewsIntelligencePage() {
         setSources(sourceResponse.sources);
         setFeatures(featureResponse.items);
         setExperiment(experimentResponse.experiment);
+        setRelease(releaseResponse.release);
       })
       .catch((requestError) => {
         if (!cancelled) {
@@ -134,6 +140,27 @@ export default function NewsIntelligencePage() {
     }
   }
 
+  async function changeReleaseMode(target: 'production' | 'shadow') {
+    const note = releaseNote.trim();
+    if (!note) {
+      setActionError('请先填写人工审核或回滚说明');
+      return;
+    }
+    setActionPending('release');
+    setActionError(null);
+    try {
+      const response = target === 'production'
+        ? await api.newsIntelligence.promote(note)
+        : await api.newsIntelligence.rollback(note);
+      setRelease(response.release);
+      setReleaseNote('');
+    } catch (requestError) {
+      setActionError(requestError instanceof Error ? requestError.message : '发布状态修改失败');
+    } finally {
+      setActionPending(null);
+    }
+  }
+
   if (loading) return <LoadingSpinner text="加载新闻情报..." size="lg" />;
   if (error) return <ErrorState message={error} />;
 
@@ -153,10 +180,12 @@ export default function NewsIntelligencePage() {
       />
 
       <Card className="news-intelligence-boundary">
-        <StatusBadge status="ok" label="安全隔离" dot />
-        <strong>正式预测未启用新闻特征</strong>
+        <StatusBadge status={release?.mode === 'production' ? 'warning' : 'ok'} label={release?.mode === 'production' ? '生产已晋升' : '安全隔离'} dot />
+        <strong>{release?.mode === 'production' ? '正式推荐已启用锁定新闻版本' : '正式预测未启用新闻特征'}</strong>
         <span style={{ color: 'var(--fqp-text-muted)', fontSize: 13 }}>
-          当前仅归档与展示，影子评估和人工晋升完成前不会影响推荐、投注或风控。
+          {release?.mode === 'production'
+            ? '仅对锁定的 SPF 基线概率应用受限新闻覆盖；风控和正式预测事实表仍保持不变。'
+            : '当前仅归档与展示，影子评估和人工晋升完成前不会影响推荐、投注或风控。'}
         </span>
       </Card>
 
@@ -273,6 +302,49 @@ export default function NewsIntelligencePage() {
             ))}
           </div>
         )}
+      </Card>
+
+      <Card title="发布与回滚">
+        <div className="news-intelligence-release">
+          <div>
+            <StatusBadge
+              status={release?.mode === 'production' ? 'warning' : 'info'}
+              label={release?.mode === 'production' ? '生产模式' : '影子模式'}
+              dot
+            />
+            <strong>{release?.promotion.reason ?? '正在读取晋升门槛'}</strong>
+            <span className="news-intelligence-meta">
+              候选版本 {release?.candidateShadowVersion ?? 'news-shadow-v1'} · 门槛样本 {release?.metrics.sampleSize ?? 0}
+            </span>
+          </div>
+          <textarea
+            value={releaseNote}
+            maxLength={2000}
+            placeholder="填写人工审核或回滚说明"
+            onChange={(event) => setReleaseNote(event.target.value)}
+          />
+          <div className="news-intelligence-actions">
+            {release?.mode === 'production' ? (
+              <button
+                type="button"
+                className="fqp-btn fqp-btn-secondary"
+                disabled={actionPending === 'release'}
+                onClick={() => changeReleaseMode('shadow')}
+              >
+                立即回滚到影子模式
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="fqp-btn fqp-btn-primary"
+                disabled={!release?.promotion.eligible || actionPending === 'release'}
+                onClick={() => changeReleaseMode('production')}
+              >
+                人工晋升并锁定版本
+              </button>
+            )}
+          </div>
+        </div>
       </Card>
 
       <Card title="原始新闻证据">

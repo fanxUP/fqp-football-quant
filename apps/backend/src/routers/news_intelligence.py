@@ -18,6 +18,11 @@ from apps.backend.src.services.news_intelligence_store import (
     review_news_event,
     set_news_source_enabled,
 )
+from apps.backend.src.services.news_release_store import (
+    get_news_release,
+    promote_news_release,
+    rollback_news_release,
+)
 
 router = APIRouter(prefix="/api/news-intelligence", tags=["news-intelligence"])
 
@@ -34,6 +39,30 @@ class EventVerificationRequest(BaseModel):
     @classmethod
     def normalize_note(cls, value: str | None) -> str | None:
         return value.strip() if value and value.strip() else None
+
+
+class PromotionRequest(BaseModel):
+    approval_note: str = Field(alias="approvalNote", min_length=4, max_length=2000)
+
+    @field_validator("approval_note")
+    @classmethod
+    def normalize_approval_note(cls, value: str) -> str:
+        normalized = value.strip()
+        if len(normalized) < 4:
+            raise ValueError("审核说明至少 4 个字符")
+        return normalized
+
+
+class RollbackRequest(BaseModel):
+    rollback_note: str = Field(alias="rollbackNote", min_length=2, max_length=2000)
+
+    @field_validator("rollback_note")
+    @classmethod
+    def normalize_rollback_note(cls, value: str) -> str:
+        normalized = value.strip()
+        if len(normalized) < 2:
+            raise ValueError("回滚说明至少 2 个字符")
+        return normalized
 
 
 @router.get("/overview")
@@ -145,3 +174,30 @@ def experiments() -> dict[str, object]:
     with get_db() as conn:
         experiment = get_news_shadow_experiment(conn)
     return {"experiment": experiment}
+
+
+@router.get("/release")
+def release() -> dict[str, object]:
+    with get_db() as conn:
+        payload = get_news_release(conn)
+    return {"release": payload}
+
+
+@router.post("/release/promote")
+def promote_release(body: PromotionRequest) -> dict[str, object]:
+    try:
+        with get_db() as conn:
+            payload = promote_news_release(conn, approval_note=body.approval_note)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return {"release": payload}
+
+
+@router.post("/release/rollback")
+def rollback_release(body: RollbackRequest) -> dict[str, object]:
+    try:
+        with get_db() as conn:
+            payload = rollback_news_release(conn, rollback_note=body.rollback_note)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return {"release": payload}

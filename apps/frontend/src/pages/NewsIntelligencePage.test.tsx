@@ -3,20 +3,23 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import NewsIntelligencePage from './NewsIntelligencePage';
 
-const { overview, articles, events, sources, features, experiments, verifyEvent, setSourceEnabled } = vi.hoisted(() => ({
+const { overview, articles, events, sources, features, experiments, release, promote, rollback, verifyEvent, setSourceEnabled } = vi.hoisted(() => ({
   overview: vi.fn(),
   articles: vi.fn(),
   events: vi.fn(),
   sources: vi.fn(),
   features: vi.fn(),
   experiments: vi.fn(),
+  release: vi.fn(),
+  promote: vi.fn(),
+  rollback: vi.fn(),
   verifyEvent: vi.fn(),
   setSourceEnabled: vi.fn(),
 }));
 
 vi.mock('../core/apiClient', () => ({
   api: { newsIntelligence: {
-    overview, articles, events, sources, features, experiments, verifyEvent, setSourceEnabled,
+    overview, articles, events, sources, features, experiments, release, promote, rollback, verifyEvent, setSourceEnabled,
   } },
 }));
 
@@ -111,6 +114,19 @@ describe('NewsIntelligencePage', () => {
         shadowLogLoss: 0.99,
       }],
     } });
+    release.mockResolvedValue({ release: {
+      mode: 'shadow',
+      approvedShadowVersion: null,
+      approvedFeatureVersion: null,
+      approvalNote: null,
+      approvedBy: null,
+      approvedAt: null,
+      updatedAt: '2026-08-11T10:00:00+00:00',
+      candidateShadowVersion: 'news-shadow-v1',
+      candidateFeatureVersion: 'news-features-v1',
+      metrics: { sampleSize: 120, brierDelta: -0.02, logLossDelta: -0.03 },
+      promotion: { eligible: false, reason: '已结算样本少于 1000 场' },
+    } });
     verifyEvent.mockResolvedValue({ event: { id: 9, verificationStatus: 'verified', reviewNote: null } });
     setSourceEnabled.mockResolvedValue({ source: { id: 2, enabled: false } });
   });
@@ -127,6 +143,8 @@ describe('NewsIntelligencePage', () => {
     expect(screen.getByText('影子模型对比')).toBeInTheDocument();
     expect(screen.getByText('0.6100')).toBeInTheDocument();
     expect(screen.getByText('dixon_coles')).toBeInTheDocument();
+    expect(screen.getByText('影子模式')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '人工晋升并锁定版本' })).toBeDisabled();
     expect(screen.getByText('待核验')).toBeInTheDocument();
     expect(screen.getAllByText('S级')).toHaveLength(2);
     expect(screen.getByText('正式预测未启用新闻特征')).toBeInTheDocument();

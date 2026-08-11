@@ -20,17 +20,21 @@ def get_news_overview(conn: Any) -> dict[str, Any]:
                 (SELECT COUNT(DISTINCT match_id) FROM news_article_matches),
                 (SELECT COUNT(*) FROM news_sources),
                 (SELECT COUNT(*) FROM news_sources WHERE enabled AND last_error IS NULL),
-                (SELECT MAX(captured_at) FROM news_articles_raw)
+                (SELECT MAX(captured_at) FROM news_articles_raw),
+                EXISTS (
+                    SELECT 1 FROM news_feature_release_settings
+                    WHERE id = 1 AND mode = 'production'
+                )
             """
         )
-        row = cur.fetchone() or (0, 0, 0, 0, None)
+        row = cur.fetchone() or (0, 0, 0, 0, None, False)
     return {
         "articleCount": int(row[0] or 0),
         "linkedMatchCount": int(row[1] or 0),
         "sourceCount": int(row[2] or 0),
         "healthySourceCount": int(row[3] or 0),
         "lastCapturedAt": _iso(row[4]),
-        "productionFeatureEnabled": False,
+        "productionFeatureEnabled": bool(row[5]),
     }
 
 
@@ -360,6 +364,15 @@ def get_news_shadow_experiment(conn: Any) -> dict[str, Any]:
             """
         )
         model_rows = cur.fetchall()
+        cur.execute(
+            """
+            SELECT EXISTS (
+                SELECT 1 FROM news_feature_release_settings
+                WHERE id = 1 AND mode = 'production'
+            )
+            """
+        )
+        production_row = cur.fetchone()
 
     def rounded(value: Any) -> float | None:
         return round(float(value), 6) if value is not None else None
@@ -399,6 +412,6 @@ def get_news_shadow_experiment(conn: Any) -> dict[str, Any]:
         "logLossDelta": round(shadow_log_loss - baseline_log_loss, 6)
         if shadow_log_loss is not None and baseline_log_loss is not None
         else None,
-        "productionFeatureEnabled": False,
+        "productionFeatureEnabled": bool(production_row and production_row[0]),
         "models": models,
     }

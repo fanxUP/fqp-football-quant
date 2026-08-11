@@ -108,3 +108,24 @@ export interface NewsShadowExperiment {
   productionFeatureEnabled: boolean;
   models: NewsShadowModelMetric[];
 }
+
+export interface NewsReleaseState {
+  mode: 'shadow' | 'production';
+  approvedShadowVersion: string | null;
+  approvedFeatureVersion: string | null;
+  approvalNote: string | null;
+  approvedBy: string | null;
+  approvedAt: string | null;
+  updatedAt: string | null;
+  candidateShadowVersion: string;
+  candidateFeatureVersion: string;
+  metrics: {
+    sampleSize: number;
+    brierDelta: number | null;
+    logLossDelta: number | null;
+  };
+  promotion: {
+    eligible: boolean;
+    reason: string;
+  };
+}

@@ -77,4 +77,7 @@ def load_actionable_predictions(conn: Any, model_names: list[str]) -> list[tuple
             """,
             (model_names,),
         )
-        return cur.fetchall()
+        rows = cur.fetchall()
+    from scripts.news_release_gate import apply_approved_news_overlay
+
+    return apply_approved_news_overlay(conn, rows)

@@ -494,6 +494,21 @@ export const api = {
     }>(
       '/api/news-intelligence/experiments',
     ),
+    release: () => request<{
+      release: import('../features/news-intelligence/types').NewsReleaseState;
+    }>('/api/news-intelligence/release'),
+    promote: (approvalNote: string) => request<{
+      release: import('../features/news-intelligence/types').NewsReleaseState;
+    }>('/api/news-intelligence/release/promote', {
+      method: 'POST',
+      body: JSON.stringify({ approvalNote }),
+    }),
+    rollback: (rollbackNote: string) => request<{
+      release: import('../features/news-intelligence/types').NewsReleaseState;
+    }>('/api/news-intelligence/release/rollback', {
+      method: 'POST',
+      body: JSON.stringify({ rollbackNote }),
+    }),
   },
 
   agentWorkspace: {

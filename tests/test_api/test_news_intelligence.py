@@ -156,3 +156,47 @@ def test_news_shadow_experiment_returns_baseline_comparison(client, monkeypatch)
 
     assert response.status_code == 200
     assert response.json() == {"experiment": experiment}
+
+
+def test_news_release_can_only_be_promoted_by_explicit_request(client, monkeypatch) -> None:
+    release = {
+        "mode": "production",
+        "approvedShadowVersion": "news-shadow-v1",
+        "approvedFeatureVersion": "news-features-v1",
+    }
+    monkeypatch.setattr(news_intelligence, "promote_news_release", lambda _conn, **_kwargs: release)
+
+    response = client.post(
+        "/api/news-intelligence/release/promote",
+        json={"approvalNote": "已人工核验评估报告"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"release": release}
+
+
+def test_news_release_promotion_rejects_unqualified_experiment(client, monkeypatch) -> None:
+    def reject(_conn, **_kwargs):
+        raise ValueError("已结算样本少于 1000 场")
+
+    monkeypatch.setattr(news_intelligence, "promote_news_release", reject)
+
+    response = client.post(
+        "/api/news-intelligence/release/promote",
+        json={"approvalNote": "尝试晋升"},
+    )
+
+    assert response.status_code == 409
+
+
+def test_news_release_can_be_rolled_back_immediately(client, monkeypatch) -> None:
+    release = {"mode": "shadow", "approvedShadowVersion": None}
+    monkeypatch.setattr(news_intelligence, "rollback_news_release", lambda _conn, **_kwargs: release)
+
+    response = client.post(
+        "/api/news-intelligence/release/rollback",
+        json={"rollbackNote": "紧急回滚"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"release": release}
