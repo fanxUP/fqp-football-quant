@@ -1,13 +1,16 @@
-"""Conservative adapters for NewsAPI Everything and GNews Search.
+"""Conservative adapters for NewsAPI, GNews and Guardian football search.
 
 Official API references:
 - https://newsapi.org/docs/endpoints/everything
 - https://docs.gnews.io/endpoints/search-endpoint
+- https://open-platform.theguardian.com/documentation/search
 """
 
 from __future__ import annotations
 
 import hashlib
+import html
+import re
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
@@ -94,6 +97,9 @@ class _SearchClient:
     def _params(self, query: str, start: datetime | None, end: datetime | None) -> dict[str, Any]:
         raise NotImplementedError
 
+    def _headers(self) -> dict[str, str]:
+        return {"X-Api-Key": self.api_key}
+
     def search(
         self,
         query: str,
@@ -103,7 +109,7 @@ class _SearchClient:
     ) -> list[NewsArticleCandidate]:
         response = self._client.get(
             self.endpoint,
-            headers={"X-Api-Key": self.api_key},
+            headers=self._headers(),
             params=self._params(query, start, end),
         )
         response.raise_for_status()
@@ -137,10 +143,83 @@ class GNewsClient(_SearchClient):
     provider_code = "gnews"
     endpoint = "https://gnews.io/api/v4/search"
 
+    def _headers(self) -> dict[str, str]:
+        return {}
+
     def _params(self, query: str, start: datetime | None, end: datetime | None) -> dict[str, Any]:
-        params: dict[str, Any] = {"q": query, "sortby": "publishedAt", "max": 100}
+        params: dict[str, Any] = {
+            "q": query,
+            "sortby": "publishedAt",
+            "max": 100,
+            "apikey": self.api_key,
+        }
         if start:
             params["from"] = start.isoformat()
         if end:
             params["to"] = end.isoformat()
         return params
+
+
+class GuardianClient:
+    """The Guardian Open Platform content search, restricted to football."""
+
+    provider_code = "guardian"
+    endpoint = "https://content.guardianapis.com/search"
+
+    def __init__(self, api_key: str, *, client: Any | None = None) -> None:
+        self.api_key = api_key
+        self._client = client or httpx.Client(timeout=20.0, follow_redirects=False)
+
+    def search(
+        self,
+        query: str,
+        *,
+        start: datetime | None = None,
+        end: datetime | None = None,
+    ) -> list[NewsArticleCandidate]:
+        params: dict[str, Any] = {
+            "q": query,
+            "section": "football",
+            "order-by": "newest",
+            "page-size": 50,
+            "show-fields": "trailText",
+            "api-key": self.api_key,
+        }
+        if start:
+            params["from-date"] = start.date().isoformat()
+        if end:
+            params["to-date"] = end.date().isoformat()
+        response = self._client.get(self.endpoint, headers={}, params=params)
+        response.raise_for_status()
+        payload = response.json()
+        body = payload.get("response", {}) if isinstance(payload, dict) else {}
+        raw_results = body.get("results", []) if isinstance(body, dict) else []
+        candidates: list[NewsArticleCandidate] = []
+        for raw in raw_results:
+            if not isinstance(raw, dict):
+                continue
+            url = canonicalize_article_url(str(raw.get("webUrl") or ""))
+            title = str(raw.get("webTitle") or "").strip()
+            published_at = raw.get("webPublicationDate")
+            if not url or not title or not published_at:
+                continue
+            raw_fields = raw.get("fields")
+            fields: dict[str, Any] = raw_fields if isinstance(raw_fields, dict) else {}
+            trail_text = str(fields.get("trailText") or "")
+            description = html.unescape(re.sub(r"<[^>]+>", " ", trail_text))
+            description = " ".join(description.split())
+            candidates.append(
+                NewsArticleCandidate(
+                    provider_code=self.provider_code,
+                    external_id=str(raw.get("id") or hashlib.sha256(url.encode()).hexdigest()),
+                    source_name="The Guardian Football",
+                    source_domain="theguardian.com",
+                    canonical_url=url,
+                    title=title,
+                    description=description,
+                    language="en",
+                    published_at=_published_at(published_at),
+                    raw_metadata={"sectionId": raw.get("sectionId")},
+                )
+            )
+        return candidates

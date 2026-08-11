@@ -9,6 +9,7 @@ from typing import Any
 from psycopg2.extras import Json
 
 from scripts.news_intelligence_clients import NewsArticleCandidate
+from scripts.news_source_policy import load_news_source_policies, resolve_source_policy
 
 
 def load_news_watch_matches(conn: Any, limit: int = 80) -> list[dict[str, Any]]:
@@ -58,10 +59,16 @@ def store_news_candidates(
     *,
     observed_at: datetime,
 ) -> dict[str, int]:
+    policies = load_news_source_policies(conn)
     inserted = 0
     duplicates = 0
     linked = 0
+    filtered = 0
     for candidate in candidates:
+        policy = resolve_source_policy(candidate.source_domain, policies)
+        if not policy.enabled:
+            filtered += 1
+            continue
         source_code = "publisher:" + hashlib.sha256(candidate.source_domain.encode()).hexdigest()[:24]
         content_hash = hashlib.sha256(
             f"{candidate.title}\n{candidate.description}".encode()
@@ -71,19 +78,26 @@ def store_news_candidates(
                 """
                 INSERT INTO news_sources (
                     source_code, source_name, publisher_domain, source_level, source_type,
-                    default_language, last_success_at, last_error
+                    default_language, enabled, last_success_at, last_error
                 )
-                VALUES (%s, %s, %s, 'C', 'media', %s, NOW(), NULL)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, NOW(), NULL)
                 ON CONFLICT (source_code) DO UPDATE SET
                     source_name = EXCLUDED.source_name,
+                    source_level = EXCLUDED.source_level,
+                    source_type = EXCLUDED.source_type,
+                    default_language = EXCLUDED.default_language,
+                    enabled = EXCLUDED.enabled,
                     last_success_at = NOW(), last_error = NULL, updated_at = NOW()
                 RETURNING id
                 """,
                 (
                     source_code,
-                    candidate.source_name,
+                    policy.display_name or candidate.source_name,
                     candidate.source_domain,
-                    candidate.language,
+                    policy.source_level,
+                    policy.source_type,
+                    policy.default_language or candidate.language,
+                    policy.enabled,
                 ),
             )
             source_id = cur.fetchone()[0]
@@ -142,4 +156,9 @@ def store_news_candidates(
                 )
                 linked += int(cur.fetchone() is not None)
     conn.commit()
-    return {"inserted": inserted, "duplicates": duplicates, "linked": linked}
+    return {
+        "inserted": inserted,
+        "duplicates": duplicates,
+        "linked": linked,
+        "filtered": filtered,
+    }

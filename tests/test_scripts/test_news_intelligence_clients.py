@@ -4,7 +4,7 @@ from typing import Any
 
 import httpx
 
-from scripts.news_intelligence_clients import GNewsClient, NewsApiClient
+from scripts.news_intelligence_clients import GNewsClient, GuardianClient, NewsApiClient
 
 
 class _FakeClient:
@@ -36,7 +36,7 @@ def test_newsapi_uses_everything_endpoint_and_header_key() -> None:
     assert articles[0].canonical_url == "https://club.example/news/1"
 
 
-def test_gnews_uses_search_endpoint_and_header_key() -> None:
+def test_gnews_uses_documented_search_endpoint_and_api_key_parameter() -> None:
     transport = _FakeClient({"articles": [{
         "source": {"name": "Sports Desk", "url": "https://sports.example"},
         "title": "Confirmed lineup",
@@ -49,7 +49,33 @@ def test_gnews_uses_search_endpoint_and_header_key() -> None:
     articles = GNewsClient("gnews-key", client=transport).search("Confirmed lineup")
 
     assert transport.url == "https://gnews.io/api/v4/search"
-    assert transport.kwargs["headers"] == {"X-Api-Key": "gnews-key"}
+    assert transport.kwargs["headers"] == {}
+    assert transport.kwargs["params"]["apikey"] == "gnews-key"
     assert transport.kwargs["params"]["sortby"] == "publishedAt"
     assert transport.kwargs["params"]["max"] == 100
     assert articles[0].source_domain == "sports.example"
+
+
+def test_guardian_uses_football_content_api_and_normalizes_results() -> None:
+    transport = _FakeClient({
+        "response": {
+            "results": [{
+                "id": "football/2026/aug/10/team-news",
+                "webTitle": "Team news confirmed",
+                "webUrl": "https://www.theguardian.com/football/2026/aug/10/team-news",
+                "webPublicationDate": "2026-08-10T10:00:00Z",
+                "fields": {"trailText": "<strong>Striker</strong> unavailable"},
+            }]
+        }
+    })
+
+    articles = GuardianClient("guardian-key", client=transport).search("Team news")
+
+    assert transport.url == "https://content.guardianapis.com/search"
+    assert transport.kwargs["params"]["api-key"] == "guardian-key"
+    assert transport.kwargs["params"]["section"] == "football"
+    assert transport.kwargs["params"]["show-fields"] == "trailText"
+    assert articles[0].provider_code == "guardian"
+    assert articles[0].external_id == "football/2026/aug/10/team-news"
+    assert articles[0].description == "Striker unavailable"
+    assert articles[0].source_domain == "theguardian.com"
