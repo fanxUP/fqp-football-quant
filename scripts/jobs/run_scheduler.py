@@ -27,7 +27,8 @@ MODEL_PREDICTION_CRON = {"minute": "15,45"}
 # never starts external news traffic by accident.
 NEWS_COLLECTION_CRON = {"hour": "0-22/2", "minute": 20}
 # Convert already stored articles into local structured events after collection.
-# This job performs no network or model calls.
+# When the dedicated Agent is ready, at most ten model calls are allowed per run;
+# deterministic extraction remains the failure-isolated fallback.
 NEWS_EXTRACTION_CRON = {"minute": 25}
 # Capture feature states just after the nearest extraction window. The inserts
 # are immutable and idempotent, so missed schedules can be reconstructed later.

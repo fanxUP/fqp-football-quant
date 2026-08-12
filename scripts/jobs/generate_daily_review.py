@@ -11,7 +11,10 @@ from typing import Any
 
 from apps.backend.src.db import get_db
 from apps.backend.src.services.match_review import build_match_review_cards
-from apps.backend.src.services.report_automation import maybe_generate_post_match_report
+from apps.backend.src.services.report_automation import (
+    maybe_generate_post_match_report,
+    retry_completed_report_interpretation,
+)
 from apps.backend.src.services.report_snapshot import build_daily_report_snapshot
 from scripts.agents.task_queue import finish_tracked_job, start_tracked_job
 from scripts.business_time import business_yesterday
@@ -62,6 +65,12 @@ def _run_impl(review_date: str | None = None, dry_run: bool = False) -> dict[str
             report_type="daily",
             period_key=date,
         ):
+            retry_completed_report_interpretation(
+                conn,
+                source_type="post_daily",
+                source_ref=date,
+                title=f"自动赛后日报：{date}",
+            )
             return {
                 "status": "skipped",
                 "review_date": date,

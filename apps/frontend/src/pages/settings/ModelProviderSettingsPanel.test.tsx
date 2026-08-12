@@ -28,6 +28,7 @@ const savedConnection = {
   defaultModel: preset.defaultModel, enabled: true, hasApiKey: true,
   apiKeyMask: '••••••••••••', updatedAt: null, lastTestAt: null,
   lastTestStatus: null, lastTestMessage: null,
+  requiresApiKey: true,
 };
 
 describe('ModelProviderSettingsPanel', () => {
@@ -58,9 +59,18 @@ describe('ModelProviderSettingsPanel', () => {
     expect(await screen.findByRole('checkbox', { name: /启用此服务商/ })).toBeChecked();
   });
 
-  it('为已启用服务商提供主题可区分的状态标签', async () => {
+  it('已启用但尚未验证模型时明确显示待测试', async () => {
     render(<ModelProviderSettingsPanel />);
 
-    expect(await screen.findByText('已启用')).toHaveAttribute('data-status', 'enabled');
+    expect(await screen.findByText('待测试')).toHaveAttribute('data-status', 'testing');
+  });
+
+  it('仅将启用且完成真实模型测试的服务商标为已就绪', async () => {
+    apiMocks.list.mockResolvedValue({ providers: [{
+      ...savedConnection, lastTestStatus: 'passed', lastTestMessage: '模型调用正常',
+    }] });
+    render(<ModelProviderSettingsPanel />);
+
+    expect(await screen.findByText('已就绪')).toHaveAttribute('data-status', 'ready');
   });
 });

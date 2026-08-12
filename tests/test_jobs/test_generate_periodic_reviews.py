@@ -1,5 +1,6 @@
 from contextlib import contextmanager
 from pathlib import Path
+from unittest.mock import MagicMock
 
 from scripts.jobs.generate_periodic_reviews import (
     _aggregate_review_rows,
@@ -154,6 +155,10 @@ def test_monthly_review_does_not_overwrite_completed_snapshot(monkeypatch) -> No
         "has_completed_report_generation_run",
         lambda *_args, **_kwargs: True,
     )
+    retry = MagicMock(return_value={"status": "skipped", "reason": "retry_cooldown"})
+    monkeypatch.setattr(
+        generate_periodic_reviews, "retry_completed_report_interpretation", retry
+    )
     monkeypatch.setattr(
         generate_periodic_reviews,
         "upsert_monthly_review",
@@ -169,3 +174,4 @@ def test_monthly_review_does_not_overwrite_completed_snapshot(monkeypatch) -> No
         "month": "2026-07",
         "reason": "already_completed",
     }
+    retry.assert_called_once()

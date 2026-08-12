@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from datetime import datetime
+from unittest.mock import MagicMock
 
 from scripts.jobs.report_generation import (
     assess_daily_report_readiness,
@@ -247,6 +248,8 @@ def test_daily_review_does_not_overwrite_completed_snapshot(monkeypatch) -> None
         "has_completed_report_generation_run",
         lambda *_args, **_kwargs: True,
     )
+    retry = MagicMock(return_value={"status": "skipped", "reason": "retry_cooldown"})
+    monkeypatch.setattr(generate_daily_review, "retry_completed_report_interpretation", retry)
     monkeypatch.setattr(
         generate_daily_review,
         "upsert_daily_review",
@@ -262,6 +265,7 @@ def test_daily_review_does_not_overwrite_completed_snapshot(monkeypatch) -> None
         "review_date": "2026-08-09",
         "reason": "already_completed",
     }
+    retry.assert_called_once()
 
 
 def test_snapshot_backfill_archives_old_snapshot_before_replacing_completed_run() -> None:

@@ -23,7 +23,11 @@ from apps.backend.src.services.agent_workspace_store import (
     set_workspace_comparison_reviewed,
     set_workspace_task_reviewed,
 )
-from apps.backend.src.services.model_gateway import ModelGatewayError, invoke_agent_model
+from apps.backend.src.services.model_gateway import (
+    ModelGatewayError,
+    invoke_agent_model,
+    model_failure_metadata,
+)
 from apps.backend.src.services.model_invocation_audit import record_model_invocation
 from apps.backend.src.services.model_provider_store import AGENT_MODEL_OPTIONS, ProviderConfigError
 
@@ -113,18 +117,19 @@ def _run_workspace_task(
                 duration_ms=round((perf_counter() - started_at) * 1000),
             )
             return task
-    except ProviderConfigError, ModelGatewayError:
+    except (ProviderConfigError, ModelGatewayError) as exc:
+        failure = model_failure_metadata(exc)
         with get_db() as conn:
             record_model_invocation(
                 conn,
                 agent_code=agent_code,
-                provider_code=None,
-                model=None,
+                provider_code=failure["provider_code"],
+                model=failure["model"],
                 status="failed",
                 prompt_length=len(prompt),
                 response_length=0,
                 duration_ms=round((perf_counter() - started_at) * 1000),
-                error_code="MODEL_CALL_FAILED",
+                error_code=failure["error_code"],
             )
         raise
 

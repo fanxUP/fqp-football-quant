@@ -13,6 +13,8 @@ from urllib.parse import urlparse
 import httpx
 from cryptography.fernet import Fernet, InvalidToken
 
+from apps.backend.src.services.model_transport import read_completion_content, request_completion
+
 
 @dataclass(frozen=True)
 class ProviderDefinition:
@@ -246,6 +248,11 @@ def mask_api_key(value: str | None) -> str | None:
     return "••••••••••••"
 
 
+def _requires_api_key(provider_code: str) -> bool:
+    provider = PROVIDERS.get(provider_code)
+    return provider.requires_api_key if provider else True
+
+
 def list_provider_configs(conn: Any) -> list[dict[str, Any]]:
     with conn.cursor() as cur:
         cur.execute(
@@ -268,6 +275,7 @@ def list_provider_configs(conn: Any) -> list[dict[str, Any]]:
             "lastTestAt": row[7].isoformat() if row[7] else None,
             "lastTestStatus": row[8],
             "lastTestMessage": row[9],
+            "requiresApiKey": _requires_api_key(row[0]),
         }
         for row in rows
     ]
@@ -315,7 +323,7 @@ def save_agent_model_binding(
         provider = cur.fetchone()
         if not provider:
             raise ProviderConfigError("请先保存模型服务商配置")
-        if enabled and not provider[2]:
+        if enabled and _requires_api_key(str(provider[0])) and not provider[2]:
             raise ProviderConfigError("请先保存服务商 API 密钥，再启用智能代理")
         if enabled and provider[3] != "passed":
             raise ProviderConfigError("请先通过服务商连通性测试，再启用智能代理")
@@ -431,6 +439,7 @@ def save_provider_config(conn: Any, payload: dict[str, Any]) -> dict[str, Any]:
         "lastTestAt": row[7].isoformat() if row[7] else None,
         "lastTestStatus": row[8],
         "lastTestMessage": row[9],
+        "requiresApiKey": provider.requires_api_key,
     }
 
 
@@ -477,30 +486,36 @@ def test_provider_config(conn: Any, provider_code: str) -> dict[str, Any]:
 def _probe_provider(
     provider: ProviderDefinition, base_url: str, model: str, api_key: str | None
 ) -> tuple[str, str]:
-    headers: dict[str, str] = {}
-    if api_key:
-        headers["Authorization"] = f"Bearer {api_key}"
+    binding = {
+        "protocol": provider.protocol,
+        "base_url": base_url,
+        "default_model": model,
+    }
     try:
-        with httpx.Client(timeout=10.0, follow_redirects=False) as client:
-            if provider.protocol == "gemini":
-                response = client.get(f"{base_url}/models", params={"key": api_key})
-            elif provider.protocol == "ollama":
-                response = client.get(f"{base_url}/api/tags")
-            elif provider.protocol == "anthropic":
-                response = client.get(
-                    f"{base_url}/models", headers={**headers, "anthropic-version": "2023-06-01"}
-                )
-            elif provider.protocol == "perplexity":
-                response = client.get(f"{base_url}/v1/models", headers=headers)
-            else:
-                response = client.get(f"{base_url}/models", headers=headers)
+        with httpx.Client(timeout=20.0, follow_redirects=False) as client:
+            response = request_completion(
+                client,
+                binding,
+                api_key,
+                "只回复 OK",
+                "这是模型接入连通性测试，不执行任何业务操作。",
+                max_tokens=32,
+            )
+            response.raise_for_status()
+            content = read_completion_content(provider.protocol, response.json())
     except httpx.HTTPError as exc:
-        return "failed", f"连接失败：{exc.__class__.__name__}"
-    if 200 <= response.status_code < 300:
-        return "passed", "连通正常，已完成只读服务探测"
-    if response.status_code in {401, 403}:
-        return "failed", "鉴权失败，请检查 API 密钥或服务商权限"
-    return "failed", f"服务返回 HTTP {response.status_code}"
+        if isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code in {401, 403}:
+            return "failed", "鉴权失败，请检查 API 密钥或服务商权限"
+        if isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code == 404:
+            return "failed", "所选模型或服务地址不存在"
+        if isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code == 429:
+            return "failed", "服务商限额或频率受限，请稍后重试"
+        return "failed", f"模型调用失败：{exc.__class__.__name__}"
+    except (ValueError, KeyError, IndexError):
+        return "failed", "模型返回格式无效，请核对兼容协议"
+    if not content:
+        return "failed", "所选模型未返回可用文本"
+    return "passed", "调用正常，已验证所选模型可生成响应"
 
 
 def provider_catalog() -> list[dict[str, Any]]:

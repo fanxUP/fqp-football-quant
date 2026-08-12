@@ -116,8 +116,10 @@ export default function ModelProviderSettingsPanel() {
             <div className="model-provider-list" role="list" aria-label="模型服务商">
             {catalog.map((provider) => {
               const connection = connections.find((item) => item.providerCode === provider.providerCode);
-              const connectionStatus = connection?.enabled ? 'enabled' : connection?.hasApiKey ? 'saved' : 'unconfigured';
-              const connectionLabel = connection?.enabled ? '已启用' : connection?.hasApiKey ? '已保存' : '未配置';
+              const configured = Boolean(connection?.hasApiKey || connection && !provider.requiresApiKey);
+              const ready = Boolean(connection?.enabled && connection.lastTestStatus === 'passed');
+              const connectionStatus = ready ? 'ready' : connection?.enabled && configured ? 'testing' : configured ? 'saved' : 'unconfigured';
+              const connectionLabel = ready ? '已就绪' : connection?.enabled && configured ? '待测试' : configured ? '已停用' : '未配置';
               return (
                 <button key={provider.providerCode} type="button" className="model-provider-item"
                   data-selected={provider.providerCode === selectedCode} onClick={() => chooseProvider(provider)}>
@@ -150,7 +152,9 @@ export default function ModelProviderSettingsPanel() {
             {selected.requiresApiKey && <>
               <label className="fqp-label" htmlFor="model-api-key">API 密钥 {saved?.hasApiKey ? '（已保存；留空则保持不变）' : ''}</label>
               <input id="model-api-key" className="fqp-input" type="password" autoComplete="off" value={draft.apiKey}
+                onFocus={() => { if (!draft.apiKeyChanged && saved?.hasApiKey) updateDraft({ apiKey: '' }); }}
                 onChange={(event) => updateDraft({ apiKey: event.target.value, apiKeyChanged: true })}
+                onBlur={() => { if (!draft.apiKeyChanged && saved?.apiKeyMask) updateDraft({ apiKey: saved.apiKeyMask }); }}
                 placeholder={saved?.hasApiKey ? '已加密保存；直接输入可替换密钥' : '仅在保存时上传到服务器'} />
             </>}
             <label className="appearance-checkbox-row model-provider-enabled">
@@ -159,8 +163,9 @@ export default function ModelProviderSettingsPanel() {
             </label>
             <div className="model-provider-actions">
               <button type="button" className="fqp-btn" disabled={saving} onClick={() => void save()}>{saving ? '保存中…' : '加密保存'}</button>
-              <button type="button" className="fqp-btn fqp-btn-primary" disabled={testing || !saved?.hasApiKey && selected.requiresApiKey} onClick={() => void test()}>{testing ? '测试中…' : '测试连接'}</button>
+              <button type="button" className="fqp-btn fqp-btn-primary" disabled={testing || !saved?.hasApiKey && selected.requiresApiKey} onClick={() => void test()}>{testing ? '验证中…' : '验证模型'}</button>
             </div>
+            <p className="model-provider-test-note">验证会向当前模型发送一次极短请求，可能产生少量服务商费用。</p>
             {saved?.lastTestMessage && <p className="model-provider-test-message" data-status={saved.lastTestStatus ?? undefined}>{saved.lastTestMessage}</p>}
             <a className="model-provider-docs" href={selected.documentationUrl} target="_blank" rel="noreferrer">查看官方接入文档 ↗</a>
             </Card>}

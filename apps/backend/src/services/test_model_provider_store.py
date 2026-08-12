@@ -10,6 +10,7 @@ from apps.backend.src.services.model_provider_store import (
     _cipher,
     list_agent_model_bindings,
     provider_catalog,
+    save_agent_model_binding,
     save_provider_config,
     validate_provider_input,
 )
@@ -175,3 +176,45 @@ def test_interpretation_agents_are_independently_bindable() -> None:
     assert AGENT_MODEL_OPTIONS["post_match_report_agent"] == "自动赛后报告 Agent"
     assert AGENT_MODEL_OPTIONS["news_extraction_agent"] == "新闻事件提取 Agent"
     assert "post_match_review_agent" not in AGENT_MODEL_OPTIONS
+
+
+class _LocalBindingCursor:
+    def __init__(self, connection: _LocalBindingConnection) -> None:
+        self.connection = connection
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args: object) -> None:
+        return None
+
+    def execute(self, query: str, params: tuple[object, ...]) -> None:
+        self.connection.query = query
+        self.connection.params = params
+
+    def fetchone(self) -> tuple[object, ...]:
+        return ("ollama", True, False, "passed")
+
+
+class _LocalBindingConnection:
+    def __init__(self) -> None:
+        self.query = ""
+        self.params: tuple[object, ...] = ()
+
+    def cursor(self) -> _LocalBindingCursor:
+        return _LocalBindingCursor(self)
+
+    def commit(self) -> None:
+        return None
+
+
+def test_local_provider_can_enable_agent_without_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    connection = _LocalBindingConnection()
+    monkeypatch.setattr(
+        "apps.backend.src.services.model_provider_store.list_agent_model_bindings",
+        lambda _conn: [{"agentCode": "review_agent", "enabled": True}],
+    )
+
+    result = save_agent_model_binding(connection, "review_agent", "ollama", True)
+
+    assert result["enabled"] is True

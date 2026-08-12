@@ -7,7 +7,10 @@ from datetime import date, timedelta
 from typing import Any
 
 from apps.backend.src.db import get_db
-from apps.backend.src.services.report_automation import maybe_generate_post_match_report
+from apps.backend.src.services.report_automation import (
+    maybe_generate_post_match_report,
+    retry_completed_report_interpretation,
+)
 from apps.backend.src.services.report_performance import build_periodic_performance
 from apps.backend.src.services.report_snapshot import (
     build_periodic_research_breakdowns,
@@ -122,6 +125,12 @@ def run_weekly(
             report_type="weekly",
             period_key=start,
         ):
+            retry_completed_report_interpretation(
+                conn,
+                source_type="post_weekly",
+                source_ref=start,
+                title=f"自动赛后周报：{start} 至 {end}",
+            )
             return {
                 "status": "skipped",
                 "week_start": start,
@@ -238,6 +247,12 @@ def run_monthly(month: str | None = None, dry_run: bool = False) -> dict[str, An
             report_type="monthly",
             period_key=target_month,
         ):
+            retry_completed_report_interpretation(
+                conn,
+                source_type="post_monthly",
+                source_ref=target_month,
+                title=f"自动赛后月报：{target_month}",
+            )
             return {
                 "status": "skipped",
                 "month": target_month,

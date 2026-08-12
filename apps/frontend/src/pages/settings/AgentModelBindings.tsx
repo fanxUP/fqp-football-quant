@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { api, type AgentModelBinding, type ModelProviderConnection } from '../../core/apiClient';
 import { toast } from '../../shared/components/Toast';
 import AgentModelTrial from './AgentModelTrial';
@@ -9,8 +9,19 @@ export default function AgentModelBindings({ providers }: { providers: ModelProv
   const [saving, setSaving] = useState<string | null>(null);
   const [auditVersion, setAuditVersion] = useState(0);
   const [providerChoices, setProviderChoices] = useState<Record<string, string>>({});
-  const readyProviders = providers.filter((provider) => provider.enabled && provider.hasApiKey && provider.lastTestStatus === 'passed');
-  const testedButDisabledProviders = providers.filter((provider) => !provider.enabled && provider.hasApiKey && provider.lastTestStatus === 'passed');
+  const hasCredential = (provider: ModelProviderConnection) => provider.hasApiKey || !provider.requiresApiKey;
+  const readyProviders = providers.filter((provider) => provider.enabled && hasCredential(provider) && provider.lastTestStatus === 'passed');
+  const testedButDisabledProviders = providers.filter((provider) => !provider.enabled && hasCredential(provider) && provider.lastTestStatus === 'passed');
+  const effectiveBindings = useMemo(() => bindings.map((binding) => {
+    const provider = providers.find((item) => item.providerCode === binding.providerCode);
+    return provider ? {
+      ...binding,
+      providerName: provider.displayName,
+      model: provider.defaultModel,
+      providerEnabled: provider.enabled,
+      providerTestStatus: provider.lastTestStatus,
+    } : binding;
+  }), [bindings, providers]);
 
   useEffect(() => {
     api.modelProviders.bindings()
@@ -51,7 +62,7 @@ export default function AgentModelBindings({ providers }: { providers: ModelProv
       </p>}
     </div>
     <div className="agent-model-binding-list">
-      {bindings.map((binding) => <div className="agent-model-binding" key={binding.agentCode}>
+      {effectiveBindings.map((binding) => <div className="agent-model-binding" key={binding.agentCode}>
         <div className="agent-model-binding-info"><strong>{binding.agentName}</strong><span>{binding.providerName ? `${binding.providerName} · ${binding.model}` : '尚未绑定服务商'}</span></div>
         <label className="agent-model-provider-select"><span>服务商</span><select className="fqp-input" aria-label={`${binding.agentName} 服务商`}
           value={providerChoices[binding.agentCode] ?? binding.providerCode ?? ''}
@@ -73,7 +84,7 @@ export default function AgentModelBindings({ providers }: { providers: ModelProv
       </div>)}
     </div>
     <AgentModelTrial
-      bindings={bindings.filter((binding) => binding.enabled && readyProviders.some(
+      bindings={effectiveBindings.filter((binding) => binding.enabled && readyProviders.some(
         (provider) => provider.providerCode === binding.providerCode,
       ))}
       onCompleted={() => setAuditVersion((version) => version + 1)}

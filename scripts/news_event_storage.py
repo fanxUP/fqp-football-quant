@@ -12,6 +12,7 @@ from apps.backend.src.services.model_provider_store import get_agent_model_bindi
 from scripts.news_ai_screening import NewsScreeningResult, screen_news_article
 
 _NEWS_AGENT = "news_extraction_agent"
+_MODEL_CALLS_PER_RUN = 10
 
 
 def _ready_model_invoker(conn: Any):
@@ -19,6 +20,52 @@ def _ready_model_invoker(conn: Any):
     if not binding or not binding["enabled"] or binding["last_test_status"] != "passed":
         return None
     return lambda prompt: invoke_agent_model(conn, _NEWS_AGENT, prompt)
+
+
+def _load_screening_candidates(
+    conn: Any,
+    *,
+    limit: int,
+    include_rule_upgrades: bool,
+) -> list[tuple[Any, ...]]:
+    """Prefer new articles, then bounded rule-only rows created before Agent enablement."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT article.id, article.title, article.description, article.available_at,
+                   source.source_level, link.match_id, match.home_team_name,
+                   match.away_team_name
+            FROM news_articles_raw article
+            JOIN news_sources source ON source.id = article.source_id
+            JOIN news_article_matches link ON link.article_id = article.id
+            JOIN official_matches match ON match.id = link.match_id
+            WHERE NOT EXISTS (
+                SELECT 1 FROM news_article_screenings screening
+                WHERE screening.article_id = article.id
+                  AND screening.match_id = link.match_id
+            ) OR (
+                %s AND EXISTS (
+                    SELECT 1 FROM news_article_screenings screening
+                    WHERE screening.article_id = article.id
+                      AND screening.match_id = link.match_id
+                      AND screening.screening_method = 'rule'
+                ) AND NOT EXISTS (
+                    SELECT 1 FROM news_model_invocations invocation
+                    WHERE invocation.article_id = article.id
+                      AND invocation.match_id = link.match_id
+                )
+            )
+            ORDER BY CASE WHEN EXISTS (
+                         SELECT 1 FROM news_article_screenings screening
+                         WHERE screening.article_id = article.id
+                           AND screening.match_id = link.match_id
+                     ) THEN 1 ELSE 0 END,
+                     article.available_at, article.id
+            LIMIT %s
+            """,
+            (include_rule_upgrades, limit),
+        )
+        return list(cur.fetchall())
 
 
 def _store_screening(
@@ -96,35 +143,19 @@ def _store_screening(
 
 
 def process_pending_news_articles(conn: Any, limit: int = 200) -> dict[str, Any]:
-    with conn.cursor() as cur:
-        cur.execute(
-            """
-            SELECT article.id, article.title, article.description, article.available_at,
-                   source.source_level, link.match_id, match.home_team_name,
-                   match.away_team_name
-            FROM news_articles_raw article
-            JOIN news_sources source ON source.id = article.source_id
-            JOIN news_article_matches link ON link.article_id = article.id
-            JOIN official_matches match ON match.id = link.match_id
-            WHERE NOT EXISTS (
-                SELECT 1 FROM news_article_screenings screening
-                WHERE screening.article_id = article.id
-                  AND screening.match_id = link.match_id
-            )
-            ORDER BY article.available_at, article.id
-            LIMIT %s
-            """,
-            (limit,),
-        )
-        rows = cur.fetchall()
-
     invoke_model = _ready_model_invoker(conn)
+    rows = _load_screening_candidates(
+        conn,
+        limit=limit,
+        include_rule_upgrades=invoke_model is not None,
+    )
     created = 0
     skipped = 0
     evidence_added = 0
     model_screened = 0
     model_failures = 0
     rule_screened = 0
+    model_calls = 0
     for row in rows:
         article = {
             "id": row[0],
@@ -136,7 +167,9 @@ def process_pending_news_articles(conn: Any, limit: int = 200) -> dict[str, Any]
             "home_team_name": row[6],
             "away_team_name": row[7],
         }
-        result = screen_news_article(article, invoke_model=invoke_model)
+        bounded_invoker = invoke_model if model_calls < _MODEL_CALLS_PER_RUN else None
+        result = screen_news_article(article, invoke_model=bounded_invoker)
+        model_calls += int(bounded_invoker is not None)
         screening_id = _store_screening(
             conn,
             article_id=row[0],

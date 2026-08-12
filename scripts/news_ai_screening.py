@@ -211,12 +211,23 @@ def screen_news_article(
     try:
         reply = invoke_model(prompt)
         payload = parse_news_screening_payload(reply.content)
-    except ModelGatewayError, ValueError:
+    except ModelGatewayError as exc:
         duration_ms = round((perf_counter() - started_at) * 1_000)
         return _rule_result(
             article,
             method="rule_fallback",
-            error_code="MODEL_CALL_FAILED" if reply is None else "INVALID_MODEL_OUTPUT",
+            error_code=exc.error_code,
+            provider_code=exc.provider_code,
+            model=exc.model,
+            prompt_sha256=_sha256(prompt),
+            duration_ms=duration_ms,
+        )
+    except ValueError:
+        duration_ms = round((perf_counter() - started_at) * 1_000)
+        return _rule_result(
+            article,
+            method="rule_fallback",
+            error_code="INVALID_MODEL_OUTPUT",
             provider_code=reply.provider_code if reply else None,
             model=reply.model if reply else None,
             prompt_sha256=_sha256(prompt),

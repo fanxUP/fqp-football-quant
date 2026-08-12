@@ -14,7 +14,11 @@ from apps.backend.src.services.agent_interpretation import (
     build_pre_match_source,
 )
 from apps.backend.src.services.agent_workspace_store import create_workspace_task
-from apps.backend.src.services.model_gateway import ModelGatewayError, invoke_agent_model
+from apps.backend.src.services.model_gateway import (
+    ModelGatewayError,
+    invoke_agent_model,
+    model_failure_metadata,
+)
 from apps.backend.src.services.model_invocation_audit import record_model_invocation
 from apps.backend.src.services.model_provider_store import ProviderConfigError
 
@@ -63,17 +67,18 @@ def _run(source):
             "model": result.model,
         }
     except (ProviderConfigError, ModelGatewayError) as exc:
+        failure = model_failure_metadata(exc)
         with get_db() as conn:
             record_model_invocation(
                 conn,
                 agent_code=source.agent_code,
-                provider_code=None,
-                model=None,
+                provider_code=failure["provider_code"],
+                model=failure["model"],
                 status="failed",
                 prompt_length=len(source.prompt),
                 response_length=0,
                 duration_ms=round((perf_counter() - started_at) * 1000),
-                error_code="MODEL_CALL_FAILED",
+                error_code=failure["error_code"],
             )
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 

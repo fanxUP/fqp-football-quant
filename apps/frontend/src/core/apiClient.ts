@@ -57,6 +57,7 @@ export interface ModelProviderConnection {
   lastTestAt: string | null;
   lastTestStatus: 'passed' | 'failed' | null;
   lastTestMessage: string | null;
+  requiresApiKey: boolean;
 }
 
 export interface AgentModelBinding {

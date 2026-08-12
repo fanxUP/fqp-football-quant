@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 
 from apps.backend.src.services.model_gateway import ModelGatewayError, ModelReply
 from scripts.news_ai_screening import build_news_screening_prompt, screen_news_article
+from scripts.news_event_storage import _load_screening_candidates
 
 
 def _article() -> dict[str, object]:
@@ -88,3 +89,41 @@ def test_prompt_contains_only_bounded_server_side_article_material() -> None:
     assert len(prompt) < 8_000
     assert "不得预测" in prompt
     assert '"matchId": 31' in prompt
+
+
+class _CandidateCursor:
+    def __init__(self) -> None:
+        self.query = ""
+        self.params: tuple[object, ...] = ()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args: object) -> None:
+        return None
+
+    def execute(self, query: str, params: tuple[object, ...]) -> None:
+        self.query = query
+        self.params = params
+
+    def fetchall(self) -> list[tuple[object, ...]]:
+        return []
+
+
+class _CandidateConnection:
+    def __init__(self) -> None:
+        self.cursor_instance = _CandidateCursor()
+
+    def cursor(self) -> _CandidateCursor:
+        return self.cursor_instance
+
+
+def test_ready_news_agent_can_upgrade_prior_rule_only_screenings() -> None:
+    connection = _CandidateConnection()
+
+    _load_screening_candidates(connection, limit=10, include_rule_upgrades=True)
+
+    query = " ".join(connection.cursor_instance.query.split())
+    assert "screening.screening_method = 'rule'" in query
+    assert "news_model_invocations" in query
+    assert connection.cursor_instance.params == (True, 10)

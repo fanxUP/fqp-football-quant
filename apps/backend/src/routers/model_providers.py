@@ -8,7 +8,11 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from apps.backend.src.db import get_db
-from apps.backend.src.services.model_gateway import ModelGatewayError, invoke_agent_model
+from apps.backend.src.services.model_gateway import (
+    ModelGatewayError,
+    invoke_agent_model,
+    model_failure_metadata,
+)
 from apps.backend.src.services.model_invocation_audit import (
     list_model_invocations,
     record_model_invocation,
@@ -95,17 +99,18 @@ def invoke_agent_binding(agent_code: str, body: AgentInvokeRequest):
                 duration_ms=round((perf_counter() - started_at) * 1000),
             )
     except (ProviderConfigError, ModelGatewayError) as exc:
+        failure = model_failure_metadata(exc)
         with get_db() as conn:
             record_model_invocation(
                 conn,
                 agent_code=agent_code,
-                provider_code=None,
-                model=None,
+                provider_code=failure["provider_code"],
+                model=failure["model"],
                 status="failed",
                 prompt_length=len(body.prompt),
                 response_length=0,
                 duration_ms=round((perf_counter() - started_at) * 1000),
-                error_code="MODEL_CALL_FAILED",
+                error_code=failure["error_code"],
             )
         _raise_config_error(exc)
     return {

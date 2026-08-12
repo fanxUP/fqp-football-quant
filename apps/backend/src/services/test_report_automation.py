@@ -75,6 +75,14 @@ def test_automatic_report_archives_one_enabled_call_with_source_reference(monkey
         lambda *_args, **_kwargs: False,
     )
     monkeypatch.setattr(
+        "apps.backend.src.services.report_automation._report_attempt_gate",
+        lambda *_args, **_kwargs: (True, None),
+    )
+    monkeypatch.setattr(
+        "apps.backend.src.services.report_automation._record_report_attempt",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(
         "apps.backend.src.services.report_automation.invoke_agent_model",
         lambda *_args: ModelReply("openai", "gpt-5-mini", "需人工核验"),
     )
@@ -113,6 +121,14 @@ def test_automatic_report_failure_is_recorded_without_raising(monkeypatch) -> No
     monkeypatch.setattr(
         "apps.backend.src.services.report_automation.has_workspace_task_for_source",
         lambda *_args, **_kwargs: False,
+    )
+    monkeypatch.setattr(
+        "apps.backend.src.services.report_automation._report_attempt_gate",
+        lambda *_args, **_kwargs: (True, None),
+    )
+    monkeypatch.setattr(
+        "apps.backend.src.services.report_automation._record_report_attempt",
+        lambda *_args, **_kwargs: None,
     )
     monkeypatch.setattr(
         "apps.backend.src.services.report_automation.invoke_agent_model",
