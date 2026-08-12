@@ -1,6 +1,6 @@
 """Health snapshots must reflect live services and real calendar uptime."""
 
-from datetime import date
+from datetime import UTC, date, datetime
 from unittest.mock import MagicMock, patch
 
 from scripts.jobs.collect_health_metrics import (
@@ -9,8 +9,22 @@ from scripts.jobs.collect_health_metrics import (
     _compute_review_generation_rate,
     _compute_uptime_days,
     _get_disk_usage,
+    _latest_backup_timestamp,
     run,
 )
+
+
+def test_latest_backup_timestamp_prefers_completed_backup_time():
+    started = datetime(2026, 8, 12, 5, 50, tzinfo=UTC)
+    finished = datetime(2026, 8, 12, 5, 51, tzinfo=UTC)
+
+    assert (
+        _latest_backup_timestamp(
+            {"started_at": started, "finished_at": finished, "created_at": started}
+        )
+        == finished
+    )
+    assert _latest_backup_timestamp(None) is None
 
 
 def test_review_generation_rate_expects_completed_days_through_yesterday(mock_conn):

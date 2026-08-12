@@ -205,6 +205,17 @@ def _get_disk_usage() -> float | None:
     return None
 
 
+def _latest_backup_timestamp(latest_backup: dict[str, Any] | None) -> Any:
+    """Expose the latest completed backup time in the normalized health row."""
+    if not latest_backup:
+        return None
+    return (
+        latest_backup.get("finished_at")
+        or latest_backup.get("started_at")
+        or latest_backup.get("created_at")
+    )
+
+
 def run(dry_run: bool = False) -> dict[str, Any]:
     """Collect operational health metrics for today.
 
@@ -345,7 +356,7 @@ def run(dry_run: bool = False) -> dict[str, Any]:
             "api_responding": services["api_responding"],
             "db_responding": services["db_responding"],
             "disk_usage_pct": disk_pct,
-            "last_backup_at": None,  # populated by backup job
+            "last_backup_at": _latest_backup_timestamp(latest_backup),
             "overall_health_status": overall,
             "health_notes": notes,
             "raw_details": {
