@@ -829,7 +829,7 @@ def crawl_official_schedule_v2(business_date: str | None = None) -> dict[str, An
                     crawl_type="schedule",
                     source_name="sporttery_v2",
                     status="ok",
-                    source_url="https://webapi.sporttery.cn/gateway/uniform/football/getMatchCalculatorV1.qry",
+                    source_url="https://webapi.sporttery.cn/gateway/uniform/football/getMatchListV1.qry",
                     records_found=0,
                 )
                 update_health(conn, "sporttery_v2", "schedule", "ok", latency_ms)
@@ -877,7 +877,7 @@ def crawl_official_schedule_v2(business_date: str | None = None) -> dict[str, An
                 crawl_type="schedule",
                 source_name="sporttery_v2",
                 status="ok",
-                source_url="https://webapi.sporttery.cn/gateway/uniform/football/getMatchCalculatorV1.qry",
+                source_url="https://webapi.sporttery.cn/gateway/uniform/football/getMatchListV1.qry",
                 records_found=len(matches),
                 records_inserted=total_inserted,
                 records_updated=total_updated,

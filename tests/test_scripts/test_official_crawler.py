@@ -370,7 +370,7 @@ def test_schedule_refresh_updates_metadata_without_writing_odds_snapshots():
         crawl_type="schedule",
         source_name="sporttery_v2",
         status="ok",
-        source_url="https://webapi.sporttery.cn/gateway/uniform/football/getMatchCalculatorV1.qry",
+        source_url="https://webapi.sporttery.cn/gateway/uniform/football/getMatchListV1.qry",
         records_found=1,
         records_inserted=1,
         records_updated=0,
