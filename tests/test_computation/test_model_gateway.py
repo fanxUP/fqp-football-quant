@@ -23,6 +23,14 @@ class _Client:
         return None
 
 
+class _Reply:
+    def raise_for_status(self) -> None:
+        return None
+
+    def json(self) -> dict[str, Any]:
+        return {"choices": [{"message": {"content": "复盘完成"}}]}
+
+
 def _ready_binding() -> dict[str, Any]:
     return {
         "agent_code": "post_match_report_agent",
@@ -55,6 +63,26 @@ def test_report_agent_uses_longer_timeout_and_exposes_timeout_diagnostics(
     assert raised.value.error_code == "MODEL_TIMEOUT"
     assert raised.value.provider_code == "deepseek"
     assert raised.value.model == "deepseek-v4-pro"
+
+
+def test_report_agent_reserves_enough_output_tokens_for_structured_sections(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, Any] = {}
+    monkeypatch.setattr(model_gateway, "get_agent_model_binding", lambda *_: _ready_binding())
+    monkeypatch.setattr(model_gateway, "_decrypt_key", lambda _value: "key")
+    monkeypatch.setattr(model_gateway.httpx, "Client", _Client)
+
+    def request(*_args: Any, **kwargs: Any) -> _Reply:
+        captured.update(kwargs)
+        return _Reply()
+
+    monkeypatch.setattr(model_gateway, "_request_completion", request)
+
+    reply = invoke_agent_model(object(), "post_match_report_agent", "生成五部分复盘")
+
+    assert reply.content == "复盘完成"
+    assert captured["max_tokens"] == 2_400
 
 
 class _ProbeResponse:

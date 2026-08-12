@@ -71,8 +71,16 @@ def invoke_agent_model(conn: Any, agent_code: str, prompt: str) -> ModelReply:
         raise ModelGatewayError(str(exc)) from exc
     try:
         timeout = 60.0 if agent_code == "post_match_report_agent" else 30.0
+        max_tokens = 2_400 if agent_code == "post_match_report_agent" else 800
         with httpx.Client(timeout=timeout, follow_redirects=False) as client:
-            response = _request_completion(client, binding, api_key, prompt, system_instruction)
+            response = _request_completion(
+                client,
+                binding,
+                api_key,
+                prompt,
+                system_instruction,
+                max_tokens=max_tokens,
+            )
             response.raise_for_status()
             content = _read_content(binding["protocol"], response.json())
     except httpx.TimeoutException as exc:
