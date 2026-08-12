@@ -66,6 +66,22 @@ def test_unrelated_article_does_not_create_an_event() -> None:
     assert event is None
 
 
+def test_generic_transfer_boost_does_not_become_a_morale_event() -> None:
+    event = extract_rule_event(
+        {
+            "title": "Liverpool land transfer boost after PSG decision",
+            "description": "The report concerns a possible summer transfer.",
+            "source_level": "C",
+            "available_at": datetime(2026, 8, 10, 8, tzinfo=UTC),
+            "match_id": 31,
+            "home_team_name": "Paris Saint-Germain",
+            "away_team_name": "Aston Villa",
+        }
+    )
+
+    assert event is None
+
+
 def test_event_fingerprint_is_stable_for_the_same_match_cluster() -> None:
     first = build_event_fingerprint(31, "injury", "home", datetime(2026, 8, 10, 8, tzinfo=UTC))
     second = build_event_fingerprint(31, "injury", "home", datetime(2026, 8, 10, 20, tzinfo=UTC))

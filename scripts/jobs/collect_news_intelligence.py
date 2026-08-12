@@ -13,6 +13,7 @@ from zoneinfo import ZoneInfo
 from apps.backend.src.db import get_db
 from scripts.news_intelligence_clients import GNewsClient, GuardianClient, NewsApiClient
 from scripts.news_intelligence_storage import (
+    filter_match_relevant_candidates,
     load_news_watch_matches,
     load_provider_request_counts,
     record_news_ingestion_request,
@@ -115,7 +116,11 @@ def collect_provider_batches(
         status = "completed"
         try:
             candidates = client.search(batch.query, start=start, end=end)
-            stored = store(candidates, list(batch.matches))
+            relevant_candidates, prefiltered = filter_match_relevant_candidates(
+                candidates, list(batch.matches)
+            )
+            stored = store(relevant_candidates, list(batch.matches))
+            stored["filtered"] = stored.get("filtered", 0) + prefiltered
         except Exception as exc:
             status = "failed"
             error_message = type(exc).__name__

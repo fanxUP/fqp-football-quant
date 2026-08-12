@@ -3,7 +3,10 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from scripts.news_intelligence_clients import NewsArticleCandidate
-from scripts.news_intelligence_storage import match_candidate_to_official_matches
+from scripts.news_intelligence_storage import (
+    filter_match_relevant_candidates,
+    match_candidate_to_official_matches,
+)
 
 
 def test_candidate_links_with_verified_english_alias_instead_of_only_chinese_name() -> None:
@@ -32,3 +35,32 @@ def test_candidate_links_with_verified_english_alias_instead_of_only_chinese_nam
     linked = match_candidate_to_official_matches(candidate, matches)
 
     assert [match["id"] for match in linked] == [7]
+
+
+def test_unlinked_aggregator_result_is_filtered_before_raw_article_storage() -> None:
+    candidate = NewsArticleCandidate(
+        provider_code="guardian",
+        external_id="article-2",
+        source_name="The Guardian Football",
+        source_domain="theguardian.com",
+        canonical_url="https://www.theguardian.com/football/article-2",
+        title="Unrelated transfer story",
+        description="No watched club is mentioned in the visible material.",
+        language="en",
+        published_at=datetime(2026, 8, 10, 8, tzinfo=UTC),
+        raw_metadata={},
+    )
+    matches = [
+        {
+            "id": 7,
+            "home_team_name": "巴黎圣日尔曼",
+            "away_team_name": "阿斯顿维拉",
+            "home_search_terms": ["巴黎圣日尔曼", "Paris Saint-Germain", "PSG"],
+            "away_search_terms": ["阿斯顿维拉", "Aston Villa"],
+        }
+    ]
+
+    accepted, filtered = filter_match_relevant_candidates([candidate], matches)
+
+    assert accepted == []
+    assert filtered == 1

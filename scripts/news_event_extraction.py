@@ -35,7 +35,7 @@ _RULES: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("manager_change", ("sacked", "appointed head coach", "new manager", "主帅下课", "新任主帅")),
     ("schedule_pressure", ("fixture congestion", "short turnaround", "密集赛程", "连续客场")),
     ("internal_issue", ("dressing room", "internal conflict", "unpaid wages", "内部矛盾", "欠薪")),
-    ("morale_positive", ("contract extension", "boost", "士气提升", "续约")),
+    ("morale_positive", ("contract extension", "morale boost", "士气提升", "续约")),
     ("morale_negative", ("low morale", "crisis", "士气低落", "危机")),
     ("injury", ("ruled out", "injured", "injury", "unavailable", "受伤", "伤缺", "缺阵")),
 )

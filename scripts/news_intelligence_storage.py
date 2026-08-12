@@ -92,6 +92,19 @@ def match_candidate_to_official_matches(
     return linked
 
 
+def filter_match_relevant_candidates(
+    candidates: list[NewsArticleCandidate],
+    matches: list[dict[str, Any]],
+) -> tuple[list[NewsArticleCandidate], int]:
+    """Reject aggregator body-only matches that visible metadata cannot link."""
+    accepted = [
+        candidate
+        for candidate in candidates
+        if match_candidate_to_official_matches(candidate, matches)
+    ]
+    return accepted, len(candidates) - len(accepted)
+
+
 def load_provider_request_counts(conn: Any, *, day_start: datetime) -> dict[str, int]:
     """Count persisted provider requests since the UTC free-tier reset."""
     with conn.cursor() as cur:

@@ -8,6 +8,7 @@ from scripts.jobs.collect_news_intelligence import (
     collect_provider_batches,
     run,
 )
+from scripts.news_intelligence_clients import NewsArticleCandidate
 from scripts.news_query_planner import NewsQueryBatch
 
 
@@ -58,14 +59,37 @@ def test_provider_batches_record_each_request_and_keep_zero_results_visible() ->
         provider_code = "gnews"
 
         def search(self, query, **_kwargs):
-            return [] if query == "empty" else [object()]
+            if query == "empty":
+                return []
+            return [
+                NewsArticleCandidate(
+                    provider_code="gnews",
+                    external_id="found",
+                    source_name="Sports Desk",
+                    source_domain="sports.example",
+                    canonical_url="https://sports.example/found",
+                    title="Team found update",
+                    description="Team found is preparing for the match.",
+                    language="en",
+                    published_at=datetime(2026, 8, 10, 7, tzinfo=UTC),
+                    raw_metadata={},
+                )
+            ]
 
     audits: list[dict[str, object]] = []
     result = collect_provider_batches(
         _Client(),
         [
-            NewsQueryBatch("empty", (1,), ({"id": 1},)),
-            NewsQueryBatch("found", (2,), ({"id": 2},)),
+            NewsQueryBatch(
+                "empty",
+                (1,),
+                ({"id": 1, "home_search_terms": ["Empty"], "away_search_terms": []},),
+            ),
+            NewsQueryBatch(
+                "found",
+                (2,),
+                ({"id": 2, "home_search_terms": ["Team found"], "away_search_terms": []},),
+            ),
         ],
         observed_at=datetime(2026, 8, 10, 8, tzinfo=UTC),
         store=lambda candidates, _matches: {
