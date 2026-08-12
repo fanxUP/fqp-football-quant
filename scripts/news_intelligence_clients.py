@@ -18,6 +18,8 @@ from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 import httpx
 
+from scripts.news_query_planner import PROVIDER_POLICIES
+
 _TRACKING_PARAMS = {
     "fbclid",
     "gclid",
@@ -135,7 +137,11 @@ class NewsApiClient(_SearchClient):
     endpoint = "https://newsapi.org/v2/everything"
 
     def _params(self, query: str, start: datetime | None, end: datetime | None) -> dict[str, Any]:
-        params: dict[str, Any] = {"q": query, "sortBy": "publishedAt", "pageSize": 100}
+        params: dict[str, Any] = {
+            "q": query,
+            "sortBy": "publishedAt",
+            "pageSize": PROVIDER_POLICIES[self.provider_code].max_results,
+        }
         if start:
             params["from"] = start.isoformat()
         if end:
@@ -154,7 +160,7 @@ class GNewsClient(_SearchClient):
         params: dict[str, Any] = {
             "q": query,
             "sortby": "publishedAt",
-            "max": 100,
+            "max": PROVIDER_POLICIES[self.provider_code].max_results,
             "apikey": self.api_key,
         }
         if start:
@@ -185,7 +191,7 @@ class GuardianClient:
             "q": query,
             "section": "football",
             "order-by": "newest",
-            "page-size": 50,
+            "page-size": PROVIDER_POLICIES[self.provider_code].max_results,
             "show-fields": "trailText",
             "api-key": self.api_key,
         }

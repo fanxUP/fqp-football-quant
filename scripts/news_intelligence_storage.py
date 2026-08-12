@@ -16,12 +16,47 @@ def load_news_watch_matches(conn: Any, limit: int = 80) -> list[dict[str, Any]]:
     with conn.cursor() as cur:
         cur.execute(
             """
-            SELECT id, official_match_code, home_team_name, away_team_name, kickoff_time
-            FROM official_matches
-            WHERE official_match_code IS NOT NULL
-              AND kickoff_time BETWEEN timezone('Asia/Shanghai', NOW())
-                                   AND timezone('Asia/Shanghai', NOW()) + INTERVAL '36 hours'
-            ORDER BY kickoff_time, id
+            SELECT match.id, match.official_match_code,
+                   match.home_team_name, match.away_team_name, match.kickoff_time,
+                   ARRAY_REMOVE(
+                       ARRAY[match.home_team_name, home_team.team_name_en]
+                       || COALESCE(home_aliases.aliases, ARRAY[]::text[]), NULL
+                   ) AS home_search_terms,
+                   ARRAY_REMOVE(
+                       ARRAY[match.away_team_name, away_team.team_name_en]
+                       || COALESCE(away_aliases.aliases, ARRAY[]::text[]), NULL
+                   ) AS away_search_terms
+            FROM official_matches match
+            LEFT JOIN LATERAL (
+                SELECT alias.team_id
+                FROM team_aliases alias
+                WHERE alias.alias_name = match.home_team_name
+                ORDER BY (alias.source_name = 'sporttery') DESC, alias.is_verified DESC, alias.id
+                LIMIT 1
+            ) home_identity ON TRUE
+            LEFT JOIN teams home_team ON home_team.id = home_identity.team_id
+            LEFT JOIN LATERAL (
+                SELECT ARRAY_AGG(DISTINCT alias.alias_name ORDER BY alias.alias_name) AS aliases
+                FROM team_aliases alias
+                WHERE alias.team_id = home_identity.team_id AND alias.is_verified
+            ) home_aliases ON TRUE
+            LEFT JOIN LATERAL (
+                SELECT alias.team_id
+                FROM team_aliases alias
+                WHERE alias.alias_name = match.away_team_name
+                ORDER BY (alias.source_name = 'sporttery') DESC, alias.is_verified DESC, alias.id
+                LIMIT 1
+            ) away_identity ON TRUE
+            LEFT JOIN teams away_team ON away_team.id = away_identity.team_id
+            LEFT JOIN LATERAL (
+                SELECT ARRAY_AGG(DISTINCT alias.alias_name ORDER BY alias.alias_name) AS aliases
+                FROM team_aliases alias
+                WHERE alias.team_id = away_identity.team_id AND alias.is_verified
+            ) away_aliases ON TRUE
+            WHERE match.official_match_code IS NOT NULL
+              AND match.kickoff_time BETWEEN timezone('Asia/Shanghai', NOW())
+                                         AND timezone('Asia/Shanghai', NOW()) + INTERVAL '36 hours'
+            ORDER BY match.kickoff_time, match.id
             LIMIT %s
             """,
             (limit,),
@@ -34,22 +69,63 @@ def load_news_watch_matches(conn: Any, limit: int = 80) -> list[dict[str, Any]]:
             "home_team_name": row[2],
             "away_team_name": row[3],
             "kickoff_time": row[4],
+            "home_search_terms": list(dict.fromkeys(row[5] or [row[2]])),
+            "away_search_terms": list(dict.fromkeys(row[6] or [row[3]])),
         }
         for row in rows
     ]
 
 
-def _matching_matches(
+def match_candidate_to_official_matches(
     candidate: NewsArticleCandidate,
     matches: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
     text = f"{candidate.title}\n{candidate.description}".casefold()
-    return [
-        match
-        for match in matches
-        if str(match["home_team_name"]).casefold() in text
-        or str(match["away_team_name"]).casefold() in text
-    ]
+    linked: list[dict[str, Any]] = []
+    for match in matches:
+        terms = [
+            *match.get("home_search_terms", [match.get("home_team_name")]),
+            *match.get("away_search_terms", [match.get("away_team_name")]),
+        ]
+        if any(str(term or "").casefold() in text for term in terms if str(term or "").strip()):
+            linked.append(match)
+    return linked
+
+
+def load_provider_request_counts(conn: Any, *, day_start: datetime) -> dict[str, int]:
+    """Count persisted provider requests since the UTC free-tier reset."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT provider_code, COUNT(*)
+            FROM news_ingestion_runs
+            WHERE started_at >= %s
+            GROUP BY provider_code
+            """,
+            (day_start,),
+        )
+        rows = cur.fetchall()
+    return {str(row[0]): int(row[1]) for row in rows}
+
+
+def record_news_ingestion_request(conn: Any, payload: dict[str, Any]) -> None:
+    """Persist one external request so restarts cannot reset daily usage."""
+    params = {**payload, "cursor_state": Json(payload.get("cursor_state", {}))}
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO news_ingestion_runs (
+                provider_code, started_at, finished_at, status,
+                requested_count, inserted_count, duplicate_count,
+                error_message, cursor_state
+            )
+            VALUES (%(provider_code)s, %(started_at)s, %(finished_at)s, %(status)s,
+                    %(requested_count)s, %(inserted_count)s, %(duplicate_count)s,
+                    %(error_message)s, %(cursor_state)s)
+            """,
+            params,
+        )
+    conn.commit()
 
 
 def store_news_candidates(
@@ -144,7 +220,7 @@ def store_news_candidates(
                 if not existing:
                     continue
                 article_id = existing[0]
-            for match in _matching_matches(candidate, matches):
+            for match in match_candidate_to_official_matches(candidate, matches):
                 cur.execute(
                     """
                     INSERT INTO news_article_matches (

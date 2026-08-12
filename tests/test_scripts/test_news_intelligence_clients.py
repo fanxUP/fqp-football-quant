@@ -64,7 +64,7 @@ def test_gnews_uses_documented_search_endpoint_and_api_key_parameter() -> None:
     assert transport.kwargs["headers"] == {}
     assert transport.kwargs["params"]["apikey"] == "gnews-key"
     assert transport.kwargs["params"]["sortby"] == "publishedAt"
-    assert transport.kwargs["params"]["max"] == 100
+    assert transport.kwargs["params"]["max"] == 10
     assert articles[0].source_domain == "sports.example"
 
 

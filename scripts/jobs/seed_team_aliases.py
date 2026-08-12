@@ -14,6 +14,13 @@ from apps.backend.src.db import get_db
 # These are derived from comparing our official_matches data against
 # API-Football /teams responses.
 MANUAL_ALIASES: dict[str, list[str]] = {
+    # 新闻检索常用国际名称；与体彩中文名共同进入可审计别名表。
+    "巴黎圣日尔曼": ["Paris Saint-Germain", "Paris Saint Germain", "PSG"],
+    "阿斯顿维拉": ["Aston Villa", "Aston Villa FC"],
+    "普拉滕斯": ["Platense", "Club Atletico Platense", "Club Atlético Platense"],
+    "科金博联": ["Coquimbo Unido", "Coquimbo Unido FC"],
+    "帕尔梅拉斯": ["Palmeiras", "SE Palmeiras", "Sociedade Esportiva Palmeiras"],
+    "波特诺山丘": ["Cerro Porteno", "Cerro Porteño", "Club Cerro Porteño"],
     # 巴西甲级联赛 (Serie A)
     "米内罗竞技": ["Atletico-MG"],
     "巴伊亚": ["Bahia"],
