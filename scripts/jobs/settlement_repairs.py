@@ -86,6 +86,27 @@ def _adjust_real_account(conn: Any, ticket_id: int, delta: float) -> None:
         )
 
 
+def reopen_orphaned_settled_real_tickets(conn: Any) -> int:
+    """Return settled real tickets without a ledger row to the automatic queue."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE real_tickets ticket
+            SET settlement_status = 'pending', updated_at = now()
+            WHERE ticket.settlement_status = 'settled'
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM ticket_settlements settlement
+                  WHERE settlement.ticket_source = 'real'
+                    AND settlement.ticket_id = ticket.id
+              )
+            """
+        )
+        reopened = int(cur.rowcount or 0)
+    conn.commit()
+    return reopened
+
+
 def repair_legacy_real_settlements(conn: Any) -> dict[str, Any]:
     """Repair legacy real-ticket settlements once; repeated calls are no-ops."""
     with conn.cursor() as cur:

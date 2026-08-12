@@ -87,3 +87,40 @@ def test_pool_analysis_uses_latest_complete_official_issue_for_historical_review
     assert payload["analysis_mode"] == "historical"
     assert payload["issue"]["issue_no"] == "26092"
     assert payload["issue"]["status"] == "closed"
+
+
+def test_closed_pool_never_backfills_a_recommendation_with_post_sale_predictions(client):
+    conn = MagicMock()
+    cur = MagicMock()
+    conn.__enter__.return_value = conn
+    conn.cursor.return_value.__enter__.return_value = cur
+    cur.fetchall.return_value = [
+        (
+            280,
+            "26103",
+            "t14c",
+            14,
+            "closed",
+            "2026-08-11 22:00:00",
+            order,
+            None,
+            f"主队{order}",
+            f"客队{order}",
+            "测试联赛",
+            "2026-08-14 02:00:00",
+            2000 + order,
+            "模型共识" if order <= 8 else None,
+            0.45 if order <= 8 else None,
+            0.30 if order <= 8 else None,
+            0.25 if order <= 8 else None,
+        )
+        for order in range(1, 15)
+    ]
+
+    with patch("apps.backend.src.routers.pool.get_db", return_value=conn):
+        response = client.get("/api/pool/analyze?issue_id=26103")
+
+    assert response.status_code == 409
+    assert "已停售" in response.json()["detail"]
+    assert "8/14" in response.json()["detail"]
+    assert "不会使用停售后的数据追补推荐" in response.json()["detail"]

@@ -407,6 +407,24 @@ def test_every_monitored_job_has_a_runtime_owner():
         assert scheduler_ids.intersection((canonical, *definition.aliases)), canonical
 
 
+def test_every_business_scheduler_job_is_visible_in_monitoring():
+    scheduler_source = Path("scripts/jobs/run_scheduler.py").read_text()
+    scheduler_ids = set(re.findall(r'id="([^"]+)"', scheduler_source))
+    monitored_ids = {
+        code
+        for canonical, definition in JOB_DEFINITIONS.items()
+        for code in (canonical, *definition.aliases)
+    }
+    infrastructure_only = {
+        "test_heartbeat",
+        "startup_recovery",
+        "reconcile_event_seasons_retry",
+        "refresh_pre_match_features",
+    }
+
+    assert scheduler_ids - monitored_ids - infrastructure_only == set()
+
+
 def test_scheduler_defaults_to_shanghai_timezone(monkeypatch):
     monkeypatch.delenv("FQP_TIMEZONE", raising=False)
 

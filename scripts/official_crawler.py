@@ -510,6 +510,15 @@ def crawl_official_schedule(business_date: str) -> dict[str, Any]:
                     records_found=0,
                     started_at=started,
                 )
+                record_official_collection_status(
+                    conn,
+                    business_date=business_date,
+                    crawl_type="schedule",
+                    source_name="sporttery",
+                    status="ok",
+                    source_url="https://webapi.sporttery.cn/gateway/uniform/football/getMatchCalculatorV1.qry",
+                    records_found=0,
+                )
                 update_health(conn, "sporttery", "schedule", "ok", latency_ms)
             return {
                 "status": "ok",
@@ -553,6 +562,17 @@ def crawl_official_schedule(business_date: str) -> dict[str, Any]:
                 records_updated=total_updated,
                 started_at=started,
             )
+            record_official_collection_status(
+                conn,
+                business_date=business_date,
+                crawl_type="schedule",
+                source_name="sporttery",
+                status="ok",
+                source_url="https://webapi.sporttery.cn/gateway/uniform/football/getMatchCalculatorV1.qry",
+                records_found=len(matches),
+                records_inserted=total_inserted,
+                records_updated=total_updated,
+            )
             update_health(conn, "sporttery", "schedule", "ok", latency_ms)
 
         client.close()
@@ -569,16 +589,27 @@ def crawl_official_schedule(business_date: str) -> dict[str, Any]:
         client.close()
         latency_ms = 0
         with get_db() as conn:
+            error_message = str(e)
             log_crawl(
                 conn,
                 source_name="sporttery",
                 crawl_type="schedule",
                 status="error",
-                error_message=str(e),
+                error_message=error_message,
                 started_at=started,
             )
-            update_health(conn, "sporttery", "schedule", "error", latency_ms, str(e))
-        return {"status": "error", "error": str(e)}
+            record_official_collection_status(
+                conn,
+                business_date=business_date,
+                crawl_type="schedule",
+                source_name="sporttery",
+                status="error",
+                source_url="https://webapi.sporttery.cn/gateway/uniform/football/getMatchCalculatorV1.qry",
+                records_found=0,
+                error_message=error_message,
+            )
+            update_health(conn, "sporttery", "schedule", "error", latency_ms, error_message)
+        return {"status": "error", "error": error_message}
 
 
 def crawl_official_odds_snapshot(business_date: str) -> dict[str, Any]:
@@ -614,6 +645,16 @@ def crawl_official_results(begin_date: str, end_date: str) -> dict[str, Any]:
                     status="ok",
                     records_found=0,
                     started_at=started,
+                )
+                record_official_collection_status(
+                    conn,
+                    business_date=begin_date,
+                    crawl_type="results",
+                    source_name="sporttery",
+                    status="ok",
+                    source_url="https://www.lottery.gov.cn/jc/zqsgkj/",
+                    records_found=0,
+                    raw_json={"begin_date": begin_date, "end_date": end_date},
                 )
                 update_health(conn, "sporttery", "results", "ok", latency_ms)
             return {
@@ -683,6 +724,18 @@ def crawl_official_results(begin_date: str, end_date: str) -> dict[str, Any]:
                 records_inserted=store_result["inserted"],
                 records_updated=store_result["updated"],
                 started_at=started,
+            )
+            record_official_collection_status(
+                conn,
+                business_date=begin_date,
+                crawl_type="results",
+                source_name="sporttery",
+                status="ok",
+                source_url="https://www.lottery.gov.cn/jc/zqsgkj/",
+                records_found=len(results),
+                records_inserted=store_result["inserted"],
+                records_updated=store_result["updated"],
+                raw_json={"begin_date": begin_date, "end_date": end_date},
             )
             update_health(conn, "sporttery", "results", "ok", latency_ms)
 
@@ -770,6 +823,15 @@ def crawl_official_schedule_v2(business_date: str | None = None) -> dict[str, An
                     records_found=0,
                     started_at=started,
                 )
+                record_official_collection_status(
+                    conn,
+                    business_date=match_bdate,
+                    crawl_type="schedule",
+                    source_name="sporttery_v2",
+                    status="ok",
+                    source_url="https://webapi.sporttery.cn/gateway/uniform/football/getMatchCalculatorV1.qry",
+                    records_found=0,
+                )
                 update_health(conn, "sporttery_v2", "schedule", "ok", latency_ms)
             return {"status": "ok", "matches_found": 0, "note": "no matches in response"}
 
@@ -808,6 +870,17 @@ def crawl_official_schedule_v2(business_date: str | None = None) -> dict[str, An
                 records_inserted=total_inserted,
                 records_updated=total_updated,
                 started_at=started,
+            )
+            record_official_collection_status(
+                conn,
+                business_date=match_bdate,
+                crawl_type="schedule",
+                source_name="sporttery_v2",
+                status="ok",
+                source_url="https://webapi.sporttery.cn/gateway/uniform/football/getMatchCalculatorV1.qry",
+                records_found=len(matches),
+                records_inserted=total_inserted,
+                records_updated=total_updated,
             )
             update_health(conn, "sporttery_v2", "schedule", "ok", latency_ms)
 

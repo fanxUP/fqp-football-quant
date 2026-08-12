@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -15,6 +16,7 @@ class JobDefinition:
     category: str
     aliases: tuple[str, ...] = ()
     max_age: timedelta | None = None
+    enabled_env: str | None = None
 
 
 JOB_DEFINITIONS: dict[str, JobDefinition] = {
@@ -43,6 +45,20 @@ JOB_DEFINITIONS: dict[str, JobDefinition] = {
     ),
     "populate_teams_leagues": JobDefinition(
         "球队联赛映射", "每日 02:00", "official", max_age=timedelta(hours=30)
+    ),
+    "seed_api_football_registry": JobDefinition(
+        "API-Football 赛事目录同步",
+        "每日 02:03",
+        "official",
+        ("seed_api_football_registry_daily",),
+        timedelta(hours=30),
+    ),
+    "seed_stadium_registry": JobDefinition(
+        "球场目录同步",
+        "每日 02:05",
+        "official",
+        ("seed_stadium_registry_daily",),
+        timedelta(hours=30),
     ),
     "feature_snapshot_build": JobDefinition(
         "特征快照构建", "每6小时", "model", ("build_feature_snapshots",), timedelta(hours=8)
@@ -89,6 +105,18 @@ JOB_DEFINITIONS: dict[str, JobDefinition] = {
     "settle_tickets": JobDefinition(
         "票单结算", "每小时 15 分", "official", max_age=timedelta(hours=3)
     ),
+    "detect_upsets": JobDefinition(
+        "冷门比赛识别", "每小时 :20/:50", "review", max_age=timedelta(minutes=90)
+    ),
+    "collect_upset_provider_evidence": JobDefinition(
+        "冷门外部证据采集", "每小时 :21/:51", "review", max_age=timedelta(minutes=90)
+    ),
+    "collect_upset_evidence": JobDefinition(
+        "冷门证据汇总", "每小时 :22/:52", "review", max_age=timedelta(minutes=90)
+    ),
+    "generate_upset_reviews": JobDefinition(
+        "冷门复盘生成", "每小时 :25/:55", "review", max_age=timedelta(minutes=90)
+    ),
     "daily_review": JobDefinition(
         "日报生成", "每日 08:00", "review", ("generate_daily_review",), timedelta(hours=30)
     ),
@@ -100,6 +128,12 @@ JOB_DEFINITIONS: dict[str, JobDefinition] = {
     ),
     "analyze_prediction_errors": JobDefinition(
         "错因分析", "每日 23:45", "review", max_age=timedelta(hours=30)
+    ),
+    "refresh_upset_knowledge": JobDefinition(
+        "冷门知识库刷新", "每日 11:00", "review", max_age=timedelta(hours=30)
+    ),
+    "sync_upset_hypotheses": JobDefinition(
+        "冷门假设同步", "每日 11:05", "review", max_age=timedelta(hours=30)
     ),
     "compute_evaluation_metrics": JobDefinition(
         "模型评估指标计算", "每日 23:40", "model", max_age=timedelta(hours=30)
@@ -143,6 +177,22 @@ JOB_DEFINITIONS: dict[str, JobDefinition] = {
     "train_mlp_shadow": JobDefinition(
         "MLP 特征模型影子训练", "每日 00:20", "model", max_age=timedelta(hours=30)
     ),
+    "collect_news_intelligence": JobDefinition(
+        "新闻情报采集",
+        "每日 00:20-22:20 每2小时",
+        "official",
+        max_age=timedelta(hours=3),
+        enabled_env="FQP_NEWS_COLLECTION_ENABLED",
+    ),
+    "extract_news_events": JobDefinition(
+        "新闻事件提取", "每小时 :25", "review", max_age=timedelta(minutes=90)
+    ),
+    "build_news_feature_snapshots": JobDefinition(
+        "新闻特征快照", "每小时 :12/:27/:42/:57", "model", max_age=timedelta(minutes=45)
+    ),
+    "run_news_shadow_model": JobDefinition(
+        "新闻影子模型", "每小时 :32", "model", max_age=timedelta(minutes=90)
+    ),
     "backtest": JobDefinition(
         "全量回测执行", "每周日 04:07", "model", ("run_backtest",), timedelta(days=8)
     ),
@@ -182,6 +232,16 @@ FAILED_STATUSES = {"error", "failed"}
 
 def _utc_now() -> datetime:
     return datetime.now(UTC)
+
+
+def active_job_definitions() -> dict[str, JobDefinition]:
+    """Return jobs registered for the current runtime configuration."""
+    return {
+        code: definition
+        for code, definition in JOB_DEFINITIONS.items()
+        if definition.enabled_env is None
+        or os.getenv(definition.enabled_env, "false").lower() == "true"
+    }
 
 
 def _as_utc(value: Any) -> datetime | None:
@@ -323,9 +383,10 @@ def get_pipeline_snapshot(conn: Any) -> dict[str, list[dict[str, Any]]]:
         )
         source_rows = _canonical_source_rows(cur.fetchall())
 
+        definitions = active_job_definitions()
         active_codes = [
             code
-            for canonical, definition in JOB_DEFINITIONS.items()
+            for canonical, definition in definitions.items()
             for code in (canonical, *definition.aliases)
         ]
         cur.execute(
@@ -368,7 +429,7 @@ def get_pipeline_snapshot(conn: Any) -> dict[str, list[dict[str, Any]]]:
 
     latest_by_code = {str(row[1]): row for row in job_rows}
     jobs: list[dict[str, Any]] = []
-    for canonical, definition in JOB_DEFINITIONS.items():
+    for canonical, definition in definitions.items():
         candidates = [
             latest_by_code[code]
             for code in (canonical, *definition.aliases)

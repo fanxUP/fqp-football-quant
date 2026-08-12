@@ -4,6 +4,7 @@ from unittest.mock import ANY, MagicMock, patch
 from scripts.official_crawler import (
     crawl_official_odds_snapshot,
     crawl_official_results,
+    crawl_official_schedule,
     crawl_official_schedule_v2,
     parse_matches_from_response,
     parse_odds_snapshots_from_match,
@@ -351,6 +352,7 @@ def test_schedule_refresh_updates_metadata_without_writing_odds_snapshots():
         patch("scripts.official_crawler.store_matches", return_value={"inserted": 1, "updated": 0}),
         patch("scripts.official_crawler.store_markets") as store_markets,
         patch("scripts.official_crawler.parse_odds_snapshots_from_match") as parse_odds,
+        patch("scripts.official_crawler.record_official_collection_status") as record_status,
         patch("scripts.official_crawler.log_crawl"),
         patch("scripts.official_crawler.update_health") as update_health,
     ):
@@ -362,4 +364,73 @@ def test_schedule_refresh_updates_metadata_without_writing_odds_snapshots():
     assert result["snapshots_inserted"] == 0
     store_markets.assert_called_once_with(connection, 12, matches[0]["_markets"])
     parse_odds.assert_not_called()
+    record_status.assert_called_once_with(
+        connection,
+        business_date="2026-07-10",
+        crawl_type="schedule",
+        source_name="sporttery_v2",
+        status="ok",
+        source_url="https://webapi.sporttery.cn/gateway/uniform/football/getMatchCalculatorV1.qry",
+        records_found=1,
+        records_inserted=1,
+        records_updated=0,
+    )
     update_health.assert_called_once_with(connection, "sporttery_v2", "schedule", "ok", ANY)
+
+
+def test_fallback_schedule_refresh_is_visible_in_collection_history():
+    client = MagicMock()
+    client.get_daily_matches.return_value = {"value": {"matchInfoList": []}}
+    connection = MagicMock()
+
+    with (
+        patch("scripts.official_crawler.SportteryClient", return_value=client),
+        patch("scripts.official_crawler.get_db") as get_db,
+        patch("scripts.official_crawler.record_official_collection_status") as record_status,
+        patch("scripts.official_crawler.log_crawl"),
+        patch("scripts.official_crawler.update_health"),
+    ):
+        get_db.return_value.__enter__.return_value = connection
+
+        result = crawl_official_schedule("2026-07-10")
+
+    assert result["status"] == "ok"
+    record_status.assert_called_once_with(
+        connection,
+        business_date="2026-07-10",
+        crawl_type="schedule",
+        source_name="sporttery",
+        status="ok",
+        source_url="https://webapi.sporttery.cn/gateway/uniform/football/getMatchCalculatorV1.qry",
+        records_found=0,
+    )
+
+
+def test_empty_official_results_refresh_is_visible_in_collection_history():
+    client = MagicMock()
+    client.get_uniform_match_results.return_value = {"value": {"matchResult": []}}
+    connection = MagicMock()
+
+    with (
+        patch("scripts.official_crawler.SportteryClient", return_value=client),
+        patch("scripts.official_crawler.get_db") as get_db,
+        patch("scripts.official_crawler.record_official_collection_status") as record_status,
+        patch("scripts.official_crawler.log_crawl"),
+        patch("scripts.official_crawler.update_health"),
+    ):
+        get_db.return_value.__enter__.return_value = connection
+
+        result = crawl_official_results("2026-07-10", "2026-07-11")
+
+    assert result["status"] == "ok"
+    assert result["results_found"] == 0
+    record_status.assert_called_once_with(
+        connection,
+        business_date="2026-07-10",
+        crawl_type="results",
+        source_name="sporttery",
+        status="ok",
+        source_url="https://www.lottery.gov.cn/jc/zqsgkj/",
+        records_found=0,
+        raw_json={"begin_date": "2026-07-10", "end_date": "2026-07-11"},
+    )

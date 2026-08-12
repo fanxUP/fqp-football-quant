@@ -141,6 +141,13 @@ def run_pool_analysis(
                 )
             predicted_count = ready_count(matches)
             if predicted_count < 14:
+                issue_status = str(matches[0][4] or "unknown")
+                if issue_status != "selling":
+                    raise HTTPException(
+                        409,
+                        f"期号 {issue_no} 已停售；停售前仅有 {predicted_count}/14 场具备可审计模型证据，"
+                        "系统不会使用停售后的数据追补推荐",
+                    )
                 raise HTTPException(
                     409,
                     f"期号 {issue_no} 已完成 {predicted_count}/14 场模型预测，待补齐 {14 - predicted_count} 场后生成组合",

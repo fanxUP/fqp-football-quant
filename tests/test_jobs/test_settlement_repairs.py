@@ -1,4 +1,9 @@
-from scripts.jobs.settlement_repairs import correct_legacy_settlement_detail
+from unittest.mock import MagicMock
+
+from scripts.jobs.settlement_repairs import (
+    correct_legacy_settlement_detail,
+    reopen_orphaned_settled_real_tickets,
+)
 
 
 def test_corrects_legacy_result_codes_and_recalculates_mixed_pass_prize():
@@ -70,3 +75,18 @@ def test_numeric_settlement_detail_needs_no_legacy_repair():
     }
 
     assert correct_legacy_settlement_detail(detail, stake=2.0) is None
+
+
+def test_orphaned_settled_real_tickets_are_reopened_for_automatic_settlement():
+    conn = MagicMock()
+    cursor = conn.cursor.return_value.__enter__.return_value
+    cursor.rowcount = 2
+
+    reopened = reopen_orphaned_settled_real_tickets(conn)
+
+    assert reopened == 2
+    sql = " ".join(cursor.execute.call_args.args[0].split())
+    assert "settlement_status = 'settled'" in sql
+    assert "NOT EXISTS" in sql
+    assert "ticket_source = 'real'" in sql
+    conn.commit.assert_called_once()

@@ -464,22 +464,20 @@ def get_prediction_model_overview():
                 )
                 SELECT cv.model_name, cv.id, cv.version, cv.is_active,
                        cv.training_start_date, cv.training_end_date, cv.created_at,
-                       COUNT(DISTINCT mp.match_id) FILTER (
-                           WHERE mp.validation_status = 'valid'
-                       ) AS valid_prediction_match_count,
-                       MAX(mp.predict_time) FILTER (
-                           WHERE mp.validation_status = 'valid'
-                       ) AS latest_prediction_at,
+                       COALESCE(prediction_stats.valid_prediction_match_count, 0),
+                       prediction_stats.latest_prediction_at,
                        cp.method_name, cp.sample_count, cp.log_loss_before,
                        cp.log_loss_after, cp.temperature, cp.training_end_date
                 FROM current_versions cv
-                LEFT JOIN model_predictions mp ON mp.model_version_id = cv.id
+                LEFT JOIN LATERAL (
+                    SELECT COUNT(DISTINCT mp.match_id) AS valid_prediction_match_count,
+                           MAX(mp.predict_time) AS latest_prediction_at
+                    FROM model_predictions mp
+                    WHERE mp.model_version_id = cv.id
+                      AND mp.validation_status = 'valid'
+                ) prediction_stats ON true
                 LEFT JOIN current_calibrations cp
                   ON cp.model_name = cv.model_name AND cp.play_type = 'spf'
-                GROUP BY cv.model_name, cv.id, cv.version, cv.is_active,
-                         cv.training_start_date, cv.training_end_date, cv.created_at,
-                         cp.method_name, cp.sample_count, cp.log_loss_before,
-                         cp.log_loss_after, cp.temperature, cp.training_end_date
                 """,
                 (list(MODEL_CODES),),
             )

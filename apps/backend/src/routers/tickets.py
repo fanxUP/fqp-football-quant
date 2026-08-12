@@ -301,8 +301,40 @@ def confirm_real_ticket(ticket_id: int, body: dict | None = None):
 
 @router.post("/api/real-tickets/{ticket_id}/settle")
 def settle_real_ticket(ticket_id: int, body: dict | None = None):
-    """Mark a real ticket settlement status from an external settlement job/manual review."""
+    """Queue or execute the audited automatic settlement path for a real ticket."""
     status = (body or {}).get("settlement_status", "settled")
+    if status not in {"pending", "settled"}:
+        raise HTTPException(400, "结算状态只能是 pending 或 settled")
     with get_db() as conn:
-        ok = _update_ticket(conn, ticket_id, {"settlement_status": status})
-    return {"status": "ok" if ok else "not_found", "ticket_id": ticket_id}
+        with conn.cursor() as cur:
+            cur.execute("SELECT id FROM real_tickets WHERE id = %s", (ticket_id,))
+            if cur.fetchone() is None:
+                raise HTTPException(404, "彩票不存在")
+        if status == "pending":
+            _update_ticket(conn, ticket_id, {"settlement_status": "pending"})
+            return {"status": "ok", "ticket_id": ticket_id, "settlement_status": "pending"}
+
+    # Only the idempotent settlement job may write the terminal state and ledger.
+    from scripts.jobs.settle_tickets import run as run_settlement
+
+    settlement_result = run_settlement()
+    with get_db() as conn, conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT ticket.settlement_status, settlement.id
+            FROM real_tickets ticket
+            LEFT JOIN ticket_settlements settlement
+              ON settlement.ticket_source = 'real' AND settlement.ticket_id = ticket.id
+            WHERE ticket.id = %s
+            """,
+            (ticket_id,),
+        )
+        row = cur.fetchone()
+    if not row or row[0] != "settled" or row[1] is None:
+        raise HTTPException(409, "官方赛果尚未齐全，彩票已保留在待结算队列")
+    return {
+        "status": "ok",
+        "ticket_id": ticket_id,
+        "settlement_status": "settled",
+        "settlement_run": settlement_result,
+    }

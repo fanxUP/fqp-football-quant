@@ -13,7 +13,10 @@ from typing import Any
 
 from apps.backend.src.db import get_db
 from scripts.business_time import utc_now_iso
-from scripts.jobs.settlement_repairs import repair_legacy_real_settlements
+from scripts.jobs.settlement_repairs import (
+    reopen_orphaned_settled_real_tickets,
+    repair_legacy_real_settlements,
+)
 from scripts.play_type_registry import result_column
 from scripts.real_ticket_storage import (
     create_bankroll_transaction,
@@ -125,6 +128,7 @@ def run(dry_run: bool = False) -> dict[str, Any]:
         return {"status": "dry_run", "message": "settle tickets (dry run)"}
 
     with get_db() as conn:
+        orphaned_real_reopened = reopen_orphaned_settled_real_tickets(conn)
         legacy_repairs = repair_legacy_real_settlements(conn)
         # 1. Find confirmed results
         with conn.cursor() as cur:
@@ -149,6 +153,7 @@ def run(dry_run: bool = False) -> dict[str, Any]:
                 "settled": 0,
                 "note": "no confirmed results",
                 "legacy_repairs": legacy_repairs,
+                "orphaned_real_reopened": orphaned_real_reopened,
             }
 
         # Build result lookup: match_id -> full results
@@ -183,6 +188,7 @@ def run(dry_run: bool = False) -> dict[str, Any]:
                 "settled": 0,
                 "note": "no actionable results",
                 "legacy_repairs": legacy_repairs,
+                "orphaned_real_reopened": orphaned_real_reopened,
             }
 
         total_settled = 0
@@ -664,6 +670,7 @@ def run(dry_run: bool = False) -> dict[str, Any]:
             "real_settled": real_settled,
             "total_prize": round(total_prize, 2),
             "legacy_repairs": legacy_repairs,
+            "orphaned_real_reopened": orphaned_real_reopened,
         }
 
 

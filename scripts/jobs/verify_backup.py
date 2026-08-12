@@ -194,13 +194,30 @@ def _verify_backup_integrity(filepath: str) -> dict[str, str | int | bool | None
 def _test_restore(filepath: str) -> bool:
     """Check that essential data tables were exported without COPY failures."""
     try:
-        with open(filepath) as f:
-            content = f.read()
-        required_tables = ("official_matches",)
-        return "COPY failed:" not in content and all(
-            f"COPY public.{table} " in content or f'COPY "public"."{table}" ' in content
-            for table in required_tables
+        required_markers = {
+            table: (
+                f"COPY public.{table} ".encode(),
+                f'COPY "public"."{table}" '.encode(),
+            )
+            for table in ("official_matches",)
+        }
+        failure_marker = b"COPY failed:"
+        max_marker_size = max(
+            len(failure_marker),
+            *(len(marker) for markers in required_markers.values() for marker in markers),
         )
+        found_tables: set[str] = set()
+        tail = b""
+        with open(filepath, "rb") as f:
+            while chunk := f.read(1024 * 1024):
+                content = tail + chunk
+                if failure_marker in content:
+                    return False
+                for table, markers in required_markers.items():
+                    if table not in found_tables and any(marker in content for marker in markers):
+                        found_tables.add(table)
+                tail = content[-max_marker_size:]
+        return found_tables == set(required_markers)
     except Exception:
         return False
 
