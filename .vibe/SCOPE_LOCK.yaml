@@ -18,9 +18,10 @@ allowed_paths:
   - tests/test_ops/test_startup_recovery_systemd.py
   - tests/test_jobs/test_audit_data_contamination_scope.py
   - tests/test_sql/test_startup_recovery_schema.py
+  - apps/frontend/src/theme/red_black_tech_tokens.css
+  - apps/frontend/src/theme/statusDotStyles.test.ts
 forbidden_paths:
-  - apps/frontend/**
   - /etc/systemd/**
   - .env*
   - scripts/agent_storage.py
-out_of_scope: "Production systemd changes, real historical task execution, contamination repair, and destructive data changes remain Phase 3+."
+out_of_scope: "Production systemd changes, real historical task execution, contamination repair, and destructive data changes remain out of scope for this status-dot hotfix."
