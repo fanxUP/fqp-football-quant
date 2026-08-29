@@ -20,6 +20,8 @@ allowed_paths:
   - tests/test_sql/test_startup_recovery_schema.py
   - apps/frontend/src/theme/red_black_tech_tokens.css
   - apps/frontend/src/theme/statusDotStyles.test.ts
+  - apps/frontend/src/pages/DataHealthPage.tsx
+  - apps/frontend/src/pages/DataHealthPage.test.tsx
 forbidden_paths:
   - /etc/systemd/**
   - .env*
