@@ -6,11 +6,17 @@ allowed_paths:
   - scripts/jobs/recovery_plan.py
   - scripts/jobs/recovery_storage.py
   - scripts/jobs/startup_recovery.py
+  - scripts/jobs/startup_recovery_executor.py
+  - scripts/jobs/audit_data_contamination.py
   - scripts/jobs/run_scheduler.py
+  - ops/systemd/fqp-scheduler.service.d/10-startup-recovery.conf
   - sql/102_startup_recovery_sessions.sql
   - tests/test_local/test_startup_preflight.py
   - tests/test_jobs/test_recovery_plan.py
   - tests/test_jobs/test_recovery_storage.py
+  - tests/test_jobs/test_startup_recovery_executor.py
+  - tests/test_ops/test_startup_recovery_systemd.py
+  - tests/test_jobs/test_audit_data_contamination_scope.py
   - tests/test_sql/test_startup_recovery_schema.py
 forbidden_paths:
   - apps/frontend/**

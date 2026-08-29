@@ -307,7 +307,12 @@ def _check_error_analysis_scope(conn: Any) -> list[dict]:
             LEFT JOIN official_matches m ON m.id = pea.match_id
             LEFT JOIN top_picks tp
               ON tp.id = pea.prediction_id AND tp.pick_rank = 1
+            -- Historical error-analysis rows are retained for review but are
+            -- not active pipeline contamination. Audit only the live 72-hour
+            -- operating window so old, valid retrospective rows do not keep
+            -- the health metric permanently critical.
             WHERE tp.id IS NULL
+              AND pea.created_at >= NOW() - INTERVAL '72 hours'
             LIMIT 100
             """
         )

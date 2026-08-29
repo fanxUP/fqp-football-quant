@@ -137,6 +137,20 @@ def _run_startup_health_snapshot() -> dict[str, Any]:
     return result
 
 
+def _run_durable_recovery_startup() -> dict[str, Any]:
+    """Plan every boot and execute only when the explicit mode is enabled."""
+    from scripts.jobs.startup_recovery_coordinator import run_startup_recovery_plan
+
+    plan = run_startup_recovery_plan()
+    if plan.get("status") != "planned" or plan.get("mode") != "execute":
+        return plan
+    from scripts.jobs.startup_recovery_executor import execute_recovery_session
+
+    result = execute_recovery_session(int(plan["session_id"]))
+    print(f"[scheduler] durable recovery execution: {result}")
+    return result
+
+
 def _odds_dispatch_owner() -> str:
     """Keep the Worker as the single high-frequency odds dispatcher."""
     return os.getenv("FQP_ODDS_DISPATCH_OWNER", "scheduler").lower()
@@ -287,9 +301,7 @@ def main() -> None:
         from scripts.jobs.startup_recovery import StartupRecovery
 
         startup_tasks: dict[str, Callable[[], Any]] = {
-            "durable_recovery_plan": lambda: __import__(
-                "scripts.jobs.startup_recovery_coordinator", fromlist=["run_startup_recovery_plan"]
-            ).run_startup_recovery_plan(),
+            "durable_recovery_plan": _run_durable_recovery_startup,
             "seed_agent_registry": lambda: __import__(
                 "scripts.jobs.seed_agent_registry", fromlist=["run"]
             ).run(),

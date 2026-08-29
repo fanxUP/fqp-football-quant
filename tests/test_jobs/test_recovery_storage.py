@@ -4,7 +4,9 @@ from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
 from scripts.jobs.recovery_storage import (
+    claim_recovery_task,
     create_recovery_session,
+    finish_recovery_task,
     insert_recovery_task_plan,
     mark_recovery_session,
 )
@@ -67,3 +69,43 @@ def test_mark_recovery_session_rejects_unknown_status() -> None:
     else:
         raise AssertionError("expected ValueError")
     cur.execute.assert_not_called()
+
+
+def test_claim_recovery_task_locks_and_increments_attempt() -> None:
+    conn, cur = _conn()
+    cur.fetchone.side_effect = [
+        (9, "current_odds", None, None, "latest_only", 0),
+        (9, "current_odds", None, None, "latest_only", 1),
+    ]
+
+    result = claim_recovery_task(conn, 7)
+
+    assert result == {
+        "id": 9,
+        "task_code": "current_odds",
+        "business_window_start": None,
+        "business_window_end": None,
+        "strategy": "latest_only",
+        "attempt_count": 1,
+    }
+    assert "FOR UPDATE SKIP LOCKED" in cur.execute.call_args_list[0].args[0]
+    conn.commit.assert_called_once()
+
+
+def test_finish_recovery_task_can_return_to_bounded_retry_queue() -> None:
+    conn, cur = _conn(rowcount=1)
+
+    result = finish_recovery_task(
+        conn,
+        9,
+        "planned",
+        error="temporary upstream failure",
+        next_attempt_at="2026-08-29T08:00:00+00:00",
+    )
+
+    assert result is True
+    query, params = cur.execute.call_args.args
+    assert "status = 'running'" in query
+    assert params[0] == "planned"
+    assert params[2] == "temporary upstream failure"
+    conn.commit.assert_called_once()

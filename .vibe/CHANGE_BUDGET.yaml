@@ -1,9 +1,9 @@
 version: 1
 mode: STRICT
-max_changed_files: 10
-max_new_files: 8
+max_changed_files: 18
+max_new_files: 14
 max_dependency_additions: 0
 max_migration_files: 1
 max_public_api_changes: 0
-max_regression_tests: 20
-scope_note: "Phase 2 adds durable recovery sessions/task idempotency, scheduler startup planning, and an immediate health snapshot. Real historical task execution remains disabled until Phase 3."
+max_regression_tests: 30
+scope_note: "Phase 3 adds bounded recovery execution, persistent systemd activation, and a recency-bounded contamination audit fix."

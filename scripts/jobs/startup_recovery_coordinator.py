@@ -17,6 +17,7 @@ from scripts.jobs.recovery_storage import (
     create_recovery_session,
     insert_recovery_task_plan,
     mark_recovery_session,
+    promote_recovery_session,
 )
 
 TASK_JOB_CODES = {
@@ -133,4 +134,6 @@ def run_startup_recovery_plan(now: datetime | None = None, mode: str | None = No
             "mode": selected_mode,
         }
         mark_recovery_session(conn, session["id"], "planned", summary)
+        if selected_mode == "execute":
+            promote_recovery_session(conn, session["id"])
     return {"status": "planned", "session_id": session["id"], **summary}
