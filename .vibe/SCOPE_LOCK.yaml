@@ -1,0 +1,20 @@
+version: 1
+allowed_paths:
+  - .vibe/CHANGE_BUDGET.yaml
+  - .vibe/SCOPE_LOCK.yaml
+  - scripts/local/startup_preflight.py
+  - scripts/jobs/recovery_plan.py
+  - scripts/jobs/recovery_storage.py
+  - scripts/jobs/startup_recovery.py
+  - scripts/jobs/run_scheduler.py
+  - sql/102_startup_recovery_sessions.sql
+  - tests/test_local/test_startup_preflight.py
+  - tests/test_jobs/test_recovery_plan.py
+  - tests/test_jobs/test_recovery_storage.py
+  - tests/test_sql/test_startup_recovery_schema.py
+forbidden_paths:
+  - apps/frontend/**
+  - /etc/systemd/**
+  - .env*
+  - scripts/agent_storage.py
+out_of_scope: "Production systemd changes, real historical task execution, contamination repair, and destructive data changes remain Phase 3+."
