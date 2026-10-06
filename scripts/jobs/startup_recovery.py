@@ -48,7 +48,7 @@ class StartupRecovery:
                 status = (
                     str(result.get("status", "ok")).lower() if isinstance(result, dict) else "ok"
                 )
-                if status in {"error", "failed", "blocked"}:
+                if status in {"error", "failed", "blocked", "recovering"}:
                     raise RuntimeError(str(result.get("error") or result.get("message") or result))
             except Exception as exc:
                 delay_index = min(state.attempts - 1, len(self._retry_delays) - 1)

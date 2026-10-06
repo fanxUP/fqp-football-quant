@@ -158,6 +158,20 @@ describe('DataHealthPage', () => {
     expect(screen.getByText(/尚未运行: 尚无记录/)).toBeInTheDocument();
   });
 
+  it('shows a right-aligned legend for every task status light color', async () => {
+    render(<DataHealthPage />);
+
+    const legend = await screen.findByTestId('data-health-status-legend');
+    expect(legend).toHaveAttribute('aria-label', '状态灯说明');
+    expect(legend).toHaveTextContent('绿色：正常/成功');
+    expect(legend).toHaveTextContent('黄色：降级/过期');
+    expect(legend).toHaveTextContent('红色：失败/异常');
+    expect(legend).toHaveTextContent('蓝色：信息/跳过/未运行');
+    expect(legend).toHaveTextContent('灰色：停用');
+    expect(legend).toHaveStyle({ justifyContent: 'flex-end' });
+    expect(legend.querySelectorAll('.fqp-status-dot')).toHaveLength(5);
+  });
+
   it('页面保持打开时自动刷新监控状态', async () => {
     vi.useFakeTimers();
 

@@ -51,6 +51,14 @@ const STAGE8_TARGETS: Record<string, { label: string; target: string; pass: (v: 
   data_contamination_count: { label: '数据污染', target: '= 0', pass: (v) => typeof v === 'number' && v === 0 },
 };
 
+const STATUS_DOT_LEGEND = [
+  { status: 'ok', label: '绿色：正常/成功' },
+  { status: 'warning', label: '黄色：降级/过期' },
+  { status: 'error', label: '红色：失败/异常' },
+  { status: 'info', label: '蓝色：信息/跳过/未运行' },
+  { status: 'disabled', label: '灰色：停用' },
+] as const;
+
 export default function DataHealthPage() {
   const [health, setHealth] = useState<HealthStatus | null>(null);
   const [opsHealth, setOpsHealth] = useState<OpsHealth | null>(null);
@@ -159,6 +167,31 @@ export default function DataHealthPage() {
     : latestOfficialCollection
     ? { status: 'error' as const, label: '需处理' }
     : { status: 'info' as const, label: '暂无记录' };
+  const statusDotLegend = (
+    <div
+      data-testid="data-health-status-legend"
+      aria-label="状态灯说明"
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'flex-end',
+        flexWrap: 'wrap',
+        gap: '6px 14px',
+        maxWidth: '78%',
+        minWidth: 0,
+        fontSize: '11px',
+        color: 'var(--fqp-text-muted)',
+        textAlign: 'right',
+      }}
+    >
+      {STATUS_DOT_LEGEND.map(({ status, label }) => (
+        <span key={status} style={{ display: 'inline-flex', alignItems: 'center', whiteSpace: 'nowrap' }}>
+          <span className={`fqp-status-dot fqp-status-dot-${status}`} aria-hidden="true" />
+          <span>{label}</span>
+        </span>
+      ))}
+    </div>
+  );
 
   return (
     <div>
@@ -354,7 +387,7 @@ export default function DataHealthPage() {
       </Card>
 
       {/* Data source grid */}
-      <Card title="数据源与任务状态">
+      <Card title="数据源与任务状态" action={statusDotLegend}>
         {error && (
           <div style={{ marginBottom: '16px', padding: '10px 14px', background: 'rgba(255,42,61,0.1)', borderRadius: 'var(--fqp-radius-sm)', color: 'var(--fqp-red-neon)', fontSize: '13px' }}>
             {error}

@@ -1,0 +1,9 @@
+version: 1
+mode: STRICT
+max_changed_files: 26
+max_new_files: 17
+max_dependency_additions: 0
+max_migration_files: 1
+max_public_api_changes: 0
+max_regression_tests: 30
+scope_note: "Publish the server-only startup recovery, data-health status, and recency-bounded contamination audit changes (26 files, 17 new). Ticket-ledger and scheduled-backup changes remain in pull request #2."

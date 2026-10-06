@@ -123,6 +123,34 @@ def _official_source_enabled() -> bool:
     return os.getenv("OFFICIAL_SOURCE_ENABLED", "true").lower() == "true"
 
 
+def _startup_health_snapshot_enabled() -> bool:
+    """Write one current health snapshot after a host boot by default."""
+    return os.getenv("FQP_STARTUP_HEALTH_SNAPSHOT", "true").lower() == "true"
+
+
+def _run_startup_health_snapshot() -> dict[str, Any]:
+    """Refresh today's operational snapshot before normal cron windows."""
+    from scripts.jobs.collect_health_metrics import run
+
+    result = run(dry_run=False)
+    print(f"[scheduler] startup health snapshot: {result}")
+    return result
+
+
+def _run_durable_recovery_startup() -> dict[str, Any]:
+    """Plan every boot and execute only when the explicit mode is enabled."""
+    from scripts.jobs.startup_recovery_coordinator import run_startup_recovery_plan
+
+    plan = run_startup_recovery_plan()
+    if plan.get("status") != "planned" or plan.get("mode") != "execute":
+        return plan
+    from scripts.jobs.startup_recovery_executor import execute_recovery_session
+
+    result = execute_recovery_session(int(plan["session_id"]))
+    print(f"[scheduler] durable recovery execution: {result}")
+    return result
+
+
 def _odds_dispatch_owner() -> str:
     """Keep the Worker as the single high-frequency odds dispatcher."""
     return os.getenv("FQP_ODDS_DISPATCH_OWNER", "scheduler").lower()
@@ -273,10 +301,13 @@ def main() -> None:
         from scripts.jobs.startup_recovery import StartupRecovery
 
         startup_tasks: dict[str, Callable[[], Any]] = {
+            "durable_recovery_plan": _run_durable_recovery_startup,
             "seed_agent_registry": lambda: __import__(
                 "scripts.jobs.seed_agent_registry", fromlist=["run"]
             ).run(),
         }
+        if _startup_health_snapshot_enabled():
+            startup_tasks["collect_health_metrics_startup"] = _run_startup_health_snapshot
         if _official_source_enabled():
             startup_tasks.update(
                 {

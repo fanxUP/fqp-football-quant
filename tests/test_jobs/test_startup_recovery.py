@@ -45,3 +45,18 @@ def test_startup_recovery_retries_error_results_and_never_duplicates_success():
     assert recovery.run(now + timedelta(seconds=1))["pending"] == []
     assert recovery.run(now + timedelta(seconds=2))["attempted"] == []
     assert calls["task"] == 2
+
+
+def test_startup_recovery_treats_recovering_result_as_transient() -> None:
+    now = datetime(2026, 7, 18, 21, 0, tzinfo=ZoneInfo("Asia/Shanghai"))
+    calls = {"task": 0}
+
+    def task():
+        calls["task"] += 1
+        return {"status": "recovering" if calls["task"] == 1 else "completed"}
+
+    recovery = StartupRecovery({"task": task}, retry_delays=(1,))
+
+    assert recovery.run(now)["pending"] == ["task"]
+    assert recovery.run(now + timedelta(seconds=1))["pending"] == []
+    assert calls["task"] == 2
