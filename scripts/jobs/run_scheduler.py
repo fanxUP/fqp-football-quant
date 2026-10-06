@@ -1042,20 +1042,6 @@ def main() -> None:
             )
 
             # ----- Stage 8: operational health & monitoring jobs -----
-            # Daily at 23:00: verify latest database backup
-            scheduler.add_job(
-                _audited_job(
-                    "verify_backup",
-                    "备份验证",
-                    "ops_agent",
-                    lambda: __import__("scripts.jobs.verify_backup", fromlist=["run"]).run(),
-                ),
-                "cron",
-                hour=23,
-                minute=0,
-                id="verify_backup",
-            )
-
             # Daily at 23:30: validate evidence chains
             scheduler.add_job(
                 _audited_job(

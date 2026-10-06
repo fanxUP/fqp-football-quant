@@ -196,7 +196,6 @@ JOB_DEFINITIONS: dict[str, JobDefinition] = {
     "backtest": JobDefinition(
         "全量回测执行", "每周日 04:07", "model", ("run_backtest",), timedelta(days=8)
     ),
-    "verify_backup": JobDefinition("备份验证", "每日 23:00", "review", max_age=timedelta(hours=30)),
     "evidence_chain_validation": JobDefinition(
         "证据链校验", "每日 23:30", "review", ("validate_evidence_chain",), timedelta(hours=30)
     ),
