@@ -3,7 +3,6 @@ from zoneinfo import ZoneInfo
 
 from scripts.jobs.recovery_plan import build_recovery_plan
 
-
 TZ = ZoneInfo("Asia/Shanghai")
 
 
