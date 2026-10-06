@@ -16,14 +16,34 @@ class RecoveryPolicy:
 
 
 DEFAULT_POLICIES = (
-    RecoveryPolicy("official_schedule", "latest_only", timedelta(minutes=30), "refresh current official facts"),
-    RecoveryPolicy("current_odds", "latest_only", timedelta(minutes=1), "refresh current odds only"),
-    RecoveryPolicy("build_feature_snapshots", "latest_only", timedelta(hours=6), "rebuild future-match features"),
-    RecoveryPolicy("run_model_prediction", "latest_only", timedelta(minutes=30), "predict future matches only"),
-    RecoveryPolicy("run_recommendation_candidate", "latest_only", timedelta(days=1), "honor daily decision guard"),
-    RecoveryPolicy("daily_review", "each_window", timedelta(days=1), "rebuild missing business dates"),
+    RecoveryPolicy(
+        "official_schedule", "latest_only", timedelta(minutes=30), "refresh current official facts"
+    ),
+    RecoveryPolicy(
+        "current_odds", "latest_only", timedelta(minutes=1), "refresh current odds only"
+    ),
+    RecoveryPolicy(
+        "build_feature_snapshots",
+        "latest_only",
+        timedelta(hours=6),
+        "rebuild future-match features",
+    ),
+    RecoveryPolicy(
+        "run_model_prediction", "latest_only", timedelta(minutes=30), "predict future matches only"
+    ),
+    RecoveryPolicy(
+        "run_recommendation_candidate",
+        "latest_only",
+        timedelta(days=1),
+        "honor daily decision guard",
+    ),
+    RecoveryPolicy(
+        "daily_review", "each_window", timedelta(days=1), "rebuild missing business dates"
+    ),
     RecoveryPolicy("settle_tickets", "each_window", timedelta(hours=1), "settle from stored facts"),
-    RecoveryPolicy("minute_odds", "mark_gap", None, "historical minute snapshots cannot be fabricated"),
+    RecoveryPolicy(
+        "minute_odds", "mark_gap", None, "historical minute snapshots cannot be fabricated"
+    ),
     RecoveryPolicy("heavy_training", "skip", None, "avoid boot-time resource storm"),
 )
 
