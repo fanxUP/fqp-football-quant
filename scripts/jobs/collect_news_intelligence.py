@@ -170,13 +170,12 @@ def run() -> dict[str, Any]:
     if not any(provider_keys.values()):
         return {"status": "skipped", "reason": "no_provider_keys"}
     skipped_providers: list[dict[str, str]] = []
-    if provider_keys["newsapi"] and os.getenv(
-        "FQP_NEWSAPI_AUTOMATION_ENABLED", "false"
-    ).lower() != "true":
+    if (
+        provider_keys["newsapi"]
+        and os.getenv("FQP_NEWSAPI_AUTOMATION_ENABLED", "false").lower() != "true"
+    ):
         provider_keys["newsapi"] = ""
-        skipped_providers.append(
-            {"provider": "newsapi", "reason": "free_plan_development_only"}
-        )
+        skipped_providers.append({"provider": "newsapi", "reason": "free_plan_development_only"})
     if not any(provider_keys.values()):
         return {
             "status": "skipped",
