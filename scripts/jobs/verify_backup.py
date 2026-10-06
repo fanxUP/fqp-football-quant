@@ -1,11 +1,7 @@
-"""Backup creation and verification job.
+"""Manual full-database backup creation and verification utility.
 
-Stage 8: Daily job (23:00) that:
-  1. Creates a pg_dump backup of the FQP database
-  2. Verifies the backup file exists and is valid
-  3. Logs results to backup_logs table
-
-Target: backup success rate = 100%.
+The scheduler does not register this utility for automatic execution.
+Run it manually only when a full backup is explicitly required.
 """
 
 from __future__ import annotations
