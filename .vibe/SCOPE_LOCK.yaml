@@ -4,6 +4,7 @@ allowed_paths:
   - .vibe/SCOPE_LOCK.yaml
   - apps/backend/src/services/model_provider_store.py
   - scripts/jobs/collect_news_intelligence.py
+  - scripts/jobs/startup_recovery_executor.py
   - tests/test_computation/test_news_query_planner.py
   - tests/test_jobs/test_collect_news_intelligence.py
   - tests/test_jobs/test_generate_periodic_reviews.py
@@ -11,4 +12,4 @@ forbidden_paths:
   - /etc/systemd/**
   - .env*
   - scripts/agent_storage.py
-out_of_scope: "Runtime behavior changes, dependency changes, API changes, migrations, and server deployment actions are outside this formatting-only change."
+out_of_scope: "Behavior changes, dependency changes, API changes, migrations, and server deployment actions are outside this formatting and typing-only change."

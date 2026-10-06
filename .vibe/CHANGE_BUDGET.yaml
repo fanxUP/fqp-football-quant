@@ -1,9 +1,9 @@
 version: 1
 mode: STRICT
-max_changed_files: 7
+max_changed_files: 8
 max_new_files: 0
 max_dependency_additions: 0
 max_migration_files: 0
 max_public_api_changes: 0
 max_regression_tests: 0
-scope_note: "Apply Ruff formatting to five existing Python files that fail the repository-wide formatter check; update scope metadata for this focused style-only change."
+scope_note: "Format five legacy Python files and assign unique names to startup-recovery job imports so Ruff and mypy pass; update scope metadata."
