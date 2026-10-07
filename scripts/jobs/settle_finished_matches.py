@@ -1,7 +1,7 @@
-"""Periodic job: settle finished matches — fetch results from sporttery.cn.
+"""Periodic job: fetch recent and outstanding official match results.
 
 Called by the scheduler every 30 minutes.
-Checks yesterday + today for newly-available results.
+Checks a recent four-day window and retries older dates blocking active tickets.
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ from scripts.official_crawler import crawl_official_results
 
 
 def run(now: datetime | None = None) -> dict:
-    """Fetch a four-day window so delayed and early-morning results are recovered."""
+    """Fetch recent results and bounded historical results needed for settlement."""
     today = business_today(now).isoformat()
     begin_date = (business_today(now) - timedelta(days=3)).isoformat()
 

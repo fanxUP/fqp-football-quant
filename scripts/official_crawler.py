@@ -619,7 +619,133 @@ def crawl_official_odds_snapshot(business_date: str) -> dict[str, Any]:
     return collect_due_official_odds()
 
 
+_RESULT_BACKFILL_LIMIT = 5
+_RESULT_BACKFILL_RETRY_MINUTES = 25
+
+
+def _pending_result_backfill_dates(before_date: str) -> list[str]:
+    """Return a bounded, fair queue of older dates blocking active tickets."""
+    query = """
+        SELECT pending.match_date
+        FROM (
+            SELECT DISTINCT m.kickoff_time::date AS match_date
+            FROM official_matches m
+            WHERE m.kickoff_time::date < %s::date
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM official_results result
+                  WHERE result.match_id = m.id
+                    AND result.result_status IN (
+                        'confirmed', 'final', 'void', 'refund', 'refunded'
+                    )
+              )
+              AND (
+                  EXISTS (
+                      SELECT 1
+                      FROM simulation_ticket_items item
+                      JOIN simulation_tickets ticket ON ticket.id = item.ticket_id
+                      WHERE item.match_id = m.id
+                        AND ticket.ticket_status IN ('generated', 'activated')
+                  )
+                  OR EXISTS (
+                      SELECT 1
+                      FROM simulator_ticket_items item
+                      JOIN simulator_tickets ticket ON ticket.id = item.ticket_id
+                      WHERE item.match_id = m.id
+                        AND ticket.status = 'pending'
+                  )
+                  OR EXISTS (
+                      SELECT 1
+                      FROM real_ticket_items item
+                      JOIN real_tickets ticket ON ticket.id = item.real_ticket_id
+                      WHERE item.match_id = m.id
+                        AND ticket.confirm_status = 'confirmed'
+                        AND ticket.settlement_status = 'pending'
+                  )
+              )
+        ) pending
+        LEFT JOIN LATERAL (
+            SELECT MAX(status.updated_at) AS last_attempt_at
+            FROM official_collection_status status
+            WHERE status.business_date = pending.match_date
+              AND status.crawl_type = 'results'
+              AND status.source_name = 'sporttery'
+        ) attempt ON TRUE
+        WHERE attempt.last_attempt_at IS NULL
+           OR attempt.last_attempt_at < NOW() - make_interval(mins => %s)
+        ORDER BY attempt.last_attempt_at NULLS FIRST, pending.match_date
+        LIMIT %s
+    """
+    with get_db() as conn, conn.cursor() as cur:
+        cur.execute(
+            query,
+            (before_date, _RESULT_BACKFILL_RETRY_MINUTES, _RESULT_BACKFILL_LIMIT),
+        )
+        rows = cur.fetchall()
+    return [str(row[0]) for row in rows]
+
+
 def crawl_official_results(begin_date: str, end_date: str) -> dict[str, Any]:
+    """Fetch recent results and retry a bounded queue of older pending-ticket dates."""
+    lookup_error: str | None = None
+    try:
+        pending_dates = _pending_result_backfill_dates(begin_date)
+    except Exception as exc:
+        pending_dates = []
+        lookup_error = str(exc)
+        print(f"[official_crawler] pending result backfill lookup failed: {lookup_error}")
+
+    result = _crawl_official_results_once(begin_date, end_date)
+    if not pending_dates and lookup_error is None:
+        return result
+
+    historical_results: list[tuple[str, dict[str, Any]]] = []
+    for match_date in pending_dates:
+        try:
+            historical = _crawl_official_results_once(match_date, match_date)
+        except Exception as exc:
+            historical = {"status": "error", "error": str(exc)}
+        historical_results.append((match_date, historical))
+
+    combined = dict(result)
+    count_fields = (
+        "results_found",
+        "results_matched",
+        "results_inserted",
+        "results_updated",
+    )
+    for field in count_fields:
+        if field in combined or any(field in item for _, item in historical_results):
+            combined[field] = sum(
+                int(item.get(field, 0) or 0)
+                for item in [result, *(item for _, item in historical_results)]
+            )
+
+    backfill_errors = [
+        {"date": match_date, "error": historical.get("error", "unknown error")}
+        for match_date, historical in historical_results
+        if historical.get("status") != "ok"
+    ]
+    combined["historical_backfill"] = {
+        "dates_attempted": [match_date for match_date, _ in historical_results],
+        "date_limit": _RESULT_BACKFILL_LIMIT,
+        "errors": backfill_errors,
+    }
+
+    if lookup_error is not None:
+        combined["historical_backfill"]["lookup_error"] = lookup_error
+    if lookup_error is not None or result.get("status") != "ok" or backfill_errors:
+        combined["status"] = "error"
+        if result.get("status") == "ok":
+            combined["error"] = (
+                lookup_error
+                or f"historical result backfill failed for {len(backfill_errors)} date(s)"
+            )
+
+    return combined
+
+
+def _crawl_official_results_once(begin_date: str, end_date: str) -> dict[str, Any]:
     """Fetch and store match results for a date range.
 
     Results come only from the China Sports Lottery result page's Uniform API.
