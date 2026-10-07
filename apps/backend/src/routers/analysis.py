@@ -20,7 +20,7 @@ from scripts.feature_importance import (
     recommend_best_combos,
     train_if_needed,
 )
-from scripts.model_performance import get_model_performance_history
+from scripts.model_performance_cache import get_cached_model_performance_history
 
 router = APIRouter(tags=["analysis"])
 
@@ -47,8 +47,7 @@ def evaluation_history(
     days: int = Query(365, ge=30, le=1095, description="查询最近天数"),
 ):
     """按日期、玩法和模型返回滚动命中率。"""
-    with get_db() as conn:
-        return get_model_performance_history(conn, window=window, days=days)
+    return get_cached_model_performance_history(window=window, days=days)
 
 
 @router.get("/api/analysis/evaluation/calibration")

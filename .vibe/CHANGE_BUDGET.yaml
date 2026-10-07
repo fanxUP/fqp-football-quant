@@ -1,9 +1,9 @@
 version: 1
 mode: STRICT
-max_changed_files: 6
-max_new_files: 2
+max_changed_files: 12
+max_new_files: 5
 max_dependency_additions: 0
-max_migration_files: 0
+max_migration_files: 1
 max_public_api_changes: 0
 max_regression_tests: 0
-scope_note: "Reduce model performance history query work while preserving scoring and response behavior; add a dedicated bounded client timeout for that endpoint."
+scope_note: "Persist per-match settled model picks, serve rolling history through a Redis response cache, and register the refresh job in scheduler monitoring."

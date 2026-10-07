@@ -1,3 +1,4 @@
-base_revision: 88b4f6cc11b1ac2a643d483d1a5388db1055f2aa
-branch: fix/model-performance-history-latency
+base_revision: accc840b8eceb91d911084d652ab020bbb89c468
+branch: perf/model-performance-history-cache
 captured_at: 2026-10-07
+version: 2

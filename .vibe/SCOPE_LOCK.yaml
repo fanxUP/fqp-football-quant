@@ -3,12 +3,17 @@ allowed_paths:
   - .vibe/CHANGE_BUDGET.yaml
   - .vibe/SCOPE_LOCK.yaml
   - BASELINE.yaml
-  - .superpowers/sdd/task-8-brief.md
+  - .superpowers/sdd/task-9-design.md
+  - scripts/model_performance_cache.py
   - scripts/model_performance.py
-  - apps/frontend/src/core/apiClient.ts
+  - scripts/jobs/refresh_model_performance_history.py
+  - scripts/jobs/run_scheduler.py
+  - apps/backend/src/routers/analysis.py
+  - apps/backend/src/services/pipeline_status.py
+  - sql/103_model_performance_scored_picks.sql
+  - sql/down/103_model_performance_scored_picks.down.sql
 forbidden_paths:
   - .env*
   - tests/**
-  - sql/**
   - apps/frontend/src/pages/**
-out_of_scope: "Database schema changes, scoring or history rewrites, API response contract changes, and unrelated page or module work."
+out_of_scope: "Production migration execution/deployment, unrelated schema changes, API response changes, unrelated frontend or backend work, and Python 3 syntax cleanup under scripts/local; listed backend modules are included only to repair directly identified syntax blockers."
