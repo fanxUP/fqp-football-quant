@@ -87,7 +87,9 @@ def insert_recovery_task_plan(conn: Any, recovery_session_id: int, task: dict[st
     return bool(inserted)
 
 
-def mark_recovery_session(conn: Any, session_id: int, status: str, summary: dict | None = None) -> bool:
+def mark_recovery_session(
+    conn: Any, session_id: int, status: str, summary: dict | None = None
+) -> bool:
     """Update a recovery session status with an auditable summary."""
     if status not in SESSION_STATUSES:
         raise ValueError(f"Unsupported recovery session status: {status}")

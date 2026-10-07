@@ -99,7 +99,9 @@ def _task_rows(session_id: int, plan: list[dict], outage_end: datetime) -> list[
     return rows
 
 
-def run_startup_recovery_plan(now: datetime | None = None, mode: str | None = None) -> dict[str, Any]:
+def run_startup_recovery_plan(
+    now: datetime | None = None, mode: str | None = None
+) -> dict[str, Any]:
     """Persist one startup plan; return ``blocked`` when no safe boundary exists."""
     current = _require_aware(now, "now") if now is not None else datetime.now(UTC)
     selected_mode = mode or os.getenv("FQP_STARTUP_RECOVERY_MODE", "plan").lower()
@@ -111,9 +113,17 @@ def run_startup_recovery_plan(now: datetime | None = None, mode: str | None = No
         if boundary is None:
             return {"status": "blocked", "reason": "no_health_boundary", "mode": selected_mode}
         if current <= boundary:
-            return {"status": "no_gap", "mode": selected_mode, "last_health_snapshot": boundary.isoformat()}
+            return {
+                "status": "no_gap",
+                "mode": selected_mode,
+                "last_health_snapshot": boundary.isoformat(),
+            }
         if current - boundary < timedelta(minutes=30):
-            return {"status": "no_gap", "mode": selected_mode, "last_health_snapshot": boundary.isoformat()}
+            return {
+                "status": "no_gap",
+                "mode": selected_mode,
+                "last_health_snapshot": boundary.isoformat(),
+            }
 
         session = create_recovery_session(
             conn,

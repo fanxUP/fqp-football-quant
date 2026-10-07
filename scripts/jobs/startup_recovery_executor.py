@@ -78,7 +78,9 @@ def execute_recovery_session(session_id: int, max_tasks: int = 200) -> dict[str,
             processed += 1
             try:
                 result = execute_recovery_task(task)
-                status = str(result.get("status", "ok")).lower() if isinstance(result, dict) else "ok"
+                status = (
+                    str(result.get("status", "ok")).lower() if isinstance(result, dict) else "ok"
+                )
                 if status in {"error", "failed", "blocked"}:
                     raise RuntimeError(str(result.get("error") or result.get("message") or result))
                 finish_recovery_task(conn, task["id"], "completed", output_refs={"result": result})
