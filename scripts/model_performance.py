@@ -6,7 +6,24 @@ from datetime import date, datetime
 from typing import Any
 
 _PERFORMANCE_HISTORY_SQL = """
-    WITH normalized_predictions AS (
+    WITH settled_matches AS MATERIALIZED (
+        SELECT
+            m.id AS match_id,
+            m.business_date,
+            m.kickoff_time,
+            r.spf_result,
+            r.rqspf_result,
+            r.full_home_goals,
+            r.full_away_goals,
+            r.total_goals_result,
+            r.score_result,
+            r.half_full_result
+        FROM official_matches m
+        JOIN official_results r ON r.match_id = m.id
+        WHERE m.business_date >= CURRENT_DATE - %(days)s
+          AND r.result_status IN ('final', 'confirmed')
+    ),
+    normalized_predictions AS (
         SELECT
             source_mp.id AS prediction_id,
             source_mp.match_id,
@@ -20,10 +37,17 @@ _PERFORMANCE_HISTORY_SQL = """
             END AS play_type,
             source_mp.option_code,
             source_mp.model_probability,
-            source_mp.predict_time
+            source_mp.predict_time,
+            m.spf_result,
+            m.rqspf_result,
+            m.full_home_goals,
+            m.full_away_goals,
+            m.total_goals_result,
+            m.score_result,
+            m.half_full_result
         FROM model_predictions source_mp
         JOIN model_versions mv ON mv.id = source_mp.model_version_id
-        JOIN official_matches m ON m.id = source_mp.match_id
+        JOIN settled_matches m ON m.match_id = source_mp.match_id
         WHERE source_mp.model_probability IS NOT NULL
           AND source_mp.validation_status = 'valid'
           AND COALESCE(
@@ -31,7 +55,6 @@ _PERFORMANCE_HISTORY_SQL = """
               false
           ) = true
           AND source_mp.predict_time < m.kickoff_time
-          AND m.business_date >= CURRENT_DATE - %(days)s
           AND source_mp.play_type IN (
               'spf', 'rqspf', 'bf', 'score',
               'zjq', 'total_goals', 'bqc', 'half_full'
@@ -46,7 +69,14 @@ _PERFORMANCE_HISTORY_SQL = """
             play_type,
             option_code,
             model_probability,
-            predict_time
+            predict_time,
+            spf_result,
+            rqspf_result,
+            full_home_goals,
+            full_away_goals,
+            total_goals_result,
+            score_result,
+            half_full_result
         FROM normalized_predictions
         ORDER BY
             match_id, model_name, play_type, option_code,
@@ -61,43 +91,59 @@ _PERFORMANCE_HISTORY_SQL = """
             ) AS choice_rank
         FROM latest_predictions
     ),
-    resolved_picks AS (
+    resolved_non_rqspf_picks AS (
         SELECT
             rp.match_id,
             rp.business_date,
             rp.model_name,
             rp.play_type,
             rp.option_code,
-            CASE
-                WHEN rp.play_type = 'spf' THEN r.spf_result
-                WHEN rp.play_type = 'rqspf' THEN COALESCE(
-                    NULLIF(r.rqspf_result, ''),
-                    CASE
-                        WHEN rq.handicap IS NULL THEN NULL
-                        WHEN r.full_home_goals + rq.handicap > r.full_away_goals THEN '3'
-                        WHEN r.full_home_goals + rq.handicap = r.full_away_goals THEN '1'
-                        ELSE '0'
-                    END
-                )
-                WHEN rp.play_type = 'zjq' THEN r.total_goals_result
-                WHEN rp.play_type = 'bf' THEN r.score_result
-                WHEN rp.play_type = 'bqc' THEN REPLACE(r.half_full_result, '-', '')
+            CASE rp.play_type
+                WHEN 'spf' THEN rp.spf_result
+                WHEN 'zjq' THEN rp.total_goals_result
+                WHEN 'bf' THEN rp.score_result
+                WHEN 'bqc' THEN REPLACE(rp.half_full_result, '-', '')
             END AS actual_option
         FROM ranked_predictions rp
-        JOIN official_results r ON r.match_id = rp.match_id
+        WHERE rp.choice_rank = 1
+          AND rp.play_type <> 'rqspf'
+    ),
+    resolved_rqspf_picks AS (
+        SELECT
+            rp.match_id,
+            rp.business_date,
+            rp.model_name,
+            rp.play_type,
+            rp.option_code,
+            COALESCE(
+                NULLIF(rp.rqspf_result, ''),
+                CASE
+                    WHEN rq.handicap IS NULL THEN NULL
+                    WHEN rp.full_home_goals + rq.handicap > rp.full_away_goals THEN '3'
+                    WHEN rp.full_home_goals + rq.handicap = rp.full_away_goals THEN '1'
+                    ELSE '0'
+                END
+            ) AS actual_option
+        FROM ranked_predictions rp
         LEFT JOIN LATERAL (
             SELECT odds.handicap
             FROM official_odds_snapshots odds
-            WHERE odds.match_id = rp.match_id
+            WHERE NULLIF(rp.rqspf_result, '') IS NULL
+              AND odds.match_id = rp.match_id
               AND odds.play_type = 'rqspf'
               AND odds.handicap IS NOT NULL
             ORDER BY
                 ABS(EXTRACT(EPOCH FROM (odds.snapshot_time - rp.predict_time))),
                 odds.id DESC
             LIMIT 1
-        ) rq ON rp.play_type = 'rqspf'
+        ) rq ON true
         WHERE rp.choice_rank = 1
-          AND r.result_status IN ('final', 'confirmed')
+          AND rp.play_type = 'rqspf'
+    ),
+    resolved_picks AS (
+        SELECT * FROM resolved_non_rqspf_picks
+        UNION ALL
+        SELECT * FROM resolved_rqspf_picks
     ),
     scored_picks AS (
         SELECT
