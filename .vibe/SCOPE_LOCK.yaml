@@ -2,31 +2,13 @@ version: 1
 allowed_paths:
   - .vibe/CHANGE_BUDGET.yaml
   - .vibe/SCOPE_LOCK.yaml
-  - apps/frontend/src/pages/TicketsPage.tsx
-  - scripts/jobs/verify_backup.py
-  - apps/backend/src/services/pipeline_status.py
-  - scripts/local/startup_preflight.py
-  - scripts/jobs/recovery_plan.py
-  - scripts/jobs/recovery_storage.py
-  - scripts/jobs/startup_recovery.py
-  - scripts/jobs/startup_recovery_executor.py
-  - scripts/jobs/audit_data_contamination.py
-  - scripts/jobs/run_scheduler.py
-  - ops/systemd/fqp-scheduler.service.d/10-startup-recovery.conf
-  - sql/102_startup_recovery_sessions.sql
-  - tests/test_local/test_startup_preflight.py
-  - tests/test_jobs/test_recovery_plan.py
-  - tests/test_jobs/test_recovery_storage.py
-  - tests/test_jobs/test_startup_recovery_executor.py
-  - tests/test_ops/test_startup_recovery_systemd.py
-  - tests/test_jobs/test_audit_data_contamination_scope.py
-  - tests/test_sql/test_startup_recovery_schema.py
-  - apps/frontend/src/theme/red_black_tech_tokens.css
-  - apps/frontend/src/theme/statusDotStyles.test.ts
-  - apps/frontend/src/pages/DataHealthPage.tsx
-  - apps/frontend/src/pages/DataHealthPage.test.tsx
+  - BASELINE.yaml
+  - .superpowers/sdd/task-8-brief.md
+  - scripts/model_performance.py
+  - apps/frontend/src/core/apiClient.ts
 forbidden_paths:
-  - /etc/systemd/**
   - .env*
-  - scripts/agent_storage.py
-out_of_scope: "Database schema changes, ticket mutations, settlement or history rewrites, API contract changes, and unrelated UI work remain out of scope for the ticket-ledger fix and previously authorized backup-job removal."
+  - tests/**
+  - sql/**
+  - apps/frontend/src/pages/**
+out_of_scope: "Database schema changes, scoring or history rewrites, API response contract changes, and unrelated page or module work."

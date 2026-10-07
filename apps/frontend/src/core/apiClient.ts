@@ -244,13 +244,18 @@ export interface AgentWorkspaceReviewEvent {
 // ---- Base request ----
 
 const TIMEOUT_MS = 15_000;
+const MODEL_PERFORMANCE_HISTORY_TIMEOUT_MS = 30_000;
 const MODEL_INTERPRETATION_TIMEOUT_MS = 45_000;
 const inFlightGetRequests = new Map<string, Promise<unknown>>();
 
 function requestTimeoutFor(path: string): number {
-  return path.startsWith('/api/agent-interpretations/')
-    ? MODEL_INTERPRETATION_TIMEOUT_MS
-    : TIMEOUT_MS;
+  if (path.startsWith('/api/analysis/evaluation/history')) {
+    return MODEL_PERFORMANCE_HISTORY_TIMEOUT_MS;
+  }
+  if (path.startsWith('/api/agent-interpretations/')) {
+    return MODEL_INTERPRETATION_TIMEOUT_MS;
+  }
+  return TIMEOUT_MS;
 }
 
 async function readErrorMessage(res: Response): Promise<string> {

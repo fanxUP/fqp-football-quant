@@ -1,9 +1,9 @@
 version: 1
 mode: STRICT
-max_changed_files: 18
-max_new_files: 14
+max_changed_files: 6
+max_new_files: 2
 max_dependency_additions: 0
-max_migration_files: 1
+max_migration_files: 0
 max_public_api_changes: 0
-max_regression_tests: 30
-scope_note: "Remove the scheduled full-database backup job and its health status while retaining manual backups; fix the lottery ledger by querying each owner separately so the shared 200-ticket limit cannot hide tickets."
+max_regression_tests: 0
+scope_note: "Reduce model performance history query work while preserving scoring and response behavior; add a dedicated bounded client timeout for that endpoint."
