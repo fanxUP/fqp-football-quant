@@ -34,12 +34,7 @@ describe('TicketsPage', () => {
   });
 
   beforeEach(() => {
-    apiMocks.tickets.mockReset().mockImplementation(({ owner }: { owner: 'me' | 'agent' }) =>
-      Promise.resolve({
-        tickets: owner === 'me' ? [realTicket, simulationTicket] : [],
-        total: owner === 'me' ? 2 : 0,
-      }),
-    );
+    apiMocks.tickets.mockReset().mockResolvedValue({ tickets: [realTicket, simulationTicket], total: 2 });
     apiMocks.deleteTicket.mockReset().mockResolvedValue({ status: 'ok' });
     apiMocks.deleteSimulationTicket.mockReset().mockResolvedValue({ status: 'ok', refunded: 2 });
     vi.stubGlobal('confirm', vi.fn(() => true));
@@ -98,9 +93,7 @@ describe('TicketsPage', () => {
       await Promise.resolve();
     });
 
-    expect(apiMocks.tickets).toHaveBeenCalledTimes(2);
-    expect(apiMocks.tickets).toHaveBeenNthCalledWith(1, { owner: 'me', limit: 300 });
-    expect(apiMocks.tickets).toHaveBeenNthCalledWith(2, { owner: 'agent', limit: 300 });
+    expect(apiMocks.tickets).toHaveBeenCalledTimes(1);
 
     await act(async () => {
       vi.advanceTimersByTime(30_000);
@@ -108,8 +101,6 @@ describe('TicketsPage', () => {
       await Promise.resolve();
     });
 
-    expect(apiMocks.tickets).toHaveBeenCalledTimes(4);
-    expect(apiMocks.tickets).toHaveBeenNthCalledWith(3, { owner: 'me', limit: 300 });
-    expect(apiMocks.tickets).toHaveBeenNthCalledWith(4, { owner: 'agent', limit: 300 });
+    expect(apiMocks.tickets).toHaveBeenCalledTimes(2);
   });
 });

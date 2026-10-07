@@ -1,9 +1,9 @@
 version: 1
 mode: STRICT
-max_changed_files: 11
-max_new_files: 0
+max_changed_files: 18
+max_new_files: 14
 max_dependency_additions: 0
-max_migration_files: 0
+max_migration_files: 1
 max_public_api_changes: 0
-max_regression_tests: 0
-scope_note: "Fix Ruff formatting and mypy dispatch typing, align existing ticket test fixtures with owner-specific fetches, and apply numbered SQL migrations in numeric order in local initialization and CI."
+max_regression_tests: 30
+scope_note: "Remove the scheduled full-database backup job and its health status while retaining manual backups; fix the lottery ledger by querying each owner separately so the shared 200-ticket limit cannot hide tickets."

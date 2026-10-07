@@ -35,35 +35,33 @@ def execute_recovery_task(task: dict[str, Any]) -> dict[str, Any]:
     """Dispatch one task using its normal idempotent job entrypoint."""
     code = str(task.get("task_code", ""))
     if code == "official_schedule":
-        from scripts.jobs.crawl_official_schedule import run as run_schedule
+        from scripts.jobs.crawl_official_schedule import run
 
-        return run_schedule()
+        return run()
     if code == "current_odds":
-        from scripts.jobs.run_official_odds_snapshot import run as run_odds_snapshot
+        from scripts.jobs.run_official_odds_snapshot import run
 
-        return run_odds_snapshot(dry_run=False)
+        return run(dry_run=False)
     if code == "build_feature_snapshots":
-        from scripts.jobs.run_feature_snapshot_build import run as run_feature_snapshot
+        from scripts.jobs.run_feature_snapshot_build import run
 
-        return run_feature_snapshot(dry_run=False)
+        return run(dry_run=False)
     if code == "run_model_prediction":
-        from scripts.jobs.run_model_prediction import run as run_model_prediction
+        from scripts.jobs.run_model_prediction import run
 
-        return run_model_prediction(dry_run=False)
+        return run(dry_run=False)
     if code == "run_recommendation_candidate":
-        from scripts.jobs.run_recommendation_candidate import run as run_recommendation_candidate
+        from scripts.jobs.run_recommendation_candidate import run
 
-        return run_recommendation_candidate(dry_run=False)
+        return run(dry_run=False)
     if code == "daily_review":
-        from scripts.jobs.generate_daily_review import run as run_daily_review
+        from scripts.jobs.generate_daily_review import run
 
-        return run_daily_review(
-            review_date=_business_date(task.get("business_window_start")), dry_run=False
-        )
+        return run(review_date=_business_date(task.get("business_window_start")), dry_run=False)
     if code == "settle_tickets":
-        from scripts.jobs.settle_tickets import run as run_settle_tickets
+        from scripts.jobs.settle_tickets import run
 
-        return run_settle_tickets(dry_run=False)
+        return run(dry_run=False)
     raise ValueError(f"Unsupported recovery task: {code}")
 
 
@@ -80,9 +78,7 @@ def execute_recovery_session(session_id: int, max_tasks: int = 200) -> dict[str,
             processed += 1
             try:
                 result = execute_recovery_task(task)
-                status = (
-                    str(result.get("status", "ok")).lower() if isinstance(result, dict) else "ok"
-                )
+                status = str(result.get("status", "ok")).lower() if isinstance(result, dict) else "ok"
                 if status in {"error", "failed", "blocked"}:
                     raise RuntimeError(str(result.get("error") or result.get("message") or result))
                 finish_recovery_task(conn, task["id"], "completed", output_refs={"result": result})

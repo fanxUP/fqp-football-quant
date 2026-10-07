@@ -156,7 +156,9 @@ def test_monthly_review_does_not_overwrite_completed_snapshot(monkeypatch) -> No
         lambda *_args, **_kwargs: True,
     )
     retry = MagicMock(return_value={"status": "skipped", "reason": "retry_cooldown"})
-    monkeypatch.setattr(generate_periodic_reviews, "retry_completed_report_interpretation", retry)
+    monkeypatch.setattr(
+        generate_periodic_reviews, "retry_completed_report_interpretation", retry
+    )
     monkeypatch.setattr(
         generate_periodic_reviews,
         "upsert_monthly_review",

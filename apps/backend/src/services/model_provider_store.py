@@ -511,7 +511,7 @@ def _probe_provider(
         if isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code == 429:
             return "failed", "服务商限额或频率受限，请稍后重试"
         return "failed", f"模型调用失败：{exc.__class__.__name__}"
-    except ValueError, KeyError, IndexError:
+    except (ValueError, KeyError, IndexError):
         return "failed", "模型返回格式无效，请核对兼容协议"
     if not content:
         return "failed", "所选模型未返回可用文本"

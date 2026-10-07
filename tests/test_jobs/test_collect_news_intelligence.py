@@ -122,5 +122,7 @@ def test_newsapi_free_tier_is_not_automated_in_production_without_explicit_opt_i
     assert result == {
         "status": "skipped",
         "reason": "no_eligible_provider_keys",
-        "skippedProviders": [{"provider": "newsapi", "reason": "free_plan_development_only"}],
+        "skippedProviders": [
+            {"provider": "newsapi", "reason": "free_plan_development_only"}
+        ],
     }

@@ -10,16 +10,6 @@ DATABASE_PASSWORD="${FQP_DATABASE_PASSWORD:-fqp_local_password}"
 PORT="${FQP_POSTGRES_PORT:-5432}"
 ADMIN_USER="${FQP_POSTGRES_ADMIN_USER:-$USER}"
 
-ordered_migrations() {
-  local migration filename version
-  for migration in "$PROJECT_ROOT"/sql/*.sql; do
-    filename="$(basename "$migration")"
-    [[ "$filename" =~ ^([0-9]+)_.*\.sql$ ]] || continue
-    version=$((10#${BASH_REMATCH[1]}))
-    printf '%s\t%s\n' "$version" "$migration"
-  done | sort -n -k1,1 | cut -f2-
-}
-
 [[ "$DATABASE_NAME" =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ ]] || {
   echo "Invalid database name: $DATABASE_NAME" >&2
   exit 1
@@ -67,11 +57,11 @@ SQL
 
 if (( database_created == 1 )); then
   export PGPASSWORD="$DATABASE_PASSWORD"
-  while IFS= read -r migration; do
+  for migration in "$PROJECT_ROOT"/sql/*.sql; do
     echo "[fqp-db] applying $(basename "$migration")"
     "$POSTGRES_BIN/psql" -h 127.0.0.1 -p "$PORT" -U "$DATABASE_USER" \
       -d "$DATABASE_NAME" -v ON_ERROR_STOP=1 -f "$migration" >/dev/null
-  done < <(ordered_migrations)
+  done
 
   {
     printf '%s\n' \
@@ -79,10 +69,10 @@ if (( database_created == 1 )); then
       'filename TEXT PRIMARY KEY,' \
       'applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()' \
       ');'
-    while IFS= read -r migration; do
+    for migration in "$PROJECT_ROOT"/sql/*.sql; do
       filename="$(basename "$migration")"
       printf "INSERT INTO local_schema_migrations (filename) VALUES ('%s') ON CONFLICT DO NOTHING;\n" "$filename"
-    done < <(ordered_migrations)
+    done
   } | "$POSTGRES_BIN/psql" -h 127.0.0.1 -p "$PORT" -U "$DATABASE_USER" \
     -d "$DATABASE_NAME" -v ON_ERROR_STOP=1 -q
 fi

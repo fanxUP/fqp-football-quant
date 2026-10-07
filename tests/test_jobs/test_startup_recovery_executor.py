@@ -15,10 +15,7 @@ def test_execute_recovery_task_dispatches_daily_review_window() -> None:
     }
     fake_module = types.ModuleType("scripts.jobs.generate_daily_review")
     fake_run = patch.object(fake_module, "run", return_value={"status": "ok"}, create=True)
-    with (
-        patch.dict(sys.modules, {"scripts.jobs.generate_daily_review": fake_module}),
-        fake_run as mocked_run,
-    ):
+    with patch.dict(sys.modules, {"scripts.jobs.generate_daily_review": fake_module}), fake_run as mocked_run:
         result = execute_recovery_task(task)
 
     assert result["status"] == "ok"
