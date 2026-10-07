@@ -264,8 +264,11 @@ export default function TicketsPage() {
       setError(null);
     }
     try {
-      const res = await api.betting.tickets({ limit: 200 });
-      setTickets(res.tickets);
+      const [mine, agent] = await Promise.all([
+        api.betting.tickets({ owner: 'me', limit: 300 }),
+        api.betting.tickets({ owner: 'agent', limit: 300 }),
+      ]);
+      setTickets([...mine.tickets, ...agent.tickets]);
       setLastUpdated(new Date().toLocaleString('zh-CN', { hour12: false }));
       setError(null);
     } catch (e) {

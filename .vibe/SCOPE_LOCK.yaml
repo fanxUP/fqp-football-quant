@@ -2,6 +2,9 @@ version: 1
 allowed_paths:
   - .vibe/CHANGE_BUDGET.yaml
   - .vibe/SCOPE_LOCK.yaml
+  - apps/frontend/src/pages/TicketsPage.tsx
+  - scripts/jobs/verify_backup.py
+  - apps/backend/src/services/pipeline_status.py
   - scripts/local/startup_preflight.py
   - scripts/jobs/recovery_plan.py
   - scripts/jobs/recovery_storage.py
@@ -26,4 +29,4 @@ forbidden_paths:
   - /etc/systemd/**
   - .env*
   - scripts/agent_storage.py
-out_of_scope: "Production systemd changes, real historical task execution, contamination repair, and destructive data changes remain out of scope for this status-dot hotfix."
+out_of_scope: "Database schema changes, ticket mutations, settlement or history rewrites, API contract changes, and unrelated UI work remain out of scope for the ticket-ledger fix and previously authorized backup-job removal."

@@ -6,4 +6,4 @@ max_dependency_additions: 0
 max_migration_files: 1
 max_public_api_changes: 0
 max_regression_tests: 30
-scope_note: "Phase 3 adds bounded recovery execution, persistent systemd activation, and a recency-bounded contamination audit fix."
+scope_note: "Remove the scheduled full-database backup job and its health status while retaining manual backups; fix the lottery ledger by querying each owner separately so the shared 200-ticket limit cannot hide tickets."
