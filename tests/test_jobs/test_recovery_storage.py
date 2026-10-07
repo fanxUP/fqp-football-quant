@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import MagicMock
 
 from scripts.jobs.recovery_storage import (
@@ -26,8 +26,8 @@ def test_create_recovery_session_is_idempotent_by_boot_id() -> None:
     result = create_recovery_session(
         conn,
         boot_id="boot-1",
-        outage_start=datetime(2026, 8, 28, tzinfo=timezone.utc),
-        outage_end=datetime(2026, 8, 29, tzinfo=timezone.utc),
+        outage_start=datetime(2026, 8, 28, tzinfo=UTC),
+        outage_end=datetime(2026, 8, 29, tzinfo=UTC),
         mode="plan",
     )
 
@@ -45,8 +45,8 @@ def test_task_plan_uses_stable_idempotency_key() -> None:
         7,
         {
             "task_code": "build_feature_snapshots",
-            "business_window_start": datetime(2026, 8, 28, tzinfo=timezone.utc),
-            "business_window_end": datetime(2026, 8, 29, tzinfo=timezone.utc),
+            "business_window_start": datetime(2026, 8, 28, tzinfo=UTC),
+            "business_window_end": datetime(2026, 8, 29, tzinfo=UTC),
             "idempotency_key": "7:build_feature_snapshots:2026-08-28",
             "strategy": "each_window",
         },
