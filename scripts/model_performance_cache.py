@@ -48,7 +48,7 @@ def _get_redis_client() -> Redis | None:
                 socket_connect_timeout=0.25,
                 socket_timeout=0.25,
             )
-        except (RedisError, ValueError):
+        except RedisError, ValueError:
             _logger.debug("Model history Redis cache is unavailable", exc_info=True)
             return None
     return _redis_client
@@ -74,7 +74,7 @@ def _read_cached_payload(client: Redis, key: str) -> tuple[dict[str, Any], float
         if not isinstance(payload, dict):
             raise ValueError("cached model history payload is not an object")
         return payload, max(0.0, time.time() - cached_at)
-    except (KeyError, TypeError, ValueError, json.JSONDecodeError):
+    except KeyError, TypeError, ValueError, json.JSONDecodeError:
         try:
             client.delete(key)
         except RedisError:
@@ -91,7 +91,7 @@ def _write_cached_payload(client: Redis, key: str, payload: dict[str, Any]) -> N
             allow_nan=False,
         )
         client.setex(key, _CACHE_TTL_SECONDS, envelope)
-    except (RedisError, TypeError, ValueError):
+    except RedisError, TypeError, ValueError:
         _logger.debug("Model history Redis write failed", exc_info=True)
 
 
@@ -148,9 +148,7 @@ def _schedule_refresh(client: Redis, key: str, window: int, days: int) -> None:
         _logger.exception("Could not start model history background refresh")
 
 
-def get_cached_model_performance_history(
-    *, window: int = 20, days: int = 365
-) -> dict[str, Any]:
+def get_cached_model_performance_history(*, window: int = 20, days: int = 365) -> dict[str, Any]:
     """Return fresh cached history, refresh stale history in the background, or query PostgreSQL."""
     client = _get_redis_client()
     key = _cache_key(window, days)

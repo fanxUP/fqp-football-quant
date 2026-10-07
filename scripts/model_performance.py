@@ -296,7 +296,8 @@ _PERFORMANCE_HISTORY_FROM_SCORED_PICKS_SQL = """
 
 # Reuse the exact prediction normalization/ranking/scoring CTEs from the
 # response query, stopping before its rolling-window aggregation.
-_REFRESH_SETTLED_PICKS_SQL = """
+_REFRESH_SETTLED_PICKS_SQL = (
+    """
     WITH settled_matches AS MATERIALIZED (
         SELECT
             match_id,
@@ -311,10 +312,15 @@ _REFRESH_SETTLED_PICKS_SQL = """
             half_full_result
         FROM model_performance_refresh_settled
     ),
-""" + _PERFORMANCE_HISTORY_SQL[
-    _PERFORMANCE_HISTORY_SQL.index("    normalized_predictions AS (") :
-    _PERFORMANCE_HISTORY_SQL.index("    evaluation_scopes AS (")
-].rstrip().removesuffix(",") + """
+"""
+    + _PERFORMANCE_HISTORY_SQL[
+        _PERFORMANCE_HISTORY_SQL.index(
+            "    normalized_predictions AS ("
+        ) : _PERFORMANCE_HISTORY_SQL.index("    evaluation_scopes AS (")
+    ]
+    .rstrip()
+    .removesuffix(",")
+    + """
     INSERT INTO model_performance_scored_picks (
         match_id, business_date, model_name, play_type, is_correct, refreshed_at
     )
@@ -325,6 +331,7 @@ _REFRESH_SETTLED_PICKS_SQL = """
         is_correct = EXCLUDED.is_correct,
         refreshed_at = EXCLUDED.refreshed_at
 """
+)
 
 
 def _iso_date(value: date | datetime | str) -> str:
@@ -539,9 +546,7 @@ def refresh_model_performance_scored_picks(
     }
 
 
-def _history_payload(
-    rows: list[tuple[Any, ...]], *, window: int, days: int
-) -> dict[str, Any]:
+def _history_payload(rows: list[tuple[Any, ...]], *, window: int, days: int) -> dict[str, Any]:
 
     points = [
         {

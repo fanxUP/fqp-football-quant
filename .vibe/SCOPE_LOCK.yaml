@@ -9,11 +9,6 @@ allowed_paths:
   - scripts/jobs/refresh_model_performance_history.py
   - scripts/jobs/run_scheduler.py
   - apps/backend/src/routers/analysis.py
-  - apps/backend/src/auth.py
-  - apps/backend/src/routers/betting.py
-  - apps/backend/src/services/model_provider_store.py
-  - apps/backend/src/services/report_performance.py
-  - apps/backend/src/services/report_snapshot.py
   - sql/103_model_performance_scored_picks.sql
   - sql/down/103_model_performance_scored_picks.down.sql
 forbidden_paths:
