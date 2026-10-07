@@ -204,7 +204,11 @@ def _run_season_reconciliation_retry() -> None:
 
 
 def _audited_job(
-    job_code: str, job_name: str, owner_agent: str, fn: Callable[[], Any]
+    job_code: str,
+    job_name: str,
+    owner_agent: str,
+    fn: Callable[[], Any],
+    schedule_type: str = "cron",
 ) -> Callable[[], None]:
     """Wrap a job function with agent audit logging (start/finish in ai_job_runs)."""
 
@@ -250,7 +254,7 @@ def _audited_job(
                         "job_code": job_code,
                         "job_name": job_name,
                         "owner_agent": owner_agent,
-                        "schedule_type": "cron",
+                        "schedule_type": schedule_type,
                         "environment": "prod",
                     },
                 )
@@ -340,6 +344,23 @@ def main() -> None:
             minutes=1,
             next_run_time=_business_now(timezone_name),
             id="startup_recovery",
+        )
+
+        # Backfill settled model picks once, then refresh recent result changes.
+        scheduler.add_job(
+            _audited_job(
+                "refresh_model_performance_history",
+                "模型表现历史汇总",
+                "backend_agent",
+                lambda: __import__(
+                    "scripts.jobs.refresh_model_performance_history", fromlist=["run"]
+                ).run(),
+                schedule_type="interval",
+            ),
+            "interval",
+            minutes=30,
+            next_run_time=_business_now(timezone_name),
+            id="refresh_model_performance_history",
         )
 
         # ----- Stage 2: official data jobs -----

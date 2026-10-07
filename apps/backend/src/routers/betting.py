@@ -488,7 +488,7 @@ def _round_result_bucket(bucket: dict) -> dict:
 def _valid_ticket_date(value: object) -> date | None:
     try:
         return date.fromisoformat(str(value)[:10])
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         return None
 
 
