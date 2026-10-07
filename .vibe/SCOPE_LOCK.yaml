@@ -1,36 +1,18 @@
 version: 1
 allowed_paths:
+  - .github/workflows/ci.yml
   - .vibe/CHANGE_BUDGET.yaml
   - .vibe/SCOPE_LOCK.yaml
-  - apps/backend/src/services/pipeline_status.py
-  - apps/frontend/src/pages/TicketsPage.tsx
-  - apps/frontend/src/pages/DataHealthPage.tsx
-  - apps/frontend/src/pages/DataHealthPage.test.tsx
-  - apps/frontend/src/pages/dataHealthPresentation.ts
-  - apps/frontend/src/pages/dataHealthPresentation.test.ts
-  - apps/frontend/src/theme/red_black_tech_tokens.css
-  - apps/frontend/src/theme/statusDotStyles.test.ts
-  - ops/systemd/fqp-scheduler.service.d/10-startup-recovery.conf
-  - scripts/jobs/audit_data_contamination.py
-  - scripts/jobs/recovery_plan.py
-  - scripts/jobs/recovery_storage.py
-  - scripts/jobs/run_scheduler.py
-  - scripts/jobs/startup_recovery.py
-  - scripts/jobs/startup_recovery_coordinator.py
+  - apps/backend/src/services/model_provider_store.py
+  - apps/frontend/src/pages/TicketsPage.test.tsx
+  - ops/local/init_local_database.sh
+  - scripts/jobs/collect_news_intelligence.py
   - scripts/jobs/startup_recovery_executor.py
-  - scripts/jobs/verify_backup.py
-  - scripts/local/startup_preflight.py
-  - sql/102_startup_recovery_sessions.sql
-  - tests/test_jobs/test_audit_data_contamination_scope.py
-  - tests/test_jobs/test_recovery_plan.py
-  - tests/test_jobs/test_recovery_storage.py
-  - tests/test_jobs/test_startup_recovery.py
-  - tests/test_jobs/test_startup_recovery_executor.py
-  - tests/test_local/test_startup_preflight.py
-  - tests/test_ops/test_startup_recovery_systemd.py
-  - tests/test_sql/test_startup_recovery_schema.py
+  - tests/test_computation/test_news_query_planner.py
+  - tests/test_jobs/test_collect_news_intelligence.py
+  - tests/test_jobs/test_generate_periodic_reviews.py
 forbidden_paths:
   - /etc/systemd/**
   - .env*
   - scripts/agent_storage.py
-out_of_scope: "Editing live /etc/systemd units, reconstructing historical minute-level odds, running heavy training, manually rewriting tickets or history, and unrelated public API or UI changes remain out of scope."
+out_of_scope: "Behavior changes, dependency changes, API changes, unrelated migrations, and server deployment actions are outside this CI, formatting, typing, and test-fixture repair."

@@ -44,7 +44,10 @@ def test_query_batches_prefer_english_aliases_but_keep_chinese_for_global_source
 
 
 def test_query_batch_rotation_eventually_covers_matches_beyond_each_run_limit() -> None:
-    matches = [_match(index, [f"球队{index}", f"Team {index}"], [f"客队{index}", f"Away {index}"]) for index in range(1, 10)]
+    matches = [
+        _match(index, [f"球队{index}", f"Team {index}"], [f"客队{index}", f"Away {index}"])
+        for index in range(1, 10)
+    ]
 
     first = build_provider_query_batches(matches, "gnews", rotation_slot=0, limit=3)
     second = build_provider_query_batches(matches, "gnews", rotation_slot=1, limit=3)
