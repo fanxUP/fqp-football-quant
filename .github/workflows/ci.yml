@@ -82,10 +82,19 @@ jobs:
       - name: Initialize test database schema
         run: |
           set -euo pipefail
-          for f in sql/*.sql; do
+          ordered_migrations() {
+            local migration filename version
+            for migration in sql/*.sql; do
+              filename="${migration##*/}"
+              [[ "$filename" =~ ^([0-9]+)_.*\.sql$ ]] || continue
+              version=$((10#${BASH_REMATCH[1]}))
+              printf '%s\t%s\n' "$version" "$migration"
+            done | sort -n -k1,1 | cut -f2-
+          }
+          while IFS= read -r f; do
             PGPASSWORD=fqp_test_password psql -X -v ON_ERROR_STOP=1 \
               -h localhost -U fqp -d fqp_test -f "$f"
-          done
+          done < <(ordered_migrations)
         env:
           PGPASSWORD: fqp_test_password
 
