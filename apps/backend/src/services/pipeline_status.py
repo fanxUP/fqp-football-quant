@@ -138,6 +138,9 @@ JOB_DEFINITIONS: dict[str, JobDefinition] = {
     "compute_evaluation_metrics": JobDefinition(
         "模型评估指标计算", "每日 23:40", "model", max_age=timedelta(hours=30)
     ),
+    "refresh_model_performance_history": JobDefinition(
+        "模型表现历史汇总", "每30分钟", "model", max_age=timedelta(hours=2)
+    ),
     "train_probability_calibration": JobDefinition(
         "概率校准影子评估", "每日 23:42", "model", max_age=timedelta(hours=30)
     ),
