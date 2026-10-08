@@ -1,9 +1,9 @@
-version: 2
+version: 3
 mode: STRICT
-max_changed_files: 24
-max_new_files: 10
+max_changed_files: 16
+max_new_files: 4
 max_dependency_additions: 0
 max_migration_files: 0
-max_public_api_changes: 2
-max_regression_tests: 32
-scope_note: "V2 P05/P06 from local V1, two read-only APIs, no dependencies or migrations."
+max_public_api_changes: 0
+max_regression_tests: 20
+scope_note: "V3a P07 match center only. Reuse existing evidence and read-only APIs."

@@ -1,16 +1,18 @@
-version: 2
-base_revision: a4759a2be3823aa09c611babb4b01c9773f58209
+version: 3
+base_revision: 3238bafa74d90184a6ddcbbb5f16739963b142af
 allowed_paths:
   - .vibe/
-  - docs/command-center-v2.md
-  - apps/frontend/src/features/command-center/
-  - apps/frontend/src/core/apiClient.ts
-  - apps/frontend/src/pages/DashboardPage.tsx
-  - apps/backend/src/routers/agents.py
-  - apps/backend/src/services/execution_evidence.py
-  - tests/test_api/test_execution_evidence.py
+  - docs/match-center-v3a.md
+  - apps/frontend/src/pages/MatchesPage.tsx
+  - apps/frontend/src/pages/MatchesPage.test.tsx
+  - apps/frontend/src/pages/MatchesPage.css
+  - apps/frontend/src/features/command-center/CommandCenter.tsx
+  - apps/frontend/src/features/command-center/MatchEvidence.tsx
+  - apps/frontend/src/features/command-center/MatchEvidence.test.tsx
 forbidden_paths:
   - .env*
   - sql/
-  - scripts/jobs/
-out_of_scope: "V3, financial/ML algorithms, task writes, tracking migrations, production data export, push/deployment. V2 continues from local V1."
+  - apps/backend/
+  - apps/frontend/package.json
+  - package-lock.json
+out_of_scope: "P07 remaining pages, P08/P09, algorithms, backend APIs, production data export, push/deployment."

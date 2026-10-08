@@ -1,88 +1,19 @@
 {
-  "base_revision": "a4759a2be3823aa09c611babb4b01c9773f58209",
+  "base_revision": "3238bafa74d90184a6ddcbbb5f16739963b142af",
   "upstream_revision": "74ebae2b11a3abda78abe851d95d58ee418e742c",
-  "source_sha256": "6923312832aa6a142147c62fed2c5292719c05e4bead90fe765b1a13162f3728",
+  "phase": "P07a",
   "source_paths": [
-    "apps/backend/src/routers/agents.py",
-    "apps/backend/src/services/execution_evidence.py",
-    "apps/frontend/src/core/apiClient.ts",
-    "apps/frontend/src/features/command-center/CommandWorkspace.tsx",
-    "apps/frontend/src/features/command-center/ExecutionCenter.test.tsx",
-    "apps/frontend/src/features/command-center/ExecutionCenter.tsx",
-    "apps/frontend/src/features/command-center/OperationScene.tsx",
-    "apps/frontend/src/features/command-center/PitchScene.tsx",
-    "apps/frontend/src/features/command-center/SceneViewport.tsx",
-    "apps/frontend/src/features/command-center/command-center.css",
-    "apps/frontend/src/features/command-center/execution.test.ts",
-    "apps/frontend/src/features/command-center/execution.ts",
-    "apps/frontend/src/features/command-center/useReadOnlyResource.ts",
-    "apps/frontend/src/pages/DashboardPage.tsx",
-    "tests/test_api/test_execution_evidence.py"
+    "apps/frontend/src/pages/MatchesPage.tsx",
+    "apps/frontend/src/pages/MatchesPage.css",
+    "apps/frontend/src/pages/MatchesPage.test.tsx",
+    "apps/frontend/src/features/command-center/CommandCenter.tsx",
+    "apps/frontend/src/features/command-center/MatchEvidence.tsx",
+    "apps/frontend/src/features/command-center/MatchEvidence.test.tsx"
   ],
-  "started_at": "2026-10-08T16:29:32.980610+00:00",
+  "source_sha256": "2983e9817c4edee90c8f9d3f57f531e2e166edf6457bfd78e9d8bcba75fb3ddf",
+  "started_at": "2026-10-08T16:46:30.310179+00:00",
   "commands": [
     {
-      "label": "ruff",
-      "command": [
-        "/private/tmp/fqp-pi-venv/bin/ruff",
-        "check",
-        "apps/backend/src/services/execution_evidence.py",
-        "apps/backend/src/routers/agents.py",
-        "tests/test_api/test_execution_evidence.py"
-      ],
-      "started_at": "2026-10-08T16:29:32.980809+00:00",
-      "finished_at": "2026-10-08T16:29:33.066846+00:00",
-      "exit_code": 0,
-      "log": "/private/tmp/fqp-v2-ruff-final.log"
-    },
-    {
-      "label": "format",
-      "command": [
-        "/private/tmp/fqp-pi-venv/bin/ruff",
-        "format",
-        "--check",
-        "apps/backend/src/services/execution_evidence.py",
-        "apps/backend/src/routers/agents.py",
-        "tests/test_api/test_execution_evidence.py"
-      ],
-      "started_at": "2026-10-08T16:29:33.066994+00:00",
-      "finished_at": "2026-10-08T16:29:33.158494+00:00",
-      "exit_code": 0,
-      "log": "/private/tmp/fqp-v2-format-final.log"
-    },
-    {
-      "label": "mypy",
-      "command": [
-        "/private/tmp/fqp-pi-venv/bin/mypy",
-        "apps/backend/src/services/execution_evidence.py",
-        "apps/backend/src/routers/agents.py",
-        "--explicit-package-bases"
-      ],
-      "started_at": "2026-10-08T16:29:33.158543+00:00",
-      "finished_at": "2026-10-08T16:29:33.700953+00:00",
-      "exit_code": 0,
-      "log": "/private/tmp/fqp-v2-mypy-final.log"
-    },
-    {
-      "label": "backend-tests",
-      "command": [
-        "/private/tmp/fqp-pi-venv/bin/python",
-        "-m",
-        "pytest",
-        "tests/test_api/test_execution_evidence.py",
-        "tests/test_api/test_agents.py",
-        "tests/test_api/test_ops.py",
-        "tests/test_auth.py",
-        "tests/test_storage/test_agent_storage.py",
-        "-q"
-      ],
-      "started_at": "2026-10-08T16:29:33.701000+00:00",
-      "finished_at": "2026-10-08T16:29:39.819079+00:00",
-      "exit_code": 0,
-      "log": "/private/tmp/fqp-v2-backend-tests-final.log"
-    },
-    {
-      "label": "typecheck",
       "command": [
         "npm",
         "--prefix",
@@ -90,28 +21,24 @@
         "run",
         "typecheck"
       ],
-      "started_at": "2026-10-08T16:29:39.819134+00:00",
-      "finished_at": "2026-10-08T16:30:00.221036+00:00",
+      "started_at": "2026-10-08T16:46:30.310449+00:00",
+      "finished_at": "2026-10-08T16:46:43.425502+00:00",
       "exit_code": 0,
-      "log": "/private/tmp/fqp-v2-typecheck-final.log"
+      "log": "/private/tmp/fqp-v3a-typecheck-final.log"
     },
     {
-      "label": "frontend-tests",
       "command": [
         "npm",
         "--prefix",
         "apps/frontend",
-        "test",
-        "--",
-        "--reporter=dot"
+        "test"
       ],
-      "started_at": "2026-10-08T16:30:00.221104+00:00",
-      "finished_at": "2026-10-08T16:31:30.375468+00:00",
+      "started_at": "2026-10-08T16:46:43.425614+00:00",
+      "finished_at": "2026-10-08T16:48:06.107687+00:00",
       "exit_code": 0,
-      "log": "/private/tmp/fqp-v2-frontend-tests-final.log"
+      "log": "/private/tmp/fqp-v3a-frontend-tests-final.log"
     },
     {
-      "label": "build",
       "command": [
         "npm",
         "--prefix",
@@ -119,14 +46,53 @@
         "run",
         "build"
       ],
-      "started_at": "2026-10-08T16:31:30.375530+00:00",
-      "finished_at": "2026-10-08T16:31:34.628797+00:00",
+      "started_at": "2026-10-08T16:48:06.107818+00:00",
+      "finished_at": "2026-10-08T16:48:08.805065+00:00",
       "exit_code": 0,
-      "log": "/private/tmp/fqp-v2-build-final.log"
+      "log": "/private/tmp/fqp-v3a-build-final.log"
     }
   ],
+  "production_data_export": false,
+  "deployment": false,
+  "independent_review": "pending",
+  "remaining": "P07 other business pages, P08/P09/P10; production contracts and release checks pending",
+  "source_unchanged": true,
+  "finished_at": "2026-10-08T16:48:08.806590+00:00",
+  "scope_budget": {
+    "checked_at": "2026-10-08T16:48:56.582742+00:00",
+    "base_revision": "3238bafa74d90184a6ddcbbb5f16739963b142af",
+    "changed_files": 15,
+    "new_files": 4,
+    "scope_violations": [],
+    "forbidden_changes": [],
+    "dependency_additions": 0,
+    "migrations": 0,
+    "public_api_changes": 0,
+    "tests_in_changed_suites": 20,
+    "new_regressions": 18,
+    "files": [
+      ".vibe/ACCEPTANCE.md",
+      ".vibe/BASELINE.yaml",
+      ".vibe/CHANGE_BUDGET.yaml",
+      ".vibe/DESIGN.md",
+      ".vibe/EVIDENCE.json",
+      ".vibe/PLAN.md",
+      ".vibe/SCOPE_LOCK.yaml",
+      ".vibe/TASK_DAG.yaml",
+      "apps/frontend/src/features/command-center/CommandCenter.tsx",
+      "apps/frontend/src/features/command-center/MatchEvidence.test.tsx",
+      "apps/frontend/src/features/command-center/MatchEvidence.tsx",
+      "apps/frontend/src/pages/MatchesPage.css",
+      "apps/frontend/src/pages/MatchesPage.test.tsx",
+      "apps/frontend/src/pages/MatchesPage.tsx",
+      "docs/match-center-v3a.md"
+    ],
+    "command": "custom Python scope/budget check against Git diff + untracked paths; harness engine unavailable",
+    "exit_code": 0
+  },
   "browser": {
-    "environment": "Chromium software WebGL test fixture; synthetic records explicitly labeled 界面测试, no production data; caveat probe relaxed only in test browser",
+    "environment": "Chromium headless, explicit synthetic UI test fixture, no production business data",
+    "started_at": "2026-10-08T16:47:31.408123+00:00",
     "checks": [
       {
         "viewport": [
@@ -169,62 +135,26 @@
         "scroll": 812
       }
     ],
-    "started_at": "2026-10-08T16:30:59.909572+00:00",
-    "single_canvas": true,
-    "history_step": true,
-    "theme_sync": {
-      "engine": "three.js r186",
-      "sceneFrames": "17",
-      "sceneCalls": "51",
-      "sceneGeometries": "3",
-      "sceneTextures": "0",
-      "sceneBackground": "#f5f7fa"
-    },
-    "after_30_mode_switches": {
-      "engine": "three.js r186",
-      "sceneFrames": "3",
-      "sceneCalls": "51",
-      "sceneGeometries": "3",
-      "sceneTextures": "0",
-      "sceneBackground": "#f5f7fa"
-    },
-    "context_loss": true,
+    "no_three_requests_or_canvas": true,
+    "keyboard_selection_filters_pagination": true,
+    "failed_refresh_retains_data_and_recovers": true,
+    "hidden_polling_paused_and_resumed": true,
+    "light_theme_reduced_motion": true,
+    "deep_link_existing_detail_route": true,
     "page_errors": [],
-    "finished_at": "2026-10-08T16:31:32.515620+00:00"
+    "finished_at": "2026-10-08T16:47:40.027253+00:00"
   },
-  "remaining": [
-    "Independent review before merge",
-    "New production API performance/contract not yet measured",
-    "Hardware GPU/two-hour endurance not measured",
-    "No push or deployment"
-  ],
-  "frontend_test_summary": [
-    "Test Files  82 passed (82)",
-    "Tests  332 passed (332)",
-    "Duration  88.29s (transform 2.94s, setup 7.94s, import 11.46s, tests 26.50s, environment 98.37s)"
-  ],
-  "backend_test_summary": [
-    "90 passed in 4.06s =============================="
-  ],
-  "scope_check": {
-    "changed_files": 24,
-    "new_files": 9,
-    "scope_violations": [],
-    "dependencies_added": 0,
-    "migrations_added": 0,
-    "public_apis_added": 2,
-    "new_tests": 31
+  "summary": {
+    "frontend_tests": 350,
+    "frontend_files": 83,
+    "added_regressions": 18,
+    "typecheck_exit_code": 0,
+    "build_exit_code": 0
   },
-  "red_evidence": {
-    "missing_backend_service": "/private/tmp/fqp-v2-backend-red.log",
-    "missing_frontend_presentation": "/private/tmp/fqp-v2-frontend-red.log",
-    "history_polling_failure": "/private/tmp/fqp-v2-history-red.log"
-  },
-  "self_review": {
-    "spec": "Local P05/P06 delivers bounded observations/reference gaps, not a fabricated full trace",
-    "architecture": "Existing tables, parameterized GETs, no migrations/dependencies, one Canvas",
-    "security": "401/422/404, numeric/reference allowlist, no raw prompt/errors/credentials, no production export",
-    "independent_review": "pending before merge",
-    "build_warning": "Three scene lazy chunk ~943 KB; existing >500 KB warning remains"
-  }
+  "limitations": [
+    "independent review pending",
+    "production contract/performance not rechecked",
+    "Three shared chunk size warning remains",
+    "P07 remaining pages and P08/P09/P10 not complete"
+  ]
 }
