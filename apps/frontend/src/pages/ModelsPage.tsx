@@ -86,6 +86,7 @@ export default function ModelsPage() {
       <ModelStats summary={summary} loading={loading} />
       <ModelPerformanceToolbar days={days} modelNames={modelNames} selectedModels={selectedModels} onDaysChange={setDays} onSelectedModelsChange={setSelectedModels} />
       <ModelEvaluationPanel models={evalModels} loading={evalLoading} error={evalError} onRetry={loadEvaluation} />
+      {performanceHistory.stale && <p role="status">模型曲线显示上次完成的数据，正在等待更新。{performanceHistory.refreshedAt ? `摘要更新时间：${new Date(performanceHistory.refreshedAt).toLocaleString('zh-CN', { hour12: false })}` : ''}</p>}
       <ModelPerformanceCharts points={performanceHistory.points} samples={performanceHistory.samples} days={performanceHistory.days} modelNames={modelNames} selectedModels={selectedModels} playType={playType} window={performanceHistory.window} loading={historyLoading} error={historyError} onRetry={loadHistory} onPlayTypeChange={setPlayType} />
       <ModelDiagnosticsPanel modelNames={modelNames} />
       <PredictionModelOverviewPanel />

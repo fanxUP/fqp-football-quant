@@ -363,37 +363,38 @@ def get_model_performance_history_auto(
     window: int = 20,
     days: int = 365,
 ) -> dict[str, Any]:
-    """Use persisted scored picks when ready, otherwise preserve the full-query fallback."""
+    """Serve the last completed summary, with freshness explicitly reported."""
     with conn.cursor() as cur:
+        cur.execute("SET LOCAL statement_timeout = '10s'")
         cur.execute("SELECT to_regclass(%s)", ("model_performance_scored_picks_state",))
         state_table = cur.fetchone()[0]
+        row = None
         if state_table is not None:
             cur.execute(
                 """
-                SELECT
-                    full_refreshed_at IS NOT NULL,
-                    last_refreshed_at >= NOW() - INTERVAL '2 hours'
-                FROM model_performance_scored_picks_state
-                WHERE singleton = TRUE
+                SELECT full_refreshed_at, last_refreshed_at,
+                       last_refreshed_at >= NOW() - INTERVAL '2 hours'
+                FROM model_performance_scored_picks_state WHERE singleton = TRUE
                 """
             )
             row = cur.fetchone()
-            ready = bool(row and row[0] and row[1])
-        else:
-            ready = False
-
-        if ready:
+        if row and row[0]:
             cur.execute(
                 _PERFORMANCE_HISTORY_FROM_SCORED_PICKS_SQL,
                 {"days": days, "preceding": window - 1},
             )
-            rows = cur.fetchall()
-        else:
-            rows = None
-
-    if rows is None:
-        return get_model_performance_history(conn, window=window, days=days)
-    return _history_payload(rows, window=window, days=days)
+            payload = _history_payload(cur.fetchall(), window=window, days=days)
+            payload.update(
+                source="scored_picks",
+                stale=not bool(row[2]),
+                refreshedAt=row[1].isoformat() if row[1] else None,
+            )
+            return payload
+        # A missing initial summary has a bounded compatibility fallback.
+        cur.execute("SET LOCAL statement_timeout = '5s'")
+    payload = get_model_performance_history(conn, window=window, days=days)
+    payload.update(source="raw_query", stale=False, refreshedAt=None)
+    return payload
 
 
 def refresh_model_performance_scored_picks(
@@ -403,7 +404,7 @@ def refresh_model_performance_scored_picks(
     overlap_days: int = 2,
     force_full: bool = False,
 ) -> dict[str, Any]:
-    """Backfill once, then refresh picks for recently changed official results."""
+    """Backfill once, then consume changed results and prediction invalidations."""
     try:
         with conn.cursor() as cur:
             cur.execute(
@@ -442,6 +443,10 @@ def refresh_model_performance_scored_picks(
                 """
             )
             state_row = cur.fetchone()
+            cur.execute("SELECT to_regclass('model_performance_dirty_matches')")
+            dirty_queue_ready = cur.fetchone()[0] is not None
+            cur.execute("SELECT clock_timestamp()")
+            refresh_started = cur.fetchone()[0]
             full_refresh = force_full or not state_row or bool(state_row[0])
 
             if full_refresh:
@@ -472,6 +477,12 @@ def refresh_model_performance_scored_picks(
                 matches_refreshed = int(cur.fetchone()[0])
                 refresh_type = "full"
             else:
+                dirty_targets = (
+                    "UNION SELECT match_id FROM model_performance_dirty_matches "
+                    "WHERE changed_at <= %(refresh_started)s"
+                    if dirty_queue_ready
+                    else ""
+                )
                 cur.execute(
                     """
                     CREATE TEMP TABLE model_performance_refresh_targets
@@ -481,8 +492,9 @@ def refresh_model_performance_scored_picks(
                     JOIN official_results r ON r.match_id = m.id
                     WHERE r.updated_at >= NOW() - %(overlap_days)s * INTERVAL '1 day'
                        OR m.updated_at >= NOW() - %(overlap_days)s * INTERVAL '1 day'
-                    """,
-                    {"overlap_days": overlap_days},
+                    """
+                    + dirty_targets,
+                    {"overlap_days": overlap_days, "refresh_started": refresh_started},
                 )
                 cur.execute("SELECT COUNT(*) FROM model_performance_refresh_targets")
                 matches_refreshed = int(cur.fetchone()[0])
@@ -521,6 +533,12 @@ def refresh_model_performance_scored_picks(
 
             cur.execute(_REFRESH_SETTLED_PICKS_SQL)
             scored_picks_written = max(cur.rowcount, 0)
+            if dirty_queue_ready:
+                # New invalidations after the refresh started remain for the next run.
+                cur.execute(
+                    "DELETE FROM model_performance_dirty_matches WHERE changed_at <= %s",
+                    (refresh_started,),
+                )
             cur.execute(
                 """
                 UPDATE model_performance_scored_picks_state
