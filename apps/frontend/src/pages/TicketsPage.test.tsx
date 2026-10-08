@@ -134,4 +134,15 @@ describe('TicketsPage', () => {
     await waitFor(() => expect(apiMocks.tickets).toHaveBeenLastCalledWith({ date: undefined, status: 'won', limit: 100 }));
   });
 
+  it('历史彩票在后续页面时不会误报为没有彩票', async () => {
+    const ownerSummary = { total: 1, stake: 2, settled: 0, pending: 1 };
+    apiMocks.tickets.mockResolvedValueOnce({ tickets: [{ ...realTicket, owner: 'agent' }], total: 2,
+      summary: { total: 2, stake: 4, settled: 0, pending: 2 },
+      byOwner: { me: ownerSummary, agent: ownerSummary }, nextCursor: 'older' });
+    render(<TicketsPage />);
+    expect(await screen.findByText('本页暂无彩票')).toBeInTheDocument();
+    expect(screen.getByText('符合筛选的彩票还在后续页面，请加载更多或按日期筛选。')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '加载更多' })).toBeInTheDocument();
+  });
+
 });

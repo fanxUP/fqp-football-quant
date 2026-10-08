@@ -222,7 +222,11 @@ function TicketColumn({ title, tickets, summary, deletingTicketId, onDelete }: {
       </div>
 
       {grouped.length === 0 ? (
-        <EmptyState icon="票" title="暂无彩票" description="投注台确认后会自动进入这里" />
+        <EmptyState
+          icon="票"
+          title={stats.total > 0 ? '本页暂无彩票' : '暂无彩票'}
+          description={stats.total > 0 ? '符合筛选的彩票还在后续页面，请加载更多或按日期筛选。' : '投注台确认后会自动进入这里'}
+        />
       ) : (
         <div className="lottery-date-list">
           {grouped.map(([date, items]) => (
