@@ -65,13 +65,16 @@ def run(apply: bool) -> None:
                         raise RuntimeError(f"Applied migration checksum changed: {path.name}")
                 else:
                     pending.append((path, checksum))
+            # Migration 93 deliberately grants only SELECT/INSERT on this
+            # append-only audit table; requiring UPDATE would reject production.
             cur.execute("""
                 SELECT c.relname FROM pg_class c
                 JOIN pg_namespace n ON n.oid = c.relnamespace
                 WHERE n.nspname = 'public' AND c.relkind IN ('r', 'p')
                   AND (NOT has_table_privilege(current_user, c.oid, 'SELECT')
                     OR NOT has_table_privilege(current_user, c.oid, 'INSERT')
-                    OR NOT has_table_privilege(current_user, c.oid, 'UPDATE'))
+                    OR (c.relname <> 'report_generation_revisions'
+                        AND NOT has_table_privilege(current_user, c.oid, 'UPDATE')))
             """)
             if cur.fetchall():
                 raise RuntimeError("Application role is missing table permissions")
