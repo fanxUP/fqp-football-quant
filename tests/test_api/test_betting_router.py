@@ -504,7 +504,7 @@ def test_list_betting_tickets_calculates_total_before_page_limit(monkeypatch):
         }
         for index in range(1, 24)
     ]
-    requested_limits: list[int] = []
+    requested = []
 
     class DbContext:
         def __enter__(self):
@@ -513,19 +513,28 @@ def test_list_betting_tickets_calculates_total_before_page_limit(monkeypatch):
         def __exit__(self, exc_type, exc, tb):
             return False
 
-    def collect(_conn, limit):
-        requested_limits.append(limit)
-        return tickets
+    def read_page(_conn, **params):
+        requested.append(params)
+        return {
+            "records": [("real", {"id": 1})],
+            "settlements": [],
+            "summary": {"total": 23, "stake": 46},
+            "byOwner": {"me": {"total": 23, "stake": 46}},
+            "nextCursor": "next-page",
+        }
 
     monkeypatch.setattr(betting, "get_db", lambda: DbContext())
-    monkeypatch.setattr(betting, "_collect_betting_tickets", collect)
+    monkeypatch.setattr(betting, "read_ledger_page", read_page)
+    monkeypatch.setattr(betting, "_map_real_ticket", lambda _raw: tickets[0])
+    monkeypatch.setattr(betting, "_attach_ticket_items", lambda *_args: None)
 
-    result = betting.list_betting_tickets(owner=None, date=None, status=None, limit=1)
+    result = betting.list_betting_tickets(owner=None, date=None, status=None, limit=1, cursor=None)
 
-    assert requested_limits == [300]
+    assert requested == [{"owner": None, "date": None, "status": None, "limit": 1, "cursor": None}]
     assert result["total"] == 23
     assert result["summary"]["stake"] == 46
     assert len(result["tickets"]) == 1
+    assert result["nextCursor"] == "next-page"
 
 
 def test_betting_results_updated_at_uses_business_timezone(monkeypatch):

@@ -1,9 +1,9 @@
 version: 1
 mode: STRICT
-max_changed_files: 30
-max_new_files: 10
+max_changed_files: 34
+max_new_files: 11
 max_dependency_additions: 0
 max_migration_files: 4
 max_public_api_changes: 4
-max_regression_tests: 0
-scope_note: "Ordered reliability improvements: atomic settlement, paginated tickets, repeatable Linux release, readiness, bounded history cache, manual backup integrity and metric semantics. No production writes or automatic backup enablement."
+max_regression_tests: 12
+scope_note: "User authorized submission/deployment and explicitly authorized regression test updates on 2026-10-08. Add targeted contract and settlement tests before release. No automatic backup enablement or historical financial correction."

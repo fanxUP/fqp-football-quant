@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import TicketsPage from './TicketsPage';
+import { calculateLedgerStats } from '../core/bettingTickets';
 
 const apiMocks = vi.hoisted(() => ({
   tickets: vi.fn(),
@@ -34,13 +35,16 @@ describe('TicketsPage', () => {
   });
 
   beforeEach(() => {
-    apiMocks.tickets.mockReset().mockImplementation(({ owner }: { owner: 'me' | 'agent' }) =>
-      Promise.resolve({
-        tickets: owner === 'me' ? [realTicket, simulationTicket] : [],
-        total: owner === 'me' ? 2 : 0,
-      }),
-    );
-    apiMocks.deleteTicket.mockReset().mockResolvedValue({ status: 'ok' });
+    let currentTickets = [realTicket, simulationTicket];
+    apiMocks.tickets.mockReset().mockImplementation(() => Promise.resolve({
+      tickets: currentTickets, total: currentTickets.length,
+      summary: calculateLedgerStats(currentTickets),
+      byOwner: { me: calculateLedgerStats(currentTickets) }, nextCursor: null,
+    }));
+    apiMocks.deleteTicket.mockReset().mockImplementation(async (id: number) => {
+      currentTickets = currentTickets.filter((ticket) => ticket.legacyId !== id);
+      return { status: 'ok' };
+    });
     apiMocks.deleteSimulationTicket.mockReset().mockResolvedValue({ status: 'ok', refunded: 2 });
     vi.stubGlobal('confirm', vi.fn(() => true));
   });
@@ -69,13 +73,12 @@ describe('TicketsPage', () => {
   });
 
   it('赢票使用红色、输票使用绿色，且卡片和大水印共用状态色', () => {
-    apiMocks.tickets.mockResolvedValueOnce({
-      tickets: [
+    const outcomeTickets = [
         { ...realTicket, ticketUid: 'real:13', ticketNumber: '20260714003', legacyId: 13, title: '赢票', status: 'settled', isWon: true },
         { ...realTicket, ticketUid: 'real:14', ticketNumber: '20260714004', legacyId: 14, title: '输票', status: 'settled', isWon: false },
-      ],
-      total: 2,
-    });
+      ];
+    apiMocks.tickets.mockResolvedValueOnce({ tickets: outcomeTickets, total: 2,
+      summary: calculateLedgerStats(outcomeTickets), byOwner: { me: calculateLedgerStats(outcomeTickets) }, nextCursor: null });
 
     const { container } = render(<TicketsPage />);
     return waitFor(() => {
@@ -98,9 +101,8 @@ describe('TicketsPage', () => {
       await Promise.resolve();
     });
 
-    expect(apiMocks.tickets).toHaveBeenCalledTimes(2);
-    expect(apiMocks.tickets).toHaveBeenNthCalledWith(1, { owner: 'me', limit: 300 });
-    expect(apiMocks.tickets).toHaveBeenNthCalledWith(2, { owner: 'agent', limit: 300 });
+    expect(apiMocks.tickets).toHaveBeenCalledTimes(1);
+    expect(apiMocks.tickets).toHaveBeenNthCalledWith(1, { date: undefined, status: undefined, limit: 100 });
 
     await act(async () => {
       vi.advanceTimersByTime(30_000);
@@ -108,8 +110,7 @@ describe('TicketsPage', () => {
       await Promise.resolve();
     });
 
-    expect(apiMocks.tickets).toHaveBeenCalledTimes(4);
-    expect(apiMocks.tickets).toHaveBeenNthCalledWith(3, { owner: 'me', limit: 300 });
-    expect(apiMocks.tickets).toHaveBeenNthCalledWith(4, { owner: 'agent', limit: 300 });
+    expect(apiMocks.tickets).toHaveBeenCalledTimes(2);
+    expect(apiMocks.tickets).toHaveBeenNthCalledWith(2, { date: undefined, status: undefined, limit: 100 });
   });
 });

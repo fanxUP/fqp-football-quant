@@ -29,7 +29,10 @@ allowed_paths:
   - sql/down/104_ticket_settlement_identity.down.sql
   - sql/105_model_performance_dirty_matches.sql
   - sql/down/105_model_performance_dirty_matches.down.sql
+  - apps/frontend/src/pages/TicketsPage.test.tsx
+  - tests/test_api/test_betting_router.py
+  - tests/test_jobs/test_verify_backup.py
+  - tests/test_scripts/test_ticket_settlement.py
 forbidden_paths:
   - .env*
-  - tests/**
-out_of_scope: "Live production deployment, live historical financial correction, new dependencies, full automatic backups, broad rewrites."
+out_of_scope: "Live historical financial correction, new dependencies, full automatic backups, broad rewrites. Submission, regression verification and guarded production deployment are authorized."
