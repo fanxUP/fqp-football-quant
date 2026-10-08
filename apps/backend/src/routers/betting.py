@@ -6,12 +6,13 @@ while giving the frontend one ticket ledger contract to render.
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from apps.backend.src.db import get_db
+from scripts.betting_ledger import read_ledger_page
 from scripts.business_time import business_now, business_today
 from scripts.real_ticket_storage import (
     create_real_ticket,
@@ -27,8 +28,6 @@ from scripts.simulator_storage import list_simulator_tickets
 from scripts.sporttery_sales import get_sporttery_sales_window
 
 router = APIRouter(tags=["betting"])
-
-BETTING_LEDGER_SCAN_LIMIT = 300
 
 
 class BettingTicketItemRequest(BaseModel):
@@ -759,34 +758,65 @@ def _collect_betting_tickets(conn, limit: int) -> list[dict]:
 
 @router.get("/api/betting/tickets")
 def list_betting_tickets(
-    owner: str | None = Query(None, description="me | agent"),
-    date: str | None = Query(None, description="YYYY-MM-DD"),
-    status: str | None = Query(None),
+    owner: str | None = Query(None, pattern="^(me|agent)$"),
+    date: str | None = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
+    status: str | None = Query(None, pattern="^(pending|settled|won|lost|cancelled)$"),
     limit: int = Query(100, ge=1, le=300),
+    cursor: str | None = Query(None, max_length=256),
 ):
-    """Return a unified ticket ledger for the betting center."""
-    with get_db() as conn:
-        # ``limit`` controls the response page, not the aggregate totals. Scan
-        # the complete supported ledger window before filtering and slicing.
-        tickets = _collect_betting_tickets(conn, BETTING_LEDGER_SCAN_LIMIT)
-
-    if owner:
-        tickets = [ticket for ticket in tickets if ticket["owner"] == owner]
-    if date:
-        tickets = [ticket for ticket in tickets if ticket["date"] == date]
-    if status:
-        tickets = [ticket for ticket in tickets if ticket["status"] == status]
-
-    tickets.sort(key=lambda ticket: ticket.get("createdAt") or "", reverse=True)
-
-    summary = {
-        "total": len(tickets),
-        "stake": round(sum(float(ticket.get("stake") or 0) for ticket in tickets), 2),
-        "settled": len([ticket for ticket in tickets if ticket.get("status") == "settled"]),
-        "pending": len([ticket for ticket in tickets if ticket.get("status") == "pending"]),
-        "profitLoss": round(sum(float(ticket.get("profitLoss") or 0) for ticket in tickets), 2),
+    """Return a filtered page and totals over the entire matching ledger."""
+    try:
+        if date:
+            datetime.strptime(date, "%Y-%m-%d")
+        with get_db() as conn:
+            page = read_ledger_page(
+                conn,
+                owner=owner,
+                date=date,
+                status=status,
+                limit=limit,
+                cursor=cursor,
+            )
+            tickets = []
+            for source, raw in page["records"]:
+                if source == "simulator":
+                    ticket = _map_simulator_ticket(raw)
+                elif source == "real":
+                    ticket = _map_real_ticket(raw)
+                else:
+                    created = (
+                        datetime.fromisoformat(raw["created_at"]) if raw.get("created_at") else None
+                    )
+                    ticket = _map_agent_ticket(
+                        (
+                            raw["id"],
+                            raw.get("suggested_stake"),
+                            raw.get("expected_value"),
+                            raw.get("strategy_pool"),
+                            raw.get("risk_level"),
+                            raw.get("ticket_status"),
+                            created,
+                            raw.get("pass_type"),
+                            raw.get("ticket_type"),
+                            raw["item_count"],
+                            raw.get("multiple"),
+                            raw.get("bet_count"),
+                            raw.get("ledger_ticket_no"),
+                            raw.get("max_return"),
+                        )
+                    )
+                tickets.append(ticket)
+            _apply_settlements(tickets, page["settlements"])
+            _attach_ticket_items(conn, tickets)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail="日期或分页游标无效") from exc
+    return {
+        "tickets": tickets,
+        "total": page["summary"]["total"],
+        "summary": page["summary"],
+        "byOwner": page["byOwner"],
+        "nextCursor": page["nextCursor"],
     }
-    return {"tickets": tickets[:limit], "total": len(tickets), "summary": summary}
 
 
 @router.get("/api/betting/results")

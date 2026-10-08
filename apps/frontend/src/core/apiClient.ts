@@ -880,13 +880,15 @@ export const api = {
       status: string; ticketUid: string; legacyId: number; source: 'time_machine';
       purchaseDate: string; stake: number; maxPrize: number; betCount: number; settlement: string;
     }>('/api/betting/time-machine/tickets', { method: 'POST', body: JSON.stringify(body) }),
-    tickets: (params?: { owner?: 'me' | 'agent'; date?: string; status?: string; limit?: number }) =>
+    tickets: (params?: { owner?: 'me' | 'agent'; date?: string; status?: string; limit?: number; cursor?: string }) =>
       request<{
         tickets: import('./types').BettingTicket[];
         total: number;
         summary: import('./types').BettingTicketSummary;
+        byOwner: Partial<Record<'me' | 'agent', import('./types').BettingTicketSummary>>;
+        nextCursor: string | null;
       }>(
-        `/api/v1/betting/tickets${qs({ owner: params?.owner, date: params?.date, status: params?.status, limit: params?.limit ?? 100 })}`,
+        `/api/v1/betting/tickets${qs({ owner: params?.owner, date: params?.date, status: params?.status, limit: params?.limit ?? 100, cursor: params?.cursor })}`,
       ),
     results: (params?: { limit?: number }) =>
       request<import('./types').BettingResults>(
