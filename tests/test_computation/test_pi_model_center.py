@@ -254,7 +254,11 @@ def test_login_without_supported_provider_never_starts_upstream(monkeypatch) -> 
 def test_credential_connection_reuses_private_libpq_password(monkeypatch) -> None:
     caller = MagicMock()
     caller.dsn = "host=example.test password=xxx"
-    caller.info.dsn_parameters = {"host": "example.test", "dbname": "isolated", "sslmode": "require"}
+    caller.info.dsn_parameters = {
+        "host": "example.test",
+        "dbname": "isolated",
+        "sslmode": "require",
+    }
     caller.info.password = "unit-test-only-database-password"
     connection = MagicMock()
     connect = MagicMock(return_value=connection)
