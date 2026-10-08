@@ -200,7 +200,8 @@ describe('Sidebar', () => {
 
       await waitFor(() => expect(screen.getByText('彩票台账')).toBeTruthy());
       const navItem = screen.getByText('彩票台账').closest('.fqp-nav-item');
-      expect(navItem?.querySelector('.fqp-nav-icon')?.textContent).toBe('🎫');
+      expect(navItem?.querySelector('.fqp-nav-icon svg')).toBeTruthy();
+      expect(navItem?.querySelector('.fqp-nav-icon')?.textContent).toBe('');
       expect(container.textContent).not.toContain('ticket彩票台账');
     });
   });
@@ -317,18 +318,18 @@ describe('Sidebar', () => {
       expect(screen.getByText('切换黑红主题')).toBeTruthy();
     });
 
-    it('shows ☀️ in dark mode', () => {
+    it('shows a decorative sun SVG in dark mode', () => {
       mockTheme = 'redline-quant';
       renderSidebar();
       const toggle = screen.getByText('切换极地浅色');
-      expect(toggle.parentElement?.textContent).toContain('☀️');
+      expect(toggle.parentElement?.querySelector('svg path')?.getAttribute('d')).toContain('M12 7');
     });
 
-    it('shows 🌙 in light mode', () => {
+    it('shows a decorative moon SVG in light mode', () => {
       mockTheme = 'polar-lab';
       renderSidebar();
       const toggle = screen.getByText('切换黑红主题');
-      expect(toggle.parentElement?.textContent).toContain('🌙');
+      expect(toggle.parentElement?.querySelector('svg path')?.getAttribute('d')).toContain('M20 15');
     });
   });
 

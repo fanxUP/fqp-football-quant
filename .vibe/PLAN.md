@@ -1,9 +1,40 @@
-# Plan
+# FQP 分阶段实施计划
 
-- P1 / A1: Add pinned server bridge and catalog/compatible completion adapters.
-- P2 / A2: Extend encrypted credential persistence, preserve existing configurations and serialize refresh.
-- P3 / A3: Add bounded authenticated OAuth start/status/input/cancel lifecycle.
-- P4 / A4: Build searchable supplier/model selection and supported authentication UI.
-- P5 / A5: Update regression coverage, verify bridge, Python/static checks and frontend; document setup and deployment dependency gate.
+日期：2026-10-08｜V1 实施阶段｜总体 STRICT｜详见 DESIGN.md
 
-- P6: User authorized submission and deployment on 2026-10-08. Commit, run Linux CI, merge, prepare pinned Node dependency separately, rehearse migration on a database copy, take a fresh backup, deploy exact main SHA and verify protected HTTP and version agreement.
+每个 P 对应一个主要 A；每个阶段产物独立审查，完成该阶段验收后再扩展范围。
+
+| ID | 阶段 | 工作及主要范围 | 前置 | 主要验收 |
+|---|---|---|---|---|
+| P01 | Phase 0 | 当前主分支与运行态审计、阵容覆盖、任务引用覆盖、业务/性能基线 | 无 | A01 |
+| P02 | Phase 1 | 现有主题/公共组件升级、全局状态栏、导航映射与注册同步 | P01 | A02 |
+| P03 | Phase 2 | 依赖兼容确认、SceneCanvas、球场、镜头、主题适配、性能与回退 | P02 | A03 |
+| P04 | Phase 3 | DashboardPage 真实数据查询适配、赛事与场景双向选择、异常与时效 | P03 | A04 |
+| P05 | Phase 4a | 注册与任务对象映射、只读执行详情、真实 Agent 状态网络 | P04 | A05 |
+| P06 | Phase 4b | 上下游证据、快照/模型关联、任务管线、可信动画与历史回放 | P05 | A06 |
+| P07 | Phase 5a | 赛事、预测、赔率、投注、回测、复盘、新闻、报告的二维升级 | P04 | A07 |
+| P08 | Phase 5b | 阵容/伤停只读契约补齐、战术场景、来源时间与示意布局 | P07 | A08 |
+| P09 | Phase 5c | 模型版本与特征结构、预测比较入口、保留二维统计 | P07 | A09 |
+| P10 | Phase 6 | 综合回归、浏览器与 GPU 耐久性、按版本提交发布与回退材料 | P06,P08,P09 | A10 |
+
+## 阶段工作约束
+
+- V1 = P01–P04；V2 = P05–P06；V3 = P07–P10。允许先发布 V1/V2 的可用部分，各自完成质量与发布检查。
+- 每个 P 拆为可审查 PR；P07 按页面拆，不将所有业务页一次重写。
+- P01 输出具体允许修改文件清单与差异预算。当前方案不预设无限文件修改权限。
+- V1 限于 frontend、必要 UI 注册配置、相关测试/文档及 lockfile。已有数据不足时准确显示缺口。
+- P05/P06/P08 允许提出只读后端字段扩展；生产任务写入、SQL 迁移、数据采购分别记录独立设计。
+- 预测算法、官方采集规则、每日预算规则、历史回测及结算口径沿用现有实现。
+- 验证贯穿阶段；测试与构建结果必须记录提交和环境。V1 已开始实现与验证，逐项结果见 EVIDENCE.json；V2/V3 尚未开始。
+- 实施前重新同步 GitHub main，确认与服务器基线一致，沿用原用户授权的验证流程。
+
+## 各阶段验证计划
+
+- P02：主题持久化/预览、12 主题公共组件、禁用模块导航、旧链接、键盘与响应式。
+- P03：typecheck/build、WebGL 2 检测、镜头操作、主题映射、context lost、清理和二维回退。
+- P04：接口错误/超时/缓存旧数据、选择双向联动、业务日期/覆盖口径、零与缺失区分。
+- P05/P06：真实任务状态、未知/过期/心跳异常、脱敏、证据缺失、没有记录时不播放传输、隐藏暂停。
+- P07–P09：已有页面回归、资金来源隔离、玩法与概率口径、快照时间/来源、无未来信息、模型比较条件。
+- P10：现有 CI 全量、GPU 实机场景、2 小时耐久与 30 次切换、Nginx 静态权限/资源版本、服务与保护接口、回退检查。
+
+实际命令以当前 package.json、CI 和服务配置为准，例如 `npm --prefix apps/frontend run typecheck`、`npm --prefix apps/frontend test`、`npm --prefix apps/frontend run build`。增加后端时沿用 Ruff、Mypy 和相关 pytest；本方案中的命令尚未运行。

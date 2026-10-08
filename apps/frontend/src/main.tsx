@@ -4,6 +4,7 @@ import App from './App';
 import './theme/red_black_tech_tokens.css';
 import './theme/themes.css';
 import './theme/appearance.css';
+import './features/command-center/command-center.css';
 import './theme/tokens/base.css';
 import './theme/themes/redline-quant.css';
 import './theme/themes/black-gold-terminal.css';

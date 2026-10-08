@@ -1,4 +1,19 @@
-base_revision: 84945eef2b74c696d52b18e33ee31a3dc2dfc07c
-branch: integrate/pi-model-center
-workspace: /private/tmp/fqp-pi-model-center
-task: Direct Pi model center integration requested 2026-10-08
+version: 1
+base_revision: 74ebae2b11a3abda78abe851d95d58ee418e742c
+branch: feat/3d-command-center-v1
+workspace: /private/tmp/fqp-command-center
+verified_at: '2026-10-08T15:28:00Z'
+github_main_revision: 74ebae2b11a3abda78abe851d95d58ee418e742c
+server_revision: 74ebae2b11a3abda78abe851d95d58ee418e742c
+server_services_state: active
+lineup_snapshots: 188
+lineup_with_source: 188
+latest_lineup_snapshot: '2026-10-07T23:42:00'
+job_runs: 167587
+job_runs_with_input: 22444
+job_runs_with_output: 167248
+active_matches: 124
+active_with_lineup: 0
+active_with_lineup_source: 0
+active_with_lineup_players: 0
+limitations: 'Historical aggregate coverage is not current match coverage or causal links. Dashboard meta.updated_at is response generation time. Long GPU baseline pending.'

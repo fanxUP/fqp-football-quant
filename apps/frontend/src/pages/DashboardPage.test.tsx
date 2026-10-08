@@ -2,9 +2,11 @@ import { StrictMode } from 'react';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import DashboardPage from './DashboardPage';
+import { LiveStatusProvider } from '../features/command-center/LiveStatus';
 
 const api = vi.hoisted(() => ({
   health: vi.fn().mockResolvedValue({ status: 'ok' }),
+  ops: { pipeline: vi.fn().mockResolvedValue({ jobs: [], sources: [] }) },
   teams: vi.fn().mockResolvedValue({ total: 0, teams: [] }),
   predictions: vi.fn().mockResolvedValue({ total: 0, predictions: [] }),
   tickets: vi.fn().mockResolvedValue({ total: 0, tickets: [] }),
@@ -18,6 +20,7 @@ const api = vi.hoisted(() => ({
 }));
 
 vi.mock('../core/apiClient', () => ({ api }));
+vi.mock('../features/command-center/CommandCenter', () => ({ default: () => <div /> }));
 vi.mock('../shared/components/ChartCard', () => ({ default: () => <div /> }));
 vi.mock('../visualization', () => ({
   RoiLineChart: () => <div />,
@@ -47,7 +50,7 @@ describe('DashboardPage', () => {
   });
 
   it('loads its initial dashboard data once in StrictMode', async () => {
-    render(<StrictMode><DashboardPage /></StrictMode>);
+    render(<StrictMode><LiveStatusProvider><DashboardPage /></LiveStatusProvider></StrictMode>);
 
     await waitFor(() => expect(api.dashboard.today).toHaveBeenCalledTimes(1));
     expect(api.health).toHaveBeenCalledTimes(1);
@@ -58,7 +61,7 @@ describe('DashboardPage', () => {
   it('使用真实 Agent 投入和待开奖数，并定时刷新驾驶舱', async () => {
     vi.useFakeTimers();
 
-    render(<DashboardPage />);
+    render(<LiveStatusProvider><DashboardPage /></LiveStatusProvider>);
     await act(async () => {
       await Promise.resolve();
       await Promise.resolve();

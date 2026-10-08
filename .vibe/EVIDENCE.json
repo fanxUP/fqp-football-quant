@@ -1,0 +1,344 @@
+{
+  "base_revision": "74ebae2b11a3abda78abe851d95d58ee418e742c",
+  "branch": "feat/3d-command-center-v1",
+  "recorded_at": "2026-10-08T16:01:35.704035+00:00",
+  "environment": {
+    "node": "v24.18.0",
+    "npm": "11.16.0"
+  },
+  "commands": [
+    {
+      "label": "typecheck",
+      "command": [
+        "npm",
+        "run",
+        "typecheck"
+      ],
+      "started_at": "2026-10-08T16:01:36.356105+00:00",
+      "finished_at": "2026-10-08T16:01:47.263980+00:00",
+      "exit_code": 0,
+      "log": "/private/tmp/fqp-command-typecheck-final.log"
+    },
+    {
+      "label": "tests",
+      "command": [
+        "npm",
+        "test",
+        "--",
+        "--reporter=dot"
+      ],
+      "started_at": "2026-10-08T16:01:47.264060+00:00",
+      "finished_at": "2026-10-08T16:02:55.702578+00:00",
+      "exit_code": 0,
+      "log": "/private/tmp/fqp-command-tests-final.log"
+    },
+    {
+      "label": "build",
+      "command": [
+        "npm",
+        "run",
+        "build"
+      ],
+      "started_at": "2026-10-08T16:02:55.702615+00:00",
+      "finished_at": "2026-10-08T16:02:57.873483+00:00",
+      "exit_code": 0,
+      "log": "/private/tmp/fqp-command-build-final.log"
+    }
+  ],
+  "frontend_source_sha256": "81322730bdb27d1735092061cacb4332cf0996da34feab4788d61792193150c3",
+  "test_summary": [
+    "Test Files  80 passed (80)",
+    "Tests  315 passed (315)",
+    "Duration  67.39s (transform 2.31s, setup 6.60s, import 9.07s, tests 20.96s, environment 73.87s)"
+  ],
+  "dependency_audit": {
+    "vulnerabilities": {
+      "info": 0,
+      "low": 0,
+      "moderate": 0,
+      "high": 0,
+      "critical": 0,
+      "total": 0
+    },
+    "dependencies": {
+      "prod": 25,
+      "dev": 148,
+      "optional": 36,
+      "peer": 11,
+      "peerOptional": 0,
+      "total": 172
+    }
+  },
+  "production_contract": {
+    "checked_at": "2026-10-08T15:54:46Z",
+    "mode": "server-side contract checks; no business records exported",
+    "checks": [
+      {
+        "endpoint": "/health",
+        "http_status": 200,
+        "duration_ms": 6
+      },
+      {
+        "endpoint": "/api/dashboard/today",
+        "http_status": 200,
+        "duration_ms": 869
+      },
+      {
+        "endpoint": "/api/ops/pipeline",
+        "http_status": 200,
+        "duration_ms": 410
+      },
+      {
+        "endpoint": "/api/matches/active",
+        "http_status": 200,
+        "duration_ms": 15
+      },
+      {
+        "endpoint": "/api/matches/:id/detail",
+        "http_status": 200,
+        "duration_ms": 253
+      },
+      {
+        "endpoint": "/api/official/matches/:id/odds-snapshots",
+        "http_status": 200,
+        "duration_ms": 25
+      },
+      {
+        "endpoint": "/api/matches/:id/detail",
+        "http_status": 200,
+        "duration_ms": 97
+      },
+      {
+        "endpoint": "/api/official/matches/:id/odds-snapshots",
+        "http_status": 200,
+        "duration_ms": 24
+      },
+      {
+        "endpoint": "/api/matches/:id/detail",
+        "http_status": 200,
+        "duration_ms": 103
+      },
+      {
+        "endpoint": "/api/official/matches/:id/odds-snapshots",
+        "http_status": 200,
+        "duration_ms": 12
+      },
+      {
+        "endpoint": "/api/matches/:id/detail",
+        "http_status": 200,
+        "duration_ms": 140
+      },
+      {
+        "endpoint": "/api/official/matches/:id/odds-snapshots",
+        "http_status": 200,
+        "duration_ms": 12
+      }
+    ],
+    "dashboard_has_business_date": true,
+    "dashboard_meta_is_response_time": true,
+    "active_match_count": 124,
+    "selected_contracts": [
+      {
+        "identity_match": true,
+        "odds_match_ids_valid": true,
+        "latest_time_option_count": 3,
+        "snapshot_ids_are_per_option": true
+      },
+      {
+        "identity_match": true,
+        "odds_match_ids_valid": true,
+        "latest_time_option_count": 3,
+        "snapshot_ids_are_per_option": true
+      },
+      {
+        "identity_match": true,
+        "odds_match_ids_valid": true,
+        "latest_time_option_count": 3,
+        "snapshot_ids_are_per_option": true
+      },
+      {
+        "identity_match": true,
+        "odds_match_ids_valid": true,
+        "latest_time_option_count": 3,
+        "snapshot_ids_are_per_option": true
+      }
+    ],
+    "passed": true
+  },
+  "scope_counts": {
+    "changed_files": 34,
+    "new_files": 15,
+    "max_changed_files": 34,
+    "max_new_files": 18,
+    "scope_verified": true
+  },
+  "remaining": [
+    "Real authenticated browser preview awaits optional export permission; no production records copied",
+    "Hardware GPU/FPS/VRAM and two-hour endurance not measured",
+    "V2/V3 not implemented",
+    "No PR merge or production deployment performed"
+  ],
+  "browser_fallback": {
+    "environment": "Chromium headless; business APIs intentionally unavailable; no production data copied",
+    "browser": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.7827.55 Safari/537.36",
+    "checks": [
+      {
+        "viewport": [
+          1920,
+          1080
+        ],
+        "width": 1920,
+        "scroll": 1920
+      },
+      {
+        "viewport": [
+          1440,
+          1000
+        ],
+        "width": 1440,
+        "scroll": 1440
+      },
+      {
+        "viewport": [
+          3840,
+          2160
+        ],
+        "width": 3840,
+        "scroll": 3840
+      },
+      {
+        "viewport": [
+          375,
+          812
+        ],
+        "width": 375,
+        "scroll": 375
+      },
+      {
+        "viewport": [
+          812,
+          375
+        ],
+        "width": 812,
+        "scroll": 812
+      }
+    ],
+    "disabled_renderer_not_downloaded": true,
+    "page_errors": []
+  },
+  "browser_software_webgl": {
+    "environment": "Chromium software WebGL; performance caveat detection relaxed only in test browser; APIs intentionally unavailable; no production records copied",
+    "browser": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.7827.55 Safari/537.36",
+    "checks": [
+      {
+        "viewport": [
+          1920,
+          1080
+        ],
+        "width": 1920,
+        "scroll": 1920
+      },
+      {
+        "viewport": [
+          1440,
+          1000
+        ],
+        "width": 1440,
+        "scroll": 1440
+      },
+      {
+        "viewport": [
+          3840,
+          2160
+        ],
+        "width": 3840,
+        "scroll": 3840
+      },
+      {
+        "viewport": [
+          375,
+          812
+        ],
+        "width": 375,
+        "scroll": 375
+      },
+      {
+        "viewport": [
+          812,
+          375
+        ],
+        "width": 812,
+        "scroll": 812
+      }
+    ],
+    "idle_render": {
+      "before": {
+        "engine": "three.js r186",
+        "sceneFrames": "8",
+        "sceneCalls": "35",
+        "sceneGeometries": "35",
+        "sceneTextures": "1",
+        "sceneBackground": "#0b0f16"
+      },
+      "after": {
+        "engine": "three.js r186",
+        "sceneFrames": "8",
+        "sceneCalls": "35",
+        "sceneGeometries": "35",
+        "sceneTextures": "1",
+        "sceneBackground": "#0b0f16"
+      }
+    },
+    "live_theme_sync": {
+      "theme": "polar-lab",
+      "scene": "#f5f7fa",
+      "token": "#f5f7fa"
+    },
+    "camera_counters": {
+      "engine": "three.js r186",
+      "sceneFrames": "20",
+      "sceneCalls": "35",
+      "sceneGeometries": "35",
+      "sceneTextures": "1",
+      "sceneBackground": "#0b0f16"
+    },
+    "after_30_switches": {
+      "engine": "three.js r186",
+      "sceneFrames": "1",
+      "sceneCalls": "35",
+      "sceneGeometries": "35",
+      "sceneTextures": "1",
+      "sceneBackground": "#0b0f16"
+    },
+    "context_loss": "2D fallback displayed",
+    "disabled_renderer_not_downloaded": true,
+    "theme_selection": [
+      "redline-quant",
+      "black-gold-terminal",
+      "deep-navy",
+      "graphite-minimal",
+      "crimson-arena",
+      "tactical-board",
+      "global-match-center",
+      "quantum-forecast",
+      "neon-grid",
+      "code-matrix",
+      "polar-lab",
+      "anime-striker"
+    ],
+    "page_errors": []
+  },
+  "current_lineup_coverage": {
+    "active_matches": 124,
+    "active_with_lineup": 0,
+    "active_with_source": 0,
+    "active_with_player_rows": 0
+  },
+  "review": {
+    "spec": "V1 P01–P04 implementation; production browser/GPU acceptance remains partial",
+    "architecture": "Existing HTTP/poll/CSS/state retained; two pinned runtime packages; no new service/API endpoint/SQL migration",
+    "code_review": "Manual self-review; selection race and per-option snapshot identity corrected with regressions; bounded odds endpoint replaces unbounded history reads",
+    "independent_review": "Not performed; required before merge",
+    "security": "No credentials or business exports in diff; existing authenticated GETs; npm production audit 0 vulnerabilities"
+  }
+}

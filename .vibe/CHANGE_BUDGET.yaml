@@ -1,9 +1,9 @@
 version: 1
 mode: STRICT
-max_changed_files: 35
-max_new_files: 17
-max_dependency_additions: 1
-max_migration_files: 2
-max_public_api_changes: 8
-max_regression_tests: 40
-scope_note: "New task: direct Pi model center integration. One pinned server dependency and additive encrypted credential fields are required. Prior explicit regression verification authorization persists."
+max_changed_files: 34
+max_new_files: 18
+max_dependency_additions: 3
+max_migration_files: 0
+max_public_api_changes: 0
+max_regression_tests: 25
+scope_note: "V1 P01–P04. Two runtime packages plus Three types. Reuse HTTP, polling, CSS and state. No database/backend changes. Prior verification authorization persists."

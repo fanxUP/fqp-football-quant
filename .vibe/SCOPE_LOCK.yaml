@@ -1,40 +1,22 @@
 version: 1
 allowed_paths:
-  - .vibe/CHANGE_BUDGET.yaml
-  - .vibe/SCOPE_LOCK.yaml
-  - .vibe/BASELINE.yaml
-  - .vibe/DESIGN.md
-  - .vibe/PLAN.md
-  - .vibe/ACCEPTANCE.md
-  - .vibe/TASK_DAG.yaml
-  - .github/workflows/ci.yml
-  - docs/pi-model-center.md
-  - apps/model-bridge/package.json
-  - apps/model-bridge/package-lock.json
-  - apps/model-bridge/bridge.mjs
-  - apps/model-bridge/bridge.test.mjs
-  - apps/backend/src/services/pi_bridge.py
-  - apps/backend/src/services/pi_login.py
-  - apps/backend/src/services/model_gateway.py
-  - apps/backend/src/services/model_provider_store.py
-  - apps/backend/src/routers/model_providers.py
-  - apps/backend/src/services/test_model_gateway.py
-  - apps/backend/src/services/test_model_provider_store.py
-  - tests/test_computation/test_model_gateway.py
-  - tests/test_api/test_model_providers.py
-  - tests/test_computation/test_pi_model_center.py
+  - .vibe/
+  - docs/command-center-v1.md
+  - apps/frontend/package.json
+  - apps/frontend/package-lock.json
+  - apps/frontend/src/main.tsx
   - apps/frontend/src/core/apiClient.ts
-  - apps/frontend/src/pages/ModelProvidersPage.tsx
-  - apps/frontend/src/pages/settings/ModelProviderSettingsPanel.tsx
-  - apps/frontend/src/pages/settings/ModelProviderSettingsPanel.test.tsx
-  - apps/frontend/src/pages/settings/AgentModelBindings.tsx
-  - apps/frontend/src/pages/settings/AgentModelBindings.test.tsx
-  - apps/frontend/src/pages/settings/ProviderAccountLogin.tsx
-  - apps/frontend/src/pages/settings/ProviderModelPicker.tsx
-  - apps/frontend/src/theme/appearance.css
-  - ops/server/deploy.sh
-  - sql/106_pi_model_credentials.sql
-  - sql/down/106_pi_model_credentials.down.sql
+  - apps/frontend/src/app/layout/Layout.tsx
+  - apps/frontend/src/app/layout/Layout.test.tsx
+  - apps/frontend/src/app/layout/Sidebar.tsx
+  - apps/frontend/src/app/layout/Sidebar.test.tsx
+  - apps/frontend/src/pages/DashboardPage.tsx
+  - apps/frontend/src/pages/DashboardPage.test.tsx
+  - apps/frontend/src/theme/themes/redline-quant.css
+  - apps/frontend/src/theme/themeRegistry.ts
+  - apps/frontend/src/features/command-center/
 forbidden_paths:
   - .env*
-out_of_scope: "Financial correction, automatic backups, unrelated model/ML changes. User chose direct Pi integration, API Key and supported account logins; submission and production deployment authorized 2026-10-08."
+  - sql/
+  - apps/backend/
+out_of_scope: "V2/V3, financial/ML algorithms, automatic backups, production deployment. Implementation starts with V1."

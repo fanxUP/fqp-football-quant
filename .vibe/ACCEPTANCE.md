@@ -1,7 +1,24 @@
-# Acceptance
+# FQP 改造验收标准
 
-- A1: Official pi-ai supplies model directory and all enabled model invocations; compatible custom models work through Pi.
-- A2: Existing configurations/keys/bindings are preserved; secrets are encrypted, omitted from APIs and logs; credential rotation cannot race.
-- A3: Only advertised OAuth providers can login; sessions are bounded, expire/cancel, belong to the initiating app session; failed login retains old credential.
-- A4: Search/select supplier and models; display capabilities; API Key/login and verification/binding are usable with stale-response guards and keyboard/mobile support.
-- A5: Targeted tests/static/build checks pass with explicit evidence and install/rollback instructions. No financial correction. Publication and deployment authorized 2026-10-08; release requires successful Linux CI, copy migration rehearsal, fresh backup, service and protected HTTP checks, and exact GitHub main/server SHA agreement.
+V1 已实现并进行局部验收；具体已验证项和待补项见 EVIDENCE.json 与 docs/command-center-v1.md。V2/V3 未实施。对应 PLAN.md 中一对一 P 项。
+
+| ID | 对应 | 可执行或可观察的验收证据 |
+|---|---|---|
+| A01 | P01 | 输出代码 SHA、路由/API/组件清单；记录现有页面基线、生产阵容来源覆盖与任务引用覆盖；未知项有明确原因，生产读数有时间 |
+| A02 | P02 | 12 个现有主题可实时切换、刷新保持选择；赤焰颜色通过 Token 管理；文字对比度和焦点可见；旧路由与被禁用模块行为保持；状态栏显示真实业务日和数据时间 |
+| A03 | P03 | 球场可旋转/缩放/有限平移/重置/切视角；主题同步；关闭自动动画有效；未进入场景不加载 3D；WebGL 2 不可用和 context lost 均完整回退；卸载清理资源 |
+| A04 | P04 | 列表选中与 3D 选中双向联动同一真实赛事；详情、赔率、预测对应一致 ID；加载/过期/缺失/验证失败/接口失败分明；KPI 口径一致；点击场景不发起业务写入或模型调用 |
+| A05 | P05 | 节点名称来自真实定义；人工任务/定时作业/LLM 归档区分；任务 ID、状态、开始结束时间与 API 一致；无记录不显示完成；心跳异常或数据过期停止可信运行动画；日志不泄露密钥 |
+| A06 | P06 | 数据流连线有真实引用证据；无批次/快照关联显示缺口；模型版本可追溯；只有明确传输证据才播放对应动画；历史回放明确标识；无时间相邻推断因果关系 |
+| A07 | P07 | 赛事、HAD/HHAD/CRS/TTG/HAFU 已有能力、票据游标分页、待结算状态、实票上传、500 元虚拟池、回测曲线、复盘归档、新闻证据及 Pi 接入回归通过；财务数据与旧口径一致，历史分析不使用未来数据 |
+| A08 | P08 | 阵容/伤停标注来源、采集/快照时间和证据类型；可靠首发缺失则空态；号码缺失不以 ID 代替；示意阵型与真实坐标区分；无位置数据不展示真实热图；二维球员列表可完成所有操作 |
+| A09 | P09 | 模型/版本/特征节点有真实映射；统计预测模型与语言模型分开；概率/ROI/回撤/样本在二维准确展示；不同玩法/选项/快照不可强行比较；关闭场景仍可使用全部研究功能 |
+| A10 | P10 | CI 与实际主分支 SHA 对应；记录桌面/移动/1440p/4K 和浏览器检查；指定设备 2 小时运行+30 次切换无持续资源增长；构建权限/Nginx HTML及JS一致；登录/彩票/曲线/Pi/报告烟测；三个服务就绪；服务器 SHA=GitHub main；回退材料可用 |
+
+## 证据格式
+
+每份记录包括：P/A ID、提交 SHA、执行时间及时间区、环境/设备/浏览器、命令或操作、退出码或观察结果、结果摘要、日志/截图位置、尚未通过的项。
+
+FPS、GPU 计数和资源增长只根据实际工具报告填写。计划目标不能代替实测结果；GPU 工具无法提供真实显存时明确写「不可测」，并使用可测指标说明限制。
+
+数据覆盖不足的页面可以交付真实空状态，但不能把缺失能力记为完整上线。V2 的状态图验收与完整因果追踪验收分别记录。

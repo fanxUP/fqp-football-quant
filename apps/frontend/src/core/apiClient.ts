@@ -382,6 +382,18 @@ function qs(params: Record<string, string | number | undefined>): string {
 
 // ---- Typed endpoints ----
 
+export interface OfficialOddsSnapshot {
+  id: number;
+  match_id: number;
+  play_type: string;
+  option_code: string;
+  sp_value: number | null;
+  handicap: number | null;
+  snapshot_time: string;
+  is_open: boolean;
+  is_single_allowed: boolean;
+}
+
 export const api = {
   // Health
   health: () => request<{ status: string; service?: string }>('/health'),
@@ -653,6 +665,10 @@ export const api = {
 
   // Official Sporttery source tracking. Third-party sources are not returned here.
   official: {
+    oddsSnapshots: (matchId: number) =>
+      request<{ snapshots: OfficialOddsSnapshot[]; total: number }>(
+        `/api/official/matches/${matchId}/odds-snapshots?limit=200`,
+      ),
     oddsIndex: () =>
       request<import('./types').OfficialOddsIndex>('/api/official/odds-index'),
     oddsHistoryMatches: (params?: { search?: string; limit?: number }) =>

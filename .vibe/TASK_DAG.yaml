@@ -1,6 +1,50 @@
+version: 1
+status: implementing_v1
+date: '2026-10-08'
+mode: STRICT
+baseline_main_sha: 74ebae2b11a3abda78abe851d95d58ee418e742c
 tasks:
-  P1: []
-  P2: [P1]
-  P3: [P2]
-  P4: [P1, P2, P3]
-  P5: [P1, P2, P3, P4]
+  - id: P01
+    title: 运行态与数据证据审计
+    acceptance: A01
+    depends_on: []
+  - id: P02
+    title: 赤焰设计系统与全局布局
+    acceptance: A02
+    depends_on: [P01]
+  - id: P03
+    title: 3D 基础框架与交互球场
+    acceptance: A03
+    depends_on: [P02]
+  - id: P04
+    title: 真实工作台与双向选择
+    acceptance: A04
+    depends_on: [P03]
+  - id: P05
+    title: Agent 真实状态网络
+    acceptance: A05
+    depends_on: [P04]
+  - id: P06
+    title: 有证据的数据管线
+    acceptance: A06
+    depends_on: [P05]
+  - id: P07
+    title: 业务二维页面升级
+    acceptance: A07
+    depends_on: [P04]
+  - id: P08
+    title: 战术证据与场景
+    acceptance: A08
+    depends_on: [P07]
+  - id: P09
+    title: 模型研究场景
+    acceptance: A09
+    depends_on: [P07]
+  - id: P10
+    title: 综合验证与分批发布
+    acceptance: A10
+    depends_on: [P06, P08, P09]
+releases:
+  V1: [P01, P02, P03, P04]
+  V2: [P05, P06]
+  V3: [P07, P08, P09, P10]
