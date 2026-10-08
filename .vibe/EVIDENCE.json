@@ -1,17 +1,17 @@
 {
-  "base_revision": "3238bafa74d90184a6ddcbbb5f16739963b142af",
+  "base_revision": "9fc42f79daeee6e0f9dfe0c93b8c50d2547d6260",
   "upstream_revision": "74ebae2b11a3abda78abe851d95d58ee418e742c",
-  "phase": "P07a",
+  "phase": "P07b",
   "source_paths": [
-    "apps/frontend/src/pages/MatchesPage.tsx",
-    "apps/frontend/src/pages/MatchesPage.css",
-    "apps/frontend/src/pages/MatchesPage.test.tsx",
-    "apps/frontend/src/features/command-center/CommandCenter.tsx",
-    "apps/frontend/src/features/command-center/MatchEvidence.tsx",
-    "apps/frontend/src/features/command-center/MatchEvidence.test.tsx"
+    "apps/frontend/src/pages/OddsMovementPage.tsx",
+    "apps/frontend/src/pages/OddsMovementPage.test.tsx",
+    "apps/frontend/src/pages/odds/OddsMatchCard.tsx",
+    "apps/frontend/src/pages/RecommendationsPage.tsx",
+    "apps/frontend/src/pages/RecommendationsPage.test.tsx",
+    "apps/frontend/src/pages/BusinessEvidence.css"
   ],
-  "source_sha256": "2983e9817c4edee90c8f9d3f57f531e2e166edf6457bfd78e9d8bcba75fb3ddf",
-  "started_at": "2026-10-08T16:46:30.310179+00:00",
+  "source_sha256": "82d6e4f2765b8715b3d4c9b9061cb1407370f7c38128e3d63a4db679cd8f7f3f",
+  "started_at": "2026-10-08T17:07:40.562137+00:00",
   "commands": [
     {
       "command": [
@@ -21,10 +21,10 @@
         "run",
         "typecheck"
       ],
-      "started_at": "2026-10-08T16:46:30.310449+00:00",
-      "finished_at": "2026-10-08T16:46:43.425502+00:00",
+      "started_at": "2026-10-08T17:07:40.562306+00:00",
+      "finished_at": "2026-10-08T17:07:52.419638+00:00",
       "exit_code": 0,
-      "log": "/private/tmp/fqp-v3a-typecheck-final.log"
+      "log": "/private/tmp/fqp-v3b-typecheck-final.log"
     },
     {
       "command": [
@@ -33,10 +33,10 @@
         "apps/frontend",
         "test"
       ],
-      "started_at": "2026-10-08T16:46:43.425614+00:00",
-      "finished_at": "2026-10-08T16:48:06.107687+00:00",
+      "started_at": "2026-10-08T17:07:52.419750+00:00",
+      "finished_at": "2026-10-08T17:09:12.079537+00:00",
       "exit_code": 0,
-      "log": "/private/tmp/fqp-v3a-frontend-tests-final.log"
+      "log": "/private/tmp/fqp-v3b-frontend-tests-final.log"
     },
     {
       "command": [
@@ -46,10 +46,10 @@
         "run",
         "build"
       ],
-      "started_at": "2026-10-08T16:48:06.107818+00:00",
-      "finished_at": "2026-10-08T16:48:08.805065+00:00",
+      "started_at": "2026-10-08T17:09:12.079662+00:00",
+      "finished_at": "2026-10-08T17:09:14.554389+00:00",
       "exit_code": 0,
-      "log": "/private/tmp/fqp-v3a-build-final.log"
+      "log": "/private/tmp/fqp-v3b-build-final.log"
     }
   ],
   "production_data_export": false,
@@ -57,44 +57,39 @@
   "independent_review": "pending",
   "remaining": "P07 other business pages, P08/P09/P10; production contracts and release checks pending",
   "source_unchanged": true,
-  "finished_at": "2026-10-08T16:48:08.806590+00:00",
+  "finished_at": "2026-10-08T17:09:14.555543+00:00",
+  "frontend_tests": {
+    "files": 83,
+    "tests": 373,
+    "changed_suites": 32,
+    "new_tests": 23
+  },
   "scope_budget": {
-    "checked_at": "2026-10-08T16:48:56.582742+00:00",
-    "base_revision": "3238bafa74d90184a6ddcbbb5f16739963b142af",
+    "checked_at": "2026-10-08T17:09:44.404402+00:00",
+    "command": "python3 /private/tmp/fqp-v3b-scope.py (custom Git scope and budget audit; harness unavailable)",
+    "base_revision": "9fc42f79daeee6e0f9dfe0c93b8c50d2547d6260",
     "changed_files": 15,
-    "new_files": 4,
+    "new_files": 2,
     "scope_violations": [],
     "forbidden_changes": [],
     "dependency_additions": 0,
     "migrations": 0,
     "public_api_changes": 0,
-    "tests_in_changed_suites": 20,
-    "new_regressions": 18,
-    "files": [
-      ".vibe/ACCEPTANCE.md",
-      ".vibe/BASELINE.yaml",
-      ".vibe/CHANGE_BUDGET.yaml",
-      ".vibe/DESIGN.md",
-      ".vibe/EVIDENCE.json",
-      ".vibe/PLAN.md",
-      ".vibe/SCOPE_LOCK.yaml",
-      ".vibe/TASK_DAG.yaml",
-      "apps/frontend/src/features/command-center/CommandCenter.tsx",
-      "apps/frontend/src/features/command-center/MatchEvidence.test.tsx",
-      "apps/frontend/src/features/command-center/MatchEvidence.tsx",
-      "apps/frontend/src/pages/MatchesPage.css",
-      "apps/frontend/src/pages/MatchesPage.test.tsx",
-      "apps/frontend/src/pages/MatchesPage.tsx",
-      "docs/match-center-v3a.md"
-    ],
-    "command": "custom Python scope/budget check against Git diff + untracked paths; harness engine unavailable",
+    "suite_tests": 32,
+    "new_regression_tests": 23,
+    "limits": {
+      "changed_files": 18,
+      "new_files": 3,
+      "suite_tests": 32
+    },
     "exit_code": 0
   },
   "browser": {
-    "environment": "Chromium headless, explicit synthetic UI test fixture, no production business data",
-    "started_at": "2026-10-08T16:47:31.408123+00:00",
-    "checks": [
+    "environment": "Chromium headless, synthetic UI test data explicitly labeled 界面测试; no production API/data",
+    "started_at": "2026-10-08T17:08:38.586205+00:00",
+    "viewports": [
       {
+        "page": "odds",
         "viewport": [
           1920,
           1080
@@ -103,6 +98,7 @@
         "scroll": 1920
       },
       {
+        "page": "odds",
         "viewport": [
           1440,
           1000
@@ -111,6 +107,7 @@
         "scroll": 1440
       },
       {
+        "page": "odds",
         "viewport": [
           3840,
           2160
@@ -119,6 +116,7 @@
         "scroll": 3840
       },
       {
+        "page": "odds",
         "viewport": [
           375,
           812
@@ -127,6 +125,52 @@
         "scroll": 375
       },
       {
+        "page": "odds",
+        "viewport": [
+          812,
+          375
+        ],
+        "width": 812,
+        "scroll": 812
+      },
+      {
+        "page": "analysis",
+        "viewport": [
+          1920,
+          1080
+        ],
+        "width": 1920,
+        "scroll": 1920
+      },
+      {
+        "page": "analysis",
+        "viewport": [
+          1440,
+          1000
+        ],
+        "width": 1440,
+        "scroll": 1440
+      },
+      {
+        "page": "analysis",
+        "viewport": [
+          3840,
+          2160
+        ],
+        "width": 3840,
+        "scroll": 3840
+      },
+      {
+        "page": "analysis",
+        "viewport": [
+          375,
+          812
+        ],
+        "width": 375,
+        "scroll": 375
+      },
+      {
+        "page": "analysis",
         "viewport": [
           812,
           375
@@ -135,26 +179,25 @@
         "scroll": 812
       }
     ],
-    "no_three_requests_or_canvas": true,
-    "keyboard_selection_filters_pagination": true,
-    "failed_refresh_retains_data_and_recovers": true,
-    "hidden_polling_paused_and_resumed": true,
-    "light_theme_reduced_motion": true,
-    "deep_link_existing_detail_route": true,
+    "odds_filters_paging_error_recovery_empty_hidden_history": true,
+    "prediction_filters_paging_zero_rest_error_and_light_theme": true,
+    "no_three_module_requests": true,
     "page_errors": [],
-    "finished_at": "2026-10-08T16:47:40.027253+00:00"
+    "finished_at": "2026-10-08T17:08:49.635919+00:00",
+    "source_sha256": "82d6e4f2765b8715b3d4c9b9061cb1407370f7c38128e3d63a4db679cd8f7f3f",
+    "script": "/private/tmp/fqp-v3b-browser.py"
   },
-  "summary": {
-    "frontend_tests": 350,
-    "frontend_files": 83,
-    "added_regressions": 18,
-    "typecheck_exit_code": 0,
-    "build_exit_code": 0
+  "red": {
+    "log": "/private/tmp/fqp-v3b-red.log",
+    "failed": 17,
+    "passed": 10,
+    "note": "Behavior tests executed against original pages; later boundary coverage added."
   },
   "limitations": [
-    "independent review pending",
-    "production contract/performance not rechecked",
-    "Three shared chunk size warning remains",
-    "P07 remaining pages and P08/P09/P10 not complete"
+    "Synthetic browser fixture only, no production data export or server checks",
+    "Existing AnalysisOverview/model explanation/feature areas unchanged",
+    "No backend API/dependency/migration changes",
+    "Independent review and release/GPU endurance pending",
+    "Existing shared PitchScene bundle warning remains; these routes do not load Three scene modules"
   ]
 }

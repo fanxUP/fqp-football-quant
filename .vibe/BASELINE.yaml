@@ -1,8 +1,8 @@
-version: 3
+version: 4
 mode: STRICT
-base_revision: 3238bafa74d90184a6ddcbbb5f16739963b142af
+base_revision: 9fc42f79daeee6e0f9dfe0c93b8c50d2547d6260
 upstream_main: 74ebae2b11a3abda78abe851d95d58ee418e742c
 branch: feat/3d-command-center-v1
-phase: V3a_P07_matches
+phase: V3b_P07_prediction_odds
 production_writes: false
 production_data_export: false

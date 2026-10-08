@@ -1,5 +1,5 @@
 version: 1
-status: implemented_v3a_matches_local
+status: implemented_v3b_prediction_odds_local
 date: '2026-10-09'
 mode: STRICT
 baseline_main_sha: 74ebae2b11a3abda78abe851d95d58ee418e742c
@@ -54,3 +54,8 @@ subtasks:
     title: 比赛中心二维列表与证据联动
     acceptance: A07a
     depends_on: [P04]
+
+  - id: P07b
+    title: 预测与赔率二维证据升级
+    acceptance: A07b
+    depends_on: [P07a]

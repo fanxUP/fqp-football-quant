@@ -1,18 +1,18 @@
-version: 3
-base_revision: 3238bafa74d90184a6ddcbbb5f16739963b142af
+version: 4
+base_revision: 9fc42f79daeee6e0f9dfe0c93b8c50d2547d6260
 allowed_paths:
   - .vibe/
-  - docs/match-center-v3a.md
-  - apps/frontend/src/pages/MatchesPage.tsx
-  - apps/frontend/src/pages/MatchesPage.test.tsx
-  - apps/frontend/src/pages/MatchesPage.css
-  - apps/frontend/src/features/command-center/CommandCenter.tsx
-  - apps/frontend/src/features/command-center/MatchEvidence.tsx
-  - apps/frontend/src/features/command-center/MatchEvidence.test.tsx
+  - docs/prediction-odds-v3b.md
+  - apps/frontend/src/pages/OddsMovementPage.tsx
+  - apps/frontend/src/pages/OddsMovementPage.test.tsx
+  - apps/frontend/src/pages/odds/OddsMatchCard.tsx
+  - apps/frontend/src/pages/RecommendationsPage.tsx
+  - apps/frontend/src/pages/RecommendationsPage.test.tsx
+  - apps/frontend/src/pages/BusinessEvidence.css
 forbidden_paths:
   - .env*
   - sql/
   - apps/backend/
   - apps/frontend/package.json
   - package-lock.json
-out_of_scope: "P07 remaining pages, P08/P09, algorithms, backend APIs, production data export, push/deployment."
+out_of_scope: "P07 remaining business pages, P08/P09, algorithms, backend APIs, production export and deployment."

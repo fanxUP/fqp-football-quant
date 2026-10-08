@@ -1,4 +1,5 @@
 import type { OddsMovementMatch } from '../../core/types';
+import { formatTimestamp } from '../../shared/utils';
 import { OddsSeriesChart } from '../../visualization';
 
 const CAPTURE_LABELS: Record<string, string> = {
@@ -16,8 +17,11 @@ export default function OddsMatchCard({ match, playType, playLabel }: OddsMatchC
   const capture = match.capture_status;
   const captureText = capture ? CAPTURE_LABELS[capture.status] || capture.status : '待首次采集';
   const kickoff = match.kickoff_time.replace('T', ' ').slice(0, 16);
+  const snapshotTimes = match.series.map(point => Date.parse(point.snapshot_time)).filter(Number.isFinite);
+  const latest = snapshotTimes.length ? new Date(snapshotTimes.reduce((a, b) => Math.max(a, b))).toISOString() : null;
   return (
     <article aria-label={`${match.official_match_code} ${match.home_team_name} 对 ${match.away_team_name}`}>
+      <div className="be-match-meta"><span>最新源快照：{latest ? formatTimestamp(latest) : '—'}</span><a href={`#/matches/${match.id}`}>查看赛事详情</a></div>
       <OddsSeriesChart
         data={match.series}
         playType={playType}

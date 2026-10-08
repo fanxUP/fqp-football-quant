@@ -1,12 +1,12 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../core/apiClient';
 import { navigate } from '../core/router';
 import type { SimulationTicket, LiveRecommendation, SportterySalesWindow } from '../core/types';
-import { ApiError } from '../core/types';
+import useReadOnlyResource from '../features/command-center/useReadOnlyResource';
+import './BusinessEvidence.css';
 import PageHeader from '../shared/components/PageHeader';
 import FilterBar from '../shared/components/FilterBar';
 import DataTable, { type Column } from '../shared/components/DataTable';
-import ErrorState from '../shared/components/ErrorState';
 import Card from '../shared/components/Card';
 import ChartCard from '../shared/components/ChartCard';
 import StatusBadge from '../shared/components/StatusBadge';
@@ -159,52 +159,45 @@ export function buildRecommendationInsightSummary(recommendations: LiveRecommend
 }
 
 export default function RecommendationsPage({ embedded = false, onMatchSelect }: RecommendationsPageProps) {
-  const [tickets, setTickets] = useState<SimulationTicket[]>([]);
-  const [liveRecs, setLiveRecs] = useState<LiveRecommendation[]>([]);
-  const [salesWindow, setSalesWindow] = useState<SportterySalesWindow | null>(null);
-  const [baselineOnly, setBaselineOnly] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const previous = useRef<{ recommendations: LiveRecommendation[]; baseline: boolean; evidenceAt: number } | null>(null);
+  const fetchRecommendations = useCallback(async () => {
+    const validate = (value: Awaited<ReturnType<typeof api.liveRecommendations>>) => {
+      if (!value || !Array.isArray(value.recommendations) || value.recommendations.length > 500
+        || value.recommendations.some(rec => !Number.isSafeInteger(rec.match_id) || rec.match_id <= 0
+          || !Number.isSafeInteger(rec.prediction_id) || rec.prediction_id <= 0
+          || [rec.home_team, rec.away_team, rec.league, rec.play_type, rec.option_code, rec.option_name, rec.model_name, rec.predict_time, rec.odds_snapshot_time].some(field => typeof field !== 'string')
+          || [rec.model_probability, rec.market_probability, rec.confidence].some(prob => !Number.isFinite(prob) || prob < 0 || prob > 1)
+          || !Number.isFinite(rec.ev) || !Number.isFinite(rec.edge) || !Number.isFinite(rec.sp_value) || rec.sp_value <= 0)) throw new Error('预测数据格式不正确');
+      return value;
+    };
+    let response = validate(await api.liveRecommendations({ limit: 500, min_ev: 0.01 }));
+    let baseline = false;
+    if (response.recommendations.length === 0 && response.sales_window?.is_open !== false) {
+      response = validate(await api.liveRecommendations({ limit: 500, min_ev: -1, min_confidence: 0 }));
+      baseline = response.recommendations.length > 0;
+    }
+    const retained = response.recommendations.length === 0 && response.sales_window?.is_open === false && (previous.current?.recommendations.length ?? 0) > 0;
+    const evidence = retained ? previous.current! : { recommendations: response.recommendations, baseline, evidenceAt: Date.now() };
+    previous.current = evidence;
+    return { ...evidence, salesWindow: response.sales_window ?? null, retained };
+  }, []);
+  const fetchTickets = useCallback(async () => {
+    const response = await api.tickets({ limit: 100 });
+    if (!response || !Array.isArray(response.tickets) || response.tickets.length > 100) throw new Error('票单数据格式不正确');
+    return response.tickets;
+  }, []);
+  const recResource = useReadOnlyResource(fetchRecommendations);
+  const ticketResource = useReadOnlyResource(fetchTickets);
+  const tickets = ticketResource.data ?? [];
+  const liveRecs = recResource.data?.recommendations ?? [];
+  const salesWindow: SportterySalesWindow | null = recResource.data?.salesWindow ?? null;
+  const baselineOnly = recResource.data?.baseline ?? false;
+  const loading = recResource.loading;
   const [statusFilter, setStatusFilter] = useState('');
   const [activePlayTypeTab, setActivePlayTypeTab] = useState('spf_rqspf');
-
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-
-    Promise.all([
-      api.tickets({ limit: 100 }),
-      api.liveRecommendations({ limit: 500, min_ev: 0.01 }),
-    ])
-      .then(async ([ticketRes, recRes]) => {
-        if (!cancelled) {
-          let recommendations = recRes.recommendations || [];
-          let baseline = false;
-          setSalesWindow(recRes.sales_window ?? null);
-          if (recommendations.length === 0 && recRes.sales_window?.is_open !== false) {
-            const baselineRes = await api.liveRecommendations({ limit: 500, min_ev: -1, min_confidence: 0 });
-            recommendations = baselineRes.recommendations || [];
-            baseline = recommendations.length > 0;
-          }
-          setTickets(ticketRes.tickets);
-          // 休市响应为空时保留上一批推荐，避免休市后页面闪空；推荐仍会显示休市锁定提示。
-          if (recommendations.length > 0 || recRes.sales_window?.is_open !== false) {
-            setLiveRecs(recommendations);
-          }
-          setBaselineOnly(baseline);
-          setLoading(false);
-        }
-      })
-      .catch((e) => {
-        if (!cancelled) {
-          setError(e instanceof ApiError ? e.message : '加载失败');
-          setLoading(false);
-        }
-      });
-
-    return () => { cancelled = true; };
-  }, []);
+  const [search, setSearch] = useState('');
+  const [league, setLeague] = useState('');
+  const [page, setPage] = useState(1);
 
   const filtered = statusFilter
     ? tickets.filter((t) => t.status === statusFilter)
@@ -217,12 +210,13 @@ export default function RecommendationsPage({ embedded = false, onMatchSelect }:
     { key: 'zjq',       label: '总进球数',            playTypes: ['zjq'] },
     { key: 'bqc',       label: '半全场',              playTypes: ['bqc'] },
   ];
-  const filteredLiveRecs = !activePlayTypeTab
-    ? liveRecs
-    : liveRecs.filter((r) => {
-        const tab = PLAY_TYPE_TABS.find((t) => t.key === activePlayTypeTab);
-        return tab ? tab.playTypes.includes(r.play_type) : true;
-      });
+  const query = search.trim().toLocaleLowerCase();
+  const leagues = [...new Set([...liveRecs.map(rec => rec.league), ...(league ? [league] : [])])].sort();
+  const filteredLiveRecs = liveRecs.filter(rec => (!league || rec.league === league)
+    && (!query || [rec.match_id, rec.match_num_str, fmtMatchNum(rec.match_num_str), rec.home_team, rec.away_team, rec.league, rec.model_name].join(' ').toLocaleLowerCase().includes(query))
+    && (PLAY_TYPE_TABS.find(tab => tab.key === activePlayTypeTab)?.playTypes.includes(rec.play_type) ?? true));
+  const resetFilters = () => { setSearch(''); setLeague(''); setActivePlayTypeTab('spf_rqspf'); setPage(1); };
+  const evidenceKey = (rec: LiveRecommendation) => JSON.stringify([rec.match_id, rec.play_type, rec.model_name, rec.predict_time, rec.odds_snapshot_time]);
 
   // ---- Group all play type options by match+playtype (side-by-side display) ----
   interface GroupedRecRow {
@@ -264,14 +258,14 @@ export default function RecommendationsPage({ embedded = false, onMatchSelect }:
   const groupedRows: DisplayRow[] = (() => {
     const groups = new Map<string, LiveRecommendation[]>();
     for (const rec of filteredLiveRecs) {
-      const k = `${rec.match_id}:${rec.play_type}`;
+      const k = evidenceKey(rec);
       if (!groups.has(k)) groups.set(k, []);
       groups.get(k)!.push(rec);
     }
     const used = new Set<string>();
     const allRows: GroupedRecRow[] = [];
     for (const rec of filteredLiveRecs) {
-      const k = `${rec.match_id}:${rec.play_type}`;
+      const k = evidenceKey(rec);
       if (!used.has(k)) {
         used.add(k);
         const g = groups.get(k)!;
@@ -313,6 +307,22 @@ export default function RecommendationsPage({ embedded = false, onMatchSelect }:
 
     return result;
   })();
+
+  const groupCount = groupedRows.filter(row => row.type === 'grouped').length;
+  const pageCount = Math.max(1, Math.ceil(groupCount / 25));
+  const currentPage = Math.min(page, pageCount);
+  useEffect(() => { if (page > pageCount) setPage(pageCount); }, [page, pageCount]);
+  const displayRows: DisplayRow[] = [];
+  let groupIndex = 0;
+  let dateHeader: DateIndexRow | null = null;
+  let includedDate = '';
+  for (const row of groupedRows) {
+    if (row.type === 'date_index') { dateHeader = row; continue; }
+    const index = groupIndex++;
+    if (index < (currentPage - 1) * 25 || index >= currentPage * 25) continue;
+    if (dateHeader && includedDate !== dateHeader.key) { displayRows.push(dateHeader); includedDate = dateHeader.key; }
+    displayRows.push(row);
+  }
 
   // Map play_type to result field and check correctness
   const RESULT_KEY: Record<string, keyof GroupedRecRow> = {
@@ -379,7 +389,7 @@ export default function RecommendationsPage({ embedded = false, onMatchSelect }:
       playType: best.play_type,
       playTypeName: best.play_type_name,
       scoreText: fullTimeScore,
-      options: item.options,
+      options: item.options.filter(option => evidenceKey(option) === evidenceKey(best)),
     });
   };
 
@@ -583,24 +593,30 @@ export default function RecommendationsPage({ embedded = false, onMatchSelect }:
     };
   })();
 
-  if (error) {
-    return (
-      <div>
-        {!embedded && <PageHeader title="推荐票单" />}
-        <ErrorState message={error} onRetry={() => window.location.reload()} />
-      </div>
-    );
-  }
-
   return (
-    <div>
+    <div className="be-page">
       {!embedded && (
         <PageHeader
           title="推荐票单"
-          lastUpdated={new Date().toLocaleString('zh-CN', { hour12: false })}
+          lastUpdated={recResource.data ? formatTimestamp(new Date(recResource.data.evidenceAt).toISOString()) : undefined}
         />
       )}
 
+      <Card style={{ marginBottom: 16 }}>
+        <div className="be-toolbar">
+          <label>搜索预测<input type="search" aria-label="搜索预测赛事" value={search} placeholder="球队、编号、联赛、模型" onChange={event => { setSearch(event.target.value); setPage(1); }} /></label>
+          <label>联赛<select aria-label="预测联赛" value={league} onChange={event => { setLeague(event.target.value); setPage(1); }}><option value="">全部联赛</option>{leagues.map(item => <option value={item} key={item}>{item}</option>)}</select></label>
+          <button type="button" onClick={resetFilters} disabled={!search && !league && activePlayTypeTab === 'spf_rqspf'}>清空预测筛选</button>
+        </div>
+        <div className="be-status" role="status">
+          <span className={recResource.error ? 'be-error' : ''}>{recResource.error ? `${recResource.error}${recResource.data ? '，保留上次成功预测' : ''}` : recResource.data ? `推荐获取：${formatTimestamp(new Date(recResource.data.evidenceAt).toISOString())}` : '正在加载模型推荐...'}</span>
+          <button type="button" onClick={() => void recResource.refresh()}>刷新预测</button>
+        </div>
+        {recResource.data?.retained && <p className="be-error">休市保留上次推荐，仅供查看旧证据。</p>}
+        <p className="be-note">已获取 {liveRecs.length} 条 · 最多 500 条，筛选与分页仅作用于已获取推荐，每页 25 个证据组。获取时间不代表预测或赔率源更新时间；同赛事、玩法、模型、预测时间和赔率时间才归为一组。强信号与冲突摘要汇总当前筛选记录；点击摘要查看最高 EV 所属证据组。</p>
+      </Card>
+      {!loading && !recResource.error && liveRecs.length === 0 && <Card><p>暂无模型推荐</p></Card>}
+      {!loading && liveRecs.length > 0 && filteredLiveRecs.length === 0 && <Card><p>预测筛选无结果</p><p className="be-note">调整玩法或清空筛选。</p></Card>}
       {/* Live recommendations panel */}
       {!loading && salesWindow?.is_open === false && (
         <Card style={{ marginBottom: 16, borderColor: 'rgba(245,165,36,0.45)' }}>
@@ -617,11 +633,10 @@ export default function RecommendationsPage({ embedded = false, onMatchSelect }:
         </Card>
       )}
       {!loading && liveRecs.length > 0 && (
-        <Card style={{ marginBottom: 20, borderColor: 'rgba(34,197,94,0.30)', animation: 'fqpSlideUpBounce 0.4s ease both' }}>
+        <Card style={{ marginBottom: 20 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-            <span style={{ fontSize: 18, animation: 'fqpNotificationDot 2s infinite', display: 'inline-block' }}>🎯</span>
             <span style={{ fontWeight: 700, fontSize: 15, color: 'var(--fqp-text)' }}>
-              实时推荐（基于最新模型预测）
+              模型预测证据
             </span>
             <span style={{ fontSize: 11, color: 'var(--fqp-text-muted)', marginLeft: 4 }}>
               {baselineOnly ? '模型基线分析' : 'EV > 0.01'} · 共 {liveRecs.length} 条
@@ -697,7 +712,8 @@ export default function RecommendationsPage({ embedded = false, onMatchSelect }:
                   key={tab.key}
                   className={activePlayTypeTab === tab.key ? 'fqp-btn fqp-btn-sm fqp-btn-primary' : 'fqp-btn fqp-btn-sm'}
                   style={{ padding: '4px 14px', fontSize: 12 }}
-                  onClick={() => setActivePlayTypeTab(tab.key)}
+                  aria-pressed={activePlayTypeTab === tab.key}
+                  onClick={() => { setActivePlayTypeTab(tab.key); setPage(1); }}
                 >
                   {tab.label}（{count}）
                 </button>
@@ -705,7 +721,8 @@ export default function RecommendationsPage({ embedded = false, onMatchSelect }:
             })}
           </div>
 
-          <div className="fqp-table-wrapper">
+          <p className="be-note">宽表可横向滚动查看概率、EV、模型及源时间；键盘可聚焦明细区域滚动。</p>
+          <div className="fqp-table-wrapper" role="region" aria-label="预测证据明细" tabIndex={0}>
             <table className="fqp-table recommendation-table" style={{ fontSize: 13 }}>
               <colgroup>
                 <col className="recommendation-table-col-code" />
@@ -740,7 +757,7 @@ export default function RecommendationsPage({ embedded = false, onMatchSelect }:
                 </tr>
               </thead>
               <tbody>
-                {groupedRows.map((row) => {
+                {displayRows.map((row) => {
                   if (row.type === 'date_index') {
                     return (
                       <tr key={row.key} style={{ background: 'rgba(229,9,20,0.06)' }}>
@@ -807,7 +824,7 @@ export default function RecommendationsPage({ embedded = false, onMatchSelect }:
                           {opts.map((o) => {
                             const outcome = renderOptionOutcome(row, o);
                             return (
-                              <div key={o.option_code} className="recommendation-option-line" title={formatRecommendationOptionDisplay(o, outcome)}>
+                              <div key={`${o.prediction_id}:${o.option_code}`} className="recommendation-option-line" title={formatRecommendationOptionDisplay(o, outcome)}>
                                 <span className={`recommendation-option-name ${recommendationOptionTone(o)}`}>
                                   {optionLabel(o.play_type, o.option_code)}
                                 </span>
@@ -828,7 +845,7 @@ export default function RecommendationsPage({ embedded = false, onMatchSelect }:
                       <td className="fqp-mono">
                         <div className="recommendation-metric-stack success">
                           {opts.map((o) => (
-                            <span key={o.option_code} className="recommendation-metric-line">
+                            <span key={`${o.prediction_id}:${o.option_code}`} className="recommendation-metric-line">
                               {(o.model_probability * 100).toFixed(1)}%
                             </span>
                           ))}
@@ -837,7 +854,7 @@ export default function RecommendationsPage({ embedded = false, onMatchSelect }:
                       <td className="fqp-mono">
                         <div className="recommendation-metric-stack muted">
                           {opts.map((o) => (
-                            <span key={o.option_code} className="recommendation-metric-line">
+                            <span key={`${o.prediction_id}:${o.option_code}`} className="recommendation-metric-line">
                               {(o.market_probability * 100).toFixed(1)}%
                             </span>
                           ))}
@@ -846,7 +863,7 @@ export default function RecommendationsPage({ embedded = false, onMatchSelect }:
                       <td className="fqp-mono">
                         <div className="recommendation-metric-stack">
                           {opts.map((o) => (
-                            <span key={o.option_code} style={{ color: o.edge > 0 ? 'var(--fqp-success)' : 'var(--fqp-red-neon)' }}>
+                            <span key={`${o.prediction_id}:${o.option_code}`} style={{ color: o.edge > 0 ? 'var(--fqp-success)' : 'var(--fqp-red-neon)' }}>
                               {o.edge >= 0 ? '+' : ''}{(o.edge * 100).toFixed(1)}%
                             </span>
                           ))}
@@ -855,8 +872,8 @@ export default function RecommendationsPage({ embedded = false, onMatchSelect }:
                       <td className="fqp-mono">
                         <div className="recommendation-metric-stack">
                           {opts.map((o) => (
-                            <span key={o.option_code} style={{ fontWeight: 700, color: o.ev > 0.05 ? 'var(--fqp-success)' : o.ev > 0.02 ? 'var(--fqp-warning)' : 'var(--fqp-text-muted)' }}>
-                              +{o.ev.toFixed(3)}
+                            <span key={`${o.prediction_id}:${o.option_code}`} style={{ fontWeight: 700, color: o.ev > 0.05 ? 'var(--fqp-success)' : o.ev > 0.02 ? 'var(--fqp-warning)' : 'var(--fqp-text-muted)' }}>
+                              {o.ev >= 0 ? '+' : ''}{o.ev.toFixed(3)}
                             </span>
                           ))}
                         </div>
@@ -871,8 +888,10 @@ export default function RecommendationsPage({ embedded = false, onMatchSelect }:
                           </span>
                         </div>
                       </td>
-                      <td style={{ fontSize: 11, color: 'var(--fqp-text-muted)', maxWidth: 100, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {best.model_name}
+                      <td style={{ fontSize: 11, color: 'var(--fqp-text-muted)', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        <div>{best.model_name}</div>
+                        <div title={best.predict_time}>预测 {formatTimestamp(best.predict_time)}</div>
+                        <div title={best.odds_snapshot_time}>赔率 {formatTimestamp(best.odds_snapshot_time)}</div>
                       </td>
                     </tr>
                   );
@@ -883,8 +902,17 @@ export default function RecommendationsPage({ embedded = false, onMatchSelect }:
         </Card>
       )}
 
+      {groupCount > 0 && <nav className="be-pagination" aria-label="预测分页">
+        <button type="button" aria-label="上一页预测" disabled={currentPage === 1} onClick={() => setPage(currentPage - 1)}>上一页</button>
+        <span>第 {currentPage} / {pageCount} 页 · {groupCount} 组</span>
+        <button type="button" aria-label="下一页预测" disabled={currentPage === pageCount} onClick={() => setPage(currentPage + 1)}>下一页</button>
+      </nav>}
+      <div className="be-status" role="status">
+        <span className={ticketResource.error ? 'be-error' : ''}>{ticketResource.error ? `票单：${ticketResource.error}${ticketResource.data ? '，保留上次成功票单' : ''}` : ticketResource.receivedAt ? `票单获取：${formatTimestamp(new Date(ticketResource.receivedAt).toISOString())} · 已获取 ${tickets.length} 条，最多 100 条` : '正在加载票单...'}</span>
+        <button type="button" onClick={() => void ticketResource.refresh()}>刷新票单</button>
+      </div>
       {/* Charts */}
-      {!loading && tickets.length > 0 && (
+      {!ticketResource.loading && tickets.length > 0 && (
         <div className="fqp-grid-2" style={{ marginBottom: '16px' }}>
           {riskDonutOption ? (
             <ChartCard title="风险等级分布" option={riskDonutOption} height={280} />
@@ -906,6 +934,7 @@ export default function RecommendationsPage({ embedded = false, onMatchSelect }:
       <FilterBar>
         <select
           className="fqp-select"
+          aria-label="票单状态"
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
           style={{ minWidth: '160px' }}
@@ -921,8 +950,8 @@ export default function RecommendationsPage({ embedded = false, onMatchSelect }:
         <DataTable
           columns={columns}
           rows={filtered}
-          loading={loading}
-          emptyText="暂无推荐票单，系统将在每日 16:00 从模型预测中生成推荐候选"
+          loading={ticketResource.loading}
+          emptyText={ticketResource.error ? '票单读取失败，请刷新票单' : '暂无推荐票单，系统将在每日 16:00 从模型预测中生成推荐候选'}
           onRowClick={(row) => navigate(`/recommendations/${row.id}`)}
           rowKey={(r) => String(r.id)}
         />

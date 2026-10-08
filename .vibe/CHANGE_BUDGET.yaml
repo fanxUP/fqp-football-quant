@@ -1,9 +1,9 @@
-version: 3
+version: 4
 mode: STRICT
-max_changed_files: 16
-max_new_files: 4
+max_changed_files: 18
+max_new_files: 3
 max_dependency_additions: 0
 max_migration_files: 0
 max_public_api_changes: 0
-max_regression_tests: 20
-scope_note: "V3a P07 match center only. Reuse existing evidence and read-only APIs."
+max_regression_tests: 32
+scope_note: "V3b P07 predictions and odds only; use existing read-only API contracts."
