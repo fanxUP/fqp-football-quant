@@ -1,5 +1,5 @@
 version: 1
-status: implementing_v1
+status: implemented_v2_local
 date: '2026-10-08'
 mode: STRICT
 baseline_main_sha: 74ebae2b11a3abda78abe851d95d58ee418e742c

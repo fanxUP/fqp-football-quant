@@ -9,7 +9,7 @@ import { sceneNodes } from './presentation';
 type View = 'angle' | 'top' | 'free';
 type CameraAction = 'reset' | 'left' | 'right' | 'in' | 'out' | 'pan-up' | 'pan-down';
 type Colors = { background: string; pitch: string; stripe: string; line: string; accent: string; neutral: string };
-function RenderCounters() {
+export function RenderCounters() {
   const { gl } = useThree();
   const frame = useRef(0);
   const rendered = useRef(0);
@@ -27,7 +27,7 @@ function RenderCounters() {
   useEffect(() => () => cancelAnimationFrame(frame.current), []);
   return null;
 }
-function useSceneColors(): Colors {
+export function useSceneColors(): Colors {
   const { appearance } = useTheme();
   const read = () => {
     const styles = getComputedStyle(document.documentElement);
@@ -38,7 +38,7 @@ function useSceneColors(): Colors {
   useLayoutEffect(() => { const frame = requestAnimationFrame(() => setColors(read())); return () => cancelAnimationFrame(frame); }, [appearance]);
   return colors;
 }
-function CameraRig({ view, command, active, onFailure }: { view: View; command: { action: CameraAction; sequence: number }; active: boolean; onFailure: () => void }) {
+export function CameraRig({ view, command, active, onFailure }: { view: View; command: { action: CameraAction; sequence: number }; active: boolean; onFailure: () => void }) {
   const { camera, gl, invalidate } = useThree();
   const controls = useRef<OrbitControls | null>(null);
   const failureRef = useRef(onFailure); failureRef.current = onFailure;

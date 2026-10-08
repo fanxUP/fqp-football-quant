@@ -1,19 +1,8 @@
-version: 1
-base_revision: 74ebae2b11a3abda78abe851d95d58ee418e742c
+version: 2
+mode: STRICT
+base_revision: a4759a2be3823aa09c611babb4b01c9773f58209
+upstream_main: 74ebae2b11a3abda78abe851d95d58ee418e742c
 branch: feat/3d-command-center-v1
-workspace: /private/tmp/fqp-command-center
-verified_at: '2026-10-08T15:28:00Z'
-github_main_revision: 74ebae2b11a3abda78abe851d95d58ee418e742c
-server_revision: 74ebae2b11a3abda78abe851d95d58ee418e742c
-server_services_state: active
-lineup_snapshots: 188
-lineup_with_source: 188
-latest_lineup_snapshot: '2026-10-07T23:42:00'
-job_runs: 167587
-job_runs_with_input: 22444
-job_runs_with_output: 167248
-active_matches: 124
-active_with_lineup: 0
-active_with_lineup_source: 0
-active_with_lineup_players: 0
-limitations: 'Historical aggregate coverage is not current match coverage or causal links. Dashboard meta.updated_at is response generation time. Long GPU baseline pending.'
+phase: V2_P05_P06
+production_writes: false
+production_data_export: false

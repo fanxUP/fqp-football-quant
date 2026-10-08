@@ -3,7 +3,7 @@ import useBackgroundRefresh from '../../shared/hooks/useBackgroundRefresh';
 export interface ReadOnlyResource<T> { data: T | null; error: string | null; loading: boolean; receivedAt: number | null }
 
 /** One polling owner per resource. Consumers retain evidence from the last successful GET. */
-export default function useReadOnlyResource<T>(fetcher: () => Promise<T>, interval = 30_000) {
+export default function useReadOnlyResource<T>(fetcher: () => Promise<T>, interval = 30_000, polling = true) {
   const [state, setState] = useState<ReadOnlyResource<T>>({ data: null, error: null, loading: true, receivedAt: null });
   const mounted = useRef(false);
   const initialized = useRef(false);
@@ -34,6 +34,11 @@ export default function useReadOnlyResource<T>(fetcher: () => Promise<T>, interv
     if (!initialized.current) { initialized.current = true; void refresh(); }
     return () => { mounted.current = false; };
   }, [refresh]);
-  useBackgroundRefresh(refresh, interval);
+  const wasPolling = useRef(polling);
+  useEffect(() => {
+    if (polling && !wasPolling.current) void refresh();
+    wasPolling.current = polling;
+  }, [polling, refresh]);
+  useBackgroundRefresh(() => { if (polling) return refresh(); }, interval);
   return { ...state, refresh: () => refresh(true) };
 }

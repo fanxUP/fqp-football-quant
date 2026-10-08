@@ -757,6 +757,11 @@ export const api = {
       ),
   },
 
+  executions: {
+    overview: () => request<unknown>('/api/agent-execution-overview?limit=100'),
+    detail: (id: number) => request<unknown>(`/api/ai-jobs/${id}`),
+  },
+
   // Ops health (Stage 8)
   ops: {
     health: () => request<Record<string, unknown>>('/api/ops/health'),

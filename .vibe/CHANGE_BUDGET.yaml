@@ -1,9 +1,9 @@
-version: 1
+version: 2
 mode: STRICT
-max_changed_files: 34
-max_new_files: 18
-max_dependency_additions: 3
+max_changed_files: 24
+max_new_files: 10
+max_dependency_additions: 0
 max_migration_files: 0
-max_public_api_changes: 0
-max_regression_tests: 25
-scope_note: "V1 P01–P04. Two runtime packages plus Three types. Reuse HTTP, polling, CSS and state. No database/backend changes. Prior verification authorization persists."
+max_public_api_changes: 2
+max_regression_tests: 32
+scope_note: "V2 P05/P06 from local V1, two read-only APIs, no dependencies or migrations."

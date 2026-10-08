@@ -9,7 +9,7 @@ import Skeleton from '../shared/components/Skeleton';
 import PageHeader from '../shared/components/PageHeader';
 import useBackgroundRefresh from '../shared/hooks/useBackgroundRefresh';
 import { RoiLineChart, EmptyChartState, AiPoolDashboard } from '../visualization';
-import CommandCenter from '../features/command-center/CommandCenter';
+import CommandWorkspace from '../features/command-center/CommandWorkspace';
 import { useLiveStatus } from '../features/command-center/LiveStatus';
 import useReducedMotion from '../features/command-center/useReducedMotion';
 
@@ -312,7 +312,7 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      <CommandCenter />
+      <CommandWorkspace />
 
       {/* AI资金池 + 盈亏趋势 */}
       <div className="fqp-grid-2" style={{ marginBottom: '24px' }}>

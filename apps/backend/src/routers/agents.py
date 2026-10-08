@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Path, Query
 
 from apps.backend.src.db import get_db
+from apps.backend.src.services.execution_evidence import get_execution_detail as _execution_detail
+from apps.backend.src.services.execution_evidence import (
+    get_execution_overview as _execution_overview,
+)
 from scripts.agent_storage import (
     create_agent_task as _create_task,
 )
@@ -167,3 +171,21 @@ def stale_agent_tasks(
     with get_db() as conn:
         tasks = _list_stale_tasks(conn, threshold_minutes=threshold_minutes, limit=limit)
     return {"tasks": tasks, "total": len(tasks), "threshold_minutes": threshold_minutes}
+
+
+@router.get("/api/agent-execution-overview")
+def execution_overview(limit: int = Query(100, ge=1, le=200)):
+    """Bounded read-only registry/execution metadata without raw logs or payloads."""
+    with get_db() as conn:
+        snapshot = _execution_overview(conn, limit=limit)
+    return {**snapshot, "limit": limit, "task_limit": 50}
+
+
+@router.get("/api/ai-jobs/{run_id}")
+def execution_detail(run_id: int = Path(..., ge=1, le=9_223_372_036_854_775_807)):
+    """Existing run metadata plus an allowlisted reference projection."""
+    with get_db() as conn:
+        detail = _execution_detail(conn, run_id)
+    if detail is None:
+        raise HTTPException(status_code=404, detail="Execution not found")
+    return detail

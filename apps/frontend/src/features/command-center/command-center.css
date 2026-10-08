@@ -61,3 +61,18 @@
 @media (max-width: 480px) { .cc-global-status > span:nth-child(3) { width: 100%; }.cc-top-bar { padding-right: 12px; }.cc-shell .fqp-main { padding: 16px 12px; }.cc-workbench { gap: 12px; }.cc-panel-heading { flex-wrap: wrap; }.cc-canvas { height: 320px; } }
 @media (prefers-reduced-motion: reduce) { .cc-workbench *, .cc-shell .fqp-stat-card * { transition: none !important; animation: none !important; } }
 [data-motion='off'] .cc-workbench * { transition: none !important; animation: none !important; }
+.cc-workspace-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+.cc-workspace-tabs button, .cc-operation-button { min-height: 44px; padding: 8px 12px; color: var(--fqp-text); border: 1px solid var(--fqp-border); border-radius: 4px; background: var(--fqp-panel-2); cursor: pointer; }
+.cc-command-workspace button:disabled { cursor: default; opacity: .55; }
+.cc-command-workspace button:not(:disabled):hover, .cc-command-workspace button[aria-pressed='true'] { border-color: var(--fqp-accent); background: var(--fqp-accent-muted); }
+.cc-command-workspace :is(button, a, input, select):focus-visible { outline: 2px solid var(--fqp-accent-strong); outline-offset: 3px; }
+.cc-operation-header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+.cc-operation-header > [role='status'] { flex-basis: 100%; margin: 0; }
+.cc-execution-center { margin-bottom: 24px; }
+.cc-execution-state { font-size: 12px; }.cc-execution-state.is-running { color: var(--fqp-info); }.cc-execution-state.is-failed, .cc-error { color: var(--fqp-danger); }.cc-execution-state.is-success { color: var(--fqp-success); }.cc-execution-state.is-unknown { color: var(--fqp-warning); }
+.cc-agent-registry { display: flex; flex-wrap: wrap; gap: 8px; }.cc-agent-registry small { display: block; font-size: 12px; color: var(--fqp-text-muted); margin-top: 6px; }
+.cc-reference-list > div { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; font-size: 12px; padding-block: 8px; border-bottom: 1px solid var(--fqp-border); }.cc-reference-list dt { color: var(--fqp-text-muted); }.cc-reference-list dd { margin: 0; font-variant-numeric: tabular-nums; }.cc-reference-list :is(dt, dd) { overflow-wrap: anywhere; }
+.cc-dependency-chain { display: grid; gap: 8px; font-size: 12px; overflow-wrap: anywhere; color: var(--fqp-text-muted); }
+.cc-human-tasks { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 12px; max-height: 360px; overflow-y: auto; }.cc-human-tasks article { padding: 12px; background: var(--fqp-panel-2); font-size: 13px; overflow-wrap: anywhere; }.cc-human-tasks p { color: var(--fqp-text-muted); }
+
+.cc-llm-bindings { margin-bottom: 16px; }
