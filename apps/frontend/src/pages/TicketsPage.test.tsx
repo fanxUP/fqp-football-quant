@@ -113,4 +113,25 @@ describe('TicketsPage', () => {
     expect(apiMocks.tickets).toHaveBeenCalledTimes(2);
     expect(apiMocks.tickets).toHaveBeenNthCalledWith(2, { date: undefined, status: undefined, limit: 100 });
   });
+  it('显示完整统计并按游标加载更多，重复彩票只显示一次', async () => {
+    const summary = { total: 301, stake: 602, settled: 0, pending: 301 };
+    apiMocks.tickets.mockResolvedValueOnce({ tickets: [realTicket], total: 301,
+      summary, byOwner: { me: summary }, nextCursor: 'page-two' });
+    apiMocks.tickets.mockResolvedValueOnce({ tickets: [realTicket, simulationTicket], total: 301,
+      summary, byOwner: { me: summary }, nextCursor: null });
+    render(<TicketsPage />);
+    expect(await screen.findByText('301 张彩票')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '加载更多' }));
+    await screen.findByRole('button', { name: '删除彩票 模拟票 #7' });
+    expect(apiMocks.tickets).toHaveBeenLastCalledWith({ date: undefined, status: undefined, limit: 100, cursor: 'page-two' });
+    expect(screen.getAllByRole('button', { name: '删除彩票 实票 #12' })).toHaveLength(1);
+    expect(screen.queryByRole('button', { name: '加载更多' })).not.toBeInTheDocument();
+  });
+
+  it('切换状态将筛选传给后端并清除旧分页游标', async () => {
+    render(<TicketsPage />);
+    fireEvent.change(await screen.findByRole('combobox', { name: '彩票状态' }), { target: { value: 'won' } });
+    await waitFor(() => expect(apiMocks.tickets).toHaveBeenLastCalledWith({ date: undefined, status: 'won', limit: 100 }));
+  });
+
 });
