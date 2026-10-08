@@ -589,7 +589,12 @@ def provider_connection(caller: Any):
     connection = None
     try:
         # A bounded independent connection also avoids nested application-pool starvation.
-        connection = psycopg2.connect(caller.dsn, connect_timeout=5)
+        # connection.dsn replaces the password with a mask. Reuse libpq's
+        # private password in memory, preserving the caller's host/SSL settings.
+        parameters = dict(caller.info.dsn_parameters)
+        parameters["password"] = caller.info.password
+        parameters["connect_timeout"] = 5
+        connection = psycopg2.connect(**parameters)
         yield connection
     except psycopg2.Error as exc:
         raise PiBridgeError("模型凭据读取或更新暂时受限，请稍后重试", "MODEL_CONFIG_ERROR") from exc

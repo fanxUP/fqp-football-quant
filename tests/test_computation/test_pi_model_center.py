@@ -251,6 +251,26 @@ def test_login_without_supported_provider_never_starts_upstream(monkeypatch) -> 
     start.assert_not_called()
 
 
+def test_credential_connection_reuses_private_libpq_password(monkeypatch) -> None:
+    caller = MagicMock()
+    caller.dsn = "host=example.test password=xxx"
+    caller.info.dsn_parameters = {"host": "example.test", "dbname": "isolated", "sslmode": "require"}
+    caller.info.password = "unit-test-only-database-password"
+    connection = MagicMock()
+    connect = MagicMock(return_value=connection)
+    monkeypatch.setattr(store.psycopg2, "connect", connect)
+    with store.provider_connection(caller) as result:
+        assert result is connection
+    connect.assert_called_once_with(
+        host="example.test",
+        dbname="isolated",
+        sslmode="require",
+        password="unit-test-only-database-password",
+        connect_timeout=5,
+    )
+    connection.close.assert_called_once()
+
+
 def test_credential_rotation_never_commits_caller_business_writes(pi_db, monkeypatch) -> None:
     _save_oauth(pi_db)
     monkeypatch.setattr(
