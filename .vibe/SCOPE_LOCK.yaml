@@ -33,6 +33,8 @@ allowed_paths:
   - tests/test_api/test_betting_router.py
   - tests/test_jobs/test_verify_backup.py
   - tests/test_scripts/test_ticket_settlement.py
+  - tests/test_jobs/test_settle_tickets_static.py
+  - tests/test_local/test_local_dev_runtime.py
 forbidden_paths:
   - .env*
 out_of_scope: "Live historical financial correction, new dependencies, full automatic backups, broad rewrites. Submission, regression verification and guarded production deployment are authorized."

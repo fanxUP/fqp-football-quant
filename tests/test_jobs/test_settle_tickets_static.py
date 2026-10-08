@@ -19,7 +19,8 @@ def test_simulator_prize_credit_uses_simulator_win_flag():
         source, "# 3. Settle simulator tickets", "# 4. Settle real tickets"
     )
 
-    assert "if ticket_won and net_prize > 0:" in simulator_section
+    assert '"is_won": ticket_won' in simulator_section
+    assert "settle_ticket_atomically(" in simulator_section
     assert "calculate_winning_prize(detail, pass_type, multiple)" in simulator_section
     assert "if ticket_all_won and net_prize > 0:" not in simulator_section
 
@@ -31,7 +32,8 @@ def test_agent_ticket_uses_combination_prize_calculator():
     )
 
     assert "_calculate_agent_prize(" in agent_section
-    assert "if agent_ticket_won and net_prize > 0:" in agent_section
+    assert '"is_won": agent_ticket_won' in agent_section
+    assert "settle_ticket_atomically(" in agent_section
     assert "stake * product_sp" not in agent_section
 
 
@@ -40,7 +42,8 @@ def test_real_ticket_prize_credit_uses_real_win_flag():
     real_section = _section(source, "# 4. Settle real tickets", "return {")
 
     assert "calculate_winning_prize(real_detail, pass_type, multiple)" in real_section
-    assert "if real_ticket_won and net_prize > 0:" in real_section
+    assert '"is_won": real_ticket_won' in real_section
+    assert "settle_ticket_atomically(" in real_section
     assert "ai_option == result_map[ai_match_id]" not in real_section
     assert "if all_won and net_prize > 0:" not in real_section
 
