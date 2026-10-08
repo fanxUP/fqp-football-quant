@@ -18,14 +18,10 @@ from scripts.jobs.settlement_repairs import (
     repair_legacy_real_settlements,
 )
 from scripts.play_type_registry import result_column
-from scripts.real_ticket_storage import (
-    create_bankroll_transaction,
-    create_settlement,
-)
 from scripts.result_codes import normalize_result as _normalize_result
 from scripts.result_status import is_void_official_result as _is_void_result
 from scripts.simulator_calculator import calculate_winning_prize
-from scripts.simulator_storage import update_ticket_status as update_sim_ticket_status
+from scripts.ticket_settlement import settle_ticket_atomically
 
 
 def _calculate_tax(prize: float) -> float:
@@ -311,7 +307,7 @@ def run(dry_run: bool = False) -> dict[str, Any]:
                 roi = profit_loss / stake if stake > 0 else 0.0
 
                 # Insert settlement
-                settlement_id = create_settlement(
+                settled = settle_ticket_atomically(
                     conn,
                     {
                         "ticket_source": "simulation",
@@ -333,33 +329,10 @@ def run(dry_run: bool = False) -> dict[str, Any]:
                             "has_winning_combination": agent_ticket_won,
                         },
                     },
+                    remark=f"AI推荐 #{tid} 中奖 {prize:.2f}, 税后 {net_prize:.2f}",
                 )
 
-                if settlement_id:
-                    # Bankroll: credit the prize (if won)
-                    # Note: simulation_tickets had no stake deducted at creation
-                    # (they are recommendations). Only record actual prize movement.
-                    if agent_ticket_won and net_prize > 0:
-                        create_bankroll_transaction(
-                            conn,
-                            {
-                                "account_type": "simulation",
-                                "transaction_type": "prize",
-                                "amount": net_prize,
-                                "related_ticket_id": tid,
-                                "remark": f"AI推荐 #{tid} 中奖 {prize:.2f}, 税后 {net_prize:.2f}",
-                            },
-                        )
-                    # Lost: no transaction (AI budget consumed, no real money lost)
-
-                    # Update ticket status
-                    with conn.cursor() as cur:
-                        cur.execute(
-                            "UPDATE simulation_tickets SET ticket_status = 'settled' WHERE id = %s",
-                            (tid,),
-                        )
-                    conn.commit()
-
+                if settled:
                     total_settled += 1
                     sim_settled += 1
                     total_prize += prize
@@ -460,7 +433,7 @@ def run(dry_run: bool = False) -> dict[str, Any]:
                 roi = profit_loss / stake if stake > 0 else 0.0
 
                 # Insert settlement
-                settlement_id = create_settlement(
+                settled = settle_ticket_atomically(
                     conn,
                     {
                         "ticket_source": "simulator",
@@ -482,27 +455,10 @@ def run(dry_run: bool = False) -> dict[str, Any]:
                             "has_winning_combination": ticket_won,
                         },
                     },
+                    remark=f"Simulator #{tid} 中奖 {prize:.2f}, 税后 {net_prize:.2f}",
                 )
 
-                if settlement_id:
-                    # Bankroll: credit the prize (if won) — stake already deducted at purchase
-                    if ticket_won and net_prize > 0:
-                        create_bankroll_transaction(
-                            conn,
-                            {
-                                "account_type": "simulator",
-                                "transaction_type": "prize",
-                                "amount": net_prize,
-                                "related_ticket_id": tid,
-                                "remark": f"Simulator #{tid} 中奖 {prize:.2f}, 税后 {net_prize:.2f}",
-                            },
-                        )
-                    # Lost: no action — stake already deducted at ticket creation
-
-                    # Update ticket status
-                    update_sim_ticket_status(conn, tid, "settled")
-                    conn.commit()
-
+                if settled:
                     total_settled += 1
                     simulator_settled += 1
                     total_prize += prize
@@ -611,7 +567,7 @@ def run(dry_run: bool = False) -> dict[str, Any]:
                 profit_loss = net_prize - stake
                 roi = profit_loss / stake if stake > 0 else 0.0
 
-                settlement_id = create_settlement(
+                settled = settle_ticket_atomically(
                     conn,
                     {
                         "ticket_source": "real",
@@ -633,31 +589,10 @@ def run(dry_run: bool = False) -> dict[str, Any]:
                             "has_winning_combination": real_ticket_won,
                         },
                     },
+                    remark=f"实票 #{rtid} 中奖 {prize:.2f}, 税后 {net_prize:.2f}",
                 )
 
-                if settlement_id:
-                    # Bankroll: credit prize for winning real tickets
-                    if real_ticket_won and net_prize > 0:
-                        create_bankroll_transaction(
-                            conn,
-                            {
-                                "account_type": "real",
-                                "transaction_type": "prize",
-                                "amount": net_prize,
-                                "related_ticket_id": rtid,
-                                "remark": f"实票 #{rtid} 中奖 {prize:.2f}, 税后 {net_prize:.2f}",
-                            },
-                        )
-                    # Lost: no transaction (stake paid at store, no digital movement)
-
-                    # Update real ticket settlement status
-                    with conn.cursor() as cur:
-                        cur.execute(
-                            "UPDATE real_tickets SET settlement_status = 'settled', updated_at = now() WHERE id = %s",
-                            (rtid,),
-                        )
-                    conn.commit()
-
+                if settled:
                     total_settled += 1
                     real_settled += 1
                     total_prize += prize

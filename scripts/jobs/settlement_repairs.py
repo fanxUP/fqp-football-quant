@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from copy import deepcopy
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
 from scripts.result_codes import normalize_result
@@ -70,7 +71,9 @@ def _adjust_real_account(conn: Any, ticket_id: int, delta: float) -> None:
         account = cur.fetchone()
         if not account:
             return
-        balance_after = float(account[1] or 0) + delta
+        balance_after = Decimal(str(account[1] or 0)) + Decimal(str(delta)).quantize(
+            Decimal("0.01"), rounding=ROUND_HALF_UP
+        )
         cur.execute(
             """
             INSERT INTO bankroll_transactions (
@@ -115,6 +118,18 @@ def repair_legacy_real_settlements(conn: Any) -> dict[str, Any]:
             SELECT id, ticket_id, stake_amount, net_prize, settlement_detail_json
             FROM ticket_settlements
             WHERE ticket_source = 'real'
+              AND EXISTS (
+                  SELECT 1 FROM jsonb_array_elements(
+                      CASE WHEN jsonb_typeof(settlement_detail_json->'items') = 'array'
+                           THEN settlement_detail_json->'items' ELSE '[]'::jsonb END
+                  ) item
+                  WHERE (item->>'play_type' IN ('spf', 'rqspf', 'bqc')
+                         AND item->>'option_code' ~ '[HhDdAa]')
+                     OR (item->>'play_type' = 'bf' AND item->>'option_code' <>
+                         REPLACE(REPLACE(item->>'option_code', '-', ':'), ' ', ''))
+                     OR (item->>'play_type' = 'zjq' AND item->>'option_code' IN ('7+', '7plus', '7以上'))
+                     OR item->>'option_code' <> BTRIM(item->>'option_code')
+              )
             ORDER BY id
             FOR UPDATE
             """

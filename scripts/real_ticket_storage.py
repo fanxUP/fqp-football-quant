@@ -7,6 +7,7 @@ All functions accept conn: Any and call conn.commit() internally.
 from __future__ import annotations
 
 import json
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
 from scripts.business_time import utc_now_iso
@@ -371,7 +372,7 @@ def update_item_model_match(
 # ---------------------------------------------------------------------------
 
 
-def create_settlement(conn: Any, settlement: dict) -> int | None:
+def create_settlement(conn: Any, settlement: dict, *, commit: bool = True) -> int | None:
     """Insert a ticket settlement. Idempotent — skips if already exists."""
     sql_check = """
         SELECT id FROM ticket_settlements
@@ -418,7 +419,8 @@ def create_settlement(conn: Any, settlement: dict) -> int | None:
         }
         cur.execute(sql_insert, params)
         row = cur.fetchone()
-    conn.commit()
+    if commit:
+        conn.commit()
     return row[0] if row else None
 
 
@@ -934,11 +936,11 @@ def get_error_summary(conn: Any, days: int = 7) -> dict:
 # ---------------------------------------------------------------------------
 
 
-def create_bankroll_transaction(conn: Any, txn: dict) -> int | None:
+def create_bankroll_transaction(conn: Any, txn: dict, *, commit: bool = True) -> int | None:
     """Insert a bankroll transaction and update account balance atomically."""
     sql_select = """
         SELECT id, current_balance FROM bankroll_accounts
-        WHERE account_type = %(account_type)s LIMIT 1
+        WHERE account_type = %(account_type)s ORDER BY id LIMIT 1 FOR UPDATE
     """
     sql_insert = """
         INSERT INTO bankroll_transactions (
@@ -961,8 +963,10 @@ def create_bankroll_transaction(conn: Any, txn: dict) -> int | None:
             return None
 
         account_id = account[0]
-        current = float(account[1] or 0)
-        amount = float(txn.get("amount", 0))
+        current = Decimal(str(account[1] or 0))
+        amount = Decimal(str(txn.get("amount", 0))).quantize(
+            Decimal("0.01"), rounding=ROUND_HALF_UP
+        )
         balance_after = current + amount
 
         cur.execute(
@@ -979,7 +983,8 @@ def create_bankroll_transaction(conn: Any, txn: dict) -> int | None:
         row = cur.fetchone()
         if row:
             cur.execute(sql_update, {"balance": balance_after, "id": account_id})
-    conn.commit()
+    if commit:
+        conn.commit()
     return row[0] if row else None
 
 
