@@ -3,7 +3,9 @@
 set -Eeuo pipefail
 main() {
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+# A first rollout runs this new runner from a staged GitHub archive while
+# the live checkout still has the previous code. Select the checkout explicitly.
+PROJECT_ROOT="$(cd "${FQP_PROJECT_ROOT:-$SCRIPT_DIR/../..}" && pwd)"
 cd "$PROJECT_ROOT"
 RELEASE_SHA="${1:-}"
 RELEASE_MODE="${2:---plan}"
