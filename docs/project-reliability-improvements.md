@@ -46,7 +46,7 @@
 - 显式配置 `DATABASE_URL` 后运行 `python -m scripts.jobs.verify_backup`，生成权限 600 的 `.dump` 和 `.dump.sha256`。
 - `--dry-run` 只返回计划，不产生备份，不记录数据库日志。
 - 未配置 `FQP_RESTORE_TEST_DATABASE_URL` 时仅校验哈希和归档目录，`restore_test` 返回 null，绝不称为实际恢复通过。
-- 恢复演练需事先准备独立、空的 `fqp_restore_*` 数据库，并设置上述 URL。执行 `pg_restore --single-transaction --exit-on-error` 后查询关键表；演练后由操作者显式清理该数据库。
+- 恢复演练需事先准备独立、空的 UTF-8 `fqp_restore_*` 数据库（如 `createdb -T template0 -E UTF8 --locale=C`），并设置上述 URL。拒绝 SQL_ASCII 目标，避免中文解码失败。执行 `pg_restore --single-transaction --exit-on-error` 后查询关键表；演练后由操作者显式清理该数据库。
 - 保留已有备份，本工具不删除历史备份。异地复制及保留期限需另行落实。
 
 ## 当前检查证据
@@ -64,5 +64,5 @@
 
 - 根据用户明确的测试授权，文件预算调整到 36，新增文件 11，回归用例预算 16；只新增一个结算测试文件，另更新既有接口、界面、备份和静态契约测试。
 - 93 迁移中的报告审计表为只追加设计，生产角色只具备 SELECT/INSERT；迁移预检保留这一权限约束，不要求额外 UPDATE。
-- 生产迁移账本尚未记录已有的 102 启动恢复记录表；发布计划包含 102、104、105。102 仅新增表和索引，应用角色执行。失败回退保留新增结构，旧版本可兼容；副本演练才删除新建的空恢复表。
+- 生产迁移账本尚未记录已有的 102 启动恢复记录表；发布计划包含 102、104、105。102 的 IF NOT EXISTS 保留现有表及数据，应用角色执行。副本中已核对 1 条恢复会话和 23 条任务记录，往返演练保留它们，仅对本轮新增的 104/105 执行 DOWN/UP。失败回退保留新增结构，旧版本可兼容。
 - 部署前 PostgreSQL 检查：重复结算账本和重复发奖均为 0。备份快照关键表计数：official_matches=2586、ticket_settlements=322、bankroll_transactions=140、model_predictions=10221273。

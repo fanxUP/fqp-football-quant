@@ -1,5 +1,5 @@
 import hashlib
-from unittest.mock import Mock
+from unittest.mock import MagicMock, Mock
 
 from scripts.jobs import verify_backup as backup
 
@@ -19,6 +19,23 @@ def test_restore_refuses_production_database(monkeypatch, tmp_path):
     monkeypatch.setattr(backup.psycopg2, "connect", connect)
     assert backup._test_restore(str(tmp_path / "backup.dump")) is False
     connect.assert_not_called()
+
+
+def test_restore_refuses_sql_ascii_target(monkeypatch, tmp_path):
+    monkeypatch.setenv("FQP_RESTORE_TEST_DATABASE_URL", "dbname=fqp_restore_validation")
+    monkeypatch.setattr(backup.shutil, "which", lambda _: "/usr/bin/pg_restore")
+    conn = MagicMock()
+    conn.__enter__.return_value = conn
+    conn.cursor.return_value.__enter__.return_value.fetchone.return_value = (
+        "fqp_restore_validation",
+        0,
+        "SQL_ASCII",
+    )
+    monkeypatch.setattr(backup.psycopg2, "connect", Mock(return_value=conn))
+    restore = Mock()
+    monkeypatch.setattr(backup.subprocess, "run", restore)
+    assert backup._test_restore(str(tmp_path / "backup.dump")) is False
+    restore.assert_not_called()
 
 
 def test_archive_checksum_mismatch_refuses_restore(monkeypatch, tmp_path):

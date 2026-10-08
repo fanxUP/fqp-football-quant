@@ -159,10 +159,10 @@ def _test_restore(filepath: str) -> bool | None:
         with psycopg2.connect(target, connect_timeout=5) as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    "SELECT current_database(), (SELECT COUNT(*) FROM pg_tables WHERE schemaname NOT IN ('pg_catalog', 'information_schema'))"
+                    "SELECT current_database(), (SELECT COUNT(*) FROM pg_tables WHERE schemaname NOT IN ('pg_catalog', 'information_schema')), current_setting('server_encoding')"
                 )
-                name, tables = cur.fetchone()
-                if not name.startswith("fqp_restore_") or tables:
+                name, tables, encoding = cur.fetchone()
+                if not name.startswith("fqp_restore_") or tables or encoding != "UTF8":
                     return False
         # Connection options go through the environment, never secret argv.
         database_name, restore_env = _pg_environment(target)
