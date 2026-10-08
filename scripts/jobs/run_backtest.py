@@ -34,7 +34,8 @@ from scripts.business_time import business_today  # noqa: E402
 def _default_config(name: str, model_names: list[str] | None = None) -> BacktestConfig:
     """构建默认回测配置。
 
-    默认：过去 2 年的数据，90 天 walk-forward 窗口，strong 信号。
+    默认：回放过去 2 年已保存的赛前预测，全部信号，最低概率 0.01。
+    不重新训练模型（walk_forward=False）；窗口参数保留为 365 天。
     """
     today = business_today()
     two_years_ago = today - timedelta(days=730)
