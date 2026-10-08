@@ -36,13 +36,17 @@ export interface RuntimeModule {
 export interface ModelProviderPreset {
   providerCode: string;
   displayName: string;
-  protocol: 'openai' | 'anthropic' | 'gemini' | 'ollama' | 'perplexity';
+  protocol: string;
   defaultBaseUrl: string;
   defaultModel: string;
   recommendedModels: string[];
   capabilities: string[];
   documentationUrl: string;
   requiresApiKey: boolean;
+  authMethods: ('api_key' | 'oauth' | 'none')[];
+  oauthLabel: string | null;
+  modelCount: number;
+  engine: string;
 }
 
 export interface ModelProviderConnection {
@@ -58,6 +62,29 @@ export interface ModelProviderConnection {
   lastTestStatus: 'passed' | 'failed' | null;
   lastTestMessage: string | null;
   requiresApiKey: boolean;
+  authType: 'api_key' | 'oauth' | 'none';
+  hasCredential: boolean;
+  apiProtocol: string | null;
+}
+
+export interface ProviderModel {
+  id: string; name: string; api: string; input: string[]; reasoning: boolean;
+  contextWindow: number | null; maxTokens: number | null;
+}
+
+export interface ProviderLogin {
+  loginId: string; providerCode: string;
+  status: 'working' | 'waiting' | 'connected' | 'failed' | 'cancelled' | 'expired';
+  expiresAt: number;
+  events: { type: string; url?: string | null; message?: string; instructions?: string; userCode?: string; verificationUri?: string | null }[];
+  prompt: { id: string; type: 'text' | 'secret' | 'manual_code' | 'select'; message: string; options: { id: string; label: string }[] } | null;
+  provider: ModelProviderConnection | null;
+}
+
+export interface ProviderConfigPayload {
+  providerCode: string; displayName?: string; baseUrl?: string; defaultModel: string;
+  apiKey?: string; enabled: boolean; authType?: 'api_key' | 'oauth' | 'none';
+  apiProtocol?: string; providerEnv?: Record<string, string>;
 }
 
 export interface AgentModelBinding {
@@ -388,17 +415,24 @@ export const api = {
   modelProviders: {
     catalog: () => request<{ providers: ModelProviderPreset[] }>('/api/model-providers/catalog'),
     list: () => request<{ providers: ModelProviderConnection[] }>('/api/model-providers'),
-    save: (providerCode: string, payload: {
-      providerCode: string;
-      displayName?: string;
-      baseUrl?: string;
-      defaultModel: string;
-      apiKey?: string;
-      enabled: boolean;
-    }) => request<{ provider: ModelProviderConnection }>(`/api/model-providers/${encodeURIComponent(providerCode)}`, {
+    save: (providerCode: string, payload: ProviderConfigPayload) => request<{ provider: ModelProviderConnection }>(`/api/model-providers/${encodeURIComponent(providerCode)}`, {
       method: 'PUT',
       body: JSON.stringify(payload),
     }),
+    models: (providerCode: string, q = '', offset = 0) => request<{ models: ProviderModel[]; total: number }>(
+      `/api/model-providers/${encodeURIComponent(providerCode)}/models?q=${encodeURIComponent(q)}&offset=${offset}&limit=100`,
+    ),
+    login: (providerCode: string, payload: ProviderConfigPayload) => request<ProviderLogin>(
+      `/api/model-providers/${encodeURIComponent(providerCode)}/login`, { method: 'POST', body: JSON.stringify(payload) },
+    ),
+    loginStatus: (loginId: string) => request<ProviderLogin>(`/api/model-providers/logins/${encodeURIComponent(loginId)}`),
+    loginInput: (loginId: string, promptId: string, value: string) => request<ProviderLogin>(
+      `/api/model-providers/logins/${encodeURIComponent(loginId)}/input`, { method: 'POST', body: JSON.stringify({ promptId, value }) },
+    ),
+    cancelLogin: (loginId: string) => request<ProviderLogin>(`/api/model-providers/logins/${encodeURIComponent(loginId)}`, { method: 'DELETE' }),
+    disconnect: (providerCode: string) => request<{ status: string }>(
+      `/api/model-providers/${encodeURIComponent(providerCode)}/credential`, { method: 'DELETE' },
+    ),
     test: (providerCode: string) => request<{
       providerCode: string;
       status: 'passed' | 'failed';

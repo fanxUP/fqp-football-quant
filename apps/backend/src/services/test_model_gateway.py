@@ -8,9 +8,9 @@ import pytest
 from apps.backend.src.services.model_agent_prompts import get_agent_system_instruction
 from apps.backend.src.services.model_gateway import (
     ModelGatewayError,
-    _request_completion,
     invoke_agent_model,
 )
+from apps.backend.src.services.model_transport import request_completion as _request_completion
 
 
 class FakeClient:

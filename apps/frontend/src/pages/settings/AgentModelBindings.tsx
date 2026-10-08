@@ -9,7 +9,7 @@ export default function AgentModelBindings({ providers }: { providers: ModelProv
   const [saving, setSaving] = useState<string | null>(null);
   const [auditVersion, setAuditVersion] = useState(0);
   const [providerChoices, setProviderChoices] = useState<Record<string, string>>({});
-  const hasCredential = (provider: ModelProviderConnection) => provider.hasApiKey || !provider.requiresApiKey;
+  const hasCredential = (provider: ModelProviderConnection) => provider.hasCredential ?? (provider.hasApiKey || !provider.requiresApiKey);
   const readyProviders = providers.filter((provider) => provider.enabled && hasCredential(provider) && provider.lastTestStatus === 'passed');
   const testedButDisabledProviders = providers.filter((provider) => !provider.enabled && hasCredential(provider) && provider.lastTestStatus === 'passed');
   const effectiveBindings = useMemo(() => bindings.map((binding) => {

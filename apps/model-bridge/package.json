@@ -1,0 +1,8 @@
+{
+  "name": "fqp-pi-model-bridge",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=24 <25" },
+  "scripts": { "test": "node --test bridge.test.mjs", "check": "node --check bridge.mjs" },
+  "dependencies": { "@earendil-works/pi-ai": "1.1.0" }
+}

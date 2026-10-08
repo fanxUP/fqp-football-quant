@@ -4,16 +4,19 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import json
 import os
+import threading
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import urlparse
 
-import httpx
+import psycopg2
 from cryptography.fernet import Fernet, InvalidToken
 
-from apps.backend.src.services.model_transport import read_completion_content, request_completion
+from apps.backend.src.services.pi_bridge import PiBridgeError, call_bridge, pi_catalog, pi_provider
 
 
 @dataclass(frozen=True)
@@ -230,7 +233,7 @@ def _validate_url(value: str, *, allow_empty: bool = False) -> str:
 def validate_provider_input(
     provider_code: str, base_url: str | None, model: str
 ) -> tuple[ProviderDefinition, str, str]:
-    provider = PROVIDERS.get(provider_code)
+    provider = provider_definition(provider_code)
     if provider is None:
         raise ProviderConfigError("不支持的模型服务商")
     resolved_url = _validate_url(base_url or provider.default_base_url, allow_empty=False)
@@ -248,49 +251,91 @@ def mask_api_key(value: str | None) -> str | None:
     return "••••••••••••"
 
 
+PI_ALIASES = {"gemini": "google", "zhipu": "zai", "moonshot": "moonshotai"}
+LEGACY_APIS = {
+    "openai": "openai-completions",
+    "perplexity": "openai-completions",
+    "ollama": "openai-completions",
+    "anthropic": "anthropic-messages",
+    "gemini": "google-generative-ai",
+}
+CUSTOM_APIS = set(LEGACY_APIS.values()) | {"openai-responses", "auto"}
+CONFIG_COLUMNS = "provider_code, display_name, base_url, default_model, enabled, api_key_encrypted, updated_at, last_test_at, last_test_status, last_test_message, auth_type, api_protocol, pi_credential_encrypted"
+
+
+def pi_id(code: str) -> str:
+    return PI_ALIASES.get(code, code)
+
+
+def provider_definition(code: str) -> ProviderDefinition | None:
+    if code in PROVIDERS:
+        return PROVIDERS[code]
+    item = pi_provider(pi_id(code))
+    if not item or not item["models"]:
+        return None
+    model = item["models"][0]
+    return ProviderDefinition(
+        code,
+        item["name"],
+        model["api"],
+        item["baseUrl"] or model["baseUrl"],
+        model["id"],
+        tuple(m["id"] for m in item["models"][:8]),
+        ("analysis",),
+        "https://pi.dev/models",
+    )
+
+
 def _requires_api_key(provider_code: str) -> bool:
-    provider = PROVIDERS.get(provider_code)
+    provider = provider_definition(provider_code)
     return provider.requires_api_key if provider else True
+
+
+def _config_record(row: Any) -> dict[str, Any]:
+    return dict(zip(CONFIG_COLUMNS.replace(" ", "").split(","), row, strict=True))
+
+
+def _public_config(record: dict[str, Any]) -> dict[str, Any]:
+    has_key = bool(record["api_key_encrypted"])
+    auth_type = record["auth_type"]
+    connected = (
+        bool(record["pi_credential_encrypted"])
+        if auth_type == "oauth"
+        else has_key or auth_type == "none"
+    )
+    return {
+        "providerCode": record["provider_code"],
+        "displayName": record["display_name"],
+        "baseUrl": record["base_url"],
+        "defaultModel": record["default_model"],
+        "enabled": record["enabled"],
+        "hasApiKey": has_key,
+        "apiKeyMask": mask_api_key(record["api_key_encrypted"]),
+        "updatedAt": record["updated_at"].isoformat() if record["updated_at"] else None,
+        "lastTestAt": record["last_test_at"].isoformat() if record["last_test_at"] else None,
+        "lastTestStatus": record["last_test_status"],
+        "lastTestMessage": record["last_test_message"],
+        "requiresApiKey": auth_type == "api_key",
+        "authType": auth_type,
+        "hasCredential": connected,
+        "apiProtocol": record["api_protocol"],
+    }
 
 
 def list_provider_configs(conn: Any) -> list[dict[str, Any]]:
     with conn.cursor() as cur:
         cur.execute(
-            """SELECT provider_code, display_name, base_url, default_model, enabled,
-                      api_key_encrypted, updated_at, last_test_at,
-                      last_test_status, last_test_message
-               FROM llm_provider_configs ORDER BY updated_at DESC, provider_code"""
+            f"SELECT {CONFIG_COLUMNS} FROM llm_provider_configs ORDER BY updated_at DESC, provider_code"
         )
-        rows = cur.fetchall()
-    return [
-        {
-            "providerCode": row[0],
-            "displayName": row[1],
-            "baseUrl": row[2],
-            "defaultModel": row[3],
-            "enabled": row[4],
-            "hasApiKey": bool(row[5]),
-            "apiKeyMask": mask_api_key(row[5]),
-            "updatedAt": row[6].isoformat() if row[6] else None,
-            "lastTestAt": row[7].isoformat() if row[7] else None,
-            "lastTestStatus": row[8],
-            "lastTestMessage": row[9],
-            "requiresApiKey": _requires_api_key(row[0]),
-        }
-        for row in rows
-    ]
+        return [_public_config(_config_record(row)) for row in cur.fetchall()]
 
 
 def list_agent_model_bindings(conn: Any) -> list[dict[str, Any]]:
-    """Return the narrow allow-list of agents that may opt into a model call."""
     with conn.cursor() as cur:
-        cur.execute(
-            """SELECT b.agent_code, b.provider_code, b.enabled, b.updated_at,
+        cur.execute("""SELECT b.agent_code, b.provider_code, b.enabled, b.updated_at,
                       p.display_name, p.default_model, p.enabled, p.last_test_status
-               FROM llm_agent_bindings b
-               JOIN llm_provider_configs p ON p.provider_code = b.provider_code
-               ORDER BY b.agent_code"""
-        )
+               FROM llm_agent_bindings b JOIN llm_provider_configs p ON p.provider_code = b.provider_code
+               ORDER BY b.agent_code""")
         saved = {row[0]: row for row in cur.fetchall()}
     return [
         {
@@ -315,25 +360,27 @@ def save_agent_model_binding(
     if agent_code not in AGENT_MODEL_OPTIONS:
         raise ProviderConfigError("该智能代理不允许配置外部模型")
     with conn.cursor() as cur:
+        cur.execute("SET LOCAL lock_timeout = '5s'", ())
         cur.execute(
-            """SELECT provider_code, enabled, api_key_encrypted IS NOT NULL, last_test_status
-               FROM llm_provider_configs WHERE provider_code = %s""",
+            """SELECT provider_code, enabled,
+                   CASE WHEN auth_type = 'oauth' THEN pi_credential_encrypted IS NOT NULL
+                        WHEN auth_type = 'none' THEN true ELSE api_key_encrypted IS NOT NULL END,
+                   last_test_status FROM llm_provider_configs WHERE provider_code = %s FOR UPDATE""",
             (provider_code,),
         )
         provider = cur.fetchone()
         if not provider:
             raise ProviderConfigError("请先保存模型服务商配置")
-        if enabled and _requires_api_key(str(provider[0])) and not provider[2]:
-            raise ProviderConfigError("请先保存服务商 API 密钥，再启用智能代理")
+        if enabled and not provider[2]:
+            raise ProviderConfigError("请先保存服务商 API 密钥或完成账号登录，再启用智能代理")
         if enabled and provider[3] != "passed":
             raise ProviderConfigError("请先通过服务商连通性测试，再启用智能代理")
         if enabled and not provider[1]:
             raise ProviderConfigError("服务商已通过测试但尚未启用，请先在模型接入中开启服务商")
         cur.execute(
             """INSERT INTO llm_agent_bindings (agent_code, provider_code, enabled, updated_at)
-               VALUES (%s, %s, %s, NOW())
-               ON CONFLICT (agent_code) DO UPDATE SET provider_code = EXCLUDED.provider_code,
-                 enabled = EXCLUDED.enabled, updated_at = NOW()""",
+                   VALUES (%s, %s, %s, NOW()) ON CONFLICT (agent_code) DO UPDATE SET
+                   provider_code = EXCLUDED.provider_code, enabled = EXCLUDED.enabled, updated_at = NOW()""",
             (agent_code, provider_code, enabled),
         )
     conn.commit()
@@ -341,23 +388,17 @@ def save_agent_model_binding(
 
 
 def get_agent_model_binding(conn: Any, agent_code: str) -> dict[str, Any] | None:
-    """Load the secret-bearing record only at the model invocation boundary."""
     if agent_code not in AGENT_MODEL_OPTIONS:
         return None
     with conn.cursor() as cur:
         cur.execute(
             """SELECT b.agent_code, b.provider_code, b.enabled, p.base_url, p.default_model,
-                      p.api_key_encrypted, p.enabled, p.last_test_status
-               FROM llm_agent_bindings b
-               JOIN llm_provider_configs p ON p.provider_code = b.provider_code
-               WHERE b.agent_code = %s""",
+                   p.api_key_encrypted, p.enabled, p.last_test_status FROM llm_agent_bindings b
+                   JOIN llm_provider_configs p ON p.provider_code = b.provider_code WHERE b.agent_code = %s""",
             (agent_code,),
         )
         row = cur.fetchone()
     if not row or not row[6]:
-        return None
-    provider = PROVIDERS.get(row[1])
-    if provider is None:
         return None
     return {
         "agent_code": row[0],
@@ -366,9 +407,41 @@ def get_agent_model_binding(conn: Any, agent_code: str) -> dict[str, Any] | None
         "base_url": row[3],
         "default_model": row[4],
         "api_key_encrypted": row[5],
-        "protocol": provider.protocol,
         "last_test_status": row[7],
     }
+
+
+def _decrypt_key(value: str | None) -> str | None:
+    if not value:
+        return None
+    try:
+        return _cipher().decrypt(value.encode()).decode()
+    except InvalidToken as exc:
+        raise ProviderConfigError("已保存的凭据无法解密，请重新保存或登录") from exc
+
+
+def _encrypted_credential(value: dict[str, Any]) -> str:
+    return _cipher().encrypt(json.dumps(value, ensure_ascii=False).encode()).decode()
+
+
+def _credential(record: dict[str, Any]) -> dict[str, Any] | None:
+    raw = _decrypt_key(record["pi_credential_encrypted"])
+    try:
+        credential = json.loads(raw) if raw else None
+        if credential is not None and not isinstance(credential, dict):
+            raise ValueError("Invalid credential")
+    except ValueError as exc:
+        raise ProviderConfigError("已保存的凭据格式无效，请重新保存或登录") from exc
+    if record["auth_type"] == "oauth":
+        if not credential or credential.get("type") != "oauth":
+            raise ProviderConfigError("请先完成账号登录")
+        return credential
+    if record["auth_type"] == "none":
+        return None
+    key = _decrypt_key(record["api_key_encrypted"])
+    if not key:
+        raise ProviderConfigError("请填写 API 密钥")
+    return {"type": "api_key", "key": key, "env": (credential or {}).get("env", {})}
 
 
 def save_provider_config(conn: Any, payload: dict[str, Any]) -> dict[str, Any]:
@@ -377,103 +450,253 @@ def save_provider_config(conn: Any, payload: dict[str, Any]) -> dict[str, Any]:
         payload.get("baseUrl"),
         str(payload.get("defaultModel", "")),
     )
-    api_key = str(payload.get("apiKey", "")).strip()
-    # The UI intentionally never reads an existing key back.  A blank value on
-    # an update therefore means "keep the encrypted key", not "delete it".
+    api_key = str(payload.get("apiKey") or "").strip()
+    if api_key == mask_api_key("saved"):
+        raise ProviderConfigError("请填写真实 API 密钥，不能提交掩码")
+    api = payload.get("apiProtocol") or None
+    if api and api not in CUSTOM_APIS:
+        raise ProviderConfigError("不支持的兼容接口类型")
+    auth_type = payload.get("authType") or ("api_key" if provider.requires_api_key else "none")
+    if auth_type not in {"api_key", "oauth", "none"}:
+        raise ProviderConfigError("不支持的认证方式")
+    if auth_type == "none" and provider.code not in {"ollama", "openai_compatible"}:
+        raise ProviderConfigError("该服务商需要凭据")
+    item = pi_provider(pi_id(provider.code))
+    if auth_type == "api_key" and item and "api_key" not in item["authMethods"]:
+        raise ProviderConfigError("该服务商需要账号登录，不支持 API Key 接入")
+    if auth_type == "oauth" and (not item or "oauth" not in item["authMethods"]):
+        raise ProviderConfigError("该服务商不支持账号登录")
+    env = payload.get("providerEnv")
+    if env is not None and (
+        not isinstance(env, dict)
+        or len(env) > 12
+        or any(
+            not isinstance(k, str)
+            or not k.replace("_", "").isalnum()
+            or not k.isupper()
+            or not isinstance(v, str)
+            or len(v) > 4096
+            for k, v in env.items()
+        )
+    ):
+        raise ProviderConfigError("附加配置必须是最多 12 项的环境变量名称与文本值")
     with conn.cursor() as cur:
+        cur.execute("SET LOCAL lock_timeout = '5s'", ())
         cur.execute(
-            """SELECT base_url, default_model, api_key_encrypted IS NOT NULL
-               FROM llm_provider_configs WHERE provider_code = %s""",
+            f"SELECT {CONFIG_COLUMNS} FROM llm_provider_configs WHERE provider_code = %s FOR UPDATE",
             (provider.code,),
         )
-        saved: tuple[Any, ...] | None = cur.fetchone()
-    if provider.requires_api_key and not api_key and not (saved and saved[2]):
+        row = cur.fetchone()
+    saved = _config_record(row) if row else None
+    if auth_type == "api_key" and not api_key and not (saved and saved["api_key_encrypted"]):
         raise ProviderConfigError("请填写 API 密钥")
-    encrypted = _cipher().encrypt(api_key.encode("utf-8")).decode("utf-8") if api_key else None
-    connection_changed = bool(
-        saved and (saved[0] != base_url or saved[1] != model or encrypted is not None)
+    if auth_type == "oauth" and not (
+        saved and saved["auth_type"] == "oauth" and saved["pi_credential_encrypted"]
+    ):
+        raise ProviderConfigError("请先完成账号登录")
+    encrypted = _cipher().encrypt(api_key.encode()).decode() if api_key else None
+    credential_encrypted = saved["pi_credential_encrypted"] if saved else None
+    if auth_type == "api_key" and (
+        api_key or env is not None or saved and saved["auth_type"] != auth_type
+    ):
+        key = api_key or _decrypt_key(saved["api_key_encrypted"] if saved else None)
+        existing = _credential(saved) if saved and saved["auth_type"] == "api_key" else None
+        credential_encrypted = _encrypted_credential(
+            {
+                "type": "api_key",
+                "key": key,
+                "env": env if env is not None else (existing or {}).get("env", {}),
+            }
+        )
+    if auth_type == "none":
+        credential_encrypted = None
+    # Existing connections retain their wire protocol until explicitly changed.
+    resolved_api = api or (saved["api_protocol"] if saved else "auto")
+    changed = bool(
+        saved
+        and (
+            saved["base_url"] != base_url
+            or saved["default_model"] != model
+            or encrypted
+            or credential_encrypted != saved["pi_credential_encrypted"]
+            or saved["auth_type"] != auth_type
+            or saved["api_protocol"] != resolved_api
+        )
     )
-    display_name = str(payload.get("displayName") or provider.name).strip()[:80] or provider.name
-    enabled = bool(payload.get("enabled", True))
     with conn.cursor() as cur:
         cur.execute(
-            """INSERT INTO llm_provider_configs
-                 (provider_code, display_name, base_url, default_model, enabled, api_key_encrypted, updated_at)
-               VALUES (%s, %s, %s, %s, %s, %s, NOW())
-               ON CONFLICT (provider_code) DO UPDATE SET
-                 display_name = EXCLUDED.display_name, base_url = EXCLUDED.base_url,
-                 default_model = EXCLUDED.default_model, enabled = EXCLUDED.enabled,
-                 api_key_encrypted = CASE WHEN EXCLUDED.api_key_encrypted IS NULL
-                                          THEN llm_provider_configs.api_key_encrypted
-                                          ELSE EXCLUDED.api_key_encrypted END,
-                 last_test_at = CASE WHEN %s THEN NULL ELSE llm_provider_configs.last_test_at END,
-                 last_test_status = CASE WHEN %s THEN NULL ELSE llm_provider_configs.last_test_status END,
-                 last_test_message = CASE WHEN %s THEN NULL ELSE llm_provider_configs.last_test_message END,
-                 updated_at = NOW()
-               RETURNING provider_code, display_name, base_url, default_model, enabled,
-                         api_key_encrypted IS NOT NULL, updated_at, last_test_at,
-                         last_test_status, last_test_message""",
+            f"""INSERT INTO llm_provider_configs (provider_code, display_name, base_url, default_model, enabled, api_key_encrypted, auth_type, api_protocol, pi_credential_encrypted, updated_at)
+                  VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+                  ON CONFLICT (provider_code) DO UPDATE SET display_name = EXCLUDED.display_name,
+                  base_url = EXCLUDED.base_url, default_model = EXCLUDED.default_model, enabled = EXCLUDED.enabled,
+                  api_key_encrypted = COALESCE(EXCLUDED.api_key_encrypted, llm_provider_configs.api_key_encrypted),
+                  auth_type = EXCLUDED.auth_type, api_protocol = EXCLUDED.api_protocol,
+                  pi_credential_encrypted = EXCLUDED.pi_credential_encrypted,
+                  last_test_at = CASE WHEN %s THEN NULL ELSE llm_provider_configs.last_test_at END,
+                  last_test_status = CASE WHEN %s THEN NULL ELSE llm_provider_configs.last_test_status END,
+                  last_test_message = CASE WHEN %s THEN NULL ELSE llm_provider_configs.last_test_message END,
+                  updated_at = NOW() RETURNING {CONFIG_COLUMNS}""",
             (
                 provider.code,
-                display_name,
+                str(payload.get("displayName") or provider.name)[:80],
                 base_url,
                 model,
-                enabled,
+                bool(payload.get("enabled", True)),
                 encrypted,
-                connection_changed,
-                connection_changed,
-                connection_changed,
+                auth_type,
+                resolved_api,
+                credential_encrypted,
+                changed,
+                changed,
+                changed,
             ),
         )
-        row = cur.fetchone()
+        result = _public_config(_config_record(cur.fetchone()))
     conn.commit()
-    return {
-        "providerCode": row[0],
-        "displayName": row[1],
-        "baseUrl": row[2],
-        "defaultModel": row[3],
-        "enabled": row[4],
-        "hasApiKey": row[5],
-        "apiKeyMask": "••••••••••••" if row[5] else None,
-        "updatedAt": row[6].isoformat() if row[6] else None,
-        "lastTestAt": row[7].isoformat() if row[7] else None,
-        "lastTestStatus": row[8],
-        "lastTestMessage": row[9],
-        "requiresApiKey": provider.requires_api_key,
+    return result
+
+
+def _pi_failure(result: dict[str, Any]) -> PiBridgeError:
+    code = result.get("code") or "MODEL_CALL_FAILED"
+    status = result.get("status")
+    if status in {401, 403}:
+        code = "MODEL_AUTH_FAILED"
+    elif status == 404:
+        code = "MODEL_NOT_FOUND"
+    elif status == 429:
+        code = "MODEL_RATE_LIMITED"
+    elif status and status >= 500:
+        code = "MODEL_PROVIDER_UNAVAILABLE"
+    messages = {
+        "MODEL_AUTH_FAILED": "模型鉴权失败，请检查 API 密钥或重新登录",
+        "MODEL_TIMEOUT": "模型调用超时，请稍后重试",
+        "MODEL_NOT_FOUND": "所选模型或服务地址不存在",
+        "MODEL_RATE_LIMITED": "服务商限额或频率受限，请稍后重试",
+        "MODEL_EMPTY_RESPONSE": "模型未返回可用文本",
+        "MODEL_PROVIDER_UNAVAILABLE": "模型服务商暂时不可用，请稍后重试",
     }
+    return PiBridgeError(messages.get(code, "Pi 模型调用失败，请检查配置或重新登录"), code)
 
 
-def _decrypt_key(value: str | None) -> str | None:
-    if not value:
-        return None
+_credential_connections = threading.BoundedSemaphore(4)
+
+
+@contextmanager
+def provider_connection(caller: Any):
+    """Credential rotation must never commit a caller's pending business writes."""
+    if not _credential_connections.acquire(timeout=1):
+        raise PiBridgeError("模型调用繁忙，请稍后重试", "MODEL_RATE_LIMITED")
+    connection = None
     try:
-        return _cipher().decrypt(value.encode("utf-8")).decode("utf-8")
-    except InvalidToken as exc:
-        raise ProviderConfigError("已保存的 API 密钥无法解密，请重新保存") from exc
+        # A bounded independent connection also avoids nested application-pool starvation.
+        connection = psycopg2.connect(caller.dsn, connect_timeout=5)
+        yield connection
+    except psycopg2.Error as exc:
+        raise PiBridgeError("模型凭据读取或更新暂时受限，请稍后重试", "MODEL_CONFIG_ERROR") from exc
+    finally:
+        if connection is not None:
+            connection.close()
+        _credential_connections.release()
 
 
-def test_provider_config(conn: Any, provider_code: str) -> dict[str, Any]:
+def invoke_provider(
+    conn: Any,
+    provider_code: str,
+    prompt: str,
+    system: str,
+    *,
+    max_tokens: int = 800,
+    timeout: float = 30,
+    require_ready: bool = True,
+    agent_code: str | None = None,
+) -> dict[str, Any]:
+    # The provider row serializes credential refresh across threads/processes.
     with conn.cursor() as cur:
+        cur.execute("SET LOCAL lock_timeout = '5s'")
         cur.execute(
-            "SELECT provider_code, base_url, default_model, api_key_encrypted FROM llm_provider_configs WHERE provider_code = %s",
+            f"SELECT {CONFIG_COLUMNS} FROM llm_provider_configs WHERE provider_code = %s FOR UPDATE",
             (provider_code,),
         )
         row = cur.fetchone()
-    if not row:
-        raise ProviderConfigError("请先保存该服务商配置")
-    provider, base_url, model = validate_provider_input(row[0], row[1], row[2])
-    api_key = _decrypt_key(row[3])
-    if provider.requires_api_key and not api_key:
-        raise ProviderConfigError("该服务商缺少 API 密钥")
-    status, message = _probe_provider(provider, base_url, model, api_key)
+        if not row:
+            raise ProviderConfigError("请先保存服务商配置")
+        record = _config_record(row)
+        if agent_code:
+            cur.execute(
+                "SELECT provider_code, enabled FROM llm_agent_bindings WHERE agent_code = %s FOR SHARE",
+                (agent_code,),
+            )
+            binding = cur.fetchone()
+            if not binding or binding[0] != provider_code or not binding[1]:
+                raise ProviderConfigError("代理绑定已变化或停用，请重新选择")
+        if require_ready and (not record["enabled"] or record["last_test_status"] != "passed"):
+            raise ProviderConfigError("请启用服务商并重新验证模型")
+        definition = provider_definition(provider_code)
+        if not definition:
+            raise ProviderConfigError("不支持的模型服务商")
+        api = (
+            None
+            if record["api_protocol"] == "auto"
+            else record["api_protocol"] or LEGACY_APIS.get(definition.protocol)
+        )
+        base_url = record["base_url"]
+        if definition.protocol == "ollama" and api in {None, "openai-completions"}:
+            base_url = base_url.removesuffix("/v1") + "/v1"
+        result = call_bridge(
+            {
+                "operation": "complete",
+                "providerId": pi_id(provider_code),
+                "credential": _credential(record),
+                "model": record["default_model"],
+                "baseUrl": base_url,
+                "api": api,
+                "keyless": record["auth_type"] == "none",
+                "prompt": prompt,
+                "system": system,
+                "maxTokens": max_tokens,
+                "timeoutMs": round(timeout * 1000),
+            },
+            timeout=timeout + 5,
+        )
+        credential = result.pop("credential", None)
+        if credential and record["auth_type"] == "oauth":
+            cur.execute(
+                "UPDATE llm_provider_configs SET pi_credential_encrypted = %s WHERE provider_code = %s",
+                (_encrypted_credential(credential), provider_code),
+            )
+    # Persist rotated refresh tokens even if the subsequent completion failed.
+    conn.commit()
+    result["version"] = record["updated_at"]
+    if result.get("ok") is not True:
+        raise _pi_failure(result)
+    return result
+
+
+def test_provider_config(conn: Any, provider_code: str) -> dict[str, Any]:
+    try:
+        result = invoke_provider(
+            conn,
+            provider_code,
+            "只回复 OK",
+            "这是模型接入连通性测试，不执行任何业务操作。",
+            max_tokens=64,
+            timeout=20,
+            require_ready=False,
+        )
+        status, message = "passed", "Pi 调用正常，已验证所选模型可生成响应"
+        version = result["version"]
+    except PiBridgeError as exc:
+        status, message, version = "failed", str(exc), None
     now = datetime.now(UTC)
     with conn.cursor() as cur:
+        # Never mark a concurrently changed configuration as verified.
         cur.execute(
-            """UPDATE llm_provider_configs
-               SET last_test_at = %s, last_test_status = %s, last_test_message = %s
-               WHERE provider_code = %s""",
-            (now, status, message[:500], provider_code),
+            """UPDATE llm_provider_configs SET last_test_at = %s, last_test_status = %s, last_test_message = %s
+                   WHERE provider_code = %s AND (%s IS NULL OR updated_at = %s)""",
+            (now, status, message, provider_code, version, version),
         )
+        if cur.rowcount == 0:
+            raise ProviderConfigError("配置在验证期间已变化，请重新验证")
     conn.commit()
     return {
         "providerCode": provider_code,
@@ -483,53 +706,79 @@ def test_provider_config(conn: Any, provider_code: str) -> dict[str, Any]:
     }
 
 
-def _probe_provider(
-    provider: ProviderDefinition, base_url: str, model: str, api_key: str | None
-) -> tuple[str, str]:
-    binding = {
-        "protocol": provider.protocol,
-        "base_url": base_url,
-        "default_model": model,
-    }
-    try:
-        with httpx.Client(timeout=20.0, follow_redirects=False) as client:
-            response = request_completion(
-                client,
-                binding,
-                api_key,
-                "只回复 OK",
-                "这是模型接入连通性测试，不执行任何业务操作。",
-                max_tokens=32,
-            )
-            response.raise_for_status()
-            content = read_completion_content(provider.protocol, response.json())
-    except httpx.HTTPError as exc:
-        if isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code in {401, 403}:
-            return "failed", "鉴权失败，请检查 API 密钥或服务商权限"
-        if isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code == 404:
-            return "failed", "所选模型或服务地址不存在"
-        if isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code == 429:
-            return "failed", "服务商限额或频率受限，请稍后重试"
-        return "failed", f"模型调用失败：{exc.__class__.__name__}"
-    except ValueError, KeyError, IndexError:
-        return "failed", "模型返回格式无效，请核对兼容协议"
-    if not content:
-        return "failed", "所选模型未返回可用文本"
-    return "passed", "调用正常，已验证所选模型可生成响应"
-
-
 def provider_catalog() -> list[dict[str, Any]]:
-    return [
-        {
-            "providerCode": item.code,
-            "displayName": item.name,
-            "protocol": item.protocol,
-            "defaultBaseUrl": item.default_base_url,
-            "defaultModel": item.default_model,
-            "recommendedModels": item.recommended_models,
-            "capabilities": item.capabilities,
-            "documentationUrl": item.documentation_url,
-            "requiresApiKey": item.requires_api_key,
-        }
-        for item in PROVIDERS.values()
-    ]
+    presets = {item.code: item for item in PROVIDERS.values()}
+    for item in pi_catalog():
+        code = next(
+            (alias for alias, target in PI_ALIASES.items() if target == item["id"]), item["id"]
+        )
+        definition = provider_definition(code)
+        if definition and item["models"]:
+            presets[code] = definition
+    result = []
+    for preset in presets.values():
+        pi = pi_provider(pi_id(preset.code))
+        models = pi["models"] if pi else []
+        result.append(
+            {
+                "providerCode": preset.code,
+                "displayName": preset.name,
+                "protocol": preset.protocol,
+                "defaultBaseUrl": (pi["baseUrl"] if pi else None)
+                or (
+                    preset.default_base_url + "/v1"
+                    if preset.code == "ollama"
+                    else preset.default_base_url
+                ),
+                "defaultModel": next(
+                    (m["id"] for m in models if m["id"] == preset.default_model),
+                    models[0]["id"] if models else preset.default_model,
+                ),
+                "recommendedModels": [m["id"] for m in models[:8]]
+                if models
+                else list(preset.recommended_models),
+                "capabilities": preset.capabilities,
+                "documentationUrl": preset.documentation_url,
+                "requiresApiKey": preset.requires_api_key,
+                "authMethods": pi["authMethods"]
+                if pi
+                else (
+                    ["api_key", "none"]
+                    if preset.code == "openai_compatible"
+                    else ["api_key"]
+                    if preset.requires_api_key
+                    else ["none"]
+                ),
+                "oauthLabel": pi["oauthLabel"] if pi else None,
+                "modelCount": len(models),
+                "engine": "pi-ai",
+            }
+        )
+    return result
+
+
+def provider_models(
+    provider_code: str, query: str = "", limit: int = 100, offset: int = 0
+) -> dict[str, Any]:
+    definition = provider_definition(provider_code)
+    if not definition:
+        raise ProviderConfigError("不支持的模型服务商")
+    item = pi_provider(pi_id(provider_code))
+    models: list[dict[str, Any]] = (
+        item["models"]
+        if item
+        else [
+            {
+                "id": model,
+                "name": model,
+                "input": ["text"],
+                "reasoning": False,
+                "api": LEGACY_APIS.get(definition.protocol),
+                "contextWindow": None,
+                "maxTokens": None,
+            }
+            for model in definition.recommended_models
+        ]
+    )
+    found = [m for m in models if query.casefold() in (m["id"] + " " + m["name"]).casefold()]
+    return {"models": found[offset : offset + limit], "total": len(found), "engine": "pi-ai"}

@@ -27,18 +27,12 @@ def test_provider_input_uses_preset_defaults() -> None:
 def test_provider_catalog_exposes_current_presets_and_official_documentation() -> None:
     catalog = {item["providerCode"]: item for item in provider_catalog()}
 
-    assert catalog["deepseek"]["defaultBaseUrl"] == "https://api.deepseek.com"
-    assert catalog["deepseek"]["recommendedModels"] == ("deepseek-v4-flash", "deepseek-v4-pro")
-    assert catalog["zhipu"]["defaultModel"] == "glm-5.2"
-    assert catalog["moonshot"]["defaultBaseUrl"] == "https://api.moonshot.ai/v1"
-    assert catalog["perplexity"]["defaultBaseUrl"] == "https://api.perplexity.ai"
-    assert catalog["gemini"]["defaultModel"] == "gemini-3.6-flash"
-    assert catalog["xiaomi"]["defaultBaseUrl"] == "https://api.xiaomimimo.com/v1"
-    assert catalog["xiaomi"]["recommendedModels"] == ("mimo-v2.5-pro", "mimo-v2.5")
-    assert catalog["openrouter"]["recommendedModels"][1] == "anthropic/claude-opus-4.6"
-    assert catalog["siliconflow"]["defaultBaseUrl"] == "https://api.siliconflow.com/v1"
-    assert catalog["minimax"]["recommendedModels"][0] == "MiniMax-M2.7"
-    assert catalog["xai"]["documentationUrl"].startswith("https://docs.x.ai/")
+    assert catalog["openai"]["engine"] == "pi-ai"
+    assert "oauth" in catalog["openai"]["authMethods"]
+    assert catalog["deepseek"]["authMethods"] == ["api_key"]
+    assert catalog["openrouter"]["modelCount"] > 100
+    assert catalog["gemini"]["modelCount"] > 0
+    assert catalog["openai_compatible"]["authMethods"] == ["api_key", "none"]
 
 
 def test_provider_input_rejects_unsafe_base_url() -> None:
@@ -71,17 +65,18 @@ class _SavedKeyCursor:
         self.connection.queries.append((query, params))
 
     def fetchone(self) -> tuple[object, ...]:
-        if "SELECT base_url" in self.connection.queries[-1][0]:
-            return ("https://api.openai.com/v1", "gpt-5-mini", True)
         return (
             "openai",
             "OpenAI",
             "https://api.openai.com/v1",
             "gpt-5-mini",
             True,
-            True,
+            "encrypted-key",
             None,
             None,
+            None,
+            None,
+            "api_key",
             None,
             None,
         )
@@ -193,7 +188,7 @@ class _LocalBindingCursor:
         self.connection.params = params
 
     def fetchone(self) -> tuple[object, ...]:
-        return ("ollama", True, False, "passed")
+        return ("ollama", True, True, "passed")
 
 
 class _LocalBindingConnection:

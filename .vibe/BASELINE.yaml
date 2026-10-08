@@ -1,0 +1,4 @@
+base_revision: 84945eef2b74c696d52b18e33ee31a3dc2dfc07c
+branch: integrate/pi-model-center
+workspace: /private/tmp/fqp-pi-model-center
+task: Direct Pi model center integration requested 2026-10-08
