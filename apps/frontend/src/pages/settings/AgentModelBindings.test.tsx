@@ -19,7 +19,7 @@ const provider = {
   defaultModel: 'deepseek-v4-pro', enabled: true, hasApiKey: true,
   apiKeyMask: '••••••••••••', updatedAt: null, lastTestAt: '2026-08-12T00:00:00Z',
   lastTestStatus: 'passed' as const, lastTestMessage: '调用正常',
-  requiresApiKey: true,
+  requiresApiKey: true, authType: 'api_key' as const, hasCredential: true, apiProtocol: 'auto',
 };
 
 describe('AgentModelBindings', () => {

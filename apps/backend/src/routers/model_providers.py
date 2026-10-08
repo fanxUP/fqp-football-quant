@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from time import perf_counter
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
+from psycopg2.errors import LockNotAvailable
 from pydantic import BaseModel, Field
 
 from apps.backend.src.db import get_db
@@ -22,9 +23,17 @@ from apps.backend.src.services.model_provider_store import (
     list_agent_model_bindings,
     list_provider_configs,
     provider_catalog,
+    provider_models,
     save_agent_model_binding,
     save_provider_config,
     test_provider_config,
+)
+from apps.backend.src.services.pi_bridge import PiBridgeError
+from apps.backend.src.services.pi_login import (
+    disconnect_provider,
+    login_status,
+    session_owner,
+    start_login,
 )
 
 router = APIRouter(prefix="/api/model-providers", tags=["model-providers"])
@@ -37,6 +46,21 @@ class ProviderConfigRequest(BaseModel):
     defaultModel: str = Field(min_length=1, max_length=160)
     apiKey: str | None = Field(default=None, max_length=4096)
     enabled: bool = True
+    authType: str | None = Field(default=None, pattern="^(api_key|oauth|none)$")
+    apiProtocol: str | None = Field(default=None, max_length=64)
+    providerEnv: dict[str, str] | None = None
+
+
+class LoginInputRequest(BaseModel):
+    promptId: str = Field(min_length=1, max_length=40)
+    value: str = Field(min_length=1, max_length=4096)
+
+
+def _login_owner(request: Request) -> str:
+    cookie = request.cookies.get("fqp_session")
+    if not cookie:
+        raise HTTPException(status_code=401, detail="账号登录需要当前系统登录会话")
+    return session_owner(cookie)
 
 
 class AgentBindingRequest(BaseModel):
@@ -55,7 +79,10 @@ def _raise_config_error(exc: ProviderConfigError | ModelGatewayError) -> None:
 @router.get("/catalog")
 def get_provider_catalog():
     """Return public presets; credentials are deliberately not part of this response."""
-    return {"providers": provider_catalog()}
+    try:
+        return {"providers": provider_catalog(), "engine": "pi-ai", "version": "1.1.0"}
+    except PiBridgeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
 @router.get("")
@@ -76,6 +103,8 @@ def put_agent_binding(agent_code: str, body: AgentBindingRequest):
     try:
         with get_db() as conn:
             binding = save_agent_model_binding(conn, agent_code, body.providerCode, body.enabled)
+    except LockNotAvailable as exc:
+        raise HTTPException(status_code=409, detail="凭据正在使用或更新，请稍后重试") from exc
     except ProviderConfigError as exc:
         _raise_config_error(exc)
     return {"binding": binding}
@@ -129,6 +158,70 @@ def get_model_invocations(limit: int = Query(30, ge=1, le=50)):
     return {"invocations": invocations, "total": len(invocations)}
 
 
+@router.get("/{provider_code}/models")
+def get_provider_models(
+    provider_code: str,
+    q: str = Query("", max_length=160),
+    limit: int = Query(100, ge=1, le=100),
+    offset: int = Query(0, ge=0, le=10000),
+):
+    try:
+        return provider_models(provider_code, q, limit, offset)
+    except ProviderConfigError as exc:
+        _raise_config_error(exc)
+    except PiBridgeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@router.post("/{provider_code}/login")
+def post_login(provider_code: str, body: ProviderConfigRequest, request: Request):
+    owner = _login_owner(request)
+    if provider_code != body.providerCode:
+        raise HTTPException(status_code=400, detail="路径服务商与请求内容不一致")
+    try:
+        return start_login(owner, provider_code, body.model_dump(exclude={"apiKey", "providerEnv"}))
+    except ProviderConfigError as exc:
+        _raise_config_error(exc)
+    except PiBridgeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@router.get("/logins/{login_id}")
+def get_login(login_id: str, request: Request):
+    try:
+        return login_status(_login_owner(request), login_id)
+    except ProviderConfigError as exc:
+        _raise_config_error(exc)
+
+
+@router.post("/logins/{login_id}/input")
+def post_login_input(login_id: str, body: LoginInputRequest, request: Request):
+    try:
+        return login_status(
+            _login_owner(request), login_id, prompt_id=body.promptId, value=body.value
+        )
+    except ProviderConfigError as exc:
+        _raise_config_error(exc)
+
+
+@router.delete("/logins/{login_id}")
+def delete_login(login_id: str, request: Request):
+    try:
+        return login_status(_login_owner(request), login_id, cancel=True)
+    except ProviderConfigError as exc:
+        _raise_config_error(exc)
+
+
+@router.delete("/{provider_code}/credential")
+def delete_credential(provider_code: str):
+    try:
+        with get_db() as conn:
+            disconnect_provider(conn, provider_code)
+    except LockNotAvailable as exc:
+        raise HTTPException(status_code=409, detail="凭据正在使用或更新，请稍后重试") from exc
+    return {"status": "disconnected"}
+
+
 @router.put("/{provider_code}")
 def put_provider_config(provider_code: str, body: ProviderConfigRequest):
     if provider_code != body.providerCode:
@@ -136,8 +229,12 @@ def put_provider_config(provider_code: str, body: ProviderConfigRequest):
     try:
         with get_db() as conn:
             provider = save_provider_config(conn, body.model_dump())
+    except LockNotAvailable as exc:
+        raise HTTPException(status_code=409, detail="凭据正在使用或更新，请稍后重试") from exc
     except ProviderConfigError as exc:
         _raise_config_error(exc)
+    except PiBridgeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     return {"provider": provider}
 
 
@@ -148,4 +245,6 @@ def test_provider(provider_code: str):
             result = test_provider_config(conn, provider_code)
     except ProviderConfigError as exc:
         _raise_config_error(exc)
+    except PiBridgeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     return result

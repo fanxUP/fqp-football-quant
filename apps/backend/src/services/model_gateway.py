@@ -5,17 +5,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-import httpx
-
 from apps.backend.src.services.model_agent_prompts import get_agent_system_instruction
 from apps.backend.src.services.model_provider_store import (
-    _decrypt_key,
     get_agent_model_binding,
+    invoke_provider,
+    provider_connection,
 )
-from apps.backend.src.services.model_transport import (
-    read_completion_content as _read_content,
-)
-from apps.backend.src.services.model_transport import request_completion as _request_completion
+from apps.backend.src.services.pi_bridge import PiBridgeError
 
 
 class ModelGatewayError(RuntimeError):
@@ -62,7 +58,6 @@ def invoke_agent_model(conn: Any, agent_code: str, prompt: str) -> ModelReply:
         raise ModelGatewayError("该智能代理未启用模型调用")
     if binding["last_test_status"] != "passed":
         raise ModelGatewayError("模型服务商配置变更后，请重新测试连接再试运行")
-    api_key = _decrypt_key(binding["api_key_encrypted"])
     provider_code = str(binding["provider_code"])
     model = str(binding["default_model"])
     try:
@@ -72,46 +67,20 @@ def invoke_agent_model(conn: Any, agent_code: str, prompt: str) -> ModelReply:
     try:
         timeout = 60.0 if agent_code == "post_match_report_agent" else 30.0
         max_tokens = 2_400 if agent_code == "post_match_report_agent" else 800
-        with httpx.Client(timeout=timeout, follow_redirects=False) as client:
-            response = _request_completion(
-                client,
-                binding,
-                api_key,
+        with provider_connection(conn) as credential_conn:
+            result = invoke_provider(
+                credential_conn,
+                provider_code,
                 prompt,
                 system_instruction,
                 max_tokens=max_tokens,
+                timeout=timeout,
+                agent_code=agent_code,
             )
-            response.raise_for_status()
-            content = _read_content(binding["protocol"], response.json())
-    except httpx.TimeoutException as exc:
+        content = str(result["content"])
+    except PiBridgeError as exc:
         raise ModelGatewayError(
-            "模型调用超时，请稍后重试",
-            error_code="MODEL_TIMEOUT",
-            provider_code=provider_code,
-            model=model,
-        ) from exc
-    except httpx.HTTPStatusError as exc:
-        status = exc.response.status_code
-        error_code, message = _http_error_detail(status)
-        raise ModelGatewayError(
-            message,
-            error_code=error_code,
-            provider_code=provider_code,
-            model=model,
-        ) from exc
-    except httpx.HTTPError as exc:
-        raise ModelGatewayError(
-            "无法连接模型服务商，请检查网络和服务地址",
-            error_code="MODEL_NETWORK_ERROR",
-            provider_code=provider_code,
-            model=model,
-        ) from exc
-    except (ValueError, KeyError, IndexError) as exc:
-        raise ModelGatewayError(
-            "模型返回格式无效，请核对服务商兼容协议",
-            error_code="MODEL_INVALID_RESPONSE",
-            provider_code=provider_code,
-            model=model,
+            str(exc), error_code=exc.code, provider_code=provider_code, model=model
         ) from exc
     if not content:
         raise ModelGatewayError(

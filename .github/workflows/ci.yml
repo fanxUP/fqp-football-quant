@@ -36,7 +36,16 @@ jobs:
         with:
           node-version: "24"
           cache: npm
-          cache-dependency-path: apps/frontend/package-lock.json
+          cache-dependency-path: |
+            apps/frontend/package-lock.json
+            apps/model-bridge/package-lock.json
+
+      - name: Pi model bridge quality gates
+        working-directory: apps/model-bridge
+        run: |
+          npm ci --ignore-scripts
+          npm run check
+          npm test
 
       - name: Frontend quality gates
         working-directory: apps/frontend
@@ -79,6 +88,15 @@ jobs:
           pip install -r requirements.txt
           pip install -r requirements-dev.txt
 
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: apps/model-bridge/package-lock.json
+
+      - name: Install server model bridge
+        run: npm --prefix apps/model-bridge ci --ignore-scripts
+
       - name: Initialize test database schema
         run: |
           set -euo pipefail
@@ -98,9 +116,20 @@ jobs:
         env:
           PGPASSWORD: fqp_test_password
 
+      - name: Initialize isolated Pi credential database
+        run: |
+          createdb -h localhost -U fqp fqp_pi_test
+          psql -X -v ON_ERROR_STOP=1 -h localhost -U fqp -d fqp_pi_test \
+            -f sql/58_llm_provider_connections.sql \
+            -f sql/59_llm_agent_bindings.sql \
+            -f sql/106_pi_model_credentials.sql
+        env:
+          PGPASSWORD: fqp_test_password
+
       - name: Run tests with coverage
         run: |
           DATABASE_URL=postgresql://fqp:fqp_test_password@localhost:5432/fqp_test \
           pytest --cov=. --cov-report=xml --cov-report=term --cov-fail-under=50 -m "not slow"
         env:
           DATABASE_URL: postgresql://fqp:fqp_test_password@localhost:5432/fqp_test
+          FQP_PI_TEST_DB: postgresql://fqp:fqp_test_password@localhost:5432/fqp_pi_test

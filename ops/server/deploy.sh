@@ -22,7 +22,7 @@ ROLLBACK_SHA="$(git rev-parse HEAD)"
 printf 'Current: %s\nTarget: %s\n' "$ROLLBACK_SHA" "$RELEASE_SHA"
 # This release runner handles code/schema changes; runtime or dependency changes
 # require their own prepared rollout so a code rollback is sufficient here.
-if ! git diff --quiet "$ROLLBACK_SHA" "$RELEASE_SHA" -- requirements.txt requirements-dev.txt pyproject.toml .python-version .node-version apps/frontend/package.json apps/frontend/package-lock.json; then
+if ! git diff --quiet "$ROLLBACK_SHA" "$RELEASE_SHA" -- requirements.txt requirements-dev.txt pyproject.toml .python-version .node-version apps/frontend/package.json apps/frontend/package-lock.json apps/model-bridge/package.json apps/model-bridge/package-lock.json; then
     echo 'Dependency/runtime changes require a separately prepared release' >&2
     exit 1
 fi
