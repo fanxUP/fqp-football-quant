@@ -504,6 +504,9 @@ class BacktestEngine:
                 "brier_score": None,
                 "log_loss": None,
                 "clv": None,
+                "probability_edge": None,
+                "odds_clv": None,
+                "clv_semantics": "probability_edge_legacy_alias",
                 "max_drawdown": 0.0,
                 "max_drawdown_pct": 0.0,
                 "longest_losing_streak": 0,
@@ -521,7 +524,7 @@ class BacktestEngine:
         # Brier Score: average over all bets
         brier_total = 0.0
         log_loss_total = 0.0
-        clv_total = 0.0
+        probability_edge_total = 0.0
         for b in bets:
             # Brier: (p - o)^2 where o=1 if correct
             o = 1.0 if b.option_code == b.actual_result else 0.0
@@ -533,12 +536,12 @@ class BacktestEngine:
                 log_loss_total -= math.log(p_clamped)
             else:
                 log_loss_total -= math.log(1.0 - p_clamped)
-            # CLV: model_prob - market_prob
-            clv_total += b.model_prob - b.market_prob
+            # Probability edge at prediction time; closing odds are not available.
+            probability_edge_total += b.model_prob - b.market_prob
 
         brier_score = brier_total / n
         log_loss = log_loss_total / n
-        clv = clv_total / n
+        probability_edge = probability_edge_total / n
 
         # 资金曲线 + 最大回撤 + 最长连亏
         equity_curve: list[dict] = []
@@ -607,7 +610,10 @@ class BacktestEngine:
             "avg_odds": round(avg_odds, 4),
             "brier_score": round(brier_score, 4),
             "log_loss": round(log_loss, 4),
-            "clv": round(clv, 4),
+            "clv": round(probability_edge, 4),  # legacy storage/API alias
+            "probability_edge": round(probability_edge, 4),
+            "odds_clv": None,
+            "clv_semantics": "probability_edge_legacy_alias",
             "max_drawdown": round(max_drawdown, 4),
             "max_drawdown_pct": round(max_drawdown_pct, 2),
             "longest_losing_streak": longest_losing_streak,

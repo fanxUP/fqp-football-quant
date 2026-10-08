@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import { api } from '../core/apiClient';
 import { navigate } from '../core/router';
-import type { BettingTicket } from '../core/types';
+import type { BettingTicket, BettingTicketSummary } from '../core/types';
 import { ApiError } from '../core/types';
 import {
   calculateLedgerStats,
@@ -196,13 +196,14 @@ function TicketCard({ ticket, deleting, onDelete }: {
   );
 }
 
-function TicketColumn({ title, tickets, deletingTicketId, onDelete }: {
+function TicketColumn({ title, tickets, summary, deletingTicketId, onDelete }: {
   title: string;
   tickets: BettingTicket[];
+  summary?: BettingTicketSummary;
   deletingTicketId: number | null;
   onDelete: (ticket: BettingTicket) => void;
 }) {
-  const stats = calculateLedgerStats(tickets);
+  const stats = summary ?? calculateLedgerStats(tickets);
   const grouped = groupTicketsByDate(tickets);
 
   return (
@@ -214,14 +215,18 @@ function TicketColumn({ title, tickets, deletingTicketId, onDelete }: {
         </div>
         <div className="lottery-column-pnl">
           <span>盈亏</span>
-          <strong style={{ color: stats.profitLoss >= 0 ? 'var(--fqp-success)' : 'var(--fqp-danger, #ef4444)' }}>
+          <strong style={{ color: (stats.profitLoss ?? 0) >= 0 ? 'var(--fqp-success)' : 'var(--fqp-danger, #ef4444)' }}>
             {money(stats.profitLoss)}
           </strong>
         </div>
       </div>
 
       {grouped.length === 0 ? (
-        <EmptyState icon="票" title="暂无彩票" description="投注台确认后会自动进入这里" />
+        <EmptyState
+          icon="票"
+          title={stats.total > 0 ? '本页暂无彩票' : '暂无彩票'}
+          description={stats.total > 0 ? '符合筛选的彩票还在后续页面，请加载更多或按日期筛选。' : '投注台确认后会自动进入这里'}
+        />
       ) : (
         <div className="lottery-date-list">
           {grouped.map(([date, items]) => (
@@ -257,29 +262,66 @@ export default function TicketsPage() {
   const [dateFilter, setDateFilter] = useState<DateFilter>('all');
   const [statusFilter, setStatusFilter] = useState('');
   const [lastUpdated, setLastUpdated] = useState('');
+  const [summary, setSummary] = useState<BettingTicketSummary>({ total: 0, stake: 0, settled: 0, pending: 0 });
+  const [byOwner, setByOwner] = useState<Partial<Record<'me' | 'agent', BettingTicketSummary>>>({});
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const requestVersion = useRef(0);
 
   const fetchTickets = useCallback(async (showLoading = true) => {
-    if (showLoading) {
-      setLoading(true);
-      setError(null);
-    }
+    const version = ++requestVersion.current;
+    if (showLoading) setLoading(true);
     try {
-      const [mine, agent] = await Promise.all([
-        api.betting.tickets({ owner: 'me', limit: 300 }),
-        api.betting.tickets({ owner: 'agent', limit: 300 }),
-      ]);
-      setTickets([...mine.tickets, ...agent.tickets]);
+      const page = await api.betting.tickets({
+        date: dateFilter === 'all' ? undefined : dateFilter,
+        status: statusFilter || undefined, limit: 100,
+      });
+      if (version !== requestVersion.current) return;
+      setTickets(page.tickets);
+      setSummary(page.summary);
+      setByOwner(page.byOwner);
+      setNextCursor(page.nextCursor);
       setLastUpdated(new Date().toLocaleString('zh-CN', { hour12: false }));
       setError(null);
     } catch (e) {
-      if (showLoading) setError(e instanceof ApiError ? e.message : '加载失败');
+      if (version === requestVersion.current) setError(e instanceof ApiError ? e.message : '加载失败');
     } finally {
-      if (showLoading) setLoading(false);
+      if (version === requestVersion.current) {
+        setLoading(false);
+        setLoadingMore(false);
+      }
     }
-  }, []);
+  }, [dateFilter, statusFilter]);
 
-  useEffect(() => { void fetchTickets(); }, [fetchTickets]);
-  useBackgroundRefresh(() => fetchTickets(false));
+  useEffect(() => {
+    void fetchTickets();
+    return () => { requestVersion.current += 1; };
+  }, [fetchTickets]);
+  useBackgroundRefresh(() => {
+    if (!loading && !loadingMore && tickets.length <= 100) return fetchTickets(false);
+  });
+
+  const loadMore = async () => {
+    if (!nextCursor || loadingMore) return;
+    const version = ++requestVersion.current;
+    setLoadingMore(true);
+    try {
+      const page = await api.betting.tickets({
+        date: dateFilter === 'all' ? undefined : dateFilter,
+        status: statusFilter || undefined, limit: 100, cursor: nextCursor,
+      });
+      if (version !== requestVersion.current) return;
+      setTickets((current) => Array.from(new Map([...current, ...page.tickets].map((ticket) => [ticket.ticketUid, ticket])).values()));
+      setNextCursor(page.nextCursor);
+      setSummary(page.summary);
+      setByOwner(page.byOwner);
+      setError(null);
+    } catch (e) {
+      if (version === requestVersion.current) setError(e instanceof ApiError ? e.message : '加载更多失败');
+    } finally {
+      if (version === requestVersion.current) setLoadingMore(false);
+    }
+  };
 
   const deleteTicket = async (ticket: BettingTicket) => {
     const message = ticket.kind === 'simulation'
@@ -295,7 +337,7 @@ export default function TicketsPage() {
       } else {
         await api.betting.deleteTicket(ticket.legacyId);
       }
-      setTickets((current) => current.filter((item) => item.ticketUid !== ticket.ticketUid));
+      await fetchTickets(false);
     } catch (e) {
       setDeleteError(e instanceof ApiError ? e.message : '删除彩票失败');
     } finally {
@@ -303,20 +345,9 @@ export default function TicketsPage() {
     }
   };
 
-  const dateOptions = useMemo(
-    () => Array.from(new Set(tickets.map((ticket) => ticket.date))).sort((a, b) => b.localeCompare(a)),
-    [tickets],
-  );
-
-  const filtered = tickets.filter((ticket) => {
-    const dateOk = dateFilter === 'all' || ticket.date === dateFilter;
-    const statusOk = !statusFilter || ticketOutcome(ticket) === statusFilter;
-    return dateOk && statusOk;
-  });
-
-  const myTickets = filtered.filter((ticket) => ticket.owner === 'me');
-  const agentTickets = filtered.filter((ticket) => ticket.owner === 'agent');
-  const stats = calculateLedgerStats(filtered);
+  const myTickets = tickets.filter((ticket) => ticket.owner === 'me');
+  const agentTickets = tickets.filter((ticket) => ticket.owner === 'agent');
+  const stats = summary;
 
   if (loading) return <LoadingSpinner text="加载彩票台账..." size="lg" />;
 
@@ -340,11 +371,12 @@ export default function TicketsPage() {
           <em>{stats.settled} 已结算 / {stats.pending} 待结算</em>
         </div>
         <div className="lottery-filters">
-          <select className="fqp-select" value={dateFilter} onChange={(e) => setDateFilter(e.target.value)}>
-            <option value="all">全部日期</option>
-            {dateOptions.map((date) => <option key={date} value={date}>{date}</option>)}
-          </select>
-          <select className="fqp-select" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+          <label>
+            购买日期
+            <input className="fqp-select" type="date" value={dateFilter === 'all' ? '' : dateFilter} onChange={(e) => setDateFilter(e.target.value || 'all')} />
+          </label>
+          <button type="button" className="fqp-btn" onClick={() => setDateFilter('all')} disabled={dateFilter === 'all'}>全部日期</button>
+          <select aria-label="彩票状态" className="fqp-select" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
             <option value="">全部状态</option>
             <option value="won">赢</option>
             <option value="lost">输</option>
@@ -355,24 +387,32 @@ export default function TicketsPage() {
 
       {deleteError && <div className="lottery-delete-error" role="alert">{deleteError}</div>}
 
-      {error ? (
-        <ErrorState message={error} onRetry={() => fetchTickets()} />
-      ) : (
-        <div className="lottery-ledger">
+      {error && (
+        <div role="alert">
+          {tickets.length > 0 && '数据尚未更新：'}
+          <ErrorState message={error} onRetry={() => fetchTickets()} />
+        </div>
+      )}
+      <div className="lottery-ledger">
           <TicketColumn
             title={ticketOwnerLabel('me')}
             tickets={myTickets}
+            summary={byOwner.me}
             deletingTicketId={deletingTicketId}
             onDelete={deleteTicket}
           />
           <TicketColumn
             title={ticketOwnerLabel('agent')}
             tickets={agentTickets}
+            summary={byOwner.agent}
             deletingTicketId={deletingTicketId}
             onDelete={deleteTicket}
           />
-        </div>
-      )}
+      </div>
+      <div aria-live="polite" aria-busy={loadingMore}>
+        <p>已显示 {tickets.length} / {stats.total} 张{tickets.length > 100 ? ' · 浏览历史时暂停自动刷新' : ''}</p>
+        {nextCursor && <button type="button" className="fqp-btn fqp-btn-primary" disabled={loadingMore} onClick={() => void loadMore()}>{loadingMore ? '加载中...' : '加载更多'}</button>}
+      </div>
     </div>
   );
 }

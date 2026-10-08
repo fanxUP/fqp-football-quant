@@ -390,7 +390,7 @@ export default function BacktestPage() {
                   { key: 'avg_odds', title: '均赔', width: '70px', render: (_: unknown, row: BacktestResult) => fmtNum(row.avg_odds) },
                   { key: 'brier_score', title: 'Brier', width: '80px', render: (_: unknown, row: BacktestResult) => fmtNum(row.brier_score, 4) },
                   { key: 'log_loss', title: '对数损失', width: '80px', render: (_: unknown, row: BacktestResult) => fmtNum(row.log_loss, 4) },
-                  { key: 'clv', title: 'CLV', width: '80px', render: (_: unknown, row: BacktestResult) => fmtNum(row.clv, 4) },
+                  { key: 'clv', title: '预测概率优势', width: '120px', render: (_: unknown, row: BacktestResult) => fmtNum(row.clv, 4) },
                   {
                     key: 'max_drawdown_pct', title: '最大回撤', width: '90px',
                     render: (_: unknown, row: BacktestResult) => (
@@ -410,6 +410,8 @@ export default function BacktestPage() {
                 loading={false}
                 emptyText="暂无回测结果"
               />
+
+              <p>预测概率优势为模型概率减去推荐时市场概率；当前回测未采集真实收盘赔率 CLV。</p>
 
               {/* 模型上线门槛检查 — staggered reveal */}
               {!selectedRunIsLegacy && results.map((r, ri) => {

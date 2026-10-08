@@ -16,7 +16,7 @@ export default function useBackgroundRefresh(
 
   useEffect(() => {
     const run = async () => {
-      if (refreshingRef.current) return;
+      if (refreshingRef.current || document.visibilityState === 'hidden') return;
       refreshingRef.current = true;
       try {
         await refreshRef.current();
@@ -27,9 +27,11 @@ export default function useBackgroundRefresh(
     const trigger = () => { void run().catch(() => undefined); };
     const timer = window.setInterval(trigger, intervalMs);
     window.addEventListener('focus', trigger);
+    document.addEventListener('visibilitychange', trigger);
     return () => {
       window.clearInterval(timer);
       window.removeEventListener('focus', trigger);
+      document.removeEventListener('visibilitychange', trigger);
     };
   }, [intervalMs]);
 }

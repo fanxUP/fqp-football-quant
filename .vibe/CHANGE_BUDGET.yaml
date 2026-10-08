@@ -1,9 +1,9 @@
 version: 1
 mode: STRICT
-max_changed_files: 12
-max_new_files: 5
+max_changed_files: 36
+max_new_files: 11
 max_dependency_additions: 0
-max_migration_files: 1
-max_public_api_changes: 0
-max_regression_tests: 0
-scope_note: "Persist per-match settled model picks, serve rolling history through a Redis response cache, and register the refresh job in scheduler monitoring."
+max_migration_files: 4
+max_public_api_changes: 4
+max_regression_tests: 16
+scope_note: "User authorized submission/deployment and explicitly authorized regression test updates on 2026-10-08. Add targeted contract and settlement tests before release. No automatic backup enablement or historical financial correction."

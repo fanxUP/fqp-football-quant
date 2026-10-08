@@ -41,7 +41,6 @@ def test_all_host_defaults_target_native_postgres() -> None:
     executable_paths = (
         PROJECT_ROOT / "apps/backend/src/db.py",
         PROJECT_ROOT / "ops/backup_daily.sh",
-        PROJECT_ROOT / "scripts/jobs/verify_backup.py",
     )
 
     assert "127.0.0.1:5432/fqp" in env_example
@@ -50,6 +49,10 @@ def test_all_host_defaults_target_native_postgres() -> None:
         content = path.read_text(encoding="utf-8")
         assert "127.0.0.1:5432/fqp" in content
         assert "127.0.0.1:5433/fqp" not in content
+    backup = (PROJECT_ROOT / "scripts/jobs/verify_backup.py").read_text(encoding="utf-8")
+    assert 'os.environ.get("DATABASE_URL")' in backup
+    assert "pg_dump and explicit DATABASE_URL are required" in backup
+    assert "127.0.0.1:5433/fqp" not in backup
 
 
 def test_local_scheduler_has_one_owner_for_odds_and_local_heartbeat() -> None:

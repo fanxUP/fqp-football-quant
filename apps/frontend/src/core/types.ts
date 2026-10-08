@@ -803,6 +803,11 @@ export interface ModelPerformanceSample {
 }
 
 export interface ModelPerformanceHistory {
+  stale?: boolean;
+  refreshedAt?: string | null;
+  generatedAt?: string;
+  cacheAgeSeconds?: number;
+  source?: 'scored_picks' | 'raw_query';
   status: string;
   metric: 'rolling_hit_rate';
   window: number;
