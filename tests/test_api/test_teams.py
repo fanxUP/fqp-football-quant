@@ -200,3 +200,141 @@ def test_match_detail_uses_latest_prematch_features_and_all_option_predictions(c
     assert "mp.predict_time <" in prediction_query
     assert "mp.validation_status = 'valid'" in prediction_query
     assert "DISTINCT ON (mv.model_name, mp.play_type, mp.option_code)" in prediction_query
+
+
+def _roster_detail_cursor():
+    """Dispatch SQL mocks by query, avoiding unrelated detail-query ordering."""
+    conn, cur = MagicMock(), MagicMock()
+    conn.__enter__.return_value = conn
+    conn.cursor.return_value.__enter__.return_value = cur
+    state = {"query": "", "args": ()}
+
+    def execute(query, args):
+        state.update(query=query, args=args)
+
+    def one():
+        query = state["query"]
+        if "FROM official_matches m" in query and "WHERE m.id = %s" in query:
+            return (
+                101,
+                "联赛",
+                "主队",
+                "客队",
+                datetime(2026, 10, 9, 20),
+                "Selling",
+                "selling",
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                1,
+                "主队",
+                None,
+                None,
+                None,
+                2,
+                "客队",
+                None,
+                None,
+                None,
+            )
+        if "FROM match_lineup_snapshots" in query and state["args"][1] == 1:
+            return (
+                11,
+                "4-3-3",
+                0,
+                0,
+                0,
+                "confirmed",
+                "来源",
+                datetime(2026, 10, 9, 19),
+                datetime(2026, 10, 9, 19, 5),
+                101,
+                1,
+            )
+        return None
+
+    def many():
+        if "FROM match_lineup_players" in state["query"]:
+            return [(7, True, False, "DF", "边路", "球员", None, "DF")]
+        if "player_availability_snapshots" in state["query"] and state["args"][0] == 1:
+            return [
+                (
+                    1,
+                    "injured",
+                    "旧伤",
+                    None,
+                    None,
+                    0,
+                    "球员",
+                    None,
+                    "DF",
+                    7,
+                    51,
+                    "伤停来源",
+                    datetime(2026, 10, 10, 10),
+                    datetime(2026, 10, 10, 10, 5),
+                )
+            ]
+        return []
+
+    cur.execute.side_effect = execute
+    cur.fetchone.side_effect = one
+    cur.fetchall.side_effect = many
+    return conn, cur
+
+
+def test_match_roster_includes_source_time_identity_and_real_zero(client):
+    conn, _ = _roster_detail_cursor()
+    with patch("apps.backend.src.routers.teams.get_db", return_value=conn):
+        response = client.get("/api/matches/101/detail")
+    assert response.status_code == 200
+    lineup = response.json()["lineups"]["home"]
+    assert lineup["snapshot_id"] == 11
+    assert lineup["match_id"] == 101 and lineup["team_id"] == 1
+    assert lineup["source"] == "来源"
+    assert lineup["snapshot_time"] == "2026-10-09T19:00:00"
+    assert lineup["collected_at"] == "2026-10-09T19:05:00"
+    assert lineup["strength_score"] == 0 and lineup["starting_11_value"] == 0
+    assert "jersey_number" not in lineup["players"][0]
+
+
+def test_latest_availability_is_selected_before_filtering_injured_status(client):
+    conn, cur = _roster_detail_cursor()
+    with patch("apps.backend.src.routers.teams.get_db", return_value=conn):
+        data = client.get("/api/matches/101/detail").json()
+    queries = [" ".join(call.args[0].split()) for call in cur.execute.call_args_list]
+    query = next(q for q in queries if "player_availability_snapshots" in q)
+    assert "DISTINCT ON (player_id)" in query
+    assert "ORDER BY player_id, snapshot_time DESC, id DESC" in query
+    assert query.index("availability_status IN") > query.index(") latest")
+    assert "LIMIT 20" in query
+    assert data["availability_scope"] == "latest_per_player_team"
+    assert data["availability_limit_per_team"] == 20
+
+
+def test_injuries_include_player_and_snapshot_provenance_with_zero_score(client):
+    conn, _ = _roster_detail_cursor()
+    with patch("apps.backend.src.routers.teams.get_db", return_value=conn):
+        data = client.get("/api/matches/101/detail").json()
+    injury = data["injuries"][0]
+    assert injury["player_id"] == 7 and injury["snapshot_id"] == 51
+    assert injury["source"] == "伤停来源"
+    assert injury["snapshot_time"] == "2026-10-10T10:00:00"
+    assert injury["collected_at"] == "2026-10-10T10:05:00"
+    assert injury["impact_score"] == 0
+
+
+def test_latest_lineup_uses_deterministic_snapshot_order(client):
+    conn, cur = _roster_detail_cursor()
+    with patch("apps.backend.src.routers.teams.get_db", return_value=conn):
+        response = client.get("/api/matches/101/detail")
+    assert response.status_code == 200
+    query = next(
+        call.args[0]
+        for call in cur.execute.call_args_list
+        if "FROM match_lineup_snapshots" in call.args[0]
+    )
+    assert "ORDER BY mls.snapshot_time DESC, mls.id DESC LIMIT 1" in query

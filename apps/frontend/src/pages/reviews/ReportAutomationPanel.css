@@ -9,3 +9,5 @@
 .report-automation-actions { display: grid; justify-items: end; gap: .5rem; flex: 0 0 auto; }
 .report-automation-note { color: var(--fqp-text-muted); font-size: .6875rem; white-space: nowrap; }
 @media (max-width: 640px) { .report-automation-panel { display: grid; align-items: start; } .report-automation-actions { justify-items: start; } .report-automation-note { white-space: normal; } }
+
+.report-automation-panel-copy { min-width: 0; overflow-wrap: anywhere; }

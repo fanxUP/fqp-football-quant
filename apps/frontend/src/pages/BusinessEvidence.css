@@ -1,0 +1,23 @@
+.be-page { min-width: 0; }
+.be-toolbar { display: grid; grid-template-columns: minmax(180px, 2fr) repeat(2, minmax(120px, 1fr)) auto; gap: 12px; align-items: end; }
+.be-toolbar label { display: flex; flex-direction: column; gap: 8px; min-width: 0; color: var(--fqp-text-muted); font-size: 13px; }
+.be-toolbar :is(input, select) { width: 100%; min-width: 0; min-height: 44px; padding: 8px 12px; background: var(--fqp-bg-input); border: 1px solid var(--fqp-border); border-radius: 4px; color: var(--fqp-text); font: inherit; }
+.be-page button { min-height: 44px; padding: 8px 12px; border: 1px solid var(--fqp-border); border-radius: 4px; color: var(--fqp-text); background: var(--fqp-panel-2); font-size: 13px; cursor: pointer; }
+.be-page button:disabled { opacity: .5; cursor: default; }
+.be-page button:not(:disabled):hover, .be-page button[aria-selected='true'], .be-page button[aria-pressed='true'] { border-color: var(--fqp-accent); background: var(--fqp-accent-muted); }
+.be-page :is(input, select, button, a, [tabindex]):focus-visible { outline: 2px solid var(--fqp-accent-strong); outline-offset: 3px; }
+.be-actions, .be-status, .be-pagination { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-top: 16px; }
+.be-status { justify-content: space-between; color: var(--fqp-text-muted); font-size: 13px; line-height: 1.7; }
+.be-status span { flex: 1; min-width: 160px; overflow-wrap: anywhere; }
+.be-error { color: var(--fqp-warning); font-size: 13px; line-height: 1.7; }
+.be-note { color: var(--fqp-text-muted); font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; }
+.be-odds-list { display: grid; gap: 16px; margin-top: 16px; }
+.be-pagination { justify-content: center; margin-bottom: 20px; color: var(--fqp-text-muted); font-size: 13px; }
+.be-match-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 16px; margin-bottom: 8px; color: var(--fqp-text-muted); font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; }
+.be-match-meta a { min-height: 44px; display: inline-flex; align-items: center; padding: 8px; color: var(--fqp-accent-strong); text-decoration: underline; }
+.be-page .recommendation-table { min-width: 1600px; }
+.be-page .recommendation-table-col-model { width: 200px; }
+@media (max-width: 1000px) { .be-toolbar { grid-template-columns: repeat(2, minmax(0, 1fr)); }.be-toolbar label:first-child { grid-column: 1 / -1; } }
+@media (max-width: 480px) { .be-toolbar { grid-template-columns: 1fr; }.be-actions, .be-pagination { gap: 8px; } }
+
+.be-page .lottery-filters :is(input, select), .be-page .fqp-form-group :is(input:not([type='checkbox']), select) { min-height: 44px; min-width: 0; max-width: 100%; }

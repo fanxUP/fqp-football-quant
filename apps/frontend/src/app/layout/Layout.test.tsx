@@ -2,6 +2,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import Layout from './Layout';
+import type { ReactNode } from 'react';
+vi.mock('../../features/command-center/LiveStatus', () => ({ LiveStatusProvider: ({ children }: { children: ReactNode }) => children }));
+vi.mock('../../features/command-center/GlobalStatusBar', () => ({ default: () => <div aria-label="全局系统状态" /> }));
 
 // ---- Mocks ----------------------------------------------------------------
 

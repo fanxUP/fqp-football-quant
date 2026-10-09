@@ -246,3 +246,14 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* Evidence controls reuse the existing business theme and keyboard focus styles. */
+.news-intelligence-boundary { flex-wrap: wrap; min-width: 0; }
+.news-intelligence-page :is(article, .fqp-card, .news-intelligence-release) { min-width: 0; overflow-wrap: anywhere; }
+.news-intelligence-filters { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) auto; margin: 12px 0; }
+.news-intelligence-release-note { display: grid; gap: 8px; min-width: 0; color: var(--fqp-text-muted); font-size: 13px; }
+.news-intelligence-release textarea { width: 100%; min-width: 0; box-sizing: border-box; }
+.news-intelligence-match-link { display: inline-flex; align-items: center; min-height: 44px; margin-left: 8px; color: var(--fqp-accent-strong); text-decoration: underline; }
+.news-intelligence-page textarea:focus-visible { outline: 2px solid var(--fqp-accent-strong); outline-offset: 3px; }
+@media (max-width: 840px) { .news-intelligence-release > .news-intelligence-release-note { width: 100%; } }
+@media (max-width: 640px) { .news-intelligence-filters { grid-template-columns: 1fr; } .news-intelligence-model-list > div { flex-wrap: wrap; } }

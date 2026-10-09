@@ -18,6 +18,7 @@ import {
 import PageHeader from '../shared/components/PageHeader';
 import useBackgroundRefresh from '../shared/hooks/useBackgroundRefresh';
 import ErrorState from '../shared/components/ErrorState';
+import './BusinessEvidence.css';
 import LoadingSpinner from '../shared/components/LoadingSpinner';
 import EmptyState from '../shared/components/EmptyState';
 import TeamName from '../shared/components/TeamName';
@@ -253,14 +254,59 @@ function TicketColumn({ title, tickets, summary, deletingTicketId, onDelete }: {
   );
 }
 
+type TicketPage = Awaited<ReturnType<typeof api.betting.tickets>>;
+
+function checkedTicketPage(page: TicketPage): TicketPage {
+  const validSummary = (value: BettingTicketSummary) => value
+    && [value.total, value.settled, value.pending].every(count => Number.isSafeInteger(count) && count >= 0)
+    && Number.isFinite(value.stake) && value.stake >= 0 && (value.profitLoss == null || Number.isFinite(value.profitLoss));
+  if (!page || !Array.isArray(page.tickets) || page.tickets.length > 100 || !validSummary(page.summary)
+    || page.summary.total < page.tickets.length || !page.byOwner || Object.values(page.byOwner).some(value => !validSummary(value))
+    || !(page.nextCursor === null || (typeof page.nextCursor === 'string' && page.nextCursor.length > 0))
+    || new Set(page.tickets.map(ticket => ticket.ticketUid)).size !== page.tickets.length
+    || page.tickets.some(ticket => !ticket.ticketUid || !Number.isSafeInteger(ticket.legacyId) || ticket.legacyId <= 0
+      || !['me', 'agent'].includes(ticket.owner) || !['real', 'simulation'].includes(ticket.kind)
+      || !Number.isFinite(ticket.stake) || ticket.stake < 0
+      || [ticket.maxPrize, ticket.settledAmount, ticket.profitLoss, ticket.roi, ticket.multiple, ticket.betCount].some(value => value != null && !Number.isFinite(value)))) throw new Error('彩票分页或统计格式不正确');
+  return page;
+}
+
 export default function TicketsPage() {
+  const [dateFilter, setDateFilter] = useState<DateFilter>('all');
+  const [statusFilter, setStatusFilter] = useState('');
+  return <div className="be-page">
+      <PageHeader
+        title="彩票"
+        subtitle="按日期归档我的彩票和智能代理的彩票，统一展示票面、结算、盈亏和 ROI"
+        actions={
+          <button className="fqp-btn fqp-btn-primary" onClick={() => navigate('/betting?tab=bet-slip')}>
+            去投注台
+          </button>
+        }
+      />
+        <div className="lottery-filters">
+          <label>
+            购买日期
+            <input className="fqp-select" type="date" value={dateFilter === 'all' ? '' : dateFilter} onChange={(e) => setDateFilter(e.target.value || 'all')} />
+          </label>
+          <button type="button" className="fqp-btn" onClick={() => setDateFilter('all')} disabled={dateFilter === 'all'}>全部日期</button>
+          <select aria-label="彩票状态" className="fqp-select" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+            <option value="">全部状态</option>
+            <option value="won">赢</option>
+            <option value="lost">输</option>
+            <option value="pending">待结算</option>
+          </select>
+        </div>
+    <TicketsQuery key={`${dateFilter}:${statusFilter}`} dateFilter={dateFilter} statusFilter={statusFilter} />
+  </div>;
+}
+
+function TicketsQuery({ dateFilter, statusFilter }: { dateFilter: DateFilter; statusFilter: string }) {
   const [tickets, setTickets] = useState<BettingTicket[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deletingTicketId, setDeletingTicketId] = useState<number | null>(null);
-  const [dateFilter, setDateFilter] = useState<DateFilter>('all');
-  const [statusFilter, setStatusFilter] = useState('');
   const [lastUpdated, setLastUpdated] = useState('');
   const [summary, setSummary] = useState<BettingTicketSummary>({ total: 0, stake: 0, settled: 0, pending: 0 });
   const [byOwner, setByOwner] = useState<Partial<Record<'me' | 'agent', BettingTicketSummary>>>({});
@@ -272,10 +318,10 @@ export default function TicketsPage() {
     const version = ++requestVersion.current;
     if (showLoading) setLoading(true);
     try {
-      const page = await api.betting.tickets({
+      const page = checkedTicketPage(await api.betting.tickets({
         date: dateFilter === 'all' ? undefined : dateFilter,
         status: statusFilter || undefined, limit: 100,
-      });
+      }));
       if (version !== requestVersion.current) return;
       setTickets(page.tickets);
       setSummary(page.summary);
@@ -284,7 +330,7 @@ export default function TicketsPage() {
       setLastUpdated(new Date().toLocaleString('zh-CN', { hour12: false }));
       setError(null);
     } catch (e) {
-      if (version === requestVersion.current) setError(e instanceof ApiError ? e.message : '加载失败');
+      if (version === requestVersion.current) setError(e instanceof Error ? e.message : '加载失败');
     } finally {
       if (version === requestVersion.current) {
         setLoading(false);
@@ -298,7 +344,7 @@ export default function TicketsPage() {
     return () => { requestVersion.current += 1; };
   }, [fetchTickets]);
   useBackgroundRefresh(() => {
-    if (!loading && !loadingMore && tickets.length <= 100) return fetchTickets(false);
+    if (deletingTicketId === null && !loading && !loadingMore && tickets.length <= 100) return fetchTickets(false);
   });
 
   const loadMore = async () => {
@@ -306,18 +352,20 @@ export default function TicketsPage() {
     const version = ++requestVersion.current;
     setLoadingMore(true);
     try {
-      const page = await api.betting.tickets({
+      const page = checkedTicketPage(await api.betting.tickets({
         date: dateFilter === 'all' ? undefined : dateFilter,
         status: statusFilter || undefined, limit: 100, cursor: nextCursor,
-      });
+      }));
       if (version !== requestVersion.current) return;
+      if (page.nextCursor === nextCursor) throw new Error('分页游标未前进，请刷新彩票');
+      setLastUpdated(new Date().toLocaleString('zh-CN', { hour12: false }));
       setTickets((current) => Array.from(new Map([...current, ...page.tickets].map((ticket) => [ticket.ticketUid, ticket])).values()));
       setNextCursor(page.nextCursor);
       setSummary(page.summary);
       setByOwner(page.byOwner);
       setError(null);
     } catch (e) {
-      if (version === requestVersion.current) setError(e instanceof ApiError ? e.message : '加载更多失败');
+      if (version === requestVersion.current) setError(e instanceof Error ? e.message : '加载更多失败');
     } finally {
       if (version === requestVersion.current) setLoadingMore(false);
     }
@@ -349,42 +397,23 @@ export default function TicketsPage() {
   const agentTickets = tickets.filter((ticket) => ticket.owner === 'agent');
   const stats = summary;
 
-  if (loading) return <LoadingSpinner text="加载彩票台账..." size="lg" />;
 
   return (
     <div>
-      <PageHeader
-        title="彩票"
-        subtitle="按日期归档我的彩票和智能代理的彩票，统一展示票面、结算、盈亏和 ROI"
-        lastUpdated={lastUpdated}
-        actions={
-          <button className="fqp-btn fqp-btn-primary" onClick={() => navigate('/betting?tab=bet-slip')}>
-            去投注台
-          </button>
-        }
-      />
-
       <div className="lottery-toolbar">
         <div className="lottery-toolbar-stats">
-          <span>{stats.total} 张彩票</span>
-          <strong>{money(stats.stake)}</strong>
-          <em>{stats.settled} 已结算 / {stats.pending} 待结算</em>
+          <span>{lastUpdated ? `${stats.total} 张彩票` : "彩票总数 —"}</span>
+          <strong>{lastUpdated ? money(stats.stake) : "—"}</strong>
+          <em>{lastUpdated ? `${stats.settled} 已结算 / ${stats.pending} 待结算` : "结算统计 —"}</em>
         </div>
-        <div className="lottery-filters">
-          <label>
-            购买日期
-            <input className="fqp-select" type="date" value={dateFilter === 'all' ? '' : dateFilter} onChange={(e) => setDateFilter(e.target.value || 'all')} />
-          </label>
-          <button type="button" className="fqp-btn" onClick={() => setDateFilter('all')} disabled={dateFilter === 'all'}>全部日期</button>
-          <select aria-label="彩票状态" className="fqp-select" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-            <option value="">全部状态</option>
-            <option value="won">赢</option>
-            <option value="lost">输</option>
-            <option value="pending">待结算</option>
-          </select>
-        </div>
+
       </div>
 
+      <div className="be-status">
+        <span>{lastUpdated ? `接收时间 ${lastUpdated}` : '本筛选尚无成功数据'} · 统计按当前购买日期和状态计算{tickets.length > 100 ? ' · 手动刷新将重新读取首页' : ''}</span>
+        <button type="button" disabled={loading || loadingMore || deletingTicketId !== null} onClick={() => void fetchTickets(false)}>刷新彩票</button>
+      </div>
+      {loading && <LoadingSpinner text="加载彩票台账..." size="lg" />}
       {deleteError && <div className="lottery-delete-error" role="alert">{deleteError}</div>}
 
       {error && (
@@ -393,7 +422,7 @@ export default function TicketsPage() {
           <ErrorState message={error} onRetry={() => fetchTickets()} />
         </div>
       )}
-      <div className="lottery-ledger">
+      {lastUpdated && <div className="lottery-ledger">
           <TicketColumn
             title={ticketOwnerLabel('me')}
             tickets={myTickets}
@@ -408,11 +437,11 @@ export default function TicketsPage() {
             deletingTicketId={deletingTicketId}
             onDelete={deleteTicket}
           />
-      </div>
-      <div aria-live="polite" aria-busy={loadingMore}>
+      </div>}
+      {lastUpdated && <div aria-live="polite" aria-busy={loadingMore}>
         <p>已显示 {tickets.length} / {stats.total} 张{tickets.length > 100 ? ' · 浏览历史时暂停自动刷新' : ''}</p>
-        {nextCursor && <button type="button" className="fqp-btn fqp-btn-primary" disabled={loadingMore} onClick={() => void loadMore()}>{loadingMore ? '加载中...' : '加载更多'}</button>}
-      </div>
+        {nextCursor && <button type="button" className="fqp-btn fqp-btn-primary" disabled={loadingMore || deletingTicketId !== null} onClick={() => void loadMore()}>{loadingMore ? '加载中...' : '加载更多'}</button>}
+      </div>}
     </div>
   );
 }

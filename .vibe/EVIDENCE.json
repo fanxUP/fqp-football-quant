@@ -1,0 +1,297 @@
+{
+  "base_revision": "795c6c6c3bc15801e34a069e5f41bcd590a163ed",
+  "upstream_revision_last_fetched": "74ebae2b11a3abda78abe851d95d58ee418e742c",
+  "phase": "P08a",
+  "source_paths": [
+    "apps/backend/src/routers/teams.py",
+    "tests/test_api/test_teams.py",
+    "apps/frontend/src/core/types.ts",
+    "apps/frontend/src/pages/MatchDetailPage.tsx",
+    "apps/frontend/src/shared/components/MatchDetailDrawer.tsx",
+    "apps/frontend/src/features/tactics/RosterEvidencePanel.css",
+    "apps/frontend/src/features/tactics/RosterEvidencePanel.test.tsx",
+    "apps/frontend/src/features/tactics/RosterEvidencePanel.tsx"
+  ],
+  "source_sha256": "154f1eb74234cd594077adcec6205182360ad8583d1d7b942bd4df0dfdebe764",
+  "commands": [
+    {
+      "name": "focused",
+      "command": [
+        "npm",
+        "--prefix",
+        "apps/frontend",
+        "test",
+        "--",
+        "src/features/tactics/RosterEvidencePanel.test.tsx"
+      ],
+      "start_utc": "2026-10-09T14:54:07.831228+00:00",
+      "end_utc": "2026-10-09T14:54:11.440723+00:00",
+      "exit_code": 0,
+      "log": "/private/tmp/fqp-v3e-focused-final.log"
+    },
+    {
+      "name": "typecheck",
+      "command": [
+        "npm",
+        "--prefix",
+        "apps/frontend",
+        "run",
+        "typecheck"
+      ],
+      "start_utc": "2026-10-09T14:54:11.441049+00:00",
+      "end_utc": "2026-10-09T14:54:25.740337+00:00",
+      "exit_code": 0,
+      "log": "/private/tmp/fqp-v3e-typecheck-final.log"
+    },
+    {
+      "name": "frontend-tests",
+      "command": [
+        "npm",
+        "--prefix",
+        "apps/frontend",
+        "test"
+      ],
+      "start_utc": "2026-10-09T14:54:25.740514+00:00",
+      "end_utc": "2026-10-09T14:55:47.498768+00:00",
+      "exit_code": 0,
+      "log": "/private/tmp/fqp-v3e-frontend-tests-final.log"
+    },
+    {
+      "name": "build",
+      "command": [
+        "npm",
+        "--prefix",
+        "apps/frontend",
+        "run",
+        "build"
+      ],
+      "start_utc": "2026-10-09T14:55:47.498948+00:00",
+      "end_utc": "2026-10-09T14:55:50.023498+00:00",
+      "exit_code": 0,
+      "log": "/private/tmp/fqp-v3e-build-final.log"
+    },
+    {
+      "name": "backend",
+      "command": [
+        "/private/tmp/fqp-pi-venv/bin/python",
+        "-m",
+        "pytest",
+        "tests/test_api/test_teams.py",
+        "-q"
+      ],
+      "start_utc": "2026-10-09T14:55:50.023622+00:00",
+      "end_utc": "2026-10-09T14:55:52.570618+00:00",
+      "exit_code": 0,
+      "log": "/private/tmp/fqp-v3e-backend-final.log"
+    },
+    {
+      "name": "ruff",
+      "command": [
+        "/private/tmp/fqp-pi-venv/bin/ruff",
+        "check",
+        "apps/backend/src/routers/teams.py",
+        "tests/test_api/test_teams.py"
+      ],
+      "start_utc": "2026-10-09T14:55:52.570722+00:00",
+      "end_utc": "2026-10-09T14:55:52.690808+00:00",
+      "exit_code": 0,
+      "log": "/private/tmp/fqp-v3e-ruff-final.log"
+    },
+    {
+      "name": "mypy",
+      "command": [
+        "/private/tmp/fqp-pi-venv/bin/python",
+        "-m",
+        "mypy",
+        "apps/backend/src/routers/teams.py"
+      ],
+      "start_utc": "2026-10-09T14:55:52.690935+00:00",
+      "end_utc": "2026-10-09T14:55:53.180410+00:00",
+      "exit_code": 0,
+      "log": "/private/tmp/fqp-v3e-mypy-final.log"
+    }
+  ],
+  "frontend": {
+    "files": 84,
+    "tests": 452,
+    "focused": 21,
+    "new_tests": 21
+  },
+  "backend": {
+    "related_passed": 11,
+    "new_tests": 4,
+    "real_postgres_validation": false
+  },
+  "red": {
+    "backend": {
+      "failed": 4,
+      "passed": 7,
+      "log": "/private/tmp/fqp-v3e-backend-red.log"
+    },
+    "frontend_initial": {
+      "status": "collection failed, component did not exist; no behavior RED claimed",
+      "log": "/private/tmp/fqp-v3e-red.log"
+    },
+    "unknown_count_behavior": {
+      "failed": 1,
+      "passed": 20,
+      "log": "/private/tmp/fqp-v3e-count-red.log"
+    }
+  },
+  "extended_api": {
+    "current_passed": 148,
+    "baseline_passed": 144,
+    "failed": 22,
+    "same_failure_set": true,
+    "failures": [
+      "tests/test_api/test_model_providers.py::test_pi_catalog_returns_actual_engine_and_model_pagination",
+      "tests/test_api/test_news_intelligence.py::test_event_verification_is_an_explicit_human_action",
+      "tests/test_api/test_news_intelligence.py::test_news_articles_are_filterable_by_official_match",
+      "tests/test_api/test_news_intelligence.py::test_news_feature_snapshots_are_read_only_and_versioned",
+      "tests/test_api/test_news_intelligence.py::test_news_overview_returns_read_only_operational_summary",
+      "tests/test_api/test_news_intelligence.py::test_news_release_can_be_rolled_back_immediately",
+      "tests/test_api/test_news_intelligence.py::test_news_release_can_only_be_promoted_by_explicit_request",
+      "tests/test_api/test_news_intelligence.py::test_news_release_promotion_rejects_unqualified_experiment",
+      "tests/test_api/test_news_intelligence.py::test_news_shadow_experiment_returns_baseline_comparison",
+      "tests/test_api/test_news_intelligence.py::test_news_sources_do_not_expose_provider_secrets",
+      "tests/test_api/test_news_intelligence.py::test_source_status_can_be_disabled_without_changing_credentials",
+      "tests/test_api/test_news_intelligence.py::test_structured_news_events_expose_evidence_and_verification",
+      "tests/test_api/test_report_automation.py::test_report_automation_archive_exposes_only_the_matching_automatic_report",
+      "tests/test_api/test_report_automation.py::test_report_automation_snapshot_exposes_only_safe_frozen_report_metrics",
+      "tests/test_api/test_report_automation.py::test_report_automation_state_is_available_as_a_stable_resource",
+      "tests/test_api/test_report_automation.py::test_report_automation_update_requires_a_ready_agent",
+      "tests/test_api/test_upsets.py::test_upset_detail_returns_404_for_unknown_event",
+      "tests/test_api/test_upsets.py::test_upset_detail_returns_signals_evidence_review_and_tickets",
+      "tests/test_api/test_upsets.py::test_upset_leagues_return_navigation_options",
+      "tests/test_api/test_upsets.py::test_upset_list_exposes_filters_and_pagination",
+      "tests/test_api/test_upsets.py::test_upset_reports_return_versioned_artifacts",
+      "tests/test_api/test_upsets.py::test_upset_summary_returns_market_and_betting_counts"
+    ],
+    "current_log": "/private/tmp/fqp-v3e-api-regression.log",
+    "baseline_log": "/private/tmp/fqp-v3e-api-baseline.log",
+    "exit_code": 1,
+    "limitation": "21 existing local database dependency failures and 1 existing Pi catalog 503; full API suite not passed"
+  },
+  "browser": {
+    "started_at": "2026-10-09T14:54:11.348529+00:00",
+    "environment": "Headless Chromium; synthetic fixtures; UTC browser clock; no production data",
+    "viewports": [
+      {
+        "viewport": [
+          1920,
+          1080
+        ],
+        "width": 1920,
+        "scroll": 1920
+      },
+      {
+        "viewport": [
+          1440,
+          1000
+        ],
+        "width": 1440,
+        "scroll": 1440
+      },
+      {
+        "viewport": [
+          3840,
+          2160
+        ],
+        "width": 3840,
+        "scroll": 3840
+      },
+      {
+        "viewport": [
+          375,
+          812
+        ],
+        "width": 375,
+        "scroll": 375
+      },
+      {
+        "viewport": [
+          812,
+          375
+        ],
+        "width": 812,
+        "scroll": 812
+      }
+    ],
+    "keyboard_selection": true,
+    "independent_resource_failures": true,
+    "raw_snapshot_timezone_preserved": true,
+    "same_query_retention": true,
+    "new_match_isolation": true,
+    "mismatch_rejected": true,
+    "empty_clears": true,
+    "dark_and_light": true,
+    "manual_only": true,
+    "no_writes": true,
+    "no_three_modules": true,
+    "page_errors": [],
+    "finished_at": "2026-10-09T14:54:16.939334+00:00"
+  },
+  "production_writes": false,
+  "production_data_export": false,
+  "pushed": false,
+  "deployed": false,
+  "security_self_review": {
+    "checked_at": "2026-10-09T14:56:14.824854+00:00",
+    "status": "completed self-review only",
+    "checks": [
+      "parameterized SELECT queries and explicit projected fields; no SQL mutations",
+      "no new dependencies, credentials, provider secrets or source URLs",
+      "React text rendering, scoped CSS, native keyboard buttons",
+      "no source IDs as jersey numbers or fabricated player coordinates",
+      "source time ambiguity preserved; current team availability not historical prematch proof"
+    ]
+  },
+  "independent_review": "pending before merge",
+  "remaining": [
+    "P08b tactics scene",
+    "P09 model research",
+    "P10 cumulative regression, independent review, real database and GPU release checks"
+  ],
+  "scope": {
+    "checked_at": "2026-10-09T14:56:15.373649+00:00",
+    "command": "python3 /private/tmp/fqp-v3e-scope.py (actual Git scope and budget; harness unavailable)",
+    "base_revision": "795c6c6c3bc15801e34a069e5f41bcd590a163ed",
+    "changed_files": 17,
+    "new_files": 4,
+    "paths": [
+      ".vibe/ACCEPTANCE.md",
+      ".vibe/BASELINE.yaml",
+      ".vibe/CHANGE_BUDGET.yaml",
+      ".vibe/DESIGN.md",
+      ".vibe/EVIDENCE.json",
+      ".vibe/PLAN.md",
+      ".vibe/SCOPE_LOCK.yaml",
+      ".vibe/TASK_DAG.yaml",
+      "apps/backend/src/routers/teams.py",
+      "apps/frontend/src/core/types.ts",
+      "apps/frontend/src/features/tactics/RosterEvidencePanel.css",
+      "apps/frontend/src/features/tactics/RosterEvidencePanel.test.tsx",
+      "apps/frontend/src/features/tactics/RosterEvidencePanel.tsx",
+      "apps/frontend/src/pages/MatchDetailPage.tsx",
+      "apps/frontend/src/shared/components/MatchDetailDrawer.tsx",
+      "docs/tactics-evidence-v3e.md",
+      "tests/test_api/test_teams.py"
+    ],
+    "scope_violations": [],
+    "forbidden_changes": [],
+    "dependency_additions": 0,
+    "migrations": 0,
+    "public_api_changes": 1,
+    "suite_tests": 32,
+    "new_tests": 25,
+    "limits": {
+      "max_changed_files": 20,
+      "max_new_files": 4,
+      "max_dependency_additions": 0,
+      "max_migration_files": 0,
+      "max_public_api_changes": 1,
+      "max_regression_tests": 45
+    },
+    "exit_code": 0
+  }
+}

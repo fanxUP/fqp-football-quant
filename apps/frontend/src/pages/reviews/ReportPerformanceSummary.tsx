@@ -5,12 +5,16 @@ import type {
 import { modelNameLabel, playTypeLabel } from '../../shared/constants';
 
 function percent(value: number | null | undefined, signed = false): string {
-  if (value == null) return '—';
+  if (value == null || !Number.isFinite(value)) return '—';
   return `${signed && value > 0 ? '+' : ''}${(value * 100).toFixed(2)}%`;
 }
 
 function decimal(value: number | null | undefined): string {
-  return value == null ? '—' : value.toFixed(4);
+  return value == null || !Number.isFinite(value) ? '—' : value.toFixed(4);
+}
+
+function count(value: number | undefined) {
+  return Number.isSafeInteger(value) && value! >= 0 ? String(value) : '—';
 }
 
 function breakdownLabel(kind: 'model' | 'play' | 'league', key: string): string {
@@ -34,7 +38,7 @@ function PerformanceBreakdown({
     <ul>
       {rows.slice(0, 8).map((row) => <li key={row.key}>
         <strong>{breakdownLabel(kind, row.key)}</strong>
-        <span>{row.correctCount}/{row.sampleCount} 命中 · {percent(row.hitRate)}</span>
+        <span>{count(row.correctCount)}/{count(row.sampleCount)} 命中 · {percent(row.hitRate)}</span>
         <span>CLV {percent(row.averageClv, true)} · 等额理论 ROI {percent(row.unitStakeRoi, true)}</span>
         <span>Brier {decimal(row.brierScore)} · Log Loss {decimal(row.logLoss)}</span>
       </li>)}
@@ -48,7 +52,7 @@ export default function ReportPerformanceSummary({ report }: { report: ReportRes
     return <p className="automatic-report-archive-status">该历史报告未包含真实赛果评价。</p>;
   }
   const cards = [
-    ['可评估选择', `${metrics.sampleCount} 个`],
+    ['可评估选择', `${count(metrics.sampleCount)} 个`],
     ['命中率', percent(metrics.hitRate)],
     ['Brier Score', decimal(metrics.brierScore)],
     ['Log Loss', decimal(metrics.logLoss)],
@@ -56,7 +60,7 @@ export default function ReportPerformanceSummary({ report }: { report: ReportRes
     ['平均 CLV', percent(metrics.averageClv, true)],
     ['临场模型 Edge', percent(metrics.averageClosingEdge, true)],
     ['等额理论 ROI', percent(metrics.unitStakeRoi, true)],
-    ['最大连续失误', `${metrics.maxLosingStreak} 次`],
+    ['最大连续失误', `${count(metrics.maxLosingStreak)} 次`],
   ] as const;
   const evidence = report.evidenceSummary;
   const errors = report.errorAnalysis;

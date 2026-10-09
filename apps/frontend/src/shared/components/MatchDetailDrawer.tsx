@@ -12,6 +12,7 @@ import { ApiError } from '../../core/types';
 import ErrorState from './ErrorState';
 import { optionLabel, statusLabel } from '../constants';
 import TeamLogo from './TeamLogo';
+import { formatRosterTime } from '../../features/tactics/RosterEvidencePanel';
 
 interface MatchDetailDrawerProps {
   matchId: number | null;
@@ -324,17 +325,19 @@ export default function MatchDetailDrawer({ matchId, onClose }: MatchDetailDrawe
             </span>
           )}
         </div>
-        {starters.map((p, i) => (
-          <div key={i} style={{
+        <p style={{ fontSize: '11px', color: 'var(--fqp-text-muted)' }}>
+          {lineup.lineup_type === 'confirmed' ? '来源标记为确认首发' : lineup.lineup_type === 'predicted' ? '预估名单' : lineup.lineup_type === 'historical' ? '历史阵容' : '类型未知'} · {lineup.source || '来源未知'} · {formatRosterTime(lineup.snapshot_time)}
+        </p>
+        {starters.map((p) => (
+          <div key={p.player_id} style={{
             fontSize: '11px', padding: '3px 8px', display: 'flex', gap: '6px',
             borderRadius: '3px',
             transition: 'background 0.1s',
           }}>
-            <span style={{ color: 'var(--fqp-text-muted)', width: '18px', fontWeight: 600 }}>{i + 1}</span>
             <span style={{ color: 'var(--fqp-text-muted)', width: '50px', fontSize: '10px' }}>
               {p.primary_position || p.position || ''}
             </span>
-            <span style={{ fontWeight: 500 }}>{p.name_cn || p.name_en || `球员#${p.player_id}`}</span>
+            <span style={{ fontWeight: 500 }}>{p.name_cn || p.name_en || '姓名未知'}</span>
           </div>
         ))}
         {subs.length > 0 && (
@@ -716,6 +719,7 @@ export default function MatchDetailDrawer({ matchId, onClose }: MatchDetailDrawe
               </Section>
             )}
 
+            <p><a href={`#/matches/${d.match.id}`} onClick={onClose}>查看阵容与伤停来源证据</a></p>
             {/* Lineups */}
             {(d.lineups.home || d.lineups.away) && (
               <Section title="阵容" icon="👥" delay={120}>
@@ -795,13 +799,15 @@ export default function MatchDetailDrawer({ matchId, onClose }: MatchDetailDrawe
       case 'injuries':
         return (
           <div key="injuries" style={{ animation: 'tabEnter 0.2s ease-out both' }}>
+            <p>球队最新情报不代表历史比赛赛前伤停；空列表不代表全员健康。</p>
+            <a href={`#/matches/${d.match.id}`} onClick={onClose}>查看阵容与伤停来源证据</a>
             {d.injuries.length > 0 ? (
               <Section title="伤停一览" icon="🏥" delay={50}>
                 {renderInjuries(d.injuries)}
               </Section>
             ) : (
               <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--fqp-text-muted)', fontSize: '13px' }}>
-                ✅ 暂无伤停信息
+                尚无可用伤停记录，采集覆盖未知，不能据此判断全员健康。
               </div>
             )}
           </div>

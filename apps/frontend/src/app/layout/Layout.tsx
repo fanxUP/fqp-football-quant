@@ -1,5 +1,7 @@
 import { useState, useCallback, type ReactNode } from 'react';
 import Sidebar from './Sidebar';
+import { LiveStatusProvider } from '../../features/command-center/LiveStatus';
+import GlobalStatusBar from '../../features/command-center/GlobalStatusBar';
 import { useAuth } from '../AuthContext';
 import { useLanguage } from '../LanguageContext';
 import { LANGUAGE_OPTIONS, shellText, type AppLanguage } from '../language';
@@ -18,7 +20,7 @@ export default function Layout({ children }: LayoutProps) {
   const closeSidebar = useCallback(() => setSidebarOpen(false), []);
 
   return (
-    <div className="fqp-layout">
+    <LiveStatusProvider><div className="fqp-layout">
       {/* Hamburger button — mobile only */}
       <button
         className="fqp-hamburger"
@@ -37,9 +39,12 @@ export default function Layout({ children }: LayoutProps) {
 
       <Sidebar isOpen={sidebarOpen} onClose={closeSidebar} />
 
+      <div className="cc-shell">
+      <header className="cc-top-bar">
+      <GlobalStatusBar />
       <div className="fqp-top-actions" aria-label={text.accountActions}>
         <label className="fqp-language-select">
-          <span aria-hidden="true">🌐</span>
+          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><circle cx="12" cy="12" r="9" /><ellipse cx="12" cy="12" rx="4" ry="9" /><path d="M3 12h18" /></svg>
           <select
             aria-label={text.language}
             value={language}
@@ -49,14 +54,16 @@ export default function Layout({ children }: LayoutProps) {
           </select>
         </label>
         <button type="button" className="fqp-logout-btn" onClick={() => logout()}>
-          <span aria-hidden="true">🚪</span>
+          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M10 4H4v16h6M10 12h10m-4-4 4 4-4 4" /></svg>
           <span>{text.logout}</span>
         </button>
       </div>
 
+      </header>
       <main className="fqp-main">
         {children}
       </main>
-    </div>
+      </div>
+    </div></LiveStatusProvider>
   );
 }

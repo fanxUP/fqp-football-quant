@@ -584,10 +584,11 @@ def get_match_detail(match_id: int):
                     """
                     SELECT mls.id, mls.formation, mls.lineup_strength_score,
                            mls.starting_11_market_value, mls.starting_11_key_player_count,
-                           mls.lineup_type
+                           mls.lineup_type, mls.source_name, mls.snapshot_time,
+                           mls.created_at, mls.match_id, mls.team_id
                     FROM match_lineup_snapshots mls
                     WHERE mls.match_id = %s AND mls.team_id = %s
-                    ORDER BY mls.snapshot_time DESC LIMIT 1
+                    ORDER BY mls.snapshot_time DESC, mls.id DESC LIMIT 1
                 """,
                     (match_id, tid),
                 )
@@ -621,11 +622,17 @@ def get_match_detail(match_id: int):
                 ]
                 lineups[side] = {
                     "formation": ls[1],
-                    "strength_score": float(ls[2]) if ls[2] else None,
-                    "starting_11_value": float(ls[3]) if ls[3] else None,
+                    "strength_score": float(ls[2]) if ls[2] is not None else None,
+                    "starting_11_value": float(ls[3]) if ls[3] is not None else None,
                     "key_player_count": ls[4],
                     "lineup_type": ls[5],
                     "players": players,
+                    "snapshot_id": ls[0],
+                    "source": ls[6],
+                    "snapshot_time": ls[7].isoformat() if ls[7] is not None else None,
+                    "collected_at": ls[8].isoformat() if ls[8] is not None else None,
+                    "match_id": ls[9],
+                    "team_id": ls[10],
                 }
 
             # 5. Head-to-head (last 10 matches between these teams)
@@ -767,15 +774,25 @@ def get_match_detail(match_id: int):
             for tid in filter(None, [home_team_id, away_team_id]):
                 cur.execute(
                     """
-                    SELECT pas.team_id, pas.availability_status,
-                           pas.injury_type, pas.injury_body_part,
-                           pas.expected_return_date, pas.absence_impact_score,
-                           p.player_name_cn, p.player_name_en, p.primary_position
-                    FROM player_availability_snapshots pas
-                    LEFT JOIN players p ON p.id = pas.player_id
-                    WHERE pas.team_id = %s
-                      AND pas.availability_status IN ('injured', 'suspended', 'doubtful')
-                    ORDER BY pas.absence_impact_score DESC NULLS LAST
+                    SELECT latest.team_id, latest.availability_status,
+                           latest.injury_type, latest.injury_body_part,
+                           latest.expected_return_date, latest.absence_impact_score,
+                           p.player_name_cn, p.player_name_en, p.primary_position,
+                           latest.player_id, latest.id, latest.source_name,
+                           latest.snapshot_time, latest.created_at
+                    FROM (
+                        SELECT DISTINCT ON (player_id) id, player_id, team_id,
+                               availability_status, injury_type, injury_body_part,
+                               expected_return_date, absence_impact_score, source_name,
+                               snapshot_time, created_at
+                        FROM player_availability_snapshots
+                        WHERE team_id = %s
+                        ORDER BY player_id, snapshot_time DESC, id DESC
+                    ) latest
+                    LEFT JOIN players p ON p.id = latest.player_id
+                    WHERE latest.availability_status IN ('injured', 'suspended', 'doubtful')
+                    ORDER BY latest.absence_impact_score DESC NULLS LAST,
+                             latest.snapshot_time DESC, latest.id DESC
                     LIMIT 20
                 """,
                     (tid,),
@@ -788,10 +805,15 @@ def get_match_detail(match_id: int):
                             "injury_type": ij[2],
                             "body_part": ij[3],
                             "expected_return": str(ij[4]) if ij[4] else None,
-                            "impact_score": float(ij[5]) if ij[5] else None,
+                            "impact_score": float(ij[5]) if ij[5] is not None else None,
                             "player_name_cn": ij[6],
                             "player_name_en": ij[7],
                             "position": ij[8],
+                            "player_id": ij[9],
+                            "snapshot_id": ij[10],
+                            "source": ij[11],
+                            "snapshot_time": ij[12].isoformat() if ij[12] is not None else None,
+                            "collected_at": ij[13].isoformat() if ij[13] is not None else None,
                         }
                     )
 
@@ -806,6 +828,8 @@ def get_match_detail(match_id: int):
         "form": form,
         "standings": standings,
         "injuries": injuries,
+        "availability_scope": "latest_per_player_team",
+        "availability_limit_per_team": 20,
     }
 
 

@@ -26,8 +26,8 @@ export const AVAILABLE_THEME_IDS: ThemeId[] = [
 
 export const THEME_REGISTRY: ThemeDefinition[] = [
   {
-    id: 'redline-quant', name: '黑红量化', description: '冷峻专业的足球量化决策终端', category: 'professional', mode: 'dark', available: true,
-    preview: { background: '#070809', surface: '#111318', primary: '#E32035', secondary: '#2ECF8D' }, defaults,
+    id: 'redline-quant', name: '赤焰量化指挥中心（黑红量化）', description: '足球量化终端与真实赛事数字球场', category: 'professional', mode: 'dark', available: true,
+    preview: { background: '#0B0F16', surface: '#171D27', primary: '#F34F62', secondary: '#F4B15E' }, defaults,
   },
   {
     id: 'black-gold-terminal', name: '黑金量化终端', description: '克制稳重的机构级投资终端', category: 'professional', mode: 'dark', available: true,
