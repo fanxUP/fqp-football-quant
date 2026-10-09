@@ -1,20 +1,26 @@
-version: 5
-base_revision: fef17a7adc2a08b97fc14d83ca3ab791162880ae
+version: 6
+base_revision: 476e8258948d57d09cdd7ac74c1bd1709ce08bbb
 allowed_paths:
   - .vibe/
-  - docs/betting-backtest-reviews-v3c.md
-  - apps/frontend/src/pages/TicketsPage.tsx
-  - apps/frontend/src/pages/TicketsPage.test.tsx
-  - apps/frontend/src/pages/BacktestPage.tsx
-  - apps/frontend/src/pages/BacktestPage.test.tsx
-  - apps/frontend/src/pages/ReviewsPage.tsx
-  - apps/frontend/src/pages/ReviewsPage.test.tsx
-  - apps/frontend/src/pages/BusinessEvidence.css
-  - apps/frontend/src/pages/ReadEvidenceStatus.tsx
+  - docs/news-reports-v3d.md
+  - apps/frontend/src/pages/NewsIntelligencePage.tsx
+  - apps/frontend/src/pages/NewsIntelligencePage.test.tsx
+  - apps/frontend/src/pages/NewsIntelligencePage.css
+  - apps/frontend/src/features/news-intelligence/NewsScreeningStatus.tsx
+  - apps/frontend/src/pages/useManualEvidence.ts
+  - apps/frontend/src/pages/reviews/ReportResearchSummary.tsx
+  - apps/frontend/src/pages/reviews/ReportResearchSummary.test.tsx
+  - apps/frontend/src/pages/reviews/AutomaticReportArchivePanel.tsx
+  - apps/frontend/src/pages/reviews/AutomaticReportArchivePanel.test.tsx
+  - apps/frontend/src/pages/reviews/ReportAutomationPanel.tsx
+  - apps/frontend/src/pages/reviews/ReportAutomationPanel.test.tsx
+  - apps/frontend/src/pages/reviews/ReportPerformanceSummary.tsx
+  - apps/frontend/src/pages/reviews/AutomaticReportArchivePanel.css
+  - apps/frontend/src/pages/reviews/ReportAutomationPanel.css
 forbidden_paths:
   - .env*
   - sql/
   - apps/backend/
   - apps/frontend/package.json
   - package-lock.json
-out_of_scope: "Bet slip, betting calculations/deletions/settlement, report automation, news, P08/P09, production export/deployment."
+out_of_scope: "Algorithms, moderation/release endpoints, generation scheduling, P08/P09, production export/deployment."

@@ -1,5 +1,5 @@
 version: 1
-status: implemented_v3c_betting_backtest_reviews_local
+status: implemented_v3d_news_reports_local
 date: '2026-10-09'
 mode: STRICT
 baseline_main_sha: 74ebae2b11a3abda78abe851d95d58ee418e742c
@@ -64,3 +64,8 @@ subtasks:
     title: 彩票查询隔离、回测证据与复盘独立加载
     acceptance: A07c
     depends_on: [P07b]
+
+  - id: P07d
+    title: 新闻独立证据与报告子面板隔离重试
+    acceptance: A07d
+    depends_on: [P07c]

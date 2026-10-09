@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ReportResearchSummary from './ReportResearchSummary';
 
@@ -10,6 +10,7 @@ vi.mock('../../core/apiClient', () => ({
 
 describe('ReportResearchSummary', () => {
   beforeEach(() => {
+    vi.clearAllMocks();
     apiMocks.snapshot.mockResolvedValue({
       report: {
         sourceType: 'post_daily',
@@ -88,10 +89,69 @@ describe('ReportResearchSummary', () => {
   });
 
   it('clearly reports that an older report has no research metrics', async () => {
-    apiMocks.snapshot.mockResolvedValueOnce({ report: { schemaVersion: 1, researchMetrics: null } });
+    apiMocks.snapshot.mockResolvedValueOnce({ report: { sourceType: 'post_monthly', sourceRef: '2026-07', schemaVersion: 1, researchMetrics: null } });
     render(<ReportResearchSummary sourceType="post_monthly" sourceRef="2026-07" />);
 
     await waitFor(() => expect(apiMocks.snapshot).toHaveBeenCalled());
     expect(screen.getByText('该历史报告未包含量化指标。')).toBeInTheDocument();
   });
+  it('offers a retry after first failure and preserves this period after refresh failure', async () => {
+    apiMocks.snapshot.mockRejectedValueOnce(new Error('快照超时'));
+    render(<ReportResearchSummary sourceType="post_daily" sourceRef="2026-08-09" />);
+    expect(await screen.findByRole('alert')).toHaveTextContent('快照超时');
+    fireEvent.click(screen.getByRole('button',{name:'刷新量化复盘指标'}));
+    expect(await screen.findByText('+¥20.00')).toBeInTheDocument();
+    apiMocks.snapshot.mockRejectedValueOnce(new Error('暂不可读'));
+    fireEvent.click(screen.getByRole('button',{name:'刷新量化复盘指标'}));
+    expect(await screen.findByRole('alert')).toHaveTextContent('保留本查询上次成功数据');
+    expect(screen.getByText('+¥20.00')).toBeInTheDocument();
+  });
+  it('does not coerce missing, null or blank finance into zero or NaN', async () => {
+    const response=await apiMocks.snapshot(); apiMocks.snapshot.mockClear();
+    apiMocks.snapshot.mockResolvedValue({...response,report:{...response.report,dailyReview:{actualStake:null,realPrize:'',realProfitLoss:null,realRoi:null}}});
+    render(<ReportResearchSummary sourceType="post_daily" sourceRef="2026-08-09" />);
+    await screen.findByText('量化复盘指标');
+    for(const label of ['实际投入','实际返还','实际盈亏','实际 ROI']) expect(screen.getByText(label).nextElementSibling).toHaveTextContent('—');
+    expect(screen.queryByText('¥0.00')).not.toBeInTheDocument(); expect(screen.queryByText('NaN%')).not.toBeInTheDocument();
+  });
+  it('shows real zero and negative profit with its own sign class', async () => {
+    const response=await apiMocks.snapshot(); apiMocks.snapshot.mockClear();
+    apiMocks.snapshot.mockResolvedValue({...response,report:{...response.report,dailyReview:{actualStake:0,realPrize:0,realProfitLoss:-20,realRoi:0}}});
+    render(<ReportResearchSummary sourceType="post_daily" sourceRef="2026-08-09" />);
+    await screen.findByText('量化复盘指标');
+    expect(screen.getByText('实际 ROI').nextElementSibling).toHaveTextContent('0.00%');
+    expect(screen.getByText('¥-20.00')).toHaveClass('automatic-report-profit-negative');
+  });
+  it('isolates periods and ignores a late previous snapshot', async () => {
+    let resolve!: (v:unknown)=>void; apiMocks.snapshot.mockReturnValueOnce(new Promise(r=>{resolve=r;}));
+    const {rerender}=render(<ReportResearchSummary sourceType="post_daily" sourceRef="2026-08-08" />);
+    rerender(<ReportResearchSummary sourceType="post_daily" sourceRef="2026-08-09" />);
+    await screen.findByText('+¥20.00');
+    resolve({report:{sourceType:'post_daily',sourceRef:'2026-08-08',researchMetrics:null}});
+    await waitFor(()=>expect(screen.getByText('+¥20.00')).toBeInTheDocument());
+  });
+  it('clears previous-period metrics even when the next period fails', async () => {
+    const {rerender}=render(<ReportResearchSummary sourceType="post_daily" sourceRef="2026-08-09" />);
+    await screen.findByText('+¥20.00'); apiMocks.snapshot.mockRejectedValueOnce(new Error('新期间失败'));
+    rerender(<ReportResearchSummary sourceType="post_daily" sourceRef="2026-08-10" />);
+    await screen.findByRole('alert'); expect(screen.queryByText('+¥20.00')).not.toBeInTheDocument();
+  });
+  it('rejects mismatched report source and clears a valid empty snapshot', async () => {
+    const {rerender}=render(<ReportResearchSummary sourceType="post_daily" sourceRef="2026-08-10" />);
+    expect(await screen.findByRole('alert')).toHaveTextContent('复盘快照与所选期间不一致');
+    rerender(<ReportResearchSummary sourceType="post_daily" sourceRef="2026-08-09" />);
+    await screen.findByText('+¥20.00'); apiMocks.snapshot.mockResolvedValueOnce({report:null});
+    fireEvent.click(screen.getByRole('button',{name:'刷新量化复盘指标'}));
+    expect(await screen.findByText('本期暂无冻结复盘快照')).toBeInTheDocument(); expect(screen.queryByText('+¥20.00')).not.toBeInTheDocument();
+  });
+  it('non-finite research and outcome percentages display as missing', async () => {
+    const response=await apiMocks.snapshot(); apiMocks.snapshot.mockClear();
+    response.report.researchMetrics.averageEdge=NaN; response.report.performanceMetrics.brierScore=Infinity;
+    apiMocks.snapshot.mockResolvedValue(response);
+    render(<ReportResearchSummary sourceType="post_daily" sourceRef="2026-08-09" />);
+    const region=await screen.findByRole('region',{name:'真实赛果评价'});
+    expect(within(region).getByText('Brier Score').nextElementSibling).toHaveTextContent('—');
+    expect(screen.getByText('平均 Edge').nextElementSibling).toHaveTextContent('—');
+  });
+
 });

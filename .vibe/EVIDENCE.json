@@ -1,19 +1,25 @@
 {
-  "base_revision": "fef17a7adc2a08b97fc14d83ca3ab791162880ae",
+  "base_revision": "476e8258948d57d09cdd7ac74c1bd1709ce08bbb",
   "upstream_revision": "74ebae2b11a3abda78abe851d95d58ee418e742c",
-  "phase": "P07c",
+  "phase": "P07d",
   "source_paths": [
-    "apps/frontend/src/pages/BacktestPage.tsx",
-    "apps/frontend/src/pages/BacktestPage.test.tsx",
-    "apps/frontend/src/pages/ReviewsPage.tsx",
-    "apps/frontend/src/pages/ReviewsPage.test.tsx",
-    "apps/frontend/src/pages/TicketsPage.tsx",
-    "apps/frontend/src/pages/TicketsPage.test.tsx",
-    "apps/frontend/src/pages/ReadEvidenceStatus.tsx",
-    "apps/frontend/src/pages/BusinessEvidence.css"
+    "apps/frontend/src/pages/NewsIntelligencePage.tsx",
+    "apps/frontend/src/pages/NewsIntelligencePage.test.tsx",
+    "apps/frontend/src/pages/NewsIntelligencePage.css",
+    "apps/frontend/src/features/news-intelligence/NewsScreeningStatus.tsx",
+    "apps/frontend/src/pages/useManualEvidence.ts",
+    "apps/frontend/src/pages/reviews/ReportResearchSummary.tsx",
+    "apps/frontend/src/pages/reviews/ReportResearchSummary.test.tsx",
+    "apps/frontend/src/pages/reviews/AutomaticReportArchivePanel.tsx",
+    "apps/frontend/src/pages/reviews/AutomaticReportArchivePanel.test.tsx",
+    "apps/frontend/src/pages/reviews/ReportAutomationPanel.tsx",
+    "apps/frontend/src/pages/reviews/ReportAutomationPanel.test.tsx",
+    "apps/frontend/src/pages/reviews/ReportPerformanceSummary.tsx",
+    "apps/frontend/src/pages/reviews/AutomaticReportArchivePanel.css",
+    "apps/frontend/src/pages/reviews/ReportAutomationPanel.css"
   ],
-  "source_sha256": "77bc671bb9b515bfc1375c68bdf4c9919e671ba4baf28b8c2a59bf19b6c1189f",
-  "started_at": "2026-10-09T13:08:10.224171+00:00",
+  "source_sha256": "65e45b5211f84e7e0d4fe48ec0ee44e79e01534146d29e7e64a60b66bbb19b63",
+  "started_at": "2026-10-09T13:29:32.173608+00:00",
   "commands": [
     {
       "command": [
@@ -23,10 +29,10 @@
         "run",
         "typecheck"
       ],
-      "started_at": "2026-10-09T13:08:10.224385+00:00",
-      "finished_at": "2026-10-09T13:08:21.053634+00:00",
+      "started_at": "2026-10-09T13:29:32.173799+00:00",
+      "finished_at": "2026-10-09T13:29:43.925488+00:00",
       "exit_code": 0,
-      "log": "/private/tmp/fqp-v3c-typecheck-final.log"
+      "log": "/private/tmp/fqp-v3d-typecheck-final.log"
     },
     {
       "command": [
@@ -35,10 +41,10 @@
         "apps/frontend",
         "test"
       ],
-      "started_at": "2026-10-09T13:08:21.053778+00:00",
-      "finished_at": "2026-10-09T13:09:22.002906+00:00",
+      "started_at": "2026-10-09T13:29:43.925621+00:00",
+      "finished_at": "2026-10-09T13:30:39.971218+00:00",
       "exit_code": 0,
-      "log": "/private/tmp/fqp-v3c-frontend-tests-final.log"
+      "log": "/private/tmp/fqp-v3d-frontend-tests-final.log"
     },
     {
       "command": [
@@ -48,53 +54,36 @@
         "run",
         "build"
       ],
-      "started_at": "2026-10-09T13:09:22.002993+00:00",
-      "finished_at": "2026-10-09T13:09:23.748042+00:00",
+      "started_at": "2026-10-09T13:30:39.971308+00:00",
+      "finished_at": "2026-10-09T13:30:41.840516+00:00",
       "exit_code": 0,
-      "log": "/private/tmp/fqp-v3c-build-final.log"
+      "log": "/private/tmp/fqp-v3d-build-final.log"
     }
   ],
   "production_data_export": false,
   "deployment": false,
   "independent_review": "pending",
-  "remaining": "P07 other business pages, P08/P09/P10; production contracts and release checks pending",
+  "remaining": "P08 roster/tactics evidence, P09 model research, P10 integration/release; P07 cumulative release regression pending",
   "source_unchanged": true,
-  "finished_at": "2026-10-09T13:09:23.749013+00:00",
-  "frontend_tests": {
-    "files": 83,
-    "tests": 401,
-    "changed_suites": 39,
-    "new_tests": 28
+  "finished_at": "2026-10-09T13:30:41.842528+00:00",
+  "frontend_summary": {
+    "test_files": 83,
+    "tests": 431,
+    "focused_tests": 39,
+    "new_regression_tests": 30
   },
-  "scope_budget": {
-    "checked_at": "2026-10-09T13:10:29.414318+00:00",
-    "command": "python3 /private/tmp/fqp-v3c-scope.py (custom Git scope and budget audit; harness unavailable)",
-    "base_revision": "fef17a7adc2a08b97fc14d83ca3ab791162880ae",
-    "changed_files": 17,
-    "new_files": 2,
-    "scope_violations": [],
-    "forbidden_changes": [],
-    "dependency_additions": 0,
-    "migrations": 0,
-    "public_api_changes": 0,
-    "suite_tests": 39,
-    "new_regression_tests": 28,
-    "limits": {
-      "max_changed_files": 18,
-      "max_new_files": 2,
-      "max_dependency_additions": 0,
-      "max_migration_files": 0,
-      "max_public_api_changes": 0,
-      "max_regression_tests": 40
-    },
-    "exit_code": 0
+  "red": {
+    "command": "npm --prefix apps/frontend test -- src/pages/NewsIntelligencePage.test.tsx src/pages/reviews/ReportResearchSummary.test.tsx src/pages/reviews/AutomaticReportArchivePanel.test.tsx src/pages/reviews/ReportAutomationPanel.test.tsx",
+    "log": "/private/tmp/fqp-v3d-red.log",
+    "result": "21 failed, 11 passed; 4 test files; on original implementation before new source edits",
+    "exit_code": 1
   },
   "browser": {
-    "environment": "Chromium headless, synthetic data labeled 界面测试 only; all API calls intercepted; no production export/writes",
-    "started_at": "2026-10-09T13:08:14.265840+00:00",
+    "environment": "Headless Chromium, UTC timezone, reduced motion; fixtures explicitly labeled 界面测试; API GETs intercepted locally; no production data",
+    "started_at": "2026-10-09T13:32:42.399667+00:00",
     "viewports": [
       {
-        "page": "tickets",
+        "page": "news",
         "viewport": [
           1920,
           1080
@@ -103,7 +92,7 @@
         "scroll": 1920
       },
       {
-        "page": "tickets",
+        "page": "news",
         "viewport": [
           1440,
           1000
@@ -112,7 +101,7 @@
         "scroll": 1440
       },
       {
-        "page": "tickets",
+        "page": "news",
         "viewport": [
           3840,
           2160
@@ -121,7 +110,7 @@
         "scroll": 3840
       },
       {
-        "page": "tickets",
+        "page": "news",
         "viewport": [
           375,
           812
@@ -130,7 +119,7 @@
         "scroll": 375
       },
       {
-        "page": "tickets",
+        "page": "news",
         "viewport": [
           812,
           375
@@ -139,7 +128,7 @@
         "scroll": 812
       },
       {
-        "page": "backtest",
+        "page": "report-subpanels",
         "viewport": [
           1920,
           1080
@@ -148,7 +137,7 @@
         "scroll": 1920
       },
       {
-        "page": "backtest",
+        "page": "report-subpanels",
         "viewport": [
           1440,
           1000
@@ -157,7 +146,7 @@
         "scroll": 1440
       },
       {
-        "page": "backtest",
+        "page": "report-subpanels",
         "viewport": [
           3840,
           2160
@@ -166,7 +155,7 @@
         "scroll": 3840
       },
       {
-        "page": "backtest",
+        "page": "report-subpanels",
         "viewport": [
           375,
           812
@@ -175,52 +164,7 @@
         "scroll": 375
       },
       {
-        "page": "backtest",
-        "viewport": [
-          812,
-          375
-        ],
-        "width": 812,
-        "scroll": 812
-      },
-      {
-        "page": "reports",
-        "viewport": [
-          1920,
-          1080
-        ],
-        "width": 1920,
-        "scroll": 1920
-      },
-      {
-        "page": "reports",
-        "viewport": [
-          1440,
-          1000
-        ],
-        "width": 1440,
-        "scroll": 1440
-      },
-      {
-        "page": "reports",
-        "viewport": [
-          3840,
-          2160
-        ],
-        "width": 3840,
-        "scroll": 3840
-      },
-      {
-        "page": "reports",
-        "viewport": [
-          375,
-          812
-        ],
-        "width": 375,
-        "scroll": 375
-      },
-      {
-        "page": "reports",
+        "page": "report-subpanels",
         "viewport": [
           812,
           375
@@ -229,33 +173,49 @@
         "scroll": 812
       }
     ],
-    "tickets_cursor_filter_failure_retention": true,
-    "backtest_filters_pages_independent_errors_retained_charts_hidden": true,
-    "reports_independent_errors_keyboard_period_buttons_shanghai_date_and_light": true,
-    "page_errors": [],
+    "news_filter_paging_focus_partial_failure_retry_empty_provenance_unknown_release": true,
+    "news_historical_manual_only_no_background_gets": true,
+    "report_subpanels_read_retry_retention_new_period_isolation_missing_finance_negative_profit_mismatch_empty": true,
     "no_api_writes": true,
+    "page_errors": [],
     "no_three_module_requests": true,
-    "finished_at": "2026-10-09T13:08:23.644246+00:00",
-    "source_sha256": "77bc671bb9b515bfc1375c68bdf4c9919e671ba4baf28b8c2a59bf19b6c1189f",
-    "script": "/private/tmp/fqp-v3c-browser.py"
+    "finished_at": "2026-10-09T13:32:49.984760+00:00",
+    "source_sha256": "65e45b5211f84e7e0d4fe48ec0ee44e79e01534146d29e7e64a60b66bbb19b63",
+    "script": "/private/tmp/fqp-v3d-browser.py",
+    "log": "/private/tmp/fqp-v3d-browser-final.log",
+    "exit_code": 0
   },
-  "red": {
-    "log": "/private/tmp/fqp-v3c-red.log",
-    "failed": 18,
-    "passed": 11,
-    "note": "Initial behavior tests executed against original pages; later boundary cases added."
+  "scope_budget": {
+    "checked_at": "2026-10-09T13:34:15.207929+00:00",
+    "command": "python3 /private/tmp/fqp-v3d-scope.py (custom Git scope and budget audit; harness unavailable)",
+    "base_revision": "476e8258948d57d09cdd7ac74c1bd1709ce08bbb",
+    "changed_files": 23,
+    "new_files": 2,
+    "scope_violations": [],
+    "forbidden_changes": [],
+    "dependency_additions": 0,
+    "migrations": 0,
+    "public_api_changes": 0,
+    "suite_tests": 39,
+    "new_regression_tests": 30,
+    "limits": {
+      "max_changed_files": 24,
+      "max_new_files": 2,
+      "max_dependency_additions": 0,
+      "max_migration_files": 0,
+      "max_public_api_changes": 0,
+      "max_regression_tests": 60
+    },
+    "exit_code": 0
   },
   "security_self_review": {
-    "new_secrets_or_dependencies": false,
-    "production_writes_or_export": false,
-    "existing_betting_deletion_refund_settlement_implementations_unchanged": true,
-    "backtest_write_endpoint_retained_probability_zero_serialization_fixed": true,
-    "independent_review": "pending"
+    "performed_at": "2026-10-09T13:34:14.659979+00:00",
+    "summary": "No dependency/API/migration/secret changes; only existing explicit moderation/config/release writes, tested with mocks. URLs limited to HTTP(S), archive rendered as escaped text; no actual API writes in browser. Query identities and write target identities checked. Not independent review."
   },
   "limitations": [
-    "Synthetic browser data only; no production contract or deployment verification",
-    "Report automation, research summary and archived report subpanels unchanged; follow-up backlog retained",
-    "Independent review, actual GPU endurance and release pending",
-    "Existing PitchScene chunk size warning; these business routes do not load Three modules"
+    "No production data or interface validation this phase",
+    "No physical GPU or two-hour endurance validation",
+    "Independent review pending before merge",
+    "No push/PR/merge/deployment"
   ]
 }

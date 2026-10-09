@@ -1,18 +1,37 @@
-import { useEffect, useState } from 'react';
 import { api, type ReportResearchBreakdownRow, type ReportResearchSnapshot } from '../../core/apiClient';
+import useManualEvidence from '../useManualEvidence';
+import ReadEvidenceStatus from '../ReadEvidenceStatus';
+import '../BusinessEvidence.css';
 import ReportPerformanceSummary from './ReportPerformanceSummary';
 import './AutomaticReportArchivePanel.css';
 
 type ReportSourceType = 'post_daily' | 'post_weekly' | 'post_monthly';
 
-function percent(value: number | null | undefined): string {
-  return value == null ? '—' : `${(value * 100).toFixed(2)}%`;
+function numeric(value: unknown): number | null {
+  if (value == null || (typeof value !== 'number' && typeof value !== 'string') || (typeof value === 'string' && !value.trim())) return null;
+  const amount = Number(value);
+  return Number.isFinite(amount) ? amount : null;
+}
+function count(value: number | undefined): string {
+  return Number.isSafeInteger(value) && value! >= 0 ? String(value) : '—';
+}
+function percent(value: unknown): string {
+  const amount = numeric(value);
+  return amount === null ? '—' : `${(amount * 100).toFixed(2)}%`;
+}
+function currency(value: unknown, signed = false): string {
+  const amount = numeric(value);
+  return amount === null ? '—' : `${signed && amount > 0 ? '+' : ''}¥${amount.toFixed(2)}`;
 }
 
-function currency(value: unknown, signed = false): string {
-  const amount = Number(value);
-  if (!Number.isFinite(amount)) return '—';
-  return `${signed && amount > 0 ? '+' : ''}¥${amount.toFixed(2)}`;
+function checkedReport(report: ReportResearchSnapshot | null, sourceType: ReportSourceType, sourceRef: string) {
+  if (report === null) return { report };
+  if (!report || report.sourceType !== sourceType || report.sourceRef !== sourceRef) throw new Error('复盘快照与所选期间不一致');
+  for (const breakdown of [report.researchBreakdowns, report.performanceBreakdowns]) {
+    if (breakdown && (!Array.isArray(breakdown.models) || !Array.isArray(breakdown.playTypes) || !Array.isArray(breakdown.leagues))) throw new Error('复盘分组格式不正确');
+  }
+  if ((report.errorAnalysis && !Array.isArray(report.errorAnalysis.byType)) || (report.strategySummary && (!Array.isArray(report.strategySummary.findings) || !Array.isArray(report.strategySummary.actions)))) throw new Error('复盘说明格式不正确');
+  return { report };
 }
 
 function financeSnapshot(report: ReportResearchSnapshot): Record<string, number | string | null> {
@@ -26,34 +45,24 @@ function SignalBreakdown({ title, rows }: { title: string; rows: ReportResearchB
     <ul>
       {rows.map((row) => <li key={row.key}>
         <strong>{row.key}</strong>
-        <span>{row.signalCount} 条信号 · {row.matchCount} 场比赛</span>
+        <span>{count(row.signalCount)} 条信号 · {count(row.matchCount)} 场比赛</span>
         <span>平均 Edge {percent(row.averageEdge)} · 平均 EV {percent(row.averageEv)}</span>
       </li>)}
     </ul>
   </section>;
 }
 
-export default function ReportResearchSummary({
-  sourceType, sourceRef,
-}: { sourceType: ReportSourceType; sourceRef: string }) {
-  const [report, setReport] = useState<ReportResearchSnapshot | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [failed, setFailed] = useState(false);
+export default function ReportResearchSummary(props: { sourceType: ReportSourceType; sourceRef: string }) {
+  return <ResearchQuery key={`${props.sourceType}:${props.sourceRef}`} {...props} />;
+}
 
-  useEffect(() => {
-    let active = true;
-    setLoading(true);
-    setFailed(false);
-    api.reportAutomation.snapshot(sourceType, sourceRef)
-      .then((response) => { if (active) setReport(response.report); })
-      .catch(() => { if (active) setFailed(true); })
-      .finally(() => { if (active) setLoading(false); });
-    return () => { active = false; };
-  }, [sourceType, sourceRef]);
-
-  if (loading) return <p className="automatic-report-archive-status" role="status">正在读取量化复盘指标…</p>;
-  if (failed) return <p className="automatic-report-archive-status" role="alert">量化复盘指标读取失败，请稍后重试。</p>;
-  if (!report?.researchMetrics) return <p className="automatic-report-archive-status">该历史报告未包含量化指标。</p>;
+function ResearchQuery({ sourceType, sourceRef }: { sourceType: ReportSourceType; sourceRef: string }) {
+  const resource = useManualEvidence(async () => checkedReport((await api.reportAutomation.snapshot(sourceType, sourceRef)).report, sourceType, sourceRef));
+  const report = resource.data?.report;
+  const status = <ReadEvidenceStatus resource={resource} label="刷新量化复盘指标" note={`${{ post_daily: '日报', post_weekly: '周报', post_monthly: '月报' }[sourceType]} · ${sourceRef} · 冻结快照，仅手动读取`} />;
+  if (!resource.data) return <div className="be-page">{status}</div>;
+  if (!report) return <div className="be-page">{status}<p className="automatic-report-archive-status">本期暂无冻结复盘快照</p></div>;
+  if (!report.researchMetrics) return <div className="be-page">{status}<p className="automatic-report-archive-status">该历史报告未包含量化指标。</p></div>;
 
   const metrics = report.researchMetrics;
   const finance = financeSnapshot(report);
@@ -61,19 +70,22 @@ export default function ReportResearchSummary({
   const prize = finance.realPrize ?? finance.total_prize;
   const profitLoss = finance.realProfitLoss ?? finance.profit_loss;
   const roi = finance.realRoi ?? finance.roi;
+  const profitAmount = numeric(profitLoss);
+  const profitClass = profitAmount === null || profitAmount === 0 ? undefined : profitAmount < 0 ? 'automatic-report-profit-negative' : 'automatic-report-profit-positive';
   const cards = [
     ['实际投入', currency(stake)],
     ['实际返还', currency(prize)],
     ['实际盈亏', currency(profitLoss, true)],
-    ['实际 ROI', percent(Number(roi))],
-    ['分析比赛', `${metrics.matchCount} 场`],
+    ['实际 ROI', percent(roi)],
+    ['分析比赛', `${count(metrics.matchCount)} 场`],
     ['信号覆盖率', percent(metrics.signalCoverageRate)],
     ['证据覆盖率', percent(metrics.evidenceCoverageRate)],
     ['平均 Edge', percent(metrics.averageEdge)],
     ['平均 EV', percent(metrics.averageEv)],
   ] as const;
 
-  return <section className="automatic-report-research" aria-labelledby={`research-summary-${sourceType}-${sourceRef}`}>
+  return <section className="automatic-report-research be-page" aria-labelledby={`research-summary-${sourceType}-${sourceRef}`}>
+    {status}
     <div className="automatic-report-research-heading">
       <h3 id={`research-summary-${sourceType}-${sourceRef}`}>量化复盘指标</h3>
       <p>后端冻结数据 · 不参与预测或投注决策</p>
@@ -86,7 +98,7 @@ export default function ReportResearchSummary({
     <dl className="automatic-report-research-grid">
       {cards.map(([label, value]) => <div key={label}>
         <dt>{label}</dt>
-        <dd className={label === '实际盈亏' ? 'automatic-report-profit' : undefined}>{value}</dd>
+        <dd className={label === '实际盈亏' ? profitClass : undefined}>{value}</dd>
       </div>)}
     </dl>
     <ReportPerformanceSummary report={report} />
