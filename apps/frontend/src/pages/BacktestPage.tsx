@@ -6,12 +6,15 @@
  *   3. 回测详情（指标仪表盘、资金曲线、模型对比）
  */
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../core/apiClient';
 import type { BacktestRun, BacktestResult, DashboardBacktestEquityItem } from '../core/types';
-import { PageHeader, Card, DataTable, ErrorState, LoadingSpinner } from '../shared/components';
+import { PageHeader, Card, DataTable, LoadingSpinner } from '../shared/components';
 import { modelNameLabel } from '../shared/constants';
 import { formatTimestamp } from '../shared/utils';
+import useReadOnlyResource from '../features/command-center/useReadOnlyResource';
+import ReadEvidenceStatus from './ReadEvidenceStatus';
+import './BusinessEvidence.css';
 import BacktestPerformanceCharts from '../visualization/backtest/BacktestPerformanceCharts';
 
 // —— 类型 ——
@@ -56,66 +59,91 @@ function methodologyVersion(config: Record<string, unknown> | null | undefined):
 // —— 组件 ——
 
 export default function BacktestPage() {
-  const [runs, setRuns] = useState<BacktestRun[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const fetchRuns = useCallback(async () => {
+    const data = await api.backtests.list({ limit: 30 });
+    if (!Array.isArray(data.runs) || data.runs.length > 30 || !Number.isSafeInteger(data.total) || data.total < data.runs.length
+      || data.runs.some(r => !Number.isSafeInteger(r.id) || r.id <= 0 || typeof r.name !== 'string' || typeof r.status !== 'string')
+      || new Set(data.runs.map(r => r.id)).size !== data.runs.length) throw new Error('回测列表格式不正确');
+    return data;
+  }, []);
+  const runResource = useReadOnlyResource(fetchRuns);
+  const runs = runResource.data?.runs ?? [];
+  const loading = runResource.loading;
+  const loadRuns = runResource.refresh;
+  const [search, setSearch] = useState('');
+  const [status, setStatus] = useState('');
+  const [method, setMethod] = useState('');
+  const [page, setPage] = useState(1);
+  const filteredRuns = runs.filter(r => (!status || r.status === status)
+    && (!method || (method === 'current' ? methodologyVersion(r.config) >= CURRENT_METHODOLOGY_VERSION : methodologyVersion(r.config) < CURRENT_METHODOLOGY_VERSION))
+    && `${r.id} ${r.name}`.toLowerCase().includes(search.trim().toLowerCase()));
+  const pageCount = Math.max(1, Math.ceil(filteredRuns.length / 10));
+  const currentPage = Math.min(page, pageCount);
+  const visibleRuns = filteredRuns.slice((currentPage - 1) * 10, currentPage * 10);
   const [selectedRun, setSelectedRun] = useState<number | null>(null);
   const [selectedRunRecord, setSelectedRunRecord] = useState<BacktestRun | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
+  const [detailAt, setDetailAt] = useState<number | null>(null);
   const [results, setResults] = useState<BacktestResult[]>([]);
   const [form, setForm] = useState<BacktestFormState>(DEFAULT_FORM);
   const [equityData, setEquityData] = useState<DashboardBacktestEquityItem[]>([]);
   const [equityLoading, setEquityLoading] = useState(false);
   const [equityError, setEquityError] = useState<string | null>(null);
+  const [equityAt, setEquityAt] = useState<number | null>(null);
+  const requestVersion = useRef(0);
+  const curveVersion = useRef(0);
+  const activeId = useRef<number | null>(null);
+  useEffect(() => () => { requestVersion.current += 1; curveVersion.current += 1; }, []);
 
-  // —— 加载回测列表 ——
-  const loadRuns = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await api.backtests.list({ limit: 30 });
-      setRuns(data.runs);
-    } catch (e) {
-      setError((e as Error).message || '加载回测列表失败');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    loadRuns();
-  }, [loadRuns]);
-
-  // —— 加载回测详情 ——
-  const loadDetail = useCallback(async (runId: number) => {
-    setSelectedRun(runId);
-    setSelectedRunRecord(null);
-    setDetailLoading(true);
-    setEquityData([]);
+  const loadCurve = useCallback(async (runId: number, version: number) => {
+    const curve = ++curveVersion.current;
+    setEquityLoading(true);
     setEquityError(null);
     try {
-      const data = await api.backtests.get(runId);
-      setSelectedRunRecord(data.run);
-      // 只显示聚合结果（window_index IS NULL）
-      setResults(data.results.filter((r) => r.window_index === null));
-
-      // Also load equity curve data for charts
-      setEquityLoading(true);
-      api.dashboard.backtestEquity({ run_id: runId })
-        .then((res) => {
-          const series = res.data?.series || [];
-          setEquityData(series as DashboardBacktestEquityItem[]);
-        })
-        .catch((equityFailure) => {
-          setEquityError((equityFailure as Error).message || '窗口趋势数据加载失败');
-        })
-        .finally(() => setEquityLoading(false));
-    } catch (e) {
-      setError((e as Error).message || '加载回测详情失败');
+      const response = await api.dashboard.backtestEquity({ run_id: runId });
+      const emptyResponse = response as unknown as { empty?: boolean; empty_reason?: string };
+      if (emptyResponse.empty_reason === '无法读取回测视图') throw new Error(emptyResponse.empty_reason);
+      if (!response.data && emptyResponse.empty !== true) throw new Error('窗口趋势格式不正确');
+      const rows = response.data?.series ?? [];
+      if (!Array.isArray(rows) || rows.some(row => row.run_id !== runId || Object.values(row).some(value => typeof value === 'number' && !Number.isFinite(value)))) throw new Error('窗口趋势与所选运行不一致');
+      if (version !== requestVersion.current || curve !== curveVersion.current) return;
+      setEquityData(rows);
+      setEquityAt(Date.now());
+    } catch (failure) {
+      if (version === requestVersion.current && curve === curveVersion.current) setEquityError(failure instanceof Error ? failure.message : '窗口趋势数据加载失败');
     } finally {
-      setDetailLoading(false);
+      if (version === requestVersion.current && curve === curveVersion.current) setEquityLoading(false);
     }
   }, []);
+
+  const loadDetail = useCallback(async (runId: number) => {
+    const version = ++requestVersion.current;
+    curveVersion.current += 1;
+    const changed = activeId.current !== runId;
+    activeId.current = runId;
+    setSelectedRun(runId);
+    if (changed) {
+      setSelectedRunRecord(null); setResults([]); setDetailAt(null);
+      setEquityData([]); setEquityAt(null);
+    }
+    setDetailLoading(true); setDetailError(null); setEquityError(null); setEquityLoading(false);
+    try {
+      const data = await api.backtests.get(runId);
+      if (data.run?.id !== runId) throw new Error('回测详情与所选运行不一致');
+      if (!Array.isArray(data.results) || data.results.some(row => typeof row.model_name !== 'string'
+        || Object.values(row).some(value => typeof value === 'number' && !Number.isFinite(value)))) throw new Error('回测指标格式不正确');
+      if (version !== requestVersion.current) return;
+      setSelectedRunRecord(data.run);
+      setResults(data.results.filter(r => r.window_index === null));
+      setDetailAt(Date.now());
+      void loadCurve(runId, version);
+    } catch (failure) {
+      if (version === requestVersion.current) setDetailError(failure instanceof Error ? failure.message : '加载回测详情失败');
+    } finally {
+      if (version === requestVersion.current) setDetailLoading(false);
+    }
+  }, [loadCurve]);
 
   // —— 提交新建回测 ——
   const handleSubmit = async (e: React.FormEvent) => {
@@ -125,7 +153,7 @@ export default function BacktestPage() {
     const body: Record<string, unknown> = {
       signal_strength: form.signalStrength,
       walk_forward: form.walkForward,
-      min_model_prob: parseFloat(form.minModelProb) || 0.35,
+      min_model_prob: form.minModelProb.trim() === '' ? 0.35 : Number(form.minModelProb),
     };
 
     if (form.modelNames.trim()) {
@@ -159,9 +187,9 @@ export default function BacktestPage() {
 
   // —— 指标渲染 ——
   const fmtPct = (v: number | null | undefined) =>
-    v != null ? `${(v * 100).toFixed(2)}%` : '—';
+    v != null && Number.isFinite(v) ? `${(v * 100).toFixed(2)}%` : '—';
   const fmtNum = (v: number | null | undefined, decimals = 2) =>
-    v != null ? v.toFixed(decimals) : '—';
+    v != null && Number.isFinite(v) ? v.toFixed(decimals) : '—';
 
   const statusLabel = (s: string) => {
     const map: Record<string, string> = {
@@ -183,26 +211,26 @@ export default function BacktestPage() {
 
   // —— 渲染 ——
   return (
-    <div>
+    <div className="be-page">
       <PageHeader
         title="策略验证"
         subtitle="赛前时点赔率 · 每场单一决策 · 独立比赛口径"
       />
 
-      {error && <ErrorState message={error} onRetry={loadRuns} />}
+      <ReadEvidenceStatus resource={runResource} label="刷新回测列表" note={`已获取 ${runs.length} / 最多 30 条 · 数据库共 ${runResource.data?.total ?? '—'} 条 · 筛选 ${filteredRuns.length} 条；可见时每30秒刷新`} />
 
       {/* 统计卡片 — staggered entrance */}
       <div className="fqp-grid-4">
         <Card entranceDelay={0}>
           <div className="fqp-stat-card">
-            <div className="fqp-stat-value">{runs.length}</div>
-            <div className="fqp-stat-sub">回测总数</div>
+            <div className="fqp-stat-value">{runResource.data ? runs.length : '—'}</div>
+            <div className="fqp-stat-sub">已获取回测数</div>
           </div>
         </Card>
         <Card entranceDelay={80}>
           <div className="fqp-stat-card">
             <div className="fqp-stat-value">
-              {runs.filter((r) => r.status === 'completed').length}
+              {runResource.data ? runs.filter((r) => r.status === 'completed').length : '—'}
             </div>
             <div className="fqp-stat-sub">已完成</div>
           </div>
@@ -210,7 +238,7 @@ export default function BacktestPage() {
         <Card entranceDelay={160}>
           <div className="fqp-stat-card">
             <div className="fqp-stat-value">
-              {runs.filter((r) => r.status === 'running').length}
+              {runResource.data ? runs.filter((r) => r.status === 'running').length : '—'}
             </div>
             <div className="fqp-stat-sub">运行中</div>
           </div>
@@ -218,7 +246,7 @@ export default function BacktestPage() {
         <Card entranceDelay={240}>
           <div className="fqp-stat-card">
             <div className="fqp-stat-value">
-              {results.length}
+              {detailAt === null ? '—' : results.length}
             </div>
             <div className="fqp-stat-sub">当前查看模型数</div>
           </div>
@@ -230,8 +258,8 @@ export default function BacktestPage() {
         <form onSubmit={handleSubmit} className="fqp-form">
           <div className="fqp-form-row">
             <div className="fqp-form-group">
-              <label>模型名称（逗号分隔，留空=全部活跃）</label>
-              <input
+              <label htmlFor="bt-model-names">模型名称（逗号分隔，留空=全部活跃）</label>
+              <input id="bt-model-names"
                 type="text"
                 value={form.modelNames}
                 onChange={(e) => setForm((f) => ({ ...f, modelNames: e.target.value }))}
@@ -239,8 +267,8 @@ export default function BacktestPage() {
               />
             </div>
             <div className="fqp-form-group">
-              <label>信号强度</label>
-              <select
+              <label htmlFor="bt-signal-strength">信号强度</label>
+              <select id="bt-signal-strength"
                 value={form.signalStrength}
                 onChange={(e) => setForm((f) => ({ ...f, signalStrength: e.target.value }))}
               >
@@ -253,16 +281,16 @@ export default function BacktestPage() {
 
           <div className="fqp-form-row">
             <div className="fqp-form-group">
-              <label>开始日期</label>
-              <input
+              <label htmlFor="bt-time-start">开始日期</label>
+              <input id="bt-time-start"
                 type="date"
                 value={form.timeStart}
                 onChange={(e) => setForm((f) => ({ ...f, timeStart: e.target.value }))}
               />
             </div>
             <div className="fqp-form-group">
-              <label>结束日期</label>
-              <input
+              <label htmlFor="bt-time-end">结束日期</label>
+              <input id="bt-time-end"
                 type="date"
                 value={form.timeEnd}
                 onChange={(e) => setForm((f) => ({ ...f, timeEnd: e.target.value }))}
@@ -272,8 +300,8 @@ export default function BacktestPage() {
 
           <div className="fqp-form-row">
             <div className="fqp-form-group">
-              <label>最低赔率</label>
-              <input
+              <label htmlFor="bt-odds-min">最低赔率</label>
+              <input id="bt-odds-min"
                 type="number" step="0.1" min="1.0"
                 value={form.oddsMin}
                 onChange={(e) => setForm((f) => ({ ...f, oddsMin: e.target.value }))}
@@ -281,8 +309,8 @@ export default function BacktestPage() {
               />
             </div>
             <div className="fqp-form-group">
-              <label>最高赔率</label>
-              <input
+              <label htmlFor="bt-odds-max">最高赔率</label>
+              <input id="bt-odds-max"
                 type="number" step="0.1" min="1.0"
                 value={form.oddsMax}
                 onChange={(e) => setForm((f) => ({ ...f, oddsMax: e.target.value }))}
@@ -290,8 +318,8 @@ export default function BacktestPage() {
               />
             </div>
             <div className="fqp-form-group">
-              <label>最低 EV</label>
-              <input
+              <label htmlFor="bt-ev-min">最低 EV</label>
+              <input id="bt-ev-min"
                 type="number" step="0.01"
                 value={form.evMin}
                 onChange={(e) => setForm((f) => ({ ...f, evMin: e.target.value }))}
@@ -299,8 +327,8 @@ export default function BacktestPage() {
               />
             </div>
             <div className="fqp-form-group">
-              <label>最低模型概率</label>
-              <input
+              <label htmlFor="bt-model-prob">最低模型概率</label>
+              <input id="bt-model-prob"
                 type="number" step="0.01" min="0" max="1"
                 value={form.minModelProb}
                 onChange={(e) => setForm((f) => ({ ...f, minModelProb: e.target.value }))}
@@ -333,12 +361,13 @@ export default function BacktestPage() {
         </form>
       </Card>
 
-      {/* 回测详情 — slide up reveal */}
+      {/* Selected run owns independent detail and window evidence. */}
       {selectedRun && (
-        <Card title={`回测详情 #${selectedRun}`} style={{ animation: 'fqpSlideUpBounce 0.5s ease both' }}>
-          {detailLoading ? (
+        <Card title={`回测详情 #${selectedRun}`} >
+          <ReadEvidenceStatus label="刷新回测详情" resource={{ data: selectedRunRecord, loading: detailLoading, error: detailError, receivedAt: detailAt, refresh: () => loadDetail(selectedRun) }} note={`运行 #${selectedRun} · 手动读取；归档口径见下方`} />
+          {detailLoading && !selectedRunRecord ? (
             <LoadingSpinner />
-          ) : results.length === 0 ? (
+          ) : !selectedRunRecord ? null : results.length === 0 ? (
             <p className="fqp-muted">暂无该回测的聚合结果</p>
           ) : (
             <div>
@@ -459,11 +488,12 @@ export default function BacktestPage() {
                 );
               })}
 
+              <ReadEvidenceStatus label="刷新窗口趋势" resource={{ data: equityAt === null ? null : equityData, loading: equityLoading, error: equityError, receivedAt: equityAt, refresh: () => loadCurve(selectedRun, requestVersion.current) }} note={`仅运行 #${selectedRun} 的历史时间窗；不是逐日资金曲线`} />
               <BacktestPerformanceCharts
                 results={results}
                 windowRows={equityData}
-                loading={equityLoading}
-                error={equityError}
+                loading={equityAt === null && equityLoading}
+                error={equityAt === null ? equityError : null}
               />
             </div>
           )}
@@ -472,6 +502,13 @@ export default function BacktestPage() {
 
       {/* 回测历史列表 */}
       <Card title="回测历史">
+        <div className="be-toolbar">
+          <label>搜索回测记录<input type="search" value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} /></label>
+          <label>运行状态<select value={status} onChange={e => { setStatus(e.target.value); setPage(1); }}><option value="">全部状态</option>{Array.from(new Set(['pending', 'running', 'completed', 'failed', 'cancelled', ...runs.map(r => r.status), ...(status ? [status] : [])])).map(value => <option key={value} value={value}>{statusLabel(value)}</option>)}</select></label>
+          <label>回测口径<select value={method} onChange={e => { setMethod(e.target.value); setPage(1); }}><option value="">全部口径</option><option value="current">当前口径</option><option value="legacy">旧口径</option></select></label>
+          <button type="button" onClick={() => { setSearch(''); setStatus(''); setMethod(''); setPage(1); }}>清空回测筛选</button>
+        </div>
+        <p className="be-note">筛选仅覆盖本次获取的最近30条；全局总数来自数据库计数。</p>
         {loading ? (
           <LoadingSpinner />
         ) : (
@@ -509,11 +546,18 @@ export default function BacktestPage() {
                 ),
               },
             ]}
-            rows={runs}
+            rows={visibleRuns}
+            rowKey={row => row.id}
+            selectedRowKey={selectedRun}
             loading={false}
-            emptyText="暂无回测记录，请创建新的回测"
+            emptyText={runResource.error && !runResource.data ? "回测列表读取失败，请刷新" : runs.length ? "未找到符合筛选的回测，请清空筛选" : "暂无回测记录，请创建新的回测"}
           />
         )}
+        <div className="be-pagination">
+          <button type="button" aria-label="上一页回测" disabled={currentPage === 1} onClick={() => setPage(currentPage - 1)}>上一页</button>
+          <span>{currentPage} / {pageCount} 页</span>
+          <button type="button" aria-label="下一页回测" disabled={currentPage === pageCount} onClick={() => setPage(currentPage + 1)}>下一页</button>
+        </div>
       </Card>
     </div>
   );

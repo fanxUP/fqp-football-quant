@@ -19,3 +19,5 @@
 .be-page .recommendation-table-col-model { width: 200px; }
 @media (max-width: 1000px) { .be-toolbar { grid-template-columns: repeat(2, minmax(0, 1fr)); }.be-toolbar label:first-child { grid-column: 1 / -1; } }
 @media (max-width: 480px) { .be-toolbar { grid-template-columns: 1fr; }.be-actions, .be-pagination { gap: 8px; } }
+
+.be-page .lottery-filters :is(input, select), .be-page .fqp-form-group :is(input:not([type='checkbox']), select) { min-height: 44px; min-width: 0; max-width: 100%; }

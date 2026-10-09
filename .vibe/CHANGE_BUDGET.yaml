@@ -1,9 +1,9 @@
-version: 4
+version: 5
 mode: STRICT
 max_changed_files: 18
-max_new_files: 3
+max_new_files: 2
 max_dependency_additions: 0
 max_migration_files: 0
 max_public_api_changes: 0
-max_regression_tests: 32
-scope_note: "V3b P07 predictions and odds only; use existing read-only API contracts."
+max_regression_tests: 40
+scope_note: "V3c P07 ticket query isolation, backtest evidence and review read-only loading; existing write endpoints retained; legitimate form probability zero preserved."

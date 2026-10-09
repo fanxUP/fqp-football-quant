@@ -146,3 +146,58 @@ describe('TicketsPage', () => {
   });
 
 });
+
+describe('TicketsPage query evidence', () => {
+  beforeEach(() => { vi.resetAllMocks(); vi.stubGlobal('confirm', vi.fn(() => true)); });
+  const response = () => ({ tickets: [realTicket], total: 1, summary: calculateLedgerStats([realTicket]), byOwner: { me: calculateLedgerStats([realTicket]) }, nextCursor: 'older' });
+  it('新筛选失败不显示旧票或旧游标且不误报暂无彩票', async () => {
+    apiMocks.tickets.mockResolvedValueOnce(response()).mockRejectedValue(new Error('筛选故障'));
+    render(<TicketsPage />); await screen.findByRole('button', { name: '删除彩票 实票 #12' });
+    fireEvent.change(screen.getByRole('combobox', { name: '彩票状态' }), { target: { value: 'won' } });
+    await screen.findByText(/筛选故障/);
+    expect(screen.queryByRole('button', { name: '删除彩票 实票 #12' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '加载更多' })).not.toBeInTheDocument();
+    expect(screen.queryByText('暂无彩票')).not.toBeInTheDocument();
+  });
+  it('同筛选手动刷新失败保留成功票和游标', async () => {
+    apiMocks.tickets.mockResolvedValueOnce(response()).mockRejectedValueOnce(new Error('刷新故障')).mockResolvedValue({ ...response(), tickets: [], total: 0, summary: calculateLedgerStats([]), byOwner: {}, nextCursor: null });
+    render(<TicketsPage />); await screen.findByRole('button', { name: '删除彩票 实票 #12' });
+    fireEvent.click(screen.getByRole('button', { name: '刷新彩票' }));
+    await screen.findByText(/刷新故障/);
+    expect(screen.getByRole('button', { name: '删除彩票 实票 #12' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '刷新彩票' }));
+    await waitFor(() => expect(screen.queryByRole('button', { name: '删除彩票 实票 #12' })).not.toBeInTheDocument());
+  });
+  it('换日期后的迟到旧票不会混入新日期', async () => {
+    let resolve!: (value: ReturnType<typeof response>) => void;
+    apiMocks.tickets.mockImplementation(({ date }: { date?: string }) => !date ? new Promise(r => { resolve = r; }) : Promise.resolve({ ...response(), tickets: [], total: 0, summary: calculateLedgerStats([]), byOwner: {}, nextCursor: null }));
+    render(<TicketsPage />);
+    fireEvent.change(screen.getByLabelText('购买日期'), { target: { value: '2026-10-01' } });
+    await waitFor(() => expect(apiMocks.tickets).toHaveBeenLastCalledWith({ date: '2026-10-01', status: undefined, limit: 100 }));
+    await act(async () => { resolve(response()); });
+    expect(screen.queryByRole('button', { name: '删除彩票 实票 #12' })).not.toBeInTheDocument();
+  });
+  it('坏分页统计被拒绝并保留旧票', async () => {
+    apiMocks.tickets.mockResolvedValueOnce(response()).mockResolvedValueOnce({ ...response(), summary: { ...response().summary, stake: NaN } });
+    render(<TicketsPage />); await screen.findByRole('button', { name: '删除彩票 实票 #12' });
+    fireEvent.click(screen.getByRole('button', { name: '刷新彩票' }));
+    await screen.findByText(/彩票分页或统计格式不正确/);
+    expect(screen.getByRole('button', { name: '删除彩票 实票 #12' })).toBeInTheDocument();
+  });
+  it('分页游标没有前进时保留成功页并提示刷新', async () => {
+    apiMocks.tickets.mockResolvedValue(response());
+    render(<TicketsPage />); await screen.findByRole('button', { name: '删除彩票 实票 #12' });
+    fireEvent.click(screen.getByRole('button', { name: '加载更多' }));
+    await screen.findByText(/分页游标未前进/);
+    expect(screen.getAllByRole('button', { name: '删除彩票 实票 #12' })).toHaveLength(1);
+  });
+
+  it('非法彩票盈亏金额被拒绝，不显示NaN', async () => {
+    apiMocks.tickets.mockResolvedValue({ ...response(), tickets: [{ ...realTicket, profitLoss: NaN }] });
+    render(<TicketsPage />);
+    await screen.findByText(/彩票分页或统计格式不正确/);
+    expect(screen.queryByRole('button', { name: '删除彩票 实票 #12' })).not.toBeInTheDocument();
+    expect(screen.queryByText(/¥NaN/)).not.toBeInTheDocument();
+  });
+
+});
