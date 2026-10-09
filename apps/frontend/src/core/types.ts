@@ -214,6 +214,12 @@ export interface MatchDetailLineupPlayer {
 }
 
 export interface MatchDetailLineup {
+  snapshot_id?: number;
+  match_id?: number;
+  team_id?: number;
+  source?: string | null;
+  snapshot_time?: string | null;
+  collected_at?: string | null;
   formation: string | null;
   strength_score: number | null;
   starting_11_value: number | null;
@@ -288,6 +294,11 @@ export interface MatchDetailStandingEntry {
 }
 
 export interface MatchDetailInjury {
+  player_id?: number;
+  snapshot_id?: number;
+  source?: string | null;
+  snapshot_time?: string | null;
+  collected_at?: string | null;
   team_id: number;
   status: string;
   injury_type: string | null;
@@ -331,6 +342,8 @@ export interface MatchDetail {
   };
   standings: MatchDetailStandingEntry[];
   injuries: MatchDetailInjury[];
+  availability_scope?: string;
+  availability_limit_per_team?: number;
 }
 
 // ---- Stage 4: Model Predictions ----

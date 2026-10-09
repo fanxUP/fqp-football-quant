@@ -1,9 +1,9 @@
-version: 6
+version: 7
 mode: STRICT
-max_changed_files: 24
-max_new_files: 2
+max_changed_files: 20
+max_new_files: 4
 max_dependency_additions: 0
 max_migration_files: 0
-max_public_api_changes: 0
-max_regression_tests: 60
-scope_note: "P07d news independent manual evidence and report query isolation; preserve existing explicit writes."
+max_public_api_changes: 1
+max_regression_tests: 45
+scope_note: "P08a additive match detail roster evidence; latest per-player team availability, explicit coverage and historical boundary."

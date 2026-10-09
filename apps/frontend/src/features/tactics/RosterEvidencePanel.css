@@ -1,0 +1,23 @@
+.te-panel { min-width: 0; overflow-wrap: anywhere; }
+.te-panel h2 { font-size: 20px; }
+.te-panel p { line-height: 1.6; }
+.te-rosters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.te-team, .te-injuries { min-width: 0; padding: 16px; background: var(--fqp-bg-glass); border: 1px solid var(--fqp-border-subtle); border-radius: 12px; }
+.te-injuries { margin-top: 16px; }
+.te-type { color: var(--fqp-red); font-weight: 600; }
+.te-warning { color: var(--fqp-warning); }
+.te-provenance { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 8px; }
+.te-provenance dt { color: var(--fqp-text-muted); }
+.te-provenance dd { margin: 0; min-width: 0; }
+.te-players, .te-injury-list { list-style: none; padding: 0; display: grid; gap: 8px; }
+.te-players { grid-template-columns: repeat(auto-fit, minmax(min(150px, 100%), 1fr)); }
+.te-players button { width: 100%; min-height: 44px; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--fqp-border-subtle); background: var(--fqp-panel-2); color: var(--fqp-text); cursor: pointer; text-align: left; }
+.te-players button small { color: var(--fqp-text-muted); }
+.te-players button[aria-pressed="true"] { border-color: var(--fqp-red); background: var(--fqp-hover-bg); }
+.te-players button:focus-visible { outline: 2px solid var(--fqp-red); outline-offset: 3px; }
+.te-selection, .te-injury-list li { border-top: 1px solid var(--fqp-border-subtle); padding-top: 12px; }
+@media (max-width: 760px) { .te-rosters { grid-template-columns: minmax(0, 1fr); } .te-provenance { grid-template-columns: minmax(0, 1fr); } }
+
+.te-panel .be-status button { min-height: 44px; padding: 8px 12px; border: 1px solid var(--fqp-border); border-radius: 8px; color: var(--fqp-text); background: var(--fqp-panel-2); cursor: pointer; }
+.te-panel .be-status button:disabled { opacity: .5; cursor: default; }
+.te-panel .be-status button:focus-visible { outline: 2px solid var(--fqp-red); outline-offset: 3px; }

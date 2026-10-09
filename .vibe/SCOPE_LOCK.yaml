@@ -1,26 +1,17 @@
-version: 6
-base_revision: 476e8258948d57d09cdd7ac74c1bd1709ce08bbb
+version: 7
+mode: STRICT
 allowed_paths:
   - .vibe/
-  - docs/news-reports-v3d.md
-  - apps/frontend/src/pages/NewsIntelligencePage.tsx
-  - apps/frontend/src/pages/NewsIntelligencePage.test.tsx
-  - apps/frontend/src/pages/NewsIntelligencePage.css
-  - apps/frontend/src/features/news-intelligence/NewsScreeningStatus.tsx
-  - apps/frontend/src/pages/useManualEvidence.ts
-  - apps/frontend/src/pages/reviews/ReportResearchSummary.tsx
-  - apps/frontend/src/pages/reviews/ReportResearchSummary.test.tsx
-  - apps/frontend/src/pages/reviews/AutomaticReportArchivePanel.tsx
-  - apps/frontend/src/pages/reviews/AutomaticReportArchivePanel.test.tsx
-  - apps/frontend/src/pages/reviews/ReportAutomationPanel.tsx
-  - apps/frontend/src/pages/reviews/ReportAutomationPanel.test.tsx
-  - apps/frontend/src/pages/reviews/ReportPerformanceSummary.tsx
-  - apps/frontend/src/pages/reviews/AutomaticReportArchivePanel.css
-  - apps/frontend/src/pages/reviews/ReportAutomationPanel.css
+  - apps/backend/src/routers/teams.py
+  - tests/test_api/test_teams.py
+  - apps/frontend/src/core/types.ts
+  - apps/frontend/src/pages/MatchDetailPage.tsx
+  - apps/frontend/src/shared/components/MatchDetailDrawer.tsx
+  - apps/frontend/src/features/tactics/
+  - docs/tactics-evidence-v3e.md
 forbidden_paths:
-  - .env*
   - sql/
-  - apps/backend/
+  - .env
   - apps/frontend/package.json
   - package-lock.json
-out_of_scope: "Algorithms, moderation/release endpoints, generation scheduling, P08/P09, production export/deployment."
+out_of_scope: "P08b 3D scene, P09 models, production export/deployment, financial logic, collection writes."

@@ -1,8 +1,8 @@
-version: 6
+version: 7
 mode: STRICT
-base_revision: 476e8258948d57d09cdd7ac74c1bd1709ce08bbb
+base_revision: 795c6c6c3bc15801e34a069e5f41bcd590a163ed
 upstream_main: 74ebae2b11a3abda78abe851d95d58ee418e742c
 branch: feat/3d-command-center-v1
-phase: V3d_P07_news_reports
+phase: V3e_P08a_roster_evidence
 production_writes: false
 production_data_export: false

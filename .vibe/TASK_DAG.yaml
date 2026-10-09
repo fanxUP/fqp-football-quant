@@ -1,5 +1,5 @@
 version: 1
-status: implemented_v3d_news_reports_local
+status: implemented_v3e_roster_evidence_local
 date: '2026-10-09'
 mode: STRICT
 baseline_main_sha: 74ebae2b11a3abda78abe851d95d58ee418e742c
@@ -69,3 +69,12 @@ subtasks:
     title: 新闻独立证据与报告子面板隔离重试
     acceptance: A07d
     depends_on: [P07c]
+
+  - id: P08a
+    title: 阵容与伤停二维证据契约
+    acceptance: A08a
+    depends_on: [P07d]
+  - id: P08b
+    title: 基于证据的战术示意场景
+    acceptance: A08b
+    depends_on: [P08a]
