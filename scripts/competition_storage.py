@@ -27,11 +27,7 @@ def _iso(val: Any) -> str | None:
 
 
 def _date_str(val: Any) -> str | None:
-    if val is None:
-        return None
-    if hasattr(val, "isoformat"):
-        return val.isoformat()
-    return str(val)
+    return _iso(val)
 
 
 # ── Round helpers ───────────────────────────────────────────────────

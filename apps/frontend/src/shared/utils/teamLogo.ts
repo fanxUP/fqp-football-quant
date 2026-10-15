@@ -228,15 +228,6 @@ export function getFlagUrl(
   return `https://flagcdn.com/${code}.svg`;
 }
 
-/** Returns true if this team is a national team (has a flag) */
-export function isNationalTeam(
-  nameCn?: string | null,
-  nameEn?: string | null,
-  country?: string | null,
-): boolean {
-  return getFlagUrl(nameCn, nameEn, country) !== null;
-}
-
 // ── Club team colors ──────────────────────────────────────
 
 const TEAM_GRADIENTS: [string, string][] = [
@@ -267,17 +258,6 @@ export function getTeamGradient(name: string): [string, string] {
     hash |= 0; // convert to 32-bit int
   }
   return TEAM_GRADIENTS[Math.abs(hash) % TEAM_GRADIENTS.length];
-}
-
-/** Extract initials (2 chars) from a team name */
-export function getTeamInitials(nameCn?: string | null, shortName?: string | null, nameEn?: string | null): string {
-  const src = shortName || nameCn || nameEn || '';
-  // If short name is 2+ chars, use first 2
-  if (src.length >= 2) return src.slice(0, 2);
-  // If it's a single char, pad
-  if (src.length === 1) return src;
-  // Fallback
-  return 'FC';
 }
 
 // ── Combined logo URL ──────────────────────────────────────

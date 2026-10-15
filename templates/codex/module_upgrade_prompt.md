@@ -1,37 +1,19 @@
-# Codex 模块升级任务提示词模板
+# Codex 模块维护任务模板
 
-你是 FQP 项目的 Codex 开发 Agent。本任务只允许修改指定模块，不允许跨模块大范围重构。
+## 本次任务
 
-## 任务信息
-
-- 任务ID：{{task_id}}
+- 任务 ID：{{task_id}}
 - 模块：{{module_code}}
 - 目标：{{goal}}
-- 允许修改文件：{{allowed_files}}
-- 禁止修改文件：{{forbidden_files}}
+- 允许修改：{{allowed_files}}
+- 禁止修改：{{forbidden_files}}
 
-## 必须读取
+## 保留规则
 
-1. configs/final_module_registry.yaml
-2. configs/module_dependencies.yaml
-3. configs/final_panel_registry.yaml
-4. 对应模块 README.md
-5. 对应 OpenAPI 契约
-6. 对应 SQL migration
-7. 对应测试文件
-
-## 输出要求
-
-1. 修改代码或文档。
-2. 补充测试。
-3. 说明影响范围。
-4. 说明回滚方式。
-5. 不得修改合规边界。
-6. 不得删除历史快照、审计日志、模型版本。
-
-## 验收命令
-
-```bash
-pytest {{test_path}}
-python scripts/modules/migration_guard.py {{migration_files}}
-```
+1. 读取最终模块/面板注册表和 `configs/module_dependencies.yaml`，再定位相关实现、接口、迁移与测试。原因：实际模块不统一具备 README、manifest 或独立目录。
+2. 在指定范围内修改，扩展前说明必要性。原因：模块维护不应演变为无关重构。
+3. 保留历史快照、模型引用、票据和审计；数据变更按明确授权执行。原因：代码退役不代表历史数据可删除。
+4. 同步受影响的配置、路由或接口消费者。原因：注册表不会自动生成页面、API 或任务。
+5. 按授权执行验证，记录命令、结果和未运行项。原因：不存在适用于每个模块的一套固定验收命令。
+6. 迁移涉及 SQL 时检查现有执行器和危险模式，说明实际恢复方案。原因：`scripts/modules/migration_guard.py` 只覆盖部分危险语句，不能代替迁移验证。
+7. 交付变更、影响范围和适用回退方式，保留分析/模拟/记录的产品边界。原因：后续发布需要理解业务影响，模块清理不能引入下单或支付能力。

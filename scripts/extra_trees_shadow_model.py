@@ -8,6 +8,12 @@ from typing import Any
 
 import numpy as np
 
+from scripts.shadow_model_helpers import (
+    load_shadow_probabilities,
+    map_official_probabilities,
+    valid_shadow_profile,
+)
+
 MIN_TRAINING_MATCHES = 100
 MIN_VALIDATION_MATCHES = 25
 
@@ -85,13 +91,14 @@ def profile_from_parameters(parameters: dict[str, Any] | None) -> ExtraTreesShad
         )
     except KeyError, TypeError, ValueError:
         return None
-    if (
-        not profile.artifact_path
-        or not profile.feature_columns
-        or profile.training_matches < MIN_TRAINING_MATCHES
-        or profile.validation_matches < MIN_VALIDATION_MATCHES
-        or not math.isfinite(profile.validation_log_loss)
-        or profile.validation_log_loss <= 0
+    if not valid_shadow_profile(
+        profile.artifact_path,
+        profile.feature_columns,
+        profile.training_matches,
+        profile.validation_matches,
+        profile.validation_log_loss,
+        min_training_matches=MIN_TRAINING_MATCHES,
+        min_validation_matches=MIN_VALIDATION_MATCHES,
     ):
         return None
     return profile
@@ -102,17 +109,12 @@ def load_probabilities(
     feature_snapshot: dict[str, Any] | None,
 ) -> dict[str, float] | None:
     """Artifact errors simply suppress this optional shadow signal."""
-    profile = profile_from_parameters(parameters)
-    if profile is None or feature_snapshot is None:
-        return None
-    try:
-        import joblib
-
-        return probabilities_from_classifier(
-            joblib.load(profile.artifact_path), profile, feature_snapshot
-        )
-    except ImportError, OSError, ValueError:
-        return None
+    return load_shadow_probabilities(
+        parameters,
+        feature_snapshot,
+        profile_from_parameters=profile_from_parameters,
+        probabilities_from_classifier=probabilities_from_classifier,
+    )
 
 
 def probabilities_from_classifier(
@@ -131,12 +133,4 @@ def probabilities_from_classifier(
     classes = getattr(classifier, "classes_", None)
     if classes is None or len(probabilities) != 1 or len(probabilities[0]) != len(classes):
         return None
-    by_class = {
-        int(class_code): float(probability)
-        for class_code, probability in zip(classes, probabilities[0], strict=True)
-    }
-    result = {"0": by_class.get(0, 0.0), "1": by_class.get(1, 0.0), "3": by_class.get(2, 0.0)}
-    total = sum(result.values())
-    if not math.isfinite(total) or total <= 0 or any(value < 0 for value in result.values()):
-        return None
-    return {code: round(value / total, 8) for code, value in result.items()}
+    return map_official_probabilities(classes, probabilities[0])

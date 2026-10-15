@@ -8,6 +8,8 @@ from typing import Any
 
 import numpy as np
 
+from scripts.shadow_model_helpers import map_official_probabilities, valid_shadow_profile
+
 MIN_TRAINING_MATCHES = 100
 MIN_VALIDATION_MATCHES = 25
 
@@ -83,13 +85,14 @@ def profile_from_parameters(parameters: dict[str, Any] | None) -> LogisticShadow
         validation_log_loss = float(parameters["validation_log_loss"])
     except KeyError, TypeError, ValueError:
         return None
-    if (
-        not artifact_path
-        or not feature_columns
-        or training_matches < MIN_TRAINING_MATCHES
-        or validation_matches < MIN_VALIDATION_MATCHES
-        or not math.isfinite(validation_log_loss)
-        or validation_log_loss <= 0
+    if not valid_shadow_profile(
+        artifact_path,
+        feature_columns,
+        training_matches,
+        validation_matches,
+        validation_log_loss,
+        min_training_matches=MIN_TRAINING_MATCHES,
+        min_validation_matches=MIN_VALIDATION_MATCHES,
     ):
         return None
     return LogisticShadowProfile(
@@ -137,12 +140,4 @@ def probabilities_from_classifier(
     classes = getattr(classifier, "classes_", None)
     if classes is None or len(probabilities) != 1 or len(probabilities[0]) != len(classes):
         return None
-    by_class = {
-        int(class_code): float(probability)
-        for class_code, probability in zip(classes, probabilities[0], strict=True)
-    }
-    result = {"0": by_class.get(0, 0.0), "1": by_class.get(1, 0.0), "3": by_class.get(2, 0.0)}
-    total = sum(result.values())
-    if not math.isfinite(total) or total <= 0 or any(value < 0 for value in result.values()):
-        return None
-    return {code: round(value / total, 8) for code, value in result.items()}
+    return map_official_probabilities(classes, probabilities[0])

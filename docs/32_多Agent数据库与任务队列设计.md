@@ -1,86 +1,24 @@
-# 32. 多 Agent 数据库与任务队列设计
+# 32. Agent 任务与运行记录
 
-## 1. 设计目标
+## 当前存储
 
-新增数据库用于追踪 Codex 多 Agent 的任务、操作、输出、审查、权限和运行结果，避免 Agent 行为不可追溯。
+| 内容 | 表/入口 |
+| --- | --- |
+| Agent 定义 | `agent_registry` |
+| 开发任务 | `agent_tasks` |
+| 任务产物 | `agent_task_artifacts` |
+| 操作审计 | `agent_audit_logs` |
+| 人工审核 | `agent_human_review_gates` |
+| QA 报告 | `codex_review_reports` |
+| 调度运行 | `ai_job_runs` |
 
-## 2. 核心表
+实现位于 `scripts/agent_storage.py`、`scripts/agents/`；基础结构见 `sql/13_multi_agent_codex_schema.sql`。
 
-### agent_registry
+## 保留规则
 
-记录 Agent 定义。
-
-### agent_tasks
-
-记录每个任务，从创建到完成的全过程。
-
-### agent_task_artifacts
-
-记录任务产生的文件、报告、测试结果、差异摘要。
-
-### agent_audit_logs
-
-记录 Agent 执行的命令、修改的文件、影响的数据表。
-
-### agent_human_review_gates
-
-记录哪些任务必须人工审核。
-
-### ai_job_runs
-
-记录 AI 计算与定时采集任务的实际运行结果。
-
-## 3. 任务状态机
-
-```text
-created
-queued
-assigned
-running
-waiting_review
-blocked
-failed
-passed_tests
-approved
-rejected
-merged
-closed
-```
-
-## 4. 风险等级
-
-```text
-L1 文档/注释/只读查询
-L2 非生产代码修改
-L3 数据库迁移/采集脚本/模型脚本
-L4 推荐生成/资金逻辑/实票复盘
-L5 生产数据写入/删除/预算上限/合规边界
-```
-
-L4 和 L5 必须人工审核。
-
-## 5. 数据流
-
-```text
-agent_tasks 创建任务
-    ↓
-Codex Agent 执行
-    ↓
-agent_audit_logs 记录操作
-    ↓
-agent_task_artifacts 保存输出
-    ↓
-QA Agent 写入测试结果
-    ↓
-Risk Agent 判断是否需要人审
-    ↓
-人工审核或合并
-```
-
-## 6. 验收标准
-
-- 任何 Agent 行为都有 task_id。
-- 任何生产写入都有 audit log。
-- 任何 L4/L5 任务都有 review gate。
-- 任何 AI 计算任务都有输入快照和输出引用。
-- 任何失败任务都能由 Codex 自动生成修复任务草案。
+1. 开发任务和调度执行分别使用各自记录，不混用状态与 ID。原因：`agent_tasks` 和 `ai_job_runs` 表达不同生命周期。
+2. 任务状态以 `agent_storage.TASK_STATUSES` 和实际转换函数为准。原因：旧文档列举的状态不完整，也没有证明每个状态都按线性顺序执行。
+3. L4/L5 或显式要求审核的任务创建审核闸门，pending 闸门阻止 approved/merged。原因：这是 `orchestrator.py` 已实现的审核边界。
+4. 已接入追踪的任务记录输入、输出、错误和结束状态。原因：页面需要区分运行、完成、失败和中断恢复。
+5. 重试受对应函数的次数和依赖条件约束。原因：任务队列直接记录 PostgreSQL，没有独立 Celery 队列自动保证重试。
+6. 对未接入审计或自动修复的操作明确记录限制。原因：不能承诺“任意操作都有审计”或“失败都会自动生成修复任务”。

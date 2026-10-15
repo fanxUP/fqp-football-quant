@@ -286,11 +286,6 @@ def provider_definition(code: str) -> ProviderDefinition | None:
     )
 
 
-def _requires_api_key(provider_code: str) -> bool:
-    provider = provider_definition(provider_code)
-    return provider.requires_api_key if provider else True
-
-
 def _config_record(row: Any) -> dict[str, Any]:
     return dict(zip(CONFIG_COLUMNS.replace(" ", "").split(","), row, strict=True))
 

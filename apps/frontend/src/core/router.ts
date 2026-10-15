@@ -16,12 +16,10 @@ export interface RouterState {
 let _routes: Route[] = [];
 const _listeners: Array<(state: RouterState) => void> = [];
 
-function parseHash(): { currentPath: string; params: Record<string, string> } {
-  const raw = window.location.hash.replace(/^#/, '') || '/';
-  const [pathPart] = raw.split('?');
-  const segments = pathPart.split('/').filter(Boolean);
+export function matchRoute(path: string, routes: Route[]): { route: Route; params: Record<string, string> } | null {
+  const segments = path.split('/').filter(Boolean);
 
-  for (const route of _routes) {
+  for (const route of routes) {
     const routeSegs = route.path.split('/').filter(Boolean);
     if (routeSegs.length !== segments.length) continue;
 
@@ -36,10 +34,20 @@ function parseHash(): { currentPath: string; params: Record<string, string> } {
       }
     }
     if (match) {
-      return { currentPath: route.path, params };
+      return { route, params };
     }
   }
 
+  return null;
+}
+
+function parseHash(): { currentPath: string; params: Record<string, string> } {
+  const raw = window.location.hash.replace(/^#/, '') || '/';
+  const [pathPart] = raw.split('?');
+  const matched = matchRoute(pathPart, _routes);
+  if (matched) {
+    return { currentPath: matched.route.path, params: matched.params };
+  }
   return { currentPath: pathPart, params: {} };
 }
 

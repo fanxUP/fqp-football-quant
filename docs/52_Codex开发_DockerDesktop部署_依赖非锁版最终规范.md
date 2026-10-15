@@ -1,16 +1,7 @@
-# 52_Codex 开发与 Docker Desktop 设计归档
+# 52. 早期 Docker 与依赖策略归档索引
 
-> 历史归档：本文仅保留迁移前设计记录，其中命令已退役，不得执行。当前运行以 `54_本机运行与DockerDesktop弃用说明.md` 为准。
+本页保留历史文件名作为索引，早期混合部署步骤已删除。
 
-> 历史设计摘要，不是操作手册。
-
-早期方案确立了两项仍有效的原则：依赖不以静态版本号锁死，实际运行版本应可记录；Codex 负责开发、测试、维护和诊断，不替代常驻任务进程。
-
-当时关于“直接执行 Docker Compose”“容器内任务是唯一运行模式”等描述已经被当前流程替代。现在的唯一操作口径是：
-
-1. 在本机工作目录开发、测试并提交；
-2. 使用 `./ops/local/run_local_stack.sh deploy` 推送 GitHub 并核验提交 SHA；
-3. 仅在校验通过后由 Docker Desktop Compose 重建发布服务；
-4. 本机 Scheduler 与 Docker Scheduler 不得并行。
-
-详细命令见 [54_本机运行与DockerDesktop弃用说明.md](54_本机运行与DockerDesktop弃用说明.md) 和 [../ops/local/README_Codex_Docker_Desktop.md](../ops/local/README_Codex_Docker_Desktop.md)。
+1. 当前启动与部署按 [54 号运行规范](54_本机运行与DockerDesktop弃用说明.md) 选择实际入口。原因：旧 `run_local_stack.sh deploy` 及配套 Docker 手册已不存在。
+2. 依赖约束按现有 requirements、package.json、lockfile 和 CI 运行版本判断。原因：Python 3.14、Node 24 和部分前端精确版本已经受约束，“一律不锁版本/安装最新版”不符合当前代码。
+3. Codex 开发维护代码，常驻服务执行长期任务。原因：这是当前 Scheduler/Worker 与开发工具之间仍然有效的职责边界。

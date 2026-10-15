@@ -11,28 +11,11 @@ Idempotent — safe to run repeatedly. Uses INSERT ... ON CONFLICT DO NOTHING.
 from __future__ import annotations
 
 import hashlib
-import re
 from datetime import datetime
 from typing import Any
 
 from apps.backend.src.db import get_db
 from scripts.team_registry import official_team_code
-
-
-def _slugify(name: str) -> str:
-    """Generate a team_code from a Chinese or English name.
-
-    For non-ASCII names (Chinese), use the first 3 characters as an
-    abbreviated code. For ASCII, use uppercase first 4 letters.
-    """
-    if not name:
-        return "UNK"
-    # If contains non-ASCII, use first 3 chars
-    if any(ord(c) > 127 for c in name):
-        return name[:4] if len(name) >= 4 else name
-    # ASCII: uppercase, strip spaces
-    slug = re.sub(r"[^a-zA-Z0-9]", "", name).upper()
-    return slug[:6] if len(slug) >= 3 else slug
 
 
 def _competition_code(league_name: str) -> str:

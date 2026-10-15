@@ -1,0 +1,22 @@
+FROM node:24-bookworm-slim AS pi-bridge
+WORKDIR /bridge
+COPY apps/model-bridge/package.json apps/model-bridge/package-lock.json ./
+RUN npm ci --omit=dev --no-audit --no-fund
+
+FROM python:3.14-slim-bookworm
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates libgomp1 libstdc++6 \
+    && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+COPY requirements.txt ./requirements.txt
+RUN python -m pip install --no-cache-dir -r requirements.txt
+COPY . .
+COPY --from=pi-bridge /usr/local/bin/node /usr/local/bin/node
+COPY --from=pi-bridge /bridge/node_modules ./apps/model-bridge/node_modules
+ARG FQP_REVISION=unknown
+LABEL org.opencontainers.image.revision=$FQP_REVISION
+EXPOSE 8080
+CMD ["python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]

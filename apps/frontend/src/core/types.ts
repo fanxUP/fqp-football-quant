@@ -564,53 +564,6 @@ export interface PlayTypeWinRate {
   win_rate: number;
 }
 
-export interface MatchReviewEvidence {
-  phase: 'pre_match' | 'post_match';
-  sourceName: string;
-  sourceUrl: string;
-  publishedAt: string | null;
-  capturedAt: string | null;
-  headline: string;
-  summary: string | null;
-  reliability: 'official' | 'verified' | 'unverified';
-}
-
-export interface MatchReviewCard {
-  matchId: number;
-  officialCode: string;
-  leagueName: string;
-  homeTeamName: string;
-  awayTeamName: string;
-  kickoffTime: string | null;
-  result: {
-    homeGoals: number | null;
-    awayGoals: number | null;
-    spfResult: string | null;
-    status: string;
-    publishedAt: string | null;
-  };
-  modelSignals: {
-    modelName: string;
-    playType: string;
-    optionCode: string;
-    modelProbability: number | null;
-    marketProbability: number | null;
-    ev: number | null;
-    confidenceScore: number | null;
-    predictTime: string | null;
-  }[];
-  oddsSignals: {
-    playType: string;
-    optionCode: string;
-    optionName: string;
-    spValue: number | null;
-    handicap: number | null;
-    snapshotTime: string | null;
-  }[];
-  evidence: MatchReviewEvidence[];
-  evidenceStatus: '已收录' | '未查到可靠资料';
-}
-
 export interface MonthlyReview {
   id: number;
   review_month: string;
@@ -693,16 +646,6 @@ export interface EquityPoint {
 }
 
 // ---- API response wrappers ----
-
-export interface ListResponse<T> {
-  [key: string]: T[] | number;
-  total: number;
-}
-
-export interface StatusResponse {
-  status: string;
-  [key: string]: unknown;
-}
 
 // ---- Settings (localStorage) ----
 
@@ -1126,9 +1069,6 @@ export interface SimulatorTicketDetail extends SimulatorTicket {
 
 export type BettingOddsOption = SimulatorOddsOption;
 export type BettingMatch = SimulatorMatch;
-export type BettingTicketHistory = SimulatorTicket;
-export type BettingTicketHistoryDetail = SimulatorTicketDetail;
-
 export interface SportterySalesWindow {
   is_open: boolean;
   current_time: string;
@@ -1397,19 +1337,6 @@ export interface DashboardTodayKpi {
   label: string;
   value: number;
   prefix?: string;
-}
-
-export interface DashboardTodayResponse {
-  chart_type: string;
-  title: string;
-  empty: boolean;
-  kpis: DashboardTodayKpi[];
-  meta: { updated_at: string; source: string };
-  extras: {
-    current_round_label: string | null;
-    current_round_id: number | null;
-    business_date: string;
-  };
 }
 
 export interface DashboardRoiDailyItem {

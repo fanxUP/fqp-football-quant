@@ -24,6 +24,7 @@ from scripts.competition_storage import AGENT_DAILY_BUDGET
 from scripts.daily_decision_storage import upsert_agent_daily_decision
 from scripts.model_storage import MAX_SINGLE_TICKET_MULTIPLE, store_simulation_ticket
 from scripts.recommendation_prediction_loader import load_actionable_predictions
+from scripts.simulator_calculator import payout_cap
 from scripts.sporttery_sales import get_sporttery_sales_window
 
 ALL_MODELS = ["market_baseline", "elo_rating", "dixon_coles", "maher_poisson"]
@@ -70,13 +71,7 @@ def _official_stake(value: float) -> float:
 
 
 def _payout_cap(match_count: int) -> float:
-    if match_count <= 1:
-        return 100_000.0
-    if match_count <= 3:
-        return 200_000.0
-    if match_count <= 5:
-        return 500_000.0
-    return 1_000_000.0
+    return payout_cap(match_count)
 
 
 def _prediction_sp_value(prediction_row: tuple[Any, ...]) -> float:

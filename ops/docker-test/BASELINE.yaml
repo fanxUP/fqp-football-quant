@@ -1,0 +1,3 @@
+base_ref: origin/main
+base_revision: 202ac4a9b5b3a0fde93d416832359e5e2de4171e
+purpose: Local Docker Desktop deployment test only

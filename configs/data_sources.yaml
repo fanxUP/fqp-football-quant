@@ -5,23 +5,6 @@ official:
     description: 中国竞彩网/中国体育彩票官方信息源，只用于官方赛程、玩法、SP、赛果。
     fail_policy: shutdown_recommendation
 third_party:
-  football_data:
-    enabled: true
-    api_key_env: FOOTBALL_DATA_API_KEY
-    base_url: https://api.football-data.org/v4/
-    rate_limit:
-      requests_per_minute: 10
-    usage:
-      - 球队历史战绩、进球、失球
-      - 球员身价与阵容（部分联赛）
-      - 联赛积分榜
-      - 赛程与赛果（补充校验，不允许新增官方比赛）
-    coverage:
-      - 欧洲五大联赛及其次级联赛
-      - 欧冠、欧联
-      - 部分南美联赛
-    source_confidence: B
-    note: 免费计划，每分钟10次请求，不支持伤停数据。
   api_football:
     enabled: true
     api_key_env: API_FOOTBALL_KEY
@@ -39,33 +22,6 @@ third_party:
       - 全球主要联赛（覆盖较 football-data.org 更广）
     source_confidence: B
     note: 免费计划，每天100次请求。伤停和首发数据可用但有限。
-  sportmonks:
-    enabled: true
-    api_key_env: SPORTMONKS_API_TOKEN
-    base_url: https://api.sportmonks.com/v3/football
-    usage:
-      - 当前赛季联赛积分榜
-      - 赛事赛季与球队排名补充
-    source_confidence: B
-    note: 仅作为积分榜补充源，不得替代体彩官方赛程。
-  theodds:
-    enabled: true
-    api_key_env: THEODDS_API_KEY
-    base_url: https://api.the-odds-api.com/v4/
-    rate_limit:
-      requests_per_month: 500
-    usage:
-      - 多家博彩公司赔率对比（h2h/spreads/totals）
-      - 赔率变动追踪（市场情绪信号）
-      - 与竞彩官方SP对比发现市场定价偏差
-      - 历史赔率回测交易策略
-      - 赛果与比分数据（辅助校验）
-    coverage:
-      - 全球主流足球联赛（与 football-data.org 覆盖相当）
-      - 主要欧洲、亚洲、美洲博彩公司
-      - 含加时赛/点球赔率（部分博彩公司）
-    source_confidence: B
-    note: 免费计划，每月500次请求。历史赔率数据受限。关键价值：多博彩公司赔率共识 vs 竞彩官方SP。
   leisu:
     enabled: true
     base_url: https://www.leisu.com/

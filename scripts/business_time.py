@@ -19,6 +19,16 @@ def business_now(value: datetime | None = None) -> datetime:
     return current.astimezone(business_timezone())
 
 
+def business_now_naive() -> datetime:
+    """Return business-local time for tables storing naive match timestamps."""
+    timezone_name = os.getenv("FQP_TIMEZONE", "Asia/Shanghai")
+    return datetime.now(ZoneInfo(timezone_name)).replace(tzinfo=None)
+
+
+def business_now_naive_iso() -> str:
+    return business_now_naive().isoformat(timespec="seconds")
+
+
 def business_today(value: datetime | None = None) -> date:
     return business_now(value).date()
 

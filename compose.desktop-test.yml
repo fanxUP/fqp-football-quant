@@ -1,0 +1,150 @@
+x-app-environment: &app-environment
+  FQP_MODE: local_development
+  FQP_AUTH_MODE: session
+  FQP_ADMIN_PASSWORD_HASH: "$$2b$$12$$7KBgTUvuPTHko3vnYDualuRizQa6ARItKWMzMPxnjuV2drbpJ/.P."
+  FQP_SESSION_TTL: "86400"
+  FQP_PROVIDER_ENCRYPTION_KEY: ${FQP_PROVIDER_ENCRYPTION_KEY:?set in .env}
+  FQP_DAILY_BUDGET: "500"
+  FQP_THEME: red_black_tech
+  FQP_BIND_HOST: 0.0.0.0
+  DATABASE_URL: postgresql://fqp:${FQP_DATABASE_PASSWORD:?set in .env}@postgres:5432/fqp
+  REDIS_URL: redis://redis:6379/0
+  FQP_DB_POOL_MIN: "1"
+  FQP_DB_POOL_MAX: "8"
+  FQP_DB_POOL_ACQUIRE_TIMEOUT: "15"
+  OFFICIAL_SOURCE_ENABLED: "false"
+  FQP_NEWS_COLLECTION_ENABLED: "false"
+  FQP_NEWSAPI_AUTOMATION_ENABLED: "false"
+  FQP_STARTUP_HEALTH_SNAPSHOT: "true"
+  FQP_ODDS_DISPATCH_OWNER: worker
+  FQP_SCHEDULER_HEARTBEAT_MODE: shared
+  FQP_API_HEALTH_URL: http://api:8080/health
+  SPORTTERY_BASE_URL: https://webapi.sporttery.cn/gateway/jc/football/
+  FQP_TIMEZONE: Asia/Shanghai
+
+services:
+  postgres:
+    image: postgres:16-bookworm
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${FQP_POSTGRES_ADMIN_PASSWORD:?set in .env}
+      POSTGRES_DB: postgres
+      TZ: Asia/Shanghai
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-bookworm
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  db-init:
+    image: postgres:16-bookworm
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGHOST: postgres
+      PGPORT: "5432"
+      FQP_POSTGRES_ADMIN_PASSWORD: ${FQP_POSTGRES_ADMIN_PASSWORD:?set in .env}
+      FQP_DATABASE_USER: fqp
+      FQP_DATABASE_PASSWORD: ${FQP_DATABASE_PASSWORD:?set in .env}
+      FQP_DATABASE_NAME: fqp
+    volumes:
+      - ./sql:/migrations:ro
+      - ./ops/docker-test/bootstrap-db.sh:/bootstrap-db.sh:ro
+    entrypoint: ["bash", "/bootstrap-db.sh"]
+    restart: "no"
+
+  api:
+    image: fqp-github-main-api:${FQP_IMAGE_TAG:-local}
+    build:
+      context: .
+      dockerfile: ops/docker-test/Dockerfile.backend
+      args:
+        FQP_REVISION: ${FQP_REVISION:-unknown}
+    environment: *app-environment
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${FQP_API_PORT:-18080}:8080"
+    volumes:
+      - runtime:/app/.runtime
+      - appdata:/app/data
+    command: ["python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health/ready', timeout=3).read()"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 90s
+    restart: unless-stopped
+
+  scheduler:
+    image: fqp-github-main-api:${FQP_IMAGE_TAG:-local}
+    build:
+      context: .
+      dockerfile: ops/docker-test/Dockerfile.backend
+      args:
+        FQP_REVISION: ${FQP_REVISION:-unknown}
+    environment: *app-environment
+    depends_on:
+      api:
+        condition: service_healthy
+    volumes:
+      - runtime:/app/.runtime
+      - appdata:/app/data
+    command: ["python", "-u", "-m", "scripts.jobs.run_scheduler"]
+    restart: unless-stopped
+
+  worker:
+    image: fqp-github-main-api:${FQP_IMAGE_TAG:-local}
+    build:
+      context: .
+      dockerfile: ops/docker-test/Dockerfile.backend
+      args:
+        FQP_REVISION: ${FQP_REVISION:-unknown}
+    environment: *app-environment
+    depends_on:
+      api:
+        condition: service_healthy
+    volumes:
+      - runtime:/app/.runtime
+      - appdata:/app/data
+    command: ["python", "-u", "-m", "scripts.official_crawler_stub"]
+    restart: unless-stopped
+
+  web:
+    image: fqp-github-main-web:${FQP_IMAGE_TAG:-local}
+    build:
+      context: .
+      dockerfile: ops/docker-test/Dockerfile.frontend
+      args:
+        FQP_REVISION: ${FQP_REVISION:-unknown}
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${FQP_WEB_PORT:-18066}:80"
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  redisdata:
+  runtime:
+  appdata:

@@ -8,6 +8,8 @@ from typing import Any
 
 import numpy as np
 
+from scripts.shadow_model_helpers import map_official_probabilities, valid_shadow_profile
+
 
 @dataclass(frozen=True)
 class XGBoostShadowProfile:
@@ -78,13 +80,14 @@ def profile_from_parameters(parameters: dict[str, Any] | None) -> XGBoostShadowP
         validation_log_loss = float(parameters["validation_log_loss"])
     except KeyError, TypeError, ValueError:
         return None
-    if (
-        not artifact_path
-        or not feature_columns
-        or training_matches < 100
-        or validation_matches < 25
-        or not math.isfinite(validation_log_loss)
-        or validation_log_loss <= 0
+    if not valid_shadow_profile(
+        artifact_path,
+        feature_columns,
+        training_matches,
+        validation_matches,
+        validation_log_loss,
+        min_training_matches=100,
+        min_validation_matches=25,
     ):
         return None
     return XGBoostShadowProfile(
@@ -132,12 +135,4 @@ def probabilities_from_classifier(
     probabilities = classifier.predict_proba([values])
     if len(probabilities) != 1 or len(probabilities[0]) != len(classifier.classes_):
         return None
-    by_class = {
-        int(class_code): float(probability)
-        for class_code, probability in zip(classifier.classes_, probabilities[0], strict=True)
-    }
-    result = {"0": by_class.get(0, 0.0), "1": by_class.get(1, 0.0), "3": by_class.get(2, 0.0)}
-    total = sum(result.values())
-    if not math.isfinite(total) or total <= 0 or any(value < 0 for value in result.values()):
-        return None
-    return {code: round(value / total, 8) for code, value in result.items()}
+    return map_official_probabilities(classifier.classes_, probabilities[0])

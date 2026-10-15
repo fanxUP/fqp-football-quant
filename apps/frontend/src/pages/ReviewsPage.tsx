@@ -199,7 +199,43 @@ function DailyReviewsTab() {
   );
 }
 
-// ---- Weekly Reviews Tab ----
+interface ArchivedReviewsTabProps<T extends { id: number }> {
+  fetchReviews: () => Promise<T[]>;
+  columns: (expandedId: number | null, onToggle: (id: number) => void) => Column<T>[];
+  reportLabel: string;
+  sourceType: 'post_weekly' | 'post_monthly';
+  sourceRef: (review: T) => string;
+  detailTitle: (review: T) => string;
+}
+
+function ArchivedReviewsTab<T extends { id: number }>({
+  fetchReviews, columns, reportLabel, sourceType, sourceRef, detailTitle,
+}: ArchivedReviewsTabProps<T>) {
+  const resource = useReadOnlyResource(fetchReviews, 30_000, false);
+  const reviews = resource.data ?? [];
+  const [expandedId, setExpandedId] = useState<number | null>(null);
+
+  return (
+    <>
+      <ReadEvidenceStatus resource={resource} label={`刷新${reportLabel}`} note="最近最多12份归档；手动刷新" />
+      <DataTable
+        columns={columns(expandedId, (id) => setExpandedId(expandedId === id ? null : id))}
+        rows={reviews}
+        loading={resource.loading}
+        emptyText={resource.error && !resource.data ? `${reportLabel}读取失败，请刷新` : `暂无${reportLabel}数据`}
+        rowKey={(row) => String(row.id)}
+      />
+      {expandedId != null && (() => {
+        const review = reviews.find((item) => item.id === expandedId);
+        return review ? <Card key={review.id} title={detailTitle(review)} style={{ marginTop: '16px' }}>
+          <ReportResearchSummary sourceType={sourceType} sourceRef={sourceRef(review)} />
+          <AutomaticReportArchivePanel sourceType={sourceType} sourceRef={sourceRef(review)} />
+        </Card> : null;
+      })()}
+    </>
+  );
+}
+
 function WeeklyReviewsTab() {
   const fetchReviews = useCallback(async () => {
     const response = await api.reviews.weekly(12);
@@ -207,35 +243,23 @@ function WeeklyReviewsTab() {
     if (rows.some(row => !Number.isSafeInteger(row.id) || row.id <= 0 || typeof row.week_start !== 'string')) throw new Error('周报日期格式不正确');
     return rows;
   }, []);
-  const resource = useReadOnlyResource(fetchReviews, 30_000, false);
-  const reviews = resource.data ?? [];
-  const loading = resource.loading;
-  const [expandedId, setExpandedId] = useState<number | null>(null);
-
-  const columns: Column<WeeklyReview>[] = [
-    { key: 'week_start', title: '周开始' },
-    { key: 'week_end', title: '周结束' },
-    { key: 'created_at', title: '生成时间', render: (v) => formatTimestamp(v) },
-    { key: 'actions', title: '查看', render: (_value, row) => <button type="button" aria-label={`查看周报 ${row.week_start}`} aria-expanded={expandedId === row.id} onClick={() => setExpandedId(expandedId === row.id ? null : row.id)}>查看周报</button> },
-  ];
-
   return (
-    <>
-      <ReadEvidenceStatus resource={resource} label="刷新周报" note="最近最多12份归档；手动刷新" />
-      <DataTable columns={columns} rows={reviews} loading={loading} emptyText={resource.error && !resource.data ? "周报读取失败，请刷新" : "暂无周报数据"}
-        rowKey={(r) => String(r.id)} />
-      {expandedId != null && (() => {
-        const review = reviews.find((item) => item.id === expandedId);
-        return review ? <Card key={review.id} title={`${review.week_start} 至 ${review.week_end} 周报详情`} style={{ marginTop: '16px' }}>
-          <ReportResearchSummary sourceType="post_weekly" sourceRef={review.week_start} />
-          <AutomaticReportArchivePanel sourceType="post_weekly" sourceRef={review.week_start} />
-        </Card> : null;
-      })()}
-    </>
+    <ArchivedReviewsTab<WeeklyReview>
+      fetchReviews={fetchReviews}
+      columns={(expandedId, onToggle) => [
+        { key: 'week_start', title: '周开始' },
+        { key: 'week_end', title: '周结束' },
+        { key: 'created_at', title: '生成时间', render: (v) => formatTimestamp(v) },
+        { key: 'actions', title: '查看', render: (_value, row) => <button type="button" aria-label={`查看周报 ${row.week_start}`} aria-expanded={expandedId === row.id} onClick={() => onToggle(row.id)}>查看周报</button> },
+      ]}
+      reportLabel="周报"
+      sourceType="post_weekly"
+      sourceRef={(review) => review.week_start}
+      detailTitle={(review) => `${review.week_start} 至 ${review.week_end} 周报详情`}
+    />
   );
 }
 
-// ---- Monthly Reviews Tab ----
 function MonthlyReviewsTab() {
   const fetchReviews = useCallback(async () => {
     const response = await api.reviews.monthly(12);
@@ -243,30 +267,19 @@ function MonthlyReviewsTab() {
     if (rows.some(row => !Number.isSafeInteger(row.id) || row.id <= 0 || typeof row.review_month !== 'string')) throw new Error('月报日期格式不正确');
     return rows;
   }, []);
-  const resource = useReadOnlyResource(fetchReviews, 30_000, false);
-  const reviews = resource.data ?? [];
-  const loading = resource.loading;
-  const [expandedId, setExpandedId] = useState<number | null>(null);
-
-  const columns: Column<MonthlyReview>[] = [
-    { key: 'review_month', title: '月份' },
-    { key: 'created_at', title: '生成时间', render: (v) => formatTimestamp(v) },
-    { key: 'actions', title: '查看', render: (_value, row) => <button type="button" aria-label={`查看月报 ${row.review_month}`} aria-expanded={expandedId === row.id} onClick={() => setExpandedId(expandedId === row.id ? null : row.id)}>查看月报</button> },
-  ];
-
   return (
-    <>
-      <ReadEvidenceStatus resource={resource} label="刷新月报" note="最近最多12份归档；手动刷新" />
-      <DataTable columns={columns} rows={reviews} loading={loading} emptyText={resource.error && !resource.data ? "月报读取失败，请刷新" : "暂无月报数据"}
-        rowKey={(r) => String(r.id)} />
-      {expandedId != null && (() => {
-        const review = reviews.find((item) => item.id === expandedId);
-        return review ? <Card key={review.id} title={`${String(review.review_month ?? review.month ?? review.id)} 月报详情`} style={{ marginTop: '16px' }}>
-          <ReportResearchSummary sourceType="post_monthly" sourceRef={review.review_month} />
-          <AutomaticReportArchivePanel sourceType="post_monthly" sourceRef={review.review_month} />
-        </Card> : null;
-      })()}
-    </>
+    <ArchivedReviewsTab<MonthlyReview>
+      fetchReviews={fetchReviews}
+      columns={(expandedId, onToggle) => [
+        { key: 'review_month', title: '月份' },
+        { key: 'created_at', title: '生成时间', render: (v) => formatTimestamp(v) },
+        { key: 'actions', title: '查看', render: (_value, row) => <button type="button" aria-label={`查看月报 ${row.review_month}`} aria-expanded={expandedId === row.id} onClick={() => onToggle(row.id)}>查看月报</button> },
+      ]}
+      reportLabel="月报"
+      sourceType="post_monthly"
+      sourceRef={(review) => review.review_month}
+      detailTitle={(review) => `${String(review.review_month ?? review.month ?? review.id)} 月报详情`}
+    />
   );
 }
 

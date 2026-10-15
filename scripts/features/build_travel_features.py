@@ -5,7 +5,7 @@
   - 时区差/海拔差
   - 旅行疲劳评分
 
-核心公式（来自 build_travel_weather_features.py 骨架）:
+核心公式:
   - haversine_km(lat1, lon1, lat2, lon2) → 大圆距离
   - compute_travel_fatigue(distance, timezone_diff, rest_days, consecutive_away)
 

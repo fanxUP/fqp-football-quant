@@ -1,17 +1,136 @@
-version: 7
+version: 16
 mode: STRICT
 allowed_paths:
-  - .vibe/
-  - apps/backend/src/routers/teams.py
-  - tests/test_api/test_teams.py
+  - .vibe/SCOPE_LOCK.yaml
+  - .vibe/CHANGE_BUDGET.yaml
+  - .vibe/PLAN.md
+  - .vibe/ACCEPTANCE.md
+  - .vibe/TASK_DAG.yaml
+  - apps/frontend/src/shared/components/DisclaimerBanner.tsx
+  - apps/frontend/src/visualization/KpiCard.tsx
+  - apps/frontend/src/visualization/RiskBadge.tsx
+  - apps/frontend/src/visualization/RoiCompareBarChart.tsx
+  - apps/frontend/src/visualization/DrawdownChart.tsx
+  - apps/frontend/src/visualization/EvBarChart.tsx
+  - apps/frontend/src/visualization/FeatureRadarChart.tsx
+  - apps/frontend/src/visualization/OddsMovementChart.tsx
+  - apps/frontend/src/visualization/HeatmapPanel.tsx
+  - apps/frontend/src/visualization/index.ts
+  - apps/frontend/src/visualization/chartTypes.ts
+  - apps/backend/src/module_contract.py
+  - apps/backend/src/services/model_transport.py
+  - apps/backend/src/services/model_gateway.py
+  - apps/backend/src/services/test_model_gateway.py
+  - scripts/features/build_travel_weather_features.py
+  - scripts/features/build_travel_features.py
+  - scripts/features/build_weather_features.py
+  - apps/frontend/src/core/ocrTicketMapping.ts
+  - apps/frontend/src/core/ocrTicketMapping.test.ts
+  - apps/frontend/src/pages/reviews/MatchReviewCards.tsx
+  - apps/frontend/src/pages/reviews/MatchReviewCards.css
+  - apps/frontend/src/pages/reviews/MatchReviewCards.test.tsx
+  - apps/frontend/src/core/apiClient.ts
   - apps/frontend/src/core/types.ts
-  - apps/frontend/src/pages/MatchDetailPage.tsx
-  - apps/frontend/src/shared/components/MatchDetailDrawer.tsx
-  - apps/frontend/src/features/tactics/
-  - docs/tactics-evidence-v3e.md
+  - apps/frontend/src/pages/ReviewsPage.test.tsx
+  - scripts/features/build_match_feature_snapshot.py
+  - scripts/features/build_player_season_profile.py
+  - scripts/features/build_team_season_profile.py
+  - scripts/bankroll.py
+  - scripts/recommendation_shutdown.py
+  - tests/test_computation/test_bankroll.py
+  - docs/27_多维预测增强开发阶段计划.md
+  - docs/31_Codex开发工作流与提示词模板.md
+  - scripts/jobs/collect_injury_data.py
+  - scripts/jobs/collect_lineup_data.py
+  - scripts/api_football_player.py
+  - scripts/jobs/train_random_forest_shadow.py
+  - scripts/jobs/train_adaboost_shadow.py
+  - scripts/jobs/train_extra_trees_shadow.py
+  - scripts/jobs/train_hist_gradient_boosting_shadow.py
+  - scripts/jobs/train_knn_shadow.py
+  - scripts/jobs/train_lda_shadow.py
+  - scripts/jobs/train_logistic_shadow.py
+  - scripts/jobs/train_mlp_shadow.py
+  - scripts/jobs/train_naive_bayes_shadow.py
+  - scripts/jobs/train_svm_shadow.py
+  - scripts/jobs/train_xgboost_shadow.py
+  - scripts/random_forest_shadow_model.py
+  - scripts/adaboost_shadow_model.py
+  - scripts/extra_trees_shadow_model.py
+  - scripts/hist_gradient_boosting_shadow_model.py
+  - scripts/knn_shadow_model.py
+  - scripts/lda_shadow_model.py
+  - scripts/logistic_shadow_model.py
+  - scripts/mlp_shadow_model.py
+  - scripts/naive_bayes_shadow_model.py
+  - scripts/svm_shadow_model.py
+  - scripts/xgboost_shadow_model.py
+  - scripts/shadow_training.py
+  - scripts/shadow_model_helpers.py
+  - scripts/business_time.py
+  - apps/frontend/src/core/router.ts
+  - apps/frontend/src/App.tsx
+  - apps/frontend/src/pages/ReviewsPage.tsx
+  - scripts/football_data_client.py
+  - scripts/sportmonks_client.py
+  - scripts/theodds_client.py
+  - configs/data_sources.yaml
+  - apps/frontend/src/app/ThemeContext.tsx
+  - apps/frontend/src/core/bettingRules.ts
+  - apps/frontend/src/theme/themeRegistry.ts
+  - apps/frontend/src/shared/constants.ts
+  - apps/frontend/src/shared/utils/teamLogo.ts
+  - apps/backend/src/services/model_provider_store.py
+  - scripts/features/populate_teams_leagues.py
+  - scripts/jobs/verify_backup.py
+  - scripts/features/build_lineup_strength.py
+  - scripts/features/build_motivation_score.py
+  - scripts/jobs/run_recommendation_candidate.py
+  - scripts/competition_storage.py
+  - README.md
+  - PROJECT_MANIFEST.md
+  - docs/README.md
+  - ops/codex/CODEX_SETUP.md
+  - ops/local/README_LOCAL_RUNTIME.md
+  - packages/shared/contracts/module_contract.md
+  - configs/README.md
+  - tests/agent_tests/test_agent_boundaries.md
+  - docs/13_运维部署与长期个人运行.md
+  - docs/14_测试验收清单.md
+  - docs/28_Codex多Agent总体架构.md
+  - docs/29_Codex Agent角色权限与职责边界.md
+  - docs/30_AI计算与定时数据采集任务编排.md
+  - docs/32_多Agent数据库与任务队列设计.md
+  - docs/33_自动测试代码审查与部署交付流程.md
+  - docs/34_Codex运行环境安全审计与回滚方案.md
+  - docs/36_模块化架构与可升级边界.md
+  - docs/37_后端模块拆分与接口契约.md
+  - docs/38_前端功能面板与插件化扩展方案.md
+  - docs/39_模块注册表_菜单权限与路由规范.md
+  - docs/40_插件生命周期与版本升级规范.md
+  - docs/41_模块化数据库迁移与兼容策略.md
+  - docs/42_多Agent按模块协作与Codex任务分配.md
+  - docs/46_模块化维护升级边界最终方案.md
+  - docs/50_Codex多Agent本地开发执行规范.md
+  - docs/52_Codex开发_DockerDesktop部署_依赖非锁版最终规范.md
+  - docs/54_本机运行与DockerDesktop弃用说明.md
+  - templates/codex/data_agent_prompt.md
+  - templates/codex/general_task_prompt.md
+  - templates/codex/model_agent_prompt.md
+  - templates/codex/module_upgrade_prompt.md
+  - templates/codex/qa_agent_prompt.md
+  - ops/docker-test/README.md
+  - .dockerignore
+  - compose.desktop-test.yml
+  - ops/docker-test/BASELINE.yaml
+  - ops/docker-test/Dockerfile.backend
+  - ops/docker-test/Dockerfile.frontend
+  - ops/docker-test/bootstrap-db.sh
+  - ops/docker-test/nginx.conf
+  - .vibe/releases/2026-10-16-cleanup.md
 forbidden_paths:
   - sql/
   - .env
   - apps/frontend/package.json
   - package-lock.json
-out_of_scope: "P08b 3D scene, P09 models, production export/deployment, financial logic, collection writes."
+out_of_scope: "Publish the approved cleanup and rule refresh with the existing isolated Docker probe. User permits existing regression tests and cleanup-related fixes. Deploy only GitHub code to local fqp-gh-main-202ac4. Preserve data volumes, rollback images, secrets and other Docker projects. No production access, new features, dependencies or migrations."
