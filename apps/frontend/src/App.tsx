@@ -1,4 +1,4 @@
-import { createRouter, navigate as routerNavigate, useRouter } from './core/router';
+import { createRouter, matchRoute, navigate as routerNavigate, useRouter } from './core/router';
 import { ThemeProvider } from './app/ThemeContext';
 import { LanguageProvider } from './app/LanguageContext';
 import { useLanguage } from './app/LanguageContext';
@@ -89,27 +89,15 @@ function PageOutlet() {
   const { currentPath, params } = useRouter();
   const { translate } = useLanguage();
 
-  // Find matching route
-  const routeParts = currentPath.split('/').filter(Boolean);
-  for (const route of routes) {
-    const rp = route.path.split('/').filter(Boolean);
-    if (rp.length !== routeParts.length) continue;
-    let match = true;
-    for (let i = 0; i < rp.length; i++) {
-      if (!rp[i].startsWith(':') && rp[i] !== routeParts[i]) {
-        match = false;
-        break;
-      }
-    }
-    if (match) {
-      return (
-        <Suspense fallback={<LoadingSpinner text={translate('加载页面...')} size="lg" />}>
-          <div key={currentPath} className="fqp-page-transition">
-            {route.render(params)}
-          </div>
-        </Suspense>
-      );
-    }
+  const route = matchRoute(currentPath, routes)?.route;
+  if (route) {
+    return (
+      <Suspense fallback={<LoadingSpinner text={translate('加载页面...')} size="lg" />}>
+        <div key={currentPath} className="fqp-page-transition">
+          {route.render(params)}
+        </div>
+      </Suspense>
+    );
   }
 
   // 404

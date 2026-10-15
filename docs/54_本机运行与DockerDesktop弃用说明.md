@@ -1,60 +1,25 @@
-# 唯一工作区与全本机运行规范
+# 54. 当前工作树与运行方式
 
-## 唯一事实来源
+文件名保留以兼容已有链接；当前规则不再禁止 Docker，也不限定某台电脑的绝对路径。
 
-- 唯一工作区：`/Users/fan/Downloads/足球量化`
-- 唯一远端：`https://github.com/fanxUP/fqp-football-quant.git`
-- 唯一启动入口：`./ops/local/manage_local_stack.sh start`
-- 唯一数据库：Homebrew PostgreSQL `127.0.0.1:5432/fqp`
-- 唯一代码版本边界：当前 Git 分支已提交并推送的 SHA
+## 保留规则
 
-旧 iCloud 副本和其他复制目录不得再修改、提交或启动服务。Docker Desktop 已从当前运行架构退役，项目不保留 Compose 启动入口。
+1. 操作前核对当前工作树、分支、提交和已有差异，不以旧个人路径识别版本。原因：项目可在服务器、原生工作树和容器测试目录中使用。
+2. 按选定环境使用对应入口，核实配置与数据位置。原因：各入口的环境文件、端口和进程管理方式不同。
+3. 同一数据库只保留一套有效调度链，赔率轮询按实际所有者执行。原因：重复启动 Scheduler/Worker 可能重复业务写入。
+4. 私密环境、密钥、上传文件和数据库持久数据不提交 Git。原因：它们含凭证或无法从源码重建的用户数据。
+5. 结构变更通过现有编号迁移执行，不修改已登记的迁移。原因：执行器校验历史 SHA-256，改旧文件会被拒绝。
+6. 全量备份按需要显式手动生成，验证归档和实际恢复分别记结果。原因：自动全量备份已移除，`verify_backup.py` 的恢复仅针对空的 `fqp_restore_*` 库。
+7. 发布前核对目标提交及验证证据，操作遵守对应入口的真实检查。原因：开发工作树与部署实例可能不是同一版本。
 
-## 本机端口
+## 入口与适用范围
 
-| 服务 | 地址 |
-| --- | --- |
-| 前端 | `http://127.0.0.1:8066` |
-| 后端 | `http://127.0.0.1:8006` |
-| PostgreSQL | `127.0.0.1:5432` |
-| Redis | `127.0.0.1:6379/0` |
+| 模式 | 入口 | 已知约束 |
+| --- | --- | --- |
+| macOS 原生 | `ops/local/manage_local_stack.sh` | Homebrew PostgreSQL 18、Redis、launchd；默认前端 8066、后端 8080 |
+| Ubuntu 发布 | `ops/server/deploy.sh` | 干净 main、目标为 origin/main；默认 plan，apply 要求发布证据；systemd/Nginx |
+| Docker Desktop | `compose.desktop-test.yml`、`ops/docker-test/README.md` | 本机隔离卷，回环端口 18066/18080；发布状态见 Git 记录及部署证据 |
 
-## 首次安装与启动
+原生入口校验数据库 `127.0.0.1:5432/fqp` 和 Redis `127.0.0.1:6379/0`；这些地址仅对该入口适用。服务器和容器地址按各自配置判断。
 
-```bash
-cp .env.local.example .env.local
-./ops/local/setup_local_latest_macos.sh
-./ops/local/manage_local_stack.sh start
-```
-
-`com.fqp.local-stack` 使用 launchd 长期运行，监管后端、前端、Worker 和 Scheduler。PostgreSQL 与 Redis 由 Homebrew services 管理。
-
-## 日常操作
-
-```bash
-./ops/local/manage_local_stack.sh status
-./ops/local/manage_local_stack.sh restart
-./ops/local/manage_local_stack.sh stop
-```
-
-数据库迁移：
-
-```bash
-./ops/local/apply_local_migrations.sh
-```
-
-守护进程日志位于 `.runtime/local-stack.launchd.out.log` 和 `.runtime/local-stack.launchd.err.log`。
-
-## 防止分岔和重复任务
-
-1. 修改前进入唯一工作区，运行 `git status --short --branch`，不复制项目目录。
-2. 每次提交包含一个完整可运行改动，测试通过后使用中文 Commit Message。
-3. Worker 是赔率高频调度的唯一所有者，Scheduler 使用本机心跳；不单独再启动第二套定时任务。
-4. `.env.local` 和 `data/` 不提交 Git。数据库结构变更通过 `sql/` 迁移管理。
-5. 新任务切换分支前，先确保当前分支已提交并推送，禁止靠复制目录保存未提交改动。
-
-## 数据保护
-
-- `data/backups/` 保留数据库全量备份和 SHA-256 校验文件。
-- 删除、升级或恢复前先生成备份，并在独立数据库中验证可恢复性。
-- 历史备份和恢复失败记录是审计证据，不为了让监控变绿而删除。
+原生管理命令见 [本机运行手册](../ops/local/README_LOCAL_RUNTIME.md)。本地 Docker 镜像、Git 提交和工作树修改是独立状态，文档更新不会重建已有镜像。

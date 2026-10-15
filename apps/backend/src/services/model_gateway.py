@@ -90,15 +90,3 @@ def invoke_agent_model(conn: Any, agent_code: str, prompt: str) -> ModelReply:
             model=model,
         )
     return ModelReply(provider_code, model, content[:12_000])
-
-
-def _http_error_detail(status: int) -> tuple[str, str]:
-    if status in {401, 403}:
-        return "MODEL_AUTH_FAILED", "模型服务商鉴权失败，请重新检查 API 密钥"
-    if status == 404:
-        return "MODEL_NOT_FOUND", "所选模型或服务地址不存在，请重新测试连接"
-    if status == 429:
-        return "MODEL_RATE_LIMITED", "模型服务商限额或频率受限，请稍后重试"
-    if status >= 500:
-        return "MODEL_PROVIDER_UNAVAILABLE", "模型服务商暂时不可用，请稍后重试"
-    return "MODEL_REQUEST_REJECTED", "模型服务商拒绝请求，请检查模型名称与参数"

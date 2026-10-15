@@ -92,10 +92,6 @@ export function getTicketPlayType(items: BetSlipItem[]): string {
   return playTypes.size === 1 ? items[0].play_type : 'hhgg';
 }
 
-export function getSelectionKey(matchId: number, playType: string): string {
-  return `${matchId}:${playType}`;
-}
-
 export function normalizePassType(mode: TicketMode, selectedPassType: string, matchCount: number): string {
   if (mode === 'single' || matchCount <= 1) return 'single';
   if (selectedPassType === 'single') return `${matchCount}x1`;
@@ -196,10 +192,6 @@ export function getPassTypeBetCount(items: BetSlipItem[], passType: string): num
     if (normalSelections < 0 || normalSelections > normalCount) return total;
     return total + weightedCombinations(normalSelections);
   }, 0);
-}
-
-export function getPassTypesBetCount(items: BetSlipItem[], passTypes: string[]): number {
-  return passTypes.reduce((sum, passType) => sum + getPassTypeBetCount(items, passType), 0);
 }
 
 export function getPassTypesGroupCount(matchCount: number, passTypes: string[]): number {

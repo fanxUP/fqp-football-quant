@@ -74,5 +74,3 @@ export const THEME_REGISTRY: ThemeDefinition[] = [
     preview: { background: '#10121C', surface: '#181C2B', primary: '#5B8CFF', secondary: '#FF8FB8' }, defaults: { ...defaults, radius: 'soft', cardStyle: 'glass', numberFont: 'display' },
   },
 ];
-
-export const THEME_BY_ID = new Map(THEME_REGISTRY.map((theme) => [theme.id, theme]));

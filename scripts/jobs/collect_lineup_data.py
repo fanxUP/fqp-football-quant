@@ -7,18 +7,18 @@ API-Football 免费额度。API fixture 返回的 lineup 是临场已确认阵�
 from __future__ import annotations
 
 import os
-from datetime import datetime, timedelta
+from datetime import timedelta
 from typing import Any
-from zoneinfo import ZoneInfo
 
 from apps.backend.src.db import get_db
 from scripts.agents.task_queue import finish_tracked_job, start_tracked_job
 from scripts.api_football_client import ApiFootballClient
+from scripts.api_football_player import get_or_create_player
+from scripts.business_time import business_now_naive as _business_now
+from scripts.business_time import business_now_naive_iso as _now
 from scripts.feature_storage import (
-    get_player_by_code,
     store_match_lineup_player,
     store_match_lineup_snapshot,
-    store_player,
 )
 from scripts.features.api_football_fixture_matcher import (
     find_matching_fixture,
@@ -27,47 +27,8 @@ from scripts.features.api_football_fixture_matcher import (
 )
 
 
-def _business_now() -> datetime:
-    timezone_name = os.getenv("FQP_TIMEZONE", "Asia/Shanghai")
-    return datetime.now(ZoneInfo(timezone_name)).replace(tzinfo=None)
-
-
-def _now() -> str:
-    return _business_now().isoformat(timespec="seconds")
-
-
-def _safe_height(value: Any) -> float | None:
-    if value in (None, ""):
-        return None
-    try:
-        return float(str(value).replace(" cm", "").strip())
-    except ValueError:
-        return None
-
-
 def _get_or_create_player(conn: Any, player_data: dict[str, Any]) -> int | None:
-    player_code = f"apifootball:{player_data.get('id')}"
-    existing = get_player_by_code(conn, player_code)
-    if existing:
-        return int(existing["id"])
-    return store_player(
-        conn,
-        {
-            "player_code": player_code,
-            "player_name_en": player_data.get("name", ""),
-            "player_name_cn": "",
-            "birth_date": (
-                player_data.get("birth", {}).get("date")
-                if isinstance(player_data.get("birth"), dict)
-                else None
-            ),
-            "nationality": player_data.get("nationality", ""),
-            "primary_position": player_data.get("pos") or player_data.get("position", ""),
-            "secondary_positions": [],
-            "preferred_foot": "",
-            "height_cm": _safe_height(player_data.get("height")),
-        },
-    )
+    return get_or_create_player(conn, player_data, prefer_short_position=True)
 
 
 def _process_lineup(

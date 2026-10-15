@@ -3,8 +3,6 @@ import { DEFAULT_APPEARANCE_SETTINGS } from '../theme/defaults';
 import { loadAppearanceSettings, saveAppearanceSettings } from '../theme/storage';
 import type { AppearanceSettings, ThemeId } from '../theme/types';
 
-export type Theme = ThemeId;
-
 interface ThemeContextValue {
   appearance: AppearanceSettings;
   theme: ThemeId;

@@ -2,7 +2,7 @@
 
 从 Open-Meteo 获取比赛日天气，计算天气影响评分，写入 match_weather_snapshots。
 
-核心公式（来自 build_travel_weather_features.py 骨架）：
+核心公式：
   - weather_impact_score: 0-100，综合降水/风速/温度/湿度影响
   - goal_expectation_adjustment: 对预期进球的调节量
 """
@@ -22,7 +22,7 @@ def _now() -> str:
 
 
 # ---------------------------------------------------------------------------
-# Weather impact computation (from skeleton build_travel_weather_features.py)
+# Weather impact computation
 # ---------------------------------------------------------------------------
 
 

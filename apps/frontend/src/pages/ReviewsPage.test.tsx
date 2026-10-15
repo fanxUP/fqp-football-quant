@@ -29,7 +29,6 @@ vi.mock('../shared/components/ChartCard', () => ({ default: () => <div /> }));
 vi.mock('../shared/components/Card', () => ({ default: ({ children }: { children: React.ReactNode }) => <section>{children}</section> }));
 vi.mock('./reviews/PlayTypeWinRateChart', () => ({ default: () => <div /> }));
 vi.mock('./reviews/RealProfitLossChart', () => ({ default: () => <div /> }));
-vi.mock('./reviews/MatchReviewCards', () => ({ default: () => <div>单场复盘</div> }));
 vi.mock('./reviews/ReportAutomationPanel', () => ({ default: () => <div /> }));
 vi.mock('./reviews/AutomaticReportArchivePanel', () => ({ default: () => <div>自动赛后报告</div> }));
 vi.mock('./reviews/ReportResearchSummary', () => ({ default: () => <div>量化复盘指标</div> }));

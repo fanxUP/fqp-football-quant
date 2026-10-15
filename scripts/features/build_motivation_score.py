@@ -1,7 +1,7 @@
 """战意/动力评分特征构建器。
 
 纯规则引擎，无需外部 API。从 season_standings_snapshots 读取积分榜，
-结合 motivation_rules.yaml 配置计算每支球队的战意评分。
+使用本模块 WEIGHTS 常量计算每支球队的战意评分。
 
 5-factor 加权公式:
   - objective_necessity (0.40): 保级/争冠/欧战需要的积分紧迫度
@@ -20,28 +20,12 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
-
-import yaml
 
 from scripts.feature_storage import (
     get_latest_standings,
     store_team_motivation_snapshot,
 )
-
-_CONFIG_PATH = Path(__file__).resolve().parent.parent.parent / "configs" / "motivation_rules.yaml"
-
-_weights: dict[str, Any] | None = None
-
-
-def _load_weights() -> dict[str, Any]:
-    global _weights
-    if _weights is None:
-        with open(_CONFIG_PATH) as f:
-            _weights = yaml.safe_load(f)
-    return _weights
-
 
 WEIGHTS = {
     "objective_necessity": 0.40,

@@ -1,95 +1,33 @@
 # 31. Codex 开发工作流与提示词模板
 
-## 1. 工作流原则
+## 开发规则
 
-所有 Codex 开发任务必须遵守：
+1. 修改前确认工作树、分支、基线及已有差异。原因：当前目录可能有用户未提交的工作，不能用清空工作区解决冲突。
+2. 先读相关实现、配置和数据结构，再确定修改范围。原因：历史方案中的路径、表和字段可能已被替换。
+3. 只修改本次任务需要的文件；确需扩展时先更新范围说明。原因：局部修复和清理应能独立审查与回退。
+4. 需要隔离改动时再建立分支或 worktree，并记录起点。原因：可隔离并行工作，同时避免每个任务都复制代码。
+5. 根据用户授权补充或运行相关验证，如实列出未执行项和失败项。原因：测试计划、静态检查和实际测试结果不能互相代替。
+6. 数据库变更说明目标环境、兼容性、数据保存和恢复方式。原因：当前迁移并非全部支持 down SQL，代码回滚也不恢复数据。
+7. 涉及项目高风险任务或发布时遵守实际审核与部署入口。原因：`human_review_gate.py` 和发布脚本已有明确检查，虚构额外 Agent 步骤不能增强这些检查。
+8. 完成后说明变化、影响、证据和适用的回退方式。原因：用户需要据此决定是否提交或部署。
 
-```text
-先读相关文档和数据字典
-再建立任务分支/worktree
-只修改任务范围内文件
-写代码同时写测试
-先本地测试后提交差异
-测试失败必须修复或说明原因
-涉及数据库迁移必须给回滚方案
-涉及推荐/资金/真实票据必须人工审核
-```
+## 模板入口
 
-## 2. 标准任务流程
+| 任务 | 模板 |
+| --- | --- |
+| 通用任务 | `templates/codex/general_task_prompt.md` |
+| 采集 | `templates/codex/data_agent_prompt.md` |
+| 模型 | `templates/codex/model_agent_prompt.md` |
+| QA | `templates/codex/qa_agent_prompt.md` |
+| 模块维护 | `templates/codex/module_upgrade_prompt.md` |
 
-```text
-1. Orchestrator 创建 agent_task
-2. 指定 owner_agent 与 scope
-3. Codex 读取 docs/sql/configs/tests
-4. Codex 生成代码或修改文件
-5. QA Agent 运行测试
-6. Doc Agent 同步文档
-7. Risk Agent 检查是否影响推荐/资金/合规
-8. 人工审核高风险任务
-9. 合并与部署
-10. 记录 agent_audit_logs
-```
+模板路径从仓库根目录解析。
 
-## 3. Codex 通用提示词模板
+## 模板使用规则
 
-```text
-你是 FQP 项目的 Codex 开发 Agent。
-本次任务：{task_title}
-任务边界：{scope}
-必须读取：{docs}
-必须修改：{files}
-不得修改：{forbidden_files}
-必须新增或更新测试：{tests}
-验收标准：{acceptance}
-安全要求：不得删除历史快照，不得绕过合规和风控，不得将模拟收益写成真实收益。
-完成后输出：变更摘要、测试结果、风险说明、后续建议。
-```
+1. 用实际目标、允许路径和验收条件填入模板变量。原因：模板占位符本身不会限制工具执行。
+2. Data Agent 按具体表结构记录来源与时间，不要求所有表都有相同列。原因：官方赔率、伤停、阵容等存储结构不同。
+3. Model Agent 按 `model_storage.py` 的实际字段及有效性规则构造结果。原因：旧的统一 probability/confidence/uncertainty 输出名与入库字段不一致。
+4. QA 按实际 CI 和授权范围报告，不以模板生成 PASS。原因：没有对应执行记录的结果不可作为质量证据。
 
-## 4. Data Agent 提示词
-
-```text
-你是 FQP Data Agent，负责官方赛程、赔率、赛果和第三方数据采集代码。
-要求：
-1. 官方赛程是唯一比赛清单来源。
-2. 官方赔率快照不可覆盖，只能新增。
-3. 官方源不可用时必须写入 data_source_health 并触发熔断。
-4. 第三方数据只能补充球队/球员/天气/伤停，不得新增官方赛程。
-5. 所有采集结果要写 raw_json、source_url、raw_hash、snapshot_time。
-```
-
-## 5. Model Agent 提示词
-
-```text
-你是 FQP Model Agent，负责 Poisson、Dixon-Coles、赔率去水、模型委员会、多维特征模型。
-要求：
-1. 任何模型预测必须绑定 odds_snapshot_id、feature_snapshot_id、model_version_id。
-2. 不允许使用赛后数据生成赛前预测。
-3. 输出必须包含 probability、confidence、uncertainty、ev。
-4. 新模型必须提供 backtest plan。
-5. 不允许直接发布推荐，只能写入 model_predictions 或 candidate_scores。
-```
-
-## 6. QA Agent 提示词
-
-```text
-你是 FQP QA Agent，负责测试和质量门禁。
-要求：
-1. 运行单元测试、集成测试、数据质量测试、回测防作弊测试。
-2. 扫描是否存在覆盖历史快照的写法。
-3. 扫描是否存在模拟收益冒充真实收益。
-4. 检查 SQL 迁移是否可回滚。
-5. 输出 pass/fail、失败位置、复现命令、修复建议。
-```
-
-## 7. 推荐开发任务拆分模板
-
-每个 Codex 任务必须拆成可合并的小任务：
-
-```text
-任务名称：实现 match_feature_snapshot 构建器
-输入：teams、players、lineups、weather、motivation、tournament_incentive
-输出：match_feature_snapshots
-修改文件：scripts/features/build_match_feature_snapshot.py
-新增测试：tests/test_match_feature_snapshot.py
-验收：给定样例数据能生成完整快照，缺失字段进入 uncertainty_score。
-```
+快照任务实现入口为 `scripts/jobs/run_feature_snapshot_build.py`；具体测试路径从当前仓库检索。

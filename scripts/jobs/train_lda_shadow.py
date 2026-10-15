@@ -2,84 +2,44 @@
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from typing import Any
-
-from psycopg2.extras import Json
 
 from apps.backend.src.db import get_db
 from scripts.agents.task_queue import finish_tracked_job, start_tracked_job
 from scripts.feature_importance import FEATURE_COLUMNS
 from scripts.lda_shadow_model import fit_temporal_holdout
 from scripts.prematch_feature_dataset import load_settled_pre_kickoff_dataset
+from scripts.shadow_training import (
+    run_tracked_shadow_training,
+    train_shadow_with_connection,
+)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 ARTIFACT_RELATIVE_PATH = "var/model_artifacts/lda_shadow_v1.joblib"
 
 
 def _run_with_connection(conn: Any) -> dict[str, Any]:
-    dataset = load_settled_pre_kickoff_dataset(conn)
-    if dataset is None:
-        return {"status": "skipped", "reason": "no_settled_pre_match_feature_rows"}
-    features, labels, dates = dataset
-    try:
-        classifier, profile = fit_temporal_holdout(features, labels, tuple(FEATURE_COLUMNS))
-    except ValueError as exc:
-        return {"status": "skipped", "reason": str(exc), "sample_count": len(labels)}
-
-    import joblib
-
-    artifact_path = PROJECT_ROOT / ARTIFACT_RELATIVE_PATH
-    artifact_path.parent.mkdir(parents=True, exist_ok=True)
-    temporary_path = artifact_path.with_name(f"{artifact_path.stem}.tmp{artifact_path.suffix}")
-    joblib.dump(classifier, temporary_path)
-    os.replace(temporary_path, artifact_path)
-    parameters = {
-        "rollout_mode": "shadow",
-        "artifact_path": ARTIFACT_RELATIVE_PATH,
-        "feature_columns": list(profile.feature_columns),
-        "training_matches": profile.training_matches,
-        "validation_matches": profile.validation_matches,
-        "validation_log_loss": round(profile.validation_log_loss, 8),
-        "evaluation_method": "temporal_holdout_v1",
-    }
-    with conn.cursor() as cur:
-        cur.execute(
-            """
-            UPDATE model_versions
-            SET parameters_json = %s, training_start_date = %s, training_end_date = %s
-            WHERE model_name = 'lda_shadow' AND is_active = true
-            """,
-            (Json(parameters), dates[0][:10], dates[-1][:10]),
-        )
-        if cur.rowcount != 1:
-            raise RuntimeError("LDA shadow model version is not available")
-    conn.commit()
-    return {
-        "status": "ok",
-        "rollout_mode": "shadow",
-        "training_matches": profile.training_matches,
-        "validation_matches": profile.validation_matches,
-        "validation_log_loss": round(profile.validation_log_loss, 6),
-    }
+    return train_shadow_with_connection(
+        conn,
+        load_dataset=load_settled_pre_kickoff_dataset,
+        fit_model=fit_temporal_holdout,
+        feature_columns=FEATURE_COLUMNS,
+        resolve_artifact=lambda: PROJECT_ROOT / ARTIFACT_RELATIVE_PATH,
+        artifact_relative_path=ARTIFACT_RELATIVE_PATH,
+        model_name="lda_shadow",
+        missing_message="LDA shadow model version is not available",
+    )
 
 
 def run(dry_run: bool = False) -> dict[str, Any]:
     """Train after settlement; this job cannot promote a decision model."""
-    if dry_run:
-        return {"status": "dry_run", "message": "LDA shadow training (dry run)"}
-    run_id = start_tracked_job(
-        "train_lda_shadow",
-        "model_agent",
-        {"rollout_mode": "shadow"},
-        dependencies=["feature_snapshot_build", "settle_tickets"],
+    return run_tracked_shadow_training(
+        dry_run,
+        job_name="train_lda_shadow",
+        dry_run_message="LDA shadow training (dry run)",
+        run_with_connection=_run_with_connection,
+        get_db=get_db,
+        start_job=start_tracked_job,
+        finish_job=finish_tracked_job,
     )
-    try:
-        with get_db() as conn:
-            result = _run_with_connection(conn)
-        finish_tracked_job(run_id, result["status"], {"result": result})
-        return result
-    except Exception as exc:
-        finish_tracked_job(run_id, "failed", error=str(exc))
-        raise

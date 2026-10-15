@@ -78,3 +78,120 @@ subtasks:
     title: 基于证据的战术示意场景
     acceptance: A08b
     depends_on: [P08a]
+
+current_cleanup:
+  date: '2026-10-16'
+  baseline_sha: 202ac4a9b5b3a0fde93d416832359e5e2de4171e
+  status: additional_listed_cleanup_complete_static_review_only
+  tasks:
+    - id: CLEAN-REFS
+      title: 复核 A1-A5 的引用与入口
+      depends_on: []
+    - id: CLEAN-A1-A5
+      title: 删除已列出的死代码及失效引用
+      acceptance: [CLEAN-A1, CLEAN-A2, CLEAN-A3, CLEAN-A4, CLEAN-A5]
+      depends_on: [CLEAN-REFS]
+    - id: CLEAN-AUDIT
+      title: 静态引用、差异与范围检查
+      acceptance: [CLEAN-SCOPE, CLEAN-CHECK]
+      depends_on: [CLEAN-A1-A5]
+    - id: CLEAN-B-REFS
+      title: 复核 B1/B2 的闭合引用与后端保留边界
+      depends_on: [CLEAN-AUDIT]
+    - id: CLEAN-B1-B2
+      title: 删除批准的 OCR 映射工具及未接入复盘组件
+      acceptance: [CLEAN-B1, CLEAN-B2]
+      depends_on: [CLEAN-B-REFS]
+    - id: CLEAN-B-AUDIT
+      title: 核对 B 批静态引用、保留代码与累计范围
+      acceptance: [CLEAN-B-PRESERVE, CLEAN-SCOPE, CLEAN-CHECK]
+      depends_on: [CLEAN-B1-B2]
+    - id: CLEAN-B35-REFS
+      title: 复核 B3/B5 无消费者及现用流水线边界
+      depends_on: [CLEAN-B-AUDIT]
+    - id: CLEAN-B3-B5
+      title: 删除批准的六个文件并修正两份文档路径
+      acceptance: [CLEAN-B3, CLEAN-B5]
+      depends_on: [CLEAN-B35-REFS]
+    - id: CLEAN-B35-AUDIT
+      title: 核对删除引用、保留文件和累计三十九文件范围
+      acceptance: [CLEAN-B35-PRESERVE, CLEAN-SCOPE, CLEAN-CHECK]
+      depends_on: [CLEAN-B3-B5]
+    - id: CLEAN-C3-REFS
+      title: 复核球员辅助函数与测试替换入口
+      depends_on: [CLEAN-B35-AUDIT]
+    - id: CLEAN-C3-PLAYERS
+      title: 按三文件清单共享球员辅助逻辑
+      acceptance: [CLEAN-C3-SHARED, CLEAN-C3-WRAPPERS]
+      depends_on: [CLEAN-C3-REFS]
+    - id: CLEAN-C3-AUDIT
+      title: 静态专门化对比、保留代码与范围复核
+      acceptance: [CLEAN-C3-PRESERVE, CLEAN-SCOPE, CLEAN-CHECK]
+      depends_on: [CLEAN-C3-PLAYERS]
+    - id: CLEAN-ALL-CONTROL
+      title: 按用户全部完成指令冻结剩余范围与预算
+      depends_on: [CLEAN-C3-AUDIT]
+    - id: CLEAN-B4-C3-TIME
+      title: 清理备用客户端并共享采集时钟
+      acceptance: [CLEAN-B4, CLEAN-C3-TIME]
+      depends_on: [CLEAN-ALL-CONTROL]
+    - id: CLEAN-C4-C5
+      title: 合并路由匹配和周月报框架
+      acceptance: [CLEAN-C4, CLEAN-C5]
+      depends_on: [CLEAN-ALL-CONTROL]
+    - id: CLEAN-C1-C2
+      title: 合并模型训练编排与公共推理校验
+      acceptance: [CLEAN-C1, CLEAN-C2]
+      depends_on: [CLEAN-ALL-CONTROL]
+    - id: CLEAN-ALL-AUDIT
+      title: 完成累计范围、语义保持与引用的静态复核
+      acceptance: [CLEAN-ALL-PRESERVE, CLEAN-SCOPE, CLEAN-CHECK]
+      depends_on: [CLEAN-B4-C3-TIME, CLEAN-C4-C5, CLEAN-C1-C2]
+    - id: CLEAN-D-CONTROL
+      title: 按再次全部完成指令冻结补充清理范围
+      depends_on: [CLEAN-ALL-AUDIT]
+    - id: CLEAN-D-DEAD
+      title: 删除列出的前端导出、私有函数及失效配置读取
+      acceptance: [CLEAN-D1, CLEAN-D2, CLEAN-D3]
+      depends_on: [CLEAN-D-CONTROL]
+    - id: CLEAN-D-DUPLICATES
+      title: 共享九模型加载、奖金上限及日期格式化
+      acceptance: [CLEAN-D4, CLEAN-D5]
+      depends_on: [CLEAN-D-CONTROL]
+    - id: CLEAN-D-AUDIT
+      title: 补充批次静态语义、引用、摘要与累计范围复核
+      acceptance: [CLEAN-D-PRESERVE, CLEAN-SCOPE, CLEAN-CHECK]
+      depends_on: [CLEAN-D-DEAD, CLEAN-D-DUPLICATES]
+
+rule_document_cleanup:
+  date: '2026-10-16'
+  baseline_sha: 202ac4a9b5b3a0fde93d416832359e5e2de4171e
+  status: complete_documentation_static_audit_only
+  tasks:
+    - id: RULES-READ
+      title: 对照现有实现核查规则依据
+      depends_on: []
+      acceptance: [RULES-EVIDENCE]
+    - id: RULES-EDIT
+      title: 删除失效要求并补充每条保留原因
+      depends_on: [RULES-READ]
+      acceptance: [RULES-REASONS, RULES-STALE]
+    - id: RULES-AUDIT
+      title: 检查文档引用、差异、范围与保留摘要
+      depends_on: [RULES-EDIT]
+      acceptance: [RULES-SCOPE, RULES-PRESERVE, RULES-CHECK]
+
+cleanup_local_release:
+  date: '2026-10-16'
+  baseline_sha: 202ac4a9b5b3a0fde93d416832359e5e2de4171e
+  status: local_checks_complete_github_ci_and_deployment_pending
+  tasks:
+    - id: RELEASE-CHECK
+      depends_on: []
+      acceptance: [RELEASE-SCOPE, RELEASE-CHECK]
+    - id: RELEASE-GIT
+      depends_on: [RELEASE-CHECK]
+      acceptance: [RELEASE-GIT]
+    - id: RELEASE-LOCAL
+      depends_on: [RELEASE-GIT]
+      acceptance: [RELEASE-LOCAL]

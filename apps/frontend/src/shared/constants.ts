@@ -163,10 +163,6 @@ export const SOURCE_TYPE_LABELS: Record<string, string> = {
   agent: '智能代理',
 };
 
-export function sourceTypeLabel(code: string): string {
-  return SOURCE_TYPE_LABELS[code] || code;
-}
-
 // ── Recommendation strategy pools ──────────────────────────────
 
 export const STRATEGY_POOL_LABELS: Record<string, string> = {

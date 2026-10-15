@@ -96,11 +96,6 @@ def _create_backup(backup_dir: str) -> tuple[str | None, int, str | None]:
         return None, 0, f"Full backup failed ({type(exc).__name__}); inspect private pg_dump logs"
 
 
-def _find_latest_backup(backup_dir: str) -> str | None:
-    files = list(Path(backup_dir).glob("fqp_*.dump"))
-    return str(max(files, key=lambda path: path.stat().st_mtime)) if files else None
-
-
 def _verify_backup_integrity(filepath: str) -> dict[str, Any]:
     path = Path(filepath)
     result: dict[str, Any] = {

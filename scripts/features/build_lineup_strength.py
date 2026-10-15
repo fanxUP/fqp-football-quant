@@ -1,6 +1,6 @@
 """首发阵容强度特征构建器。
 
-从 match_lineup_snapshots 读取阵容数据，结合 lineup_strength_weights.yaml
+从 match_lineup_snapshots 读取阵容数据，使用本模块 WEIGHTS 常量
 计算首发强度、轮换风险等指标。
 
 输出字段（写入 match_feature_snapshots）:
@@ -13,27 +13,9 @@
 from __future__ import annotations
 
 import math
-from pathlib import Path
 from typing import Any
 
-import yaml
-
 from scripts.feature_storage import get_lineup_for_match
-
-_CONFIG_PATH = (
-    Path(__file__).resolve().parent.parent.parent / "configs" / "lineup_strength_weights.yaml"
-)
-
-_weights: dict[str, Any] | None = None
-
-
-def _load_weights() -> dict[str, Any]:
-    global _weights
-    if _weights is None:
-        with open(_CONFIG_PATH) as f:
-            _weights = yaml.safe_load(f)
-    return _weights
-
 
 WEIGHTS: dict[str, float] = {
     "starting_11_market_value_score": 0.25,
