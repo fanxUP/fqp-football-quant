@@ -607,7 +607,28 @@
     "full_p10_acceptance": false,
     "engine_available": false,
     "evidence_dir": "/Volumes/Nas/FQP/plans/v3i-resume-20261016",
-    "native_endurance": "pending_independent_540_plus_7200_plus_600",
+    "native_endurance": {
+      "closed_at": "2026-10-16T04:43:22.502124+00:00",
+      "task_status": "closed_by_user_waiver",
+      "test_result": "interrupted_by_user_during_warmup",
+      "full_p10_passed": false,
+      "user_instruction": "直接标记为完成，如果以后我发现有问题再来重新解决",
+      "actual_seconds": 117.63,
+      "warmup_cycles": 125,
+      "formal_cycles": 0,
+      "formal_seconds": 0,
+      "idle_seconds": 0,
+      "page_errors": 0,
+      "http_writes": 0,
+      "csp_blocks": 0,
+      "runner_exit_code": 1,
+      "guardian_observed_runner_exit_code": 1,
+      "owned_processes_left": [],
+      "stable_source_dist_inputs": true,
+      "automation": "PAUSED",
+      "remaining_risk": "Long-duration JS/native/GPU allocation plateau and prior transient timeouts remain unverified/unattributed. User accepts addressing discovered issues later.",
+      "release_requirement_change": "The user waived endurance only; fresh exact-commit CI and deployment/recovery checks remain required."
+    },
     "gpu_interactions": {
       "model-gpu-capture": {
         "step": "model-gpu-capture",
@@ -735,6 +756,7 @@
     },
     "preserved_failure": {
       "gpu_interactions_initial": "theme dataset wait timeout; not reproduced in four unchanged assertion cases; no application fix or root cause claimed"
-    }
+    },
+    "release_readiness": "user_waived_endurance; current regular regression and source review complete; exact candidate CI and deployment verification pending"
   }
 }
