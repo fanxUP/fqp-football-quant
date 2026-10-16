@@ -1,0 +1,34 @@
+.mr-panel { padding: 20px; border: 1px solid var(--fqp-border); border-radius: 14px; background: var(--fqp-panel); margin-bottom: 24px; min-width: 0; }
+.mr-panel h2 { font-size: 22px; margin: 6px 0 12px; }
+.mr-panel h3 { font-size: 16px; margin: 16px 0 12px; }
+.mr-panel p { color: var(--fqp-text-muted); line-height: 1.6; overflow-wrap: anywhere; }
+.mr-panel button, .mr-panel select { min-height: 44px; border: 1px solid var(--fqp-border); border-radius: 8px; background: var(--fqp-panel-2); color: var(--fqp-text); padding: 8px 12px; font: inherit; cursor: pointer; max-width: 100%; }
+.mr-panel button:hover { border-color: var(--fqp-accent); }
+.mr-panel button[aria-pressed=true] { border-color: var(--fqp-accent); box-shadow: inset 3px 0 var(--fqp-accent); }
+.mr-panel button:focus-visible, .mr-panel select:focus-visible { outline: 2px solid var(--fqp-accent); outline-offset: 3px; }
+.mr-panel button:disabled { opacity: .55; cursor: default; }
+.mr-panel label { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.mr-modes, .mr-controls, .mr-nodes, .mr-read-status { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 8px 0; }
+.mr-read-status { font-size: 13px; }
+.mr-read-status p { flex-basis: 100%; margin: 0; }
+.mr-layout { display: grid; grid-template-columns: minmax(220px, 1fr) minmax(0, 2fr); gap: 20px; }
+.mr-layout > div { min-width: 0; }
+.mr-list { display: grid; gap: 8px; }
+.mr-list button { display: grid; gap: 5px; text-align: left; overflow-wrap: anywhere; }
+.mr-list small, .mr-list span { color: var(--fqp-text-muted); }
+.mr-legend { font-size: 13px; }
+.mr-canvas { height: clamp(320px, 38vw, 500px); background: var(--fqp-bg); border: 1px solid var(--fqp-border); border-radius: 10px; overflow: hidden; }
+.mr-panel .cc-scene-fallback { padding: 20px; min-height: 100px; background: var(--fqp-bg); border-radius: 10px; }
+.mr-panel .cc-scene-mode { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; }
+.mr-selection { margin-top: 12px; padding: 14px; border: 1px solid var(--fqp-accent); border-radius: 10px; overflow-wrap: anywhere; }
+.mr-selection p { margin-bottom: 0; }
+.mr-panel table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.mr-panel td, .mr-panel th { padding: 10px 6px; border-bottom: 1px solid var(--fqp-border); text-align: left; overflow-wrap: anywhere; }
+.mr-comparison { border-top: 1px solid var(--fqp-border); margin-top: 20px; }
+.mr-table-scroll { overflow: auto; }
+@media (max-width: 850px) { .mr-layout { grid-template-columns: minmax(0,1fr); } .mr-panel { padding: 14px; } .mr-canvas { height: 340px; } }
+
+.mr-panel a { color: var(--fqp-text); text-decoration: underline; text-underline-offset: 4px; }
+.mr-panel a:focus-visible { outline: 2px solid var(--fqp-accent); outline-offset: 3px; }
+/* Keep the host grid within the available width so its existing metric tables scroll locally. */
+.models-page:has(> .mr-panel) { grid-template-columns: minmax(0, 1fr); }

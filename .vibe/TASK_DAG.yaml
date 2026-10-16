@@ -195,3 +195,24 @@ cleanup_local_release:
     - id: RELEASE-LOCAL
       depends_on: [RELEASE-GIT]
       acceptance: [RELEASE-LOCAL]
+
+v3i_resume_20261016:
+  baseline: 7927b43880464ef6899fb2e559e4769216b143dc
+  sequence:
+    - {id: R1, title: Exact recovery and three-way integration, depends_on: []}
+    - {id: R2, title: Fresh regression and build, depends_on: [R1]}
+    - {id: R3, title: CDP timeout diagnosis and GPU interaction, depends_on: [R1]}
+    - {id: R4, title: Independent native endurance and review, depends_on: [R2, R3]}
+    - {id: R5, title: Exact commit CI and merge, depends_on: [R4]}
+    - {id: R6, title: GitHub main deploy and rollback checks, depends_on: [R5]}
+
+  endurance_decision:
+    status: closed_by_user_waiver
+    raw_result: interrupted_by_user_during_warmup
+    full_p10_passed: false
+    observed_seconds: 117.63
+    observed_warmup_cycles: 125
+    formal_seconds: 0
+    idle_seconds: 0
+    release_dependency: regular_checks_and_independent_review_complete_with_user_endurance_waiver
+    remaining: [exact_candidate_ci_and_merge, deployment_and_rollback_verification]

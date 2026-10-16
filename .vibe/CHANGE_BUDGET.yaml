@@ -1,9 +1,9 @@
-version: 16
+version: 17
 mode: STRICT
-max_changed_files: 127
+max_changed_files: 32
 max_new_files: 12
 max_dependency_additions: 0
 max_migration_files: 0
-max_public_api_changes: 0
-max_regression_tests: 0
-scope_note: "User authorized submission, local Docker deployment, existing tests and cleanup-related fixes. Add seven existing Docker materials and one release record to cumulative 119 paths. Git-new files: three shared modules, eight Docker materials and one release record. No new tests, features, dependencies, migrations or public APIs."
+max_public_api_changes: 1
+max_regression_tests: 85
+scope_note: "Restore the 24 source/test/doc paths from the verified prior candidate and refresh eight existing controls. Regression budget includes restored historical cases; no unrelated feature work. External diagnostic scripts/evidence stay outside repo."
