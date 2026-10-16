@@ -1,9 +1,10 @@
-version: 17
+version: 18
 mode: STRICT
-max_changed_files: 32
-max_new_files: 12
+max_changed_files: 17
+max_new_files: 2
 max_dependency_additions: 0
 max_migration_files: 0
 max_public_api_changes: 1
-max_regression_tests: 85
-scope_note: "Restore the 24 source/test/doc paths from the verified prior candidate and refresh eight existing controls. Regression budget includes restored historical cases; no unrelated feature work. External diagnostic scripts/evidence stay outside repo."
+max_regression_tests: 20
+scope_note: "Homepage exact count and independent request completion only; preserve default prediction API and financial/model semantics. Evidence stays outside repo."
+budget_revision_reason: "Independent review found the composite AiPoolDashboard still gates model display on unrelated counts. Include its nullable count rendering and regression tests to satisfy independent-loading acceptance; no extra feature scope."

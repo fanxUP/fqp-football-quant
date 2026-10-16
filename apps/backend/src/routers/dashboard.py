@@ -37,6 +37,26 @@ def _empty(title: str, reason: str = "暂无数据") -> dict:
 
 
 # ---------------------------------------------------------------------------
+# GET /api/dashboard/prediction-count — exact homepage count without details
+# ---------------------------------------------------------------------------
+@router.get("/api/dashboard/prediction-count")
+def get_prediction_count() -> dict[str, int]:
+    """Count the same eligible rows as the default prediction summary."""
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """SELECT COUNT(*)
+                   FROM model_predictions mp
+                   JOIN model_versions mv ON mv.id = mp.model_version_id
+                   JOIN official_matches m ON m.id = mp.match_id
+                   WHERE mp.validation_status = 'valid'
+                     AND mp.predict_time < m.kickoff_time"""
+            )
+            row = cur.fetchone()
+    return {"total": int(row[0])}
+
+
+# ---------------------------------------------------------------------------
 # GET /api/dashboard/today — KPI summary for homepage
 # ---------------------------------------------------------------------------
 @router.get("/api/dashboard/today")

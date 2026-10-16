@@ -1,8 +1,8 @@
-version: 17
+version: 18
 mode: STRICT
-base_revision: 7927b43880464ef6899fb2e559e4769216b143dc
-upstream_main: 7927b43880464ef6899fb2e559e4769216b143dc
-branch: feat/v3i-endurance-20261016
-phase: V3i_resume_and_acceptance
+base_revision: 5abb3d9fdc0e66268cc5e3d03bb1fa13edfee2c5
+upstream_main: 5abb3d9fdc0e66268cc5e3d03bb1fa13edfee2c5
+branch: perf/dashboard-loading-20261016
+phase: dashboard_loading
 production_writes: false
 production_data_export: false

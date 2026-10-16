@@ -1,36 +1,148 @@
 {
-  "base_revision": "795c6c6c3bc15801e34a069e5f41bcd590a163ed",
-  "upstream_revision_last_fetched": "74ebae2b11a3abda78abe851d95d58ee418e742c",
-  "phase": "P08a",
+  "base_revision": "5abb3d9fdc0e66268cc5e3d03bb1fa13edfee2c5",
+  "upstream_revision_last_fetched": "5abb3d9fdc0e66268cc5e3d03bb1fa13edfee2c5",
+  "phase": "dashboard_loading_local_verified",
   "source_paths": [
-    "apps/backend/src/routers/teams.py",
-    "tests/test_api/test_teams.py",
-    "apps/frontend/src/core/types.ts",
-    "apps/frontend/src/pages/MatchDetailPage.tsx",
-    "apps/frontend/src/shared/components/MatchDetailDrawer.tsx",
-    "apps/frontend/src/features/tactics/RosterEvidencePanel.css",
-    "apps/frontend/src/features/tactics/RosterEvidencePanel.test.tsx",
-    "apps/frontend/src/features/tactics/RosterEvidencePanel.tsx"
+    "apps/backend/src/routers/dashboard.py",
+    "apps/frontend/src/core/apiClient.test.ts",
+    "apps/frontend/src/core/apiClient.ts",
+    "apps/frontend/src/pages/DashboardPage.test.tsx",
+    "apps/frontend/src/pages/DashboardPage.tsx",
+    "apps/frontend/src/visualization/AiPoolDashboard.test.ts",
+    "apps/frontend/src/visualization/AiPoolDashboard.tsx",
+    "tests/test_api/test_dashboard_router.py",
+    "tests/test_sql/test_dashboard_prediction_count.py"
   ],
-  "source_sha256": "154f1eb74234cd594077adcec6205182360ad8583d1d7b942bd4df0dfdebe764",
+  "source_sha256": "d3ef8dc14f5edeae2b23a8da7d0ab6da49c197eb0fe48e7e83cabd3b82e685ad",
   "commands": [
     {
-      "name": "focused",
+      "step": "frontend-complete",
       "command": [
         "npm",
         "--prefix",
         "apps/frontend",
         "test",
         "--",
-        "src/features/tactics/RosterEvidencePanel.test.tsx"
+        "--maxWorkers=3"
       ],
-      "start_utc": "2026-10-09T14:54:07.831228+00:00",
-      "end_utc": "2026-10-09T14:54:11.440723+00:00",
+      "head": "5abb3d9fdc0e66268cc5e3d03bb1fa13edfee2c5",
+      "started_at": "2026-10-16T05:52:13.759983+00:00",
+      "source_sha256_start": "d3ef8dc14f5edeae2b23a8da7d0ab6da49c197eb0fe48e7e83cabd3b82e685ad",
       "exit_code": 0,
-      "log": "/private/tmp/fqp-v3e-focused-final.log"
+      "finished_at": "2026-10-16T05:53:25.202987+00:00",
+      "seconds": 71.444,
+      "source_sha256_end": "d3ef8dc14f5edeae2b23a8da7d0ab6da49c197eb0fe48e7e83cabd3b82e685ad",
+      "log": "/Volumes/Nas/FQP/plans/dashboard-loading-20261016/frontend-complete.log"
     },
     {
-      "name": "typecheck",
+      "step": "backend-complete",
+      "command": [
+        "docker",
+        "run",
+        "--rm",
+        "--name",
+        "fqp-dashboard-pytest",
+        "--cpus",
+        "3",
+        "--network",
+        "fqp-dashboard-check-20261016",
+        "--env-file",
+        "/Users/estefan-macworkstation/.codex/workspaces/.private/fqp-dashboard-20261016/test.env",
+        "-v",
+        "/Users/estefan-macworkstation/.codex/workspaces/fqp-dashboard-20261016:/source:ro",
+        "-v",
+        "/Volumes/Nas/FQP/plans/dashboard-loading-20261016:/evidence:ro",
+        "-v",
+        "/Users/estefan-macworkstation/.codex/workspaces/fqp-v3i-20261016/apps/model-bridge/node_modules:/bridge/node_modules:ro",
+        "-w",
+        "/tmp",
+        "fqp-cleanup-quality:20261016",
+        "python",
+        "/evidence/backend-check.py"
+      ],
+      "head": "5abb3d9fdc0e66268cc5e3d03bb1fa13edfee2c5",
+      "started_at": "2026-10-16T05:52:13.755391+00:00",
+      "source_sha256_start": "d3ef8dc14f5edeae2b23a8da7d0ab6da49c197eb0fe48e7e83cabd3b82e685ad",
+      "exit_code": 0,
+      "finished_at": "2026-10-16T05:53:21.186864+00:00",
+      "seconds": 67.433,
+      "source_sha256_end": "d3ef8dc14f5edeae2b23a8da7d0ab6da49c197eb0fe48e7e83cabd3b82e685ad",
+      "log": "/Volumes/Nas/FQP/plans/dashboard-loading-20261016/backend-complete.log"
+    },
+    {
+      "step": "backend-services-complete",
+      "command": [
+        "docker",
+        "run",
+        "--rm",
+        "--name",
+        "fqp-dashboard-service-tests",
+        "--cpus",
+        "2",
+        "--network",
+        "fqp-dashboard-check-20261016",
+        "--env-file",
+        "/Users/estefan-macworkstation/.codex/workspaces/.private/fqp-dashboard-20261016/test.env",
+        "-v",
+        "/Users/estefan-macworkstation/.codex/workspaces/fqp-dashboard-20261016:/source:ro",
+        "-v",
+        "/Volumes/Nas/FQP/plans/dashboard-loading-20261016:/evidence:ro",
+        "-v",
+        "/Users/estefan-macworkstation/.codex/workspaces/fqp-v3i-20261016/apps/model-bridge/node_modules:/bridge/node_modules:ro",
+        "-w",
+        "/tmp",
+        "fqp-cleanup-quality:20261016",
+        "python",
+        "/evidence/backend-check.py",
+        "apps/backend/src",
+        "-m",
+        "not slow"
+      ],
+      "head": "5abb3d9fdc0e66268cc5e3d03bb1fa13edfee2c5",
+      "started_at": "2026-10-16T05:54:40.831937+00:00",
+      "source_sha256_start": "d3ef8dc14f5edeae2b23a8da7d0ab6da49c197eb0fe48e7e83cabd3b82e685ad",
+      "exit_code": 0,
+      "finished_at": "2026-10-16T05:54:53.163533+00:00",
+      "seconds": 12.332,
+      "source_sha256_end": "d3ef8dc14f5edeae2b23a8da7d0ab6da49c197eb0fe48e7e83cabd3b82e685ad",
+      "log": "/Volumes/Nas/FQP/plans/dashboard-loading-20261016/backend-services-complete.log"
+    },
+    {
+      "step": "bridge-complete",
+      "command": [
+        "docker",
+        "run",
+        "--rm",
+        "--name",
+        "fqp-dashboard-bridge-check",
+        "--cpus",
+        "2",
+        "--network",
+        "none",
+        "-v",
+        "/Users/estefan-macworkstation/.codex/workspaces/fqp-dashboard-20261016:/source:ro",
+        "-v",
+        "/Volumes/Nas/FQP/plans/dashboard-loading-20261016:/evidence:ro",
+        "-v",
+        "/Users/estefan-macworkstation/.codex/workspaces/fqp-v3i-20261016/apps/model-bridge/node_modules:/bridge/node_modules:ro",
+        "-w",
+        "/tmp",
+        "fqp-cleanup-quality:20261016",
+        "python",
+        "/evidence/backend-check.py",
+        "bridge"
+      ],
+      "head": "5abb3d9fdc0e66268cc5e3d03bb1fa13edfee2c5",
+      "started_at": "2026-10-16T05:54:40.831890+00:00",
+      "source_sha256_start": "d3ef8dc14f5edeae2b23a8da7d0ab6da49c197eb0fe48e7e83cabd3b82e685ad",
+      "exit_code": 0,
+      "finished_at": "2026-10-16T05:54:50.241740+00:00",
+      "seconds": 9.41,
+      "source_sha256_end": "d3ef8dc14f5edeae2b23a8da7d0ab6da49c197eb0fe48e7e83cabd3b82e685ad",
+      "log": "/Volumes/Nas/FQP/plans/dashboard-loading-20261016/bridge-complete.log"
+    },
+    {
+      "step": "types-complete",
       "command": [
         "npm",
         "--prefix",
@@ -38,26 +150,17 @@
         "run",
         "typecheck"
       ],
-      "start_utc": "2026-10-09T14:54:11.441049+00:00",
-      "end_utc": "2026-10-09T14:54:25.740337+00:00",
+      "head": "5abb3d9fdc0e66268cc5e3d03bb1fa13edfee2c5",
+      "started_at": "2026-10-16T05:52:13.779494+00:00",
+      "source_sha256_start": "d3ef8dc14f5edeae2b23a8da7d0ab6da49c197eb0fe48e7e83cabd3b82e685ad",
       "exit_code": 0,
-      "log": "/private/tmp/fqp-v3e-typecheck-final.log"
+      "finished_at": "2026-10-16T05:52:35.924839+00:00",
+      "seconds": 22.146,
+      "source_sha256_end": "d3ef8dc14f5edeae2b23a8da7d0ab6da49c197eb0fe48e7e83cabd3b82e685ad",
+      "log": "/Volumes/Nas/FQP/plans/dashboard-loading-20261016/types-complete.log"
     },
     {
-      "name": "frontend-tests",
-      "command": [
-        "npm",
-        "--prefix",
-        "apps/frontend",
-        "test"
-      ],
-      "start_utc": "2026-10-09T14:54:25.740514+00:00",
-      "end_utc": "2026-10-09T14:55:47.498768+00:00",
-      "exit_code": 0,
-      "log": "/private/tmp/fqp-v3e-frontend-tests-final.log"
-    },
-    {
-      "name": "build",
+      "step": "build-complete",
       "command": [
         "npm",
         "--prefix",
@@ -65,50 +168,72 @@
         "run",
         "build"
       ],
-      "start_utc": "2026-10-09T14:55:47.498948+00:00",
-      "end_utc": "2026-10-09T14:55:50.023498+00:00",
+      "head": "5abb3d9fdc0e66268cc5e3d03bb1fa13edfee2c5",
+      "started_at": "2026-10-16T05:52:13.735287+00:00",
+      "source_sha256_start": "d3ef8dc14f5edeae2b23a8da7d0ab6da49c197eb0fe48e7e83cabd3b82e685ad",
       "exit_code": 0,
-      "log": "/private/tmp/fqp-v3e-build-final.log"
+      "finished_at": "2026-10-16T05:52:17.256125+00:00",
+      "seconds": 3.521,
+      "source_sha256_end": "d3ef8dc14f5edeae2b23a8da7d0ab6da49c197eb0fe48e7e83cabd3b82e685ad",
+      "log": "/Volumes/Nas/FQP/plans/dashboard-loading-20261016/build-complete.log"
     },
     {
-      "name": "backend",
+      "step": "static-complete",
       "command": [
-        "/private/tmp/fqp-pi-venv/bin/python",
-        "-m",
-        "pytest",
-        "tests/test_api/test_teams.py",
-        "-q"
+        "docker",
+        "run",
+        "--rm",
+        "--name",
+        "fqp-dashboard-static",
+        "--cpus",
+        "2",
+        "-v",
+        "/Users/estefan-macworkstation/.codex/workspaces/fqp-dashboard-20261016:/work:ro",
+        "-w",
+        "/work",
+        "fqp-cleanup-quality:20261016",
+        "sh",
+        "-c",
+        "ruff check --cache-dir=/tmp/ruff-dashboard . && ruff format --check --cache-dir=/tmp/ruff-dashboard . && mypy apps/backend/src scripts --explicit-package-bases --cache-dir=/tmp/mypy-dashboard"
       ],
-      "start_utc": "2026-10-09T14:55:50.023622+00:00",
-      "end_utc": "2026-10-09T14:55:52.570618+00:00",
+      "head": "5abb3d9fdc0e66268cc5e3d03bb1fa13edfee2c5",
+      "started_at": "2026-10-16T05:54:40.881600+00:00",
+      "source_sha256_start": "d3ef8dc14f5edeae2b23a8da7d0ab6da49c197eb0fe48e7e83cabd3b82e685ad",
       "exit_code": 0,
-      "log": "/private/tmp/fqp-v3e-backend-final.log"
+      "finished_at": "2026-10-16T05:55:08.795566+00:00",
+      "seconds": 28.029,
+      "source_sha256_end": "d3ef8dc14f5edeae2b23a8da7d0ab6da49c197eb0fe48e7e83cabd3b82e685ad",
+      "log": "/Volumes/Nas/FQP/plans/dashboard-loading-20261016/static-complete.log"
     },
     {
-      "name": "ruff",
+      "step": "browser-loading",
       "command": [
-        "/private/tmp/fqp-pi-venv/bin/ruff",
-        "check",
-        "apps/backend/src/routers/teams.py",
-        "tests/test_api/test_teams.py"
+        "python3",
+        "/Volumes/Nas/FQP/plans/dashboard-loading-20261016/browser-loading.py"
       ],
-      "start_utc": "2026-10-09T14:55:52.570722+00:00",
-      "end_utc": "2026-10-09T14:55:52.690808+00:00",
+      "head": "5abb3d9fdc0e66268cc5e3d03bb1fa13edfee2c5",
+      "started_at": "2026-10-16T05:52:47.107004+00:00",
+      "source_sha256_start": "d3ef8dc14f5edeae2b23a8da7d0ab6da49c197eb0fe48e7e83cabd3b82e685ad",
       "exit_code": 0,
-      "log": "/private/tmp/fqp-v3e-ruff-final.log"
+      "finished_at": "2026-10-16T05:52:58.499649+00:00",
+      "seconds": 11.392,
+      "source_sha256_end": "d3ef8dc14f5edeae2b23a8da7d0ab6da49c197eb0fe48e7e83cabd3b82e685ad",
+      "log": "/Volumes/Nas/FQP/plans/dashboard-loading-20261016/browser-loading.log"
     },
     {
-      "name": "mypy",
+      "step": "scope-security",
       "command": [
-        "/private/tmp/fqp-pi-venv/bin/python",
-        "-m",
-        "mypy",
-        "apps/backend/src/routers/teams.py"
+        "python3",
+        "/Volumes/Nas/FQP/plans/dashboard-loading-20261016/audit.py"
       ],
-      "start_utc": "2026-10-09T14:55:52.690935+00:00",
-      "end_utc": "2026-10-09T14:55:53.180410+00:00",
+      "head": "5abb3d9fdc0e66268cc5e3d03bb1fa13edfee2c5",
+      "started_at": "2026-10-16T05:56:00.629297+00:00",
+      "source_sha256_start": "d3ef8dc14f5edeae2b23a8da7d0ab6da49c197eb0fe48e7e83cabd3b82e685ad",
       "exit_code": 0,
-      "log": "/private/tmp/fqp-v3e-mypy-final.log"
+      "finished_at": "2026-10-16T05:56:01.258691+00:00",
+      "seconds": 0.629,
+      "source_sha256_end": "d3ef8dc14f5edeae2b23a8da7d0ab6da49c197eb0fe48e7e83cabd3b82e685ad",
+      "log": "/Volumes/Nas/FQP/plans/dashboard-loading-20261016/scope-security.log"
     }
   ],
   "frontend": {
@@ -758,5 +883,23 @@
       "gpu_interactions_initial": "theme dataset wait timeout; not reproduced in four unchanged assertion cases; no application fix or root cause claimed"
     },
     "release_readiness": "user_waived_endurance; current regular regression and source review complete; exact candidate CI and deployment verification pending"
+  },
+  "dashboard_loading_20261016": {
+    "base_revision": "5abb3d9fdc0e66268cc5e3d03bb1fa13edfee2c5",
+    "status": "implemented_verified_local",
+    "evidence_directory": "/Volumes/Nas/FQP/plans/dashboard-loading-20261016",
+    "production_read_only": true,
+    "production_deployed": false,
+    "canonical_engine": "not found; direct checks will be recorded",
+    "source_sha256": "d3ef8dc14f5edeae2b23a8da7d0ab6da49c197eb0fe48e7e83cabd3b82e685ad",
+    "regression_passed": 1537,
+    "new_regressions": 20,
+    "changed_files": 17,
+    "independent_review": "PASS",
+    "github_pushed": false,
+    "final_report": "/Volumes/Nas/FQP/plans/dashboard-loading-20261016/FINAL.md",
+    "publication_authorized": true,
+    "release_status": "authorized_pending_exact_CI_and_rollout",
+    "rollback_revision": "5abb3d9fdc0e66268cc5e3d03bb1fa13edfee2c5"
   }
 }
