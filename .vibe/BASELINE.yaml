@@ -1,8 +1,8 @@
-version: 7
+version: 17
 mode: STRICT
-base_revision: 795c6c6c3bc15801e34a069e5f41bcd590a163ed
-upstream_main: 74ebae2b11a3abda78abe851d95d58ee418e742c
-branch: feat/3d-command-center-v1
-phase: V3e_P08a_roster_evidence
+base_revision: 7927b43880464ef6899fb2e559e4769216b143dc
+upstream_main: 7927b43880464ef6899fb2e559e4769216b143dc
+branch: feat/v3i-endurance-20261016
+phase: V3i_resume_and_acceptance
 production_writes: false
 production_data_export: false

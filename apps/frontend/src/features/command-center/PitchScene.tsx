@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { Color, CylinderGeometry, MeshBasicMaterial, MeshStandardMaterial, RingGeometry, Spherical, Vector3 } from 'three';
+import { Color, CylinderGeometry, MeshBasicMaterial, MeshLambertMaterial, RingGeometry, Spherical, Vector3 } from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import type { TodayMatch } from '../../core/types';
 import { useTheme } from '../../app/ThemeContext';
@@ -43,7 +43,12 @@ export function CameraRig({ view, command, active, onFailure }: { view: View; co
   const controls = useRef<OrbitControls | null>(null);
   const failureRef = useRef(onFailure); failureRef.current = onFailure;
   useEffect(() => {
+    const connectedRoot = gl.domElement.getRootNode();
     const orbit = new OrbitControls(camera, gl.domElement);
+    // Three r186 disconnect() re-reads getRootNode(). React may already have
+    // detached the canvas, so also release its pinned internal key handlers
+    // from the Document/ShadowRoot used when connecting.
+    const rootKeys = orbit as unknown as { _interceptControlDown: EventListener; _interceptControlUp: EventListener };
     orbit.enableDamping = false; orbit.minDistance = 40; orbit.maxDistance = 150;
     orbit.minPolarAngle = 0.01; orbit.maxPolarAngle = Math.PI / 2.2;
     const changed = () => {
@@ -53,7 +58,12 @@ export function CameraRig({ view, command, active, onFailure }: { view: View; co
     const lost = (event: Event) => { event.preventDefault(); failureRef.current(); };
     orbit.addEventListener('change', changed); gl.domElement.addEventListener('webglcontextlost', lost);
     controls.current = orbit;
-    return () => { controls.current = null; orbit.removeEventListener('change', changed); orbit.dispose(); gl.domElement.removeEventListener('webglcontextlost', lost); };
+    return () => {
+      controls.current = null; orbit.removeEventListener('change', changed); orbit.dispose();
+      connectedRoot.removeEventListener('keydown', rootKeys._interceptControlDown, { capture: true });
+      connectedRoot.removeEventListener('keyup', rootKeys._interceptControlUp, { capture: true });
+      gl.domElement.removeEventListener('webglcontextlost', lost);
+    };
   }, [camera, gl, invalidate]);
   useEffect(() => { if (controls.current) controls.current.enabled = active; }, [active]);
   useEffect(() => {
@@ -84,22 +94,22 @@ function RectLine({ width, depth, x = 0, z = 0, color }: { width: number; depth:
     {[-1, 1].map(side => <mesh key={`v-${side}`} position={[side * width / 2, 0, 0]} rotation={[-Math.PI / 2, 0, 0]}><planeGeometry args={[0.2, depth]} /><meshBasicMaterial color={color} /></mesh>)}
   </group>;
 }
-function Pitch({ colors }: { colors: Colors }) {
+export function Pitch({ colors }: { colors: Colors }) {
   return <group>
-    <mesh position={[0, -0.6, 0]}><boxGeometry args={[76, 1.2, 113]} /><meshStandardMaterial color={colors.pitch} roughness={0.9} /></mesh>
+    <mesh position={[0, -0.6, 0]}><boxGeometry args={[76, 1.2, 113]} /><meshLambertMaterial color={colors.pitch} /></mesh>
     {Array.from({ length: 10 }, (_, i) => <mesh key={i} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.01, -47.25 + i * 10.5]}><planeGeometry args={[68, 10.5]} /><meshBasicMaterial color={i % 2 ? colors.pitch : colors.stripe} /></mesh>)}
     <RectLine width={68} depth={105} color={colors.line} />
     <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.04, 0]}><planeGeometry args={[68, 0.2]} /><meshBasicMaterial color={colors.line} /></mesh>
     <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.04, 0]}><ringGeometry args={[9, 9.2, 64]} /><meshBasicMaterial color={colors.line} /></mesh>
-    {[-1, 1].map(side => <group key={side}><RectLine width={40.3} depth={16.5} z={side * 44.25} color={colors.line} /><RectLine width={18.3} depth={5.5} z={side * 49.75} color={colors.line} /><mesh position={[0, 1.25, side * 54]}><boxGeometry args={[7.32, 2.5, 1.6]} /><meshStandardMaterial color={colors.line} wireframe /></mesh></group>)}
+    {[-1, 1].map(side => <group key={side}><RectLine width={40.3} depth={16.5} z={side * 44.25} color={colors.line} /><RectLine width={18.3} depth={5.5} z={side * 49.75} color={colors.line} /><mesh position={[0, 1.25, side * 54]}><boxGeometry args={[7.32, 2.5, 1.6]} /><meshLambertMaterial color={colors.line} wireframe /></mesh></group>)}
   </group>;
 }
 function MatchNodes({ matches, selectedId, onSelect, colors }: { matches: TodayMatch[]; selectedId: number | null; onSelect: (id: number) => void; colors: Colors }) {
   const nodes = useMemo(() => sceneNodes(matches, selectedId), [matches, selectedId]);
   const geometries = useMemo(() => ({ pillar: new CylinderGeometry(1.7, 1.7, 2, 24), ring: new RingGeometry(2.15, 2.7, 32) }), []);
   const materials = useMemo(() => ({
-    selected: new MeshStandardMaterial({ color: colors.accent, emissive: colors.accent, emissiveIntensity: 0.3 }),
-    neutral: new MeshStandardMaterial({ color: colors.neutral, emissive: colors.neutral, emissiveIntensity: 0.04 }),
+    selected: new MeshLambertMaterial({ color: colors.accent, emissive: colors.accent, emissiveIntensity: 0.3 }),
+    neutral: new MeshLambertMaterial({ color: colors.neutral, emissive: colors.neutral, emissiveIntensity: 0.04 }),
     ringSelected: new MeshBasicMaterial({ color: colors.accent }),
     ringNeutral: new MeshBasicMaterial({ color: colors.line }),
   }), [colors.accent, colors.neutral, colors.line]);

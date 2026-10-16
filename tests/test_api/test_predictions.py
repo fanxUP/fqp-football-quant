@@ -190,6 +190,7 @@ class TestPredictionsEndpoint:
                 0.85,
                 "曼联",
                 "利物浦",
+                *([None] * 10),
             ),
         ]
         mock_cur.fetchone.return_value = (4187, 1632, 0.714, 19, now)
@@ -233,6 +234,7 @@ class TestPredictionsEndpoint:
                 None,
                 "曼联",
                 "利物浦",
+                *([None] * 10),
             ),
         ]
         mock_cur.fetchone.return_value = (1, 0, None, 1, now)

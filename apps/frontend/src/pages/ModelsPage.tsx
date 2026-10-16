@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLanguage } from '../app/LanguageContext';
 import { api } from '../core/apiClient';
 import type { EvalModelSummary, ModelPerformanceHistory, Prediction, PredictionSummary } from '../core/types';
@@ -17,6 +17,7 @@ import ModelEvaluationPanel from './models/ModelEvaluationPanel';
 import ModelPerformanceToolbar from './models/ModelPerformanceToolbar';
 import ModelStats from './models/ModelStats';
 import type { PerformancePlayType } from './models/modelPerformanceViews';
+import ModelResearchPanel from '../features/model-research/ModelResearchPanel';
 import './ModelsPage.css';
 
 const EMPTY_HISTORY: ModelPerformanceHistory = { status: 'ok', metric: 'rolling_hit_rate', window: 20, days: 365, points: [], samples: [] };
@@ -25,6 +26,10 @@ export default function ModelsPage() {
   const { translate } = useLanguage();
   const [predictions, setPredictions] = useState<Prediction[]>([]);
   const [summary, setSummary] = useState<PredictionSummary | null>(null);
+  const [summaryLoading, setSummaryLoading] = useState(false);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
+  const [summaryReceivedAt, setSummaryReceivedAt] = useState<number | null>(null);
+  const summaryPending = useRef(false);
   const [evalModels, setEvalModels] = useState<EvalModelSummary[]>([]);
   const [performanceHistory, setPerformanceHistory] = useState<ModelPerformanceHistory>(EMPTY_HISTORY);
   const [days, setDays] = useState(365);
@@ -33,13 +38,32 @@ export default function ModelsPage() {
   const [loading, setLoading] = useState(true);
   const [evalLoading, setEvalLoading] = useState(true);
   const [historyLoading, setHistoryLoading] = useState(true);
+  const predictionPending = useRef(false);
+  const [predictionReceivedAt, setPredictionReceivedAt] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [evalError, setEvalError] = useState<string | null>(null);
   const [historyError, setHistoryError] = useState<string | null>(null);
 
   const loadPredictions = useCallback(() => {
+    if (predictionPending.current) return;
+    predictionPending.current = true;
     setLoading(true); setError(null);
-    api.predictions({ limit: 200 }).then((response) => { setPredictions(response.predictions); setSummary(response.summary); }).catch((reason) => setError(reason instanceof ApiError ? reason.message : '预测数据加载失败')).finally(() => setLoading(false));
+    api.predictions({ limit: 200, include_summary: false }).then((response) => { if (!Array.isArray(response.predictions) || response.predictions.length > 200 || new Set(response.predictions.map(row => row?.id)).size !== response.predictions.length || response.predictions.some(row => !row || !Number.isSafeInteger(row.id) || row.id <= 0 || !Number.isSafeInteger(row.match_id) || row.match_id <= 0 || [row.model_name, row.play_type, row.option_code, row.predict_time, row.home_team, row.away_team].some(value => typeof value !== 'string') || [row.raw_model_probability, row.model_probability, row.market_probability, row.fair_odds, row.ev, row.confidence].some(value => value !== null && (typeof value !== 'number' || !Number.isFinite(value))))) throw new ApiError(502, '预测记录身份、范围或指标格式不正确');
+      setPredictions(response.predictions); setPredictionReceivedAt(Date.now()); }).catch((reason) => setError(reason instanceof ApiError ? reason.message : '预测数据加载失败')).finally(() => { predictionPending.current = false; setLoading(false); });
+  }, []);
+  const loadSummary = useCallback(() => {
+    if (summaryPending.current) return;
+    summaryPending.current = true;
+    setSummaryLoading(true); setSummaryError(null);
+    api.predictions({ limit: 1 }).then((response) => {
+      const value = response.summary;
+      if (!value || [value.total, value.positive_ev_count, value.model_count].some(count => !Number.isSafeInteger(count) || count < 0)
+        || response.total !== value.total || value.positive_ev_count > value.total || value.model_count > value.total
+        || (value.avg_confidence !== null && (!Number.isFinite(value.avg_confidence) || value.avg_confidence < 0 || value.avg_confidence > 1))
+        || (value.latest_predict_time !== null && typeof value.latest_predict_time !== 'string')) throw new ApiError(502, '全量统计格式或口径不正确');
+      setSummary(value); setSummaryReceivedAt(Date.now());
+    }).catch(reason => setSummaryError(reason instanceof ApiError ? reason.message : '全量预测统计读取失败，请稍后重试'))
+      .finally(() => { summaryPending.current = false; setSummaryLoading(false); });
   }, []);
   const loadEvaluation = useCallback(() => {
     setEvalLoading(true); setEvalError(null);
@@ -83,7 +107,13 @@ export default function ModelsPage() {
   return (
     <div className="models-page">
       <PageHeader title="模型表现" subtitle="按独立比赛评估模型，正式结论与小样本观察严格分区" />
-      <ModelStats summary={summary} loading={loading} />
+      <ModelResearchPanel predictions={predictions} loading={loading} error={error} receivedAt={predictionReceivedAt} total={summary?.total ?? null} onRefresh={loadPredictions} />
+      <section aria-label="全量预测统计">
+        <button type="button" className="fqp-btn fqp-btn-secondary" onClick={loadSummary} disabled={summaryLoading}>加载全量预测统计</button>
+        <p role="status">{summaryReceivedAt === null ? '全量统计尚未读取；独立于最近 200 条研究记录。' : `全量统计接收于 ${new Date(summaryReceivedAt).toLocaleString('zh-CN', { hour12: false })}；刷新研究记录不会更新此统计。`}</p>
+        {summaryError && <p role="alert">{summaryError}{summary ? '；保留上次成功的全量统计。' : '；尚无成功统计，指标显示未知。'}</p>}
+        <ModelStats summary={summary} loading={summaryLoading && summary === null} />
+      </section>
       <ModelPerformanceToolbar days={days} modelNames={modelNames} selectedModels={selectedModels} onDaysChange={setDays} onSelectedModelsChange={setSelectedModels} />
       <ModelEvaluationPanel models={evalModels} loading={evalLoading} error={evalError} onRetry={loadEvaluation} />
       {performanceHistory.stale && <p role="status">模型曲线显示上次完成的数据，正在等待更新。{performanceHistory.refreshedAt ? `摘要更新时间：${new Date(performanceHistory.refreshedAt).toLocaleString('zh-CN', { hour12: false })}` : ''}</p>}

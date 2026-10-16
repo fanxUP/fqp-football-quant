@@ -290,89 +290,147 @@ def predict_models_for_date(date: str, dry_run: bool = Query(True)):
 @router.get("/api/models/predictions")
 @router.get("/api/predictions")
 def list_predictions(
-    match_id: int | None = Query(None),
-    limit: int = Query(20),
+    match_id: int | None = Query(None, ge=1),
+    limit: int = Query(20, ge=1, le=500),
+    include_summary: bool = True,
 ):
     """List recent model predictions, optionally filtered by match."""
+    summary_row = None
     with get_db() as conn:
         with conn.cursor() as cur:
-            if match_id:
-                cur.execute(
-                    """
-                    SELECT mp.id, mp.match_id, mp.predict_time,
-                           mv.model_name, mp.play_type, mp.option_code,
-                           COALESCE(mp.raw_model_probability, mp.model_probability),
-                           mp.model_probability, mp.market_probability,
-                           mp.fair_odds, mp.ev, mp.confidence_score,
-                           m.home_team_name, m.away_team_name
-                    FROM model_predictions mp
-                    JOIN model_versions mv ON mv.id = mp.model_version_id
-                    JOIN official_matches m ON m.id = mp.match_id
-                    WHERE mp.match_id = %s
-                      AND mp.validation_status = 'valid'
-                      AND mp.predict_time < m.kickoff_time
-                    ORDER BY mp.predict_time DESC, mp.ev DESC
-                    LIMIT %s
-                    """,
-                    (match_id, limit),
-                )
-            else:
-                cur.execute(
-                    """
-                    SELECT mp.id, mp.match_id, mp.predict_time,
-                           mv.model_name, mp.play_type, mp.option_code,
-                           COALESCE(mp.raw_model_probability, mp.model_probability),
-                           mp.model_probability, mp.market_probability,
-                           mp.fair_odds, mp.ev, mp.confidence_score,
-                           m.home_team_name, m.away_team_name
-                    FROM model_predictions mp
+            match_clause = "AND mp.match_id = %s" if match_id is not None else ""
+            params = (match_id, limit) if match_id is not None else (limit,)
+            cur.execute(
+                f"""
+                WITH recent AS MATERIALIZED (
+                    SELECT mp.* FROM model_predictions mp
                     JOIN model_versions mv ON mv.id = mp.model_version_id
                     JOIN official_matches m ON m.id = mp.match_id
                     WHERE mp.validation_status = 'valid'
                       AND mp.predict_time < m.kickoff_time
+                      {match_clause}
                     ORDER BY mp.predict_time DESC, mp.ev DESC
                     LIMIT %s
-                    """,
-                    (limit,),
                 )
-            rows = cur.fetchall()
-            aggregate_where = """
-                mp.validation_status = 'valid'
-                AND mp.predict_time < m.kickoff_time
-            """
-            aggregate_params: tuple[int, ...] = ()
-            if match_id:
-                aggregate_where += " AND mp.match_id = %s"
-                aggregate_params = (match_id,)
-            cur.execute(
-                f"""
-                SELECT
-                    COUNT(*) AS total,
-                    COUNT(*) FILTER (WHERE mp.ev > 0) AS positive_ev_count,
-                    AVG(mp.confidence_score) AS avg_confidence,
-                    COUNT(DISTINCT mv.model_name) AS model_count,
-                    MAX(mp.predict_time) AS latest_predict_time
-                FROM model_predictions mp
+                SELECT mp.id, mp.match_id, mp.predict_time,
+                   mv.model_name, mp.play_type, mp.option_code,
+                   COALESCE(mp.raw_model_probability, mp.model_probability),
+                   mp.model_probability, mp.market_probability,
+                   mp.fair_odds, mp.ev, mp.confidence_score,
+                   m.home_team_name, m.away_team_name,
+                   mv.id, mv.version, mv.model_type, mv.feature_set_version,
+                   fs.id, fs.snapshot_time, fs.feature_version,
+                   jsonb_build_object(
+                       'strength', (fs.home_team_market_value IS NOT NULL
+                               OR fs.away_team_market_value IS NOT NULL
+                               OR fs.team_market_value_diff IS NOT NULL
+                               OR fs.team_market_value_ratio IS NOT NULL
+                               OR fs.home_attack_strength_score IS NOT NULL
+                               OR fs.away_attack_strength_score IS NOT NULL
+                               OR fs.home_defense_strength_score IS NOT NULL
+                               OR fs.away_defense_strength_score IS NOT NULL),
+                       'lineup', (fs.home_lineup_confirmed IS NOT NULL
+                               OR fs.away_lineup_confirmed IS NOT NULL
+                               OR fs.home_starting_11_value IS NOT NULL
+                               OR fs.away_starting_11_value IS NOT NULL
+                               OR fs.starting_11_value_diff IS NOT NULL
+                               OR fs.home_lineup_strength_score IS NOT NULL
+                               OR fs.away_lineup_strength_score IS NOT NULL
+                               OR fs.lineup_strength_diff IS NOT NULL),
+                       'absence', (fs.home_absence_impact_score IS NOT NULL
+                               OR fs.away_absence_impact_score IS NOT NULL
+                               OR fs.absence_impact_diff IS NOT NULL
+                               OR fs.home_key_absence_count IS NOT NULL
+                               OR fs.away_key_absence_count IS NOT NULL),
+                       'rest', (fs.home_rotation_risk_score IS NOT NULL
+                               OR fs.away_rotation_risk_score IS NOT NULL
+                               OR fs.rotation_risk_diff IS NOT NULL
+                               OR fs.home_rest_days IS NOT NULL
+                               OR fs.away_rest_days IS NOT NULL
+                               OR fs.rest_days_diff IS NOT NULL),
+                       'travel', (fs.stadium_id IS NOT NULL
+                               OR fs.away_travel_distance_km IS NOT NULL
+                               OR fs.timezone_diff IS NOT NULL
+                               OR fs.altitude_m IS NOT NULL
+                               OR fs.away_travel_fatigue_score IS NOT NULL),
+                       'weather', (fs.temperature_2m IS NOT NULL
+                               OR fs.precipitation IS NOT NULL
+                               OR fs.wind_speed_10m IS NOT NULL
+                               OR fs.weather_impact_score IS NOT NULL
+                               OR fs.goal_expectation_weather_adjustment IS NOT NULL),
+                       'motivation', (fs.home_motivation_score IS NOT NULL
+                               OR fs.away_motivation_score IS NOT NULL
+                               OR fs.motivation_diff IS NOT NULL
+                               OR fs.home_must_win IS NOT NULL
+                               OR fs.away_must_win IS NOT NULL
+                               OR fs.home_draw_enough IS NOT NULL
+                               OR fs.away_draw_enough IS NOT NULL),
+                       'tournament', (fs.home_avoid_strong_opponent_score IS NOT NULL
+                               OR fs.away_avoid_strong_opponent_score IS NOT NULL
+                               OR fs.home_tanking_risk_score IS NOT NULL
+                               OR fs.away_tanking_risk_score IS NOT NULL
+                               OR fs.tournament_incentive_risk_score IS NOT NULL)
+                   ), od.id, od.snapshot_time
+                FROM recent mp
                 JOIN model_versions mv ON mv.id = mp.model_version_id
                 JOIN official_matches m ON m.id = mp.match_id
-                WHERE {aggregate_where}
+                LEFT JOIN match_feature_snapshots fs
+                  ON fs.id = mp.feature_snapshot_id AND fs.match_id = mp.match_id
+                 AND fs.snapshot_time <= mp.predict_time
+                LEFT JOIN official_odds_snapshots od
+                  ON od.id = mp.odds_snapshot_id AND od.match_id = mp.match_id
+                 AND od.play_type = mp.play_type
+                 AND od.option_code = CASE WHEN mp.play_type IN ('spf', 'rqspf') THEN CASE mp.option_code
+                     WHEN '3' THEN 'h' WHEN '1' THEN 'd' WHEN '0' THEN 'a'
+                     ELSE mp.option_code END ELSE mp.option_code END
+                 AND od.snapshot_time <= mp.predict_time
+                ORDER BY mp.predict_time DESC, mp.ev DESC
                 """,
-                aggregate_params,
+                params,
             )
-            summary_row = cur.fetchone()
-    summary = {
-        "total": int(summary_row[0] or 0),
-        "positive_ev_count": int(summary_row[1] or 0),
-        "avg_confidence": float(summary_row[2]) if summary_row[2] is not None else None,
-        "model_count": int(summary_row[3] or 0),
-        "latest_predict_time": (
-            summary_row[4].isoformat()
-            if summary_row[4] is not None and hasattr(summary_row[4], "isoformat")
-            else str(summary_row[4])
-            if summary_row[4] is not None
-            else None
-        ),
-    }
+            rows = cur.fetchall()
+            if include_summary:
+                aggregate_where = """
+                    mp.validation_status = 'valid'
+                    AND mp.predict_time < m.kickoff_time
+                """
+                aggregate_params: tuple[int, ...] = ()
+                if match_id:
+                    aggregate_where += " AND mp.match_id = %s"
+                    aggregate_params = (match_id,)
+                cur.execute(
+                    f"""
+                    SELECT
+                        COUNT(*) AS total,
+                        COUNT(*) FILTER (WHERE mp.ev > 0) AS positive_ev_count,
+                        AVG(mp.confidence_score) AS avg_confidence,
+                        COUNT(DISTINCT mv.model_name) AS model_count,
+                        MAX(mp.predict_time) AS latest_predict_time
+                    FROM model_predictions mp
+                    JOIN model_versions mv ON mv.id = mp.model_version_id
+                    JOIN official_matches m ON m.id = mp.match_id
+                    WHERE {aggregate_where}
+                    """,
+                    aggregate_params,
+                )
+                summary_row = cur.fetchone()
+    summary = (
+        {
+            "total": int(summary_row[0] or 0),
+            "positive_ev_count": int(summary_row[1] or 0),
+            "avg_confidence": float(summary_row[2]) if summary_row[2] is not None else None,
+            "model_count": int(summary_row[3] or 0),
+            "latest_predict_time": (
+                summary_row[4].isoformat()
+                if summary_row[4] is not None and hasattr(summary_row[4], "isoformat")
+                else str(summary_row[4])
+                if summary_row[4] is not None
+                else None
+            ),
+        }
+        if summary_row is not None
+        else None
+    )
     return {
         "predictions": [
             {
@@ -393,10 +451,24 @@ def list_predictions(
                 "confidence": float(r[11]) if r[11] is not None else None,
                 "home_team": r[12],
                 "away_team": r[13],
+                "research_evidence": {
+                    "model_version_id": r[14],
+                    "model_version": r[15],
+                    "model_type": r[16],
+                    "feature_set_version": r[17],
+                    "feature_snapshot_id": r[18],
+                    "feature_snapshot_time": r[19].isoformat() if r[19] else None,
+                    "feature_version": r[20],
+                    "feature_categories": [
+                        key for key, present in (r[21] or {}).items() if present is True
+                    ],
+                    "odds_snapshot_id": r[22],
+                    "odds_snapshot_time": r[23].isoformat() if r[23] else None,
+                },
             }
             for r in rows
         ],
-        "total": summary["total"],
+        "total": summary["total"] if summary is not None else None,
         "summary": summary,
     }
 

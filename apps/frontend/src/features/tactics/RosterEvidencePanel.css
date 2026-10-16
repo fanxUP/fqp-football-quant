@@ -21,3 +21,15 @@
 .te-panel .be-status button { min-height: 44px; padding: 8px 12px; border: 1px solid var(--fqp-border); border-radius: 8px; color: var(--fqp-text); background: var(--fqp-panel-2); cursor: pointer; }
 .te-panel .be-status button:disabled { opacity: .5; cursor: default; }
 .te-panel .be-status button:focus-visible { outline: 2px solid var(--fqp-red); outline-offset: 3px; }
+
+.te-schematic { min-width: 0; margin-bottom: 16px; padding: 16px; border: 1px solid var(--fqp-border); border-radius: 12px; background: var(--fqp-bg-glass); }
+.te-scene-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; color: var(--fqp-text-muted); }
+.te-scene-controls label { display: inline-flex; align-items: center; gap: 8px; }
+.te-scene-controls button, .te-scene-controls select, .te-schematic .cc-scene-mode button, .te-schematic .cc-scene-fallback button { min-height: 44px; padding: 8px 12px; border: 1px solid var(--fqp-border); border-radius: 8px; background: var(--fqp-panel-2); color: var(--fqp-text); cursor: pointer; }
+.te-scene-controls button[aria-pressed="true"] { border-color: var(--fqp-red); background: var(--fqp-hover-bg); }
+.te-schematic button:focus-visible, .te-scene-controls select:focus-visible { outline: 2px solid var(--fqp-red); outline-offset: 3px; }
+.te-schematic .cc-scene-viewport { min-height: 0; margin-top: 12px; }
+.te-schematic .cc-scene-mode { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
+.te-schematic .cc-scene-fallback { min-height: 120px; padding: 16px; color: var(--fqp-text-muted); }
+.te-canvas { height: clamp(320px, 38vw, 520px); margin-block: 12px; border: 1px solid var(--fqp-border); border-radius: 8px; overflow: hidden; touch-action: none; }
+@media (max-width: 760px) { .te-schematic { padding: 12px; } .te-canvas { height: 340px; } }

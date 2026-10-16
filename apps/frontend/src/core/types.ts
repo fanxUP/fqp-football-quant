@@ -348,7 +348,21 @@ export interface MatchDetail {
 
 // ---- Stage 4: Model Predictions ----
 
+export interface PredictionResearchEvidence {
+  model_version_id: number;
+  model_version: string;
+  model_type: string;
+  feature_set_version: string | null;
+  feature_snapshot_id: number | null;
+  feature_snapshot_time: string | null;
+  feature_version: string | null;
+  feature_categories: string[];
+  odds_snapshot_id: number | null;
+  odds_snapshot_time: string | null;
+}
+
 export interface Prediction {
+  research_evidence?: PredictionResearchEvidence;
   id: number;
   match_id: number;
   predict_time: string;

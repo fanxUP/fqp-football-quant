@@ -1,13 +1,15 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import RosterEvidencePanel from './RosterEvidencePanel';
 import MatchDetailPage from '../../pages/MatchDetailPage';
 const mocks = vi.hoisted(() => ({ detail: vi.fn(), features: vi.fn(), predictions: vi.fn() }));
 vi.mock('../../core/apiClient', () => ({ api: { matches: { detail: mocks.detail }, features: mocks.features, predictions: mocks.predictions } }));
+vi.mock('./TacticsScene', () => ({default: ({nodes,selectedId,onSelect,active,onFailure}:{nodes:{player:{player_id:number}}[];selectedId:number|null;onSelect:(id:number)=>void;active:boolean;onFailure:()=>void}) => <div data-testid="mock-tactics" data-selected={selectedId} data-active={String(active)}>{nodes.map(node=><button key={node.player.player_id} onClick={()=>onSelect(node.player.player_id)}>场景测试选择 {node.player.player_id}</button>)}<button onClick={onFailure}>场景测试中断</button></div>}));
+afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 function fixture(id = 101) {
   return { match: {id, home_team_name:'主队',away_team_name:'客队',kickoff_time:'2026-10-09T20:00:00'}, teams: {home:{id:1},away:{id:2}}, lineups:{home:{snapshot_id:11,match_id:id,team_id:1,lineup_type:'confirmed',source:'测试来源',snapshot_time:'2026-10-09T19:00:00',collected_at:'2026-10-09T19:05:00',formation:'4-3-3',strength_score:0,players:Array.from({length:11},(_,i)=>({player_id:i+1,name_cn:`球员${i+1}`,is_starting:true,is_substitute:false,position:'DF',tactical_role:'边路'}))},away:null}, injuries:[],availability_scope:'latest_per_player_team',availability_limit_per_team:20 };
 }
-beforeEach(() => {vi.clearAllMocks();mocks.detail.mockResolvedValue(fixture());mocks.features.mockResolvedValue({snapshots:[]});mocks.predictions.mockResolvedValue({predictions:[]});});
+beforeEach(() => {localStorage.clear();vi.clearAllMocks();mocks.detail.mockResolvedValue(fixture());mocks.features.mockResolvedValue({snapshots:[]});mocks.predictions.mockResolvedValue({predictions:[]});});
 it('shows source times, provenance, real zero and keyboard-operable player details without jersey IDs', async () => {
   render(<RosterEvidencePanel matchId={101}/>);await screen.findByText('测试来源');
   expect(screen.getByText(/入库时间/)).toBeInTheDocument();expect(screen.getByText('战力 0.00')).toBeInTheDocument();
@@ -89,4 +91,68 @@ it('formats explicit timezone timestamps in Beijing time', async () => {
 });
 it('shows unknown query counts instead of zero when feature and prediction reads fail', async () => {
   mocks.features.mockRejectedValue(new Error('特征失败'));mocks.predictions.mockRejectedValue(new Error('预测失败'));render(<MatchDetailPage matchId={101}/>);await screen.findByRole('alert');expect(screen.getByRole('button',{name:'多维特征 (—)'})).toBeInTheDocument();expect(screen.getByRole('button',{name:'模型预测 (—)'})).toBeInTheDocument();
+});
+
+function sceneFixture() {
+  const data=fixture();
+  const positions=['GK','CB','CB','LB','RB','CM','CM','DM','LW','RW','ST'];
+  data.lineups.home.players.forEach((player,i)=>{player.position=positions[i];});
+  return data;
+}
+function enableScene() {
+  vi.stubGlobal('WebGL2RenderingContext', class {});
+  vi.spyOn(HTMLCanvasElement.prototype,'getContext').mockReturnValue({getExtension:()=>null} as unknown as WebGL2RenderingContext);
+}
+it('shares actual player selection between 2D keyboard controls and the lazy scene', async () => {
+  enableScene();mocks.detail.mockResolvedValue(sceneFixture());render(<RosterEvidencePanel matchId={101}/>);
+  await screen.findByTestId('mock-tactics');fireEvent.click(screen.getByRole('button',{name:'选择球员 球员1'}));
+  expect(screen.getByTestId('mock-tactics')).toHaveAttribute('data-selected','1');
+  fireEvent.click(screen.getByRole('button',{name:'场景测试选择 2'}));
+  expect(screen.getByRole('button',{name:'选择球员 球员2'})).toHaveAttribute('aria-pressed','true');
+  expect(screen.getByRole('button',{name:'选择球员 球员1'})).toHaveAttribute('aria-pressed','false');
+  expect(mocks.detail).toHaveBeenCalledTimes(1);
+});
+it('keeps exactly one scene and scopes the same player ID to the selected team', async () => {
+  enableScene();const data=sceneFixture();const away={...data.lineups.home,team_id:2,snapshot_id:12,players:data.lineups.home.players.map(p=>({...p,name_cn:`客${p.name_cn}`}))};
+  mocks.detail.mockResolvedValue({...data,lineups:{...data.lineups,away}});render(<RosterEvidencePanel matchId={101}/>);await screen.findByTestId('mock-tactics');
+  fireEvent.click(screen.getByRole('button',{name:'选择球员 球员1'}));fireEvent.click(screen.getByRole('button',{name:'客队示意'}));
+  expect(screen.getByText('尚未选择球员')).toBeInTheDocument();expect(screen.getAllByTestId('mock-tactics')).toHaveLength(1);
+  fireEvent.click(screen.getByRole('button',{name:'场景测试选择 1'}));expect(screen.getByRole('button',{name:'选择球员 客球员1'})).toHaveAttribute('aria-pressed','true');expect(screen.getByRole('button',{name:'选择球员 球员1'})).toHaveAttribute('aria-pressed','false');
+});
+it.each(['source','position','snapshot_time'])('keeps 2D usable without rendering unsupported %s evidence', async field => {
+  enableScene();const data=sceneFixture();if(field==='source')data.lineups.home.source='';if(field==='snapshot_time')data.lineups.home.snapshot_time='invalid';if(field==='position')data.lineups.home.players[0].position='unknown';
+  mocks.detail.mockResolvedValue(data);render(<RosterEvidencePanel matchId={101}/>);await screen.findByRole('button',{name:'选择球员 球员1'});
+  expect(screen.queryByTestId('mock-tactics')).not.toBeInTheDocument();fireEvent.click(screen.getByRole('button',{name:'选择球员 球员1'}));expect(screen.getByText('战术角色：边路')).toBeInTheDocument();
+});
+it.each(['predicted','historical'])('labels %s schematic separately from confirmed starting evidence', async type => {
+  enableScene();const data=sceneFixture();data.lineups.home.lineup_type=type;mocks.detail.mockResolvedValue(data);render(<RosterEvidencePanel matchId={101}/>);await screen.findByTestId('mock-tactics');
+  expect(screen.getByText(type==='predicted'?'预估名单示意，不代表已确认首发。':'历史名单示意，不代表本场已确认首发。')).toBeInTheDocument();
+});
+it('retains still-present selection across a new snapshot and clears removed players immediately', async () => {
+  enableScene();mocks.detail.mockResolvedValue(sceneFixture());render(<RosterEvidencePanel matchId={101}/>);await screen.findByTestId('mock-tactics');fireEvent.click(screen.getByRole('button',{name:'场景测试选择 2'}));
+  const next=sceneFixture();next.lineups.home.snapshot_id=12;mocks.detail.mockResolvedValue(next);fireEvent.click(screen.getByRole('button',{name:'刷新阵容与伤停证据'}));await waitFor(()=>expect(mocks.detail).toHaveBeenCalledTimes(2));await waitFor(()=>expect(screen.getByRole('button',{name:'刷新阵容与伤停证据'})).toBeEnabled());
+  expect(screen.getByRole('button',{name:'选择球员 球员2'})).toHaveAttribute('aria-pressed','true');
+  next.lineups.home.players=next.lineups.home.players.slice(2);mocks.detail.mockResolvedValue({...next});fireEvent.click(screen.getByRole('button',{name:'刷新阵容与伤停证据'}));await screen.findByText('尚未选择球员');expect(screen.queryByTestId('mock-tactics')).not.toBeInTheDocument();
+});
+it('keeps selected 2D player after renderer failure and supports scene retry', async () => {
+  enableScene();mocks.detail.mockResolvedValue(sceneFixture());render(<RosterEvidencePanel matchId={101}/>);await screen.findByTestId('mock-tactics');fireEvent.click(screen.getByRole('button',{name:'场景测试选择 1'}));fireEvent.click(screen.getByRole('button',{name:'场景测试中断'}));
+  expect(screen.getByText(/3D 连接已中断/)).toBeInTheDocument();expect(screen.getByRole('button',{name:'选择球员 球员1'})).toHaveAttribute('aria-pressed','true');
+  fireEvent.click(screen.getByRole('button',{name:'重试 3D'}));await screen.findByTestId('mock-tactics');expect(screen.getByTestId('mock-tactics')).toHaveAttribute('data-selected','1');
+});
+it('preserves explicit 2D preference without loading the tactical renderer', async () => {
+  localStorage.setItem('fqp.scene.enabled','false');mocks.detail.mockResolvedValue(sceneFixture());render(<RosterEvidencePanel matchId={101}/>);await screen.findByRole('button',{name:'开启 3D'});
+  expect(screen.queryByTestId('mock-tactics')).not.toBeInTheDocument();fireEvent.click(screen.getByRole('button',{name:'选择球员 球员1'}));expect(screen.getByText('战术角色：边路')).toBeInTheDocument();
+});
+it('clears a rendered scene and selection on valid empty refresh', async () => {
+  enableScene();mocks.detail.mockResolvedValue(sceneFixture());render(<RosterEvidencePanel matchId={101}/>);await screen.findByTestId('mock-tactics');fireEvent.click(screen.getByRole('button',{name:'场景测试选择 1'}));
+  mocks.detail.mockResolvedValue({...sceneFixture(),lineups:{home:null,away:null}});fireEvent.click(screen.getByRole('button',{name:'刷新阵容与伤停证据'}));await screen.findAllByText('尚无阵容快照');expect(screen.queryByTestId('mock-tactics')).not.toBeInTheDocument();expect(screen.getByText('尚未选择球员')).toBeInTheDocument();
+});
+it('unmounts the old rendered scene when another match fails to load', async () => {
+  enableScene();mocks.detail.mockResolvedValue(sceneFixture());const {rerender}=render(<RosterEvidencePanel matchId={101}/>);await screen.findByTestId('mock-tactics');fireEvent.click(screen.getByRole('button',{name:'场景测试选择 1'}));
+  mocks.detail.mockRejectedValueOnce(new Error('下一场失败'));rerender(<RosterEvidencePanel matchId={102}/>);await screen.findByRole('alert');expect(screen.queryByTestId('mock-tactics')).not.toBeInTheDocument();expect(screen.queryByText('已选择主队球员：球员1')).not.toBeInTheDocument();
+});
+it('passes hidden-page pause state to the tactical renderer', async () => {
+  enableScene();mocks.detail.mockResolvedValue(sceneFixture());render(<RosterEvidencePanel matchId={101}/>);await screen.findByTestId('mock-tactics');
+  const visibility=vi.spyOn(document,'visibilityState','get').mockReturnValue('hidden');fireEvent(document,new Event('visibilitychange'));
+  expect(screen.getByTestId('mock-tactics')).toHaveAttribute('data-active','false');visibility.mockReturnValue('visible');fireEvent(document,new Event('visibilitychange'));expect(screen.getByTestId('mock-tactics')).toHaveAttribute('data-active','true');
 });
