@@ -64,14 +64,14 @@ export default function DashboardPage() {
   // Dashboard API data
   const todayKpis = live.today.data?.kpis ?? [];
   const [roiDaily, setRoiDaily] = useState<DashboardRoiDailyItem[]>([]);
-  const [dashLoading, setDashLoading] = useState(false);
+  const [roiLoading, setRoiLoading] = useState(true);
+  const [modelPerfLoading, setModelPerfLoading] = useState(true);
   const dashError = live.today.error;
   const [modelPerf, setModelPerf] = useState<DashboardModelPerfItem[]>([]);
   const todayExtras = { current_round_label: live.today.data?.roundLabel ?? null, business_date: live.today.data?.businessDate ?? '' };
 
-  const load = useCallback(async (showLoading = true) => {
-    const results: Partial<DashboardData> = { errors: {} };
-
+  const load = useCallback(async () => {
+    const update = (values: Partial<DashboardData>) => setData((prev) => ({ ...prev, ...values }));
     const settle = <T,>(
       key: string,
       promise: Promise<T>,
@@ -79,55 +79,54 @@ export default function DashboardPage() {
     ) =>
       promise
         .then((val) => {
-          if (isMounted.current) onOk(val);
+          if (isMounted.current) {
+            onOk(val);
+            setData((prev) => {
+              const errors = { ...prev.errors };
+              delete errors[key];
+              return { ...prev, errors };
+            });
+          }
         })
         .catch((e) => {
           if (isMounted.current) {
-            results.errors = {
-              ...results.errors,
-              [key]: e instanceof ApiError ? e.message : '请求失败',
-            };
+            setData((prev) => ({
+              ...prev,
+              errors: { ...prev.errors, [key]: e instanceof ApiError ? e.message : '请求失败' },
+            }));
           }
         });
 
-    await Promise.all([
-      settle('teams', api.teams(), (t) => (results.teamCount = t.total)),
-      settle('predictions', api.predictions({ limit: 200 }), (p) => (results.predictionCount = p.total)),
-      settle('tickets', api.tickets({ status: 'generated', limit: 50 }), (t) => (results.activeTicketCount = t.total)),
-      settle('bettingTickets', api.betting.tickets({ limit: 1 }), (t) => (results.ticketLedgerCount = t.total)),
+    // Publish each completed card immediately; history counts can take longer.
+    const stats = Promise.all([
+      settle('teams', api.teams(), (t) => update({ teamCount: t.total })),
+      settle('predictions', api.dashboard.predictionCount(), (p) => update({ predictionCount: p.total })),
+      settle('tickets', api.tickets({ status: 'generated', limit: 50 }), (t) => update({ activeTicketCount: t.total })),
+      settle('bettingTickets', api.betting.tickets({ limit: 1 }), (t) => update({ ticketLedgerCount: t.total })),
       settle('reviews', api.reviews.daily(30), (r) => {
         if (r.reviews.length > 0) {
-          results.latestReview = r.reviews[0].review_date;
+          update({ latestReview: r.reviews[0].review_date });
         }
-        if (isMounted.current) setDailyReviews(r.reviews);
+        setDailyReviews(r.reviews);
+      }),
+    ]).finally(() => {
+      if (isMounted.current) update({ loading: false });
+    });
+
+    // Charts start with the cards and finish independently of each other.
+    await Promise.all([
+      stats,
+      settle('roiDaily', api.dashboard.roiDaily({ days: 30 }), (r) => {
+        if (r?.data?.series) setRoiDaily(r.data.series as DashboardRoiDailyItem[]);
+      }).finally(() => {
+        if (isMounted.current) setRoiLoading(false);
+      }),
+      settle('modelPerformance', api.dashboard.modelPerformance(), (r) => {
+        if (r?.data?.series) setModelPerf(r.data.series as DashboardModelPerfItem[]);
+      }).finally(() => {
+        if (isMounted.current) setModelPerfLoading(false);
       }),
     ]);
-
-    // Dashboard API — independent from existing loads
-    if (isMounted.current) {
-      if (showLoading) setDashLoading(true);
-      try {
-        const [roiRes, modelRes] = await Promise.all([
-          api.dashboard.roiDaily({ days: 30 }).catch(() => null),
-          api.dashboard.modelPerformance().catch(() => null),
-        ]);
-        if (isMounted.current) {
-          if (roiRes?.data?.series) setRoiDaily(roiRes.data.series as DashboardRoiDailyItem[]);
-          if (modelRes?.data?.series) setModelPerf(modelRes.data.series as DashboardModelPerfItem[]);
-        }
-      } finally {
-        if (isMounted.current && showLoading) setDashLoading(false);
-      }
-    }
-
-    if (isMounted.current) {
-      setData((prev) => ({
-        ...prev,
-        ...results,
-        loading: showLoading ? false : prev.loading,
-        errors: results.errors || {},
-      }));
-    }
   }, []);
 
   const refreshLive = useCallback(async () => {
@@ -142,6 +141,7 @@ export default function DashboardPage() {
       ...prev,
       ticketLedgerCount: ledger?.total ?? prev.ticketLedgerCount,
       latestReview: reviews?.reviews[0]?.review_date ?? prev.latestReview,
+      errors: Object.fromEntries(Object.entries(prev.errors).filter(([key]) => key !== 'roiDaily' || !roi?.data?.series)),
     }));
     if (roi?.data?.series) setRoiDaily(roi.data.series as DashboardRoiDailyItem[]);
     if (reviews?.reviews) setDailyReviews(reviews.reviews);
@@ -452,8 +452,8 @@ export default function DashboardPage() {
           <Card title="累计 ROI 对比">
             <EmptyChartState
               icon="📈"
-              title={dashLoading ? '加载中...' : '暂无数据'}
-              description={dashLoading ? '正在获取 Dashboard 数据' : (dashError || '等待 ROI 数据')}
+              title={roiLoading ? '加载中...' : data.errors.roiDaily ? '读取失败' : '暂无数据'}
+              description={roiLoading ? '正在获取 Dashboard 数据' : (data.errors.roiDaily || dashError || '等待 ROI 数据')}
               height={260}
             />
           </Card>
@@ -461,19 +461,20 @@ export default function DashboardPage() {
 
         {/* 智能代理资金池综合看板 — 多维度数据 */}
         <Card title="智能代理资金池概览" subtitle="当日策略统计">
-          {todayKpis.length > 0 && data.predictionCount !== null && data.activeTicketCount !== null && data.ticketLedgerCount !== null ? <AiPoolDashboard
+          {dashError && <p className="cc-muted">{dashError}</p>}
+          <AiPoolDashboard
             kpis={todayKpis}
             models={modelPerf}
             extras={todayExtras}
             pageStats={{
-              matchCount: todayKpis.find(k => k.key === 'predicted_match_count')?.value ?? 0,
+              matchCount: todayKpis.find(k => k.key === 'predicted_match_count')?.value ?? null,
               predictionCount: data.predictionCount,
               activeTicketCount: data.activeTicketCount,
               ticketLedgerCount: data.ticketLedgerCount,
             }}
-            loading={dashLoading}
-            error={dashError}
-          /> : <p className="cc-muted">{dashError || '总览数据尚未完整获取'}</p>}
+            loading={modelPerfLoading}
+            error={data.errors.modelPerformance ?? null}
+          />
         </Card>
       </div>
 
@@ -507,7 +508,9 @@ export default function DashboardPage() {
               {
                 label: '模型预测',
                 ok: (data.predictionCount ?? 0) > 0,
-                detail: (data.predictionCount ?? 0) > 0 ? `${data.predictionCount} 条` : '等待模型计算',
+                detail: data.predictionCount === null
+                  ? data.errors.predictions ? '预测总数读取失败' : '预测总数尚未获取'
+                  : data.predictionCount > 0 ? `${data.predictionCount} 条` : '等待模型计算',
               },
               {
                 label: '推荐引擎',

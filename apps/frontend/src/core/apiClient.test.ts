@@ -7,6 +7,14 @@ describe('api client GET request coalescing', () => {
     vi.useRealTimers();
   });
 
+  it('reads only the exact dashboard prediction count and coalesces concurrent reads', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({ total: 42 }) });
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(Promise.all([api.dashboard.predictionCount(), api.dashboard.predictionCount()])).resolves.toEqual([{ total: 42 }, { total: 42 }]);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/dashboard/prediction-count');
+  });
+
   it('records-only prediction requests preserve false and remain separate from full statistics', async () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({ predictions: [], total: null, summary: null }) });
     vi.stubGlobal('fetch', fetchMock);

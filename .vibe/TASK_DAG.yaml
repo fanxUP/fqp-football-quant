@@ -1,8 +1,8 @@
 version: 1
-status: implemented_v3e_roster_evidence_local
-date: '2026-10-09'
+status: dashboard_loading_local_verified
+date: '2026-10-16'
 mode: STRICT
-baseline_main_sha: 74ebae2b11a3abda78abe851d95d58ee418e742c
+baseline_main_sha: 5abb3d9fdc0e66268cc5e3d03bb1fa13edfee2c5
 tasks:
   - id: P01
     title: 运行态与数据证据审计
@@ -216,3 +216,25 @@ v3i_resume_20261016:
     idle_seconds: 0
     release_dependency: regular_checks_and_independent_review_complete_with_user_endurance_waiver
     remaining: [exact_candidate_ci_and_merge, deployment_and_rollback_verification]
+
+dashboard_loading_20261016:
+  base_revision: 5abb3d9fdc0e66268cc5e3d03bb1fa13edfee2c5
+  tasks:
+    - {id: D1, depends_on: [], title: read_only_profile}
+    - {id: D2, depends_on: [D1], title: exact_count_and_contract_tests}
+    - {id: D3, depends_on: [D1], title: independent_homepage_loading}
+    - {id: D4, depends_on: [D2, D3], title: regression_scope_and_evidence}
+
+dashboard_review_followup:
+  depends_on: [D3]
+  title: composite_panel_nullable_counts_and_local_model_status
+  reason: remove_remaining_cross_request_display_gate
+
+dashboard_release_20261016:
+  authorized: true
+  target_environment: server
+  rollback_revision: 5abb3d9fdc0e66268cc5e3d03bb1fa13edfee2c5
+  tasks:
+    - {id: R1, depends_on: [D4], title: commit_PR_exact_CI_and_merge}
+    - {id: R2, depends_on: [R1], title: main_CI_and_staged_build_recovery_smoke}
+    - {id: R3, depends_on: [R2], title: server_rollout_and_observe}

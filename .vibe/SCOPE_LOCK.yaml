@@ -1,4 +1,4 @@
-version: 17
+version: 18
 mode: STRICT
 allowed_paths:
   - .vibe/BASELINE.yaml
@@ -9,30 +9,15 @@ allowed_paths:
   - .vibe/ACCEPTANCE.md
   - .vibe/TASK_DAG.yaml
   - .vibe/EVIDENCE.json
-  - apps/backend/src/routers/predictions.py
-  - apps/frontend/src/core/apiClient.test.ts
+  - apps/backend/src/routers/dashboard.py
+  - tests/test_api/test_dashboard_router.py
+  - tests/test_sql/test_dashboard_prediction_count.py
   - apps/frontend/src/core/apiClient.ts
-  - apps/frontend/src/core/types.ts
-  - apps/frontend/src/features/command-center/CameraRig.test.tsx
-  - apps/frontend/src/features/command-center/PitchScene.tsx
-  - apps/frontend/src/features/model-research/ModelResearchPanel.css
-  - apps/frontend/src/features/model-research/ModelResearchPanel.test.tsx
-  - apps/frontend/src/features/model-research/ModelResearchPanel.tsx
-  - apps/frontend/src/features/model-research/ResearchScene.tsx
-  - apps/frontend/src/features/model-research/research.test.ts
-  - apps/frontend/src/features/model-research/research.ts
-  - apps/frontend/src/features/tactics/RosterEvidencePanel.css
-  - apps/frontend/src/features/tactics/RosterEvidencePanel.test.tsx
-  - apps/frontend/src/features/tactics/RosterEvidencePanel.tsx
-  - apps/frontend/src/features/tactics/TacticsScene.tsx
-  - apps/frontend/src/features/tactics/schematic.test.ts
-  - apps/frontend/src/features/tactics/schematic.ts
-  - apps/frontend/src/pages/ModelsPage.test.tsx
-  - apps/frontend/src/pages/ModelsPage.tsx
-  - apps/frontend/src/pages/models/ModelStats.tsx
-  - docs/tactics-schematic-v3f.md
-  - tests/test_api/test_prediction_research.py
-  - tests/test_api/test_predictions.py
+  - apps/frontend/src/core/apiClient.test.ts
+  - apps/frontend/src/pages/DashboardPage.tsx
+  - apps/frontend/src/pages/DashboardPage.test.tsx
+  - apps/frontend/src/visualization/AiPoolDashboard.tsx
+  - apps/frontend/src/visualization/AiPoolDashboard.test.ts
 forbidden_paths:
   - sql/
   - .env
@@ -40,4 +25,4 @@ forbidden_paths:
   - apps/frontend/package-lock.json
   - apps/model-bridge/package.json
   - apps/model-bridge/package-lock.json
-out_of_scope: "Complete prior V3f-V3i changes and P10 acceptance on current main. Preserve cleanup; no new feature scope, dependencies, SQL, model/financial algorithm, production data writes or test substitution. Publish/deploy only after fresh acceptance and CI."
+out_of_scope: "No new features, dependencies, migrations, production business-data writes. Publishing and server rollout of this tested source are authorized on 2026-10-16. Count exact same eligible prediction rows; no estimates or stale cache."
