@@ -1,7 +1,8 @@
 """Free-tier-aware query planning for football news providers.
 
 The planner is deliberately pure: it does not call providers or the database.
-Daily usage is enforced by the collector from persisted ingestion audit rows.
+These local planning caps are not verified account entitlements.
+Actual sends require the shared quota ledger in request_transport.
 """
 
 from __future__ import annotations

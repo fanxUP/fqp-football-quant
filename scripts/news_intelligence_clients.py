@@ -19,6 +19,8 @@ from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 import httpx
 
 from scripts.news_query_planner import PROVIDER_POLICIES
+from scripts.request_quota import RedisQuotaLedger
+from scripts.request_transport import GovernedJsonClient
 
 _TRACKING_PARAMS = {
     "fbclid",
@@ -96,9 +98,40 @@ class _SearchClient:
     provider_code: str
     endpoint: str
 
-    def __init__(self, api_key: str, *, client: Any | None = None) -> None:
+    def __init__(
+        self,
+        api_key: str,
+        *,
+        client: Any | None = None,
+        ledger: RedisQuotaLedger | None = None,
+        max_attempts: int = 1,
+    ) -> None:
         self.api_key = api_key
-        self._client = client or httpx.Client(timeout=20.0, follow_redirects=False)
+        self._owns_client = client is None
+        self._client = (
+            client if client is not None else httpx.Client(timeout=20.0, follow_redirects=False)
+        )
+        self._transport = GovernedJsonClient(
+            self.provider_code,
+            api_key,
+            client=self._client,
+            ledger=ledger,
+            max_attempts=max_attempts,
+            min_interval_seconds=PROVIDER_POLICIES[self.provider_code].minimum_interval_seconds,
+        )
+
+    @property
+    def last_request_meta(self) -> dict[str, Any]:
+        return dict(self._transport.last_request_meta)
+
+    @property
+    def total_sends(self) -> int:
+        return self._transport.total_sends
+
+    def close(self) -> None:
+        self._transport.close()
+        if self._owns_client:
+            self._client.close()
 
     def _params(self, query: str, start: datetime | None, end: datetime | None) -> dict[str, Any]:
         raise NotImplementedError
@@ -113,13 +146,11 @@ class _SearchClient:
         start: datetime | None = None,
         end: datetime | None = None,
     ) -> list[NewsArticleCandidate]:
-        response = self._client.get(
+        payload = self._transport.get(
             self.endpoint,
             headers=self._headers(),
             params=self._params(query, start, end),
         )
-        response.raise_for_status()
-        payload = response.json()
         raw_articles = payload.get("articles", []) if isinstance(payload, dict) else []
         candidates: list[NewsArticleCandidate] = []
         for raw in raw_articles:
@@ -170,15 +201,11 @@ class GNewsClient(_SearchClient):
         return params
 
 
-class GuardianClient:
+class GuardianClient(_SearchClient):
     """The Guardian Open Platform content search, restricted to football."""
 
     provider_code = "guardian"
     endpoint = "https://content.guardianapis.com/search"
-
-    def __init__(self, api_key: str, *, client: Any | None = None) -> None:
-        self.api_key = api_key
-        self._client = client or httpx.Client(timeout=20.0, follow_redirects=False)
 
     def search(
         self,
@@ -199,9 +226,7 @@ class GuardianClient:
             params["from-date"] = start.date().isoformat()
         if end:
             params["to-date"] = end.date().isoformat()
-        response = self._client.get(self.endpoint, headers={}, params=params)
-        response.raise_for_status()
-        payload = response.json()
+        payload = self._transport.get(self.endpoint, headers={}, params=params)
         body = payload.get("response", {}) if isinstance(payload, dict) else {}
         raw_results = body.get("results", []) if isinstance(body, dict) else []
         candidates: list[NewsArticleCandidate] = []

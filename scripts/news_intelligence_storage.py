@@ -106,7 +106,7 @@ def filter_match_relevant_candidates(
 
 
 def load_provider_request_counts(conn: Any, *, day_start: datetime) -> dict[str, int]:
-    """Count persisted provider requests since the UTC free-tier reset."""
+    """Count historical logical ingestion runs; not an account quota ledger."""
     with conn.cursor() as cur:
         cur.execute(
             """
@@ -122,7 +122,7 @@ def load_provider_request_counts(conn: Any, *, day_start: datetime) -> dict[str,
 
 
 def record_news_ingestion_request(conn: Any, payload: dict[str, Any]) -> None:
-    """Persist one external request so restarts cannot reset daily usage."""
+    """Persist one logical batch and its actual-send diagnostics for audit."""
     params = {**payload, "cursor_state": Json(payload.get("cursor_state", {}))}
     with conn.cursor() as cur:
         cur.execute(

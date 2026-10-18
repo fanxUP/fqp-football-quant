@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 
 from apps.backend.src.db import get_db
@@ -29,6 +30,7 @@ from scripts.extra_trees_shadow_model import (
     load_probabilities as load_extra_trees_shadow_probabilities,
 )
 from scripts.feature_adjustment import GoalRateAdjustment, adjust_goal_rates
+from scripts.feature_storage import load_latest_match_feature_snapshot
 from scripts.glicko2_model import Glicko2Rating
 from scripts.glicko2_model import predict_1x2 as glicko2_predict_1x2
 from scripts.hist_gradient_boosting_shadow_model import (
@@ -39,6 +41,12 @@ from scripts.lda_shadow_model import load_probabilities as load_lda_shadow_proba
 from scripts.logistic_shadow_model import load_probabilities as load_logistic_shadow_probabilities
 from scripts.market_metric_validation import MarketMetricValidationError, validate_market
 from scripts.mlp_shadow_model import load_probabilities as load_mlp_shadow_probabilities
+from scripts.model_signal_policy import (
+    MODEL_FAMILIES,
+    committee_weights,
+    disagreement_diagnostic,
+    supports_market,
+)
 from scripts.model_storage import store_committee_vote, store_model_prediction
 from scripts.naive_bayes_shadow_model import (
     load_probabilities as load_naive_bayes_shadow_probabilities,
@@ -350,33 +358,11 @@ def _now() -> str:
     return business_now().replace(tzinfo=None).isoformat(timespec="seconds")
 
 
-def _latest_feature_snapshot(conn: Any, match_id: int) -> dict[str, Any] | None:
-    """Load the latest pre-match fields used by the explainable adjustment layer."""
-    columns = [
-        "id",
-        "home_team_id",
-        "away_team_id",
-        "data_completeness_score",
-        "lineup_strength_diff",
-        "absence_impact_diff",
-        "rest_days_diff",
-        "motivation_diff",
-        "rotation_risk_diff",
-        "goal_expectation_weather_adjustment",
-    ]
-    with conn.cursor() as cur:
-        cur.execute(
-            f"""
-            SELECT {", ".join(columns)}
-            FROM match_feature_snapshots
-            WHERE match_id = %s
-            ORDER BY snapshot_time DESC
-            LIMIT 1
-            """,
-            (match_id,),
-        )
-        row = cur.fetchone()
-    return dict(zip(columns, row, strict=False)) if row else None
+def _latest_feature_snapshot(
+    conn: Any, match_id: int, *, as_of: datetime | str
+) -> dict[str, Any] | None:
+    """Use the same complete snapshot schema as storage and training."""
+    return load_latest_match_feature_snapshot(conn, match_id, as_of=as_of)
 
 
 def _load_trained_elo_probabilities(
@@ -647,7 +633,7 @@ def _predict_match_play_type(
     Returns:
         (predictions_count, votes_count)
     """
-    feature_snapshot = _latest_feature_snapshot(conn, mid)
+    feature_snapshot = _latest_feature_snapshot(conn, mid, as_of=predict_time)
     feature_snapshot_id = feature_snapshot.get("id") if feature_snapshot else None
     model_parameters = model_parameters or {}
 
@@ -697,8 +683,13 @@ def _predict_match_play_type(
                 (mid,),
             )
             row = cur.fetchone()
-            if row and row[0]:
-                handicap = float(row[0])
+            if row and row[0] is not None:
+                try:
+                    value = float(row[0])
+                    if math.isfinite(value) and value.is_integer():
+                        handicap = value
+                except TypeError, ValueError, OverflowError:
+                    pass
 
     # 4. Poisson model
     poisson_matrix = None
@@ -711,7 +702,13 @@ def _predict_match_play_type(
     raw_negative_binomial_matrix = None
     feature_adjustment = GoalRateAdjustment(1.3, 1.1, False, 0.0, 1.0, [])
     trained_goal_rates = _load_trained_goal_rates(model_parameters, feature_snapshot)
+    poisson_succeeded = False
+    dc_succeeded = False
     try:
+        if play_type == "rqspf" and (
+            trained_goal_rates is None or not supports_market("maher_poisson", play_type, handicap)
+        ):
+            raise ValueError("handicap score projection requires trained ordinary goal rates")
         if trained_goal_rates:
             raw_lam_h = trained_goal_rates.home_lambda
             raw_lam_a = trained_goal_rates.away_lambda
@@ -733,6 +730,7 @@ def _predict_match_play_type(
             poisson_probs = derive_handicap(poisson_matrix, handicap)
         else:
             poisson_probs = derive_1x2(poisson_matrix)
+        poisson_succeeded = True
     except Exception:
         lam_h, lam_a = 1.3, 1.1
         raw_lam_h, raw_lam_a = lam_h, lam_a
@@ -748,7 +746,7 @@ def _predict_match_play_type(
     # fitted shared-goal component. It remains an independently tracked shadow
     # model until its evaluation gates are explicitly promoted.
     trained_bivariate_component = _load_trained_bivariate_shared_component(
-        model_parameters, trained_goal_rates
+        model_parameters, trained_goal_rates if poisson_succeeded else None
     )
     bivariate_is_independent = trained_bivariate_component is not None
     try:
@@ -780,7 +778,7 @@ def _predict_match_play_type(
         bivariate_probs = dict(market_probs)
 
     trained_negative_binomial_dispersion = _load_trained_negative_binomial_dispersion(
-        model_parameters, trained_goal_rates
+        model_parameters, trained_goal_rates if poisson_succeeded else None
     )
     negative_binomial_is_independent = trained_negative_binomial_dispersion is not None
     try:
@@ -811,6 +809,8 @@ def _predict_match_play_type(
 
     # 5. Dixon-Coles model
     try:
+        if not poisson_succeeded:
+            raise ValueError("ordinary goal rates unavailable")
         raw_dc_matrix = dixon_coles_matrix(raw_lam_h, raw_lam_a, rho)
         raw_dc_probs = (
             derive_handicap(raw_dc_matrix, handicap)
@@ -822,6 +822,7 @@ def _predict_match_play_type(
             dc_probs = derive_handicap(dc_matrix, handicap)
         else:
             dc_probs = derive_1x2(dc_matrix)
+        dc_succeeded = True
     except Exception:
         raw_dc_probs = dict(raw_poisson_probs)
         dc_probs = dict(poisson_probs)
@@ -845,8 +846,13 @@ def _predict_match_play_type(
             predict_time=predict_time,
             model_independence={
                 "market_baseline": False,
-                "maher_poisson": trained_goal_rates is not None,
-                "dixon_coles": trained_goal_rates is not None and mle_rho is not None,
+                "maher_poisson": trained_goal_rates is not None and poisson_succeeded,
+                "dixon_coles": trained_goal_rates is not None
+                and mle_rho is not None
+                and dc_succeeded,
+            },
+            rollout_modes={
+                name: str(p.get("rollout_mode") or "live") for name, p in model_parameters.items()
             },
         )
 
@@ -1006,8 +1012,8 @@ def _predict_match_play_type(
     }
     model_independence = {
         "market_baseline": False,
-        "maher_poisson": trained_goal_rates is not None,
-        "dixon_coles": trained_goal_rates is not None and mle_rho is not None,
+        "maher_poisson": trained_goal_rates is not None and poisson_succeeded,
+        "dixon_coles": trained_goal_rates is not None and mle_rho is not None and dc_succeeded,
         "elo_rating": elo_is_independent,
         "glicko2_rating": glicko2_is_independent,
         "bivariate_poisson": bivariate_is_independent,
@@ -1029,20 +1035,37 @@ def _predict_match_play_type(
     total_p = derived_predictions
     total_v = 0
 
-    for model_name, (raw_probs, probs) in model_results.items():
-        mv_id = active_models.get(model_name)
-        if mv_id is None:
+    # Validate all eligible models before computing any cross-model diagnostic.
+    # Unsupported markets have no prediction row, rather than mislabelled 1X2 odds.
+    validated_metrics = {}
+    for name, (_raw, distribution) in model_results.items():
+        if name not in active_models or not supports_market(name, play_type, handicap):
             continue
-
         try:
-            option_metrics = validate_market(
-                model_probabilities=probs,
+            validated_metrics[name] = validate_market(
+                model_probabilities=distribution,
                 market_probabilities=market_probs,
                 odds_by_option=odds_dict,
                 snapshot_ids=snapshot_ids,
             )
         except MarketMetricValidationError:
             continue
+
+    vote_weights = committee_weights(
+        active_models, model_independence, rollout_modes, set(validated_metrics)
+    )
+    for model_name, (raw_probs, probs) in model_results.items():
+        mv_id = active_models.get(model_name)
+        if mv_id is None or model_name not in validated_metrics:
+            continue
+        option_metrics = validated_metrics[model_name]
+        goal_family = MODEL_FAMILIES.get(model_name) == "maher_goal_rates"
+        score_source_used = goal_family and (
+            poisson_succeeded
+            if model_name in ("maher_poisson", "dixon_coles")
+            else model_independence[model_name]
+        )
+        trained_rate_source = trained_goal_rates if score_source_used else None
 
         for opt_code in ("3", "1", "0"):
             model_p = probs.get(opt_code, 0.0)
@@ -1055,29 +1078,15 @@ def _predict_match_play_type(
             stored_market_p = round(market_p, 6)
             stored_break_even = round(metric.break_even_probability, 6)
 
-            uncertainty = _model_std(
-                [
-                    market_probs.get(opt_code, 0),
-                    poisson_probs.get(opt_code, 0),
-                    dc_probs.get(opt_code, 0),
-                    elo_1x2.get(opt_code, 0),
-                    glicko2_1x2.get(opt_code, 0),
-                    bivariate_probs.get(opt_code, 0),
-                    negative_binomial_probs.get(opt_code, 0),
-                    xgboost_1x2.get(opt_code, 0),
-                    logistic_1x2.get(opt_code, 0),
-                    bayesian_form_1x2.get(opt_code, 0),
-                    random_forest_1x2.get(opt_code, 0),
-                    extra_trees_1x2.get(opt_code, 0),
-                    hist_gradient_boosting_1x2.get(opt_code, 0),
-                    adaboost_1x2.get(opt_code, 0),
-                    lda_1x2.get(opt_code, 0),
-                    knn_1x2.get(opt_code, 0),
-                    mlp_1x2.get(opt_code, 0),
-                    naive_bayes_1x2.get(opt_code, 0),
-                    svm_1x2.get(opt_code, 0),
-                ]
+            diagnostic = disagreement_diagnostic(
+                {name: result[1] for name, result in model_results.items()},
+                active_models,
+                model_independence,
+                rollout_modes,
+                set(validated_metrics),
+                opt_code,
             )
+            uncertainty = diagnostic["model_std"]
 
             pred: dict[str, Any] = {
                 "match_id": mid,
@@ -1090,9 +1099,9 @@ def _predict_match_play_type(
                 "raw_model_probability": round(raw_model_p, 6),
                 "model_probability": stored_model_p,
                 "market_probability": stored_market_p,
-                "probability_lower_bound": round(max(0, model_p - uncertainty * 2), 6),
-                "probability_upper_bound": round(min(1, model_p + uncertainty * 2), 6),
-                "uncertainty_score": round(uncertainty, 6),
+                "probability_lower_bound": None,
+                "probability_upper_bound": None,
+                "uncertainty_score": uncertainty,
                 "adjusted_probability": round(model_p, 6),
                 "fair_odds": fair_odds,
                 "ev": round(stored_model_p * odds_dict[opt_code] - 1.0, 6),
@@ -1102,31 +1111,45 @@ def _predict_match_play_type(
                 "validation_status": "valid",
                 "validation_errors": [],
                 "calculation_version": "market_metrics_v2",
-                "confidence_score": round(max(0, 1.0 - uncertainty * 3), 4),
-                "risk_score": round(uncertainty * 3, 4),
+                "confidence_score": None,
+                "risk_score": None,
                 "uncertainty_reason": {
-                    "model_std": round(uncertainty, 6),
+                    "model_std": uncertainty,
+                    "disagreement": diagnostic,
+                    "confidence_status": "uncalibrated",
+                    "interval_status": "not_estimated",
+                    "risk_status": "not_estimated",
+                    "signal_kind": "market_baseline"
+                    if model_name == "market_baseline"
+                    else "independent_signal"
+                    if model_independence[model_name]
+                    else "non_independent_score_projection"
+                    if score_source_used
+                    else "market_fallback",
+                    "model_capability": play_type,
+                    "handicap": handicap if play_type == "rqspf" else None,
                     "rho": rho if model_name == "dixon_coles" else None,
                     "rho_source": "mle"
                     if (model_name == "dixon_coles" and mle_rho is not None)
                     else "default",
                     "margin_removal": (
                         "not_applicable"
-                        if model_name in ("maher_poisson", "dixon_coles")
-                        and trained_goal_rates is not None
+                        if trained_rate_source is not None
+                        or (not goal_family and model_independence[model_name])
                         else "shin_flb"
-                        if model_name in ("maher_poisson", "dixon_coles")
+                        if score_source_used
                         else "proportional"
                     ),
                     "goal_rate_source": "trained_maher"
-                    if model_name in ("maher_poisson", "dixon_coles")
-                    and trained_goal_rates is not None
-                    else "official_market",
-                    "training_matches": trained_goal_rates.training_matches
-                    if trained_goal_rates is not None
+                    if trained_rate_source is not None
+                    else "official_market"
+                    if goal_family or model_name == "market_baseline"
                     else None,
-                    "minimum_team_matches": trained_goal_rates.minimum_team_matches
-                    if trained_goal_rates is not None
+                    "training_matches": trained_rate_source.training_matches
+                    if trained_rate_source is not None
+                    else model_parameters.get(model_name, {}).get("training_matches"),
+                    "minimum_team_matches": trained_rate_source.minimum_team_matches
+                    if trained_rate_source is not None
                     else None,
                     "elo_based": model_name == "elo_rating",
                     "glicko2_based": model_name == "glicko2_rating",
@@ -1149,8 +1172,7 @@ def _predict_match_play_type(
                     "model_independent": model_independence[model_name],
                     "feature_adjustment": {
                         "version": feature_adjustment.version,
-                        "applied": feature_adjustment.applied
-                        and model_name in ("maher_poisson", "dixon_coles"),
+                        "applied": feature_adjustment.applied and score_source_used,
                         "snapshot_id": feature_snapshot_id,
                         "home_log_shift": feature_adjustment.home_log_shift,
                         "total_goal_multiplier": feature_adjustment.total_goal_multiplier,
@@ -1164,7 +1186,7 @@ def _predict_match_play_type(
         # Committee votes represent independent model opinions. Market-seeded
         # fallbacks remain available as benchmark predictions but must never
         # enter committee or recommendation decision paths.
-        if not model_independence[model_name] or rollout_modes.get(model_name) == "shadow":
+        if model_name not in vote_weights:
             continue
 
         for opt_code in ("3", "1", "0"):
@@ -1180,22 +1202,12 @@ def _predict_match_play_type(
                 "model_name": model_name,
                 "model_probability": round(p, 6),
                 "vote_direction": direction_full,
-                "vote_weight": 1.0,
+                "vote_weight": vote_weights[model_name],
             }
             store_committee_vote(conn, vote)
             total_v += 1
 
     return total_p, total_v
-
-
-def _model_std(values: list[float]) -> float:
-    """Standard deviation among model predictions for the same option."""
-    n = len(values)
-    if n < 2:
-        return 0.0
-    mean = sum(values) / n
-    variance = sum((v - mean) ** 2 for v in values) / n
-    return variance**0.5
 
 
 if __name__ == "__main__":

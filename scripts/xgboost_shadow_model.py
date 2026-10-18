@@ -8,7 +8,12 @@ from typing import Any
 
 import numpy as np
 
-from scripts.shadow_model_helpers import map_official_probabilities, valid_shadow_profile
+from scripts.shadow_model_helpers import (
+    artifact_matches_features,
+    map_official_probabilities,
+    prepare_shadow_input,
+    valid_shadow_profile,
+)
 
 
 @dataclass(frozen=True)
@@ -105,14 +110,17 @@ def load_probabilities(
 ) -> dict[str, float] | None:
     """Load the trained artifact lazily; any load failure disables this shadow signal."""
     profile = profile_from_parameters(parameters)
-    if profile is None or feature_snapshot is None:
+    model_input = prepare_shadow_input(parameters, feature_snapshot)
+    if profile is None or model_input is None:
         return None
     try:
         import xgboost as xgb
 
         classifier = xgb.XGBClassifier()
         classifier.load_model(profile.artifact_path)
-        return probabilities_from_classifier(classifier, profile, feature_snapshot)
+        if not artifact_matches_features(classifier, profile.feature_columns):
+            return None
+        return probabilities_from_classifier(classifier, profile, model_input)
     except ImportError, OSError, ValueError:
         return None
 

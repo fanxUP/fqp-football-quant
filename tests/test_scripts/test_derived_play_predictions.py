@@ -42,7 +42,7 @@ def test_derived_history_stores_every_official_option_for_each_capable_model():
         )
 
     stored = [call.args[1] for call in store.call_args_list]
-    assert count == 18
+    assert count == 14
     assert {(row["play_type"], row["option_code"]) for row in stored} == {
         ("zjq", "0"),
         ("zjq", "7"),
@@ -93,3 +93,65 @@ def test_derived_history_does_nothing_without_official_odds():
 
     assert count == 0
     store.assert_not_called()
+
+
+def test_half_full_time_has_only_market_baseline_until_joint_model_is_validated():
+    conn = MagicMock()
+    cursor = conn.cursor.return_value.__enter__.return_value
+    cursor.fetchall.return_value = [(301, "bqc", "33", 1.5), (302, "bqc", "10", 1.8)]
+    matrix = score_matrix(1.7, 0.9)
+    with patch("scripts.derived_play_predictions.store_model_prediction") as store:
+        count = store_derived_play_predictions(
+            conn=conn,
+            match_id=9,
+            active_models={"market_baseline": 1, "maher_poisson": 2, "dixon_coles": 3},
+            raw_poisson_matrix=matrix,
+            poisson_matrix=matrix,
+            raw_dc_matrix=matrix,
+            dc_matrix=matrix,
+            raw_lambdas=(1.7, 0.9),
+            adjusted_lambdas=(1.7, 0.9),
+            feature_snapshot_id=88,
+            predict_time="2026-10-17T10:00:00",
+            model_independence={"maher_poisson": True, "dixon_coles": True},
+        )
+    rows = [call.args[1] for call in store.call_args_list]
+    assert count == 2
+    assert {row["model_version_id"] for row in rows} == {1}
+    assert all(row["model_probability"] == row["market_probability"] for row in rows)
+    assert all(row["confidence_score"] is None for row in rows)
+    assert all(not row["uncertainty_reason"]["model_independent"] for row in rows)
+
+
+def test_same_goal_family_and_market_baseline_cannot_manufacture_derived_confidence():
+    conn = MagicMock()
+    cursor = conn.cursor.return_value.__enter__.return_value
+    cursor.fetchall.return_value = [(101, "zjq", "0", 1.5), (102, "zjq", "7", 1.8)]
+    matrix = score_matrix(1.7, 0.9)
+    with patch("scripts.derived_play_predictions.store_model_prediction") as store:
+        count = store_derived_play_predictions(
+            conn=conn,
+            match_id=9,
+            active_models={"market_baseline": 1, "maher_poisson": 2, "dixon_coles": 3},
+            raw_poisson_matrix=matrix,
+            poisson_matrix=matrix,
+            raw_dc_matrix=matrix,
+            dc_matrix=matrix,
+            raw_lambdas=(1.7, 0.9),
+            adjusted_lambdas=(1.7, 0.9),
+            feature_snapshot_id=88,
+            predict_time="2026-10-17T10:00:00",
+            model_independence={"maher_poisson": True, "dixon_coles": True},
+        )
+    assert count == 6
+    for call in store.call_args_list:
+        row = call.args[1]
+        for key in (
+            "confidence_score",
+            "risk_score",
+            "probability_lower_bound",
+            "probability_upper_bound",
+            "uncertainty_score",
+        ):
+            assert row[key] is None
+        assert row["uncertainty_reason"]["confidence_status"] == "uncalibrated"

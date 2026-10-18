@@ -41,7 +41,7 @@ export interface RecommendationInsightItem {
   bestPlayTypeName: string;
   bestEv: number;
   bestEdge: number;
-  bestConfidence: number;
+  bestConfidence: number | null;
   directionCount: number;
   options: LiveRecommendation[];
 }
@@ -144,11 +144,11 @@ export function buildRecommendationInsightSummary(recommendations: LiveRecommend
   });
 
   const byBestSignal = (a: RecommendationInsightItem, b: RecommendationInsightItem) =>
-    b.bestEv - a.bestEv || b.bestConfidence - a.bestConfidence || b.bestEdge - a.bestEdge;
+    b.bestEv - a.bestEv || (b.bestConfidence ?? -1) - (a.bestConfidence ?? -1) || b.bestEdge - a.bestEdge;
 
   return {
     strongSignals: items
-      .filter((item) => item.bestEv >= 0.05 && item.bestEdge >= 0.05 && item.bestConfidence >= 0.55)
+      .filter((item) => item.bestEv >= 0.05 && item.bestEdge >= 0.05 && item.bestConfidence !== null && item.bestConfidence >= 0.55)
       .sort(byBestSignal)
       .slice(0, 4),
     conflictSignals: items
@@ -166,7 +166,8 @@ export default function RecommendationsPage({ embedded = false, onMatchSelect }:
         || value.recommendations.some(rec => !Number.isSafeInteger(rec.match_id) || rec.match_id <= 0
           || !Number.isSafeInteger(rec.prediction_id) || rec.prediction_id <= 0
           || [rec.home_team, rec.away_team, rec.league, rec.play_type, rec.option_code, rec.option_name, rec.model_name, rec.predict_time, rec.odds_snapshot_time].some(field => typeof field !== 'string')
-          || [rec.model_probability, rec.market_probability, rec.confidence].some(prob => !Number.isFinite(prob) || prob < 0 || prob > 1)
+          || [rec.model_probability, rec.market_probability].some(prob => !Number.isFinite(prob) || prob < 0 || prob > 1)
+          || (rec.confidence !== null && (!Number.isFinite(rec.confidence) || rec.confidence < 0 || rec.confidence > 1))
           || !Number.isFinite(rec.ev) || !Number.isFinite(rec.edge) || !Number.isFinite(rec.sp_value) || rec.sp_value <= 0)) throw new Error('预测数据格式不正确');
       return value;
     };
@@ -666,7 +667,7 @@ export default function RecommendationsPage({ embedded = false, onMatchSelect }:
                       </span>
                       <span className="recommendation-insight-stats">
                         <b>EV {item.bestEv >= 0 ? '+' : ''}{item.bestEv.toFixed(3)}</b>
-                        <i>置信 {(item.bestConfidence * 100).toFixed(0)}%</i>
+                        <i>{item.bestConfidence === null ? '置信 未校准' : `置信 ${(item.bestConfidence * 100).toFixed(0)}%`}</i>
                       </span>
                     </button>
                   ))}
@@ -879,14 +880,14 @@ export default function RecommendationsPage({ embedded = false, onMatchSelect }:
                         </div>
                       </td>
                       <td>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        {best.confidence === null ? <span style={{ fontSize: 11, color: 'var(--fqp-text-muted)' }}>未校准</span> : <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                           <div style={{ width: 40, height: 4, borderRadius: 2, background: 'var(--fqp-panel)', overflow: 'hidden' }}>
                             <div style={{ height: '100%', width: `${Math.round(best.confidence * 100)}%`, background: best.confidence > 0.6 ? 'var(--fqp-success)' : best.confidence > 0.4 ? 'var(--fqp-warning)' : 'var(--fqp-red-neon)', borderRadius: 2 }} />
                           </div>
                           <span style={{ fontSize: 11, color: 'var(--fqp-text-muted)' }}>
                             {(best.confidence * 100).toFixed(0)}%
                           </span>
-                        </div>
+                        </div>}
                       </td>
                       <td style={{ fontSize: 11, color: 'var(--fqp-text-muted)', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         <div>{best.model_name}</div>

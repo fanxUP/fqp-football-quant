@@ -13,6 +13,8 @@ import json
 from datetime import datetime
 from typing import Any
 
+from scripts.feature_schema import SNAPSHOT_READ_COLUMNS, SNAPSHOT_WRITE_COLUMNS
+
 
 def _now() -> str:
     return datetime.now().isoformat(timespec="seconds")
@@ -80,81 +82,62 @@ def store_match_feature_snapshot(conn: Any, snapshot: dict) -> int | None:
 
     Returns the snapshot id.
     """
-    sql = """
-        INSERT INTO match_feature_snapshots (
-            match_id, snapshot_time, feature_version,
-            home_team_id, away_team_id, competition_season_id,
-            -- team strength
-            home_team_market_value, away_team_market_value,
-            team_market_value_diff, team_market_value_ratio,
-            home_attack_strength_score, away_attack_strength_score,
-            home_defense_strength_score, away_defense_strength_score,
-            -- rest / schedule
-            home_rest_days, away_rest_days, rest_days_diff,
-            -- motivation
-            home_motivation_score, away_motivation_score, motivation_diff,
-            -- cold-result research, strictly pre-kickoff history
-            upset_risk_score, league_upset_rate,
-            home_team_upset_rate, away_team_upset_rate, upset_risk_confidence,
-            -- data quality
-            data_completeness_score, source_confidence_score, uncertainty_score,
-            raw_feature_refs, created_at
-        ) VALUES (
-            %(match_id)s, %(snapshot_time)s, %(feature_version)s,
-            %(home_team_id)s, %(away_team_id)s, %(competition_season_id)s,
-            %(home_team_market_value)s, %(away_team_market_value)s,
-            %(team_market_value_diff)s, %(team_market_value_ratio)s,
-            %(home_attack_strength_score)s, %(away_attack_strength_score)s,
-            %(home_defense_strength_score)s, %(away_defense_strength_score)s,
-            %(home_rest_days)s, %(away_rest_days)s, %(rest_days_diff)s,
-            %(home_motivation_score)s, %(away_motivation_score)s, %(motivation_diff)s,
-            %(upset_risk_score)s, %(league_upset_rate)s,
-            %(home_team_upset_rate)s, %(away_team_upset_rate)s, %(upset_risk_confidence)s,
-            %(data_completeness_score)s, %(source_confidence_score)s, %(uncertainty_score)s,
-            %(raw_feature_refs)s, now()
-        )
-        RETURNING id
-    """
+    # SQL identifiers come only from the immutable schema, never caller keys.
+    # Explicit None stays missing; false and zero must survive unchanged.
+    params = {column: snapshot.get(column) for column in SNAPSHOT_WRITE_COLUMNS}
+    params.update(
+        match_id=snapshot["match_id"],
+        snapshot_time=snapshot.get("snapshot_time", _now()),
+        feature_version=snapshot.get("feature_version", "v1_basic"),
+        raw_feature_refs=json.dumps(snapshot.get("raw_feature_refs", {}), ensure_ascii=False),
+    )
+    columns = ", ".join(SNAPSHOT_WRITE_COLUMNS)
+    placeholders = ", ".join(f"%({column})s" for column in SNAPSHOT_WRITE_COLUMNS)
     with conn.cursor() as cur:
         cur.execute(
-            sql,
-            {
-                "match_id": snapshot["match_id"],
-                "snapshot_time": snapshot.get("snapshot_time", _now()),
-                "feature_version": snapshot.get("feature_version", "v1_basic"),
-                "home_team_id": snapshot.get("home_team_id"),
-                "away_team_id": snapshot.get("away_team_id"),
-                "competition_season_id": snapshot.get("competition_season_id"),
-                "home_team_market_value": snapshot.get("home_team_market_value"),
-                "away_team_market_value": snapshot.get("away_team_market_value"),
-                "team_market_value_diff": snapshot.get("team_market_value_diff"),
-                "team_market_value_ratio": snapshot.get("team_market_value_ratio"),
-                "home_attack_strength_score": snapshot.get("home_attack_strength_score"),
-                "away_attack_strength_score": snapshot.get("away_attack_strength_score"),
-                "home_defense_strength_score": snapshot.get("home_defense_strength_score"),
-                "away_defense_strength_score": snapshot.get("away_defense_strength_score"),
-                "home_rest_days": snapshot.get("home_rest_days"),
-                "away_rest_days": snapshot.get("away_rest_days"),
-                "rest_days_diff": snapshot.get("rest_days_diff"),
-                "home_motivation_score": snapshot.get("home_motivation_score"),
-                "away_motivation_score": snapshot.get("away_motivation_score"),
-                "motivation_diff": snapshot.get("motivation_diff"),
-                "upset_risk_score": snapshot.get("upset_risk_score"),
-                "league_upset_rate": snapshot.get("league_upset_rate"),
-                "home_team_upset_rate": snapshot.get("home_team_upset_rate"),
-                "away_team_upset_rate": snapshot.get("away_team_upset_rate"),
-                "upset_risk_confidence": snapshot.get("upset_risk_confidence"),
-                "data_completeness_score": snapshot.get("data_completeness_score"),
-                "source_confidence_score": snapshot.get("source_confidence_score"),
-                "uncertainty_score": snapshot.get("uncertainty_score"),
-                "raw_feature_refs": json.dumps(
-                    snapshot.get("raw_feature_refs", {}), ensure_ascii=False
-                ),
-            },
+            f"""
+            INSERT INTO match_feature_snapshots ({columns}, created_at)
+            VALUES ({placeholders}, now())
+            RETURNING id
+            """,
+            params,
         )
         row = cur.fetchone()
     conn.commit()
     return row[0] if row else None
+
+
+def load_latest_match_feature_snapshot(
+    conn: Any, match_id: int, *, as_of: datetime | str
+) -> dict[str, Any] | None:
+    """Read all declared fields at the prediction's legacy business-local time.
+
+    These existing PostgreSQL columns are TIMESTAMP WITHOUT TIME ZONE. The
+    caller must supply the same business-local naive clock as official_matches
+    and predict_time, rather than letting the DB reinterpret an aware cutoff.
+    This bounds snapshot_time only; observation publication/revision history
+    and complete-batch visibility belong to the later observation contract.
+    """
+    cutoff = datetime.fromisoformat(as_of) if isinstance(as_of, str) else as_of
+    if cutoff.tzinfo is not None:
+        raise ValueError("as_of must be business-local naive for legacy timestamp columns")
+    columns = ", ".join(f"fs.{column}" for column in SNAPSHOT_READ_COLUMNS)
+    with conn.cursor() as cur:
+        cur.execute(
+            f"""
+            SELECT {columns}
+            FROM match_feature_snapshots fs
+            JOIN official_matches m ON m.id = fs.match_id
+            WHERE fs.match_id = %(match_id)s
+              AND fs.snapshot_time < m.kickoff_time
+              AND fs.snapshot_time <= %(as_of)s
+            ORDER BY fs.snapshot_time DESC, fs.id DESC
+            LIMIT 1
+            """,
+            {"match_id": match_id, "as_of": cutoff},
+        )
+        row = cur.fetchone()
+    return dict(zip(SNAPSHOT_READ_COLUMNS, row, strict=True)) if row is not None else None
 
 
 # ---------------------------------------------------------------------------

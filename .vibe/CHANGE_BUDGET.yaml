@@ -1,10 +1,28 @@
-version: 18
+version: 35
 mode: STRICT
-max_changed_files: 17
-max_new_files: 2
+max_changed_files: 65
+max_new_files: 22
 max_dependency_additions: 0
 max_migration_files: 0
-max_public_api_changes: 1
-max_regression_tests: 20
-scope_note: "Homepage exact count and independent request completion only; preserve default prediction API and financial/model semantics. Evidence stays outside repo."
-budget_revision_reason: "Independent review found the composite AiPoolDashboard still gates model display on unrelated counts. Include its nullable count rendering and regression tests to satisfy independent-loading acceptance; no extra feature scope."
+max_public_api_changes: 3
+max_regression_tests: 490
+scope_note: Prior63 + one read-only job + its regression file =65/22; no dependency/migration/public
+  API additions.
+regression_budget_scope: Prior440 + at most50 operational fixed scenarios including
+  isolated recovery/ACL/memory refusal.
+revision_reason: 'Before any implementation: one bounded read-only operator entry;
+  no config mutation/provision/unlock endpoint.'
+scope_extension_v23: Two existing frontend paths for nullable SHAP feature_value;
+  no dependency or migration.
+scope_extension_v25: 'Before edits: parameterized version SQL requires existing capture-cursor
+  fixture to accept params; inspected observed-form source must require final/confirmed
+  and both nonnegative goals before calling it settled history. No new data source
+  or model algorithm.'
+scope_extension_v26: 'Before edits: end-to-end null confidence in recommendation item
+  parsing, existing live API and consuming page. Existing frontend type paths retained;
+  no financial formulas or ticket publication gates. min_confidence>0 still rejects
+  unknown; unfiltered0 can show unknown explicitly.'
+slice2_revision: 'Before implementation: prior238 changed scenarios plus up to92 transport,
+  client and audit cases; no new dependency, SQL or public endpoint.'
+slice3_revision: 'Before implementation: prior conservative327 plus up to103 request
+  reuse/audit cases; total430. Exact59 paths/19new; no dependency or migration.'

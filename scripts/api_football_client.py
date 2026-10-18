@@ -1,6 +1,6 @@
 """API-Football v3 REST client.
 
-Free tier: 100 calls/day, x-apisports-key header.
+Explicit shared quota required; x-apisports-key header.
 Wider league coverage than football-data.org, includes injuries and lineups.
 
 Key endpoints:
@@ -15,25 +15,16 @@ Key endpoints:
 from __future__ import annotations
 
 import os
-import time
 from typing import Any
 
 import httpx
 
+from scripts.request_quota import RedisQuotaLedger
+from scripts.request_transport import GovernedJsonClient, ProviderRequestError
+
 
 class ApiFootballRateLimitError(RuntimeError):
     """Raised when API-SPORTS refuses a request because quota is exhausted."""
-
-
-def _is_rate_limit_error(errors: Any) -> bool:
-    if isinstance(errors, dict):
-        return any(
-            "rate" in str(key).lower() or "rate limit" in str(value).lower()
-            for key, value in errors.items()
-        )
-    if isinstance(errors, list):
-        return any(_is_rate_limit_error(item) for item in errors)
-    return "rate limit" in str(errors).lower()
 
 
 class ApiFootballClient:
@@ -41,112 +32,61 @@ class ApiFootballClient:
 
     BASE_URL = "https://v3.football.api-sports.io/"
 
-    # 100 calls/day on free tier → track usage locally
-    _daily_call_limit = 100
-
     def __init__(
         self,
         api_key: str | None = None,
         timeout: float = 30.0,
         min_interval: float | None = None,
         max_retries: int = 3,
+        *,
+        client: Any | None = None,
+        ledger: RedisQuotaLedger | None = None,
     ) -> None:
-        self._api_key = api_key or os.getenv("API_FOOTBALL_KEY", "")
-        if not self._api_key:
+        key = api_key or os.getenv("API_FOOTBALL_KEY", "")
+        if not key:
             raise ValueError("API_FOOTBALL_KEY is required (env or constructor)")
+        self._api_key: str = key
 
-        self._client = httpx.Client(
-            base_url=self.BASE_URL,
-            timeout=timeout,
-            headers={
-                "x-apisports-key": self._api_key,
-                "Accept": "application/json",
-            },
+        self._owns_client = client is None
+        self._client = (
+            client
+            if client is not None
+            else httpx.Client(
+                base_url=self.BASE_URL,
+                timeout=timeout,
+                follow_redirects=False,
+                headers={
+                    "x-apisports-key": self._api_key,
+                    "Accept": "application/json",
+                },
+            )
         )
         self._min_interval = (
             float(os.getenv("API_FOOTBALL_MIN_INTERVAL_SECONDS", "6.1"))
             if min_interval is None
             else min_interval
         )
-        self._max_retries = max_retries
-        self._last_request_time = 0.0
-        self._call_count_today = 0
-        self._last_response_meta: dict[str, Any] = {}
-
-    # ------------------------------------------------------------------
-    # Internal
-    # ------------------------------------------------------------------
-
-    def _rate_limit(self) -> None:
-        elapsed = time.monotonic() - self._last_request_time
-        if elapsed < self._min_interval:
-            time.sleep(self._min_interval - elapsed)
+        self._transport = GovernedJsonClient(
+            "api_football",
+            self._api_key,
+            client=self._client,
+            ledger=ledger,
+            max_attempts=max_retries,
+            min_interval_seconds=self._min_interval,
+        )
+        self._counter_reset = 0
 
     def _request(self, path: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
-        self._rate_limit()
-        self._call_count_today += 1
-
-        if self._call_count_today > self._daily_call_limit:
-            print(
-                f"[api-football] WARNING: daily call limit ({self._daily_call_limit}) "
-                f"exceeded ({self._call_count_today} calls so far)"
+        try:
+            return self._transport.get(
+                self.BASE_URL + path,
+                params=params,
+                headers={"x-apisports-key": self._api_key, "Accept": "application/json"},
             )
-
-        last_error: Exception | None = None
-        for attempt in range(1, self._max_retries + 1):
-            try:
-                print(
-                    f"[api-football] GET {path} params={params} "
-                    f"(attempt {attempt}, call #{self._call_count_today})"
-                )
-                resp = self._client.get(path, params=params)
-                self._last_request_time = time.monotonic()
-
-                if resp.status_code == 429:
-                    raise ApiFootballRateLimitError(
-                        "API-Football rate limit reached; retry on the next scheduled run"
-                    )
-
-                # Handle rate limit headers
-                remaining = resp.headers.get("x-ratelimit-requests-remaining")
-                if remaining:
-                    remaining = int(remaining)
-                    if remaining < 5:
-                        print(f"[api-football] low quota: {remaining} calls remaining today")
-
-                resp.raise_for_status()
-                data = resp.json()
-                self._last_response_meta = {
-                    "errors": data.get("errors") or {},
-                    "results": data.get("results"),
-                    "parameters": data.get("parameters") or {},
-                    "remaining": remaining,
-                }
-
-                # API-Football wraps responses in {get:, parameters:, errors:, results:}
-                if data.get("errors"):
-                    error_msg = data["errors"]
-                    print(f"[api-football] API errors: {error_msg}")
-                    if _is_rate_limit_error(error_msg):
-                        raise ApiFootballRateLimitError(
-                            "API-Football rate limit reached; retry on the next scheduled run"
-                        )
-
-                print(
-                    f"[api-football] GET {path} → {resp.status_code} "
-                    f"(remaining: {remaining if remaining else '?'})"
-                )
-                return data
-            except (httpx.HTTPError, httpx.TimeoutException, ValueError) as e:
-                last_error = e
-                print(f"[api-football] GET {path} error (attempt {attempt}): {e}")
-                if attempt < self._max_retries:
-                    backoff = 2**attempt
-                    print(f"[api-football] retrying in {backoff}s...")
-                    time.sleep(backoff)
-        raise RuntimeError(
-            f"ApiFootballClient: {self._max_retries} attempts failed for {path}: {last_error}"
-        )
+        except ProviderRequestError as exc:
+            if exc.reason in ("rate_limited", "daily_exhausted"):
+                raise ApiFootballRateLimitError("API-Football rate limit reached") from None
+            raise
 
     # ------------------------------------------------------------------
     # Helper
@@ -397,20 +337,22 @@ class ApiFootballClient:
 
     @property
     def call_count_today(self) -> int:
-        return self._call_count_today
+        return self._transport.total_sends - self._counter_reset
 
     @property
     def last_response_meta(self) -> dict[str, Any]:
         """返回最近一次 API 响应的可审计元数据，不包含密钥。"""
-        return dict(self._last_response_meta)
+        return {"errors": {}, **self._transport.last_request_meta}
 
     def reset_call_count(self) -> None:
-        """Reset daily counter (call at midnight)."""
-        self._call_count_today = 0
+        """Reset the legacy per-instance diagnostic only; never shared quota."""
+        self._counter_reset = self._transport.total_sends
 
     # ------------------------------------------------------------------
     # Cleanup
     # ------------------------------------------------------------------
 
     def close(self) -> None:
-        self._client.close()
+        self._transport.close()
+        if self._owns_client:
+            self._client.close()

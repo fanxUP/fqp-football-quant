@@ -351,6 +351,7 @@ def _run_with_odds(odds_rows):
     conn = MagicMock()
     cursor = conn.cursor.return_value.__enter__.return_value
     cursor.fetchall.return_value = odds_rows
+    cursor.fetchone.return_value = None  # No eligible feature snapshot in this fixture.
 
     with (
         patch("scripts.jobs.run_model_prediction.store_model_prediction") as store_prediction,

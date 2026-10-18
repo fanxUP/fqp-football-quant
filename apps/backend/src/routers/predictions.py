@@ -175,7 +175,7 @@ def get_live_recommendations(
                             AND market.is_open = true
                       )
                       AND sti.model_probability * current_odds.sp_value - 1 > %(min_ev)s
-                      AND sti.confidence_score >= %(min_confidence)s
+                      AND (%(min_confidence)s <= 0 OR sti.confidence_score >= %(min_confidence)s)
                     ORDER BY sti.match_id, sti.play_type, sti.option_code,
                              st.created_at DESC, sti.id DESC
                 )
@@ -201,7 +201,7 @@ def get_live_recommendations(
         market_prob = float(r[5]) if r[5] else 0
         fair_odds = float(r[6]) if r[6] else 0
         ev = float(r[7]) if r[7] else 0
-        confidence = float(r[8]) if r[8] else 0
+        confidence = float(r[8]) if r[8] is not None else None
         edge = model_prob - market_prob if market_prob > 0 else 0
         handicap = float(r[16]) if r[16] is not None else None
         official_match_code = r[17]
@@ -228,7 +228,7 @@ def get_live_recommendations(
                 "market_edge": round(edge, 4),
                 "break_even_probability": round(break_even_probability, 4),
                 "breakeven_edge": round(breakeven_edge, 4),
-                "confidence": round(confidence, 4),
+                "confidence": round(confidence, 4) if confidence is not None else None,
                 "odds_snapshot_time": odds_snapshot_time.isoformat()
                 if hasattr(odds_snapshot_time, "isoformat")
                 else str(odds_snapshot_time),

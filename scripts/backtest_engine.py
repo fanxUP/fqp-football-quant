@@ -119,7 +119,7 @@ class BetRecord:
     actual_result: str  # "3" / "1" / "0"
     profit: float  # 盈亏 (正=赢, 负=输)
     ev: float
-    confidence: float
+    confidence: float | None
     play_type: str = "spf"
 
 
@@ -476,7 +476,11 @@ class BacktestEngine:
                     actual_result=actual,
                     profit=profit,
                     ev=float(row.get("ev", 0)),
-                    confidence=float(row.get("confidence_score", 0)),
+                    confidence=(
+                        float(row["confidence_score"])
+                        if row.get("confidence_score") is not None
+                        else None
+                    ),
                     play_type=str(row.get("play_type") or "spf"),
                 )
             )
