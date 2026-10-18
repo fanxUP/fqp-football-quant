@@ -84,6 +84,16 @@ describe('RecommendationsPage', () => {
     });
   });
 
+  it('keeps uncalibrated recommendations available without displaying zero confidence', async () => {
+    const unknown = { ...recommendation, confidence: null };
+    liveRecommendations.mockResolvedValue({ status: 'ok', recommendations: [unknown], total: 1, sales_window: { is_open: true } });
+    expect(buildRecommendationInsightSummary([unknown]).strongSignals).toEqual([]);
+    render(<RecommendationsPage />);
+    expect(await screen.findByText('未校准')).toBeInTheDocument();
+    expect(screen.queryByText('预测数据格式不正确')).not.toBeInTheDocument();
+    expect(screen.queryByText('0%')).not.toBeInTheDocument();
+  });
+
   it('休市时显示官方提示且不回退为模型基线推荐', async () => {
     liveRecommendations.mockResolvedValue({
       status: 'resting',

@@ -861,7 +861,7 @@ export interface ShapEntry {
   label: string;
   shap_value: number;
   shap_abs: number;
-  feature_value: number;
+  feature_value: number | null;
 }
 
 export interface ShapExplanation {
@@ -911,7 +911,7 @@ export interface LiveRecommendation {
   market_edge: number;
   break_even_probability: number;
   breakeven_edge: number;
-  confidence: number;
+  confidence: number | null;
   odds_snapshot_time: string;
   data_completeness: number | null;
   validation_status: 'valid' | 'invalid';
@@ -1008,7 +1008,7 @@ export interface BetSlipItem {
     marketProbability?: number;
     edge?: number;
     ev?: number;
-    confidence?: number;
+    confidence?: number | null;
     sentimentWeight?: number;
     summary?: string;
   };

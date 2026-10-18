@@ -1,0 +1,119 @@
+# Metadata only. Does not enable a collector, establish account permission,
+# certify coverage, or grant a caller access to any database table.
+contract_version: fqp-data/v1
+catalog_version: '2026-10-16.1'
+runtime_authorization: false
+sources:
+  sporttery:
+    family: sporttery
+    alias_namespace: sporttery
+    implementation: existing
+    account_verification: unknown
+    coverage_verification: unknown
+    permission_evidence: existing official business chain; runtime not revalidated
+    quota_owner: P103
+  api_football:
+    family: api_sports
+    # Preserve the namespace actually written by seed_team_aliases.py.
+    alias_namespace: apifootball
+    implementation: existing
+    account_verification: unknown
+    coverage_verification: unknown
+    permission_evidence: verify actual account, purpose and league-season fields before enabling
+    quota_owner: P103
+  open_meteo:
+    family: open_meteo
+    alias_namespace: null
+    implementation: existing
+    account_verification: unknown
+    coverage_verification: unknown
+    permission_evidence: verify actual usage plan and field freshness before enabling
+    quota_owner: P103
+  newsapi:
+    family: newsapi
+    alias_namespace: null
+    implementation: existing
+    account_verification: unknown
+    coverage_verification: unknown
+    permission_evidence: actual plan and permitted use must be verified
+    quota_owner: P103
+  gnews:
+    family: gnews
+    alias_namespace: null
+    implementation: existing
+    account_verification: unknown
+    coverage_verification: unknown
+    permission_evidence: actual plan and permitted use must be verified
+    quota_owner: P103
+  guardian:
+    family: guardian
+    alias_namespace: null
+    implementation: existing
+    account_verification: unknown
+    coverage_verification: unknown
+    permission_evidence: actual plan and permitted use must be verified
+    quota_owner: P103
+products:
+  official_events:
+    contract_owner: P101
+    writer: official_storage
+    tables: [official_matches, official_markets, official_results]
+    purposes: [research, prediction, display, settlement, operations]
+    consumers: [feature_build, model_prediction, official_api, tickets, pool]
+    availability: business_required_per_match_market
+  official_prices:
+    contract_owner: P104
+    writer: official_odds_capture
+    tables: [official_odds_snapshots, official_odds_capture_batches]
+    purposes: [research, prediction, display, settlement, operations]
+    consumers: [model_prediction, recommendations, evaluation]
+    availability: business_required_per_match_market
+  football_entities:
+    contract_owner: P101
+    writer: existing_entity_seed_jobs
+    tables: [teams, team_aliases, players, player_aliases, competitions, seasons, competition_seasons]
+    purposes: [research, prediction, display, operations]
+    consumers: [feature_build, models, news, enrichment]
+    availability: model_declared
+  match_features:
+    contract_owner: P102
+    writer: run_feature_snapshot_build
+    tables: [match_feature_snapshots]
+    purposes: [research, prediction, display, operations]
+    consumers: [maher_poisson, logistic_shadow, feature_snapshot_panel, evaluation]
+    availability: model_declared
+  player_availability:
+    contract_owner: P108
+    writer: existing_lineup_injury_collectors
+    tables: [match_lineup_snapshots, match_lineup_players, player_availability_snapshots, team_squad_snapshots]
+    purposes: [research, prediction, display, operations]
+    consumers: [feature_build, news, lineup_scenarios]
+    availability: optional_until_model_requires
+  news_evidence:
+    contract_owner: P104
+    writer: existing_news_review_pipeline
+    tables: [news_articles_raw, news_events, news_event_evidence, match_news_features]
+    purposes: [research, prediction, display, operations]
+    consumers: [news_shadow, approved_news_overlay, review]
+    availability: optional_until_model_requires
+  model_runs:
+    contract_owner: P106
+    writer: existing_model_prediction_and_training_jobs
+    tables: [model_versions, model_predictions, score_distribution_snapshots]
+    purposes: [research, prediction, display, operations]
+    consumers: [model_lab, recommendations, evaluation, review]
+    availability: model_declared
+  financial_ledger:
+    contract_owner: existing_financial_domain
+    writer: existing_financial_transactions
+    tables: [bankroll_accounts, bankroll_transactions]
+    purposes: [settlement, operations]
+    consumers: [authorized_financial_services_only]
+    availability: restricted
+  provider_credentials:
+    contract_owner: existing_credential_domain
+    writer: existing_provider_store
+    tables: [llm_provider_configs]
+    purposes: [credential_admin]
+    consumers: [authorized_provider_store_only]
+    availability: restricted

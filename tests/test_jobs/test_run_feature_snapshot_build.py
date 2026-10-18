@@ -6,10 +6,20 @@ from scripts.jobs.run_feature_snapshot_build import (
     _load_collected_weather,
     _load_latest_open_odds,
     _resolve_competition_season_id,
+    _resolve_team_id,
     _snapshot_job_result,
     can_build_team_dependent_features,
     compute_full_completeness,
 )
+
+
+def test_feature_job_uses_shared_alias_contract_and_rejects_ambiguity(mock_conn):
+    conn, cur = mock_conn
+    cur.fetchall.return_value = [(11,), (12,)]
+    assert _resolve_team_id(conn, "测试队") is None
+    query, params = cur.execute.call_args.args
+    assert "LIMIT 2" in query
+    assert params["source_name"] == "sporttery"
 
 
 def test_feature_snapshot_reads_only_latest_open_odds(mock_conn):

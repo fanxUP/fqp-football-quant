@@ -15,7 +15,6 @@ from scripts.news_intelligence_clients import GNewsClient, GuardianClient, NewsA
 from scripts.news_intelligence_storage import (
     filter_match_relevant_candidates,
     load_news_watch_matches,
-    load_provider_request_counts,
     record_news_ingestion_request,
     store_news_candidates,
 )
@@ -91,12 +90,20 @@ def collect_provider_batches(
     audit: Callable[[dict[str, Any]], None],
     wait: Callable[[float], None] = time.sleep,
 ) -> dict[str, Any]:
-    """Collect one provider conservatively and audit every quota-consuming request."""
+    """Audit logical batches separately from measured transport attempts.
+
+    Audit rows are evidence, never permission to send or a quota balance. Legacy
+    test/ad-hoc clients without counters are explicitly marked unmeasured.
+    """
     provider_code = str(client.provider_code)
     policy = PROVIDER_POLICIES[provider_code]
     start, end = provider_window(provider_code, observed_at)
     totals = {
         "requests": 0,
+        "sentRequests": 0,
+        "reusedRequests": 0,
+        "blockedRequests": 0,
+        "unmeasuredRequests": 0,
         "failedRequests": 0,
         "zeroResultQueries": 0,
         "candidates": 0,
@@ -114,6 +121,7 @@ def collect_provider_batches(
         stored = {"inserted": 0, "duplicates": 0, "linked": 0, "filtered": 0}
         error_message: str | None = None
         status = "completed"
+        sent_before = getattr(client, "total_sends", None)
         try:
             candidates = client.search(batch.query, start=start, end=end)
             relevant_candidates, prefiltered = filter_match_relevant_candidates(
@@ -127,6 +135,39 @@ def collect_provider_batches(
             totals["failedRequests"] += 1
             errors.append({"provider": provider_code, "error": error_message})
         finished_at = datetime.now(UTC)
+        sent_after = getattr(client, "total_sends", None)
+        sent = (
+            sent_after - sent_before
+            if type(sent_before) is int and type(sent_after) is int and sent_after >= sent_before
+            else None
+        )
+        measured = sent is not None
+        if sent is None:
+            totals["unmeasuredRequests"] += 1
+        else:
+            totals["sentRequests"] += sent
+            totals["blockedRequests"] += int(status == "failed" and sent == 0)
+        # Allowlist only bounded diagnostics; never serialize provider payloads,
+        # request URLs or query-string API keys into the existing audit JSON.
+        raw_meta = getattr(client, "last_request_meta", {})
+        request_meta: dict[str, Any] = {"attemptsSent": sent, "measured": measured}
+        for key in (
+            "http_status",
+            "quota_day_sent",
+            "remaining",
+            "minute_remaining",
+            "fetched_at_ms",
+            "age_ms",
+        ):
+            value = raw_meta.get(key) if isinstance(raw_meta, dict) else None
+            if type(value) is int and value >= 0:
+                request_meta[key] = value
+        reuse_status = raw_meta.get("reuse_status") if isinstance(raw_meta, dict) else None
+        if reuse_status in ("fetched", "cache_hit", "coalesced", "not_stored", "unavailable"):
+            request_meta["reuse_status"] = reuse_status
+            totals["reusedRequests"] += int(
+                status == "completed" and sent == 0 and reuse_status in ("cache_hit", "coalesced")
+            )
         totals["requests"] += 1
         totals["candidates"] += len(candidates)
         totals["zeroResultQueries"] += int(status == "completed" and not candidates)
@@ -145,6 +186,7 @@ def collect_provider_batches(
                 "cursor_state": {
                     "querySha256": sha256(batch.query.encode()).hexdigest(),
                     "matchIds": list(batch.match_ids),
+                    "transport": request_meta,
                 },
             }
         )
@@ -183,10 +225,8 @@ def run() -> dict[str, Any]:
             "skippedProviders": skipped_providers,
         }
     now = datetime.now(UTC)
-    utc_day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     with get_db() as conn:
         matches = load_news_watch_matches(conn)
-        used_requests = load_provider_request_counts(conn, day_start=utc_day_start)
         if not matches:
             return {
                 "status": "skipped",
@@ -200,30 +240,6 @@ def run() -> dict[str, Any]:
     for client in build_collection_clients(provider_keys):
         provider_code = str(client.provider_code)
         policy = PROVIDER_POLICIES[provider_code]
-        remaining = max(0, policy.daily_request_budget - used_requests.get(provider_code, 0))
-        limit = min(policy.requests_per_run, remaining)
-        if limit == 0:
-            provider_results[provider_code] = {
-                "status": "skipped",
-                "reason": "daily_budget_exhausted",
-                "dailyBudget": policy.daily_request_budget,
-                "usedRequests": used_requests.get(provider_code, 0),
-            }
-            continue
-        batches = build_provider_query_batches(
-            matches,
-            provider_code,
-            rotation_slot=rotation_slot,
-            limit=limit,
-        )
-        if not batches:
-            provider_results[provider_code] = {
-                "status": "skipped",
-                "reason": "no_eligible_team_aliases",
-                "dailyBudget": policy.daily_request_budget,
-                "usedRequests": used_requests.get(provider_code, 0),
-            }
-            continue
 
         def store(candidates: list[Any], batch_matches: list[dict[str, Any]]) -> dict[str, int]:
             with get_db() as conn:
@@ -233,16 +249,31 @@ def run() -> dict[str, Any]:
             with get_db() as conn:
                 record_news_ingestion_request(conn, payload)
 
-        result = collect_provider_batches(
-            client,
-            batches,
-            observed_at=now,
-            store=store,
-            audit=audit,
-        )
-        result["dailyBudget"] = policy.daily_request_budget
-        result["usedRequests"] = used_requests.get(provider_code, 0) + result["requests"]
-        provider_results[provider_code] = result
+        try:
+            batches = build_provider_query_batches(
+                matches,
+                provider_code,
+                rotation_slot=rotation_slot,
+                limit=policy.requests_per_run,
+            )
+            if not batches:
+                provider_results[provider_code] = {
+                    "status": "skipped",
+                    "reason": "no_eligible_team_aliases",
+                }
+                continue
+            result = collect_provider_batches(
+                client,
+                batches,
+                observed_at=now,
+                store=store,
+                audit=audit,
+            )
+            result["planningDailyBudget"] = policy.daily_request_budget
+            result["quotaSource"] = "shared_account_ledger"
+            provider_results[provider_code] = result
+        finally:
+            client.close()
 
     completed_results = [
         result for result in provider_results.values() if result.get("requests", 0)

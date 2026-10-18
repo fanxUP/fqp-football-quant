@@ -205,7 +205,9 @@ def compute_team_form(
                  OR m.away_team_name IN (SELECT name FROM target_names)
             )
               AND m.kickoff_time < %(kickoff)s
-              AND r.full_home_goals IS NOT NULL
+              AND r.result_status IN ('final', 'confirmed')
+              AND r.full_home_goals >= 0
+              AND r.full_away_goals >= 0
             ORDER BY m.kickoff_time DESC
             LIMIT %(limit)s
             """,

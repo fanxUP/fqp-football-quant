@@ -26,6 +26,7 @@ from scripts.feature_quality import (
 from scripts.feature_quality import (
     snapshot_job_result as _snapshot_job_result,
 )
+from scripts.feature_schema import CURRENT_SNAPSHOT_VERSION, FEATURE_SCHEMA_VERSION
 from scripts.feature_storage import (
     get_weather_for_match,
     store_match_feature_snapshot,
@@ -37,6 +38,7 @@ from scripts.features.build_basic_features import (
     compute_team_form,
 )
 from scripts.features.build_upset_risk import load_pre_kickoff_upset_risk
+from scripts.team_registry import resolve_team_alias
 
 
 def _now() -> str:
@@ -50,19 +52,8 @@ def _business_now_naive() -> datetime:
 
 
 def _resolve_team_id(conn: Any, official_name: str) -> int | None:
-    """Map an official team name to internal team_id via aliases."""
-    with conn.cursor() as cur:
-        cur.execute(
-            """
-            SELECT t.id FROM teams t
-            JOIN team_aliases ta ON ta.team_id = t.id
-            WHERE ta.alias_name = %(name)s AND ta.source_name = 'sporttery'
-            LIMIT 1
-            """,
-            {"name": official_name},
-        )
-        row = cur.fetchone()
-    return row[0] if row else None
+    """Use the common source-alias contract; ambiguous identities stay missing."""
+    return resolve_team_alias(conn, official_name, source_name="sporttery").resolved_id
 
 
 def _resolve_competition_season_id(
@@ -168,7 +159,7 @@ def _run_impl(match_id: int | None = None, dry_run: bool = False) -> dict[str, A
 
     business_now = _business_now_naive()
     snap_time = business_now.isoformat(timespec="seconds")
-    feature_version = "v3_upset_risk"
+    feature_version = CURRENT_SNAPSHOT_VERSION
 
     with get_db() as conn:
         # ---------------------------------------------------------------
@@ -243,10 +234,12 @@ def _run_impl(match_id: int | None = None, dry_run: bool = False) -> dict[str, A
                 # 4. Compute team profiles
                 # ---------------------------------------------------
                 profile_team_count = 0
+                team_forms: dict[str, dict[str, Any]] = {}
+                team_strength: dict[str, float] = {}
                 if has_mapping and competition_season_id and home_id and away_id:
-                    for tname, tid in [
-                        (match_data["home_team_name"], home_id),
-                        (match_data["away_team_name"], away_id),
+                    for side, tname, tid in [
+                        ("home", match_data["home_team_name"], home_id),
+                        ("away", match_data["away_team_name"], away_id),
                     ]:
                         form = compute_team_form(
                             tname,
@@ -255,6 +248,7 @@ def _run_impl(match_id: int | None = None, dry_run: bool = False) -> dict[str, A
                             conn=conn,
                             team_id=tid,
                         )
+                        team_forms[side] = form
                         if form["matches_played"] > 0:
                             profile = {
                                 "team_id": tid,
@@ -271,6 +265,12 @@ def _run_impl(match_id: int | None = None, dry_run: bool = False) -> dict[str, A
                                 "raw_json": form,
                             }
                             store_team_season_profile(conn, profile)
+                            team_strength[f"{side}_attack_strength_score"] = profile[
+                                "attack_strength_score"
+                            ]
+                            team_strength[f"{side}_defense_strength_score"] = profile[
+                                "defense_strength_score"
+                            ]
                             profiles_updated += 1
                             profile_team_count += 1
                 has_profile = profile_team_count == 2
@@ -476,20 +476,15 @@ def _run_impl(match_id: int | None = None, dry_run: bool = False) -> dict[str, A
                     "home_team_id": home_id,
                     "away_team_id": away_id,
                     "competition_season_id": competition_season_id,
-                    # Team strength (basic + profiles)
-                    "home_team_market_value": probs.get("home_win_prob"),
-                    "away_team_market_value": probs.get("away_win_prob"),
-                    "team_market_value_ratio": (
-                        round(home_prob / away_prob, 4)
-                        if (home_prob := probs.get("home_win_prob"))
-                        and (away_prob := probs.get("away_win_prob"))
-                        and away_prob > 0
-                        else None
-                    ),
-                    "home_attack_strength_score": probs.get("home_win_prob"),
-                    "away_attack_strength_score": probs.get("away_win_prob"),
-                    "home_defense_strength_score": probs.get("home_draw_prob"),
-                    "away_defense_strength_score": probs.get("away_draw_prob"),
+                    # No valuation source: unknown is not an implied win probability.
+                    "home_team_market_value": None,
+                    "away_team_market_value": None,
+                    "team_market_value_ratio": None,
+                    # Observed official last-10 form, not opponent-adjusted team strength.
+                    "home_attack_strength_score": team_strength.get("home_attack_strength_score"),
+                    "away_attack_strength_score": team_strength.get("away_attack_strength_score"),
+                    "home_defense_strength_score": team_strength.get("home_defense_strength_score"),
+                    "away_defense_strength_score": team_strength.get("away_defense_strength_score"),
                     # Lineup (NEW)
                     "home_lineup_confirmed": lineup.get("home_lineup_confirmed"),
                     "away_lineup_confirmed": lineup.get("away_lineup_confirmed"),
@@ -556,6 +551,17 @@ def _run_impl(match_id: int | None = None, dry_run: bool = False) -> dict[str, A
                     # Metadata
                     "raw_feature_refs": {
                         "feature_version": feature_version,
+                        "feature_schema_version": FEATURE_SCHEMA_VERSION,
+                        "team_form": team_forms,
+                        "form_definition": {
+                            "source": "official_settled_history",
+                            "window": "last_10_available_matches_before_kickoff",
+                            "attack_unit": "goals_for_per_match",
+                            "defense_unit": "goals_against_per_match_lower_is_better",
+                            "opponent_adjusted": False,
+                            "current_squad_adjusted": False,
+                        },
+                        "market_value_status": "unknown_no_valuation_source",
                         "dimensions": dims,
                         "dimension_coverage": dimension_coverage,
                         "dimension_status": {
@@ -572,7 +578,7 @@ def _run_impl(match_id: int | None = None, dry_run: bool = False) -> dict[str, A
                         "enrichment_sources": [
                             "api-football" if (has_injury or has_lineup) else None,
                             "open-meteo" if has_weather else None,
-                            "football-data.org" if has_profile else None,
+                            "official_settled_history" if profile_team_count else None,
                         ],
                     },
                 }

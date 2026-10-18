@@ -1,10 +1,19 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
 from typing import Any
+from unittest.mock import MagicMock
 
 import httpx
+import pytest
 
 from scripts.news_intelligence_clients import GNewsClient, GuardianClient, NewsApiClient
+
+
+def _ledger(provider):
+    ledger = MagicMock(policy=SimpleNamespace(provider=provider, day_reset_offset_seconds=0))
+    ledger.mark_sent.return_value = SimpleNamespace(day_sent=1)
+    return ledger
 
 
 class _FakeClient:
@@ -34,7 +43,9 @@ def test_newsapi_uses_everything_endpoint_and_header_key() -> None:
         }
     )
 
-    articles = NewsApiClient("news-key", client=transport).search("Team injury")
+    articles = NewsApiClient("news-key", client=transport, ledger=_ledger("newsapi")).search(
+        "Team injury"
+    )
 
     assert transport.url == "https://newsapi.org/v2/everything"
     assert transport.kwargs["headers"] == {"X-Api-Key": "news-key"}
@@ -58,7 +69,9 @@ def test_gnews_uses_documented_search_endpoint_and_api_key_parameter() -> None:
         }
     )
 
-    articles = GNewsClient("gnews-key", client=transport).search("Confirmed lineup")
+    articles = GNewsClient("gnews-key", client=transport, ledger=_ledger("gnews")).search(
+        "Confirmed lineup"
+    )
 
     assert transport.url == "https://gnews.io/api/v4/search"
     assert transport.kwargs["headers"] == {}
@@ -85,7 +98,9 @@ def test_guardian_uses_football_content_api_and_normalizes_results() -> None:
         }
     )
 
-    articles = GuardianClient("guardian-key", client=transport).search("Team news")
+    articles = GuardianClient("guardian-key", client=transport, ledger=_ledger("guardian")).search(
+        "Team news"
+    )
 
     assert transport.url == "https://content.guardianapis.com/search"
     assert transport.kwargs["params"]["api-key"] == "guardian-key"
@@ -95,3 +110,18 @@ def test_guardian_uses_football_content_api_and_normalizes_results() -> None:
     assert articles[0].external_id == "football/2026/aug/10/team-news"
     assert articles[0].description == "Striker unavailable"
     assert articles[0].source_domain == "theguardian.com"
+
+
+@pytest.mark.parametrize("client_type", [NewsApiClient, GNewsClient, GuardianClient])
+def test_news_clients_cannot_bypass_quota_with_injected_http_client(monkeypatch, client_type):
+    from scripts.request_quota import QuotaUnavailable
+
+    monkeypatch.delenv("FQP_REQUEST_QUOTA_CONFIG", raising=False)
+    transport = MagicMock()
+    client = client_type("test-secret", client=transport)
+    with pytest.raises(QuotaUnavailable):
+        client.search("Team")
+    transport.get.assert_not_called()
+    assert client.total_sends == 0
+    client.close()
+    transport.close.assert_not_called()

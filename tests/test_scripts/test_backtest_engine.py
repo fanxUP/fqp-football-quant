@@ -73,6 +73,30 @@ def test_backtest_places_only_one_bet_per_match_model_and_play_type() -> None:
     assert bets[0].option_code == "3"
 
 
+@pytest.mark.parametrize("confidence", [None, 0.0, 0.8])
+def test_backtest_preserves_uncalibrated_confidence(confidence) -> None:
+    engine = BacktestEngine(object(), BacktestConfig(signal_strength="all"))
+    row = {**_settled_row("3", 0.52, 0.12), "confidence_score": confidence}
+
+    bets = engine._simulate_bets([row], "2026-07-01", "2026-07-31")
+
+    assert len(bets) == 1
+    assert bets[0].confidence == confidence
+    assert bets[0].stake == 1.0
+    assert bets[0].profit == 2.0
+    assert engine.compute_metrics(bets)["total_profit"] == 2.0
+
+
+def test_backtest_missing_uncalibrated_confidence_stays_unknown() -> None:
+    engine = BacktestEngine(object(), BacktestConfig(signal_strength="all"))
+    row = _settled_row("3", 0.52, 0.12)
+    del row["confidence_score"]
+
+    bets = engine._simulate_bets([row], "2026-07-01", "2026-07-31")
+
+    assert bets[0].confidence is None
+
+
 def test_drawdown_is_measured_from_a_real_initial_bankroll() -> None:
     bets = [
         BetRecord(1, "2026-07-01", "elo", "3", 0.5, 0.4, 3.0, 1.0, "3", 2.0, 0.1, 0.8),

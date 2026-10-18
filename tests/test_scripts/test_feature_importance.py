@@ -1,10 +1,37 @@
+import re
+import sqlite3
 import sys
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import MagicMock, Mock
 
 import numpy as np
 
 from scripts import feature_importance
+
+
+def test_confidence_condition_preserves_uncalibrated_group():
+    conn = MagicMock()
+    cursor = conn.cursor.return_value.__enter__.return_value
+    cursor.description = []
+    cursor.fetchall.return_value = []
+    feature_importance.get_condition_performance(conn, dimension="confidence")
+    query = cursor.execute.call_args.args[0]
+    case = re.search(
+        r"CASE\s+WHEN mp_home\.confidence_score.*?END AS confidence_range", query, re.S
+    )
+    assert case is not None
+    with sqlite3.connect(":memory:") as db:
+        for confidence, expected in (
+            (None, "未校准/未知"),
+            (0.0, "低信心 (<30%)"),
+            (0.4, "中低信心 (30-50%)"),
+            (0.6, "中高信心 (50-70%)"),
+            (0.9, "高信心 (>70%)"),
+        ):
+            actual = db.execute(
+                f"SELECT {case[0]} FROM (SELECT ? AS confidence_score) mp_home", (confidence,)
+            ).fetchone()[0]
+            assert actual == expected
 
 
 class FakeClassifier:
@@ -153,7 +180,8 @@ class CaptureTrainingCursor:
     def __exit__(self, *_args) -> None:
         return None
 
-    def execute(self, query: str) -> None:
+    def execute(self, query: str, params=None) -> None:
+        self.params = params
         self.query = " ".join(query.split())
 
     def fetchall(self):

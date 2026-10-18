@@ -23,6 +23,11 @@ from typing import Any
 
 import numpy as np
 
+from scripts.feature_schema import (
+    COMPATIBLE_SNAPSHOT_VERSIONS,
+    FEATURE_COLUMNS,
+    numeric_feature_value,
+)
 from scripts.model_evaluation_scope import (
     LATEST_METRICS_CTE as _LATEST_METRICS_CTE,
 )
@@ -47,74 +52,15 @@ MIN_FEATURE_MODEL_MATCHES = 100
 # Feature column definitions — must match match_feature_snapshots table
 # ---------------------------------------------------------------------------
 
-# Numeric features extracted from the 49-column snapshot
-FEATURE_COLUMNS: list[str] = [
-    "home_team_market_value",
-    "away_team_market_value",
-    "team_market_value_ratio",
-    "home_attack_strength_score",
-    "away_attack_strength_score",
-    "home_defense_strength_score",
-    "away_defense_strength_score",
-    "home_lineup_confirmed",
-    "away_lineup_confirmed",
-    "home_starting_11_value",
-    "away_starting_11_value",
-    "starting_11_value_diff",
-    "home_lineup_strength_score",
-    "away_lineup_strength_score",
-    "lineup_strength_diff",
-    "home_absence_impact_score",
-    "away_absence_impact_score",
-    "absence_impact_diff",
-    "home_key_absence_count",
-    "away_key_absence_count",
-    "home_rotation_risk_score",
-    "away_rotation_risk_score",
-    "rotation_risk_diff",
-    "home_rest_days",
-    "away_rest_days",
-    "rest_days_diff",
-    "away_travel_distance_km",
-    "timezone_diff",
-    "altitude_m",
-    "away_travel_fatigue_score",
-    "temperature_2m",
-    "precipitation",
-    "wind_speed_10m",
-    "weather_impact_score",
-    "goal_expectation_weather_adjustment",
-    "home_motivation_score",
-    "away_motivation_score",
-    "motivation_diff",
-    "home_must_win",
-    "away_must_win",
-    "home_draw_enough",
-    "away_draw_enough",
-    "home_avoid_strong_opponent_score",
-    "away_avoid_strong_opponent_score",
-    "home_tanking_risk_score",
-    "away_tanking_risk_score",
-    "tournament_incentive_risk_score",
-    "upset_risk_score",
-    "league_upset_rate",
-    "home_team_upset_rate",
-    "away_team_upset_rate",
-    "upset_risk_confidence",
-    "data_completeness_score",
-    "source_confidence_score",
-    "uncertainty_score",
-]
-
 # Chinese labels for display
 FEATURE_LABELS: dict[str, str] = {
-    "home_team_market_value": "主队市场价值(概率)",
-    "away_team_market_value": "客队市场价值(概率)",
-    "team_market_value_ratio": "市场价值比",
-    "home_attack_strength_score": "主队进攻强度",
-    "away_attack_strength_score": "客队进攻强度",
-    "home_defense_strength_score": "主队防守强度",
-    "away_defense_strength_score": "客队防守强度",
+    "home_team_market_value": "主队身价（缺少估值来源）",
+    "away_team_market_value": "客队身价（缺少估值来源）",
+    "team_market_value_ratio": "身价比（缺少估值来源）",
+    "home_attack_strength_score": "主队近10场场均进球（官方可用历史）",
+    "away_attack_strength_score": "客队近10场场均进球（官方可用历史）",
+    "home_defense_strength_score": "主队近10场场均失球（越低越好）",
+    "away_defense_strength_score": "客队近10场场均失球（越低越好）",
     "home_lineup_confirmed": "主队首发确认",
     "away_lineup_confirmed": "客队首发确认",
     "home_starting_11_value": "主队首发身价",
@@ -188,14 +134,15 @@ def _load_training_data(
     col_refs = ", ".join(f"fs.{c}" for c in FEATURE_COLUMNS)
 
     with conn.cursor() as cur:
-        cur.execute(f"""
+        cur.execute(
+            f"""
             WITH latest_feature_snapshots AS (
                 SELECT DISTINCT ON (fs.match_id) fs.*
                 FROM match_feature_snapshots fs
                 JOIN official_matches m ON m.id = fs.match_id
-                WHERE fs.feature_version IS NOT NULL
+                WHERE fs.feature_version IN %(feature_versions)s
                   AND fs.snapshot_time < m.kickoff_time
-                ORDER BY fs.match_id, fs.snapshot_time DESC
+                ORDER BY fs.match_id, fs.snapshot_time DESC, fs.id DESC
             )
             SELECT
                 fs.match_id,
@@ -209,9 +156,12 @@ def _load_training_data(
             FROM latest_feature_snapshots fs
             JOIN official_matches m ON m.id = fs.match_id
             JOIN official_results r ON r.match_id = fs.match_id
+            WHERE r.result_status IN ('final', 'confirmed')
             ORDER BY m.business_date DESC, fs.match_id
             LIMIT 5000
-        """)
+        """,
+            {"feature_versions": COMPATIBLE_SNAPSHOT_VERSIONS},
+        )
         rows = cur.fetchall()
 
     if len(rows) < min_samples:
@@ -224,7 +174,7 @@ def _load_training_data(
 
     n_features = len(FEATURE_COLUMNS)
     X = np.array(
-        [[float(v) if v is not None else np.nan for v in r[2 : 2 + n_features]] for r in rows],
+        [[numeric_feature_value(v) for v in r[2 : 2 + n_features]] for r in rows],
         dtype=np.float64,
     )
     y = np.array([r[-1] for r in rows], dtype=np.int64)
@@ -235,13 +185,7 @@ def _load_training_data(
     X_valid = X[:, valid_indices]
     feature_names = [FEATURE_COLUMNS[i] for i in valid_indices]
 
-    # Impute NaN with column median (or 0 if all NaN)
-    for j in range(X_valid.shape[1]):
-        col = X_valid[:, j]
-        nan_mask = np.isnan(col)
-        if nan_mask.any():
-            fill_val = np.nanmedian(col) if not np.all(nan_mask) else 0.0
-            col[nan_mask] = fill_val
+    # XGBoost learns missing branches natively; prediction must keep the same NaN policy.
 
     return X_valid, y, match_ids, feature_names
 
@@ -471,12 +415,13 @@ def explain_prediction(
                 {col_refs}
             FROM match_feature_snapshots fs
             JOIN official_matches m ON m.id = fs.match_id
-            WHERE fs.match_id = %s
+            WHERE fs.match_id = %(match_id)s
+              AND fs.feature_version IN %(feature_versions)s
               AND fs.snapshot_time < m.kickoff_time
-            ORDER BY fs.snapshot_time DESC
+            ORDER BY fs.snapshot_time DESC, fs.id DESC
             LIMIT 1
         """,
-            (match_id,),
+            {"match_id": match_id, "feature_versions": COMPATIBLE_SNAPSHOT_VERSIONS},
         )
         row = cur.fetchone()
 
@@ -488,18 +433,11 @@ def explain_prediction(
     raw_features = row[3:]
 
     # Build feature vector matching training columns
-    full_vec = np.array(
-        [float(v) if v is not None else np.nan for v in raw_features], dtype=np.float64
-    )
+    full_vec = np.array([numeric_feature_value(v) for v in raw_features], dtype=np.float64)
 
     # Map to training feature subset
     train_indices = [FEATURE_COLUMNS.index(f) for f in _feature_names_cache]
     X_single = full_vec[train_indices].reshape(1, -1)
-
-    # Impute NaN
-    for j in range(X_single.shape[1]):
-        if np.isnan(X_single[0, j]):
-            X_single[0, j] = 0.0
 
     # Predict
     probs = _trained_model.predict_proba(X_single)[0]  # [away, draw, home]
@@ -534,7 +472,9 @@ def explain_prediction(
                         "label": _label(_feature_names_cache[j]),
                         "shap_value": round(float(raw_values[j, 2]), 6),  # home-win class
                         "shap_abs": round(float(agg_shap[j]), 6),
-                        "feature_value": round(float(X_single[0, j]), 4),
+                        "feature_value": round(float(X_single[0, j]), 4)
+                        if np.isfinite(X_single[0, j])
+                        else None,
                     }
                 )
             shap_data.sort(key=lambda x: -x["shap_abs"])
@@ -928,6 +868,7 @@ def get_condition_performance(
                 {_LATEST_METRICS_CTE}
                 SELECT
                     CASE
+                        WHEN mp_home.confidence_score IS NULL THEN '未校准/未知'
                         WHEN mp_home.confidence_score < 0.3 THEN '低信心 (<30%)'
                         WHEN mp_home.confidence_score < 0.5 THEN '中低信心 (30-50%)'
                         WHEN mp_home.confidence_score < 0.7 THEN '中高信心 (50-70%)'

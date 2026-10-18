@@ -1,905 +1,157 @@
 {
-  "base_revision": "5abb3d9fdc0e66268cc5e3d03bb1fa13edfee2c5",
-  "upstream_revision_last_fetched": "5abb3d9fdc0e66268cc5e3d03bb1fa13edfee2c5",
-  "phase": "dashboard_loading_local_verified",
-  "source_paths": [
-    "apps/backend/src/routers/dashboard.py",
-    "apps/frontend/src/core/apiClient.test.ts",
-    "apps/frontend/src/core/apiClient.ts",
-    "apps/frontend/src/pages/DashboardPage.test.tsx",
-    "apps/frontend/src/pages/DashboardPage.tsx",
-    "apps/frontend/src/visualization/AiPoolDashboard.test.ts",
-    "apps/frontend/src/visualization/AiPoolDashboard.tsx",
-    "tests/test_api/test_dashboard_router.py",
-    "tests/test_sql/test_dashboard_prediction_count.py"
-  ],
-  "source_sha256": "d3ef8dc14f5edeae2b23a8da7d0ab6da49c197eb0fe48e7e83cabd3b82e685ad",
-  "commands": [
+  "head": "b2a2d0b0fdf07ac82bfb399c5a88cf36b5d8c663",
+  "phase": "P102_slice4_postgres_and_joint_review",
+  "status": "P102_locally_accepted_P103_reviewed_runtime_not_ready",
+  "full_A102_accepted": true,
+  "A102_acceptance_scope": "current contracts/semantics/capabilities; fresh current local PG16 schema copy with synthetic data, independent source review; no production write/effect/calibration claim",
+  "full_A103_accepted": false,
+  "independent_review": true,
+  "independent_review_evidence": "/Volumes/Nas/FQP/plans/model-modernization-20261016/integrated/P102/04-postgres-and-review/REVIEW.json",
+  "source_files": {
+    ".github/workflows/ci.yml": "7bc916f930c8a96842636e2ee32ce3c4a6c4224525bb9eac9a54e07941279894",
+    "apps/backend/src/routers/predictions.py": "54ed2d7a0011b692401b74bf5075080645d62fa52bdd8e40d563fa3a10cd173e",
+    "apps/frontend/src/core/types.ts": "13893a8ce4f250f437920759295a8666200971dc0dcedd6cf09b0db62b8bb867",
+    "apps/frontend/src/pages/AnalysisPage.tsx": "bdec10857b6de3fb095249dfddef7c647e9b69e9c1000d89603928970b11c464",
+    "apps/frontend/src/pages/RecommendationsPage.test.tsx": "5fc9f52175bfcf3b0a124198f39f2b62f44b32ff54d3e2acd1172750547e55e9",
+    "apps/frontend/src/pages/RecommendationsPage.tsx": "06cf4ab3f1083870381053207f20c0a205b55ae5623e6bc69313a4188ac3dedc",
+    "configs/data_catalog.yaml": "f2d16d757fbb6bc3cc7e068526dbbe3b7bb8364b150ebb7b145f00bf9b32f796",
+    "docs/data-contracts.md": "09056ef22965ace2ce42c0ecf48be5546d382c6010aacc988bf0bd6880b8ea32",
+    "docs/feature-pipeline.md": "db56777435dd04b319d4deedf6f492f0547ac19a6eb829de93738fa1ec7b7377",
+    "docs/request-governance.md": "ede09336dd3ae8e640f7e98ca3120b507446cf1cb0384b4007d8a931b018ae10",
+    "scripts/api_football_client.py": "07d668f305a0217694d92b9bc105b976cc3bad1d9fc79066be8e7fd74cc3a60a",
+    "scripts/backtest_engine.py": "9eaebfdcce3da721bc32e9da1d8736b4f22231bab5dea847a77a03bf01448db3",
+    "scripts/data_catalog.py": "63147b77e49ae55293f18e27ebc29edb79aed561d4c6bcc6eafa90145de32374",
+    "scripts/data_contracts.py": "5b5e076042bf3f4d404c76feb62e5a55e87e247c38f9bdd5f98bfe0fe9d9f609",
+    "scripts/derived_play_predictions.py": "9aac337a2f01e16deb889cbe1b77f9d3680735c6f4294119294857aaa60a2d45",
+    "scripts/feature_importance.py": "6b333247fc785b0a4ddbfd4f31aad33e56ca14de126f10b90460effe8193044c",
+    "scripts/feature_schema.py": "e8b07407a7602e3f068987f16567b3c50106cc44df11cf8fe4beacec6a299457",
+    "scripts/feature_storage.py": "41a7d18e5ccb51c654787717f6e685865adaa0dfa2685477b171f7da8e41209e",
+    "scripts/features/build_basic_features.py": "8f6144b2e8deb1e570f43949119542c9b1cc60df18dff9c237d75834a8c1c55c",
+    "scripts/jobs/collect_news_intelligence.py": "3e1ce93cc2e656429a734ca140ef843028e41aaf647d8bbe4974c54d9031728a",
+    "scripts/jobs/run_feature_snapshot_build.py": "f364cb737e1325a05df83c8a13888ed805f200f3bfe722fd2760b4948c3fd126",
+    "scripts/jobs/run_model_prediction.py": "6f86e82306b0e2e53133d47bb610e17a78218d971cb0be1dfe3ddc99ce91b8ea",
+    "scripts/jobs/run_recommendation_candidate.py": "721996999611be2e285d3bf4dae1da4dd869480f42e32f40f09968d6bf31af05",
+    "scripts/logistic_shadow_model.py": "706d89f869921633878c816265860da9852d50eb82167940a31ce3122f6f183a",
+    "scripts/model_signal_policy.py": "d7ab7cfe9b01872f9f47ddc6d721c050a73698b3ddedac69d2c2378cd70419c7",
+    "scripts/news_intelligence_clients.py": "51f083f6772280bae06500e1da5572a93ad3d45645156e2116a39813d5992418",
+    "scripts/news_intelligence_storage.py": "a0811c5ccfa86710a16912ae7c2e4119131463f29f2e355cd0ef44ac2817592f",
+    "scripts/news_query_planner.py": "5142b78d3c74ca8e697d35fca7289c5fd3fe006f80454152845b08fc969100cb",
+    "scripts/prematch_feature_dataset.py": "f6cb0733c9768eb8ebc99c5d1eb7859d517c813f966c489f4c9e1334c5d9a535",
+    "scripts/request_quota.py": "6f753348aa1d5523e0d58e9df7b961de481618982d36c6a32032324f007da130",
+    "scripts/request_reuse.py": "5fb1f1a751f8779fb69724965c141da2798701db484c51b1fb6bdd1fd1f1694b",
+    "scripts/request_transport.py": "1f7f5da3863286db667876ae8e4b29f9e4ec574fe9221bed7309da8c0d9a39b8",
+    "scripts/shadow_model_helpers.py": "aab636be9ec67e16c9f5d2d1cc66d78f84c2ad6ae7d8c90019679a82fb5e045b",
+    "scripts/shadow_training.py": "88c724122f47c327dc615e7e2524de75cc3da5f8de2be49610714c145e0f7925",
+    "scripts/team_registry.py": "decb395045d5d476fa4644fe43c7550eba7e7447eec58c85e5432ff8f77701a3",
+    "scripts/xgboost_shadow_model.py": "3f0807c191183f12bfc09cbe79c5f09a6158dd29f377cc1ca8e5a86fcfa815bb",
+    "tests/test_computation/test_feature_pipeline_contract.py": "c0c592fc112ab4b3713b57ce4560fa70b9336c64857200ab77601bf12a698fca",
+    "tests/test_computation/test_feature_pipeline_postgres.py": "57cd2546c4b6efab3b5a115a7d7ae0276a6510673c2fbf9c44893e428207e456",
+    "tests/test_computation/test_prediction_semantics.py": "693696c50f2b0727faaf7b929dd50058793bc1546cbb5e4d8319519ef27d0ce9",
+    "tests/test_computation/test_shadow_input_contract.py": "ec6dc614f76f8c3c86e608074adaafb70a0daf9cd0590493a4d692aa31c422bd",
+    "tests/test_features/test_build_basic_features.py": "9d16090d8799e186d9d23f3a6bfd69f3664bf59311fb0047655f854ad7b6d46e",
+    "tests/test_jobs/test_collect_news_intelligence.py": "24434da4323e038e36a0034cca5478cce3bdb1b224f68d68b9fa05d1e14a2a4e",
+    "tests/test_jobs/test_run_feature_snapshot_build.py": "7fc0b2e464cbece4f89a21d268dfd45abe7c27ae2bea17d52e3a856de7db8572",
+    "tests/test_scripts/test_api_football_client.py": "3fe0f5ed5c8a209177e39572827bbc87e343cefd81d72e9ffddd7f5efdd8a2a1",
+    "tests/test_scripts/test_backtest_engine.py": "520e6be3716da5516d564135d7e37812f77b415721914451933e8a951fc471b8",
+    "tests/test_scripts/test_data_catalog.py": "00681df8ba00f9413ae622e0a5ce7459d98881ecb2b85b662c79dfd79bcb6cb9",
+    "tests/test_scripts/test_data_contracts.py": "13389c3058cc6b400ee730e700cdbbcba6c5721b009a7e2def99aaea2f7ddc69",
+    "tests/test_scripts/test_derived_play_predictions.py": "c2660d3c96a5d75ad696687e054890ad30bbce527f589a35975afffc5ccffab5",
+    "tests/test_scripts/test_feature_importance.py": "1259940743814af51389852a03f7c04ed7452272e29edc97eb2e4f80f4ea4620",
+    "tests/test_scripts/test_news_intelligence_clients.py": "a03c51fff2333a06d2f310c340e588eb89605eb38438f664dbf488695ddbbe6d",
+    "tests/test_scripts/test_request_quota.py": "675c3a0b51de66b204f320eabece4cf642f2666b2b7312ccbfd35db6f0677224",
+    "tests/test_scripts/test_request_reuse.py": "4121c5550ef34fe20a93102e3eaa0604bf954f674345f90e39b3a2f4d968b391",
+    "tests/test_scripts/test_request_transport.py": "f3388d5338134e3d163d823e017d8385f45ac755ff351f8d2ef2a14a7da48568",
+    "tests/test_scripts/test_run_model_prediction.py": "216cdb673b0b96fd50bb338acd30820437ebb074f7de22c104e6aeeeba51fb99",
+    "tests/test_scripts/test_team_registry.py": "145107b2d57cd5aea7d51eccc24f0d85f040d103135090e4ca83fc6d25087d78"
+  },
+  "quality_evidence": "/Volumes/Nas/FQP/plans/model-modernization-20261016/integrated/P102/04-postgres-and-review/QUALITY.json",
+  "latest_delivery": "/Volumes/Nas/FQP/plans/model-modernization-20261016/integrated/P102/04-postgres-and-review/FINAL.md",
+  "consistency_evidence": "/Volumes/Nas/FQP/plans/model-modernization-20261016/integrated/P102/04-postgres-and-review/DELIVERY-CHECK.json",
+  "prior_evidence_archive": "/Volumes/Nas/FQP/plans/model-modernization-20261016/integrated/P102/04-postgres-and-review/prior-vibe/EVIDENCE.json",
+  "at": "2026-10-18T12:03:44.149010+08:00",
+  "all_passed": false,
+  "whole_project_ready": false,
+  "local_verification_passed": true,
+  "audit_checks_passed": true,
+  "pytest_passed": 575,
+  "new_application_regression_cases": 16,
+  "ci_static_assertions": 5,
+  "changed_test_budget_conservative": 440,
+  "local_runtime_ready": false,
+  "github_ci_executed": false,
+  "checks": [
     {
-      "step": "frontend-complete",
-      "command": [
-        "npm",
-        "--prefix",
-        "apps/frontend",
-        "test",
-        "--",
-        "--maxWorkers=3"
-      ],
-      "head": "5abb3d9fdc0e66268cc5e3d03bb1fa13edfee2c5",
-      "started_at": "2026-10-16T05:52:13.759983+00:00",
-      "source_sha256_start": "d3ef8dc14f5edeae2b23a8da7d0ab6da49c197eb0fe48e7e83cabd3b82e685ad",
+      "name": "green-null",
+      "record": "/Volumes/Nas/FQP/plans/model-modernization-20261016/integrated/P102/04-postgres-and-review/green-null.json",
       "exit_code": 0,
-      "finished_at": "2026-10-16T05:53:25.202987+00:00",
-      "seconds": 71.444,
-      "source_sha256_end": "d3ef8dc14f5edeae2b23a8da7d0ab6da49c197eb0fe48e7e83cabd3b82e685ad",
-      "log": "/Volumes/Nas/FQP/plans/dashboard-loading-20261016/frontend-complete.log"
+      "freshness": "Historical TDD/standalone run; current final regression supersedes this step after formatting."
     },
     {
-      "step": "backend-complete",
-      "command": [
-        "docker",
-        "run",
-        "--rm",
-        "--name",
-        "fqp-dashboard-pytest",
-        "--cpus",
-        "3",
-        "--network",
-        "fqp-dashboard-check-20261016",
-        "--env-file",
-        "/Users/estefan-macworkstation/.codex/workspaces/.private/fqp-dashboard-20261016/test.env",
-        "-v",
-        "/Users/estefan-macworkstation/.codex/workspaces/fqp-dashboard-20261016:/source:ro",
-        "-v",
-        "/Volumes/Nas/FQP/plans/dashboard-loading-20261016:/evidence:ro",
-        "-v",
-        "/Users/estefan-macworkstation/.codex/workspaces/fqp-v3i-20261016/apps/model-bridge/node_modules:/bridge/node_modules:ro",
-        "-w",
-        "/tmp",
-        "fqp-cleanup-quality:20261016",
-        "python",
-        "/evidence/backend-check.py"
-      ],
-      "head": "5abb3d9fdc0e66268cc5e3d03bb1fa13edfee2c5",
-      "started_at": "2026-10-16T05:52:13.755391+00:00",
-      "source_sha256_start": "d3ef8dc14f5edeae2b23a8da7d0ab6da49c197eb0fe48e7e83cabd3b82e685ad",
-      "exit_code": 0,
-      "finished_at": "2026-10-16T05:53:21.186864+00:00",
-      "seconds": 67.433,
-      "source_sha256_end": "d3ef8dc14f5edeae2b23a8da7d0ab6da49c197eb0fe48e7e83cabd3b82e685ad",
-      "log": "/Volumes/Nas/FQP/plans/dashboard-loading-20261016/backend-complete.log"
+      "name": "green-ci",
+      "record": "/Volumes/Nas/FQP/plans/model-modernization-20261016/integrated/P102/04-postgres-and-review/green-ci.json",
+      "exit_code": 0
     },
     {
-      "step": "backend-services-complete",
-      "command": [
-        "docker",
-        "run",
-        "--rm",
-        "--name",
-        "fqp-dashboard-service-tests",
-        "--cpus",
-        "2",
-        "--network",
-        "fqp-dashboard-check-20261016",
-        "--env-file",
-        "/Users/estefan-macworkstation/.codex/workspaces/.private/fqp-dashboard-20261016/test.env",
-        "-v",
-        "/Users/estefan-macworkstation/.codex/workspaces/fqp-dashboard-20261016:/source:ro",
-        "-v",
-        "/Volumes/Nas/FQP/plans/dashboard-loading-20261016:/evidence:ro",
-        "-v",
-        "/Users/estefan-macworkstation/.codex/workspaces/fqp-v3i-20261016/apps/model-bridge/node_modules:/bridge/node_modules:ro",
-        "-w",
-        "/tmp",
-        "fqp-cleanup-quality:20261016",
-        "python",
-        "/evidence/backend-check.py",
-        "apps/backend/src",
-        "-m",
-        "not slow"
-      ],
-      "head": "5abb3d9fdc0e66268cc5e3d03bb1fa13edfee2c5",
-      "started_at": "2026-10-16T05:54:40.831937+00:00",
-      "source_sha256_start": "d3ef8dc14f5edeae2b23a8da7d0ab6da49c197eb0fe48e7e83cabd3b82e685ad",
+      "name": "postgres-features",
+      "record": "/Volumes/Nas/FQP/plans/model-modernization-20261016/integrated/P102/04-postgres-and-review/postgres-features.json",
       "exit_code": 0,
-      "finished_at": "2026-10-16T05:54:53.163533+00:00",
-      "seconds": 12.332,
-      "source_sha256_end": "d3ef8dc14f5edeae2b23a8da7d0ab6da49c197eb0fe48e7e83cabd3b82e685ad",
-      "log": "/Volumes/Nas/FQP/plans/dashboard-loading-20261016/backend-services-complete.log"
+      "freshness": "Historical TDD/standalone run; current final regression supersedes this step after formatting."
     },
     {
-      "step": "bridge-complete",
-      "command": [
-        "docker",
-        "run",
-        "--rm",
-        "--name",
-        "fqp-dashboard-bridge-check",
-        "--cpus",
-        "2",
-        "--network",
-        "none",
-        "-v",
-        "/Users/estefan-macworkstation/.codex/workspaces/fqp-dashboard-20261016:/source:ro",
-        "-v",
-        "/Volumes/Nas/FQP/plans/dashboard-loading-20261016:/evidence:ro",
-        "-v",
-        "/Users/estefan-macworkstation/.codex/workspaces/fqp-v3i-20261016/apps/model-bridge/node_modules:/bridge/node_modules:ro",
-        "-w",
-        "/tmp",
-        "fqp-cleanup-quality:20261016",
-        "python",
-        "/evidence/backend-check.py",
-        "bridge"
-      ],
-      "head": "5abb3d9fdc0e66268cc5e3d03bb1fa13edfee2c5",
-      "started_at": "2026-10-16T05:54:40.831890+00:00",
-      "source_sha256_start": "d3ef8dc14f5edeae2b23a8da7d0ab6da49c197eb0fe48e7e83cabd3b82e685ad",
-      "exit_code": 0,
-      "finished_at": "2026-10-16T05:54:50.241740+00:00",
-      "seconds": 9.41,
-      "source_sha256_end": "d3ef8dc14f5edeae2b23a8da7d0ab6da49c197eb0fe48e7e83cabd3b82e685ad",
-      "log": "/Volumes/Nas/FQP/plans/dashboard-loading-20261016/bridge-complete.log"
+      "name": "regression",
+      "record": "/Volumes/Nas/FQP/plans/model-modernization-20261016/integrated/P102/04-postgres-and-review/regression.json",
+      "exit_code": 0
     },
     {
-      "step": "types-complete",
-      "command": [
-        "npm",
-        "--prefix",
-        "apps/frontend",
-        "run",
-        "typecheck"
-      ],
-      "head": "5abb3d9fdc0e66268cc5e3d03bb1fa13edfee2c5",
-      "started_at": "2026-10-16T05:52:13.779494+00:00",
-      "source_sha256_start": "d3ef8dc14f5edeae2b23a8da7d0ab6da49c197eb0fe48e7e83cabd3b82e685ad",
-      "exit_code": 0,
-      "finished_at": "2026-10-16T05:52:35.924839+00:00",
-      "seconds": 22.146,
-      "source_sha256_end": "d3ef8dc14f5edeae2b23a8da7d0ab6da49c197eb0fe48e7e83cabd3b82e685ad",
-      "log": "/Volumes/Nas/FQP/plans/dashboard-loading-20261016/types-complete.log"
+      "name": "lint",
+      "record": "/Volumes/Nas/FQP/plans/model-modernization-20261016/integrated/P102/04-postgres-and-review/lint.json",
+      "exit_code": 0
     },
     {
-      "step": "build-complete",
-      "command": [
-        "npm",
-        "--prefix",
-        "apps/frontend",
-        "run",
-        "build"
-      ],
-      "head": "5abb3d9fdc0e66268cc5e3d03bb1fa13edfee2c5",
-      "started_at": "2026-10-16T05:52:13.735287+00:00",
-      "source_sha256_start": "d3ef8dc14f5edeae2b23a8da7d0ab6da49c197eb0fe48e7e83cabd3b82e685ad",
-      "exit_code": 0,
-      "finished_at": "2026-10-16T05:52:17.256125+00:00",
-      "seconds": 3.521,
-      "source_sha256_end": "d3ef8dc14f5edeae2b23a8da7d0ab6da49c197eb0fe48e7e83cabd3b82e685ad",
-      "log": "/Volumes/Nas/FQP/plans/dashboard-loading-20261016/build-complete.log"
+      "name": "format-check",
+      "record": "/Volumes/Nas/FQP/plans/model-modernization-20261016/integrated/P102/04-postgres-and-review/format-check.json",
+      "exit_code": 0
     },
     {
-      "step": "static-complete",
-      "command": [
-        "docker",
-        "run",
-        "--rm",
-        "--name",
-        "fqp-dashboard-static",
-        "--cpus",
-        "2",
-        "-v",
-        "/Users/estefan-macworkstation/.codex/workspaces/fqp-dashboard-20261016:/work:ro",
-        "-w",
-        "/work",
-        "fqp-cleanup-quality:20261016",
-        "sh",
-        "-c",
-        "ruff check --cache-dir=/tmp/ruff-dashboard . && ruff format --check --cache-dir=/tmp/ruff-dashboard . && mypy apps/backend/src scripts --explicit-package-bases --cache-dir=/tmp/mypy-dashboard"
-      ],
-      "head": "5abb3d9fdc0e66268cc5e3d03bb1fa13edfee2c5",
-      "started_at": "2026-10-16T05:54:40.881600+00:00",
-      "source_sha256_start": "d3ef8dc14f5edeae2b23a8da7d0ab6da49c197eb0fe48e7e83cabd3b82e685ad",
-      "exit_code": 0,
-      "finished_at": "2026-10-16T05:55:08.795566+00:00",
-      "seconds": 28.029,
-      "source_sha256_end": "d3ef8dc14f5edeae2b23a8da7d0ab6da49c197eb0fe48e7e83cabd3b82e685ad",
-      "log": "/Volumes/Nas/FQP/plans/dashboard-loading-20261016/static-complete.log"
-    },
-    {
-      "step": "browser-loading",
-      "command": [
-        "python3",
-        "/Volumes/Nas/FQP/plans/dashboard-loading-20261016/browser-loading.py"
-      ],
-      "head": "5abb3d9fdc0e66268cc5e3d03bb1fa13edfee2c5",
-      "started_at": "2026-10-16T05:52:47.107004+00:00",
-      "source_sha256_start": "d3ef8dc14f5edeae2b23a8da7d0ab6da49c197eb0fe48e7e83cabd3b82e685ad",
-      "exit_code": 0,
-      "finished_at": "2026-10-16T05:52:58.499649+00:00",
-      "seconds": 11.392,
-      "source_sha256_end": "d3ef8dc14f5edeae2b23a8da7d0ab6da49c197eb0fe48e7e83cabd3b82e685ad",
-      "log": "/Volumes/Nas/FQP/plans/dashboard-loading-20261016/browser-loading.log"
-    },
-    {
-      "step": "scope-security",
-      "command": [
-        "python3",
-        "/Volumes/Nas/FQP/plans/dashboard-loading-20261016/audit.py"
-      ],
-      "head": "5abb3d9fdc0e66268cc5e3d03bb1fa13edfee2c5",
-      "started_at": "2026-10-16T05:56:00.629297+00:00",
-      "source_sha256_start": "d3ef8dc14f5edeae2b23a8da7d0ab6da49c197eb0fe48e7e83cabd3b82e685ad",
-      "exit_code": 0,
-      "finished_at": "2026-10-16T05:56:01.258691+00:00",
-      "seconds": 0.629,
-      "source_sha256_end": "d3ef8dc14f5edeae2b23a8da7d0ab6da49c197eb0fe48e7e83cabd3b82e685ad",
-      "log": "/Volumes/Nas/FQP/plans/dashboard-loading-20261016/scope-security.log"
+      "name": "types",
+      "record": "/Volumes/Nas/FQP/plans/model-modernization-20261016/integrated/P102/04-postgres-and-review/types.json",
+      "exit_code": 0
     }
   ],
-  "frontend": {
-    "files": 84,
-    "tests": 452,
-    "focused": 21,
-    "new_tests": 21
-  },
-  "backend": {
-    "related_passed": 11,
-    "new_tests": 4,
-    "real_postgres_validation": false
-  },
-  "red": {
-    "backend": {
-      "failed": 4,
-      "passed": 7,
-      "log": "/private/tmp/fqp-v3e-backend-red.log"
-    },
-    "frontend_initial": {
-      "status": "collection failed, component did not exist; no behavior RED claimed",
-      "log": "/private/tmp/fqp-v3e-red.log"
-    },
-    "unknown_count_behavior": {
-      "failed": 1,
-      "passed": 20,
-      "log": "/private/tmp/fqp-v3e-count-red.log"
-    }
-  },
-  "extended_api": {
-    "current_passed": 148,
-    "baseline_passed": 144,
-    "failed": 22,
-    "same_failure_set": true,
-    "failures": [
-      "tests/test_api/test_model_providers.py::test_pi_catalog_returns_actual_engine_and_model_pagination",
-      "tests/test_api/test_news_intelligence.py::test_event_verification_is_an_explicit_human_action",
-      "tests/test_api/test_news_intelligence.py::test_news_articles_are_filterable_by_official_match",
-      "tests/test_api/test_news_intelligence.py::test_news_feature_snapshots_are_read_only_and_versioned",
-      "tests/test_api/test_news_intelligence.py::test_news_overview_returns_read_only_operational_summary",
-      "tests/test_api/test_news_intelligence.py::test_news_release_can_be_rolled_back_immediately",
-      "tests/test_api/test_news_intelligence.py::test_news_release_can_only_be_promoted_by_explicit_request",
-      "tests/test_api/test_news_intelligence.py::test_news_release_promotion_rejects_unqualified_experiment",
-      "tests/test_api/test_news_intelligence.py::test_news_shadow_experiment_returns_baseline_comparison",
-      "tests/test_api/test_news_intelligence.py::test_news_sources_do_not_expose_provider_secrets",
-      "tests/test_api/test_news_intelligence.py::test_source_status_can_be_disabled_without_changing_credentials",
-      "tests/test_api/test_news_intelligence.py::test_structured_news_events_expose_evidence_and_verification",
-      "tests/test_api/test_report_automation.py::test_report_automation_archive_exposes_only_the_matching_automatic_report",
-      "tests/test_api/test_report_automation.py::test_report_automation_snapshot_exposes_only_safe_frozen_report_metrics",
-      "tests/test_api/test_report_automation.py::test_report_automation_state_is_available_as_a_stable_resource",
-      "tests/test_api/test_report_automation.py::test_report_automation_update_requires_a_ready_agent",
-      "tests/test_api/test_upsets.py::test_upset_detail_returns_404_for_unknown_event",
-      "tests/test_api/test_upsets.py::test_upset_detail_returns_signals_evidence_review_and_tickets",
-      "tests/test_api/test_upsets.py::test_upset_leagues_return_navigation_options",
-      "tests/test_api/test_upsets.py::test_upset_list_exposes_filters_and_pagination",
-      "tests/test_api/test_upsets.py::test_upset_reports_return_versioned_artifacts",
-      "tests/test_api/test_upsets.py::test_upset_summary_returns_market_and_betting_counts"
-    ],
-    "current_log": "/private/tmp/fqp-v3e-api-regression.log",
-    "baseline_log": "/private/tmp/fqp-v3e-api-baseline.log",
-    "exit_code": 1,
-    "limitation": "21 existing local database dependency failures and 1 existing Pi catalog 503; full API suite not passed"
-  },
-  "browser": {
-    "started_at": "2026-10-09T14:54:11.348529+00:00",
-    "environment": "Headless Chromium; synthetic fixtures; UTC browser clock; no production data",
-    "viewports": [
-      {
-        "viewport": [
-          1920,
-          1080
-        ],
-        "width": 1920,
-        "scroll": 1920
-      },
-      {
-        "viewport": [
-          1440,
-          1000
-        ],
-        "width": 1440,
-        "scroll": 1440
-      },
-      {
-        "viewport": [
-          3840,
-          2160
-        ],
-        "width": 3840,
-        "scroll": 3840
-      },
-      {
-        "viewport": [
-          375,
-          812
-        ],
-        "width": 375,
-        "scroll": 375
-      },
-      {
-        "viewport": [
-          812,
-          375
-        ],
-        "width": 812,
-        "scroll": 812
-      }
-    ],
-    "keyboard_selection": true,
-    "independent_resource_failures": true,
-    "raw_snapshot_timezone_preserved": true,
-    "same_query_retention": true,
-    "new_match_isolation": true,
-    "mismatch_rejected": true,
-    "empty_clears": true,
-    "dark_and_light": true,
-    "manual_only": true,
-    "no_writes": true,
-    "no_three_modules": true,
-    "page_errors": [],
-    "finished_at": "2026-10-09T14:54:16.939334+00:00"
-  },
-  "production_writes": false,
-  "production_data_export": false,
-  "pushed": false,
-  "deployed": false,
-  "security_self_review": {
-    "checked_at": "2026-10-09T14:56:14.824854+00:00",
-    "status": "completed self-review only",
-    "checks": [
-      "parameterized SELECT queries and explicit projected fields; no SQL mutations",
-      "no new dependencies, credentials, provider secrets or source URLs",
-      "React text rendering, scoped CSS, native keyboard buttons",
-      "no source IDs as jersey numbers or fabricated player coordinates",
-      "source time ambiguity preserved; current team availability not historical prematch proof"
-    ]
-  },
-  "independent_review": "pending before merge",
-  "remaining": [
-    "P08b tactics scene",
-    "P09 model research",
-    "P10 cumulative regression, independent review, real database and GPU release checks"
+  "final_current_source_checks": [
+    "regression",
+    "lint",
+    "format-check",
+    "types",
+    "green-ci",
+    "diff-check"
   ],
-  "scope": {
-    "checked_at": "2026-10-09T14:56:15.373649+00:00",
-    "command": "python3 /private/tmp/fqp-v3e-scope.py (actual Git scope and budget; harness unavailable)",
-    "base_revision": "795c6c6c3bc15801e34a069e5f41bcd590a163ed",
-    "changed_files": 17,
-    "new_files": 4,
-    "paths": [
-      ".vibe/ACCEPTANCE.md",
-      ".vibe/BASELINE.yaml",
-      ".vibe/CHANGE_BUDGET.yaml",
-      ".vibe/DESIGN.md",
-      ".vibe/EVIDENCE.json",
-      ".vibe/PLAN.md",
-      ".vibe/SCOPE_LOCK.yaml",
-      ".vibe/TASK_DAG.yaml",
-      "apps/backend/src/routers/teams.py",
-      "apps/frontend/src/core/types.ts",
-      "apps/frontend/src/features/tactics/RosterEvidencePanel.css",
-      "apps/frontend/src/features/tactics/RosterEvidencePanel.test.tsx",
-      "apps/frontend/src/features/tactics/RosterEvidencePanel.tsx",
-      "apps/frontend/src/pages/MatchDetailPage.tsx",
-      "apps/frontend/src/shared/components/MatchDetailDrawer.tsx",
-      "docs/tactics-evidence-v3e.md",
-      "tests/test_api/test_teams.py"
-    ],
-    "scope_violations": [],
-    "forbidden_changes": [],
-    "dependency_additions": 0,
-    "migrations": 0,
-    "public_api_changes": 1,
-    "suite_tests": 32,
-    "new_tests": 25,
-    "limits": {
-      "max_changed_files": 20,
-      "max_new_files": 4,
-      "max_dependency_additions": 0,
-      "max_migration_files": 0,
-      "max_public_api_changes": 1,
-      "max_regression_tests": 45
-    },
-    "exit_code": 0
+  "resources_cleaned": true,
+  "isolated_postgres_written": true,
+  "isolated_redis_written": true,
+  "application_pg_data_writes": false,
+  "business_rows_copied": 0,
+  "production_connected": false,
+  "paid_requests": 0,
+  "live_runtime_activated": false,
+  "cache_implemented": true,
+  "singleflight_implemented": true,
+  "committed_pushed_deployed": false,
+  "read_only_source_pg_catalog": "/Volumes/Nas/FQP/plans/model-modernization-20261016/integrated/P102/04-postgres-and-review/SOURCE-CATALOG.json",
+  "engine_status": "project harness unavailable; direct evidence aggregation only, not merge gate execution",
+  "p103_runtime_operations": {
+    "status": "local_verified_review_PASS_runtime_cutover_authorized",
+    "start": "/Volumes/Nas/FQP/plans/model-modernization-20261016/integrated/P103/05-runtime-operations/START.json",
+    "test_authorization": "existing explicit P103 isolated fixed-response regression authorization; user now requests complete P103",
+    "real_source_enabled": false,
+    "delivery": "/Volumes/Nas/FQP/plans/model-modernization-20261016/integrated/P103/05-runtime-operations/FINAL.md",
+    "regression_passed": 316,
+    "additional_unit_cases": 40,
+    "production_metadata_read_only": true
   },
-  "resume_20261016": {
-    "phase": "V3i_resume_20261016",
-    "baseline": "7927b43880464ef6899fb2e559e4769216b143dc",
-    "recovery": {
-      "exact": true,
-      "source_sha256": "5a9d293bd2e117481bb5d7226a341effe146d9e3a5af04086cdf7b45977a5eb2",
-      "paths": 23
-    },
-    "verification": {
-      "recorded_at": "2026-10-16T04:25:57.431725+00:00",
-      "commands": {
-        "frontend-typecheck": {
-          "step": "frontend-typecheck",
-          "command": [
-            "npm",
-            "--prefix",
-            "apps/frontend",
-            "run",
-            "typecheck"
-          ],
-          "head": "7927b43880464ef6899fb2e559e4769216b143dc",
-          "started_at": "2026-10-16T04:12:08.893264+00:00",
-          "source_sha256_start": "6b39bb68b5a3b0c4b8a36d5aefaf31a7bcd7e66bbbf0658438edd013adc2a956",
-          "exit_code": 0,
-          "finished_at": "2026-10-16T04:12:23.510741+00:00",
-          "seconds": 14.618,
-          "source_sha256_end": "6b39bb68b5a3b0c4b8a36d5aefaf31a7bcd7e66bbbf0658438edd013adc2a956",
-          "log": "/Volumes/Nas/FQP/plans/v3i-resume-20261016/frontend-typecheck.log"
-        },
-        "frontend-tests": {
-          "step": "frontend-tests",
-          "command": [
-            "npm",
-            "--prefix",
-            "apps/frontend",
-            "test"
-          ],
-          "head": "7927b43880464ef6899fb2e559e4769216b143dc",
-          "started_at": "2026-10-16T04:12:08.893273+00:00",
-          "source_sha256_start": "6b39bb68b5a3b0c4b8a36d5aefaf31a7bcd7e66bbbf0658438edd013adc2a956",
-          "exit_code": 0,
-          "finished_at": "2026-10-16T04:13:33.112657+00:00",
-          "seconds": 84.222,
-          "source_sha256_end": "6b39bb68b5a3b0c4b8a36d5aefaf31a7bcd7e66bbbf0658438edd013adc2a956",
-          "log": "/Volumes/Nas/FQP/plans/v3i-resume-20261016/frontend-tests.log"
-        },
-        "frontend-build": {
-          "step": "frontend-build",
-          "command": [
-            "npm",
-            "--prefix",
-            "apps/frontend",
-            "run",
-            "build"
-          ],
-          "head": "7927b43880464ef6899fb2e559e4769216b143dc",
-          "started_at": "2026-10-16T04:12:08.893481+00:00",
-          "source_sha256_start": "6b39bb68b5a3b0c4b8a36d5aefaf31a7bcd7e66bbbf0658438edd013adc2a956",
-          "exit_code": 0,
-          "finished_at": "2026-10-16T04:12:11.847190+00:00",
-          "seconds": 2.953,
-          "source_sha256_end": "6b39bb68b5a3b0c4b8a36d5aefaf31a7bcd7e66bbbf0658438edd013adc2a956",
-          "log": "/Volumes/Nas/FQP/plans/v3i-resume-20261016/frontend-build.log"
-        },
-        "ruff-check": {
-          "step": "ruff-check",
-          "command": [
-            "uv",
-            "tool",
-            "run",
-            "--from",
-            "ruff==0.15.21",
-            "ruff",
-            "check",
-            "."
-          ],
-          "head": "7927b43880464ef6899fb2e559e4769216b143dc",
-          "started_at": "2026-10-16T04:12:33.613911+00:00",
-          "source_sha256_start": "6b39bb68b5a3b0c4b8a36d5aefaf31a7bcd7e66bbbf0658438edd013adc2a956",
-          "exit_code": 0,
-          "finished_at": "2026-10-16T04:12:34.066332+00:00",
-          "seconds": 0.452,
-          "source_sha256_end": "6b39bb68b5a3b0c4b8a36d5aefaf31a7bcd7e66bbbf0658438edd013adc2a956",
-          "log": "/Volumes/Nas/FQP/plans/v3i-resume-20261016/ruff-check.log"
-        },
-        "ruff-format": {
-          "step": "ruff-format",
-          "command": [
-            "uv",
-            "tool",
-            "run",
-            "--from",
-            "ruff==0.15.21",
-            "ruff",
-            "format",
-            "--check",
-            "."
-          ],
-          "head": "7927b43880464ef6899fb2e559e4769216b143dc",
-          "started_at": "2026-10-16T04:12:33.615189+00:00",
-          "source_sha256_start": "6b39bb68b5a3b0c4b8a36d5aefaf31a7bcd7e66bbbf0658438edd013adc2a956",
-          "exit_code": 0,
-          "finished_at": "2026-10-16T04:12:34.047520+00:00",
-          "seconds": 0.432,
-          "source_sha256_end": "6b39bb68b5a3b0c4b8a36d5aefaf31a7bcd7e66bbbf0658438edd013adc2a956",
-          "log": "/Volumes/Nas/FQP/plans/v3i-resume-20261016/ruff-format.log"
-        },
-        "mypy": {
-          "step": "mypy",
-          "command": [
-            "docker",
-            "run",
-            "--rm",
-            "--network",
-            "none",
-            "--cpus",
-            "2",
-            "-v",
-            "/Users/estefan-macworkstation/.codex/workspaces/fqp-v3i-20261016:/work:ro",
-            "-w",
-            "/work",
-            "fqp-cleanup-quality:20261016",
-            "mypy",
-            "apps/backend/src",
-            "scripts",
-            "--explicit-package-bases",
-            "--cache-dir",
-            "/tmp/fqp-mypy-cache"
-          ],
-          "head": "7927b43880464ef6899fb2e559e4769216b143dc",
-          "started_at": "2026-10-16T04:12:33.614865+00:00",
-          "source_sha256_start": "6b39bb68b5a3b0c4b8a36d5aefaf31a7bcd7e66bbbf0658438edd013adc2a956",
-          "exit_code": 0,
-          "finished_at": "2026-10-16T04:13:06.741964+00:00",
-          "seconds": 33.127,
-          "source_sha256_end": "6b39bb68b5a3b0c4b8a36d5aefaf31a7bcd7e66bbbf0658438edd013adc2a956",
-          "log": "/Volumes/Nas/FQP/plans/v3i-resume-20261016/mypy.log"
-        },
-        "bridge-tests": {
-          "step": "bridge-tests",
-          "command": [
-            "npm",
-            "--prefix",
-            "apps/model-bridge",
-            "test"
-          ],
-          "head": "7927b43880464ef6899fb2e559e4769216b143dc",
-          "started_at": "2026-10-16T04:14:08.322400+00:00",
-          "source_sha256_start": "6b39bb68b5a3b0c4b8a36d5aefaf31a7bcd7e66bbbf0658438edd013adc2a956",
-          "exit_code": 0,
-          "finished_at": "2026-10-16T04:14:10.500749+00:00",
-          "seconds": 2.178,
-          "source_sha256_end": "6b39bb68b5a3b0c4b8a36d5aefaf31a7bcd7e66bbbf0658438edd013adc2a956",
-          "log": "/Volumes/Nas/FQP/plans/v3i-resume-20261016/bridge-tests.log"
-        },
-        "bridge-check": {
-          "step": "bridge-check",
-          "command": [
-            "npm",
-            "--prefix",
-            "apps/model-bridge",
-            "run",
-            "check"
-          ],
-          "head": "7927b43880464ef6899fb2e559e4769216b143dc",
-          "started_at": "2026-10-16T04:14:08.322364+00:00",
-          "source_sha256_start": "6b39bb68b5a3b0c4b8a36d5aefaf31a7bcd7e66bbbf0658438edd013adc2a956",
-          "exit_code": 0,
-          "finished_at": "2026-10-16T04:14:09.166660+00:00",
-          "seconds": 0.844,
-          "source_sha256_end": "6b39bb68b5a3b0c4b8a36d5aefaf31a7bcd7e66bbbf0658438edd013adc2a956",
-          "log": "/Volumes/Nas/FQP/plans/v3i-resume-20261016/bridge-check.log"
-        },
-        "backend-tests-writable": {
-          "step": "backend-tests-writable",
-          "command": [
-            "docker",
-            "run",
-            "--rm",
-            "--name",
-            "fqp-v3i-pytest",
-            "--cpus",
-            "3",
-            "--network",
-            "fqp-v3i-check-20261016",
-            "--env-file",
-            "/Users/estefan-macworkstation/.codex/workspaces/.private/fqp-v3i-20261016/test.env",
-            "-v",
-            "/Users/estefan-macworkstation/.codex/workspaces/fqp-v3i-20261016:/source:ro",
-            "-v",
-            "/Volumes/Nas/FQP/plans/v3i-resume-20261016:/evidence:ro",
-            "-w",
-            "/tmp",
-            "fqp-cleanup-quality:20261016",
-            "python",
-            "/evidence/backend-check.py"
-          ],
-          "head": "7927b43880464ef6899fb2e559e4769216b143dc",
-          "started_at": "2026-10-16T04:17:22.521619+00:00",
-          "source_sha256_start": "6b39bb68b5a3b0c4b8a36d5aefaf31a7bcd7e66bbbf0658438edd013adc2a956",
-          "exit_code": 0,
-          "finished_at": "2026-10-16T04:18:04.310742+00:00",
-          "seconds": 41.79,
-          "source_sha256_end": "6b39bb68b5a3b0c4b8a36d5aefaf31a7bcd7e66bbbf0658438edd013adc2a956",
-          "log": "/Volumes/Nas/FQP/plans/v3i-resume-20261016/backend-tests-writable.log"
-        },
-        "backend-all-services": {
-          "step": "backend-all-services",
-          "command": [
-            "docker",
-            "run",
-            "--rm",
-            "--name",
-            "fqp-v3i-service-tests",
-            "--cpus",
-            "2",
-            "--network",
-            "fqp-v3i-check-20261016",
-            "--env-file",
-            "/Users/estefan-macworkstation/.codex/workspaces/.private/fqp-v3i-20261016/test.env",
-            "-v",
-            "/Users/estefan-macworkstation/.codex/workspaces/fqp-v3i-20261016:/source:ro",
-            "-v",
-            "/Volumes/Nas/FQP/plans/v3i-resume-20261016:/evidence:ro",
-            "-w",
-            "/tmp",
-            "fqp-cleanup-quality:20261016",
-            "python",
-            "/evidence/backend-check.py",
-            "services"
-          ],
-          "head": "7927b43880464ef6899fb2e559e4769216b143dc",
-          "started_at": "2026-10-16T04:18:31.452418+00:00",
-          "source_sha256_start": "6b39bb68b5a3b0c4b8a36d5aefaf31a7bcd7e66bbbf0658438edd013adc2a956",
-          "exit_code": 0,
-          "finished_at": "2026-10-16T04:18:41.836080+00:00",
-          "seconds": 10.384,
-          "source_sha256_end": "6b39bb68b5a3b0c4b8a36d5aefaf31a7bcd7e66bbbf0658438edd013adc2a956",
-          "log": "/Volumes/Nas/FQP/plans/v3i-resume-20261016/backend-all-services.log"
-        },
-        "research-sql": {
-          "step": "research-sql",
-          "command": [
-            "docker",
-            "run",
-            "--rm",
-            "--name",
-            "fqp-v3i-research-sql",
-            "--cpus",
-            "1",
-            "--network",
-            "fqp-v3i-check-20261016",
-            "--env-file",
-            "/Users/estefan-macworkstation/.codex/workspaces/.private/fqp-v3i-20261016/test.env",
-            "-v",
-            "/Users/estefan-macworkstation/.codex/workspaces/fqp-v3i-20261016:/work:ro",
-            "-v",
-            "/Volumes/Nas/FQP/plans/v3i-resume-20261016:/evidence:ro",
-            "-w",
-            "/work",
-            "fqp-cleanup-quality:20261016",
-            "python",
-            "/evidence/research-sql.py"
-          ],
-          "head": "7927b43880464ef6899fb2e559e4769216b143dc",
-          "started_at": "2026-10-16T04:16:21.654762+00:00",
-          "source_sha256_start": "6b39bb68b5a3b0c4b8a36d5aefaf31a7bcd7e66bbbf0658438edd013adc2a956",
-          "exit_code": 0,
-          "finished_at": "2026-10-16T04:16:24.138731+00:00",
-          "seconds": 2.484,
-          "source_sha256_end": "6b39bb68b5a3b0c4b8a36d5aefaf31a7bcd7e66bbbf0658438edd013adc2a956",
-          "log": "/Volumes/Nas/FQP/plans/v3i-resume-20261016/research-sql.log"
-        },
-        "scope-security": {
-          "step": "scope-security",
-          "command": [
-            "python3",
-            "/Volumes/Nas/FQP/plans/v3i-resume-20261016/audit.py"
-          ],
-          "head": "7927b43880464ef6899fb2e559e4769216b143dc",
-          "started_at": "2026-10-16T04:21:53.392998+00:00",
-          "source_sha256_start": "6b39bb68b5a3b0c4b8a36d5aefaf31a7bcd7e66bbbf0658438edd013adc2a956",
-          "exit_code": 0,
-          "finished_at": "2026-10-16T04:21:53.919964+00:00",
-          "seconds": 0.527,
-          "source_sha256_end": "6b39bb68b5a3b0c4b8a36d5aefaf31a7bcd7e66bbbf0658438edd013adc2a956",
-          "log": "/Volumes/Nas/FQP/plans/v3i-resume-20261016/scope-security.log"
-        },
-        "protocol-check": {
-          "step": "protocol-check",
-          "command": [
-            "python3",
-            "/Volumes/Nas/FQP/plans/v3i-resume-20261016/check-protocol.py"
-          ],
-          "head": "7927b43880464ef6899fb2e559e4769216b143dc",
-          "started_at": "2026-10-16T04:21:05.828350+00:00",
-          "source_sha256_start": "6b39bb68b5a3b0c4b8a36d5aefaf31a7bcd7e66bbbf0658438edd013adc2a956",
-          "exit_code": 0,
-          "finished_at": "2026-10-16T04:21:06.110046+00:00",
-          "seconds": 0.281,
-          "source_sha256_end": "6b39bb68b5a3b0c4b8a36d5aefaf31a7bcd7e66bbbf0658438edd013adc2a956",
-          "log": "/Volumes/Nas/FQP/plans/v3i-resume-20261016/protocol-check.log"
-        }
-      },
-      "frontend": 519,
-      "backend": 944,
-      "backend_services": 44,
-      "pi_bridge": 10,
-      "coverage_percent": 53.33
-    },
-    "full_p10_acceptance": false,
-    "engine_available": false,
-    "evidence_dir": "/Volumes/Nas/FQP/plans/v3i-resume-20261016",
-    "native_endurance": {
-      "closed_at": "2026-10-16T04:43:22.502124+00:00",
-      "task_status": "closed_by_user_waiver",
-      "test_result": "interrupted_by_user_during_warmup",
-      "full_p10_passed": false,
-      "user_instruction": "直接标记为完成，如果以后我发现有问题再来重新解决",
-      "actual_seconds": 117.63,
-      "warmup_cycles": 125,
-      "formal_cycles": 0,
-      "formal_seconds": 0,
-      "idle_seconds": 0,
-      "page_errors": 0,
-      "http_writes": 0,
-      "csp_blocks": 0,
-      "runner_exit_code": 1,
-      "guardian_observed_runner_exit_code": 1,
-      "owned_processes_left": [],
-      "stable_source_dist_inputs": true,
-      "automation": "PAUSED",
-      "remaining_risk": "Long-duration JS/native/GPU allocation plateau and prior transient timeouts remain unverified/unattributed. User accepts addressing discovered issues later.",
-      "release_requirement_change": "The user waived endurance only; fresh exact-commit CI and deployment/recovery checks remain required."
-    },
-    "gpu_interactions": {
-      "model-gpu-capture": {
-        "step": "model-gpu-capture",
-        "command": [
-          "python3",
-          "/Volumes/Nas/FQP/plans/v3i-resume-20261016/run-browser-script.py",
-          "/Volumes/Nas/FQP/plans/v3i-resume-20261016/model-gpu-capture.py"
-        ],
-        "head": "7927b43880464ef6899fb2e559e4769216b143dc",
-        "started_at": "2026-10-16T04:32:53.187059+00:00",
-        "source_sha256_start": "6b39bb68b5a3b0c4b8a36d5aefaf31a7bcd7e66bbbf0658438edd013adc2a956",
-        "exit_code": 0,
-        "finished_at": "2026-10-16T04:33:15.955710+00:00",
-        "seconds": 22.769,
-        "source_sha256_end": "6b39bb68b5a3b0c4b8a36d5aefaf31a7bcd7e66bbbf0658438edd013adc2a956",
-        "log": "/Volumes/Nas/FQP/plans/v3i-resume-20261016/model-gpu-capture.log"
-      },
-      "model-gpu-capture-2": {
-        "step": "model-gpu-capture-2",
-        "command": [
-          "python3",
-          "/Volumes/Nas/FQP/plans/v3i-resume-20261016/run-browser-script.py",
-          "/Volumes/Nas/FQP/plans/v3i-resume-20261016/model-gpu-capture-2.py"
-        ],
-        "head": "7927b43880464ef6899fb2e559e4769216b143dc",
-        "started_at": "2026-10-16T04:34:08.992286+00:00",
-        "source_sha256_start": "6b39bb68b5a3b0c4b8a36d5aefaf31a7bcd7e66bbbf0658438edd013adc2a956",
-        "exit_code": 0,
-        "finished_at": "2026-10-16T04:34:31.978601+00:00",
-        "seconds": 22.987,
-        "source_sha256_end": "6b39bb68b5a3b0c4b8a36d5aefaf31a7bcd7e66bbbf0658438edd013adc2a956",
-        "log": "/Volumes/Nas/FQP/plans/v3i-resume-20261016/model-gpu-capture-2.log"
-      },
-      "model-gpu-capture-3": {
-        "step": "model-gpu-capture-3",
-        "command": [
-          "/usr/local/bin/python3",
-          "/Volumes/Nas/FQP/plans/v3i-resume-20261016/run-browser-script.py",
-          "/Volumes/Nas/FQP/plans/v3i-resume-20261016/model-gpu-capture-3.py"
-        ],
-        "head": "7927b43880464ef6899fb2e559e4769216b143dc",
-        "started_at": "2026-10-16T04:34:42.351198+00:00",
-        "source_sha256_start": "6b39bb68b5a3b0c4b8a36d5aefaf31a7bcd7e66bbbf0658438edd013adc2a956",
-        "exit_code": 0,
-        "finished_at": "2026-10-16T04:35:04.994219+00:00",
-        "seconds": 22.643,
-        "source_sha256_end": "6b39bb68b5a3b0c4b8a36d5aefaf31a7bcd7e66bbbf0658438edd013adc2a956",
-        "log": "/Volumes/Nas/FQP/plans/v3i-resume-20261016/model-gpu-capture-3.log"
-      },
-      "model-gpu-capture-4": {
-        "step": "model-gpu-capture-4",
-        "command": [
-          "/usr/local/bin/python3",
-          "/Volumes/Nas/FQP/plans/v3i-resume-20261016/run-browser-script.py",
-          "/Volumes/Nas/FQP/plans/v3i-resume-20261016/model-gpu-capture-4.py"
-        ],
-        "head": "7927b43880464ef6899fb2e559e4769216b143dc",
-        "started_at": "2026-10-16T04:35:05.825117+00:00",
-        "source_sha256_start": "6b39bb68b5a3b0c4b8a36d5aefaf31a7bcd7e66bbbf0658438edd013adc2a956",
-        "exit_code": 0,
-        "finished_at": "2026-10-16T04:35:28.790693+00:00",
-        "seconds": 22.966,
-        "source_sha256_end": "6b39bb68b5a3b0c4b8a36d5aefaf31a7bcd7e66bbbf0658438edd013adc2a956",
-        "log": "/Volumes/Nas/FQP/plans/v3i-resume-20261016/model-gpu-capture-4.log"
-      },
-      "tactics-gpu": {
-        "step": "tactics-gpu",
-        "command": [
-          "python3",
-          "/Volumes/Nas/FQP/plans/v3i-resume-20261016/run-browser-script.py",
-          "/Volumes/Nas/FQP/plans/v3i-resume-20261016/tactics-gpu.py"
-        ],
-        "head": "7927b43880464ef6899fb2e559e4769216b143dc",
-        "started_at": "2026-10-16T04:35:38.769119+00:00",
-        "source_sha256_start": "6b39bb68b5a3b0c4b8a36d5aefaf31a7bcd7e66bbbf0658438edd013adc2a956",
-        "exit_code": 0,
-        "finished_at": "2026-10-16T04:36:03.718495+00:00",
-        "seconds": 24.95,
-        "source_sha256_end": "6b39bb68b5a3b0c4b8a36d5aefaf31a7bcd7e66bbbf0658438edd013adc2a956",
-        "log": "/Volumes/Nas/FQP/plans/v3i-resume-20261016/tactics-gpu.log"
-      },
-      "debug-original": {
-        "step": "debug-original",
-        "command": [
-          "python3",
-          "-u",
-          "/Volumes/Nas/FQP/plans/v3i-resume-20261016/debug-original.py"
-        ],
-        "head": "7927b43880464ef6899fb2e559e4769216b143dc",
-        "started_at": "2026-10-16T04:13:25.513334+00:00",
-        "source_sha256_start": "6b39bb68b5a3b0c4b8a36d5aefaf31a7bcd7e66bbbf0658438edd013adc2a956",
-        "exit_code": 0,
-        "finished_at": "2026-10-16T04:20:55.859090+00:00",
-        "seconds": 450.36,
-        "source_sha256_end": "6b39bb68b5a3b0c4b8a36d5aefaf31a7bcd7e66bbbf0658438edd013adc2a956",
-        "log": "/Volumes/Nas/FQP/plans/v3i-resume-20261016/debug-original.log"
-      },
-      "controlled-short": {
-        "step": "controlled-short",
-        "command": [
-          "python3",
-          "-u",
-          "/Volumes/Nas/FQP/plans/v3i-resume-20261016/controlled-short.py"
-        ],
-        "head": "7927b43880464ef6899fb2e559e4769216b143dc",
-        "started_at": "2026-10-16T04:21:22.317281+00:00",
-        "source_sha256_start": "6b39bb68b5a3b0c4b8a36d5aefaf31a7bcd7e66bbbf0658438edd013adc2a956",
-        "exit_code": 0,
-        "finished_at": "2026-10-16T04:28:56.961042+00:00",
-        "seconds": 454.586,
-        "source_sha256_end": "6b39bb68b5a3b0c4b8a36d5aefaf31a7bcd7e66bbbf0658438edd013adc2a956",
-        "log": "/Volumes/Nas/FQP/plans/v3i-resume-20261016/controlled-short.log"
-      }
-    },
-    "independent_review": {
-      "reviewer": "/root/v3i_release_review",
-      "source_and_script_design": "PASS",
-      "formal_execution_permitted": true,
-      "reviewed_script_hashes": {
-        "native-endurance.py": "72ae57dccc5ec689ce4da0395861d5a5bfef7b5158340b148157cbc2dba919e0",
-        "native-runner.py": "d87fe9b005ff063ab6a18c05cdf2c171e6dd15e73f5a0364fa0c603e278d00e6",
-        "native-guardian.py": "19e2062d525808c2be8c13da0422bfa39dd444e030457f84ff18d5b9c911d1c1"
-      },
-      "final_release_acceptance": false
-    },
-    "preserved_failure": {
-      "gpu_interactions_initial": "theme dataset wait timeout; not reproduced in four unchanged assertion cases; no application fix or root cause claimed"
-    },
-    "release_readiness": "user_waived_endurance; current regular regression and source review complete; exact candidate CI and deployment verification pending"
-  },
-  "dashboard_loading_20261016": {
-    "base_revision": "5abb3d9fdc0e66268cc5e3d03bb1fa13edfee2c5",
-    "status": "implemented_verified_local",
-    "evidence_directory": "/Volumes/Nas/FQP/plans/dashboard-loading-20261016",
-    "production_read_only": true,
-    "production_deployed": false,
-    "canonical_engine": "not found; direct checks will be recorded",
-    "source_sha256": "d3ef8dc14f5edeae2b23a8da7d0ab6da49c197eb0fe48e7e83cabd3b82e685ad",
-    "regression_passed": 1537,
-    "new_regressions": 20,
-    "changed_files": 17,
-    "independent_review": "PASS",
-    "github_pushed": false,
-    "final_report": "/Volumes/Nas/FQP/plans/dashboard-loading-20261016/FINAL.md",
-    "publication_authorized": true,
-    "release_status": "authorized_pending_exact_CI_and_rollout",
-    "rollback_revision": "5abb3d9fdc0e66268cc5e3d03bb1fa13edfee2c5"
+  "p103_authorized_release": {
+    "start": "/Volumes/Nas/FQP/plans/model-modernization-20261016/integrated/P103/06-server-cutover/START.json",
+    "status": "pending",
+    "user_explicit_authorization": true
   }
 }

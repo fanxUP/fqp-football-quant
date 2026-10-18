@@ -1,8 +1,9 @@
-version: 18
+version: 35
 mode: STRICT
-base_revision: 5abb3d9fdc0e66268cc5e3d03bb1fa13edfee2c5
-upstream_main: 5abb3d9fdc0e66268cc5e3d03bb1fa13edfee2c5
-branch: perf/dashboard-loading-20261016
-phase: dashboard_loading
+base_revision: b2a2d0b0fdf07ac82bfb399c5a88cf36b5d8c663
+branch: feat/shared-data-contracts-20261016
+phase: P103_authorized_release_and_runtime_cutover
+authoritative_plan: /Volumes/Nas/FQP/plans/model-modernization-20261016/integrated/PLAN.md
 production_writes: false
-production_data_export: false
+database_changes: false
+starting_manifest: /Volumes/Nas/FQP/plans/model-modernization-20261016/integrated/P103/06-server-cutover/START.json

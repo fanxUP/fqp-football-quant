@@ -39,3 +39,13 @@ def test_rest_days_uses_verified_sporttery_aliases_for_team_identity(mock_conn):
     assert rest_days == 8
     assert cur.execute.call_args.args[1]["team_id"] == 1360
     assert "team_aliases" in cur.execute.call_args.args[0]
+
+
+def test_team_form_requires_final_complete_nonnegative_official_scores(mock_conn):
+    conn, cur = mock_conn
+    cur.fetchall.return_value = []
+    assert compute_team_form("home", "2026-10-17T20:00:00", 10, conn=conn)["matches_played"] == 0
+    sql = cur.execute.call_args.args[0]
+    assert "r.result_status IN ('final', 'confirmed')" in sql
+    assert "r.full_home_goals >= 0" in sql
+    assert "r.full_away_goals >= 0" in sql

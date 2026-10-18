@@ -8,7 +8,11 @@ from typing import Any
 
 import numpy as np
 
-from scripts.shadow_model_helpers import map_official_probabilities, valid_shadow_profile
+from scripts.shadow_model_helpers import (
+    load_shadow_probabilities,
+    map_official_probabilities,
+    valid_shadow_profile,
+)
 
 MIN_TRAINING_MATCHES = 100
 MIN_VALIDATION_MATCHES = 25
@@ -109,16 +113,12 @@ def load_probabilities(
     feature_snapshot: dict[str, Any] | None,
 ) -> dict[str, float] | None:
     """Load lazily; artifact failures remove this signal rather than changing decisions."""
-    profile = profile_from_parameters(parameters)
-    if profile is None or feature_snapshot is None:
-        return None
-    try:
-        import joblib
-
-        classifier = joblib.load(profile.artifact_path)
-        return probabilities_from_classifier(classifier, profile, feature_snapshot)
-    except ImportError, OSError, ValueError:
-        return None
+    return load_shadow_probabilities(
+        parameters,
+        feature_snapshot,
+        profile_from_parameters=profile_from_parameters,
+        probabilities_from_classifier=probabilities_from_classifier,
+    )
 
 
 def probabilities_from_classifier(

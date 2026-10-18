@@ -9,6 +9,13 @@ from typing import Any
 
 from psycopg2.extras import Json
 
+from scripts.feature_schema import (
+    FEATURE_INPUT_POLICY,
+    FEATURE_SCHEMA_VERSION,
+    valid_feature_columns,
+)
+from scripts.shadow_model_helpers import artifact_matches_features
+
 
 def store_active_shadow_profile(
     conn: Any,
@@ -45,14 +52,23 @@ def train_shadow_with_connection(
     store_profile: Callable[..., None] | None = None,
     save_artifact: Callable[[Any, Path], Any] | None = None,
 ) -> dict[str, Any]:
+    if not valid_feature_columns(feature_columns):
+        raise ValueError("feature columns must be a known unique ordered subset")
     dataset = load_dataset(conn)
     if dataset is None:
         return {"status": "skipped", "reason": "no_settled_pre_match_feature_rows"}
     features, labels, dates = dataset
+    if features.ndim != 2 or features.shape[1] != len(feature_columns):
+        raise ValueError("feature matrix width must match declared feature columns")
     try:
         classifier, profile = fit_model(features, labels, tuple(feature_columns))
     except ValueError as exc:
         return {"status": "skipped", "reason": str(exc), "sample_count": len(labels)}
+
+    if tuple(profile.feature_columns) != tuple(feature_columns) or not artifact_matches_features(
+        classifier, tuple(feature_columns)
+    ):
+        raise ValueError("fitted artifact feature contract does not match training input")
 
     if save_artifact is None:
         import joblib
@@ -68,6 +84,8 @@ def train_shadow_with_connection(
         "rollout_mode": "shadow",
         "artifact_path": artifact_relative_path,
         "feature_columns": list(profile.feature_columns),
+        "feature_schema_version": FEATURE_SCHEMA_VERSION,
+        "feature_input_policy": FEATURE_INPUT_POLICY,
         "training_matches": profile.training_matches,
         "validation_matches": profile.validation_matches,
         "validation_log_loss": round(profile.validation_log_loss, 8),

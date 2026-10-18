@@ -6,7 +6,11 @@ from typing import Any
 
 import numpy as np
 
-from scripts.feature_importance import FEATURE_COLUMNS
+from scripts.feature_schema import (
+    COMPATIBLE_SNAPSHOT_VERSIONS,
+    FEATURE_COLUMNS,
+    numeric_feature_value,
+)
 
 
 def load_settled_pre_kickoff_dataset(
@@ -22,6 +26,7 @@ def load_settled_pre_kickoff_dataset(
                 FROM match_feature_snapshots fs
                 JOIN official_matches m ON m.id = fs.match_id
                 WHERE fs.snapshot_time < m.kickoff_time
+                  AND fs.feature_version IN %(feature_versions)s
                 ORDER BY fs.match_id, fs.snapshot_time DESC, fs.id DESC
             )
             SELECT m.kickoff_time, {columns},
@@ -36,7 +41,8 @@ def load_settled_pre_kickoff_dataset(
             WHERE r.result_status IN ('final', 'confirmed')
             ORDER BY m.kickoff_time ASC, fs.match_id ASC
             LIMIT 5000
-            """
+            """,
+            {"feature_versions": COMPATIBLE_SNAPSHOT_VERSIONS},
         )
         rows = cur.fetchall()
     if not rows:
@@ -44,10 +50,7 @@ def load_settled_pre_kickoff_dataset(
 
     feature_count = len(FEATURE_COLUMNS)
     features = np.array(
-        [
-            [float(value) if value is not None else np.nan for value in row[1 : feature_count + 1]]
-            for row in rows
-        ],
+        [[numeric_feature_value(value) for value in row[1 : feature_count + 1]] for row in rows],
         dtype=np.float64,
     )
     labels = np.array([int(row[-1]) for row in rows], dtype=np.int64)

@@ -165,7 +165,7 @@ function AnalysisOverview({
               : null,
           highConfidenceCount:
             recommendationRes.status === 'fulfilled'
-              ? recommendations.filter((rec) => rec.confidence >= 0.6 && rec.edge > 0).length
+              ? recommendations.filter((rec) => rec.confidence !== null && rec.confidence >= 0.6 && rec.edge > 0).length
               : null,
           conflictMatchCount:
             recommendationRes.status === 'fulfilled'
@@ -988,7 +988,7 @@ function ShapExplainTab({ initialMatchId }: { initialMatchId?: number | null }) 
                     <tr key={e.feature} style={{ borderBottom: '1px solid var(--fqp-border-light)' }}>
                       <td style={tdS}>{e.label}</td>
                       <td style={{ ...tdS, textAlign: 'right' }} className="fqp-mono">
-                        {e.feature_value}
+                        {e.feature_value ?? '缺失'}
                       </td>
                       <td style={{ ...tdS, textAlign: 'right' }} className="fqp-mono">
                         <span style={{ color: e.shap_value >= 0 ? 'var(--fqp-success)' : 'var(--fqp-red-neon)' }}>

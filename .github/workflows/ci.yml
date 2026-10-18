@@ -60,6 +60,16 @@ jobs:
     needs: lint-and-typecheck
 
     services:
+      redis:
+        image: redis:7-bookworm
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
       postgres:
         image: postgres:16
         env:
@@ -126,6 +136,17 @@ jobs:
         env:
           PGPASSWORD: fqp_test_password
 
+      - name: Initialize isolated feature contract database
+        run: |
+          set -euo pipefail
+          createdb -h localhost -U fqp fqp_feature_contract_test
+          pg_dump --schema-only --no-owner --no-privileges -h localhost -U fqp -d fqp_test \
+            | psql -X -v ON_ERROR_STOP=1 -h localhost -U fqp -d fqp_feature_contract_test
+          psql -X -v ON_ERROR_STOP=1 -h localhost -U fqp -d fqp_feature_contract_test \
+            -c "COMMENT ON DATABASE fqp_feature_contract_test IS 'fqp-p102-isolated-fixtures/v1'"
+        env:
+          PGPASSWORD: fqp_test_password
+
       - name: Run tests with coverage
         run: |
           DATABASE_URL=postgresql://fqp:fqp_test_password@localhost:5432/fqp_test \
@@ -133,3 +154,5 @@ jobs:
         env:
           DATABASE_URL: postgresql://fqp:fqp_test_password@localhost:5432/fqp_test
           FQP_PI_TEST_DB: postgresql://fqp:fqp_test_password@localhost:5432/fqp_pi_test
+          FQP_QUOTA_TEST_REDIS_URL: redis://127.0.0.1:6379/15
+          FQP_FEATURE_TEST_POSTGRES_DSN: postgresql://fqp:fqp_test_password@localhost:5432/fqp_feature_contract_test

@@ -4,208 +4,319 @@ date: '2026-10-16'
 mode: STRICT
 baseline_main_sha: 5abb3d9fdc0e66268cc5e3d03bb1fa13edfee2c5
 tasks:
-  - id: P01
-    title: 运行态与数据证据审计
-    acceptance: A01
-    depends_on: []
-  - id: P02
-    title: 赤焰设计系统与全局布局
-    acceptance: A02
-    depends_on: [P01]
-  - id: P03
-    title: 3D 基础框架与交互球场
-    acceptance: A03
-    depends_on: [P02]
-  - id: P04
-    title: 真实工作台与双向选择
-    acceptance: A04
-    depends_on: [P03]
-  - id: P05
-    title: Agent 真实状态网络
-    acceptance: A05
-    depends_on: [P04]
-  - id: P06
-    title: 有证据的数据管线
-    acceptance: A06
-    depends_on: [P05]
-  - id: P07
-    title: 业务二维页面升级
-    acceptance: A07
-    depends_on: [P04]
-  - id: P08
-    title: 战术证据与场景
-    acceptance: A08
-    depends_on: [P07]
-  - id: P09
-    title: 模型研究场景
-    acceptance: A09
-    depends_on: [P07]
-  - id: P10
-    title: 综合验证与分批发布
-    acceptance: A10
-    depends_on: [P06, P08, P09]
+- id: P01
+  title: 运行态与数据证据审计
+  acceptance: A01
+  depends_on: []
+- id: P02
+  title: 赤焰设计系统与全局布局
+  acceptance: A02
+  depends_on:
+  - P01
+- id: P03
+  title: 3D 基础框架与交互球场
+  acceptance: A03
+  depends_on:
+  - P02
+- id: P04
+  title: 真实工作台与双向选择
+  acceptance: A04
+  depends_on:
+  - P03
+- id: P05
+  title: Agent 真实状态网络
+  acceptance: A05
+  depends_on:
+  - P04
+- id: P06
+  title: 有证据的数据管线
+  acceptance: A06
+  depends_on:
+  - P05
+- id: P07
+  title: 业务二维页面升级
+  acceptance: A07
+  depends_on:
+  - P04
+- id: P08
+  title: 战术证据与场景
+  acceptance: A08
+  depends_on:
+  - P07
+- id: P09
+  title: 模型研究场景
+  acceptance: A09
+  depends_on:
+  - P07
+- id: P10
+  title: 综合验证与分批发布
+  acceptance: A10
+  depends_on:
+  - P06
+  - P08
+  - P09
 releases:
-  V1: [P01, P02, P03, P04]
-  V2: [P05, P06]
-  V3: [P07, P08, P09, P10]
-
+  V1:
+  - P01
+  - P02
+  - P03
+  - P04
+  V2:
+  - P05
+  - P06
+  V3:
+  - P07
+  - P08
+  - P09
+  - P10
 subtasks:
-  - id: P07a
-    title: 比赛中心二维列表与证据联动
-    acceptance: A07a
-    depends_on: [P04]
-
-  - id: P07b
-    title: 预测与赔率二维证据升级
-    acceptance: A07b
-    depends_on: [P07a]
-
-  - id: P07c
-    title: 彩票查询隔离、回测证据与复盘独立加载
-    acceptance: A07c
-    depends_on: [P07b]
-
-  - id: P07d
-    title: 新闻独立证据与报告子面板隔离重试
-    acceptance: A07d
-    depends_on: [P07c]
-
-  - id: P08a
-    title: 阵容与伤停二维证据契约
-    acceptance: A08a
-    depends_on: [P07d]
-  - id: P08b
-    title: 基于证据的战术示意场景
-    acceptance: A08b
-    depends_on: [P08a]
-
+- id: P07a
+  title: 比赛中心二维列表与证据联动
+  acceptance: A07a
+  depends_on:
+  - P04
+- id: P07b
+  title: 预测与赔率二维证据升级
+  acceptance: A07b
+  depends_on:
+  - P07a
+- id: P07c
+  title: 彩票查询隔离、回测证据与复盘独立加载
+  acceptance: A07c
+  depends_on:
+  - P07b
+- id: P07d
+  title: 新闻独立证据与报告子面板隔离重试
+  acceptance: A07d
+  depends_on:
+  - P07c
+- id: P08a
+  title: 阵容与伤停二维证据契约
+  acceptance: A08a
+  depends_on:
+  - P07d
+- id: P08b
+  title: 基于证据的战术示意场景
+  acceptance: A08b
+  depends_on:
+  - P08a
 current_cleanup:
   date: '2026-10-16'
   baseline_sha: 202ac4a9b5b3a0fde93d416832359e5e2de4171e
   status: additional_listed_cleanup_complete_static_review_only
   tasks:
-    - id: CLEAN-REFS
-      title: 复核 A1-A5 的引用与入口
-      depends_on: []
-    - id: CLEAN-A1-A5
-      title: 删除已列出的死代码及失效引用
-      acceptance: [CLEAN-A1, CLEAN-A2, CLEAN-A3, CLEAN-A4, CLEAN-A5]
-      depends_on: [CLEAN-REFS]
-    - id: CLEAN-AUDIT
-      title: 静态引用、差异与范围检查
-      acceptance: [CLEAN-SCOPE, CLEAN-CHECK]
-      depends_on: [CLEAN-A1-A5]
-    - id: CLEAN-B-REFS
-      title: 复核 B1/B2 的闭合引用与后端保留边界
-      depends_on: [CLEAN-AUDIT]
-    - id: CLEAN-B1-B2
-      title: 删除批准的 OCR 映射工具及未接入复盘组件
-      acceptance: [CLEAN-B1, CLEAN-B2]
-      depends_on: [CLEAN-B-REFS]
-    - id: CLEAN-B-AUDIT
-      title: 核对 B 批静态引用、保留代码与累计范围
-      acceptance: [CLEAN-B-PRESERVE, CLEAN-SCOPE, CLEAN-CHECK]
-      depends_on: [CLEAN-B1-B2]
-    - id: CLEAN-B35-REFS
-      title: 复核 B3/B5 无消费者及现用流水线边界
-      depends_on: [CLEAN-B-AUDIT]
-    - id: CLEAN-B3-B5
-      title: 删除批准的六个文件并修正两份文档路径
-      acceptance: [CLEAN-B3, CLEAN-B5]
-      depends_on: [CLEAN-B35-REFS]
-    - id: CLEAN-B35-AUDIT
-      title: 核对删除引用、保留文件和累计三十九文件范围
-      acceptance: [CLEAN-B35-PRESERVE, CLEAN-SCOPE, CLEAN-CHECK]
-      depends_on: [CLEAN-B3-B5]
-    - id: CLEAN-C3-REFS
-      title: 复核球员辅助函数与测试替换入口
-      depends_on: [CLEAN-B35-AUDIT]
-    - id: CLEAN-C3-PLAYERS
-      title: 按三文件清单共享球员辅助逻辑
-      acceptance: [CLEAN-C3-SHARED, CLEAN-C3-WRAPPERS]
-      depends_on: [CLEAN-C3-REFS]
-    - id: CLEAN-C3-AUDIT
-      title: 静态专门化对比、保留代码与范围复核
-      acceptance: [CLEAN-C3-PRESERVE, CLEAN-SCOPE, CLEAN-CHECK]
-      depends_on: [CLEAN-C3-PLAYERS]
-    - id: CLEAN-ALL-CONTROL
-      title: 按用户全部完成指令冻结剩余范围与预算
-      depends_on: [CLEAN-C3-AUDIT]
-    - id: CLEAN-B4-C3-TIME
-      title: 清理备用客户端并共享采集时钟
-      acceptance: [CLEAN-B4, CLEAN-C3-TIME]
-      depends_on: [CLEAN-ALL-CONTROL]
-    - id: CLEAN-C4-C5
-      title: 合并路由匹配和周月报框架
-      acceptance: [CLEAN-C4, CLEAN-C5]
-      depends_on: [CLEAN-ALL-CONTROL]
-    - id: CLEAN-C1-C2
-      title: 合并模型训练编排与公共推理校验
-      acceptance: [CLEAN-C1, CLEAN-C2]
-      depends_on: [CLEAN-ALL-CONTROL]
-    - id: CLEAN-ALL-AUDIT
-      title: 完成累计范围、语义保持与引用的静态复核
-      acceptance: [CLEAN-ALL-PRESERVE, CLEAN-SCOPE, CLEAN-CHECK]
-      depends_on: [CLEAN-B4-C3-TIME, CLEAN-C4-C5, CLEAN-C1-C2]
-    - id: CLEAN-D-CONTROL
-      title: 按再次全部完成指令冻结补充清理范围
-      depends_on: [CLEAN-ALL-AUDIT]
-    - id: CLEAN-D-DEAD
-      title: 删除列出的前端导出、私有函数及失效配置读取
-      acceptance: [CLEAN-D1, CLEAN-D2, CLEAN-D3]
-      depends_on: [CLEAN-D-CONTROL]
-    - id: CLEAN-D-DUPLICATES
-      title: 共享九模型加载、奖金上限及日期格式化
-      acceptance: [CLEAN-D4, CLEAN-D5]
-      depends_on: [CLEAN-D-CONTROL]
-    - id: CLEAN-D-AUDIT
-      title: 补充批次静态语义、引用、摘要与累计范围复核
-      acceptance: [CLEAN-D-PRESERVE, CLEAN-SCOPE, CLEAN-CHECK]
-      depends_on: [CLEAN-D-DEAD, CLEAN-D-DUPLICATES]
-
+  - id: CLEAN-REFS
+    title: 复核 A1-A5 的引用与入口
+    depends_on: []
+  - id: CLEAN-A1-A5
+    title: 删除已列出的死代码及失效引用
+    acceptance:
+    - CLEAN-A1
+    - CLEAN-A2
+    - CLEAN-A3
+    - CLEAN-A4
+    - CLEAN-A5
+    depends_on:
+    - CLEAN-REFS
+  - id: CLEAN-AUDIT
+    title: 静态引用、差异与范围检查
+    acceptance:
+    - CLEAN-SCOPE
+    - CLEAN-CHECK
+    depends_on:
+    - CLEAN-A1-A5
+  - id: CLEAN-B-REFS
+    title: 复核 B1/B2 的闭合引用与后端保留边界
+    depends_on:
+    - CLEAN-AUDIT
+  - id: CLEAN-B1-B2
+    title: 删除批准的 OCR 映射工具及未接入复盘组件
+    acceptance:
+    - CLEAN-B1
+    - CLEAN-B2
+    depends_on:
+    - CLEAN-B-REFS
+  - id: CLEAN-B-AUDIT
+    title: 核对 B 批静态引用、保留代码与累计范围
+    acceptance:
+    - CLEAN-B-PRESERVE
+    - CLEAN-SCOPE
+    - CLEAN-CHECK
+    depends_on:
+    - CLEAN-B1-B2
+  - id: CLEAN-B35-REFS
+    title: 复核 B3/B5 无消费者及现用流水线边界
+    depends_on:
+    - CLEAN-B-AUDIT
+  - id: CLEAN-B3-B5
+    title: 删除批准的六个文件并修正两份文档路径
+    acceptance:
+    - CLEAN-B3
+    - CLEAN-B5
+    depends_on:
+    - CLEAN-B35-REFS
+  - id: CLEAN-B35-AUDIT
+    title: 核对删除引用、保留文件和累计三十九文件范围
+    acceptance:
+    - CLEAN-B35-PRESERVE
+    - CLEAN-SCOPE
+    - CLEAN-CHECK
+    depends_on:
+    - CLEAN-B3-B5
+  - id: CLEAN-C3-REFS
+    title: 复核球员辅助函数与测试替换入口
+    depends_on:
+    - CLEAN-B35-AUDIT
+  - id: CLEAN-C3-PLAYERS
+    title: 按三文件清单共享球员辅助逻辑
+    acceptance:
+    - CLEAN-C3-SHARED
+    - CLEAN-C3-WRAPPERS
+    depends_on:
+    - CLEAN-C3-REFS
+  - id: CLEAN-C3-AUDIT
+    title: 静态专门化对比、保留代码与范围复核
+    acceptance:
+    - CLEAN-C3-PRESERVE
+    - CLEAN-SCOPE
+    - CLEAN-CHECK
+    depends_on:
+    - CLEAN-C3-PLAYERS
+  - id: CLEAN-ALL-CONTROL
+    title: 按用户全部完成指令冻结剩余范围与预算
+    depends_on:
+    - CLEAN-C3-AUDIT
+  - id: CLEAN-B4-C3-TIME
+    title: 清理备用客户端并共享采集时钟
+    acceptance:
+    - CLEAN-B4
+    - CLEAN-C3-TIME
+    depends_on:
+    - CLEAN-ALL-CONTROL
+  - id: CLEAN-C4-C5
+    title: 合并路由匹配和周月报框架
+    acceptance:
+    - CLEAN-C4
+    - CLEAN-C5
+    depends_on:
+    - CLEAN-ALL-CONTROL
+  - id: CLEAN-C1-C2
+    title: 合并模型训练编排与公共推理校验
+    acceptance:
+    - CLEAN-C1
+    - CLEAN-C2
+    depends_on:
+    - CLEAN-ALL-CONTROL
+  - id: CLEAN-ALL-AUDIT
+    title: 完成累计范围、语义保持与引用的静态复核
+    acceptance:
+    - CLEAN-ALL-PRESERVE
+    - CLEAN-SCOPE
+    - CLEAN-CHECK
+    depends_on:
+    - CLEAN-B4-C3-TIME
+    - CLEAN-C4-C5
+    - CLEAN-C1-C2
+  - id: CLEAN-D-CONTROL
+    title: 按再次全部完成指令冻结补充清理范围
+    depends_on:
+    - CLEAN-ALL-AUDIT
+  - id: CLEAN-D-DEAD
+    title: 删除列出的前端导出、私有函数及失效配置读取
+    acceptance:
+    - CLEAN-D1
+    - CLEAN-D2
+    - CLEAN-D3
+    depends_on:
+    - CLEAN-D-CONTROL
+  - id: CLEAN-D-DUPLICATES
+    title: 共享九模型加载、奖金上限及日期格式化
+    acceptance:
+    - CLEAN-D4
+    - CLEAN-D5
+    depends_on:
+    - CLEAN-D-CONTROL
+  - id: CLEAN-D-AUDIT
+    title: 补充批次静态语义、引用、摘要与累计范围复核
+    acceptance:
+    - CLEAN-D-PRESERVE
+    - CLEAN-SCOPE
+    - CLEAN-CHECK
+    depends_on:
+    - CLEAN-D-DEAD
+    - CLEAN-D-DUPLICATES
 rule_document_cleanup:
   date: '2026-10-16'
   baseline_sha: 202ac4a9b5b3a0fde93d416832359e5e2de4171e
   status: complete_documentation_static_audit_only
   tasks:
-    - id: RULES-READ
-      title: 对照现有实现核查规则依据
-      depends_on: []
-      acceptance: [RULES-EVIDENCE]
-    - id: RULES-EDIT
-      title: 删除失效要求并补充每条保留原因
-      depends_on: [RULES-READ]
-      acceptance: [RULES-REASONS, RULES-STALE]
-    - id: RULES-AUDIT
-      title: 检查文档引用、差异、范围与保留摘要
-      depends_on: [RULES-EDIT]
-      acceptance: [RULES-SCOPE, RULES-PRESERVE, RULES-CHECK]
-
+  - id: RULES-READ
+    title: 对照现有实现核查规则依据
+    depends_on: []
+    acceptance:
+    - RULES-EVIDENCE
+  - id: RULES-EDIT
+    title: 删除失效要求并补充每条保留原因
+    depends_on:
+    - RULES-READ
+    acceptance:
+    - RULES-REASONS
+    - RULES-STALE
+  - id: RULES-AUDIT
+    title: 检查文档引用、差异、范围与保留摘要
+    depends_on:
+    - RULES-EDIT
+    acceptance:
+    - RULES-SCOPE
+    - RULES-PRESERVE
+    - RULES-CHECK
 cleanup_local_release:
   date: '2026-10-16'
   baseline_sha: 202ac4a9b5b3a0fde93d416832359e5e2de4171e
   status: local_checks_complete_github_ci_and_deployment_pending
   tasks:
-    - id: RELEASE-CHECK
-      depends_on: []
-      acceptance: [RELEASE-SCOPE, RELEASE-CHECK]
-    - id: RELEASE-GIT
-      depends_on: [RELEASE-CHECK]
-      acceptance: [RELEASE-GIT]
-    - id: RELEASE-LOCAL
-      depends_on: [RELEASE-GIT]
-      acceptance: [RELEASE-LOCAL]
-
+  - id: RELEASE-CHECK
+    depends_on: []
+    acceptance:
+    - RELEASE-SCOPE
+    - RELEASE-CHECK
+  - id: RELEASE-GIT
+    depends_on:
+    - RELEASE-CHECK
+    acceptance:
+    - RELEASE-GIT
+  - id: RELEASE-LOCAL
+    depends_on:
+    - RELEASE-GIT
+    acceptance:
+    - RELEASE-LOCAL
 v3i_resume_20261016:
   baseline: 7927b43880464ef6899fb2e559e4769216b143dc
   sequence:
-    - {id: R1, title: Exact recovery and three-way integration, depends_on: []}
-    - {id: R2, title: Fresh regression and build, depends_on: [R1]}
-    - {id: R3, title: CDP timeout diagnosis and GPU interaction, depends_on: [R1]}
-    - {id: R4, title: Independent native endurance and review, depends_on: [R2, R3]}
-    - {id: R5, title: Exact commit CI and merge, depends_on: [R4]}
-    - {id: R6, title: GitHub main deploy and rollback checks, depends_on: [R5]}
-
+  - id: R1
+    title: Exact recovery and three-way integration
+    depends_on: []
+  - id: R2
+    title: Fresh regression and build
+    depends_on:
+    - R1
+  - id: R3
+    title: CDP timeout diagnosis and GPU interaction
+    depends_on:
+    - R1
+  - id: R4
+    title: Independent native endurance and review
+    depends_on:
+    - R2
+    - R3
+  - id: R5
+    title: Exact commit CI and merge
+    depends_on:
+    - R4
+  - id: R6
+    title: GitHub main deploy and rollback checks
+    depends_on:
+    - R5
   endurance_decision:
     status: closed_by_user_waiver
     raw_result: interrupted_by_user_during_warmup
@@ -215,26 +326,62 @@ v3i_resume_20261016:
     formal_seconds: 0
     idle_seconds: 0
     release_dependency: regular_checks_and_independent_review_complete_with_user_endurance_waiver
-    remaining: [exact_candidate_ci_and_merge, deployment_and_rollback_verification]
-
+    remaining:
+    - exact_candidate_ci_and_merge
+    - deployment_and_rollback_verification
 dashboard_loading_20261016:
   base_revision: 5abb3d9fdc0e66268cc5e3d03bb1fa13edfee2c5
   tasks:
-    - {id: D1, depends_on: [], title: read_only_profile}
-    - {id: D2, depends_on: [D1], title: exact_count_and_contract_tests}
-    - {id: D3, depends_on: [D1], title: independent_homepage_loading}
-    - {id: D4, depends_on: [D2, D3], title: regression_scope_and_evidence}
-
+  - id: D1
+    depends_on: []
+    title: read_only_profile
+  - id: D2
+    depends_on:
+    - D1
+    title: exact_count_and_contract_tests
+  - id: D3
+    depends_on:
+    - D1
+    title: independent_homepage_loading
+  - id: D4
+    depends_on:
+    - D2
+    - D3
+    title: regression_scope_and_evidence
 dashboard_review_followup:
-  depends_on: [D3]
+  depends_on:
+  - D3
   title: composite_panel_nullable_counts_and_local_model_status
   reason: remove_remaining_cross_request_display_gate
-
 dashboard_release_20261016:
   authorized: true
   target_environment: server
   rollback_revision: 5abb3d9fdc0e66268cc5e3d03bb1fa13edfee2c5
   tasks:
-    - {id: R1, depends_on: [D4], title: commit_PR_exact_CI_and_merge}
-    - {id: R2, depends_on: [R1], title: main_CI_and_staged_build_recovery_smoke}
-    - {id: R3, depends_on: [R2], title: server_rollout_and_observe}
+  - id: R1
+    depends_on:
+    - D4
+    title: commit_PR_exact_CI_and_merge
+  - id: R2
+    depends_on:
+    - R1
+    title: main_CI_and_staged_build_recovery_smoke
+  - id: R3
+    depends_on:
+    - R2
+    title: server_rollout_and_observe
+current_modernization:
+  canonical_dag: /Volumes/Nas/FQP/plans/model-modernization-20261016/integrated/TASK_DAG.yaml
+  current_task: P103
+  depends_on:
+  - P101
+  primary_acceptance: A103
+  slice: 06-server-cutover
+  status: P103_explicit_release_authorized
+  next_task: P103
+  next_task_status: execute exact CI and controlled server cutover; fullA103 not yet
+    passed
+  workflow_engine: unavailable; task tracking only, not engine state
+  local_runtime_ready: false
+  latest_delivery: /Volumes/Nas/FQP/plans/model-modernization-20261016/integrated/P103/05-runtime-operations/FINAL.md
+  independent_review: true

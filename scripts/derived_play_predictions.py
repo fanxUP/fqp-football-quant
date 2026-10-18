@@ -8,19 +8,10 @@ from scripts.market_metric_validation import (
     MarketMetricValidationError,
     validate_market,
 )
+from scripts.model_signal_policy import MODEL_MARKETS, disagreement_diagnostic, supports_market
 from scripts.model_storage import store_model_prediction
 from scripts.odds_conversion import normalize_probabilities
-from scripts.poisson_model import (
-    derive_1x2,
-    derive_total_goals,
-    score_matrix,
-)
-
-DERIVED_PLAY_CAPABILITIES: dict[str, tuple[str, ...]] = {
-    "bf": ("market_baseline", "maher_poisson", "dixon_coles"),
-    "zjq": ("market_baseline", "maher_poisson", "dixon_coles"),
-    "bqc": ("market_baseline", "maher_poisson", "dixon_coles"),
-}
+from scripts.poisson_model import derive_total_goals
 
 
 def _latest_official_odds(
@@ -86,24 +77,9 @@ def _score_probabilities(
     return result
 
 
-def _half_full_probabilities(
-    matrix: dict[str, float],
-    lambdas: tuple[float, float],
-) -> dict[str, float]:
-    home_lambda, away_lambda = lambdas
-    half_time = derive_1x2(score_matrix(home_lambda * 0.45, away_lambda * 0.45, max_goals=4))
-    full_time = derive_1x2(matrix)
-    return {
-        f"{half_code}{full_code}": half_time[half_code] * full_time[full_code]
-        for half_code in ("3", "1", "0")
-        for full_code in ("3", "1", "0")
-    }
-
-
 def _derive_probabilities(
     play_type: str,
     matrix: dict[str, float],
-    lambdas: tuple[float, float],
     official_options: set[str],
 ) -> dict[str, float]:
     if play_type == "zjq":
@@ -111,15 +87,7 @@ def _derive_probabilities(
         return {option: probabilities.get(option, 0.0) for option in official_options}
     if play_type == "bf":
         return _score_probabilities(matrix, official_options)
-    probabilities = _half_full_probabilities(matrix, lambdas)
-    return {option: probabilities.get(option, 0.0) for option in official_options}
-
-
-def _model_std(values: list[float]) -> float:
-    if len(values) < 2:
-        return 0.0
-    mean = sum(values) / len(values)
-    return (sum((value - mean) ** 2 for value in values) / len(values)) ** 0.5
+    raise ValueError("no validated joint half/full-time model")
 
 
 def _normalize_distribution(probabilities: dict[str, float]) -> dict[str, float]:
@@ -144,32 +112,31 @@ def store_derived_play_predictions(
     feature_snapshot_id: int | None,
     predict_time: str,
     model_independence: dict[str, bool] | None = None,
+    rollout_modes: dict[str, str] | None = None,
 ) -> int:
     """Store unfiltered model history for every open official derived option."""
     official_odds = _latest_official_odds(conn, match_id, predict_time)
     model_independence = model_independence or {}
+    rollout_modes = rollout_modes or {}
     stored = 0
 
     for play_type, option_odds in official_odds.items():
-        capabilities = DERIVED_PLAY_CAPABILITIES.get(play_type, ())
+        capabilities = tuple(name for name in MODEL_MARKETS if supports_market(name, play_type))
         if not capabilities:
             continue
         official_options = set(option_odds)
         sp_values = {option: value[1] for option, value in option_odds.items()}
         market_probabilities = normalize_probabilities(sp_values)
-        model_probabilities = {
-            "market_baseline": (market_probabilities, market_probabilities),
-            "maher_poisson": (
-                _derive_probabilities(play_type, raw_poisson_matrix, raw_lambdas, official_options),
-                _derive_probabilities(
-                    play_type, poisson_matrix, adjusted_lambdas, official_options
-                ),
-            ),
-            "dixon_coles": (
-                _derive_probabilities(play_type, raw_dc_matrix, raw_lambdas, official_options),
-                _derive_probabilities(play_type, dc_matrix, adjusted_lambdas, official_options),
-            ),
-        }
+        model_probabilities = {"market_baseline": (market_probabilities, market_probabilities)}
+        for name, raw, adjusted in (
+            ("maher_poisson", raw_poisson_matrix, poisson_matrix),
+            ("dixon_coles", raw_dc_matrix, dc_matrix),
+        ):
+            if supports_market(name, play_type):
+                model_probabilities[name] = (
+                    _derive_probabilities(play_type, raw, official_options),
+                    _derive_probabilities(play_type, adjusted, official_options),
+                )
         model_probabilities = {
             model_name: (
                 _normalize_distribution(raw_probabilities),
@@ -196,13 +163,15 @@ def store_derived_play_predictions(
                 continue
 
         for option_code, (snapshot_id, _sp_value) in option_odds.items():
-            disagreement = _model_std(
-                [
-                    model_probabilities[model_name][1].get(option_code, 0.0)
-                    for model_name in capabilities
-                    if active_models.get(model_name) is not None
-                ]
+            diagnostic = disagreement_diagnostic(
+                {name: pair[1] for name, pair in model_probabilities.items()},
+                active_models,
+                model_independence,
+                rollout_modes,
+                set(validated_metrics),
+                option_code,
             )
+            disagreement = diagnostic["model_std"]
             market_probability = market_probabilities.get(option_code, 0.0)
             for model_name in capabilities:
                 model_version_id = active_models.get(model_name)
@@ -229,13 +198,9 @@ def store_derived_play_predictions(
                         "raw_model_probability": round(raw_probability, 6),
                         "model_probability": stored_model_probability,
                         "market_probability": stored_market_probability,
-                        "probability_lower_bound": round(
-                            max(0.0, model_probability - disagreement * 2), 6
-                        ),
-                        "probability_upper_bound": round(
-                            min(1.0, model_probability + disagreement * 2), 6
-                        ),
-                        "uncertainty_score": round(disagreement, 6),
+                        "probability_lower_bound": None,
+                        "probability_upper_bound": None,
+                        "uncertainty_score": disagreement,
                         "adjusted_probability": round(model_probability, 6),
                         "fair_odds": round(fair_odds, 4) if fair_odds else None,
                         "ev": round(stored_model_probability * _sp_value - 1.0, 6),
@@ -247,14 +212,21 @@ def store_derived_play_predictions(
                         "validation_status": "valid",
                         "validation_errors": [],
                         "calculation_version": "market_metrics_v2",
-                        "confidence_score": round(max(0.0, 1.0 - disagreement * 3), 4),
-                        "risk_score": round(min(1.0, disagreement * 3), 4),
+                        "confidence_score": None,
+                        "risk_score": None,
                         "uncertainty_reason": {
+                            "model_std": disagreement,
+                            "disagreement": diagnostic,
+                            "confidence_status": "uncalibrated",
+                            "interval_status": "not_estimated",
+                            "risk_status": "not_estimated",
+                            "rollout_mode": rollout_modes.get(model_name, "live"),
                             "derived_from": "official_market"
                             if model_name == "market_baseline"
                             else "score_matrix",
                             "model_capability": play_type,
-                            "model_independent": model_independence.get(model_name, False),
+                            "model_independent": model_name != "market_baseline"
+                            and model_independence.get(model_name, False),
                             "recommendation_filtered": False,
                             "feature_adjustment": {
                                 "applied": abs(raw_probability - model_probability) > 1e-9,
