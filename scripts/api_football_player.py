@@ -21,8 +21,12 @@ def get_or_create_player(
     player_data: dict[str, Any],
     *,
     prefer_short_position: bool,
+    commit: bool = True,
 ) -> int | None:
-    player_code = f"apifootball:{player_data.get('id')}"
+    source_id = player_data.get("id")
+    if type(source_id) is not int or source_id <= 0:
+        raise ValueError("API-Football player requires a positive source ID")
+    player_code = f"apifootball:{source_id}"
     existing = get_player_by_code(conn, player_code)
     if existing:
         return int(existing["id"])
@@ -47,4 +51,5 @@ def get_or_create_player(
             "preferred_foot": "",
             "height_cm": _safe_height(player_data.get("height")),
         },
+        commit=commit,
     )

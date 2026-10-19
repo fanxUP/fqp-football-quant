@@ -1,4 +1,4 @@
-version: 35
+version: 42
 mode: STRICT
 allowed_paths:
 - .vibe/BASELINE.yaml
@@ -9,73 +9,49 @@ allowed_paths:
 - .vibe/ACCEPTANCE.md
 - .vibe/TASK_DAG.yaml
 - .vibe/EVIDENCE.json
-- scripts/data_contracts.py
-- scripts/data_catalog.py
-- configs/data_catalog.yaml
-- scripts/team_registry.py
-- scripts/jobs/run_feature_snapshot_build.py
-- docs/data-contracts.md
-- tests/test_scripts/test_data_contracts.py
-- tests/test_scripts/test_data_catalog.py
-- tests/test_scripts/test_team_registry.py
-- tests/test_jobs/test_run_feature_snapshot_build.py
-- scripts/feature_schema.py
+- scripts/observation_storage.py
 - scripts/feature_storage.py
-- scripts/feature_importance.py
-- scripts/prematch_feature_dataset.py
-- scripts/jobs/run_model_prediction.py
-- tests/test_computation/test_feature_pipeline_contract.py
-- docs/feature-pipeline.md
-- tests/test_scripts/test_run_model_prediction.py
-- scripts/shadow_model_helpers.py
-- scripts/logistic_shadow_model.py
-- scripts/xgboost_shadow_model.py
-- scripts/shadow_training.py
-- tests/test_computation/test_shadow_input_contract.py
-- apps/frontend/src/core/types.ts
-- apps/frontend/src/pages/AnalysisPage.tsx
-- scripts/model_signal_policy.py
-- scripts/derived_play_predictions.py
-- tests/test_computation/test_prediction_semantics.py
-- tests/test_scripts/test_derived_play_predictions.py
-- tests/test_scripts/test_feature_importance.py
-- scripts/features/build_basic_features.py
-- tests/test_features/test_build_basic_features.py
-- scripts/jobs/run_recommendation_candidate.py
-- apps/backend/src/routers/predictions.py
-- apps/frontend/src/pages/RecommendationsPage.tsx
-- apps/frontend/src/pages/RecommendationsPage.test.tsx
-- scripts/request_quota.py
-- tests/test_scripts/test_request_quota.py
-- docs/request-governance.md
-- scripts/request_transport.py
-- tests/test_scripts/test_request_transport.py
+- scripts/features/build_weather_features.py
+- sql/107_source_observations.sql
+- sql/down/107_source_observations.down.sql
+- tests/test_storage/test_observation_storage.py
+- tests/test_computation/test_observation_postgres.py
+- tests/test_features/test_build_weather_features.py
+- docs/observations.md
+- configs/data_catalog.yaml
+- tests/test_scripts/test_data_catalog.py
+- scripts/feature_batch_storage.py
+- sql/108_complete_feature_batches.sql
+- sql/down/108_complete_feature_batches.down.sql
+- tests/test_computation/test_feature_batch_postgres.py
+- scripts/player_observations.py
+- scripts/api_football_player.py
 - scripts/api_football_client.py
-- scripts/news_intelligence_clients.py
-- scripts/jobs/collect_news_intelligence.py
-- scripts/news_query_planner.py
-- scripts/news_intelligence_storage.py
+- scripts/jobs/collect_lineup_data.py
+- scripts/jobs/collect_injury_data.py
+- tests/test_computation/test_player_observations_postgres.py
+- tests/test_jobs/test_collect_lineup_data.py
+- tests/test_jobs/test_collect_injury_data.py
 - tests/test_scripts/test_api_football_client.py
-- tests/test_scripts/test_news_intelligence_clients.py
-- tests/test_jobs/test_collect_news_intelligence.py
-- scripts/request_reuse.py
-- tests/test_scripts/test_request_reuse.py
-- scripts/backtest_engine.py
-- tests/test_scripts/test_backtest_engine.py
-- tests/test_computation/test_feature_pipeline_postgres.py
+- scripts/observation_resolution.py
+- scripts/data_catalog.py
+- tests/test_storage/test_observation_resolution.py
+- tests/test_computation/test_resolution_postgres.py
+- scripts/observed_feature_pipeline.py
+- scripts/jobs/run_feature_snapshot_build.py
+- scripts/prematch_feature_dataset.py
+- tests/test_storage/test_observed_feature_pipeline.py
+- tests/test_computation/test_observed_pipeline_postgres.py
 - .github/workflows/ci.yml
-- scripts/jobs/check_request_governance.py
-- tests/test_jobs/test_check_request_governance.py
+- scripts/ci/init_observation_test_db.sh
+- tests/test_computation/test_observation_ci_postgres.py
 forbidden_paths:
-- sql/
 - .env
 - requirements.txt
 - requirements-dev.txt
-- apps/frontend/package.json
-- apps/frontend/package-lock.json
-- apps/model-bridge/package.json
-- apps/model-bridge/package-lock.json
-out_of_scope: P103 authorized exact GitHub/CI/server cutover, existing Redis hardening
-  and quota opening only; no P104/training/new services/dependencies/migrations.
-revision_reason: User explicitly authorized server cutover after concrete CUTOVER.md
-  and local engineering review. No additional source paths.
+- configs/request_quota.json
+- apps/
+out_of_scope: production/provider activation/deploy/new algorithms/full consumer migration;
+  P105+
+revision_reason: 'P104/06 declared before editing: CI-only isolated fixture setup
+  and executable permission/timeout checks; no SQL migration changes.'

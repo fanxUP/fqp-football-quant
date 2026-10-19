@@ -13,6 +13,13 @@ from scripts.feature_schema import (
 )
 
 
+def load_observed_feature_input(conn: Any, **contract: Any) -> dict:
+    """Explicit exact-ID observation pilot; legacy training stays unreplayed."""
+    from scripts.observed_feature_pipeline import load_observed_feature_input as load
+
+    return load(conn, **contract)
+
+
 def load_settled_pre_kickoff_dataset(
     conn: Any,
 ) -> tuple[np.ndarray, np.ndarray, list[str]] | None:

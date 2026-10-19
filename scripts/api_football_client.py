@@ -257,7 +257,24 @@ class ApiFootballClient:
             params["team"] = team
         if fixture is not None:
             params["fixture"] = fixture
-        return self._extract_response(self._request("injuries", params=params))
+        payload = self._request("injuries", params=params)
+        if fixture is not None:
+            rows = payload.get("response")
+            if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
+                raise ProviderRequestError("invalid_response")
+            results = payload.get("results")
+            if results is not None and (type(results) is not int or results != len(rows)):
+                raise ProviderRequestError("partial_response")
+            paging = payload.get("paging")
+            if paging is not None and (
+                not isinstance(paging, dict)
+                or type(paging.get("total")) is not int
+                or type(paging.get("current")) is not int
+                or paging["total"] not in (0, 1)
+                or paging["current"] != 1
+            ):
+                raise ProviderRequestError("partial_response")
+        return self._extract_response(payload)
 
     # ------------------------------------------------------------------
     # Public API — Odds

@@ -1,28 +1,14 @@
-version: 35
+version: 42
 mode: STRICT
-max_changed_files: 65
-max_new_files: 22
+max_changed_files: 44
+max_new_files: 20
 max_dependency_additions: 0
-max_migration_files: 0
-max_public_api_changes: 3
-max_regression_tests: 490
-scope_note: Prior63 + one read-only job + its regression file =65/22; no dependency/migration/public
-  API additions.
-regression_budget_scope: Prior440 + at most50 operational fixed scenarios including
-  isolated recovery/ACL/memory refusal.
-revision_reason: 'Before any implementation: one bounded read-only operator entry;
-  no config mutation/provision/unlock endpoint.'
-scope_extension_v23: Two existing frontend paths for nullable SHAP feature_value;
-  no dependency or migration.
-scope_extension_v25: 'Before edits: parameterized version SQL requires existing capture-cursor
-  fixture to accept params; inspected observed-form source must require final/confirmed
-  and both nonnegative goals before calling it settled history. No new data source
-  or model algorithm.'
-scope_extension_v26: 'Before edits: end-to-end null confidence in recommendation item
-  parsing, existing live API and consuming page. Existing frontend type paths retained;
-  no financial formulas or ticket publication gates. min_confidence>0 still rejects
-  unknown; unfiltered0 can show unknown explicitly.'
-slice2_revision: 'Before implementation: prior238 changed scenarios plus up to92 transport,
-  client and audit cases; no new dependency, SQL or public endpoint.'
-slice3_revision: 'Before implementation: prior conservative327 plus up to103 request
-  reuse/audit cases; total430. Exact59 paths/19new; no dependency or migration.'
+max_migration_files: 4
+max_public_api_changes: 0
+max_regression_tests: 370
+scope_note: 'Cumulative01-06: CI workflow + one fixture shell + one PG test; 4 original
+  SQL paths unchanged.'
+revision_reason: 'P104/06 declared before editing: CI-only isolated fixture setup
+  and executable permission/timeout checks; no SQL migration changes.'
+regression_budget_scope: new/modified fixed scenarios relative base <=370; unchanged
+  suite may run
