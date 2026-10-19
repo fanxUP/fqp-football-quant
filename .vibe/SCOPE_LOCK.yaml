@@ -1,4 +1,4 @@
-version: 42
+version: 44
 mode: STRICT
 allowed_paths:
 - .vibe/BASELINE.yaml
@@ -45,13 +45,13 @@ allowed_paths:
 - .github/workflows/ci.yml
 - scripts/ci/init_observation_test_db.sh
 - tests/test_computation/test_observation_ci_postgres.py
+- ops/server/migrate.py
+- tests/test_local/test_native_database_runtime.py
 forbidden_paths:
 - .env
 - requirements.txt
 - requirements-dev.txt
 - configs/request_quota.json
 - apps/
-out_of_scope: production/provider activation/deploy/new algorithms/full consumer migration;
-  P105+
-revision_reason: 'P104/06 declared before editing: CI-only isolated fixture setup
-  and executable permission/timeout checks; no SQL migration changes.'
+out_of_scope: provider activation/new algorithms/full consumer migration; P105+
+revision_reason: 'P104/06 production preflight found the server runner rejected 107/108 outer markers and no-op after DB ownership transfer. The explicit P104 cutover authorization permits hardening its SQL boundary parser and regression coverage; no schema or migration changes.'

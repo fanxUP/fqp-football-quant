@@ -1,14 +1,12 @@
-version: 42
+version: 44
 mode: STRICT
-max_changed_files: 44
+max_changed_files: 46
 max_new_files: 20
 max_dependency_additions: 0
 max_migration_files: 4
 max_public_api_changes: 0
 max_regression_tests: 370
-scope_note: 'Cumulative01-06: CI workflow + one fixture shell + one PG test; 4 original
-  SQL paths unchanged.'
-revision_reason: 'P104/06 declared before editing: CI-only isolated fixture setup
-  and executable permission/timeout checks; no SQL migration changes.'
+scope_note: 'Cumulative01-06 plus the pre-cutover migration-runner compatibility fix; 4 SQL paths unchanged.'
+revision_reason: 'P104/06 production preflight found the server runner rejected 107/108 outer markers and no-op after ownership transfer. Harden top-level SQL boundary parsing and add bypass regressions; no schema, migration, dependency, or API changes.'
 regression_budget_scope: new/modified fixed scenarios relative base <=370; unchanged
   suite may run

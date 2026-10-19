@@ -1,6 +1,129 @@
+import importlib.util
 from pathlib import Path
 
+import pytest
+
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+
+def _server_migration_runner():
+    runner_path = PROJECT_ROOT / "ops/server/migrate.py"
+    spec = importlib.util.spec_from_file_location("server_migration_runner", runner_path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_server_migration_runner_executes_outer_transaction_markers_inside_ledger_tx() -> None:
+    runner = _server_migration_runner()
+    for name in ("107_source_observations.sql", "108_complete_feature_batches.sql"):
+        source = (PROJECT_ROOT / "sql" / name).read_text(encoding="utf-8")
+
+        body = runner.migration_body(source)
+
+        assert "CREATE TABLE IF NOT EXISTS" in body
+        assert not any(
+            line.strip().upper() in {"BEGIN;", "COMMIT;", "ROLLBACK;"} for line in body.splitlines()
+        )
+
+
+def test_server_migration_runner_strips_same_line_outer_transaction_statements() -> None:
+    runner = _server_migration_runner()
+
+    body = runner.migration_body("BEGIN; CREATE TABLE p104_probe(id int); COMMIT;\n")
+
+    assert body.strip() == "CREATE TABLE p104_probe(id int);"
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "BEGIN; SELECT 1; COMMIT AND CHAIN;\n",
+        "BEGIN; SELECT 1; COMMIT; SELECT 2;\n",
+        "BEGIN; SELECT 1; COMMIT; BEGIN;\n",
+        r"CREATE TABLE p104_probe(id int); SELECT '\'; COMMIT; SELECT $$'--$$;",
+        "CREATE TABLE p104_probe(id int); SELECT 1 AS x$$; COMMIT; SELECT 2 AS y$$;",
+        "CREATE TABLE p104_probe(id int); SELECT 1 AS 名$$; COMMIT; SELECT 2 AS x$$;",
+        "SELECT $é$'$é$; COMMIT; SELECT $$'--$$;",
+    ],
+)
+def test_server_migration_runner_rejects_unsafe_transaction_control_variants(source: str) -> None:
+    runner = _server_migration_runner()
+
+    with pytest.raises(RuntimeError, match="transaction boundary"):
+        runner.migration_body(source)
+
+
+def test_server_migration_runner_ignores_begin_inside_dollar_quoted_sql() -> None:
+    runner = _server_migration_runner()
+    source = "DO $$ BEGIN; PERFORM 1; END $$; SELECT 2;\n"
+
+    assert runner.migration_body(source) == source
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "SET LOCAL standard_conforming_strings = off;",
+        "RESET standard_conforming_strings;",
+        "RESET ALL;",
+        "SELECT set_config('standard_conforming_strings', 'off', true);",
+    ],
+)
+def test_server_migration_runner_rejects_changes_to_string_lexing(source: str) -> None:
+    runner = _server_migration_runner()
+
+    with pytest.raises(RuntimeError, match="cannot change standard_conforming_strings"):
+        runner.migration_body(source)
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "BEGIN;\nSELECT 1;\n",
+        "SELECT 1;\nCOMMIT;\n",
+        "BEGIN;\nSELECT 1;\nCOMMIT;\nBEGIN;\n",
+    ],
+)
+def test_server_migration_runner_rejects_partial_or_nested_transaction_markers(source: str) -> None:
+    runner = _server_migration_runner()
+
+    with pytest.raises(RuntimeError, match="transaction boundary"):
+        runner.migration_body(source)
+
+
+def test_server_migration_runner_allows_noop_after_database_ownership_transfer() -> None:
+    runner = _server_migration_runner()
+
+    runner.require_migration_authority(
+        role="fqp",
+        database_owner="fqp_observation_owner",
+        superuser=False,
+        has_pending=False,
+        apply=True,
+    )
+
+
+def test_server_migration_runner_requires_owner_or_admin_for_pending_apply() -> None:
+    runner = _server_migration_runner()
+
+    with pytest.raises(RuntimeError, match="database owner or PostgreSQL administrator"):
+        runner.require_migration_authority(
+            role="fqp",
+            database_owner="fqp_observation_owner",
+            superuser=False,
+            has_pending=True,
+            apply=True,
+        )
+
+    runner.require_migration_authority(
+        role="postgres",
+        database_owner="fqp_observation_owner",
+        superuser=True,
+        has_pending=True,
+        apply=True,
+    )
 
 
 def test_host_ports_use_the_canonical_local_endpoints() -> None:
