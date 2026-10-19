@@ -118,20 +118,50 @@ def test_error_analysis_scope_uses_snapshot_rank_and_flags_bad_links(audit_pg) -
         independent: object = True,
         status: str = "valid",
     ) -> int:
+        market_probability = {"3": 0.40, "1": 0.35, "0": 0.25}[option_code]
+        odds_value = 1 / market_probability
+        with audit_pg.cursor() as cur:
+            cur.execute(
+                """INSERT INTO official_odds_snapshots (
+                       match_id, snapshot_time, play_type, option_code,
+                       option_name, sp_value
+                   ) VALUES (%s, %s, 'spf', %s, %s, %s)
+                   RETURNING id""",
+                (
+                    match_id,
+                    predict_time - timedelta(hours=1),
+                    option_code,
+                    option_code,
+                    odds_value,
+                ),
+            )
+            odds_snapshot_id = cur.fetchone()[0]
+
         with audit_pg.cursor() as cur:
             cur.execute(
                 """INSERT INTO model_predictions (
-                       match_id, model_version_id, predict_time, play_type,
-                       option_code, model_probability, uncertainty_reason,
+                       match_id, model_version_id, odds_snapshot_id, predict_time,
+                       play_type, option_code, model_probability, market_probability,
+                       break_even_probability, market_edge, breakeven_edge, ev,
+                       uncertainty_reason,
                        validation_status, calculation_version
-                   ) VALUES (%s, %s, %s, 'spf', %s, %s, %s, %s, 'audit-fixture-v1')
+                   ) VALUES (
+                       %s, %s, %s, %s, 'spf', %s, %s, %s, %s, %s, %s, %s,
+                       %s, %s, 'market_metrics_v2'
+                   )
                    RETURNING id""",
                 (
                     match_id,
                     model_id,
+                    odds_snapshot_id,
                     predict_time,
                     option_code,
                     probability,
+                    market_probability,
+                    market_probability,
+                    probability - market_probability,
+                    probability - market_probability,
+                    probability * odds_value - 1,
                     Json({"model_independent": independent}),
                     status,
                 ),
