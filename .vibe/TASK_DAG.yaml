@@ -1,14 +1,17 @@
 schema_version: 1
-task: P104
-slice: 06-integration-and-review
-acceptance: A104
-status: local_CI_and_independent_review_verified_not_release_ready
+task: BUGFIX-20261019-DATA-CONTAMINATION
+slice: error-analysis-snapshot-scope
+acceptance: A-ERROR-ANALYSIS-SNAPSHOT
+status: authorized_test_and_deploy
 depends_on:
-- P104/05
+- production_read_only_root_cause
 substeps:
-- RED role/default-timeout contract
-- CI isolated init integration
-- fresh empty PG16 migrations and local full regression
-- independent review packet / honest remaining gates
-- scope evidence cleanup
-next: P104 GitHub CI/target/source activation gates; P107/P116 owns full migration
+- register the narrow audit scope
+- rank eligible SPF predictions inside each prediction-time snapshot
+- compare each recent error row with its linked snapshot
+- add a fixed regression test for later forecasts not invalidating older snapshots
+- run targeted tests and local static checks
+- push branch, wait for GitHub CI, and merge after green checks
+- deploy code-only release to 100.121.47.26 with rollback evidence
+- rerun the audit and verify the seven false positives are resolved
+next: targeted verification, then GitHub CI and production release gates
