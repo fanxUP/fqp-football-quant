@@ -123,8 +123,8 @@ def test_error_analysis_scope_uses_snapshot_rank_and_flags_bad_links(audit_pg) -
                 """INSERT INTO model_predictions (
                        match_id, model_version_id, predict_time, play_type,
                        option_code, model_probability, uncertainty_reason,
-                       validation_status
-                   ) VALUES (%s, %s, %s, 'spf', %s, %s, %s, %s)
+                       validation_status, calculation_version
+                   ) VALUES (%s, %s, %s, 'spf', %s, %s, %s, %s, 'audit-fixture-v1')
                    RETURNING id""",
                 (
                     match_id,
