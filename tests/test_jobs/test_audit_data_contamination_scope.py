@@ -218,6 +218,7 @@ def test_error_analysis_scope_uses_snapshot_rank_and_flags_bad_links(audit_pg) -
         "3",
         0.60,
         independent="broken",
+        status="invalid",
     )
     add_prediction(malformed_match, malformed_model, malformed_time, "1", 0.25)
     add_prediction(malformed_match, malformed_model, malformed_time, "0", 0.15)
