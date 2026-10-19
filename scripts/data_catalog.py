@@ -42,6 +42,12 @@ def get_data_source(source_id: str) -> dict[str, Any]:
     return deepcopy(_catalog()["sources"][source_id])
 
 
+def get_field_resolution_policy(field: str) -> dict[str, Any]:
+    """Versioned field metadata only; no source access or coverage approval."""
+    policies = _catalog()["field_resolution"]
+    return deepcopy(dict(policies["fields"][field], version=policies["version"], field=field))
+
+
 def get_data_product(product_id: str, *, purpose: str) -> dict[str, Any]:
     requested = DataPurpose(purpose)
     product = _catalog()["products"][product_id]

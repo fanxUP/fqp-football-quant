@@ -147,6 +147,16 @@ jobs:
         env:
           PGPASSWORD: fqp_test_password
 
+      - name: Initialize isolated observation database
+        run: bash scripts/ci/init_observation_test_db.sh
+        env:
+          FQP_ALLOW_ISOLATED_OBSERVATION_SETUP: "1"
+          PGHOST: 127.0.0.1
+          PGPORT: "5432"
+          PGUSER: fqp
+          PGDATABASE: fqp_test
+          PGPASSWORD: fqp_test_password
+
       - name: Run tests with coverage
         run: |
           DATABASE_URL=postgresql://fqp:fqp_test_password@localhost:5432/fqp_test \
@@ -156,3 +166,5 @@ jobs:
           FQP_PI_TEST_DB: postgresql://fqp:fqp_test_password@localhost:5432/fqp_pi_test
           FQP_QUOTA_TEST_REDIS_URL: redis://127.0.0.1:6379/15
           FQP_FEATURE_TEST_POSTGRES_DSN: postgresql://fqp:fqp_test_password@localhost:5432/fqp_feature_contract_test
+          FQP_OBSERVATION_TEST_POSTGRES_DSN: host=127.0.0.1 port=5432 user=fqp_observation_test dbname=fqp_observation_test
+          PGPASSWORD: fqp_test_password

@@ -1,9 +1,7 @@
-version: 35
-mode: STRICT
-base_revision: b2a2d0b0fdf07ac82bfb399c5a88cf36b5d8c663
-branch: feat/shared-data-contracts-20261016
-phase: P103_authorized_release_and_runtime_cutover
-authoritative_plan: /Volumes/Nas/FQP/plans/model-modernization-20261016/integrated/PLAN.md
+version: 42
+base_revision: 5560cdc0c639870954df40c5fa7bce4f087c4716
+branch: feat/observation-asof-20261018
+repo: /Users/estefan-macworkstation/.codex/workspaces/fqp-observation-20261018
+phase: P104_06_CI_integration_local
 production_writes: false
-database_changes: false
-starting_manifest: /Volumes/Nas/FQP/plans/model-modernization-20261016/integrated/P103/06-server-cutover/START.json
+database_changes: isolated fixtures only

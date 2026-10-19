@@ -144,6 +144,13 @@ def can_build_team_dependent_features(home_id: int | None, away_id: int | None) 
 # ---------------------------------------------------------------------------
 
 
+def build_observed_feature_batch(conn: Any, *, match_id: int, cutoff: Any, context: dict) -> int:
+    """Explicit observation pilot; does not change the default scheduled builder."""
+    from scripts.observed_feature_pipeline import build_observed_feature_batch as build
+
+    return build(conn, match_id=match_id, cutoff=cutoff, context=context)
+
+
 def _run_impl(match_id: int | None = None, dry_run: bool = False) -> dict[str, Any]:
     """Build full feature snapshots for matches.
 

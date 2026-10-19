@@ -76,3 +76,46 @@ def test_legacy_counter_reset_does_not_reset_shared_account():
     client.close()
     assert not transport.is_closed
     transport.close()
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {},
+        {"response": None},
+        {"response": {}},
+        {"response": [None]},
+        {"response": [], "results": 1},
+        {"response": [], "results": False},
+        {"response": [], "paging": {"current": 1, "total": 2}},
+        {"response": [], "paging": {"current": 2, "total": 1}},
+        {"response": [], "paging": {"current": True, "total": 1}},
+    ],
+)
+def test_fixture_injury_query_rejects_missing_or_partial_response(payload):
+    from unittest.mock import patch
+
+    from scripts.request_transport import ProviderRequestError
+
+    client = ApiFootballClient(api_key="test-key")
+    try:
+        with patch.object(client, "_request", return_value=payload):
+            with pytest.raises(ProviderRequestError):
+                client.get_injuries(fixture=900)
+    finally:
+        client.close()
+
+
+def test_fixture_injury_query_allows_explicit_empty_response_without_claiming_coverage():
+    from unittest.mock import patch
+
+    client = ApiFootballClient(api_key="test-key")
+    try:
+        with patch.object(
+            client,
+            "_request",
+            return_value={"response": [], "results": 0, "paging": {"current": 1, "total": 1}},
+        ):
+            assert client.get_injuries(fixture=900) == []
+    finally:
+        client.close()

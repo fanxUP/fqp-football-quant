@@ -10,10 +10,12 @@ Follows the same psycopg2 pattern as scripts/official_storage.py.
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from scripts.data_contracts import FactStatus, to_utc
 from scripts.feature_schema import SNAPSHOT_READ_COLUMNS, SNAPSHOT_WRITE_COLUMNS
+from scripts.observation_storage import append_observation
 
 
 def _now() -> str:
@@ -146,11 +148,65 @@ def load_latest_match_feature_snapshot(
 
 
 def store_match_weather_snapshot(conn: Any, snapshot: dict) -> int | None:
-    """Insert or update a weather snapshot for a match.
+    """Commit source evidence and the compatible latest-weather projection together.
 
-    Required: match_id, snapshot_time, forecast_for_time
-    Upsert by (match_id) — only the latest weather matters per match.
+    Historical reads use observation_storage, never the overwritten projection.
+    The legacy snapshot_time is business-local; acquisition is explicitly aware.
+    No old projection is backfilled as historical evidence.
     """
+    acquired = snapshot.get("acquired_at", datetime.now(UTC))
+    verified = snapshot.get("verified_at", datetime.now(UTC))
+    forecast = snapshot["forecast_for_time"]
+    forecast = datetime.fromisoformat(forecast) if isinstance(forecast, str) else forecast
+    effective = to_utc(forecast, naive_timezone="Asia/Shanghai")
+    if snapshot.get("source_name", "open-meteo") != "open-meteo":
+        raise ValueError("weather source requires an explicit registered source adapter")
+    fields = (
+        "stadium_id",
+        "temperature_2m",
+        "apparent_temperature",
+        "relative_humidity_2m",
+        "precipitation",
+        "rain",
+        "snowfall",
+        "wind_speed_10m",
+        "wind_gusts_10m",
+        "surface_pressure",
+        "cloud_cover",
+        "weather_code",
+        "weather_impact_score",
+        "tempo_penalty_score",
+        "goal_expectation_adjustment",
+        "uncertainty_adjustment",
+        "source_confidence",
+        "raw_json",
+    )
+    try:
+        append_observation(
+            conn,
+            match_id=snapshot["match_id"],
+            source_id="open_meteo",
+            domain="weather",
+            subject_key="forecast",
+            fact_status=FactStatus.VALUE,
+            value={field: snapshot.get(field) for field in fields},
+            acquired_at=acquired,
+            verified_at=verified,
+            effective_at=effective,
+            published_at=snapshot.get("published_at"),
+            valid_until=snapshot.get("valid_until", acquired + timedelta(hours=6)),
+            evidence={"adapter_version": "open-meteo-weather/v1", "type": "forecast"},
+        )
+        projection_id = _store_weather_projection(conn, snapshot)
+        conn.commit()
+        return projection_id
+    except Exception:
+        conn.rollback()
+        raise
+
+
+def _store_weather_projection(conn: Any, snapshot: dict) -> int | None:
+    """Legacy latest projection; transaction belongs to the public writer above."""
     with conn.cursor() as cur:
         cur.execute(
             "SELECT id FROM match_weather_snapshots WHERE match_id = %(match_id)s",
@@ -212,7 +268,6 @@ def store_match_weather_snapshot(conn: Any, snapshot: dict) -> int | None:
                 """,
                 {**common, "id": row[0]},
             )
-            conn.commit()
             return row[0]
         else:
             cur.execute(
@@ -239,7 +294,6 @@ def store_match_weather_snapshot(conn: Any, snapshot: dict) -> int | None:
                 common,
             )
             row = cur.fetchone()
-    conn.commit()
     return row[0] if row else None
 
 
@@ -282,7 +336,7 @@ def get_weather_for_match(conn: Any, match_id: int) -> dict | None:
 # ---------------------------------------------------------------------------
 
 
-def store_player(conn: Any, player: dict) -> int | None:
+def store_player(conn: Any, player: dict, *, commit: bool = True) -> int | None:
     """Insert or update a player. Upsert by api_player_id (stored in player_code).
 
     Required: player_code (unique external ID), player_name_en or player_name_cn.
@@ -341,7 +395,8 @@ def store_player(conn: Any, player: dict) -> int | None:
                 common,
             )
             row = cur.fetchone()
-    conn.commit()
+    if commit:
+        conn.commit()
     return row[0] if row else None
 
 
@@ -464,7 +519,7 @@ def store_player_season_profile(conn: Any, profile: dict) -> int | None:
 # ---------------------------------------------------------------------------
 
 
-def store_team_squad_snapshot(conn: Any, snapshot: dict) -> int | None:
+def store_team_squad_snapshot(conn: Any, snapshot: dict, *, commit: bool = True) -> int | None:
     """Insert a team squad snapshot (append-only — each call is a new snapshot)."""
     with conn.cursor() as cur:
         cur.execute(
@@ -511,7 +566,8 @@ def store_team_squad_snapshot(conn: Any, snapshot: dict) -> int | None:
             },
         )
         row = cur.fetchone()
-    conn.commit()
+    if commit:
+        conn.commit()
     return row[0] if row else None
 
 
@@ -520,7 +576,7 @@ def store_team_squad_snapshot(conn: Any, snapshot: dict) -> int | None:
 # ---------------------------------------------------------------------------
 
 
-def store_match_lineup_snapshot(conn: Any, lineup: dict) -> int | None:
+def store_match_lineup_snapshot(conn: Any, lineup: dict, *, commit: bool = True) -> int | None:
     """Upsert a match lineup snapshot by (match_id, team_id, snapshot_time)."""
     with conn.cursor() as cur:
         cur.execute(
@@ -606,11 +662,12 @@ def store_match_lineup_snapshot(conn: Any, lineup: dict) -> int | None:
             )
             row = cur.fetchone()
             lineup_id = row[0] if row else None
-    conn.commit()
+    if commit:
+        conn.commit()
     return lineup_id
 
 
-def store_match_lineup_player(conn: Any, lp: dict) -> int | None:
+def store_match_lineup_player(conn: Any, lp: dict, *, commit: bool = True) -> int | None:
     """Insert a player in a lineup snapshot.
 
     Required: lineup_snapshot_id, player_id.
@@ -640,7 +697,8 @@ def store_match_lineup_player(conn: Any, lp: dict) -> int | None:
             },
         )
         row = cur.fetchone()
-    conn.commit()
+    if commit:
+        conn.commit()
     return row[0] if row else None
 
 
@@ -678,7 +736,7 @@ def get_lineup_for_match(conn: Any, match_id: int, team_id: int) -> dict | None:
 # ---------------------------------------------------------------------------
 
 
-def store_player_availability_snapshot(conn: Any, snap: dict) -> int | None:
+def store_player_availability_snapshot(conn: Any, snap: dict, *, commit: bool = True) -> int | None:
     """Upsert a player availability snapshot.
 
     Upsert by (player_id, official_match_id) when the source observation is
@@ -778,7 +836,8 @@ def store_player_availability_snapshot(conn: Any, snap: dict) -> int | None:
             )
             row = cur.fetchone()
             snapshot_id = row[0] if row else None
-    conn.commit()
+    if commit:
+        conn.commit()
     return snapshot_id
 
 
@@ -864,18 +923,22 @@ def get_injury_observation_for_match(
         cur.execute(
             """
             SELECT injured_players_count, suspended_players_count,
-                   doubtful_players_count, data_confidence, snapshot_time
+                   doubtful_players_count, data_confidence, snapshot_time, raw_json
             FROM team_squad_snapshots
             WHERE team_id = %(team_id)s
               AND raw_json->>'official_match_id' = %(match_id)s
               AND raw_json->>'observation_type' = 'fixture_injuries'
-            ORDER BY snapshot_time DESC
+            ORDER BY snapshot_time DESC, id DESC
             LIMIT 1
             """,
             {"team_id": team_id, "match_id": str(match_id)},
         )
         row = cur.fetchone()
     if not row:
+        return None
+    # New partial-query counts are reported observations, not proven full coverage.
+    # Unversioned legacy rows retain their old read contract, not replayability.
+    if isinstance(row[5], dict) and row[5].get("coverage_complete") is False:
         return None
     return {
         "injured_players_count": row[0],

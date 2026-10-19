@@ -1,7 +1,7 @@
 # Metadata only. Does not enable a collector, establish account permission,
 # certify coverage, or grant a caller access to any database table.
 contract_version: fqp-data/v1
-catalog_version: '2026-10-16.1'
+catalog_version: '2026-10-19.1'
 runtime_authorization: false
 sources:
   sporttery:
@@ -53,7 +53,45 @@ sources:
     coverage_verification: unknown
     permission_evidence: actual plan and permitted use must be verified
     quota_owner: P103
+# Internal selection policy, not access authorization, coverage verification,
+# independence or accuracy. Lower rank wins for this field only; equal ranks
+# must agree. Reposts do not vote. No new source is enabled by this section.
+field_resolution:
+  version: observation-fields/v1
+  fields:
+    weather.temperature_2m:
+      domain: weather
+      subject: forecast
+      extractor: temperature_2m/v1
+      max_age_seconds: 21600
+      sources: {open_meteo: 10}
+    lineup.starters:
+      domain: lineup
+      subject: team
+      extractor: lineup.starters/v1
+      max_age_seconds: 1800
+      sources: {api_football: 10}
+    injuries.complete_report:
+      domain: injuries
+      subject: team
+      extractor: injuries.complete_report/v1
+      max_age_seconds: 1800
+      sources: {api_football: 10}
 products:
+  source_observations:
+    contract_owner: P104
+    writer: observation_storage
+    tables: [observation_streams, observation_revisions, observation_checks, observation_cutoffs]
+    purposes: [research, prediction, display, operations]
+    consumers: [feature_build, model_runs, source_review]
+    availability: requires_captured_cutoff_and_source_permission
+  complete_feature_batches:
+    contract_owner: P104
+    writer: feature_batch_storage
+    tables: [feature_batches]
+    purposes: [research, prediction, display, operations]
+    consumers: [feature_build, model_runs, source_review]
+    availability: complete_only_with_exact_cutoff_and_declared_fields
   official_events:
     contract_owner: P101
     writer: official_storage

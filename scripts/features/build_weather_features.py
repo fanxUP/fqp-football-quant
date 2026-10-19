@@ -10,15 +10,16 @@
 from __future__ import annotations
 
 import os
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
+from scripts.business_time import business_now_naive_iso
 from scripts.feature_storage import store_match_weather_snapshot
 from scripts.openmeteo_client import OpenMeteoClient
 
 
 def _now() -> str:
-    return datetime.now().isoformat(timespec="seconds")
+    return business_now_naive_iso()
 
 
 # ---------------------------------------------------------------------------
@@ -143,6 +144,7 @@ def build_weather_for_match(
     if own_client and client:
         client.close()
 
+    acquired_at = datetime.now(UTC)
     if weather_data.get("temperature_2m") is None:
         print(f"[weather] no weather data returned for match {match_id}")
         return {
@@ -165,6 +167,8 @@ def build_weather_for_match(
                 "match_id": match_id,
                 "stadium_id": stadium_id,
                 "snapshot_time": _now(),
+                "acquired_at": acquired_at,
+                "verified_at": datetime.now(UTC),
                 "forecast_for_time": kickoff_str,
                 "temperature_2m": weather_data.get("temperature_2m"),
                 "apparent_temperature": weather_data.get("apparent_temperature"),
@@ -187,6 +191,15 @@ def build_weather_for_match(
         )
     except Exception as e:
         print(f"[weather] DB store failed for match {match_id}: {e}")
+        return {
+            "temperature_2m": None,
+            "precipitation": None,
+            "wind_speed_10m": None,
+            "weather_impact_score": None,
+            "goal_expectation_weather_adjustment": None,
+            "has_weather": False,
+            "weather_persisted": False,
+        }
 
     return {
         "temperature_2m": weather_data.get("temperature_2m"),
@@ -195,6 +208,7 @@ def build_weather_for_match(
         "weather_impact_score": impact["weather_impact_score"],
         "goal_expectation_weather_adjustment": impact["goal_expectation_adjustment"],
         "has_weather": True,
+        "weather_persisted": True,
         "weather_source": "open-meteo",
     }
 
