@@ -10,7 +10,7 @@ Checks performed:
   3. result_leak: match results should not enter pre-match model features
   4. feature_leak: feature snapshots built after kickoff should be flagged
   5. post_match_prediction: predictions generated at/after kickoff
-  6. error_analysis_scope: error rows not tied to the latest pre-match top pick
+  6. error_analysis_scope: error rows not tied to their pre-match snapshot's top pick
 """
 
 from __future__ import annotations
@@ -274,45 +274,77 @@ def _check_prediction_temporal_integrity(conn: Any) -> list[dict]:
 
 
 def _check_error_analysis_scope(conn: Any) -> list[dict]:
-    """Flag stored errors that are not the latest pre-match SPF top pick."""
+    """Flag stored errors that were not a top pre-match SPF pick in their own snapshot.
+
+    Predictions are append-only. Comparing an old error row with the newest forecast
+    would make a later run retroactively invalidate a historically valid prediction.
+    """
     findings = []
     with conn.cursor() as cur:
         cur.execute(
             """
-            WITH latest_options AS (
+            WITH recent_errors AS (
+                SELECT pea.id AS error_id, pea.match_id, pea.prediction_id,
+                       m.home_team_name, m.away_team_name,
+                       mp.match_id AS prediction_match_id,
+                       mp.model_version_id, mp.predict_time,
+                       mp.play_type, mp.option_code
+                FROM prediction_error_analysis pea
+                LEFT JOIN model_predictions mp ON mp.id = pea.prediction_id
+                LEFT JOIN official_matches m ON m.id = pea.match_id
+                WHERE pea.created_at >= NOW() - INTERVAL '72 hours'
+            ), error_snapshots AS (
+                SELECT DISTINCT prediction_match_id AS match_id,
+                       model_version_id, predict_time
+                FROM recent_errors
+                WHERE prediction_match_id IS NOT NULL
+                  AND model_version_id IS NOT NULL
+                  AND predict_time IS NOT NULL
+            ), latest_options AS (
                 SELECT DISTINCT ON (
-                    mp.match_id, mp.model_version_id, mp.option_code
+                    mp.match_id, mp.model_version_id, mp.predict_time,
+                    mp.option_code
                 ) mp.id, mp.match_id, mp.model_version_id,
-                  mp.option_code, mp.model_probability
+                  mp.predict_time, mp.option_code, mp.model_probability
                 FROM model_predictions mp
+                JOIN error_snapshots es
+                  ON es.match_id = mp.match_id
+                 AND es.model_version_id = mp.model_version_id
+                 AND es.predict_time = mp.predict_time
                 JOIN official_matches m ON m.id = mp.match_id
                 WHERE mp.play_type = 'spf'
                   AND mp.option_code IN ('3', '1', '0')
                   AND mp.model_probability IS NOT NULL
+                  AND mp.validation_status = 'valid'
+                  AND mp.uncertainty_reason->'model_independent' = 'true'::jsonb
                   AND mp.predict_time < m.kickoff_time
-                ORDER BY mp.match_id, mp.model_version_id, mp.option_code,
-                         mp.predict_time DESC, mp.id DESC
-            ), top_picks AS (
-                SELECT id, match_id,
+                ORDER BY mp.match_id, mp.model_version_id, mp.predict_time,
+                         mp.option_code, mp.id DESC
+            ), ranked_picks AS (
+                SELECT id, match_id, model_version_id, predict_time,
                        ROW_NUMBER() OVER (
-                           PARTITION BY match_id, model_version_id
+                           PARTITION BY match_id, model_version_id, predict_time
                            ORDER BY model_probability DESC NULLS LAST,
                                     option_code, id DESC
                        ) AS pick_rank
                 FROM latest_options
             )
-            SELECT pea.id, pea.match_id, pea.prediction_id,
-                   m.home_team_name, m.away_team_name
-            FROM prediction_error_analysis pea
-            LEFT JOIN official_matches m ON m.id = pea.match_id
-            LEFT JOIN top_picks tp
-              ON tp.id = pea.prediction_id AND tp.pick_rank = 1
+            SELECT e.error_id, e.match_id, e.prediction_id,
+                   e.home_team_name, e.away_team_name,
+                   e.prediction_match_id, e.model_version_id, e.predict_time,
+                   e.play_type, e.option_code
+            FROM recent_errors e
+            LEFT JOIN ranked_picks tp
+              ON tp.id = e.prediction_id
+             AND tp.match_id = e.match_id
+             AND tp.model_version_id = e.model_version_id
+             AND tp.predict_time = e.predict_time
+             AND tp.pick_rank = 1
             -- Historical error-analysis rows are retained for review but are
             -- not active pipeline contamination. Audit only the live 72-hour
             -- operating window so old, valid retrospective rows do not keep
             -- the health metric permanently critical.
             WHERE tp.id IS NULL
-              AND pea.created_at >= NOW() - INTERVAL '72 hours'
             LIMIT 100
             """
         )
@@ -325,12 +357,18 @@ def _check_error_analysis_scope(conn: Any) -> list[dict]:
                     "contamination_detected": True,
                     "detail": (
                         f"Error row {row[0]} for match {row[1]} "
-                        f"({row[3]} vs {row[4]}) is not a valid pre-match top pick"
+                        f"({row[3]} vs {row[4]}) is not a valid top pick "
+                        "in its prediction-time snapshot"
                     ),
                     "evidence": {
                         "error_id": row[0],
                         "match_id": row[1],
                         "prediction_id": row[2],
+                        "prediction_match_id": row[5],
+                        "model_version_id": row[6],
+                        "predict_time": str(row[7]) if row[7] else None,
+                        "play_type": row[8],
+                        "option_code": row[9],
                     },
                 }
             )

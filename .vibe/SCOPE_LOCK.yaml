@@ -1,4 +1,4 @@
-version: 44
+version: 45
 mode: STRICT
 allowed_paths:
 - .vibe/BASELINE.yaml
@@ -46,6 +46,8 @@ allowed_paths:
 - scripts/ci/init_observation_test_db.sh
 - tests/test_computation/test_observation_ci_postgres.py
 - ops/server/migrate.py
+- scripts/jobs/audit_data_contamination.py
+- tests/test_jobs/test_audit_data_contamination_scope.py
 - tests/test_local/test_native_database_runtime.py
 forbidden_paths:
 - .env
@@ -53,5 +55,5 @@ forbidden_paths:
 - requirements-dev.txt
 - configs/request_quota.json
 - apps/
-out_of_scope: provider activation/new algorithms/full consumer migration; P105+
-revision_reason: 'P104/06 production preflight found the server runner rejected 107/108 outer markers and no-op after DB ownership transfer. The explicit P104 cutover authorization permits hardening its SQL boundary parser and regression coverage; no schema or migration changes.'
+out_of_scope: provider activation/new algorithms/full consumer migration/schema or migration edits; P105+. Authorized in this task: code-only deployment and audit-log refresh on 100.121.47.26.
+revision_reason: 'BUGFIX-20261019-DATA-CONTAMINATION: correct error_analysis_scope to compare an error row with its own append-only prediction-time snapshot after read-only production diagnosis found seven false positives. No business-record, schema, migration, dependency, or API changes; code-only deployment and audit-log refresh are explicitly authorized.'

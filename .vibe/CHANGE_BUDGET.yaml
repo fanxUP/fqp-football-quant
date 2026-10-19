@@ -7,6 +7,6 @@ max_migration_files: 4
 max_public_api_changes: 0
 max_regression_tests: 370
 scope_note: 'Cumulative01-06 plus the pre-cutover migration-runner compatibility fix; 4 SQL paths unchanged.'
-revision_reason: 'P104/06 production preflight found the server runner rejected 107/108 outer markers and no-op after ownership transfer. Harden top-level SQL boundary parsing and add bypass regressions; no schema, migration, dependency, or API changes.'
+revision_reason: 'BUGFIX-20261019-DATA-CONTAMINATION changes one audit module and one focused regression test; no schema, migration, dependency, or API changes. User authorized tests and deployment.'
 regression_budget_scope: new/modified fixed scenarios relative base <=370; unchanged
   suite may run
