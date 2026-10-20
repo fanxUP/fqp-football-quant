@@ -338,7 +338,12 @@ def test_cutoff_capture_rejects_a_transaction_with_own_uncommitted_writes(pg, ma
 def test_database_enforces_append_only_even_for_owner(pg, match_id, table, operation):
     write(pg, match_id)
     pg.commit()
-    with pytest.raises(psycopg2.Error, match="append-only"):
+    expected_error = (
+        "append-only|permission denied for table prediction_input_dirty_matches"
+        if operation.startswith("TRUNCATE")
+        else "append-only"
+    )
+    with pytest.raises(psycopg2.Error, match=expected_error):
         with pg.cursor() as cur:
             cur.execute(operation.format(table=table))
     pg.rollback()
