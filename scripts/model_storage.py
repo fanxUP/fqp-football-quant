@@ -64,6 +64,18 @@ def _validate_prediction_payload(pred: dict) -> None:
 def store_model_prediction(conn: Any, pred: dict) -> int | None:
     """Insert a single model prediction row. Returns the new id."""
     _validate_prediction_payload(pred)
+    reason = dict(pred.get("uncertainty_reason") or {})
+    if "input_fence" in reason:
+        raise ValueError("input_fence is reserved for the internal pre-computation token")
+    if "input_fence" in pred:
+        from scripts.prediction_input_fence import bind_prediction_input_fence
+
+        reason["input_fence"] = bind_prediction_input_fence(
+            conn,
+            pred["match_id"],
+            pred["input_fence"],
+            odds_snapshot_id=pred.get("odds_snapshot_id"),
+        )
     sql = """
         INSERT INTO model_predictions (
             match_id, model_version_id, odds_snapshot_id, feature_snapshot_id, predict_time,
@@ -120,9 +132,7 @@ def store_model_prediction(conn: Any, pred: dict) -> int | None:
                     pred.get("validation_errors", []), ensure_ascii=False
                 ),
                 "calculation_version": pred["calculation_version"],
-                "uncertainty_reason": json.dumps(
-                    pred.get("uncertainty_reason", {}), ensure_ascii=False
-                ),
+                "uncertainty_reason": json.dumps(reason, ensure_ascii=False),
             },
         )
         row = cur.fetchone()

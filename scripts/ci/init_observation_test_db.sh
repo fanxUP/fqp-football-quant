@@ -28,7 +28,7 @@ BEGIN
     IF EXISTS (SELECT FROM pg_database WHERE datname='fqp_observation_test')
        OR EXISTS (SELECT FROM pg_roles WHERE rolname IN (
            'fqp_observation_test','fqp_observation_reader',
-           'fqp_observation_writer','fqp_player_writer')) THEN
+           'fqp_observation_writer','fqp_player_writer','fqp_input_consumer')) THEN
         RAISE EXCEPTION 'Refusing to overwrite existing fixture database or roles';
     END IF;
 END $$;
@@ -71,6 +71,36 @@ GRANT USAGE ON SEQUENCE players_id_seq,match_lineup_snapshots_id_seq,
     match_lineup_players_id_seq,player_availability_snapshots_id_seq,
     team_squad_snapshots_id_seq,observation_streams_id_seq,
     observation_revisions_id_seq,observation_checks_id_seq TO fqp_player_writer;
+
+-- Older CI callers may stop at migration108; grant queue privileges only when
+-- the additive migration109 is present. The P105 tests require these tables.
+DO $$
+BEGIN
+    IF to_regclass('public.prediction_input_dirty_matches') IS NOT NULL THEN
+        -- The schema clone omits ACLs; restore the migration's trigger-function
+        -- restriction explicitly instead of inheriting PUBLIC EXECUTE defaults.
+        REVOKE ALL ON FUNCTION notify_prediction_input_update() FROM PUBLIC;
+        CREATE ROLE fqp_input_consumer NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE
+            NOREPLICATION NOBYPASSRLS;
+        GRANT fqp_input_consumer TO fqp_observation_test;
+        GRANT SELECT ON prediction_input_dirty_matches,prediction_input_consumers,
+            prediction_input_consumptions TO fqp_observation_reader;
+        GRANT SELECT,UPDATE ON prediction_input_dirty_matches TO fqp_input_consumer;
+        GRANT SELECT,INSERT,UPDATE ON prediction_input_consumers TO fqp_input_consumer;
+        GRANT SELECT,INSERT ON prediction_input_consumptions TO fqp_input_consumer;
+    END IF;
+    IF to_regclass('public.prediction_input_revisions') IS NOT NULL THEN
+        REVOKE ALL ON FUNCTION notify_prediction_official_update() FROM PUBLIC;
+        GRANT SELECT ON prediction_input_revisions TO fqp_observation_reader;
+        GRANT SELECT,INSERT ON prediction_input_revisions TO fqp_input_consumer;
+        GRANT USAGE ON SEQUENCE prediction_input_revisions_id_seq TO fqp_input_consumer;
+        GRANT SELECT ON official_matches,official_markets,official_odds_snapshots,teams,team_aliases,
+            feature_batches,observation_streams,observation_revisions,observation_checks,
+            observation_cutoffs TO fqp_input_consumer;
+        GRANT INSERT ON observation_cutoffs,feature_batches TO fqp_input_consumer;
+        GRANT USAGE ON SEQUENCE feature_batches_id_seq TO fqp_input_consumer;
+    END IF;
+END $$;
 
 ALTER ROLE fqp_observation_test IN DATABASE fqp_observation_test SET statement_timeout='5s';
 ALTER ROLE fqp_observation_test IN DATABASE fqp_observation_test SET lock_timeout='500ms';

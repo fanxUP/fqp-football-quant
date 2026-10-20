@@ -254,7 +254,7 @@ def test_same_stream_concurrent_writes_and_rollback_are_atomic(pg, connect, matc
 
 @pytest.mark.parametrize("zone", ["UTC", "Asia/Shanghai", "America/New_York"])
 def test_cutoff_timezone_is_session_independent_and_future_target_is_visible(pg, match_id, zone):
-    ref = write(pg, match_id)
+    ref = write(pg, match_id, effective_at=datetime.now(UTC) + timedelta(days=1))
     pg.commit()
     utc_cutoff = stamp(pg, match_id)
     shanghai = utc_cutoff.as_of.astimezone(ZoneInfo("Asia/Shanghai"))

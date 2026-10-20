@@ -23,6 +23,7 @@ from scripts.agents.task_queue import finish_tracked_job, start_tracked_job
 from scripts.competition_storage import AGENT_DAILY_BUDGET
 from scripts.daily_decision_storage import upsert_agent_daily_decision
 from scripts.model_storage import MAX_SINGLE_TICKET_MULTIPLE, store_simulation_ticket
+from scripts.prediction_input_fence import CURRENT_PREDICTION_INPUT_SQL
 from scripts.recommendation_prediction_loader import load_actionable_predictions
 from scripts.simulator_calculator import payout_cap
 from scripts.sporttery_sales import get_sporttery_sales_window
@@ -349,6 +350,24 @@ def _load_reusable_ticket_summary(conn: Any) -> tuple[int, float]:
     return int(count or 0), float(stake or 0)
 
 
+def _has_outdated_ticket_inputs(conn: Any) -> bool:
+    """Keep existing tickets/ledgers intact; do not spend today's budget again."""
+    with conn.cursor() as cur:
+        cur.execute(
+            f"""SELECT EXISTS (
+                SELECT 1 FROM simulation_tickets st
+                JOIN daily_budget_plans bp ON bp.id=st.budget_plan_id
+                JOIN simulation_ticket_items sti ON sti.ticket_id=st.id
+                JOIN model_predictions mp ON mp.id=sti.model_prediction_id
+                WHERE bp.plan_date=timezone('Asia/Shanghai',NOW())::date
+                    AND st.ticket_status<>'invalid'
+                    AND st.strategy_pool='agent_virtual_recommendation'
+                    AND NOT ({CURRENT_PREDICTION_INPUT_SQL})
+            )"""
+        )
+        return bool(cur.fetchone()[0])
+
+
 def _parse_candidates(
     predictions: list[tuple[Any, ...]],
     quality_map: dict[int, float],
@@ -427,6 +446,14 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
                 (AGENT_DAILY_BUDGET, AGENT_DAILY_BUDGET),
             )
         conn.commit()
+
+        if _has_outdated_ticket_inputs(conn):
+            return {
+                "status": "ok",
+                "tickets": 0,
+                "quality_status": "input_invalidated",
+                "note": "今日历史推荐的输入已更新，保留原记录，本次不重复生成或分配虚拟预算",
+            }
 
         existing_count, existing_stake = _load_reusable_ticket_summary(conn)
         if existing_count > 0:

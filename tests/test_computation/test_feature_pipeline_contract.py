@@ -173,9 +173,10 @@ def test_prediction_wrapper_reuses_the_common_snapshot_reader():
 def test_prediction_job_passes_its_prediction_time_to_snapshot_reader():
     conn, cursor = _connection()
     cursor.fetchall.return_value = []
-    with patch.object(
-        run_model_prediction, "_latest_feature_snapshot", return_value=None
-    ) as reader:
+    with (
+        patch.object(run_model_prediction, "capture_prediction_input_fence"),
+        patch.object(run_model_prediction, "_latest_feature_snapshot", return_value=None) as reader,
+    ):
         assert run_model_prediction._predict_match_play_type(
             conn, 101, "主队", "客队", "spf", {}, -0.08, None, AS_OF
         ) == (0, 0)

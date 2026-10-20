@@ -1,7 +1,7 @@
-version: 42
-base_revision: 5560cdc0c639870954df40c5fa7bce4f087c4716
-branch: feat/observation-asof-20261018
-repo: /Users/estefan-macworkstation/.codex/workspaces/fqp-observation-20261018
-phase: P104_06_CI_integration_local
-production_writes: false
-database_changes: isolated fixtures only
+base_revision: af3d66fa14c8abbfa753923bd7d0ecaafd78bbcf
+branch: feat/input-degradation-20261020
+prior_slice: P105/05-ci-and-runtime-readiness/FINAL.md
+recorded_at: '2026-10-20T20:00:48.162003+08:00'
+repo: /Users/estefan-macworkstation/.codex/workspaces/fqp-input-degradation-20261020
+slice: 06-controlled-runtime-integration
+task: P105

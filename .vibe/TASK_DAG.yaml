@@ -1,17 +1,12 @@
-schema_version: 1
-task: BUGFIX-20261019-DATA-CONTAMINATION
-slice: error-analysis-snapshot-scope
-acceptance: A-ERROR-ANALYSIS-SNAPSHOT
-status: authorized_test_and_deploy
-depends_on:
-- production_read_only_root_cause
-substeps:
-- register the narrow audit scope
-- rank eligible SPF predictions inside each prediction-time snapshot
-- compare each recent error row with its linked snapshot
-- add a fixed regression test for later forecasts not invalidating older snapshots
-- run targeted tests and local static checks
-- push branch, wait for GitHub CI, and merge after green checks
-- deploy code-only release to 100.121.47.26 with rollback evidence
-- rerun the audit and verify the seven false positives are resolved
-next: targeted verification, then GitHub CI and production release gates
+task: P105
+slice: 06-controlled-runtime-integration
+status: in_progress
+steps:
+- RED_runtime_and_job
+- GREEN_bounded_consumer
+- isolated_runtime_and_CI
+- regression_scope_review
+- checkpoint
+remaining_after_slice:
+- actual-GitHub-CI
+- authorized-production-admission-and-release

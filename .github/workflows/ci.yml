@@ -157,6 +157,23 @@ jobs:
           PGDATABASE: fqp_test
           PGPASSWORD: fqp_test_password
 
+      - name: Verify prediction inputs without skipped database tests
+        timeout-minutes: 5
+        run: |
+          set -euo pipefail
+          report="${RUNNER_TEMP}/p105-inputs.xml"
+          python -m pytest -q --junitxml="$report" \
+            tests/test_storage/test_prediction_input_policy.py \
+            tests/test_computation/test_prediction_input_updates_postgres.py \
+            tests/test_computation/test_prediction_input_revisions_postgres.py \
+            tests/test_computation/test_prediction_input_fence_postgres.py \
+            tests/test_computation/test_prediction_input_runtime_postgres.py
+          python scripts/ci/verify_prediction_input_results.py "$report"
+        env:
+          DATABASE_URL: postgresql://invalid:invalid@unavailable.invalid/disabled
+          FQP_OBSERVATION_TEST_POSTGRES_DSN: host=127.0.0.1 port=5432 user=fqp_observation_test dbname=fqp_observation_test
+          PGPASSWORD: fqp_test_password
+
       - name: Run tests with coverage
         run: |
           DATABASE_URL=postgresql://fqp:fqp_test_password@localhost:5432/fqp_test \

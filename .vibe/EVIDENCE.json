@@ -1,15 +1,14 @@
 {
-  "status": "LOCAL_CI_INTEGRATION_AND_INDEPENDENT_REVIEW_VERIFIED_NOT_RELEASE_READY",
-  "task": "P104",
-  "slice": "06-integration-and-review",
-  "tests_passed": 1727,
-  "coverage_percent": 59.43,
-  "postgres_cases_included": 175,
-  "quality": "/Volumes/Nas/FQP/plans/model-modernization-20261016/integrated/P104/06-integration-and-review/QUALITY-LOCAL.json",
-  "source_manifest": "/Volumes/Nas/FQP/plans/model-modernization-20261016/integrated/P104/06-integration-and-review/SOURCE-MANIFEST.json",
+  "current_task": "P105",
+  "current_slice": "06-controlled-runtime-integration",
+  "current_status": "local_verified_independently_reviewed_limited_runtime_integration",
+  "evidence": "/Volumes/Nas/FQP/plans/model-modernization-20261016/integrated/P105/06-controlled-runtime-integration/QUALITY-LOCAL.json",
+  "source_manifest": "/Volumes/Nas/FQP/plans/model-modernization-20261016/integrated/P105/06-controlled-runtime-integration/SOURCE-MANIFEST.json",
+  "fresh_executed_evidence": true,
+  "full_A105_accepted": false,
   "independent_review": true,
-  "review": "/Volumes/Nas/FQP/plans/model-modernization-20261016/integrated/P104/06-integration-and-review/INDEPENDENT-REVIEW.md",
-  "full_A104_accepted": false,
-  "merge_ready": false,
-  "engine_gate_claimed": false
+  "actual_CI": false,
+  "local_workflow_command_verified": true,
+  "production_connected": false,
+  "prior_slice_evidence": "/Volumes/Nas/FQP/plans/model-modernization-20261016/integrated/P105/04-consumer-integration-and-review/QUALITY-LOCAL.json"
 }

@@ -17,6 +17,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
+from psycopg2.errors import LockNotAvailable
+
 from apps.backend.src.db import get_db
 from scripts.adaboost_shadow_model import load_probabilities as load_adaboost_shadow_probabilities
 from scripts.agents.task_queue import finish_tracked_job, start_tracked_job
@@ -63,6 +65,8 @@ from scripts.poisson_model import (
     estimate_lambdas_from_odds,
     score_matrix,
 )
+from scripts.prediction_input_fence import capture_prediction_input_fence
+from scripts.prediction_input_updates import InputUpdateSuperseded
 from scripts.random_forest_shadow_model import (
     load_probabilities as load_random_forest_shadow_probabilities,
 )
@@ -533,6 +537,7 @@ def _run_impl(match_id: int | None = None, dry_run: bool = False) -> dict[str, A
 
         total_predictions = 0
         total_votes = 0
+        input_updates_skipped = 0
 
         # 3. Load available markets: only predict for play types that are open
         match_ids = [r[0] for r in match_rows]
@@ -573,18 +578,25 @@ def _run_impl(match_id: int | None = None, dry_run: bool = False) -> dict[str, A
             )
             play_types = available_markets.get(mid, [])
             for play_type in play_types:
-                p, v = _predict_match_play_type(
-                    conn,
-                    mid,
-                    home_team_name,
-                    away_team_name,
-                    play_type,
-                    active_models,
-                    rho,
-                    mle_rho,
-                    predict_time,
-                    model_parameters,
-                )
+                try:
+                    p, v = _predict_match_play_type(
+                        conn,
+                        mid,
+                        home_team_name,
+                        away_team_name,
+                        play_type,
+                        active_models,
+                        rho,
+                        mle_rho,
+                        predict_time,
+                        model_parameters,
+                    )
+                except InputUpdateSuperseded, LockNotAvailable:
+                    # Other matches remain available. Any already committed
+                    # options from this calculation are invalidated on reads.
+                    conn.rollback()
+                    input_updates_skipped += 1
+                    continue
                 total_predictions += p
                 total_votes += v
 
@@ -593,6 +605,7 @@ def _run_impl(match_id: int | None = None, dry_run: bool = False) -> dict[str, A
         "predictions": total_predictions,
         "votes": total_votes,
         "matches_processed": len(match_rows),
+        **({"input_updates_skipped": input_updates_skipped} if input_updates_skipped else {}),
     }
 
 
@@ -633,6 +646,7 @@ def _predict_match_play_type(
     Returns:
         (predictions_count, votes_count)
     """
+    input_fence = capture_prediction_input_fence(conn, mid)
     feature_snapshot = _latest_feature_snapshot(conn, mid, as_of=predict_time)
     feature_snapshot_id = feature_snapshot.get("id") if feature_snapshot else None
     model_parameters = model_parameters or {}
@@ -833,6 +847,7 @@ def _predict_match_play_type(
     derived_predictions = 0
     if play_type == "spf" and poisson_matrix and raw_poisson_matrix:
         derived_predictions = store_derived_play_predictions(
+            input_fence=input_fence,
             conn=conn,
             match_id=mid,
             active_models=active_models,
@@ -1089,6 +1104,7 @@ def _predict_match_play_type(
             uncertainty = diagnostic["model_std"]
 
             pred: dict[str, Any] = {
+                "input_fence": input_fence,
                 "match_id": mid,
                 "model_version_id": mv_id,
                 "odds_snapshot_id": snapshot_ids[opt_code],

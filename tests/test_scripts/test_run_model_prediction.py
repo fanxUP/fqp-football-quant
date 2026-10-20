@@ -6,6 +6,8 @@ from datetime import datetime
 from unittest.mock import MagicMock, patch
 from zoneinfo import ZoneInfo
 
+import pytest
+
 from scripts.feature_adjustment import GoalRateAdjustment
 from scripts.jobs.run_model_prediction import (
     _load_adaboost_shadow_probabilities,
@@ -28,6 +30,17 @@ from scripts.jobs.run_model_prediction import (
     _safe_fair_odds,
     run,
 )
+from scripts.prediction_input_fence import PredictionInputFence
+
+
+@pytest.fixture(autouse=True)
+def legacy_input_fence():
+    # Existing unit fixtures do not model PostgreSQL's input head/isolation.
+    with patch(
+        "scripts.jobs.run_model_prediction.capture_prediction_input_fence",
+        return_value=PredictionInputFence(101, None),
+    ) as capture:
+        yield capture
 
 
 def test_xgboost_shadow_requires_a_verified_profile_before_predicting() -> None:
@@ -477,6 +490,7 @@ def test_poisson_prediction_persists_raw_and_feature_adjusted_probabilities():
     assert len(stored) == 3
     assert any(item["raw_model_probability"] != item["model_probability"] for item in stored)
     assert all(item["feature_snapshot_id"] == 88 for item in stored)
+    assert all(item["input_fence"] == PredictionInputFence(101, None) for item in stored)
     assert all(item["uncertainty_reason"]["feature_adjustment"]["applied"] for item in stored)
 
 
@@ -614,3 +628,78 @@ def test_prediction_job_requires_odds_and_feature_snapshot_jobs() -> None:
         "official_odds_snapshot",
         "feature_snapshot_build",
     ]
+
+
+def test_input_fence_is_captured_before_feature_or_odds_reads(legacy_input_fence):
+    events = []
+    legacy_input_fence.side_effect = lambda *args: (
+        events.append("capture") or PredictionInputFence(101, 7)
+    )
+    conn = MagicMock()
+    conn.cursor.return_value.__enter__.return_value.fetchall.side_effect = lambda: (
+        events.append("odds") or []
+    )
+    with patch(
+        "scripts.jobs.run_model_prediction._latest_feature_snapshot",
+        side_effect=lambda *a, **k: events.append("features") or None,
+    ):
+        _predict_match_play_type(
+            conn,
+            101,
+            "home",
+            "away",
+            "spf",
+            {"market_baseline": 1},
+            -0.08,
+            None,
+            "2026-10-20T12:00:00",
+        )
+    assert events == ["capture", "features", "odds"]
+
+
+def test_superseded_match_does_not_abort_other_match_predictions():
+    from scripts.prediction_input_updates import InputUpdateSuperseded
+
+    conn = MagicMock()
+    cursor = conn.cursor.return_value.__enter__.return_value
+    cursor.fetchall.side_effect = [
+        [(1, "market_baseline")],
+        [(101, "a", "b"), (102, "c", "d")],
+        [(101, "spf"), (102, "spf")],
+    ]
+    cursor.fetchone.return_value = None
+    with (
+        patch("scripts.jobs.run_model_prediction.get_db") as db,
+        patch(
+            "scripts.jobs.run_model_prediction._predict_match_play_type",
+            side_effect=[InputUpdateSuperseded("changed"), (3, 0)],
+        ) as predict,
+    ):
+        db.return_value.__enter__.return_value = conn
+        result = _run_impl()
+    assert result["predictions"] == 3 and predict.call_count == 2
+    conn.rollback.assert_called_once()
+
+
+def test_input_lock_contention_does_not_abort_other_match_predictions():
+    from psycopg2.errors import LockNotAvailable
+
+    conn = MagicMock()
+    cursor = conn.cursor.return_value.__enter__.return_value
+    cursor.fetchall.side_effect = [
+        [(1, "market_baseline")],
+        [(101, "a", "b"), (102, "c", "d")],
+        [(101, "spf"), (102, "spf")],
+    ]
+    cursor.fetchone.return_value = None
+    with (
+        patch("scripts.jobs.run_model_prediction.get_db") as db,
+        patch(
+            "scripts.jobs.run_model_prediction._predict_match_play_type",
+            side_effect=[LockNotAvailable("locked"), (3, 0)],
+        ) as predict,
+    ):
+        db.return_value.__enter__.return_value = conn
+        result = _run_impl()
+    assert result["predictions"] == 3 and predict.call_count == 2
+    conn.rollback.assert_called_once()
