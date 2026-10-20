@@ -4,12 +4,14 @@ from __future__ import annotations
 
 from typing import Any
 
+from scripts.prediction_input_fence import CURRENT_PREDICTION_INPUT_SQL
+
 
 def load_actionable_predictions(conn: Any, model_names: list[str]) -> list[tuple]:
     """Load the latest evidence-complete pre-match prediction per decision key."""
     with conn.cursor() as cur:
         cur.execute(
-            """
+            f"""
             WITH latest_prediction_ids AS (
                 SELECT DISTINCT ON (
                     mp.match_id, mp.model_version_id, mp.play_type, mp.option_code
@@ -23,6 +25,7 @@ def load_actionable_predictions(conn: Any, model_names: list[str]) -> list[tuple
                   AND mp.odds_snapshot_id IS NOT NULL
                   AND mp.feature_snapshot_id IS NOT NULL
                   AND mp.validation_status = 'valid'
+                  AND ({CURRENT_PREDICTION_INPUT_SQL})
                   AND COALESCE(
                       (mp.uncertainty_reason->>'model_independent')::boolean,
                       false
@@ -31,9 +34,9 @@ def load_actionable_predictions(conn: Any, model_names: list[str]) -> list[tuple
                   AND m.sale_status = 'selling'
                   AND LOWER(COALESCE(m.match_status, ''))
                       IN ('scheduled', 'selling', 'not_started')
-                  AND m.kickoff_time > timezone('Asia/Shanghai', NOW())
+                  AND m.kickoff_time > timezone('Asia/Shanghai', statement_timestamp())
                   AND (m.sale_stop_time IS NULL
-                       OR m.sale_stop_time > timezone('Asia/Shanghai', NOW()))
+                       OR m.sale_stop_time > timezone('Asia/Shanghai', statement_timestamp()))
                 ORDER BY mp.match_id, mp.model_version_id, mp.play_type,
                          mp.option_code, mp.predict_time DESC, mp.id DESC
             )

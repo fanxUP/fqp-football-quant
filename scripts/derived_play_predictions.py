@@ -12,6 +12,7 @@ from scripts.model_signal_policy import MODEL_MARKETS, disagreement_diagnostic, 
 from scripts.model_storage import store_model_prediction
 from scripts.odds_conversion import normalize_probabilities
 from scripts.poisson_model import derive_total_goals
+from scripts.prediction_input_fence import PredictionInputFence
 
 
 def _latest_official_odds(
@@ -113,6 +114,7 @@ def store_derived_play_predictions(
     predict_time: str,
     model_independence: dict[str, bool] | None = None,
     rollout_modes: dict[str, str] | None = None,
+    input_fence: PredictionInputFence | None = None,
 ) -> int:
     """Store unfiltered model history for every open official derived option."""
     official_odds = _latest_official_odds(conn, match_id, predict_time)
@@ -188,6 +190,7 @@ def store_derived_play_predictions(
                 store_model_prediction(
                     conn,
                     {
+                        **({"input_fence": input_fence} if input_fence is not None else {}),
                         "match_id": match_id,
                         "model_version_id": model_version_id,
                         "odds_snapshot_id": snapshot_id,

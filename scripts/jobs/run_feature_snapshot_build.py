@@ -38,6 +38,7 @@ from scripts.features.build_basic_features import (
     compute_team_form,
 )
 from scripts.features.build_upset_risk import load_pre_kickoff_upset_risk
+from scripts.prediction_input_runtime import drain_prediction_input_updates
 from scripts.team_registry import resolve_team_alias
 
 
@@ -624,7 +625,18 @@ def run(match_id: int | None = None, dry_run: bool = False) -> dict[str, Any]:
         dependencies=[] if dry_run else ["official_odds_snapshot"],
     )
     try:
+        inputs = None
+        if not dry_run:
+            with get_db() as conn:
+                # This task owns the borrowed connection. End any pooled read
+                # transaction before handing transaction ownership to consumer.
+                conn.rollback()
+                inputs = drain_prediction_input_updates(conn, match_id=match_id)
         result = _run_impl(match_id=match_id, dry_run=dry_run)
+        if inputs is not None:
+            result["input_updates"] = inputs
+            if inputs["status"] == "failed":
+                result["status"] = "failed"
         finish_tracked_job(run_id, result.get("status", "completed"), {"result": result})
         return result
     except Exception as exc:

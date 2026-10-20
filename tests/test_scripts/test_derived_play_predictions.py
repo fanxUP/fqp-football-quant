@@ -2,6 +2,7 @@ from unittest.mock import MagicMock, patch
 
 from scripts.derived_play_predictions import store_derived_play_predictions
 from scripts.poisson_model import score_matrix
+from scripts.prediction_input_fence import PredictionInputFence
 
 
 def test_derived_history_stores_every_official_option_for_each_capable_model():
@@ -19,9 +20,11 @@ def test_derived_history_stores_every_official_option_for_each_capable_model():
     adjusted_poisson = score_matrix(1.6, 0.9)
     raw_dc = score_matrix(1.25, 1.05)
     adjusted_dc = score_matrix(1.5, 0.95)
+    token = PredictionInputFence(9, 12)
 
     with patch("scripts.derived_play_predictions.store_model_prediction") as store:
         count = store_derived_play_predictions(
+            input_fence=token,
             conn=conn,
             match_id=9,
             active_models={
@@ -43,6 +46,7 @@ def test_derived_history_stores_every_official_option_for_each_capable_model():
 
     stored = [call.args[1] for call in store.call_args_list]
     assert count == 14
+    assert all(row["input_fence"] is token for row in stored)
     assert {(row["play_type"], row["option_code"]) for row in stored} == {
         ("zjq", "0"),
         ("zjq", "7"),

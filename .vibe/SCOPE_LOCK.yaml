@@ -1,4 +1,3 @@
-version: 45
 mode: STRICT
 allowed_paths:
 - .vibe/BASELINE.yaml
@@ -9,51 +8,59 @@ allowed_paths:
 - .vibe/ACCEPTANCE.md
 - .vibe/TASK_DAG.yaml
 - .vibe/EVIDENCE.json
-- scripts/observation_storage.py
-- scripts/feature_storage.py
-- scripts/features/build_weather_features.py
-- sql/107_source_observations.sql
-- sql/down/107_source_observations.down.sql
-- tests/test_storage/test_observation_storage.py
-- tests/test_computation/test_observation_postgres.py
-- tests/test_features/test_build_weather_features.py
-- docs/observations.md
-- configs/data_catalog.yaml
-- tests/test_scripts/test_data_catalog.py
-- scripts/feature_batch_storage.py
-- sql/108_complete_feature_batches.sql
-- sql/down/108_complete_feature_batches.down.sql
-- tests/test_computation/test_feature_batch_postgres.py
-- scripts/player_observations.py
-- scripts/api_football_player.py
-- scripts/api_football_client.py
-- scripts/jobs/collect_lineup_data.py
-- scripts/jobs/collect_injury_data.py
-- tests/test_computation/test_player_observations_postgres.py
-- tests/test_jobs/test_collect_lineup_data.py
-- tests/test_jobs/test_collect_injury_data.py
-- tests/test_scripts/test_api_football_client.py
-- scripts/observation_resolution.py
-- scripts/data_catalog.py
-- tests/test_storage/test_observation_resolution.py
-- tests/test_computation/test_resolution_postgres.py
-- scripts/observed_feature_pipeline.py
-- scripts/jobs/run_feature_snapshot_build.py
+- scripts/prediction_input_policy.py
 - scripts/prematch_feature_dataset.py
-- tests/test_storage/test_observed_feature_pipeline.py
-- tests/test_computation/test_observed_pipeline_postgres.py
-- .github/workflows/ci.yml
+- tests/test_storage/test_prediction_input_policy.py
+- docs/prediction-input-modes.md
+- sql/109_prediction_input_updates.sql
+- sql/down/109_prediction_input_updates.down.sql
+- scripts/prediction_input_updates.py
+- tests/test_computation/test_prediction_input_updates_postgres.py
+- docs/prediction-input-updates.md
 - scripts/ci/init_observation_test_db.sh
-- tests/test_computation/test_observation_ci_postgres.py
+- sql/110_prediction_input_revisions.sql
+- sql/down/110_prediction_input_revisions.down.sql
+- scripts/prediction_input_revisions.py
+- tests/test_computation/test_prediction_input_revisions_postgres.py
+- docs/prediction-input-revisions.md
+- scripts/prediction_input_fence.py
+- scripts/model_storage.py
+- scripts/jobs/run_model_prediction.py
+- scripts/derived_play_predictions.py
+- scripts/recommendation_prediction_loader.py
+- scripts/jobs/run_recommendation_candidate.py
+- tests/test_computation/test_prediction_input_fence_postgres.py
+- tests/test_scripts/test_run_model_prediction.py
+- tests/test_scripts/test_derived_play_predictions.py
+- tests/test_jobs/test_recommendation_candidate.py
+- tests/test_computation/test_shadow_input_contract.py
+- tests/test_computation/test_feature_pipeline_contract.py
+- .github/workflows/ci.yml
+- scripts/ci/verify_prediction_input_results.py
+- tests/test_scripts/test_prediction_input_ci.py
+- docs/prediction-input-runtime-readiness.md
+- scripts/prediction_input_runtime.py
+- tests/test_computation/test_prediction_input_runtime_postgres.py
+- scripts/jobs/run_feature_snapshot_build.py
+- tests/test_jobs/test_run_feature_snapshot_build.py
+- tests/test_computation/test_observation_postgres.py
+- tests/test_computation/test_prediction_semantics.py
+- ops/server/deploy.sh
 - ops/server/migrate.py
-- scripts/jobs/audit_data_contamination.py
-- tests/test_jobs/test_audit_data_contamination_scope.py
+- ops/local/init_local_database.sh
+- ops/local/apply_local_migrations.sh
+- ops/docker-test/bootstrap-db.sh
 - tests/test_local/test_native_database_runtime.py
 forbidden_paths:
-- .env
-- requirements.txt
-- requirements-dev.txt
-- configs/request_quota.json
 - apps/
-out_of_scope: provider activation/new algorithms/full consumer migration/schema or migration edits; P105+. Authorized in this task: code-only deployment and audit-log refresh on 100.121.47.26.
-revision_reason: 'BUGFIX-20261019-DATA-CONTAMINATION: correct error_analysis_scope to compare an error row with its own append-only prediction-time snapshot after read-only production diagnosis found seven false positives. No business-record, schema, migration, dependency, or API changes; code-only deployment and audit-log refresh are explicitly authorized.'
+- requirements
+- scripts/jobs/run_scheduler.py
+- .env
+max_changed_files: 51
+max_new_files: 20
+max_regression_tests: 300
+scope_note: >-
+  Cumulative P105/01..06 plus release/bootstrap hardening: pending production migrations
+  run via local peer-authenticated PostgreSQL admin; local and Docker bootstraps prepare the no-login
+  owner; failure after applying P105 schema keeps legacy services stopped; no dependency or new
+  migration file

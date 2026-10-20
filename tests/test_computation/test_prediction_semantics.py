@@ -11,6 +11,7 @@ import pytest
 from scripts import feature_importance, prematch_feature_dataset, shadow_model_helpers
 from scripts.jobs import run_feature_snapshot_build as build
 from scripts.jobs import run_model_prediction as prediction
+from scripts.prediction_input_fence import PredictionInputFence
 
 CURRENT_SNAPSHOT = "v4_observed_form"
 CURRENT_SCHEMA = "observed-form/v2"
@@ -147,6 +148,13 @@ def predict(
     parameters=None,
 ):
     conn = MagicMock()
+    # This unit helper exercises prediction semantics, not PostgreSQL's
+    # transaction isolation or event-version fence implementation.
+    monkeypatch.setattr(
+        prediction,
+        "capture_prediction_input_fence",
+        lambda *_args: PredictionInputFence(101, None),
+    )
     cursor = conn.cursor.return_value.__enter__.return_value
     cursor.fetchall.return_value = [(11, "h", 2), (12, "d", 3), (13, "a", 4)]
     cursor.fetchone.return_value = None if handicap is None else (handicap,)
@@ -211,7 +219,10 @@ def test_unusable_handicap_only_allows_market_baseline(monkeypatch, handicap):
     assert count == (3, 0)
     assert {s["model_version_id"] for s in stored} == {1}
     assert all(s["uncertainty_reason"]["handicap"] is None for s in stored)
-    json.dumps(stored, allow_nan=False)
+    json.dumps(
+        [{**row, "input_fence": row["input_fence"].payload()} for row in stored],
+        allow_nan=False,
+    )
     vote.assert_not_called()
 
 
@@ -398,6 +409,10 @@ def test_real_prediction_storage_preserves_unknown_confidence(monkeypatch):
     from scripts.model_storage import store_model_prediction
 
     _, rows, _ = predict(monkeypatch, {"market_baseline": 1})
+    monkeypatch.setattr(
+        "scripts.prediction_input_fence.bind_prediction_input_fence",
+        lambda *_args, **_kwargs: rows[0]["input_fence"].payload(),
+    )
     conn = MagicMock()
     cursor = conn.cursor.return_value.__enter__.return_value
     cursor.fetchone.return_value = (7,)

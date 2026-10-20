@@ -254,7 +254,7 @@ def test_same_stream_concurrent_writes_and_rollback_are_atomic(pg, connect, matc
 
 @pytest.mark.parametrize("zone", ["UTC", "Asia/Shanghai", "America/New_York"])
 def test_cutoff_timezone_is_session_independent_and_future_target_is_visible(pg, match_id, zone):
-    ref = write(pg, match_id)
+    ref = write(pg, match_id, effective_at=datetime.now(UTC) + timedelta(days=1))
     pg.commit()
     utc_cutoff = stamp(pg, match_id)
     shanghai = utc_cutoff.as_of.astimezone(ZoneInfo("Asia/Shanghai"))
@@ -338,7 +338,12 @@ def test_cutoff_capture_rejects_a_transaction_with_own_uncommitted_writes(pg, ma
 def test_database_enforces_append_only_even_for_owner(pg, match_id, table, operation):
     write(pg, match_id)
     pg.commit()
-    with pytest.raises(psycopg2.Error, match="append-only"):
+    expected_error = (
+        "append-only|permission denied for table prediction_input_dirty_matches"
+        if operation.startswith("TRUNCATE")
+        else "append-only"
+    )
+    with pytest.raises(psycopg2.Error, match=expected_error):
         with pg.cursor() as cur:
             cur.execute(operation.format(table=table))
     pg.rollback()

@@ -317,8 +317,12 @@ def test_shap_missing_feature_is_null_and_strict_json_safe(monkeypatch):
 
 def test_legacy_signal_falls_back_without_committee_vote_or_artifact_load(monkeypatch):
     from scripts.jobs import run_model_prediction as prediction
+    from scripts.prediction_input_fence import PredictionInputFence
 
     conn = MagicMock()
+    monkeypatch.setattr(
+        prediction, "capture_prediction_input_fence", lambda *_args: PredictionInputFence(101, None)
+    )
     cursor = conn.cursor.return_value.__enter__.return_value
     cursor.fetchall.side_effect = [[(11, "h", 2.1), (12, "d", 3.2), (13, "a", 3.6)], []]
     monkeypatch.setattr(

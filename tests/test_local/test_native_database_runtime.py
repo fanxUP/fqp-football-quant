@@ -15,6 +15,11 @@ def _server_migration_runner():
     return module
 
 
+def _clear_peer_migration_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    for variable in ("PGHOSTADDR", "PGSERVICE", "PGSERVICEFILE"):
+        monkeypatch.delenv(variable, raising=False)
+
+
 def test_server_migration_runner_executes_outer_transaction_markers_inside_ledger_tx() -> None:
     runner = _server_migration_runner()
     for name in ("107_source_observations.sql", "108_complete_feature_batches.sql"):
@@ -124,6 +129,169 @@ def test_server_migration_runner_requires_owner_or_admin_for_pending_apply() -> 
         has_pending=True,
         apply=True,
     )
+
+
+def test_peer_migration_url_drops_app_credentials_and_uses_local_postgres_socket(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _clear_peer_migration_environment(monkeypatch)
+    runner = _server_migration_runner()
+
+    dsn = runner.peer_migration_database_url(
+        "postgresql://fqp:secret-password@127.0.0.1:5432/fqp?sslmode=prefer"
+    )
+    parsed = runner.psycopg2.extensions.parse_dsn(dsn)
+
+    assert parsed == {
+        "dbname": "fqp",
+        "user": "postgres",
+        "host": "/var/run/postgresql",
+        "port": "5432",
+    }
+    assert "secret-password" not in dsn
+    assert "127.0.0.1" not in dsn
+
+
+def test_peer_migration_url_rejects_unsafe_database_name(monkeypatch: pytest.MonkeyPatch) -> None:
+    _clear_peer_migration_environment(monkeypatch)
+    runner = _server_migration_runner()
+
+    with pytest.raises(RuntimeError, match="simple local database"):
+        runner.peer_migration_database_url("postgresql://fqp:secret@127.0.0.1:5432/not/safe")
+
+
+@pytest.mark.parametrize(
+    "dsn",
+    [
+        "postgresql://fqp:secret@db.internal:5432/fqp",
+        "host=127.0.0.1 hostaddr=203.0.113.15 dbname=fqp user=fqp",
+        "host=127.0.0.1,db.internal dbname=fqp user=fqp",
+        "service=remote dbname=fqp user=fqp",
+        "dbname=fqp user=fqp",
+        "host=127.0.0.1 dbname=fqp user=fqp",
+        "host=127.0.0.1 hostaddr=127.0.0.1,::1 port=5432 dbname=fqp user=fqp",
+    ],
+)
+def test_peer_migration_url_rejects_remote_or_mixed_endpoints(
+    dsn: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _clear_peer_migration_environment(monkeypatch)
+    runner = _server_migration_runner()
+
+    with pytest.raises(
+        RuntimeError,
+        match="service routing|local PostgreSQL endpoint|loopback address|one valid local",
+    ):
+        runner.peer_migration_database_url(dsn)
+
+
+@pytest.mark.parametrize("variable", ["PGHOSTADDR", "PGSERVICE", "PGSERVICEFILE"])
+def test_peer_migration_url_rejects_ambient_routing(
+    variable: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _clear_peer_migration_environment(monkeypatch)
+    monkeypatch.setenv(variable, "/tmp/remote-routing.conf")
+    runner = _server_migration_runner()
+
+    with pytest.raises(RuntimeError, match="ambient libpq routing variables"):
+        runner.peer_migration_database_url("host=127.0.0.1 port=5432 dbname=fqp")
+
+
+def test_deploy_runner_executes_migrations_as_local_database_owner() -> None:
+    deploy = (PROJECT_ROOT / "ops/server/deploy.sh").read_text(encoding="utf-8")
+
+    assert '"sudo",\n    "-n",\n    "-u",\n    "postgres",' in deploy
+    assert "peer_migration_database_url()" in deploy
+    assert "FQP_MIGRATION_ROLE" not in deploy
+    assert "run_migration" in deploy
+    assert "run_migration --apply" in deploy
+    assert ".venv/bin/python ops/server/migrate.py --apply" not in deploy
+    assert "MIGRATION_APPLY_ATTEMPTED=true" in deploy
+    assert "systemctl stop nginx" in deploy
+    assert "nginx remain stopped" in deploy
+
+
+def test_prediction_input_migrations_grant_only_runtime_required_privileges() -> None:
+    updates = (PROJECT_ROOT / "sql/109_prediction_input_updates.sql").read_text(encoding="utf-8")
+    revisions = (PROJECT_ROOT / "sql/110_prediction_input_revisions.sql").read_text(
+        encoding="utf-8"
+    )
+
+    assert "GRANT SELECT, UPDATE ON prediction_input_dirty_matches TO fqp;" in updates
+    assert "GRANT SELECT, INSERT, UPDATE ON prediction_input_consumers TO fqp;" in updates
+    assert "GRANT SELECT, INSERT ON prediction_input_consumptions TO fqp;" in updates
+    assert "GRANT SELECT, INSERT ON prediction_input_revisions TO fqp;" in revisions
+    assert "GRANT USAGE ON SEQUENCE prediction_input_revisions_id_seq TO fqp;" in revisions
+    assert "ALTER TABLE prediction_input_dirty_matches OWNER TO fqp_observation_owner;" in updates
+    assert "ALTER TABLE prediction_input_consumers OWNER TO fqp_observation_owner;" in updates
+    assert "ALTER TABLE prediction_input_consumptions OWNER TO fqp_observation_owner;" in updates
+    assert (
+        "ALTER FUNCTION notify_prediction_input_update() OWNER TO fqp_observation_owner;" in updates
+    )
+    assert "GRANT SELECT ON observation_streams TO fqp_observation_owner;" in updates
+    assert "ALTER TABLE prediction_input_revisions OWNER TO fqp_observation_owner;" in revisions
+    assert (
+        "ALTER SEQUENCE prediction_input_revisions_id_seq OWNER TO fqp_observation_owner;"
+        in revisions
+    )
+    assert (
+        "ALTER FUNCTION notify_prediction_official_update() OWNER TO fqp_observation_owner;"
+        in revisions
+    )
+    assert "GRANT UPDATE, DELETE, TRUNCATE ON prediction_input_consumptions" not in updates
+    assert "GRANT UPDATE, DELETE, TRUNCATE ON prediction_input_revisions" not in revisions
+
+
+def test_ci_fixture_checks_migration_owner_and_app_acl_catalogs() -> None:
+    setup = (PROJECT_ROOT / "scripts/ci/init_observation_test_db.sh").read_text(encoding="utf-8")
+
+    assert "aclexplode(c.relacl)" in setup
+    assert "P105 migrations did not grant the required runtime ACLs to fqp" in setup
+    assert "fqp_observation_owner" in setup
+    assert "P105 append-only runtime grants include mutation privileges" in setup
+    assert "P105 runtime grants include privileges outside the required ACL" in setup
+    assert "P105 notification owner cannot read observation stream bindings" in setup
+    assert "ALTER FUNCTION notify_prediction_input_update() OWNER TO fqp_observation_owner" in setup
+    assert "Test-only elevated actor rights exercise immutable triggers" in setup
+
+
+def test_local_and_docker_bootstraps_prepare_the_p105_owner() -> None:
+    local_init = (PROJECT_ROOT / "ops/local/init_local_database.sh").read_text(encoding="utf-8")
+    local_migrations = (PROJECT_ROOT / "ops/local/apply_local_migrations.sh").read_text(
+        encoding="utf-8"
+    )
+    docker_bootstrap = (PROJECT_ROOT / "ops/docker-test/bootstrap-db.sh").read_text(
+        encoding="utf-8"
+    )
+
+    for script in (local_init, local_migrations, docker_bootstrap):
+        assert "fqp_observation_owner NOLOGIN NOSUPERUSER" in script
+        assert "GRANT USAGE, CREATE ON SCHEMA public TO fqp_observation_owner" in script
+        assert "fqp_observation_owner exists with unsafe role attributes" in script
+    for script in (local_init, local_migrations, docker_bootstrap):
+        assert '"$filename" =~ ^(109|110)_' in script
+    assert 'psql_admin -d "$FQP_DATABASE_NAME" -f "$migration"' in docker_bootstrap
+    assert local_migrations.index('source "$ENV_FILE"') < local_migrations.index(
+        'ADMIN_USER="${FQP_POSTGRES_ADMIN_USER:-$USER}"'
+    )
+
+
+def test_deploy_peer_migration_clears_libpq_routing_and_secret_environment() -> None:
+    deploy = (PROJECT_ROOT / "ops/server/deploy.sh").read_text(encoding="utf-8")
+
+    for variable in (
+        "PGHOST",
+        "PGHOSTADDR",
+        "PGPORT",
+        "PGDATABASE",
+        "PGSERVICE",
+        "PGSERVICEFILE",
+        "PGPASSWORD",
+        "PGOPTIONS",
+    ):
+        assert f'"-u",\n    "{variable}",' in deploy
 
 
 def test_host_ports_use_the_canonical_local_endpoints() -> None:

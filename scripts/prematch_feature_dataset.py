@@ -20,6 +20,27 @@ def load_observed_feature_input(conn: Any, **contract: Any) -> dict:
     return load(conn, **contract)
 
 
+def load_prediction_input_mode(conn: Any, **contract: Any) -> dict:
+    """Explicit P105 mode selection on the same retained P104 batch."""
+    from scripts.prediction_input_policy import load_prediction_input_mode as load
+
+    return load(conn, **contract)
+
+
+def complete_prediction_input_revision(conn: Any, claim: Any, **contract: Any) -> dict:
+    """Explicit P105 retained input gate; no default model or ticket activation."""
+    from scripts.prediction_input_revisions import complete_prediction_input_revision as complete
+
+    return complete(conn, claim, **contract)
+
+
+def load_prediction_input_revision(conn: Any, revision_id: int) -> dict | None:
+    """Current DB validation for the exact retained input decision."""
+    from scripts.prediction_input_revisions import load_prediction_input_revision as load
+
+    return load(conn, revision_id)
+
+
 def load_settled_pre_kickoff_dataset(
     conn: Any,
 ) -> tuple[np.ndarray, np.ndarray, list[str]] | None:

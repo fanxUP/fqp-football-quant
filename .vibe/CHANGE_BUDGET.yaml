@@ -1,12 +1,9 @@
-version: 44
-mode: STRICT
-max_changed_files: 46
+max_changed_files: 51
 max_new_files: 20
 max_dependency_additions: 0
 max_migration_files: 4
 max_public_api_changes: 0
-max_regression_tests: 370
-scope_note: 'Cumulative01-06 plus the pre-cutover migration-runner compatibility fix; 4 SQL paths unchanged.'
-revision_reason: 'BUGFIX-20261019-DATA-CONTAMINATION changes one audit module and one focused regression test; no schema, migration, dependency, or API changes. User authorized tests and deployment.'
-regression_budget_scope: new/modified fixed scenarios relative base <=370; unchanged
-  suite may run
+max_regression_tests: 300
+scope_note: Cumulative P105/01..06 plus deployment and local/Docker bootstrap hardening after
+  read-only review found unsafe migration rollback, remote-DSN remapping, missing owner setup and
+  insufficient runtime ACL coverage; no additional migration file or dependency

@@ -1,4 +1,4 @@
-"""Plan migrations as the application role; apply pending SQL as owner/admin.
+"""Plan migrations with the configured role; apply pending SQL as owner/admin.
 
 Requires the existing checksum ledger; never guesses a production baseline.
 Default is read-only planning. Use --apply only after copy dry-run and backup.
@@ -200,6 +200,47 @@ def database_url() -> str:
             if len(parts) == 1:
                 return parts[0]
     raise RuntimeError("DATABASE_URL is not configured")
+
+
+def peer_migration_database_url(configured_dsn: str | None = None) -> str:
+    """Build a local peer-authenticated DSN without carrying app credentials."""
+    ambient_route = {
+        "PGHOSTADDR",
+        "PGSERVICE",
+        "PGSERVICEFILE",
+    }.intersection(os.environ)
+    if ambient_route:
+        names = ", ".join(sorted(ambient_route))
+        raise RuntimeError(f"ambient libpq routing variables are unsupported: {names}")
+    dsn = configured_dsn if configured_dsn is not None else database_url()
+    parameters = psycopg2.extensions.parse_dsn(dsn)
+    database_name = parameters.get("dbname")
+    if not database_name or not re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_.-]*", database_name):
+        raise RuntimeError("DATABASE_URL must name a simple local database for peer migration")
+    if parameters.get("service") or parameters.get("servicefile"):
+        raise RuntimeError("DATABASE_URL service routing is unsupported for peer migration")
+    configured_hosts = parameters.get("host", "").split(",")
+    if len(configured_hosts) != 1 or configured_hosts[0] not in {
+        "127.0.0.1",
+        "::1",
+        "localhost",
+        "/var/run/postgresql",
+    }:
+        raise RuntimeError("DATABASE_URL must use a supported local PostgreSQL endpoint")
+    configured_addresses = parameters.get("hostaddr", "").split(",")
+    if configured_addresses != [""] and (
+        len(configured_addresses) != 1 or configured_addresses[0] not in {"127.0.0.1", "::1"}
+    ):
+        raise RuntimeError("DATABASE_URL hostaddr must be a loopback address for peer migration")
+    port = parameters.get("port", "")
+    if not port.isdecimal() or not 1 <= int(port) <= 65535:
+        raise RuntimeError("DATABASE_URL must use one valid local PostgreSQL port")
+    return psycopg2.extensions.make_dsn(
+        dbname=database_name,
+        user="postgres",
+        host="/var/run/postgresql",
+        port=port,
+    )
 
 
 def migration_body(source: str) -> str:

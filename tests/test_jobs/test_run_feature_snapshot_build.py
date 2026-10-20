@@ -172,3 +172,62 @@ def test_feature_snapshot_clock_uses_shanghai_business_time(monkeypatch):
     assert now.tzinfo is None
     expected = datetime.now(ZoneInfo("Asia/Shanghai")).replace(tzinfo=None)
     assert abs((now - expected).total_seconds()) < 2
+
+
+def test_default_feature_task_consumes_input_updates_even_without_legacy_matches(monkeypatch):
+    from contextlib import contextmanager
+    from unittest.mock import MagicMock
+
+    from scripts.jobs import run_feature_snapshot_build as job
+
+    conn = MagicMock()
+
+    @contextmanager
+    def database():
+        yield conn
+
+    consume = MagicMock(return_value={"status": "ok", "completed": 2})
+    monkeypatch.setattr(job, "get_db", database)
+    monkeypatch.setattr(job, "drain_prediction_input_updates", consume)
+    monkeypatch.setattr(job, "start_tracked_job", lambda *a, **kw: 1)
+    monkeypatch.setattr(job, "finish_tracked_job", MagicMock())
+    monkeypatch.setattr(job, "_run_impl", lambda **kw: {"status": "ok", "snapshots_built": 0})
+    result = job.run(match_id=123)
+    consume.assert_called_once_with(conn, match_id=123)
+    assert result["input_updates"]["completed"] == 2
+    conn.rollback.assert_called_once()
+
+
+def test_default_feature_task_dry_run_never_consumes_inputs(monkeypatch):
+    from unittest.mock import MagicMock
+
+    from scripts.jobs import run_feature_snapshot_build as job
+
+    consume = MagicMock()
+    monkeypatch.setattr(job, "drain_prediction_input_updates", consume)
+    monkeypatch.setattr(job, "start_tracked_job", lambda *a, **kw: 1)
+    monkeypatch.setattr(job, "finish_tracked_job", MagicMock())
+    assert job.run(dry_run=True)["status"] == "dry_run"
+    consume.assert_not_called()
+
+
+def test_default_feature_task_exposes_consumer_failure(monkeypatch):
+    from contextlib import contextmanager
+    from unittest.mock import MagicMock
+
+    from scripts.jobs import run_feature_snapshot_build as job
+
+    @contextmanager
+    def database():
+        yield MagicMock()
+
+    monkeypatch.setattr(job, "get_db", database)
+    monkeypatch.setattr(
+        job, "drain_prediction_input_updates", lambda *a, **kw: {"status": "failed", "failed": 1}
+    )
+    monkeypatch.setattr(job, "start_tracked_job", lambda *a, **kw: 1)
+    finish = MagicMock()
+    monkeypatch.setattr(job, "finish_tracked_job", finish)
+    monkeypatch.setattr(job, "_run_impl", lambda **kw: {"status": "ok", "snapshots_built": 2})
+    assert job.run()["status"] == "failed"
+    assert finish.call_args.args[1] == "failed"
