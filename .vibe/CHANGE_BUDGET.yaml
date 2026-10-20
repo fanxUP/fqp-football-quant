@@ -1,8 +1,9 @@
-max_changed_files: 44
+max_changed_files: 45
 max_new_files: 20
 max_dependency_additions: 0
 max_migration_files: 4
 max_public_api_changes: 0
 max_regression_tests: 300
-scope_note: Cumulative P105/01..06; no new migration/dependency; includes a runtime-relative
-  future-time test fixture so CI stays valid after 2026-10-20 12:00 UTC
+scope_note: Cumulative P105/01..06; one existing prediction-semantics fixture is included
+  because full CI exercises the event-version fence; no new migration/dependency; also includes
+  a runtime-relative future-time fixture so CI stays valid after 2026-10-20 12:00 UTC
