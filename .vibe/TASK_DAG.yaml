@@ -9,4 +9,5 @@ steps:
 - checkpoint
 remaining_after_slice:
 - actual-GitHub-CI
+- production-release-runner-and-acl-hardening
 - authorized-production-admission-and-release

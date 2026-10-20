@@ -18,6 +18,16 @@ psql_exec() {
     "$PSQL_BIN" -X "$DATABASE_URL" -v ON_ERROR_STOP=1 "$@"
 }
 
+psql_admin() {
+    if [[ -n "${FQP_POSTGRES_ADMIN_PASSWORD:-}" ]]; then
+        PGPASSWORD="$FQP_POSTGRES_ADMIN_PASSWORD" "$PSQL_BIN" -X -h 127.0.0.1 -p 5432 \
+            -U "$ADMIN_USER" -v ON_ERROR_STOP=1 "$@"
+    else
+        env -u PGPASSWORD "$PSQL_BIN" -X -h 127.0.0.1 -p 5432 -U "$ADMIN_USER" \
+            -v ON_ERROR_STOP=1 "$@"
+    fi
+}
+
 migration_checksum() {
     if command -v sha256sum >/dev/null 2>&1; then
         sha256sum "$1" | awk '{print $1}'
@@ -43,8 +53,28 @@ set +u
 source "$ENV_FILE"
 set -u
 set +a
+ADMIN_USER="${FQP_POSTGRES_ADMIN_USER:-$USER}"
 [[ "$DATABASE_URL" == *"@127.0.0.1:5432/fqp" ]] \
     || { echo "[fqp-db] native DATABASE_URL is required" >&2; exit 1; }
+
+# P105's SECURITY DEFINER notifications and object ownership use a dedicated
+# non-login role. Only the local PostgreSQL administrator can prepare it.
+psql_admin -d postgres <<'SQL' >/dev/null
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = current_user AND rolsuper) THEN
+    RAISE EXCEPTION 'local migration bootstrap requires a PostgreSQL superuser';
+  END IF;
+END $$;
+SELECT 'CREATE ROLE fqp_observation_owner NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS'
+WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'fqp_observation_owner') \gexec
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'fqp_observation_owner'
+      AND (rolcanlogin OR rolsuper OR rolcreatedb OR rolcreaterole OR rolreplication OR rolbypassrls)) THEN
+    RAISE EXCEPTION 'fqp_observation_owner exists with unsafe role attributes';
+  END IF;
+END $$;
+SQL
+psql_admin -d fqp -c 'GRANT USAGE, CREATE ON SCHEMA public TO fqp_observation_owner' >/dev/null
 
 # All timestamp-without-time-zone audit fields use UTC storage semantics.
 # Enforce the database default on every deployment, including migrated native
@@ -118,7 +148,11 @@ SQL
         sed -n '1,$p' "$migration"
         printf "\nINSERT INTO local_schema_migrations (filename, checksum_sha256) VALUES ('%s', '%s');\n" "$filename" "$checksum"
         printf 'COMMIT;\n'
-    } | psql_exec -q
+    } | if [[ "$filename" =~ ^(109|110)_ ]]; then
+        psql_admin -d fqp -q
+    else
+        psql_exec -q
+    fi
 done < <(ordered_migrations)
 
 echo "[fqp-db] incremental migrations are current"

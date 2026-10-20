@@ -13,6 +13,7 @@ REQUIRED_MODULES = (
     "tests.test_computation.test_prediction_input_revisions_postgres",
     "tests.test_computation.test_prediction_input_fence_postgres",
     "tests.test_computation.test_prediction_input_runtime_postgres",
+    "tests.test_local.test_native_database_runtime",
 )
 MAX_REPORT_BYTES = 16 * 1024 * 1024
 

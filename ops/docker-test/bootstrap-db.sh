@@ -3,7 +3,7 @@ set -Eeuo pipefail
 
 psql_admin() {
   PGPASSWORD="$FQP_POSTGRES_ADMIN_PASSWORD" psql -X -v ON_ERROR_STOP=1 -h "$PGHOST" \
-    -p "$PGPORT" -U postgres -d postgres "$@"
+    -p "$PGPORT" -U postgres "$@"
 }
 
 psql_app() {
@@ -11,7 +11,7 @@ psql_app() {
     -p "$PGPORT" -U "$FQP_DATABASE_USER" -d "$FQP_DATABASE_NAME" "$@"
 }
 
-psql_admin -v role_name="$FQP_DATABASE_USER" -v role_password="$FQP_DATABASE_PASSWORD" \
+psql_admin -d postgres -v role_name="$FQP_DATABASE_USER" -v role_password="$FQP_DATABASE_PASSWORD" \
   -v db_name="$FQP_DATABASE_NAME" <<'SQL'
 SELECT format('CREATE ROLE %I LOGIN PASSWORD %L', :'role_name', :'role_password')
 WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'role_name')
@@ -20,6 +20,25 @@ SELECT format('CREATE DATABASE %I OWNER %I', :'db_name', :'role_name')
 WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = :'db_name')
 \gexec
 SQL
+
+psql_admin -d postgres <<'SQL'
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = current_user AND rolsuper) THEN
+    RAISE EXCEPTION 'Docker test bootstrap requires a PostgreSQL superuser';
+  END IF;
+END $$;
+SELECT 'CREATE ROLE fqp_observation_owner NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS'
+WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'fqp_observation_owner')
+\gexec
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'fqp_observation_owner'
+      AND (rolcanlogin OR rolsuper OR rolcreatedb OR rolcreaterole OR rolreplication OR rolbypassrls)) THEN
+    RAISE EXCEPTION 'fqp_observation_owner exists with unsafe role attributes';
+  END IF;
+END $$;
+SQL
+psql_admin -d "$FQP_DATABASE_NAME" \
+  -c 'GRANT USAGE, CREATE ON SCHEMA public TO fqp_observation_owner'
 
 psql_app <<'SQL'
 SELECT format('ALTER DATABASE %I SET timezone TO %L', current_database(), 'UTC') \gexec
@@ -47,7 +66,11 @@ SQL
     continue
   fi
   echo "[docker-test-db] applying $filename"
-  psql_app -f "$migration"
+  if [[ "$filename" =~ ^(109|110)_ ]]; then
+    psql_admin -d "$FQP_DATABASE_NAME" -f "$migration"
+  else
+    psql_app -f "$migration"
+  fi
   psql_app -v filename="$filename" -v checksum="$checksum" <<'SQL'
 INSERT INTO local_schema_migrations(filename, checksum_sha256)
 VALUES (:'filename', :'checksum');

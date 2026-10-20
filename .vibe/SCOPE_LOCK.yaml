@@ -45,14 +45,22 @@ allowed_paths:
 - tests/test_jobs/test_run_feature_snapshot_build.py
 - tests/test_computation/test_observation_postgres.py
 - tests/test_computation/test_prediction_semantics.py
+- ops/server/deploy.sh
+- ops/server/migrate.py
+- ops/local/init_local_database.sh
+- ops/local/apply_local_migrations.sh
+- ops/docker-test/bootstrap-db.sh
+- tests/test_local/test_native_database_runtime.py
 forbidden_paths:
 - apps/
 - requirements
 - scripts/jobs/run_scheduler.py
 - .env
-max_changed_files: 45
+max_changed_files: 51
 max_new_files: 20
 max_regression_tests: 300
-scope_note: Cumulative P105/01..06; bounded existing-task consumer and timezone-stable
-  observation cutoff fixture; full CI also exercises the existing prediction-semantics
-  fixture, which now stubs the event-version fence; no new migration, dependency or production activation
+scope_note: >-
+  Cumulative P105/01..06 plus release/bootstrap hardening: pending production migrations
+  run via local peer-authenticated PostgreSQL admin; local and Docker bootstraps prepare the no-login
+  owner; failure after applying P105 schema keeps legacy services stopped; no dependency or new
+  migration file

@@ -72,4 +72,17 @@ BEGIN
             EXECUTE FUNCTION reject_observation_mutation();
     END IF;
 END $$;
+
+-- Keep queue data and SECURITY DEFINER behavior under the dedicated no-login owner.
+ALTER TABLE prediction_input_dirty_matches OWNER TO fqp_observation_owner;
+ALTER TABLE prediction_input_consumers OWNER TO fqp_observation_owner;
+ALTER TABLE prediction_input_consumptions OWNER TO fqp_observation_owner;
+ALTER FUNCTION notify_prediction_input_update() OWNER TO fqp_observation_owner;
+GRANT SELECT ON observation_streams TO fqp_observation_owner;
+
+-- Runtime access is deliberately narrower than table ownership. The app can
+-- lease work and update its input head, but cannot create heads or erase receipts.
+GRANT SELECT, UPDATE ON prediction_input_dirty_matches TO fqp;
+GRANT SELECT, INSERT, UPDATE ON prediction_input_consumers TO fqp;
+GRANT SELECT, INSERT ON prediction_input_consumptions TO fqp;
 COMMIT;

@@ -13,6 +13,7 @@ MODULES = (
     "tests.test_computation.test_prediction_input_revisions_postgres",
     "tests.test_computation.test_prediction_input_fence_postgres",
     "tests.test_computation.test_prediction_input_runtime_postgres",
+    "tests.test_local.test_native_database_runtime",
 )
 
 
@@ -62,7 +63,7 @@ def test_nonzero_summary_rejected_even_if_case_missing_status(tmp_path, attribut
         verify_report(path)
 
 
-@pytest.mark.parametrize("count", ["0", "4", "6", "-1", "bad"])
+@pytest.mark.parametrize("count", ["0", "4", "5", "-1", "bad"])
 def test_invalid_or_inconsistent_test_count_rejected(tmp_path, count):
     path = tmp_path / "p105.xml"
     root, suite = report(path)

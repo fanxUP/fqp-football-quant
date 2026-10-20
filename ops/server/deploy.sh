@@ -19,6 +19,7 @@ git fetch --no-tags origin main
 git cat-file -e "$RELEASE_SHA^{commit}"
 [[ "$RELEASE_SHA" == "$(git rev-parse origin/main)" ]] || { echo 'Target must equal current origin/main' >&2; exit 1; }
 ROLLBACK_SHA="$(git rev-parse HEAD)"
+MIGRATION_APPLY_ATTEMPTED=false
 printf 'Current: %s\nTarget: %s\n' "$ROLLBACK_SHA" "$RELEASE_SHA"
 # This release runner handles code/schema changes; runtime or dependency changes
 # require their own prepared rollout so a code rollback is sufficient here.
@@ -51,6 +52,14 @@ if checksum != record.get('backup_sha256'):
 subprocess.run(['pg_restore', '--list', str(backup)], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 PY
 sudo -n true
+sudo -n -u postgres -- test -x "$PROJECT_ROOT/.venv/bin/python" || {
+    echo 'PostgreSQL operating-system user cannot execute the application virtualenv' >&2
+    exit 1
+}
+sudo -n -u postgres -- test -r "$PROJECT_ROOT/ops/server/migrate.py" || {
+    echo 'PostgreSQL operating-system user cannot read the migration runner' >&2
+    exit 1
+}
 SERVICES=(fqp-backend fqp-scheduler fqp-worker)
 for service in "${SERVICES[@]}"; do sudo -n systemctl is-active --quiet "$service"; done
 wait_ready() {
@@ -71,6 +80,14 @@ rollback() {
     sudo -n systemctl stop "${SERVICES[@]}"
     git -c core.hooksPath=/dev/null checkout -B main "$ROLLBACK_SHA"
     npm --prefix apps/frontend run build
+    if [[ "$MIGRATION_APPLY_ATTEMPTED" == true ]]; then
+        # The prior code may not fence stale P105 inputs. Fail closed after an
+        # apply attempt; an operator must validate the old release before restart.
+        sudo -n systemctl stop nginx
+        echo 'ROLLBACK_REQUIRED: P105 migration apply was attempted; backend, scheduler, worker and nginx remain stopped.' >&2
+        echo 'Do not restart the legacy release until stale recommendations are gated or a compatible release is deployed.' >&2
+        exit "${code:-1}"
+    fi
     sudo -n systemctl start "${SERVICES[@]}"
     local restored=false attempt
     for attempt in {1..20}; do
@@ -81,13 +98,56 @@ rollback() {
     echo 'Inspect service logs and /health before retrying; no destructive SQL rollback was run.' >&2
     exit "${code:-1}"
 }
+run_migration() {
+    .venv/bin/python - "$@" <<'PY'
+import subprocess
+import sys
+from pathlib import Path
+
+from ops.server.migrate import peer_migration_database_url
+
+root = Path.cwd()
+# The new trigger must attach to fqp-owned official tables. The migrations
+# explicitly transfer their new tables/functions back to the no-login owner.
+command = [
+    "sudo",
+    "-n",
+    "-u",
+    "postgres",
+    "--",
+    "env",
+    "-u",
+    "PGHOST",
+    "-u",
+    "PGHOSTADDR",
+    "-u",
+    "PGPORT",
+    "-u",
+    "PGDATABASE",
+    "-u",
+    "PGSERVICE",
+    "-u",
+    "PGSERVICEFILE",
+    "-u",
+    "PGPASSWORD",
+    "-u",
+    "PGOPTIONS",
+    "DATABASE_URL=" + peer_migration_database_url(),
+    str(root / ".venv/bin/python"),
+    str(root / "ops/server/migrate.py"),
+    *sys.argv[1:],
+]
+raise SystemExit(subprocess.run(command, check=False).returncode)
+PY
+}
 trap rollback ERR
 sudo -n systemctl stop "${SERVICES[@]}"
 git -c core.hooksPath=/dev/null checkout -B main "$RELEASE_SHA"
 npm --prefix apps/frontend ci --ignore-scripts
 npm --prefix apps/frontend run build
-.venv/bin/python ops/server/migrate.py
-.venv/bin/python ops/server/migrate.py --apply
+run_migration
+MIGRATION_APPLY_ATTEMPTED=true
+run_migration --apply
 sudo -n systemctl start fqp-backend
 wait_ready
 # Invoke exact protected-route handlers using the application's environment.

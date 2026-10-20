@@ -11,6 +11,7 @@
 - 每事务 statement<=5s/lock<=500ms 保留更严格配置，SET LOCAL 不污染池连接；消费者要求闲置专属连接，借用后先回滚池中遗留读事务。
 - RED→最小实现→PG16合成纵向/角色/并发/回滚/恢复/作业接线回归→CI no-skip包含runtime→范围/静态→只读独立审查。
 - 完整A105仍false，真实GitHub CI/生产切换另行处理；本轮不提交/推送/部署/连接生产。
+- 生产迁移runner验证配置端点为本机后，通过peer认证调用PostgreSQL管理账号，不把超级用户DSN放进应用配置；109/110把新增表、序列、`SECURITY DEFINER`函数转交给无登录owner，通知owner仅获观测stream读取权限，`fqp`仅获运行所需权限，追加写表拒绝UPDATE/DELETE/TRUNCATE。CI及本机/Docker初始化均准备并检查owner，隔离副本保留通知函数owner并实际触发观测回执；应用迁移失败后旧服务保持停止，等待兼容恢复。
 
 ## 预算（编辑前）
 

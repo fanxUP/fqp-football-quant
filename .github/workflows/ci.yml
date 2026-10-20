@@ -110,6 +110,10 @@ jobs:
       - name: Initialize test database schema
         run: |
           set -euo pipefail
+          psql -X -v ON_ERROR_STOP=1 -h localhost -U fqp -d fqp_test \
+            -c "CREATE ROLE fqp_observation_owner NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS"
+          psql -X -v ON_ERROR_STOP=1 -h localhost -U fqp -d fqp_test \
+            -c "GRANT USAGE,CREATE ON SCHEMA public TO fqp_observation_owner"
           ordered_migrations() {
             local migration filename version
             for migration in sql/*.sql; do
@@ -167,7 +171,8 @@ jobs:
             tests/test_computation/test_prediction_input_updates_postgres.py \
             tests/test_computation/test_prediction_input_revisions_postgres.py \
             tests/test_computation/test_prediction_input_fence_postgres.py \
-            tests/test_computation/test_prediction_input_runtime_postgres.py
+            tests/test_computation/test_prediction_input_runtime_postgres.py \
+            tests/test_local/test_native_database_runtime.py
           python scripts/ci/verify_prediction_input_results.py "$report"
         env:
           DATABASE_URL: postgresql://invalid:invalid@unavailable.invalid/disabled

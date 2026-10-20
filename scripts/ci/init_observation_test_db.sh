@@ -31,6 +31,94 @@ BEGIN
            'fqp_observation_writer','fqp_player_writer','fqp_input_consumer')) THEN
         RAISE EXCEPTION 'Refusing to overwrite existing fixture database or roles';
     END IF;
+    IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname='fqp_observation_owner'
+        AND NOT rolcanlogin AND NOT rolsuper AND NOT rolcreatedb AND NOT rolcreaterole
+        AND NOT rolreplication AND NOT rolbypassrls) THEN
+        RAISE EXCEPTION 'P105 no-login owner role is missing or unsafe';
+    END IF;
+    IF NOT EXISTS (
+        SELECT FROM pg_class c CROSS JOIN LATERAL aclexplode(c.relacl) acl
+        WHERE c.oid='public.prediction_input_dirty_matches'::regclass
+          AND acl.grantee='fqp'::regrole AND acl.privilege_type='SELECT'
+    ) OR NOT EXISTS (
+        SELECT FROM pg_class c CROSS JOIN LATERAL aclexplode(c.relacl) acl
+        WHERE c.oid='public.prediction_input_dirty_matches'::regclass
+          AND acl.grantee='fqp'::regrole AND acl.privilege_type='UPDATE'
+    ) OR NOT EXISTS (
+        SELECT FROM pg_class c CROSS JOIN LATERAL aclexplode(c.relacl) acl
+        WHERE c.oid='public.prediction_input_consumers'::regclass
+          AND acl.grantee='fqp'::regrole AND acl.privilege_type='SELECT'
+    ) OR NOT EXISTS (
+        SELECT FROM pg_class c CROSS JOIN LATERAL aclexplode(c.relacl) acl
+        WHERE c.oid='public.prediction_input_consumers'::regclass
+          AND acl.grantee='fqp'::regrole AND acl.privilege_type IN ('INSERT','UPDATE')
+        GROUP BY c.oid HAVING count(DISTINCT acl.privilege_type)=2
+    ) OR NOT EXISTS (
+        SELECT FROM pg_class c CROSS JOIN LATERAL aclexplode(c.relacl) acl
+        WHERE c.oid='public.prediction_input_consumptions'::regclass
+          AND acl.grantee='fqp'::regrole AND acl.privilege_type IN ('SELECT','INSERT')
+        GROUP BY c.oid HAVING count(DISTINCT acl.privilege_type)=2
+    ) OR NOT EXISTS (
+        SELECT FROM pg_class c CROSS JOIN LATERAL aclexplode(c.relacl) acl
+        WHERE c.oid='public.prediction_input_revisions'::regclass
+          AND acl.grantee='fqp'::regrole AND acl.privilege_type IN ('SELECT','INSERT')
+        GROUP BY c.oid HAVING count(DISTINCT acl.privilege_type)=2
+    ) OR NOT EXISTS (
+        SELECT FROM pg_class c CROSS JOIN LATERAL aclexplode(c.relacl) acl
+        WHERE c.oid='public.prediction_input_revisions_id_seq'::regclass
+          AND acl.grantee='fqp'::regrole AND acl.privilege_type='USAGE'
+    ) THEN
+        RAISE EXCEPTION 'P105 migrations did not grant the required runtime ACLs to fqp';
+    END IF;
+    IF EXISTS (
+        SELECT FROM pg_class c CROSS JOIN LATERAL aclexplode(c.relacl) acl
+        WHERE c.oid IN (
+            'public.prediction_input_consumptions'::regclass,
+            'public.prediction_input_revisions'::regclass
+        ) AND acl.grantee='fqp'::regrole
+          AND acl.privilege_type IN ('UPDATE','DELETE','TRUNCATE')
+    ) THEN
+        RAISE EXCEPTION 'P105 append-only runtime grants include mutation privileges';
+    END IF;
+    IF EXISTS (
+        SELECT FROM pg_class c CROSS JOIN LATERAL aclexplode(c.relacl) acl
+        WHERE acl.grantee='fqp'::regrole AND (
+            (c.oid='public.prediction_input_dirty_matches'::regclass
+                AND acl.privilege_type NOT IN ('SELECT','UPDATE'))
+            OR (c.oid='public.prediction_input_consumers'::regclass
+                AND acl.privilege_type NOT IN ('SELECT','INSERT','UPDATE'))
+            OR (c.oid IN (
+                'public.prediction_input_consumptions'::regclass,
+                'public.prediction_input_revisions'::regclass
+            ) AND acl.privilege_type NOT IN ('SELECT','INSERT'))
+            OR (c.oid='public.prediction_input_revisions_id_seq'::regclass
+                AND acl.privilege_type <> 'USAGE')
+        )
+    ) THEN
+        RAISE EXCEPTION 'P105 runtime grants include privileges outside the required ACL';
+    END IF;
+    IF EXISTS (
+        SELECT FROM pg_class c
+        WHERE c.oid IN (
+            'public.prediction_input_dirty_matches'::regclass,
+            'public.prediction_input_consumers'::regclass,
+            'public.prediction_input_consumptions'::regclass,
+            'public.prediction_input_revisions'::regclass,
+            'public.prediction_input_revisions_id_seq'::regclass
+        ) AND c.relowner <> 'fqp_observation_owner'::regrole
+    ) OR EXISTS (
+        SELECT FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+        WHERE n.nspname='public'
+          AND p.proname IN ('notify_prediction_input_update','notify_prediction_official_update')
+          AND p.proowner <> 'fqp_observation_owner'::regrole
+    ) THEN
+        RAISE EXCEPTION 'P105 migration objects are not owned by the no-login observation owner';
+    END IF;
+    IF NOT has_table_privilege(
+        'fqp_observation_owner','public.observation_streams','SELECT'
+    ) THEN
+        RAISE EXCEPTION 'P105 notification owner cannot read observation stream bindings';
+    END IF;
 END $$;
 -- Public dummy credential, used only inside the disposable CI service.
 CREATE ROLE fqp_observation_test LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE
@@ -45,6 +133,15 @@ pg_dump --schema-only --no-owner --no-privileges \
 psql -X -v ON_ERROR_STOP=1 -d fqp_observation_test <<'SQL'
 BEGIN;
 COMMENT ON DATABASE fqp_observation_test IS 'fqp-p104-isolated-fixtures/v1';
+GRANT USAGE,CREATE ON SCHEMA public TO fqp_observation_owner;
+GRANT SELECT ON observation_streams TO fqp_observation_owner;
+ALTER TABLE prediction_input_dirty_matches OWNER TO fqp_observation_owner;
+ALTER TABLE prediction_input_consumers OWNER TO fqp_observation_owner;
+ALTER TABLE prediction_input_consumptions OWNER TO fqp_observation_owner;
+ALTER TABLE prediction_input_revisions OWNER TO fqp_observation_owner;
+ALTER SEQUENCE prediction_input_revisions_id_seq OWNER TO fqp_observation_owner;
+ALTER FUNCTION notify_prediction_input_update() OWNER TO fqp_observation_owner;
+ALTER FUNCTION notify_prediction_official_update() OWNER TO fqp_observation_owner;
 CREATE ROLE fqp_observation_writer NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE
     NOREPLICATION NOBYPASSRLS;
 CREATE ROLE fqp_observation_reader NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE
@@ -99,6 +196,11 @@ BEGIN
             observation_cutoffs TO fqp_input_consumer;
         GRANT INSERT ON observation_cutoffs,feature_batches TO fqp_input_consumer;
         GRANT USAGE ON SEQUENCE feature_batches_id_seq TO fqp_input_consumer;
+        -- Test-only elevated actor rights exercise immutable triggers. The source
+        -- database assertions above independently prove fqp's deployed ACL stays narrow.
+        GRANT UPDATE,DELETE,TRUNCATE ON prediction_input_consumptions,
+            prediction_input_revisions TO fqp_observation_writer;
+        GRANT DELETE ON prediction_input_dirty_matches TO fqp_observation_writer;
     END IF;
 END $$;
 

@@ -9,6 +9,7 @@ DATABASE_USER="${FQP_DATABASE_USER:-fqp}"
 DATABASE_PASSWORD="${FQP_DATABASE_PASSWORD:-fqp_local_password}"
 PORT="${FQP_POSTGRES_PORT:-5432}"
 ADMIN_USER="${FQP_POSTGRES_ADMIN_USER:-$USER}"
+ADMIN_PASSWORD="${FQP_POSTGRES_ADMIN_PASSWORD:-}"
 
 ordered_migrations() {
   local migration filename version
@@ -18,6 +19,22 @@ ordered_migrations() {
     version=$((10#${BASH_REMATCH[1]}))
     printf '%s\t%s\n' "$version" "$migration"
   done | sort -n -k1,1 | cut -f2-
+}
+
+admin_psql() {
+  if [[ -n "$ADMIN_PASSWORD" ]]; then
+    PGPASSWORD="$ADMIN_PASSWORD" "$POSTGRES_BIN/psql" "$@"
+  else
+    env -u PGPASSWORD "$POSTGRES_BIN/psql" "$@"
+  fi
+}
+
+admin_createdb() {
+  if [[ -n "$ADMIN_PASSWORD" ]]; then
+    PGPASSWORD="$ADMIN_PASSWORD" "$POSTGRES_BIN/createdb" "$@"
+  else
+    env -u PGPASSWORD "$POSTGRES_BIN/createdb" "$@"
+  fi
 }
 
 [[ "$DATABASE_NAME" =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ ]] || {
@@ -42,16 +59,29 @@ done
 }
 
 escaped_password="${DATABASE_PASSWORD//\'/\'\'}"
-"$POSTGRES_BIN/psql" -h 127.0.0.1 -p "$PORT" -U "$ADMIN_USER" -d postgres \
+admin_psql -h 127.0.0.1 -p "$PORT" -U "$ADMIN_USER" -d postgres \
   -v ON_ERROR_STOP=1 -v role_name="$DATABASE_USER" -v role_password="$escaped_password" <<'SQL' >/dev/null
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = current_user AND rolsuper) THEN
+    RAISE EXCEPTION 'local database bootstrap requires a PostgreSQL superuser';
+  END IF;
+END $$;
 SELECT format('CREATE ROLE %I LOGIN PASSWORD %L', :'role_name', :'role_password')
 WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'role_name') \gexec
+SELECT 'CREATE ROLE fqp_observation_owner NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS'
+WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'fqp_observation_owner') \gexec
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'fqp_observation_owner'
+      AND (rolcanlogin OR rolsuper OR rolcreatedb OR rolcreaterole OR rolreplication OR rolbypassrls)) THEN
+    RAISE EXCEPTION 'fqp_observation_owner exists with unsafe role attributes';
+  END IF;
+END $$;
 SQL
 
 database_created=0
-if ! "$POSTGRES_BIN/psql" -h 127.0.0.1 -p "$PORT" -U "$ADMIN_USER" -d postgres \
+if ! admin_psql -h 127.0.0.1 -p "$PORT" -U "$ADMIN_USER" -d postgres \
   -Atq -c "SELECT 1 FROM pg_database WHERE datname = '$DATABASE_NAME'" | grep -q '^1$'; then
-  "$POSTGRES_BIN/createdb" -h 127.0.0.1 -p "$PORT" -U "$ADMIN_USER" \
+  admin_createdb -h 127.0.0.1 -p "$PORT" -U "$ADMIN_USER" \
     -O "$DATABASE_USER" "$DATABASE_NAME"
   database_created=1
 fi
@@ -59,18 +89,27 @@ fi
 # Timestamp columns are stored as UTC wall-clock values.  Keep the native
 # database aligned with the original runtime so Asia/Shanghai business-date
 # projections do not shift records twice.
-"$POSTGRES_BIN/psql" -h 127.0.0.1 -p "$PORT" -U "$ADMIN_USER" -d "$DATABASE_NAME" \
+admin_psql -h 127.0.0.1 -p "$PORT" -U "$ADMIN_USER" -d "$DATABASE_NAME" \
   -v ON_ERROR_STOP=1 <<'SQL' >/dev/null
 SELECT format('ALTER DATABASE %I SET timezone TO %L', current_database(), 'UTC') \gexec
 SET timezone TO 'UTC';
 SQL
 
+admin_psql -h 127.0.0.1 -p "$PORT" -U "$ADMIN_USER" -d "$DATABASE_NAME" \
+  -v ON_ERROR_STOP=1 -c 'GRANT USAGE, CREATE ON SCHEMA public TO fqp_observation_owner' >/dev/null
+
 if (( database_created == 1 )); then
   export PGPASSWORD="$DATABASE_PASSWORD"
   while IFS= read -r migration; do
-    echo "[fqp-db] applying $(basename "$migration")"
-    "$POSTGRES_BIN/psql" -h 127.0.0.1 -p "$PORT" -U "$DATABASE_USER" \
-      -d "$DATABASE_NAME" -v ON_ERROR_STOP=1 -f "$migration" >/dev/null
+    filename="$(basename "$migration")"
+    echo "[fqp-db] applying $filename"
+    if [[ "$filename" =~ ^(109|110)_ ]]; then
+      admin_psql -h 127.0.0.1 -p "$PORT" -U "$ADMIN_USER" \
+        -d "$DATABASE_NAME" -v ON_ERROR_STOP=1 -f "$migration" >/dev/null
+    else
+      "$POSTGRES_BIN/psql" -h 127.0.0.1 -p "$PORT" -U "$DATABASE_USER" \
+        -d "$DATABASE_NAME" -v ON_ERROR_STOP=1 -f "$migration" >/dev/null
+    fi
   done < <(ordered_migrations)
 
   {

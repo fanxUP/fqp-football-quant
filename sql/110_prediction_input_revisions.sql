@@ -31,6 +31,14 @@ DO $$ BEGIN
     END IF;
 END $$;
 
+-- Keep revisions and trigger execution under the dedicated no-login owner.
+ALTER TABLE prediction_input_revisions OWNER TO fqp_observation_owner;
+ALTER SEQUENCE prediction_input_revisions_id_seq OWNER TO fqp_observation_owner;
+
+-- Revisions are append-only; the runtime needs only read/insert and sequence use.
+GRANT SELECT, INSERT ON prediction_input_revisions TO fqp;
+GRANT USAGE ON SEQUENCE prediction_input_revisions_id_seq TO fqp;
+
 -- Only matches already observed participate; no historical queue backfill.
 -- Sorted old/new IDs also cover a source correcting a row's match binding.
 CREATE OR REPLACE FUNCTION notify_prediction_official_update()
@@ -51,6 +59,7 @@ BEGIN
     RETURN NULL;
 END $$;
 REVOKE ALL ON FUNCTION notify_prediction_official_update() FROM PUBLIC;
+ALTER FUNCTION notify_prediction_official_update() OWNER TO fqp_observation_owner;
 DO $$ BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgrelid='official_matches'::regclass
         AND tgname='trg_prediction_official_dirty') THEN
