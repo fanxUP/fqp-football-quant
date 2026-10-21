@@ -2,7 +2,7 @@
   "schema_version": 1,
   "current_task": "P118",
   "current_slice": "01-safe-frontend-dev-dependency-release",
-  "current_status": "independent_review_passed_ci_pending",
+  "current_status": "ci_passed_for_ab20fbc; evidence_update_ci_pending",
   "base_revision": "d592cdfd2207c2ed148f8346f02ab92a25399e8d",
   "branch": "fix/deploy-build-dependency-rollback",
   "scope": "Safely deploy merged Vite/Vitest dev dependency updates with rollback dependency restoration.",
@@ -139,7 +139,12 @@
     "pending_migrations": [],
     "backup_required_by_migration_gate": false,
     "deploy_script_currently_blocks_dependency_file_changes": true,
-    "production_mutations": false
+    "production_mutations": false,
+    "protected_http_smoke": {
+      "request": "GET /api/auth/me without a session cookie",
+      "result": "HTTP 401 as expected",
+      "verified_at_utc": "2026-10-21T07:50:46Z"
+    }
   },
   "verification": {
     "merged_dependency_fix_ci": {
@@ -180,7 +185,16 @@
       "new_sha": "d592cdfd2207c2ed148f8346f02ab92a25399e8d",
       "result": "passed; classified only Vite/Vitest dev dependency closure changes"
     },
-    "github_ci": "pending; P118 branch not pushed",
+    "github_ci": {
+      "run": 39565008918,
+      "head": "ab20fbc126dd96badf21db20b20b6e8eb20dcd03",
+      "conclusion": "success",
+      "jobs": {
+        "lint-and-typecheck": "success",
+        "test": "success"
+      },
+      "verified_at_utc": "2026-10-21T07:57:54Z"
+    },
     "independent_review": {
       "status": "passed",
       "reviewer": "read-only independent review",
@@ -189,7 +203,7 @@
     }
   },
   "deploy": {
-    "status": "pending_merge_and_server_plan",
-    "reason": "Independent review passed. Waiting for P118 GitHub CI; server migration preflight previously returned no pending migrations."
+    "status": "pending_latest_head_ci_and_merge",
+    "reason": "CI and independent review passed for ab20fbc. Evidence update will run CI on the final PR head before merge."
   }
 }
