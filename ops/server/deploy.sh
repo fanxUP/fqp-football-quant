@@ -191,11 +191,11 @@ if checksum != record.get('backup_sha256'):
     raise SystemExit('Backup checksum mismatch')
 subprocess.run(['pg_restore', '--list', str(backup)], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 PY
+    MIGRATION_APPLY_ATTEMPTED=true
+    run_migration --apply
 else
     echo 'No pending database migrations; migration dry-run and recent-backup gates are not applicable.'
 fi
-MIGRATION_APPLY_ATTEMPTED=true
-run_migration --apply
 write_release_marker "${RELEASE_SHA}-${DEPLOYMENT_INSTANCE}-d"
 sudo -n systemctl start fqp-backend
 wait_ready
