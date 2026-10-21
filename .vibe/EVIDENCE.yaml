@@ -39,7 +39,16 @@
       "verified_at": "2026-10-21T20:03:46.910401+08:00"
     },
     "A120-DEPLOY": {
-      "status": "PENDING"
+      "status": "PASS",
+      "command": "sshpass -e ssh -T -o StrictHostKeyChecking=yes -o PreferredAuthentications=password -o PubkeyAuthentication=no root@100.121.47.26 'set -euo pipefail; workdir=$(systemctl show -p WorkingDirectory --value fqp-backend); test -n \"$workdir\"; git_cmd() { git -c safe.directory=\"$workdir\" -C \"$workdir\" \"$@\"; }; expected=aad9fc44cbb7495da8d27616779f0f64b6453201; head=$(git_cmd rev-parse HEAD); test \"$head\" = \"$expected\"; branch=$(git_cmd branch --show-current); test \"$branch\" = main; test -z \"$(git_cmd status --porcelain)\"; marker=$(cat \"$workdir/.runtime/release-id\"); test \"$marker\" = \"aad9fc44cbb7495da8d27616779f0f64b6453201-20261021T152524Z-a44e5957-249f-4010-b2b8-a8ed87e9910a-d\"; printf \"server_time=%s\\nworking_directory=%s\\nserver_head=%s\\nserver_branch=%s\\ncheckout=clean\\nrelease_marker=%s\\n\" \"$(date -Is)\" \"$workdir\" \"$head\" \"$branch\" \"$marker\"; for service in fqp-backend fqp-scheduler fqp-worker nginx; do status=$(systemctl is-active \"$service\"); test \"$status\" = active; printf \"service_%s=%s\\n\" \"$service\" \"$status\"; done; ready=$(curl -fsS --connect-timeout 3 --max-time 8 http://127.0.0.1:8080/health/ready); python3 -c \"import json,sys; x=json.loads(sys.argv[1]); assert x[\\\"status\\\"]==\\\"ok\\\" and x[\\\"checks\\\"][\\\"database\\\"]==\\\"ok\\\" and x[\\\"checks\\\"][\\\"redis\\\"]==\\\"ok\\\"\" \"$ready\"; printf \"readiness_json=%s\\n\" \"$ready\"; root_http=$(curl -sS --connect-timeout 3 --max-time 8 -o /dev/null -w \"%{http_code}\" http://127.0.0.1/); auth_http=$(curl -sS --connect-timeout 3 --max-time 8 -o /dev/null -w \"%{http_code}\" http://127.0.0.1/api/auth/me); modules_http=$(curl -sS --connect-timeout 3 --max-time 8 -o /dev/null -w \"%{http_code}\" http://127.0.0.1/api/modules); test \"$root_http\" = 200; test \"$auth_http\" = 401; test \"$modules_http\" = 401; printf \"frontend_http=%s\\nauth_me_http=%s\\nmodules_http=%s\\n\" \"$root_http\" \"$auth_http\" \"$modules_http\"; migration=$(sudo -u postgres env -u PGHOST -u PGHOSTADDR -u PGPORT -u PGDATABASE -u PGSERVICE -u PGSERVICEFILE -u PGPASSWORD -u PGOPTIONS PYTHONDONTWRITEBYTECODE=1 DATABASE_URL=\"dbname=fqp user=postgres host=/var/run/postgresql port=5432\" \"$workdir/.venv/bin/python\" -B \"$workdir/ops/server/migrate.py\"); case \"$migration\" in *\"pending migrations: []\"*) ;; *) printf \"%s\\n\" \"$migration\"; exit 1;; esac; printf \"migration_plan=%s\\n\" \"$migration\"; stamp=$(printf \"%s\" \"$marker\" | cut -c42-57); since=\"${stamp:0:4}-${stamp:4:2}-${stamp:6:2} ${stamp:9:2}:${stamp:11:2}:${stamp:13:2} UTC\"; errors=$(journalctl -u fqp-backend -u fqp-scheduler -u fqp-worker --since \"$since\" -p err --no-pager -o short-iso); if test -z \"$errors\" || test \"$errors\" = \"-- No entries --\"; then printf \"journal_errors_since_release=0\\n\"; else printf \"journal_errors_since_release_begin\\n%s\\njournal_errors_since_release_end\\n\" \"$errors\"; exit 1; fi'",
+      "exit_code": 0,
+      "summary": "server_time=2026-10-21T15:47:32+00:00\nworking_directory=/home/admin/fqp-football-quant\nserver_head=aad9fc44cbb7495da8d27616779f0f64b6453201\nserver_branch=main\ncheckout=clean\nrelease_marker=aad9fc44cbb7495da8d27616779f0f64b6453201-20261021T152524Z-a44e5957-249f-4010-b2b8-a8ed87e9910a-d\nservice_fqp-backend=active\nservice_fqp-scheduler=active\nservice_fqp-worker=active\nservice_nginx=active\nreadiness_json={\"status\":\"ok\",\"checks\":{\"database\":\"ok\",\"redis\":\"ok\"}}\nfrontend_http=200\nauth_me_http=401\nmodules_http=401\nmigration_plan=Role: postgres; pending migrations: []\nRead-only migration plan complete\njournal_errors_since_release=0\n",
+      "timed_out": false,
+      "environment": "unknown",
+      "revision": "aad9fc44cbb7495da8d27616779f0f64b6453201",
+      "dirty_tree": false,
+      "tree_fingerprint": "40e3bfb3346a5c4df163c6f89b014ec8a68f69177244e436ff5d0cfdaf91ded0",
+      "verified_at": "2026-10-21T23:47:33.572717+08:00"
     },
     "A120-BUILD": {
       "status": "PASS",
@@ -132,8 +141,66 @@
     "dependency_migrations": 0
   },
   "deployment": {
-    "status": "PENDING",
-    "target": "100.121.47.26"
+    "status": "passed",
+    "target": "100.121.47.26",
+    "source_revision": "aad9fc44cbb7495da8d27616779f0f64b6453201",
+    "deployed_at": "2026-10-21T15:25:24Z",
+    "verified_at": "2026-10-21T23:47:33.572717+08:00",
+    "release_id": "aad9fc44cbb7495da8d27616779f0f64b6453201-20261021T152524Z-a44e5957-249f-4010-b2b8-a8ed87e9910a-d",
+    "runner_exit_code": 0,
+    "rollback_revision": "275d44bc73139ce9b9e68d4decd64c096edae01f",
+    "database_migrations_pending": 0,
+    "frontend_dependency_vulnerabilities": 0,
+    "checks": {
+      "server_head_matches_github_main_at_deploy": "passed",
+      "server_branch": "main",
+      "server_checkout": "clean",
+      "fqp-backend": "active",
+      "fqp-scheduler": "active",
+      "fqp-worker": "active",
+      "nginx": "active",
+      "health_ready_database_redis": "passed",
+      "frontend_http": 200,
+      "protected_auth_me_unauthenticated_http": 401,
+      "protected_modules_unauthenticated_http": 401,
+      "recent_service_errors_since_release": 0
+    },
+    "runner_summary": "deploy.sh exited 0; frontend dependencies installed with zero reported vulnerabilities; Vite build passed; publisher reported 0 asset changes and retained older assets.",
+    "verification_evidence": {
+      "verified_at": "2026-10-21T23:47:33.572717+08:00",
+      "checks": [
+        {
+          "command": "Read-only SSH: git rev-parse HEAD; git branch --show-current; git status --porcelain",
+          "exit_code": 0,
+          "output": "aad9fc44cbb7495da8d27616779f0f64b6453201\nmain\nclean"
+        },
+        {
+          "command": "cat /home/admin/fqp-football-quant/.runtime/release-id",
+          "exit_code": 0,
+          "output": "aad9fc44cbb7495da8d27616779f0f64b6453201-20261021T152524Z-a44e5957-249f-4010-b2b8-a8ed87e9910a-d"
+        },
+        {
+          "command": "systemctl is-active fqp-backend fqp-scheduler fqp-worker nginx",
+          "exit_code": 0,
+          "output": "fqp-backend=active; fqp-scheduler=active; fqp-worker=active; nginx=active"
+        },
+        {
+          "command": "curl http://127.0.0.1:8080/health/ready; HTTP smoke for /, /api/auth/me and /api/modules",
+          "exit_code": 0,
+          "output": "ready HTTP 200; {\"status\":\"ok\",\"checks\":{\"database\":\"ok\",\"redis\":\"ok\"}}; frontend HTTP 200; auth/me HTTP 401; modules HTTP 401"
+        },
+        {
+          "command": "sudo -u postgres env -u PGHOST -u PGHOSTADDR -u PGPORT -u PGDATABASE -u PGSERVICE -u PGSERVICEFILE -u PGPASSWORD -u PGOPTIONS PYTHONDONTWRITEBYTECODE=1 DATABASE_URL=dbname=fqp user=postgres host=/var/run/postgresql port=5432 .venv/bin/python -B ops/server/migrate.py",
+          "exit_code": 0,
+          "output": "Role: postgres; pending migrations: []\nRead-only migration plan complete"
+        },
+        {
+          "command": "journalctl -u fqp-backend -u fqp-scheduler -u fqp-worker --since \"2026-10-21 15:25:24 UTC\" -p err --no-pager -o short-iso",
+          "exit_code": 0,
+          "output": "-- No entries --"
+        }
+      ]
+    }
   },
   "external_ci": {
     "status": "passed",
@@ -314,8 +381,8 @@
     }
   },
   "quality_gate": {
-    "status": "PENDING",
-    "checked_at": null,
+    "status": "READY_TO_MERGE",
+    "checked_at": "2026-10-21T23:57:30.147130+08:00",
     "failures": []
   },
   "prior_reviews": {
