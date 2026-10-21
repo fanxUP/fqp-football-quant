@@ -1,22 +1,16 @@
 schema_version: 1
-task: P117
+task: P118
 status: implementation_in_progress
 tasks:
-  - id: P117
-    title: 部署版本提示与强制重新登录
-    acceptance: A117
+  - id: P118
+    title: 安全发布并回退前端开发依赖更新
+    acceptance: A118
     depends_on: []
     kind: required
     status: implementation_in_progress
     files:
-      - apps/backend/src/deployment_version.py
-      - apps/backend/src/auth.py
-      - apps/backend/src/routers/auth_router.py
-      - apps/frontend/src/shared/api/auth.ts
-      - apps/frontend/src/app/AuthContext.tsx
-      - apps/frontend/src/App.tsx
-      - apps/frontend/src/app/language.ts
-      - apps/frontend/src/theme/appearance.css
       - ops/server/deploy.sh
-      - tests/test_auth.py
-      - apps/frontend/src/App.test.tsx
+      - ops/server/release_dependencies.py
+      - tests/test_local/test_frontend_release_dependencies.py
+      - docs/33_自动测试代码审查与部署交付流程.md
+      - docs/project-reliability-improvements.md

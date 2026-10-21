@@ -1,11 +1,9 @@
-max_changed_files: 19
-max_new_files: 1
+max_changed_files: 13
+max_new_files: 2
 max_dependency_additions: 0
 max_migration_files: 0
-max_public_api_changes: 1
+max_public_api_changes: 0
 max_regression_tests: 6
 scope_note: >-
-  P117 adds a unique deployment marker to the server release runner, release-aware Redis sessions,
-  a cache-free release identifier endpoint, client deployment detection, and a mandatory re-login prompt.
-  Up to six isolated auth and update-prompt regression cases are allowed after the user's continuation
-  authorized verification. No database schema or dependency changes are in scope.
+  Only the deploy runner, narrow dependency classifier, its regression tests, release documentation,
+  and P118 evidence/scope metadata are allowed. No runtime dependency additions or schema changes.

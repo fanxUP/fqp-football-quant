@@ -1,10 +1,10 @@
-# A117：新部署触发会话失效与重新登录
+# A118：前端构建开发依赖的安全发布与回退
 
-1. 服务端每次部署和回滚都生成新的 release ID；发布标记原子写入，release endpoint 禁止缓存。
-2. 登录创建的 Redis session 绑定当前 release ID；release 不同或缺失的 session 无法访问任何受保护 API，并且不会滑动续期。
-3. 已登录前端每 30 秒及标签页重新显示时检测 release；检测到变化后阻止继续使用旧页面并显示不可关闭、键盘可操作、有可访问标签的提示。
-4. 用户确认后会尝试删除旧 Redis session、清除 HttpOnly cookie、刷新页面并进入登录页；登出请求失败时仍继续刷新，服务端会继续拒绝旧 session。
-5. 常规登录/登出路径保持可用；没有版本变化或版本接口暂时不可用时，不错误强制登出。
-6. 无数据库迁移、无新增依赖；本地验证限于认证与前端更新弹窗测试，不连接生产数据库或供应商 API。
+1. 发布分类器只允许 `apps/frontend/package.json` 中 `devDependencies.vite` / `devDependencies.vitest` 的版本变更，以及这两个包依赖闭包内锁文件的 `dev: true` 包变化。
+2. 拒绝前端生产 `dependencies`、其他 manifest 配置、非 dev-only 锁项、Python/Node/模型桥接依赖或运行时文件变更。
+3. `--plan` 明确标注前端开发依赖刷新；常规依赖变化仍保持拒绝。
+4. 部署失败并回退时，在旧提交 checkout 后执行旧锁文件的 `npm ci --ignore-scripts`，再构建旧版本；依赖恢复失败时停止 Nginx，退出并输出 `ROLLBACK_REQUIRED`。
+5. 保持当前 release evidence、服务健康、迁移和保护 HTTP 烟测门禁。无待执行迁移时不要求新数据库备份；有迁移时继续要求新鲜备份和副本演练。
+6. 分类器的允许/拒绝路径、无关 dev lock 项拒绝、首次暂存目录加载分类器、runner shell 语法、全套 GitHub CI 通过；部署后验证服务、`/health/ready`、release ID 和关键路由。
 
-状态：`implementation_in_progress`；本轮验证已获得用户继续授权，证据待运行后补充。
+状态：`implementation_in_progress`；PR #20 已合并。服务器暂未更新。

@@ -30,15 +30,26 @@ git cat-file -e "$RELEASE_SHA^{commit}"
 [[ "$RELEASE_SHA" == "$(git rev-parse origin/main)" ]] || { echo 'Target must equal current origin/main' >&2; exit 1; }
 ROLLBACK_SHA="$(git rev-parse HEAD)"
 MIGRATION_APPLY_ATTEMPTED=false
+FRONTEND_DEV_DEPENDENCIES_CHANGED=false
 printf 'Current: %s\nTarget: %s\n' "$ROLLBACK_SHA" "$RELEASE_SHA"
-# This release runner handles code/schema changes; runtime or dependency changes
-# require their own prepared rollout so a code rollback is sufficient here.
-if ! git diff --quiet "$ROLLBACK_SHA" "$RELEASE_SHA" -- requirements.txt requirements-dev.txt pyproject.toml .python-version .node-version apps/frontend/package.json apps/frontend/package-lock.json apps/model-bridge/package.json apps/model-bridge/package-lock.json; then
+# Runtime dependency changes still require a separately prepared release. Only
+# verified Vite/Vitest dev-only updates have a matching rollback path here.
+if ! git diff --quiet "$ROLLBACK_SHA" "$RELEASE_SHA" -- requirements.txt requirements-dev.txt pyproject.toml .python-version .node-version apps/model-bridge/package.json apps/model-bridge/package-lock.json; then
     echo 'Dependency/runtime changes require a separately prepared release' >&2
     exit 1
 fi
+if ! git diff --quiet "$ROLLBACK_SHA" "$RELEASE_SHA" -- apps/frontend/package.json apps/frontend/package-lock.json; then
+    if ! .venv/bin/python "$SCRIPT_DIR/release_dependencies.py" "$ROLLBACK_SHA" "$RELEASE_SHA"; then
+        echo 'Frontend dependency changes are outside the safe dev-only release policy' >&2
+        exit 1
+    fi
+    FRONTEND_DEV_DEPENDENCIES_CHANGED=true
+fi
 if [[ "$RELEASE_MODE" == '--plan' ]]; then
     git diff --stat "$ROLLBACK_SHA" "$RELEASE_SHA"
+    if [[ "$FRONTEND_DEV_DEPENDENCIES_CHANGED" == true ]]; then
+        echo 'Verified frontend Vite/Vitest devDependency update; rollback will reinstall the prior lockfile.'
+    fi
     echo 'Plan only. Record quality/rollback/HTTP evidence before --apply; migration copy-dry-run and a recent backup are required only when migrations are pending.'
     exit 0
 fi
@@ -81,7 +92,16 @@ rollback() {
     echo "Release failed; restoring $ROLLBACK_SHA. Applied additive migrations are retained." >&2
     sudo -n systemctl stop "${SERVICES[@]}"
     git -c core.hooksPath=/dev/null checkout -B main "$ROLLBACK_SHA"
-    npm --prefix apps/frontend run build
+    if [[ "$FRONTEND_DEV_DEPENDENCIES_CHANGED" == true ]] && ! npm --prefix apps/frontend ci --ignore-scripts; then
+        sudo -n systemctl stop nginx
+        echo 'ROLLBACK_REQUIRED: unable to restore frontend dependencies from the prior lockfile; services and nginx remain stopped.' >&2
+        exit 1
+    fi
+    if ! npm --prefix apps/frontend run build; then
+        sudo -n systemctl stop nginx
+        echo 'ROLLBACK_REQUIRED: prior frontend build failed; services and nginx remain stopped.' >&2
+        exit 1
+    fi
     if ! write_release_marker "${ROLLBACK_SHA}-${DEPLOYMENT_INSTANCE}-r"; then
         echo 'ROLLBACK_REQUIRED: unable to write rollback release marker; services remain stopped.' >&2
         sudo -n systemctl stop nginx
