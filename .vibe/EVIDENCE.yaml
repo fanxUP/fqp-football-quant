@@ -1,0 +1,178 @@
+{
+  "schema_version": 4,
+  "current_task": "P119",
+  "acceptance": {
+    "A119": {
+      "status": "PASS",
+      "command": "/bin/bash -lc '/Volumes/Nas/FQP/code/.venv/bin/python -m pytest -q tests/test_auth.py && /Volumes/Nas/FQP/code/.venv/bin/ruff check apps/backend/src/auth.py tests/test_auth.py && /Volumes/Nas/FQP/code/.venv/bin/ruff format --check apps/backend/src/auth.py tests/test_auth.py'",
+      "exit_code": 0,
+      "summary": "============================= test session starts ==============================\nplatform darwin -- Python 3.14.6, pytest-9.1.1, pluggy-1.7.0\nrootdir: /Volumes/Nas/FQP/worktrees/session-release-acl-compat\nconfigfile: pyproject.toml\nplugins: mock-3.15.1, cov-7.1.0, asyncio-1.4.0, anyio-4.15.1, platformdirs-4.13.5\nasyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function\ncollected 14 items\n\ntests/test_auth.py ..............                                        [100%]\n\n============================== 14 passed in 0.38s ==============================\nAll checks passed!\n2 files already formatted\n",
+      "timed_out": false,
+      "environment": "unknown",
+      "revision": "da323244bd20c0df162e53f6260e9c0038ac8b4e",
+      "dirty_tree": true,
+      "tree_fingerprint": "4f839be037a193bbb736dde2bdba96b8a9ccf6084dacd679ddf2545c3522e611",
+      "verified_at": "2026-10-21T19:01:02.416233+08:00"
+    },
+    "A119-V4": {
+      "status": "PASS",
+      "command": "python3 -I -S -B .vibe/verify_migration.py",
+      "exit_code": 0,
+      "summary": "PASS: 9 archived files hash-verified; 8 V4 controls parse; P118 pending status preserved; 14 pinned engine sources verified\n",
+      "timed_out": false,
+      "environment": "unknown",
+      "revision": "da323244bd20c0df162e53f6260e9c0038ac8b4e",
+      "dirty_tree": true,
+      "tree_fingerprint": "4f839be037a193bbb736dde2bdba96b8a9ccf6084dacd679ddf2545c3522e611",
+      "verified_at": "2026-10-21T19:22:58.686257+08:00"
+    }
+  },
+  "reviews": {
+    "status": "PASS",
+    "application_code": {
+      "status": "PASS",
+      "reviewer": "independent read-only review agent",
+      "summary": "No remaining findings on the unchanged auth.py and tests/test_auth.py application diff."
+    },
+    "v4_migration": {
+      "status": "PASS",
+      "reviewer": "independent read-only review agent",
+      "summary": "Final review found no blocker, major, or minor findings across V4 controls, engine pinning, PR/CI preflight, and archive verifier.",
+      "verified_at": "2026-10-21T19:23:14.126389+08:00"
+    }
+  },
+  "security": {
+    "status": "PASS",
+    "scope": "Authentication and Redis ACL changes",
+    "checks": {
+      "credential_handling": "No production credential was added; ACL test credentials are generated randomly and the test requires a loopback Redis URL.",
+      "authorization_boundary": "Redis ACL integration proved a runtime user restricted to ~session:* can complete password login and cannot delete the legacy out-of-scope marker.",
+      "dependency_or_schema_change": "None."
+    },
+    "verified_at": "2026-10-21T19:01:16+08:00"
+  },
+  "migration": {
+    "status": "NOT_APPLICABLE",
+    "database_migrations": 0,
+    "dependency_migrations": 0
+  },
+  "deployment": {
+    "status": "PENDING",
+    "target": "100.121.47.26"
+  },
+  "external_ci": {
+    "status": "passed",
+    "head_revision": "da323244bd20c0df162e53f6260e9c0038ac8b4e",
+    "run_id": "39582190297",
+    "checks": {
+      "lint-and-typecheck": "passed",
+      "test": "passed"
+    },
+    "note": "The recorded run validates the unchanged application diff at da323244. After committing V4 controls, .vibe/quality_gate.py requires configured CI jobs to pass on the exact current PR head before merge."
+  },
+  "workflow_engine": {
+    "version": "V4",
+    "path": "/Users/estefan-macworkstation/.remote-vibe-coding/engine/vibe.py",
+    "control_path_policy": "engine/common.py CONTROL_PREFIXES includes .vibe/; changed_files excludes those files. Executed scope check reported exactly 2 business files.",
+    "engine_module_sha256": "9892d4806154276c647a0514efaae5029e38e7accfebe04cb38bd7ec9d2d8254",
+    "repository_revision": "da323244bd20c0df162e53f6260e9c0038ac8b4e",
+    "observed_at": "2026-10-21T19:23:14.126389+08:00",
+    "commands": [
+      {
+        "command": "state transition DISCOVERY --reason \"V4 migration selected by user; legacy P118 snapshot archived\"",
+        "exit_code": 0,
+        "result": "PASS: NEW -> DISCOVERY"
+      },
+      {
+        "command": "state transition DESIGN --reason \"Defined V4 record for the ACL-compatible login fix\"",
+        "exit_code": 0,
+        "result": "PASS: DISCOVERY -> DESIGN"
+      },
+      {
+        "command": "state transition PLANNED --reason \"Scope and acceptance are bounded to auth.py and its regression test\"",
+        "exit_code": 0,
+        "result": "PASS: DESIGN -> PLANNED"
+      },
+      {
+        "command": "state transition READY --reason \"V4 controls and baseline are in place\"",
+        "exit_code": 0,
+        "result": "PASS: PLANNED -> READY"
+      },
+      {
+        "command": "state transition IMPLEMENTING --reason \"P119 auth fix is implemented; validating current branch\"",
+        "exit_code": 0,
+        "result": "PASS: READY -> IMPLEMENTING"
+      },
+      {
+        "command": "task ready",
+        "exit_code": 0,
+        "result": "READY: P119"
+      },
+      {
+        "command": "task start P119",
+        "exit_code": 0,
+        "result": "PASS: started P119"
+      },
+      {
+        "command": "evidence run A119 with isolated Redis; tests/test_auth.py, Ruff check and format check",
+        "exit_code": 0,
+        "result": "14 passed; Ruff passed; 2 files already formatted"
+      },
+      {
+        "command": "state transition VERIFYING --reason \"Local ACL integration, lint and format checks are being verified\"",
+        "exit_code": 0,
+        "result": "PASS: IMPLEMENTING -> VERIFYING"
+      },
+      {
+        "command": "scope check",
+        "exit_code": 0,
+        "result": "changed_files=2; PASS"
+      },
+      {
+        "command": "budget check",
+        "exit_code": 0,
+        "result": "2/2 files; 0/0 new files, dependencies and migrations; PASS"
+      },
+      {
+        "command": "regression check with FQP_TEST_PYTHON and FQP_TEST_RUFF overrides",
+        "exit_code": 0,
+        "result": "test=0/0; lint=0/0; PASS"
+      },
+      {
+        "command": "archive integrity check against pre-migration HEAD",
+        "exit_code": 0,
+        "result": "9/9 files byte-identical; PASS"
+      },
+      {
+        "command": "python3 -B .vibe/quality_gate.py --repo .",
+        "exit_code": 1,
+        "result": "Expected safe block: workflow state is VERIFYING; wrapper does not invoke the V4 merge gate before REVIEWING."
+      },
+      {
+        "command": "evidence run A119-V4 -- python3 -I -S -B .vibe/verify_migration.py",
+        "exit_code": 0,
+        "result": "9 archived files hash-verified; 8 V4 controls parse; P118 pending status preserved; 14 pinned engine sources verified"
+      },
+      {
+        "command": "scope check; budget check; regression check with FQP_TEST_PYTHON/FQP_TEST_RUFF",
+        "exit_code": 0,
+        "result": "2/2 allowed business files; zero new files/dependencies/migrations; test and lint regressions zero"
+      },
+      {
+        "command": "independent read-only migration and quality-gate review",
+        "exit_code": 0,
+        "result": "PASS; no blocker, major, or minor findings"
+      },
+      {
+        "command": "verify migration verifier rejects missing archive and symlink archive copies; verify duplicate failing CI row rejection",
+        "exit_code": 0,
+        "result": "PASS"
+      }
+    ],
+    "project_gate_wrapper": {
+      "path": ".vibe/quality_gate.py",
+      "policy": "Requires every task and acceptance PASS, all reviews/security/migration complete, clean checkout, configured exact open PR head on main, and every returned live GitHub check row PASS with all configured job names present. Pins and isolates the complete V4 engine bundle.",
+      "status": "Implemented and independently reviewed; tampering, CLI overrides, duplicate failing checks, and premature VERIFYING state are blocked. Successful current-head run waits for committed V4 controls and their CI."
+    }
+  }
+}

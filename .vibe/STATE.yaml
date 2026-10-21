@@ -1,0 +1,9 @@
+{
+  "state": "REVIEWING",
+  "last_transition": {
+    "from": "VERIFYING",
+    "to": "REVIEWING",
+    "at": "2026-10-21T19:23:14.349801+08:00",
+    "reason": "P119 and V4 migration acceptance, independent review, and local gates passed"
+  }
+}

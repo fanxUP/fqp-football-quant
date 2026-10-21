@@ -1,0 +1,9 @@
+max_changed_files: 13
+max_new_files: 2
+max_dependency_additions: 0
+max_migration_files: 0
+max_public_api_changes: 0
+max_regression_tests: 6
+scope_note: >-
+  Only the deploy runner, narrow dependency classifier, its regression tests, release documentation,
+  and P118 evidence/scope metadata are allowed. No runtime dependency additions or schema changes.
