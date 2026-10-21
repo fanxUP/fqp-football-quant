@@ -1,15 +1,12 @@
 #!/usr/bin/env python3
 """Reproducibly verify the P118 archive and V4 control migration."""
+
 from __future__ import annotations
 
 import hashlib
 import json
 import sys
 from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from quality_gate import verified_engine_sources
-
 
 ROOT = Path(__file__).resolve().parent.parent
 VIBE = ROOT / ".vibe"
@@ -36,6 +33,9 @@ def read_json(path: Path) -> dict:
 
 
 def main() -> int:
+    sys.path.insert(0, str(VIBE))
+    from quality_gate import verified_engine_sources
+
     control_names = [
         "STATE.yaml",
         "EVIDENCE.yaml",
@@ -67,7 +67,9 @@ def main() -> int:
     archive_root = archive.resolve()
     for path in archive.rglob("*"):
         if path.is_symlink():
-            raise SystemExit(f"FAIL: archive must not contain symlinks: {path.relative_to(archive)}")
+            raise SystemExit(
+                f"FAIL: archive must not contain symlinks: {path.relative_to(archive)}"
+            )
         if path.is_file() and path != archive / "MANIFEST.json":
             actual_paths.add(path.relative_to(archive).as_posix())
     if actual_paths != EXPECTED_ARCHIVE_FILES:
@@ -87,7 +89,9 @@ def main() -> int:
     for key in ("current_task", "current_slice", "current_status"):
         if manifest.get(f"legacy_{key}") != old.get(key):
             raise SystemExit(f"FAIL: manifest does not preserve legacy {key}")
-    if old.get("current_task") != "P118" or "evidence_update_ci_pending" not in old.get("current_status", ""):
+    if old.get("current_task") != "P118" or "evidence_update_ci_pending" not in old.get(
+        "current_status", ""
+    ):
         raise SystemExit("FAIL: archived P118 status is not preserved as pending")
 
     config = read_json(VIBE / "config.yaml")

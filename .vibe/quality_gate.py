@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """FQP-specific preflight around the shared V4 merge gate."""
+
 from __future__ import annotations
 
 import argparse
@@ -17,7 +18,9 @@ def read_json(path: Path) -> dict[str, Any]:
     try:
         value = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
-        raise SystemExit(f"BLOCKED: cannot read valid JSON-compatible control file {path}: {exc}")
+        raise SystemExit(
+            f"BLOCKED: cannot read valid JSON-compatible control file {path}: {exc}"
+        ) from exc
     if not isinstance(value, dict):
         raise SystemExit(f"BLOCKED: control file must contain an object: {path}")
     return value
@@ -41,7 +44,11 @@ def check_rows_error(rows: Any, expected_checks: set[str]) -> str | None:
     missing = sorted(expected_checks - names)
     if missing:
         return "configured GitHub checks are missing: " + ", ".join(missing)
-    not_passed = sorted(f"{row['name']} ({row.get('bucket', '<missing>')})" for row in rows if row.get("bucket") != "pass")
+    not_passed = sorted(
+        f"{row['name']} ({row.get('bucket', '<missing>')})"
+        for row in rows
+        if row.get("bucket") != "pass"
+    )
     if not_passed:
         return "GitHub checks are not green: " + ", ".join(not_passed)
     return None
@@ -62,7 +69,9 @@ def verified_engine_sources(engine_path: Path, lock_path: Path) -> dict[str, byt
     if actual_names != expected_names:
         missing = sorted(expected_names - actual_names)
         extra = sorted(actual_names - expected_names)
-        raise SystemExit(f"BLOCKED: V4 engine bundle file set differs (missing={missing}, extra={extra})")
+        raise SystemExit(
+            f"BLOCKED: V4 engine bundle file set differs (missing={missing}, extra={extra})"
+        )
     sources: dict[str, bytes] = {}
     for path in actual_paths:
         if path.is_symlink() or not path.is_file():
@@ -129,7 +138,11 @@ def main() -> int:
     if evidence.get("migration", {}).get("status") not in {"PASS", "NOT_APPLICABLE"}:
         return fail("migration review is neither PASS nor NOT_APPLICABLE")
     ci = evidence.get("external_ci", {})
-    if ci.get("status") != "passed" or not ci.get("checks") or any(v != "passed" for v in ci["checks"].values()):
+    if (
+        ci.get("status") != "passed"
+        or not ci.get("checks")
+        or any(v != "passed" for v in ci["checks"].values())
+    ):
         return fail("recorded application CI evidence is incomplete")
 
     dirty = run(["git", "status", "--porcelain"], repo)
@@ -139,7 +152,19 @@ def main() -> int:
     head = run(["git", "rev-parse", "HEAD"], repo)
     if branch.returncode or head.returncode:
         return fail("cannot determine the current branch and revision")
-    pr = run([gh_cli, "pr", "view", str(pull_request), "--repo", repository, "--json", "state,headRefName,baseRefName,headRefOid"], repo)
+    pr = run(
+        [
+            gh_cli,
+            "pr",
+            "view",
+            str(pull_request),
+            "--repo",
+            repository,
+            "--json",
+            "state,headRefName,baseRefName,headRefOid",
+        ],
+        repo,
+    )
     if pr.returncode:
         return fail("cannot read the selected GitHub pull request; check gh authentication")
     try:
@@ -148,13 +173,19 @@ def main() -> int:
         return fail("GitHub returned invalid PR metadata")
     if pr_data.get("state") != "OPEN" or pr_data.get("baseRefName") != "main":
         return fail("the selected PR must be open and target main")
-    if pr_data.get("headRefName") != branch.stdout.strip() or pr_data.get("headRefOid") != head.stdout.strip():
+    if (
+        pr_data.get("headRefName") != branch.stdout.strip()
+        or pr_data.get("headRefOid") != head.stdout.strip()
+    ):
         return fail("the selected PR head does not match this checkout")
 
     expected_checks = set(policy.get("required_checks", []))
     if not expected_checks:
         return fail("configure the project-required GitHub checks in .vibe/config.yaml")
-    checks = run([gh_cli, "pr", "checks", str(pull_request), "--repo", repository, "--json", "name,bucket"], repo)
+    checks = run(
+        [gh_cli, "pr", "checks", str(pull_request), "--repo", repository, "--json", "name,bucket"],
+        repo,
+    )
     if checks.returncode:
         return fail(f"GitHub checks are not all green (gh exit {checks.returncode})")
     try:
@@ -164,7 +195,19 @@ def main() -> int:
     check_error = check_rows_error(rows, expected_checks)
     if check_error:
         return fail(check_error)
-    final_pr = run([gh_cli, "pr", "view", str(pull_request), "--repo", repository, "--json", "state,headRefName,baseRefName,headRefOid"], repo)
+    final_pr = run(
+        [
+            gh_cli,
+            "pr",
+            "view",
+            str(pull_request),
+            "--repo",
+            repository,
+            "--json",
+            "state,headRefName,baseRefName,headRefOid",
+        ],
+        repo,
+    )
     if final_pr.returncode:
         return fail("cannot re-read the selected PR after checking its CI status")
     try:
@@ -191,7 +234,9 @@ def main() -> int:
         or final_dirty.stdout.strip()
     ):
         return fail("local branch, revision, or worktree changed during preflight; re-run it")
-    print("PASS: required reviews, security, migration, task acceptance, and configured live PR checks")
+    print(
+        "PASS: required reviews, security, migration, task acceptance, and configured live PR checks"
+    )
 
     # Execute a clean temporary copy so modified or stale __pycache__ files beside
     # the configured engine cannot bypass the source hash lock.
@@ -199,7 +244,20 @@ def main() -> int:
         isolated_engine = Path(temp_dir)
         for name, source in engine_sources.items():
             (isolated_engine / name).write_bytes(source)
-        gate = run([sys.executable, "-I", "-S", "-B", str(isolated_engine / "vibe.py"), "--repo", str(repo), "gate", "merge"], repo)
+        gate = run(
+            [
+                sys.executable,
+                "-I",
+                "-S",
+                "-B",
+                str(isolated_engine / "vibe.py"),
+                "--repo",
+                str(repo),
+                "gate",
+                "merge",
+            ],
+            repo,
+        )
     sys.stdout.write(gate.stdout)
     sys.stderr.write(gate.stderr)
     if gate.returncode:
