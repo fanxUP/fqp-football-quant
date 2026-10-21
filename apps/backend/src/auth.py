@@ -21,7 +21,9 @@ from apps.backend.src.deployment_version import RELEASE_ID
 
 COOKIE_NAME = "fqp_session"
 SESSION_TTL = int(os.getenv("FQP_SESSION_TTL", "86400"))
-SESSION_RELEASE_PREFIX = "session-release:"
+# Keep release markers under the existing session:* Redis ACL namespace. The
+# runtime account can then inspect, refresh, and delete both session keys.
+SESSION_RELEASE_PREFIX = "session:release:"
 
 
 # Singleton Redis connection pool
