@@ -1,8 +1,8 @@
 {
   "schema_version": 4,
-  "task_id": "P119",
-  "max_files_changed": 2,
-  "max_new_files": 0,
+  "task_id": "P120",
+  "max_files_changed": 3,
+  "max_new_files": 2,
   "max_new_dependencies": 0,
   "max_schema_migrations": 0,
   "max_public_api_changes": 0,

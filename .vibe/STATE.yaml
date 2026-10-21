@@ -1,9 +1,10 @@
 {
-  "state": "DONE",
+  "state": "REVIEWING",
   "last_transition": {
-    "from": "VERIFIED",
-    "to": "DONE",
-    "at": "2026-10-21T20:03:56.455720+08:00",
-    "reason": "PR #23 merged and verified on 100.121.47.26"
-  }
+    "from": "VERIFYING",
+    "to": "REVIEWING",
+    "at": "2026-10-21T21:10:01.815992+08:00",
+    "reason": "P120 local checks pass; final-head CI and second-pass independent review are pending."
+  },
+  "mode": "STRICT"
 }

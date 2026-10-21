@@ -1,6 +1,6 @@
 {
   "schema_version": 4,
-  "current_task": "P119",
+  "current_task": "P120",
   "tasks": {
     "P119": {
       "title": "修复 Redis ACL 限制下的密码登录会话创建",
@@ -49,6 +49,27 @@
         "V4 control documents parse as JSON-compatible YAML and cite the actual engine used for legal state transitions and gates.",
         "The original P118 evidence remains archived with its exact evidence_update_ci_pending status and is not falsely marked complete.",
         "Independent review has no blocker or major finding."
+      ]
+    },
+    "P120": {
+      "title": "安全发布构建后的前端静态资源",
+      "acceptance_id": "A120",
+      "depends_on": [
+        "P119-V4"
+      ],
+      "kind": "required",
+      "status": "DONE",
+      "files": [
+        "ops/server/deploy.sh",
+        "ops/server/publish_frontend.py",
+        "tests/test_local/test_frontend_publish.py"
+      ],
+      "definition_of_done": [
+        "Publisher rejects unsafe source trees, symlinks, missing local entry assets and path traversal.",
+        "Assets are atomically written before index.html; referenced local JS/CSS bytes match and old assets remain.",
+        "Deploy rollback restores the prior frontend or stops Nginx and reports ROLLBACK_REQUIRED.",
+        "Focused tests, build integration, lint and shell syntax pass; current-head GitHub CI, security review and independent code review pass.",
+        "Production deployment and server health are tracked by the separate A120-DEPLOY acceptance."
       ]
     }
   }

@@ -18,3 +18,19 @@
 ## Deployment check (post-merge)
 
 Deployment is tracked separately from the merge acceptance: record target revision, rollback revision, migration/dependency readiness, service health and protected-route smoke in the release evidence. A successful password login smoke may be recorded only when private test credentials are available; credentials must not be stored here.
+
+# P120 Acceptance
+
+## A120 — Publish the built frontend safely
+
+- The deploy runner verifies `/var/www/fqp` and every ancestor path component are free of symlinks, and that the root is an existing writable directory, before stopping application services.
+- Built assets are validated as regular files and copied atomically; existing hashed assets are retained.
+- The local JavaScript and CSS assets referenced by `index.html` are present and byte-identical at the destination before `index.html` is atomically switched.
+- External URLs are not mistaken for local files, traversal paths and symlink destinations fail closed, and a failed publish leaves the previous entry page in place.
+- Rollback rebuilds and republishes the previous frontend when publication was attempted; restoration failure stops Nginx and reports `ROLLBACK_REQUIRED`.
+- Focused isolated filesystem regression tests, shell syntax checks, configured GitHub CI, security review and independent read-only review pass. The V4 merge gate evaluates the committed evidence separately.
+- No application API, database schema, runtime dependency or frontend dependency changes are introduced.
+
+## A120-DEPLOY — Production release
+
+Record the exact merged `main` revision, rollback revision, migration/dependency readiness, current service state, deployment runner exit code, release marker, service health, frontend response, readiness checks, protected-route smoke and recent error logs. Apply only after the V4 quality gate passes. If a database migration is pending, satisfy the runner's fresh-backup and copy-dry-run requirements; otherwise record that they are not applicable.

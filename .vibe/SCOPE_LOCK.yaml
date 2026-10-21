@@ -1,10 +1,11 @@
 {
   "schema_version": 4,
-  "task_id": "P119",
-  "objective": "Fix password login when Redis runtime ACL restricts session keys to the session:* namespace.",
+  "task_id": "P120",
+  "objective": "Safely publish the built frontend to the Nginx web root as part of a server release.",
   "allowed_paths": [
-    "apps/backend/src/auth.py",
-    "tests/test_auth.py"
+    "ops/server/deploy.sh",
+    "ops/server/publish_frontend.py",
+    "tests/test_local/test_frontend_publish.py"
   ],
   "protected_paths": [
     "**/migrations/**",
@@ -15,5 +16,5 @@
     "**/*lock*"
   ],
   "approved_protected_paths": [],
-  "notes": "The V4 engine common.py excludes .vibe/ from business changed_files. This was confirmed by running scope check, which reports exactly the two allowed application paths."
+  "notes": "P120 is separate from completed P119. Control-plane files under .vibe/ are excluded by the pinned V4 engine; only the three listed business paths may change."
 }

@@ -4,8 +4,8 @@
     "command_timeout_seconds": 900
   },
   "commands": {
-    "test": "\"${FQP_TEST_PYTHON:-python3.14}\" -m pytest -q tests/test_auth.py",
-    "lint": "\"${FQP_TEST_RUFF:-ruff}\" check apps/backend/src/auth.py tests/test_auth.py"
+    "test": "\"${FQP_TEST_PYTHON:-python3.14}\" -m pytest -q tests/test_local/test_frontend_publish.py",
+    "lint": "\"${FQP_TEST_RUFF:-ruff}\" check ops/server/publish_frontend.py tests/test_local/test_frontend_publish.py"
   },
   "paths": {
     "dependency_files": [
@@ -26,11 +26,11 @@
   "quality_gate": {
     "engine_path": "~/.remote-vibe-coding/engine/vibe.py",
     "repository": "fanxUP/fqp-football-quant",
-    "pull_request": 23,
+    "pull_request": 22,
     "required_checks": [
       "test",
       "lint-and-typecheck"
     ],
-    "preflight": "python3 .vibe/quality_gate.py"
+    "preflight": "python3 -I -S -B .vibe/quality_gate.py --repo ."
   }
 }

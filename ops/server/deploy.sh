@@ -31,6 +31,19 @@ git cat-file -e "$RELEASE_SHA^{commit}"
 ROLLBACK_SHA="$(git rev-parse HEAD)"
 MIGRATION_APPLY_ATTEMPTED=false
 FRONTEND_DEV_DEPENDENCIES_CHANGED=false
+FRONTEND_PUBLISH_ATTEMPTED=false
+WEB_ROOT=/var/www/fqp
+has_symlink_component() {
+    local path="$1" component="/" part
+    local -a parts
+    IFS=/ read -r -a parts <<< "$path"
+    for part in "${parts[@]}"; do
+        [[ -z "$part" ]] && continue
+        component="${component%/}/$part"
+        [[ ! -L "$component" ]] || return 0
+    done
+    return 1
+}
 printf 'Current: %s\nTarget: %s\n' "$ROLLBACK_SHA" "$RELEASE_SHA"
 # Runtime dependency changes still require a separately prepared release. Only
 # verified Vite/Vitest dev-only updates have a matching rollback path here.
@@ -75,6 +88,11 @@ sudo -n -u postgres -- test -r "$PROJECT_ROOT/ops/server/migrate.py" || {
 }
 SERVICES=(fqp-backend fqp-scheduler fqp-worker)
 for service in "${SERVICES[@]}"; do sudo -n systemctl is-active --quiet "$service"; done
+sudo -n systemctl is-active --quiet nginx
+if [[ ! -d "$WEB_ROOT" || ! -w "$WEB_ROOT" ]] || has_symlink_component "$WEB_ROOT"; then
+    echo "Nginx web root is unavailable or not writable: $WEB_ROOT" >&2
+    exit 1
+fi
 wait_ready() {
     local attempt
     for attempt in {1..20}; do
@@ -85,35 +103,63 @@ wait_ready() {
     done
     return 1
 }
+publish_frontend() {
+    .venv/bin/python "$SCRIPT_DIR/publish_frontend.py" \
+        "$PROJECT_ROOT/apps/frontend/dist" "$WEB_ROOT"
+}
+stop_and_confirm_services() {
+    local service active_state
+    for service in "$@"; do
+        if [[ "$service" == nginx ]]; then
+            sudo -n systemctl stop nginx || true
+        else
+            sudo -n systemctl stop "$service" || true
+        fi
+    done
+    for service in "$@"; do
+        active_state="$(sudo -n systemctl show --property=ActiveState --value "$service")" || return 1
+        [[ "$active_state" == inactive ]] || return 1
+    done
+}
+rollback_required() {
+    local reason="$1"
+    if stop_and_confirm_services "${SERVICES[@]}" nginx; then
+        echo "ROLLBACK_REQUIRED: $reason; application services and nginx remain stopped after verified inactivity." >&2
+    else
+        echo "ROLLBACK_REQUIRED: $reason; stop was attempted but all services could not be verified inactive. Manual recovery is required." >&2
+    fi
+    exit 1
+}
 rollback() {
     local code=$?
     trap - ERR
     set +e
     echo "Release failed; restoring $ROLLBACK_SHA. Applied additive migrations are retained." >&2
-    sudo -n systemctl stop "${SERVICES[@]}"
-    git -c core.hooksPath=/dev/null checkout -B main "$ROLLBACK_SHA"
+    if ! stop_and_confirm_services "${SERVICES[@]}"; then
+        rollback_required 'unable to verify application services stopped before restoring the prior revision'
+    fi
+    if ! git -c core.hooksPath=/dev/null checkout -B main "$ROLLBACK_SHA" \
+        || [[ "$(git rev-parse HEAD 2>/dev/null)" != "$ROLLBACK_SHA" ]]; then
+        rollback_required 'unable to restore the exact prior checkout'
+    fi
     if [[ "$FRONTEND_DEV_DEPENDENCIES_CHANGED" == true ]] && ! npm --prefix apps/frontend ci --ignore-scripts; then
-        sudo -n systemctl stop nginx
-        echo 'ROLLBACK_REQUIRED: unable to restore frontend dependencies from the prior lockfile; services and nginx remain stopped.' >&2
-        exit 1
+        rollback_required 'unable to restore frontend dependencies from the prior lockfile'
     fi
     if ! npm --prefix apps/frontend run build; then
-        sudo -n systemctl stop nginx
-        echo 'ROLLBACK_REQUIRED: prior frontend build failed; services and nginx remain stopped.' >&2
-        exit 1
+        rollback_required 'prior frontend build failed'
+    fi
+    if [[ "$FRONTEND_PUBLISH_ATTEMPTED" == true ]] && ! publish_frontend; then
+        rollback_required 'unable to restore prior frontend files'
     fi
     if ! write_release_marker "${ROLLBACK_SHA}-${DEPLOYMENT_INSTANCE}-r"; then
-        echo 'ROLLBACK_REQUIRED: unable to write rollback release marker; services remain stopped.' >&2
-        sudo -n systemctl stop nginx
-        exit 1
+        rollback_required 'unable to write rollback release marker'
     fi
     if [[ "$MIGRATION_APPLY_ATTEMPTED" == true ]]; then
         # The prior code may not fence stale P105 inputs. Fail closed after an
         # apply attempt; an operator must validate the old release before restart.
-        sudo -n systemctl stop nginx
-        echo 'ROLLBACK_REQUIRED: P105 migration apply was attempted; backend, scheduler, worker and nginx remain stopped.' >&2
+        echo 'P105 migration apply was attempted; prior release needs operator validation.' >&2
         echo 'Do not restart the legacy release until stale recommendations are gated or a compatible release is deployed.' >&2
-        exit "${code:-1}"
+        rollback_required 'migration apply was attempted; prior release requires operator validation'
     fi
     sudo -n systemctl start "${SERVICES[@]}"
     local restored=false attempt
@@ -121,7 +167,7 @@ rollback() {
         if curl -fsS --connect-timeout 2 --max-time 5 http://127.0.0.1:8080/health >/dev/null; then restored=true; break; fi
         sleep 2
     done
-    if [[ "$restored" != true ]]; then echo 'ROLLBACK_REQUIRED: old service health did not recover' >&2; fi
+    if [[ "$restored" != true ]]; then rollback_required 'old service health did not recover'; fi
     echo 'Inspect service logs and /health before retrying; no destructive SQL rollback was run.' >&2
     exit "${code:-1}"
 }
@@ -243,6 +289,8 @@ PY
 sudo -n systemctl start fqp-scheduler fqp-worker
 for service in "${SERVICES[@]}"; do sudo -n systemctl is-active --quiet "$service"; done
 [[ "$(git rev-parse HEAD)" == "$(git rev-parse origin/main)" ]]
+FRONTEND_PUBLISH_ATTEMPTED=true
+publish_frontend
 trap - ERR
 printf 'Deployed: %s\n' "$RELEASE_SHA"
 
