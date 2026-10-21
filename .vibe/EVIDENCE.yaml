@@ -196,10 +196,8 @@
     }
   },
   "quality_gate": {
-    "status": "BLOCKED",
-    "checked_at": "2026-10-21T19:33:31.171825+08:00",
-    "failures": [
-      "reviews"
-    ]
+    "status": "READY_TO_MERGE",
+    "checked_at": "2026-10-21T19:40:00.409129+08:00",
+    "failures": []
   }
 }

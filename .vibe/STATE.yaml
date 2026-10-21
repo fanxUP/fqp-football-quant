@@ -1,9 +1,9 @@
 {
-  "state": "REVIEWING",
+  "state": "READY_TO_MERGE",
   "last_transition": {
-    "from": "VERIFYING",
-    "to": "REVIEWING",
-    "at": "2026-10-21T19:23:14.349801+08:00",
-    "reason": "P119 and V4 migration acceptance, independent review, and local gates passed"
+    "from": "REVIEWING",
+    "to": "READY_TO_MERGE",
+    "at": "2026-10-21T19:40:05.740350+08:00",
+    "reason": "FQP preflight and live PR checks passed at c8a7546"
   }
 }
