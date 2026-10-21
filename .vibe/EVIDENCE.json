@@ -1,22 +1,100 @@
 {
-  "current_task": "P105",
-  "current_slice": "06-controlled-runtime-integration",
-  "current_status": "github_ci_passed_draft_pr_open_limited_runtime_integration",
-  "evidence": "/Volumes/Nas/FQP/plans/model-modernization-20261016/integrated/P105/06-controlled-runtime-integration/QUALITY-LOCAL.json",
-  "source_manifest": "/Volumes/Nas/FQP/plans/model-modernization-20261016/integrated/P105/06-controlled-runtime-integration/SOURCE-MANIFEST.json",
-  "fresh_executed_evidence": true,
-  "full_A105_accepted": false,
-  "independent_review": true,
-  "actual_CI": true,
-  "actual_CI_run_id": "39422269861",
-  "actual_CI_commit": "9a225b84bca16f091bc0f78a2a632c33eb49d64e",
-  "actual_CI_conclusion": "success",
-  "actual_CI_p105_gate": "230 passed, 0 failed, 0 skipped",
-  "actual_CI_full_suite": "2006 passed, 0 failed, 0 skipped; 60.67% coverage",
-  "draft_pr": 18,
-  "initial_CI_failure_resolved": true,
-  "initial_CI_failure_run_id": "39420838862",
-  "local_workflow_command_verified": true,
-  "production_connected": false,
-  "prior_slice_evidence": "/Volumes/Nas/FQP/plans/model-modernization-20261016/integrated/P105/04-consumer-integration-and-review/QUALITY-LOCAL.json"
+  "current_task": "P117",
+  "current_slice": "01-deployment-session-revalidation",
+  "current_status": "local_verification_passed_ci_pending",
+  "base_revision": "2e0285e5a6c65f682c1d3118e2e188c2c3b03be2",
+  "branch": "feat/force-relogin-on-deploy",
+  "scope": "release-aware session invalidation and mandatory re-login prompt",
+  "database_migrations": 0,
+  "dependency_additions": 0,
+  "tests_added_or_run": true,
+  "test_reason": "User said '继续' after being told the next step was authorized testing and deployment; only isolated local verification was run.",
+  "verification_recorded_at": "2026-10-21T05:32:02Z",
+  "local_verification": [
+    {
+      "command": ".venv/bin/python -m pytest -q tests/test_auth.py",
+      "revision": "2e0285e5a6c65f682c1d3118e2e188c2c3b03be2 plus final P117 working tree",
+      "exit_code": 0,
+      "summary": "13 passed",
+      "verified_at": "2026-10-21T05:32:02Z"
+    },
+    {
+      "command": "npm --prefix apps/frontend test",
+      "revision": "2e0285e5a6c65f682c1d3118e2e188c2c3b03be2 plus final P117 working tree",
+      "exit_code": 0,
+      "summary": "86 test files, 535 tests passed",
+      "verified_at": "2026-10-21T05:32:02Z"
+    },
+    {
+      "command": ".venv/bin/ruff check on changed Python files",
+      "revision": "2e0285e5a6c65f682c1d3118e2e188c2c3b03be2 plus final P117 working tree",
+      "exit_code": 0,
+      "summary": "All checks passed",
+      "verified_at": "2026-10-21T05:32:02Z"
+    },
+    {
+      "command": ".venv/bin/ruff format --check on changed Python files",
+      "revision": "2e0285e5a6c65f682c1d3118e2e188c2c3b03be2 plus final P117 working tree",
+      "exit_code": 0,
+      "summary": "Four files already formatted",
+      "verified_at": "2026-10-21T05:32:02Z"
+    },
+    {
+      "command": ".venv/bin/mypy apps/backend/src scripts --explicit-package-bases",
+      "revision": "2e0285e5a6c65f682c1d3118e2e188c2c3b03be2 plus final P117 working tree",
+      "exit_code": 0,
+      "summary": "No issues found in 285 source files",
+      "verified_at": "2026-10-21T05:32:02Z"
+    },
+    {
+      "command": ".venv/bin/python -m py_compile on changed backend modules",
+      "revision": "2e0285e5a6c65f682c1d3118e2e188c2c3b03be2 plus final P117 working tree",
+      "exit_code": 0,
+      "summary": "Python 3.14.6 compilation passed",
+      "verified_at": "2026-10-21T05:32:02Z"
+    },
+    {
+      "command": "npm --prefix apps/frontend run typecheck",
+      "revision": "2e0285e5a6c65f682c1d3118e2e188c2c3b03be2 plus final P117 working tree",
+      "exit_code": 0,
+      "summary": "TypeScript check passed",
+      "verified_at": "2026-10-21T05:32:02Z"
+    },
+    {
+      "command": "npm --prefix apps/frontend run build",
+      "revision": "2e0285e5a6c65f682c1d3118e2e188c2c3b03be2 plus final P117 working tree",
+      "exit_code": 0,
+      "summary": "Build passed; Vite reported a nonblocking large-chunk advisory for PitchScene",
+      "verified_at": "2026-10-21T05:32:02Z"
+    },
+    {
+      "command": "bash -n ops/server/deploy.sh; git diff --check",
+      "revision": "2e0285e5a6c65f682c1d3118e2e188c2c3b03be2 plus final P117 working tree",
+      "exit_code": 0,
+      "summary": "Release shell syntax and whitespace checks passed",
+      "verified_at": "2026-10-21T05:32:02Z"
+    }
+  ],
+  "github_ci": "pending; feature branch not pushed",
+  "production_preflight": {
+    "prior_read_only_check": {
+      "services": "fqp-backend, fqp-scheduler, fqp-worker, nginx active",
+      "health": "http://127.0.0.1:8080/health returned status ok",
+      "root_disk_used_percent": 63,
+      "memory_available_gib": 7.6,
+      "swap_used_mib": 92,
+      "newest_backup": "2026-10-08; older than deploy runner 1-hour freshness requirement"
+    },
+    "latest_recheck": "blocked: SSH host key verification failed in BatchMode; no server mutation performed",
+    "status": "incomplete; verify host identity and create a fresh validated backup before deployment"
+  },
+  "state_harness": "not_found_in_repository_or_agent_skill_roots",
+  "commit_push_deploy": false,
+  "independent_review": {
+    "status": "passed",
+    "reviewer": "read-only independent review",
+    "summary": "No blocker or major issue. Deployment-during-login race and transient session-check retry were reviewed after fixes.",
+    "verified_at": "2026-10-21T05:32:02Z",
+    "remaining_note": "The frontend suite verifies the mandatory prompt but does not directly exercise every AuthContext polling timing branch."
+  }
 }

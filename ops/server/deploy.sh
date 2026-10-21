@@ -7,6 +7,16 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # the live checkout still has the previous code. Select the checkout explicitly.
 PROJECT_ROOT="$(cd "${FQP_PROJECT_ROOT:-$SCRIPT_DIR/../..}" && pwd)"
 cd "$PROJECT_ROOT"
+DEPLOYMENT_INSTANCE="$(date -u +%Y%m%dT%H%M%SZ)-$(cat /proc/sys/kernel/random/uuid)"
+write_release_marker() {
+    local release_id="$1"
+    local marker_dir="$PROJECT_ROOT/.runtime"
+    local marker_tmp="$marker_dir/release-id.$$"
+    mkdir -p "$marker_dir"
+    printf '%s\n' "$release_id" > "$marker_tmp"
+    chmod 0644 "$marker_tmp"
+    mv -f "$marker_tmp" "$marker_dir/release-id"
+}
 RELEASE_SHA="${1:-}"
 RELEASE_MODE="${2:---plan}"
 RELEASE_EVIDENCE="${3:-}"
@@ -80,6 +90,11 @@ rollback() {
     sudo -n systemctl stop "${SERVICES[@]}"
     git -c core.hooksPath=/dev/null checkout -B main "$ROLLBACK_SHA"
     npm --prefix apps/frontend run build
+    if ! write_release_marker "${ROLLBACK_SHA}-${DEPLOYMENT_INSTANCE}-r"; then
+        echo 'ROLLBACK_REQUIRED: unable to write rollback release marker; services remain stopped.' >&2
+        sudo -n systemctl stop nginx
+        exit 1
+    fi
     if [[ "$MIGRATION_APPLY_ATTEMPTED" == true ]]; then
         # The prior code may not fence stale P105 inputs. Fail closed after an
         # apply attempt; an operator must validate the old release before restart.
@@ -148,6 +163,7 @@ npm --prefix apps/frontend run build
 run_migration
 MIGRATION_APPLY_ATTEMPTED=true
 run_migration --apply
+write_release_marker "${RELEASE_SHA}-${DEPLOYMENT_INSTANCE}-d"
 sudo -n systemctl start fqp-backend
 wait_ready
 # Invoke exact protected-route handlers using the application's environment.

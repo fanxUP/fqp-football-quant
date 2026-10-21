@@ -17,8 +17,11 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.types import ASGIApp
 
+from apps.backend.src.deployment_version import RELEASE_ID
+
 COOKIE_NAME = "fqp_session"
 SESSION_TTL = int(os.getenv("FQP_SESSION_TTL", "86400"))
+SESSION_RELEASE_PREFIX = "session-release:"
 
 
 # Singleton Redis connection pool
@@ -48,7 +51,10 @@ async def create_session(response: Response) -> str:
     """Create a new session in Redis and set cookie on the response."""
     session_id = str(uuid.uuid4())
     r = await get_redis()
-    await r.setex(f"session:{session_id}", SESSION_TTL, "admin")
+    pipeline = r.pipeline(transaction=True)
+    pipeline.setex(f"session:{session_id}", SESSION_TTL, "admin")
+    pipeline.setex(f"{SESSION_RELEASE_PREFIX}{session_id}", SESSION_TTL, RELEASE_ID)
+    await pipeline.execute()
     response.set_cookie(
         key=COOKIE_NAME,
         value=session_id,
@@ -60,21 +66,38 @@ async def create_session(response: Response) -> str:
     return session_id
 
 
-async def validate_session(session_id: str) -> str | None:
-    """Validate a session ID. Returns username if valid, None otherwise."""
+async def inspect_session(session_id: str) -> tuple[str | None, bool]:
+    """Return the user and whether an existing session belongs to an old release."""
     r = await get_redis()
     raw_user = await r.get(f"session:{session_id}")
+    if raw_user is None:
+        return None, False
+
+    raw_release = await r.get(f"{SESSION_RELEASE_PREFIX}{session_id}")
+    release_id = raw_release.decode() if isinstance(raw_release, bytes) else raw_release
+    if release_id != RELEASE_ID:
+        # Keep the stale marker until its original TTL expires so /me can tell
+        # the user why this session was rejected. Protected routes still fail closed.
+        return None, True
+
     user: str | None = raw_user.decode() if isinstance(raw_user, bytes) else raw_user
     if user is not None:
         # Refresh TTL on each access
         await r.expire(f"session:{session_id}", SESSION_TTL)
+        await r.expire(f"{SESSION_RELEASE_PREFIX}{session_id}", SESSION_TTL)
+    return user, False
+
+
+async def validate_session(session_id: str) -> str | None:
+    """Validate a session ID and reject sessions created by another release."""
+    user, _release_changed = await inspect_session(session_id)
     return user
 
 
 async def destroy_session(session_id: str) -> None:
     """Delete a session from Redis."""
     r = await get_redis()
-    await r.delete(f"session:{session_id}")
+    await r.delete(f"session:{session_id}", f"{SESSION_RELEASE_PREFIX}{session_id}")
 
 
 class AuthMiddleware(BaseHTTPMiddleware):

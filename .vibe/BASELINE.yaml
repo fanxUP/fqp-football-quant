@@ -1,7 +1,7 @@
-base_revision: af3d66fa14c8abbfa753923bd7d0ecaafd78bbcf
-branch: feat/input-degradation-20261020
-prior_slice: P105/05-ci-and-runtime-readiness/FINAL.md
-recorded_at: '2026-10-20T20:00:48.162003+08:00'
-repo: /Users/estefan-macworkstation/.codex/workspaces/fqp-input-degradation-20261020
-slice: 06-controlled-runtime-integration
-task: P105
+base_revision: 2e0285e5a6c65f682c1d3118e2e188c2c3b03be2
+branch: feat/force-relogin-on-deploy
+recorded_at: '2026-10-21'
+repo: /Volumes/Nas/FQP/code
+slice: 01-deployment-session-revalidation
+task: P117
+mode: STRICT

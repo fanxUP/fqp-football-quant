@@ -6,14 +6,16 @@ import os
 
 from fastapi import APIRouter, HTTPException, Request, Response
 from pydantic import BaseModel
+from starlette.responses import JSONResponse
 
 from apps.backend.src.auth import (
     COOKIE_NAME,
     create_session,
     destroy_session,
-    validate_session,
+    inspect_session,
     verify_password,
 )
+from apps.backend.src.deployment_version import RELEASE_ID
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -52,24 +54,33 @@ async def login(body: LoginRequest, request: Request, response: Response) -> Log
 
 
 @router.post("/logout")
-async def logout(request: Request) -> dict[str, bool]:
+async def logout(request: Request, response: Response) -> dict[str, bool]:
     """Destroy the current session."""
     session_id = request.cookies.get(COOKIE_NAME)
     if session_id:
         await destroy_session(session_id)
-    response: dict[str, bool] = {"ok": True}
-    return response
+    response.delete_cookie(key=COOKIE_NAME, path="/", httponly=True, samesite="lax")
+    return {"ok": True}
 
 
-@router.get("/me")
-async def me(request: Request) -> MeResponse:
+@router.get("/release")
+async def release(response: Response) -> dict[str, str]:
+    """Expose a cache-free release identifier for clients to detect deployments."""
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    return {"releaseId": RELEASE_ID}
+
+
+@router.get("/me", response_model=None)
+async def me(request: Request) -> MeResponse | JSONResponse:
     """Return current user if authenticated."""
-    user = getattr(request.state, "user", None)
-    if not user:
-        # Check cookie manually — middleware may not have run for this path
-        session_id = request.cookies.get(COOKIE_NAME)
-        if session_id:
-            user = await validate_session(session_id)
+    session_id = request.cookies.get(COOKIE_NAME)
+    user: str | None = None
+    release_changed = False
+    if session_id:
+        user, release_changed = await inspect_session(session_id)
+    if release_changed:
+        return JSONResponse(status_code=409, content={"code": "deployment_changed"})
     if not user:
         raise HTTPException(status_code=401, detail="未登录")
     return MeResponse(user=user)

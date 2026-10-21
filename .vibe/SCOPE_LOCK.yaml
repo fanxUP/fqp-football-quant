@@ -1,66 +1,35 @@
 mode: STRICT
+task: P117
+slice: 01-deployment-session-revalidation
 allowed_paths:
-- .vibe/BASELINE.yaml
-- .vibe/SCOPE_LOCK.yaml
-- .vibe/CHANGE_BUDGET.yaml
-- .vibe/PLAN.md
-- .vibe/DESIGN.md
-- .vibe/ACCEPTANCE.md
-- .vibe/TASK_DAG.yaml
-- .vibe/EVIDENCE.json
-- scripts/prediction_input_policy.py
-- scripts/prematch_feature_dataset.py
-- tests/test_storage/test_prediction_input_policy.py
-- docs/prediction-input-modes.md
-- sql/109_prediction_input_updates.sql
-- sql/down/109_prediction_input_updates.down.sql
-- scripts/prediction_input_updates.py
-- tests/test_computation/test_prediction_input_updates_postgres.py
-- docs/prediction-input-updates.md
-- scripts/ci/init_observation_test_db.sh
-- sql/110_prediction_input_revisions.sql
-- sql/down/110_prediction_input_revisions.down.sql
-- scripts/prediction_input_revisions.py
-- tests/test_computation/test_prediction_input_revisions_postgres.py
-- docs/prediction-input-revisions.md
-- scripts/prediction_input_fence.py
-- scripts/model_storage.py
-- scripts/jobs/run_model_prediction.py
-- scripts/derived_play_predictions.py
-- scripts/recommendation_prediction_loader.py
-- scripts/jobs/run_recommendation_candidate.py
-- tests/test_computation/test_prediction_input_fence_postgres.py
-- tests/test_scripts/test_run_model_prediction.py
-- tests/test_scripts/test_derived_play_predictions.py
-- tests/test_jobs/test_recommendation_candidate.py
-- tests/test_computation/test_shadow_input_contract.py
-- tests/test_computation/test_feature_pipeline_contract.py
-- .github/workflows/ci.yml
-- scripts/ci/verify_prediction_input_results.py
-- tests/test_scripts/test_prediction_input_ci.py
-- docs/prediction-input-runtime-readiness.md
-- scripts/prediction_input_runtime.py
-- tests/test_computation/test_prediction_input_runtime_postgres.py
-- scripts/jobs/run_feature_snapshot_build.py
-- tests/test_jobs/test_run_feature_snapshot_build.py
-- tests/test_computation/test_observation_postgres.py
-- tests/test_computation/test_prediction_semantics.py
-- ops/server/deploy.sh
-- ops/server/migrate.py
-- ops/local/init_local_database.sh
-- ops/local/apply_local_migrations.sh
-- ops/docker-test/bootstrap-db.sh
-- tests/test_local/test_native_database_runtime.py
+  - .vibe/BASELINE.yaml
+  - .vibe/CHANGE_BUDGET.yaml
+  - .vibe/DESIGN.md
+  - .vibe/PLAN.md
+  - .vibe/ACCEPTANCE.md
+  - .vibe/TASK_DAG.yaml
+  - .vibe/SCOPE_LOCK.yaml
+  - .vibe/EVIDENCE.json
+  - apps/backend/src/deployment_version.py
+  - apps/backend/src/auth.py
+  - apps/backend/src/routers/auth_router.py
+  - apps/frontend/src/shared/api/auth.ts
+  - apps/frontend/src/app/AuthContext.tsx
+  - apps/frontend/src/App.tsx
+  - apps/frontend/src/app/language.ts
+  - apps/frontend/src/theme/appearance.css
+  - ops/server/deploy.sh
+  - tests/test_auth.py
+  - apps/frontend/src/App.test.tsx
 forbidden_paths:
-- apps/
-- requirements
-- scripts/jobs/run_scheduler.py
-- .env
-max_changed_files: 51
-max_new_files: 20
-max_regression_tests: 300
-scope_note: >-
-  Cumulative P105/01..06 plus release/bootstrap hardening: pending production migrations
-  run via local peer-authenticated PostgreSQL admin; local and Docker bootstraps prepare the no-login
-  owner; failure after applying P105 schema keeps legacy services stopped; no dependency or new
-  migration file
+  - sql/
+  - .github/
+  - requirements.txt
+  - apps/frontend/package.json
+  - apps/frontend/package-lock.json
+max_changed_files: 19
+max_new_files: 1
+max_dependency_additions: 0
+max_migration_files: 0
+max_public_api_changes: 1
+max_regression_tests: 6
