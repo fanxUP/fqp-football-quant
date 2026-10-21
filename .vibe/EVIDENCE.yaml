@@ -4,15 +4,15 @@
   "acceptance": {
     "A119": {
       "status": "PASS",
-      "command": "/bin/bash -lc '/Volumes/Nas/FQP/code/.venv/bin/python -m pytest -q tests/test_auth.py && /Volumes/Nas/FQP/code/.venv/bin/ruff check apps/backend/src/auth.py tests/test_auth.py && /Volumes/Nas/FQP/code/.venv/bin/ruff format --check apps/backend/src/auth.py tests/test_auth.py'",
+      "command": "/bin/bash -lc 'set -euo pipefail; FQP_REDIS_TEST_DIR=$(mktemp -d /private/tmp/fqp-a119-redis.XXXXXX); FQP_REDIS_TEST_PORT=$(python3 -c \"import socket; s=socket.socket(); s.bind((\\\"127.0.0.1\\\",0)); print(s.getsockname()[1]); s.close()\"); redis-server --bind 127.0.0.1 --port \"$FQP_REDIS_TEST_PORT\" --save \"\" --appendonly no --daemonize yes --dir \"$FQP_REDIS_TEST_DIR\" --pidfile \"$FQP_REDIS_TEST_DIR/redis.pid\" --logfile \"$FQP_REDIS_TEST_DIR/redis.log\"; trap '\"'\"'redis-cli -h 127.0.0.1 -p \"$FQP_REDIS_TEST_PORT\" shutdown nosave >/dev/null 2>&1 || true; rm -rf \"$FQP_REDIS_TEST_DIR\"'\"'\"' EXIT; FQP_REDIS_TEST_PID=$(cat \"$FQP_REDIS_TEST_DIR/redis.pid\"); ps -p \"$FQP_REDIS_TEST_PID\" -o command= | rg \"redis-server.*$FQP_REDIS_TEST_PORT\" >/dev/null; for _ in $(seq 1 50); do if redis-cli -h 127.0.0.1 -p \"$FQP_REDIS_TEST_PORT\" ping >/dev/null 2>&1; then break; fi; sleep 0.1; done; FQP_QUOTA_TEST_REDIS_URL=\"redis://127.0.0.1:$FQP_REDIS_TEST_PORT/15\" /Volumes/Nas/FQP/code/.venv/bin/python -m pytest -q tests/test_auth.py && /Volumes/Nas/FQP/code/.venv/bin/ruff check apps/backend/src/auth.py tests/test_auth.py && /Volumes/Nas/FQP/code/.venv/bin/ruff format --check apps/backend/src/auth.py tests/test_auth.py'",
       "exit_code": 0,
-      "summary": "============================= test session starts ==============================\nplatform darwin -- Python 3.14.6, pytest-9.1.1, pluggy-1.7.0\nrootdir: /Volumes/Nas/FQP/worktrees/session-release-acl-compat\nconfigfile: pyproject.toml\nplugins: mock-3.15.1, cov-7.1.0, asyncio-1.4.0, anyio-4.15.1, platformdirs-4.13.5\nasyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function\ncollected 14 items\n\ntests/test_auth.py ..............                                        [100%]\n\n============================== 14 passed in 0.38s ==============================\nAll checks passed!\n2 files already formatted\n",
+      "summary": "============================= test session starts ==============================\nplatform darwin -- Python 3.14.6, pytest-9.1.1, pluggy-1.7.0\nrootdir: /Volumes/Nas/FQP/code\nconfigfile: pyproject.toml\nplugins: mock-3.15.1, cov-7.1.0, asyncio-1.4.0, anyio-4.15.1, platformdirs-4.13.5\nasyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function\ncollected 14 items\n\ntests/test_auth.py ..............                                        [100%]\n\n============================== 14 passed in 0.45s ==============================\nAll checks passed!\n2 files already formatted\n",
       "timed_out": false,
       "environment": "unknown",
-      "revision": "da323244bd20c0df162e53f6260e9c0038ac8b4e",
+      "revision": "83d932e35fbd84b0bfc6cd7e607e15bbed7bda36",
       "dirty_tree": true,
-      "tree_fingerprint": "4f839be037a193bbb736dde2bdba96b8a9ccf6084dacd679ddf2545c3522e611",
-      "verified_at": "2026-10-21T19:01:02.416233+08:00"
+      "tree_fingerprint": "40e3bfb3346a5c4df163c6f89b014ec8a68f69177244e436ff5d0cfdaf91ded0",
+      "verified_at": "2026-10-21T21:36:59.722618+08:00"
     },
     "A119-V4": {
       "status": "PASS",
@@ -21,10 +21,10 @@
       "summary": "PASS: 9 archived files hash-verified; 8 V4 controls parse; P118 pending status preserved; 14 pinned engine sources verified\n",
       "timed_out": false,
       "environment": "unknown",
-      "revision": "da323244bd20c0df162e53f6260e9c0038ac8b4e",
+      "revision": "83d932e35fbd84b0bfc6cd7e607e15bbed7bda36",
       "dirty_tree": true,
-      "tree_fingerprint": "4f839be037a193bbb736dde2bdba96b8a9ccf6084dacd679ddf2545c3522e611",
-      "verified_at": "2026-10-21T19:22:58.686257+08:00"
+      "tree_fingerprint": "40e3bfb3346a5c4df163c6f89b014ec8a68f69177244e436ff5d0cfdaf91ded0",
+      "verified_at": "2026-10-21T21:35:55.493869+08:00"
     },
     "A119-DEPLOY": {
       "status": "PASS",
@@ -79,15 +79,15 @@
     },
     "A120": {
       "status": "PASS",
-      "command": "GitHub Actions CI run 39607670437 on current application head c989a096545ddede3267ad957e67ff39e0cb593a; independent code/security reviews and local build, regression, scope, budget and shell checks.",
+      "command": "GitHub Actions CI run 39609005277 on current application/control head 83d932e35fbd84b0bfc6cd7e607e15bbed7bda36; independent code/security reviews and local build, regression, scope, budget and shell checks.",
       "exit_code": 0,
-      "summary": "Current code head CI passed both required checks (test, lint-and-typecheck). Independent code review and security review PASS. Local A120-LOCAL (11 tests plus lint/format/shell/compile), A120-BUILD (884 assets published in isolated temp root), and A120-GATES all passed.",
+      "summary": "Current head CI passed both required checks (test, lint-and-typecheck). Independent code review and security review PASS. Local A120-LOCAL (11 tests plus lint/format/shell/compile), A120-BUILD (884 assets published in isolated temp root), and A120-GATES all passed; application files are unchanged from reviewed c989a09.",
       "timed_out": false,
       "environment": "GitHub Actions and local isolated environment",
-      "revision": "c989a096545ddede3267ad957e67ff39e0cb593a",
+      "revision": "83d932e35fbd84b0bfc6cd7e607e15bbed7bda36",
       "dirty_tree": true,
       "tree_fingerprint": "40e3bfb3346a5c4df163c6f89b014ec8a68f69177244e436ff5d0cfdaf91ded0",
-      "verified_at": "2026-10-21T21:31:35.042893+08:00"
+      "verified_at": "2026-10-21T21:40:35.501582+08:00"
     }
   },
   "reviews": {
@@ -137,14 +137,14 @@
   },
   "external_ci": {
     "status": "passed",
-    "head_revision": "c989a096545ddede3267ad957e67ff39e0cb593a",
-    "run_id": 39607670437,
-    "url": "https://github.com/fanxUP/fqp-football-quant/actions/runs/39607670437",
+    "head_revision": "83d932e35fbd84b0bfc6cd7e607e15bbed7bda36",
+    "run_id": 39609005277,
+    "url": "https://github.com/fanxUP/fqp-football-quant/actions/runs/39609005277",
     "checks": {
       "test": "passed",
       "lint-and-typecheck": "passed"
     },
-    "verified_at": "2026-10-21T21:31:35.042893+08:00"
+    "verified_at": "2026-10-21T21:40:35.501582+08:00"
   },
   "workflow_engine": {
     "version": "V4",
