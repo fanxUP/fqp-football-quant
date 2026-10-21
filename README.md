@@ -16,7 +16,8 @@ FQP 用于官方足球数据分析、概率模型研究、虚拟票单、实票�
 
 | 目的 | 入口 |
 | --- | --- |
-| 现行规则与历史文档边界 | [文档导航](docs/README.md) |
+| 文档阅读顺序、现行规范与历史资料 | [文档地图](docs/README.md) |
+| 项目目标和产品边界 | [项目总览](docs/00_项目总览与边界.md) |
 | 项目身份与运行入口 | [项目清单](PROJECT_MANIFEST.md) |
 | 开发工作流与模板 | [开发规范](docs/31_Codex开发工作流与提示词模板.md)、`templates/codex/` |
 | 后端与业务任务 | `main.py`、`apps/backend/src/`、`scripts/` |

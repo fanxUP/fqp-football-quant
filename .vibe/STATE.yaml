@@ -1,10 +1,10 @@
 {
-  "state": "READY_TO_MERGE",
+  "state": "DONE",
   "last_transition": {
-    "from": "REVIEWING",
-    "to": "READY_TO_MERGE",
-    "at": "2026-10-21T23:58:05.988175+08:00",
-    "reason": "PR 26 evidence-only closeout: deployment SHA verified on server, required CI and independent review pass, and FQP merge quality gate is READY_TO_MERGE."
+    "from": "READY_TO_MERGE",
+    "to": "DONE",
+    "at": "2026-10-22T02:10:34.481971+08:00",
+    "reason": "PR #27 has merged and commit 38fd713ec85232b7ef593a6e5cfd5312ac3c0e2b is deployed; server services, readiness, HTTP smoke and release marker were verified, and the temporary deployment privilege was removed."
   },
   "mode": "STRICT"
 }
