@@ -22,7 +22,7 @@ def make_build(root: Path, *, index: str | None = None) -> Path:
     return source
 
 
-def test_publish_copies_assets_before_switching_index_and_retains_old_assets(tmp_path):
+def test_publish_copies_assets_before_switching_index_and_retains_old_assets(tmp_path, monkeypatch):
     source = make_build(tmp_path)
     web_root = tmp_path / "web"
     (web_root / "assets").mkdir(parents=True)
@@ -30,6 +30,15 @@ def test_publish_copies_assets_before_switching_index_and_retains_old_assets(tmp
     (web_root / "old-hash.js").write_text("old asset", encoding="utf-8")
     (web_root / "assets/app.js").write_text("old js", encoding="utf-8")
 
+    copied_destinations: list[Path] = []
+    atomic_copy = publish_frontend.atomic_copy
+
+    def record_copy(source_file: Path, destination: Path) -> None:
+        assert (web_root / "index.html").read_text(encoding="utf-8") == "old index"
+        copied_destinations.append(destination)
+        atomic_copy(source_file, destination)
+
+    monkeypatch.setattr(publish_frontend, "atomic_copy", record_copy)
     updated = publish_frontend.publish(source, web_root, expected_web_root=web_root)
 
     assert updated == 2
@@ -39,6 +48,8 @@ def test_publish_copies_assets_before_switching_index_and_retains_old_assets(tmp
         source / "index.html"
     ).read_text(encoding="utf-8")
     assert (web_root / "old-hash.js").read_text(encoding="utf-8") == "old asset"
+    assert copied_destinations[-1] == web_root / "index.html"
+    assert all(destination != web_root / "index.html" for destination in copied_destinations[:-1])
     assert not list(web_root.rglob("*.tmp"))
 
 
@@ -138,6 +149,19 @@ def test_symlink_web_root_is_rejected(tmp_path):
         publish_frontend.publish(source, linked_root, expected_web_root=linked_root)
 
 
+def test_symlink_ancestor_of_web_root_is_rejected(tmp_path):
+    source = make_build(tmp_path)
+    actual_parent = tmp_path / "actual-parent"
+    actual_parent.mkdir()
+    (actual_parent / "web").mkdir()
+    linked_parent = tmp_path / "linked-parent"
+    linked_parent.symlink_to(actual_parent, target_is_directory=True)
+    linked_root = linked_parent / "web"
+
+    with pytest.raises(SystemExit, match="Configured Nginx web root"):
+        publish_frontend.publish(source, linked_root, expected_web_root=linked_root)
+
+
 def test_deploy_runner_wires_publish_and_fails_closed_on_restore_error():
     deploy = Path("ops/server/deploy.sh").read_text(encoding="utf-8")
 
@@ -147,3 +171,18 @@ def test_deploy_runner_wires_publish_and_fails_closed_on_restore_error():
     assert publish_mark < publish_call
     assert 'if [[ "$FRONTEND_PUBLISH_ATTEMPTED" == true ]] && ! publish_frontend; then' in deploy
     assert "ROLLBACK_REQUIRED: unable to restore prior frontend files" in deploy
+    checkout_guard = deploy.index(
+        'if ! git -c core.hooksPath=/dev/null checkout -B main "$ROLLBACK_SHA"'
+    )
+    head_verification = deploy.index(
+        '[[ "$(git rev-parse HEAD 2>/dev/null)" != "$ROLLBACK_SHA" ]]', checkout_guard
+    )
+    rollback_failure = deploy.index(
+        "ROLLBACK_REQUIRED: unable to restore the exact prior checkout", head_verification
+    )
+    prior_build = deploy.index("if ! npm --prefix apps/frontend run build; then", checkout_guard)
+    assert checkout_guard < head_verification < rollback_failure < prior_build
+    failure_branch = deploy[head_verification:prior_build]
+    assert 'sudo -n systemctl stop "${SERVICES[@]}"' in failure_branch
+    assert "sudo -n systemctl stop nginx" in failure_branch
+    assert "has_symlink_component" in deploy

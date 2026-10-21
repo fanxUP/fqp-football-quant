@@ -60,6 +60,17 @@ def atomic_copy(source: Path, destination: Path) -> None:
         temporary.unlink(missing_ok=True)
 
 
+def has_symlink_component(path: Path) -> Path | None:
+    """Return the first symlink in an absolute path, including its ancestors."""
+    absolute = path.absolute()
+    current = Path(absolute.anchor)
+    for part in absolute.parts[1:]:
+        current = current / part
+        if current.is_symlink():
+            return current
+    return None
+
+
 def local_entry_assets(index_html: str) -> list[tuple[str, PurePosixPath]]:
     assets: list[tuple[str, PurePosixPath]] = []
     for reference in re.findall(r"""(?:src|href)=["']([^"']+)["']""", index_html):
@@ -85,7 +96,8 @@ def publish(
 ) -> int:
     if source_root.is_symlink() or not source_root.is_dir():
         raise SystemExit("Frontend build directory is missing or unsafe")
-    if web_root != expected_web_root or web_root.is_symlink() or not web_root.is_dir():
+    symlink_component = has_symlink_component(web_root)
+    if web_root != expected_web_root or symlink_component is not None or not web_root.is_dir():
         raise SystemExit("Configured Nginx web root is missing or unsafe")
 
     index_source = source_root / "index.html"

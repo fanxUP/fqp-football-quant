@@ -23,7 +23,7 @@ Deployment is tracked separately from the merge acceptance: record target revisi
 
 ## A120 — Publish the built frontend safely
 
-- The deploy runner verifies `/var/www/fqp` is an existing writable directory and not a symlink before stopping application services.
+- The deploy runner verifies `/var/www/fqp` and every ancestor path component are free of symlinks, and that the root is an existing writable directory, before stopping application services.
 - Built assets are validated as regular files and copied atomically; existing hashed assets are retained.
 - The local JavaScript and CSS assets referenced by `index.html` are present and byte-identical at the destination before `index.html` is atomically switched.
 - External URLs are not mistaken for local files, traversal paths and symlink destinations fail closed, and a failed publish leaves the previous entry page in place.

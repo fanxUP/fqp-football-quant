@@ -33,6 +33,17 @@ MIGRATION_APPLY_ATTEMPTED=false
 FRONTEND_DEV_DEPENDENCIES_CHANGED=false
 FRONTEND_PUBLISH_ATTEMPTED=false
 WEB_ROOT=/var/www/fqp
+has_symlink_component() {
+    local path="$1" component="/" part
+    local -a parts
+    IFS=/ read -r -a parts <<< "$path"
+    for part in "${parts[@]}"; do
+        [[ -z "$part" ]] && continue
+        component="${component%/}/$part"
+        [[ ! -L "$component" ]] || return 0
+    done
+    return 1
+}
 printf 'Current: %s\nTarget: %s\n' "$ROLLBACK_SHA" "$RELEASE_SHA"
 # Runtime dependency changes still require a separately prepared release. Only
 # verified Vite/Vitest dev-only updates have a matching rollback path here.
@@ -78,10 +89,10 @@ sudo -n -u postgres -- test -r "$PROJECT_ROOT/ops/server/migrate.py" || {
 SERVICES=(fqp-backend fqp-scheduler fqp-worker)
 for service in "${SERVICES[@]}"; do sudo -n systemctl is-active --quiet "$service"; done
 sudo -n systemctl is-active --quiet nginx
-[[ -d "$WEB_ROOT" && ! -L "$WEB_ROOT" && -w "$WEB_ROOT" ]] || {
+if [[ ! -d "$WEB_ROOT" || ! -w "$WEB_ROOT" ]] || has_symlink_component "$WEB_ROOT"; then
     echo "Nginx web root is unavailable or not writable: $WEB_ROOT" >&2
     exit 1
-}
+fi
 wait_ready() {
     local attempt
     for attempt in {1..20}; do
@@ -102,7 +113,13 @@ rollback() {
     set +e
     echo "Release failed; restoring $ROLLBACK_SHA. Applied additive migrations are retained." >&2
     sudo -n systemctl stop "${SERVICES[@]}"
-    git -c core.hooksPath=/dev/null checkout -B main "$ROLLBACK_SHA"
+    if ! git -c core.hooksPath=/dev/null checkout -B main "$ROLLBACK_SHA" \
+        || [[ "$(git rev-parse HEAD 2>/dev/null)" != "$ROLLBACK_SHA" ]]; then
+        sudo -n systemctl stop "${SERVICES[@]}"
+        sudo -n systemctl stop nginx
+        echo 'ROLLBACK_REQUIRED: unable to restore the exact prior checkout; application services and nginx remain stopped.' >&2
+        exit 1
+    fi
     if [[ "$FRONTEND_DEV_DEPENDENCIES_CHANGED" == true ]] && ! npm --prefix apps/frontend ci --ignore-scripts; then
         sudo -n systemctl stop nginx
         echo 'ROLLBACK_REQUIRED: unable to restore frontend dependencies from the prior lockfile; services and nginx remain stopped.' >&2
