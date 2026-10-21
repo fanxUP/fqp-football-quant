@@ -141,7 +141,9 @@
             "critical": 0,
             "total": 0,
             "advisories": 0
-          }
+          },
+          "working_directory": "/home/admin/fqp-football-quant",
+          "output_scope": "apps/frontend dependency lockfile in the deployed checkout"
         },
         {
           "command": "stat -c '%a %n' /home/admin/fqp-football-quant/sql/106_pi_model_credentials.sql; find /etc/sudoers.d -maxdepth 1 -type f -name 'fqp-deploy-*' -print",
@@ -299,12 +301,14 @@
     "project_gate_wrapper": {
       "path": ".vibe/quality_gate.py",
       "policy": "Requires every task and acceptance PASS, all reviews/security/migration complete, clean checkout, configured exact open PR head on main, and every returned live GitHub check row PASS with all configured job names present. Pins and isolates the complete V4 engine bundle.",
-      "status": "Independent review and current PR CI pass. Initial V4 gate run exposed a naive substring false positive on negated review wording; corrected wording is being committed before rerunning the gate."
+      "status": "The historical V4 engine merge gate recorded READY_TO_MERGE for PR #23 at 2026-10-21T19:40:00.409129+08:00. A separate FQP wrapper attempt exited 1 on a false-positive substring check; no successful wrapper rerun is recorded. PR #23 then passed independent review and required CI and was merged/deployed. PR #24 is an evidence-only closeout; its own live CI and independent read-only review are being checked, and no PR #24 wrapper pass is claimed."
     }
   },
   "quality_gate": {
     "status": "READY_TO_MERGE",
     "checked_at": "2026-10-21T19:40:00.409129+08:00",
-    "failures": []
+    "failures": [],
+    "scope_pull_request": 23,
+    "scope_note": "Historical V4 engine merge-gate result for PR #23: READY_TO_MERGE with no failures at the recorded time. The separate FQP wrapper attempt exited 1 on a false-positive substring check; no successful wrapper rerun is recorded. PR #23 was independently reviewed, its required CI passed, and it was merged and deployed. PR #24 changes only V4 control/evidence metadata; its own required CI and independent read-only review are the applicable checks for this closeout."
   }
 }
