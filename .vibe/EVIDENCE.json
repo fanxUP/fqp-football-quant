@@ -2,7 +2,7 @@
   "schema_version": 1,
   "current_task": "P119",
   "current_slice": "01-publish-built-frontend-to-nginx-root",
-  "current_status": "implementation_complete; static_checks_passed",
+  "current_status": "verification_in_progress; static_checks_passed; first_review_minors_addressed",
   "base_revision": "657d82d671fe0842c8c7c27c8cd85c9b509caa1e",
   "branch": "fix/deploy-sync-frontend-dist",
   "scope": "Publish the built frontend to /var/www/fqp after service readiness, with atomic index switch and rollback restoration.",
@@ -226,29 +226,39 @@
         "command": "bash -n ops/server/deploy.sh",
         "exit_code": 0,
         "summary": "Deployment shell syntax passed.",
-        "verified_at_utc": "2026-10-21T08:44:38Z"
+        "verified_at_utc": "2026-10-21T08:51:17Z",
+        "revision": "657d82d671fe0842c8c7c27c8cd85c9b509caa1e plus updated P119 working tree"
       },
       {
         "command": "ast.parse on the embedded publish_frontend Python heredoc",
         "exit_code": 0,
         "summary": "Inline publisher Python syntax passed.",
-        "verified_at_utc": "2026-10-21T08:44:38Z"
+        "verified_at_utc": "2026-10-21T08:51:17Z",
+        "revision": "657d82d671fe0842c8c7c27c8cd85c9b509caa1e plus updated P119 working tree"
       },
       {
         "command": "YAML safe_load for .vibe/BASELINE.yaml, CHANGE_BUDGET.yaml, SCOPE_LOCK.yaml, TASK_DAG.yaml",
         "exit_code": 0,
         "summary": "Planning and scope YAML parsed.",
-        "verified_at_utc": "2026-10-21T08:44:38Z"
+        "verified_at_utc": "2026-10-21T08:51:17Z",
+        "revision": "657d82d671fe0842c8c7c27c8cd85c9b509caa1e plus updated P119 working tree"
       },
       {
         "command": "git diff --check",
         "exit_code": 0,
         "summary": "No whitespace errors.",
-        "verified_at_utc": "2026-10-21T08:44:38Z"
+        "verified_at_utc": "2026-10-21T08:51:17Z",
+        "revision": "657d82d671fe0842c8c7c27c8cd85c9b509caa1e plus updated P119 working tree"
       }
     ],
     "automated_tests": "not added or run in this change",
-    "state_harness": "not_found_in_repository_or_agent_skill_roots"
+    "state_harness": "not_found_in_repository_or_agent_skill_roots",
+    "independent_review": {
+      "status": "first_pass_no_blocker_or_major; two_minor_findings_fixed; second_pass_pending",
+      "reviewer": "read-only independent review",
+      "findings": "Entry assets are now required to be regular files in dist, destination symlinks are rejected, and source/destination hashes must match. P119 DAG and evidence statuses now both say verification_in_progress."
+    },
+    "github_ci": "pending for updated P119 head"
   },
   "deploy": {
     "status": "not_performed",

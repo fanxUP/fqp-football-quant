@@ -20,7 +20,7 @@ tasks:
     depends_on:
       - P118
     kind: required
-    status: implementation_in_progress
+    status: verification_in_progress
     files:
       - ops/server/deploy.sh
       - .vibe/BASELINE.yaml

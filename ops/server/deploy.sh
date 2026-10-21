@@ -177,8 +177,15 @@ for reference in re.findall(r'''(?:src|href)=["']([^"']+)["']''', index_html):
     relative = PurePosixPath(unquote(path.lstrip("/")))
     if relative.is_absolute() or ".." in relative.parts:
         raise SystemExit(f"Unsafe frontend entry reference: {reference}")
-    if not (web_root / Path(*relative.parts)).is_file():
+    relative_path = Path(*relative.parts)
+    source_asset = source / relative_path
+    if source_asset.is_symlink() or not source_asset.is_file():
+        raise SystemExit(f"Frontend build is missing a regular entry asset: {reference}")
+    destination_asset = safe_destination(relative_path)
+    if destination_asset.is_symlink() or not destination_asset.is_file():
         raise SystemExit(f"Frontend entry asset is missing: {reference}")
+    if digest(source_asset) != digest(destination_asset):
+        raise SystemExit(f"Frontend entry asset checksum mismatch: {reference}")
 
 index_destination = safe_destination(Path("index.html"))
 atomic_copy(index_source, index_destination)
