@@ -31,6 +31,8 @@ git cat-file -e "$RELEASE_SHA^{commit}"
 ROLLBACK_SHA="$(git rev-parse HEAD)"
 MIGRATION_APPLY_ATTEMPTED=false
 FRONTEND_DEV_DEPENDENCIES_CHANGED=false
+FRONTEND_PUBLISH_ATTEMPTED=false
+WEB_ROOT=/var/www/fqp
 printf 'Current: %s\nTarget: %s\n' "$ROLLBACK_SHA" "$RELEASE_SHA"
 # Runtime dependency changes still require a separately prepared release. Only
 # verified Vite/Vitest dev-only updates have a matching rollback path here.
@@ -75,6 +77,11 @@ sudo -n -u postgres -- test -r "$PROJECT_ROOT/ops/server/migrate.py" || {
 }
 SERVICES=(fqp-backend fqp-scheduler fqp-worker)
 for service in "${SERVICES[@]}"; do sudo -n systemctl is-active --quiet "$service"; done
+sudo -n systemctl is-active --quiet nginx
+[[ -d "$WEB_ROOT" && ! -L "$WEB_ROOT" && -w "$WEB_ROOT" ]] || {
+    echo "Nginx web root is unavailable or not writable: $WEB_ROOT" >&2
+    exit 1
+}
 wait_ready() {
     local attempt
     for attempt in {1..20}; do
@@ -84,6 +91,100 @@ wait_ready() {
         sleep 2
     done
     return 1
+}
+publish_frontend() {
+    .venv/bin/python - "$PROJECT_ROOT/apps/frontend/dist" "$WEB_ROOT" <<'PY'
+import hashlib
+import os
+import re
+import shutil
+import stat
+import sys
+import tempfile
+from pathlib import Path, PurePosixPath
+from urllib.parse import unquote, urlsplit
+
+source = Path(sys.argv[1])
+web_root = Path(sys.argv[2])
+if source.is_symlink() or not source.is_dir():
+    raise SystemExit("Frontend build directory is missing or unsafe")
+if web_root != Path("/var/www/fqp") or web_root.is_symlink() or not web_root.is_dir():
+    raise SystemExit("Configured Nginx web root is missing or unsafe")
+
+index_source = source / "index.html"
+if index_source.is_symlink() or not index_source.is_file():
+    raise SystemExit("Frontend build has no regular index.html")
+
+def digest(path: Path) -> str:
+    with path.open("rb") as stream:
+        return hashlib.file_digest(stream, "sha256").hexdigest()
+
+def safe_destination(relative: Path) -> Path:
+    if relative.is_absolute() or ".." in relative.parts:
+        raise SystemExit(f"Unsafe frontend build path: {relative}")
+    destination = web_root / relative
+    current = web_root
+    for part in relative.parts[:-1]:
+        current = current / part
+        if current.is_symlink():
+            raise SystemExit(f"Symlink in Nginx web root: {current}")
+        current.mkdir(exist_ok=True)
+    if destination.is_symlink():
+        raise SystemExit(f"Symlink target in Nginx web root: {destination}")
+    return destination
+
+def atomic_copy(source_file: Path, destination: Path) -> None:
+    descriptor, temporary_name = tempfile.mkstemp(
+        prefix=f".{destination.name}.", suffix=".tmp", dir=destination.parent
+    )
+    os.close(descriptor)
+    temporary = Path(temporary_name)
+    try:
+        shutil.copy2(source_file, temporary)
+        with temporary.open("rb") as stream:
+            os.fsync(stream.fileno())
+        os.replace(temporary, destination)
+        directory = os.open(destination.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+files = sorted(source.rglob("*"))
+changed = 0
+for source_file in files:
+    if source_file.is_symlink():
+        raise SystemExit(f"Symlink in frontend build: {source_file}")
+    if not source_file.is_file() or source_file == index_source:
+        continue
+    relative = source_file.relative_to(source)
+    destination = safe_destination(relative)
+    if destination.exists() and not destination.is_file():
+        raise SystemExit(f"Non-file frontend destination: {destination}")
+    if destination.is_file() and digest(source_file) == digest(destination):
+        continue
+    atomic_copy(source_file, destination)
+    os.chmod(destination, stat.S_IMODE(source_file.stat().st_mode))
+    changed += 1
+
+index_html = index_source.read_text()
+for reference in re.findall(r'''(?:src|href)=["']([^"']+)["']''', index_html):
+    path = urlsplit(reference).path
+    if not path.startswith("/") or not path.endswith((".js", ".css")):
+        continue
+    relative = PurePosixPath(unquote(path.lstrip("/")))
+    if relative.is_absolute() or ".." in relative.parts:
+        raise SystemExit(f"Unsafe frontend entry reference: {reference}")
+    if not (web_root / Path(*relative.parts)).is_file():
+        raise SystemExit(f"Frontend entry asset is missing: {reference}")
+
+index_destination = safe_destination(Path("index.html"))
+atomic_copy(index_source, index_destination)
+os.chmod(index_destination, stat.S_IMODE(index_source.stat().st_mode))
+print(f"Published frontend to {web_root}; updated {changed} assets; retained older assets")
+PY
 }
 rollback() {
     local code=$?
@@ -100,6 +201,11 @@ rollback() {
     if ! npm --prefix apps/frontend run build; then
         sudo -n systemctl stop nginx
         echo 'ROLLBACK_REQUIRED: prior frontend build failed; services and nginx remain stopped.' >&2
+        exit 1
+    fi
+    if [[ "$FRONTEND_PUBLISH_ATTEMPTED" == true ]] && ! publish_frontend; then
+        sudo -n systemctl stop nginx
+        echo 'ROLLBACK_REQUIRED: unable to restore prior frontend files; services and nginx remain stopped.' >&2
         exit 1
     fi
     if ! write_release_marker "${ROLLBACK_SHA}-${DEPLOYMENT_INSTANCE}-r"; then
@@ -243,6 +349,8 @@ PY
 sudo -n systemctl start fqp-scheduler fqp-worker
 for service in "${SERVICES[@]}"; do sudo -n systemctl is-active --quiet "$service"; done
 [[ "$(git rev-parse HEAD)" == "$(git rev-parse origin/main)" ]]
+FRONTEND_PUBLISH_ATTEMPTED=true
+publish_frontend
 trap - ERR
 printf 'Deployed: %s\n' "$RELEASE_SHA"
 

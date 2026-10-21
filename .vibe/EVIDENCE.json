@@ -1,11 +1,11 @@
 {
   "schema_version": 1,
-  "current_task": "P118",
-  "current_slice": "01-safe-frontend-dev-dependency-release",
-  "current_status": "ci_passed_for_ab20fbc; evidence_update_ci_pending",
-  "base_revision": "d592cdfd2207c2ed148f8346f02ab92a25399e8d",
-  "branch": "fix/deploy-build-dependency-rollback",
-  "scope": "Safely deploy merged Vite/Vitest dev dependency updates with rollback dependency restoration.",
+  "current_task": "P119",
+  "current_slice": "01-publish-built-frontend-to-nginx-root",
+  "current_status": "implementation_complete; static_checks_passed",
+  "base_revision": "657d82d671fe0842c8c7c27c8cd85c9b509caa1e",
+  "branch": "fix/deploy-sync-frontend-dist",
+  "scope": "Publish the built frontend to /var/www/fqp after service readiness, with atomic index switch and rollback restoration.",
   "prior_task_evidence": {
     "P117": {
       "current_task": "P117",
@@ -106,104 +106,152 @@
         "verified_at": "2026-10-21T05:32:02Z",
         "remaining_note": "The frontend suite verifies the mandatory prompt but does not directly exercise every AuthContext polling timing branch."
       }
+    },
+    "P118": {
+      "current_task": "P118",
+      "current_slice": "01-safe-frontend-dev-dependency-release",
+      "current_status": "ci_passed_for_ab20fbc; evidence_update_ci_pending",
+      "base_revision": "d592cdfd2207c2ed148f8346f02ab92a25399e8d",
+      "branch": "fix/deploy-build-dependency-rollback",
+      "scope": "Safely deploy merged Vite/Vitest dev dependency updates with rollback dependency restoration.",
+      "preflight": {
+        "verified_at_utc": "2026-10-21T07:34:00Z",
+        "target_sha": "d592cdfd2207c2ed148f8346f02ab92a25399e8d",
+        "rollback_sha": "8420390ede836a4a130bf5a551953cfa62b6b81c",
+        "server": "FQPfootball",
+        "repo_branch": "main",
+        "repo_clean": true,
+        "server_head_matches_rollback_sha": true,
+        "remote_main_matches_target_sha": true,
+        "host_key": "OpenSSH pinned host entry matches current ED25519 host key",
+        "disk_root_used_percent": 63,
+        "memory_available_gib": 7.6,
+        "swap_used_mib": 79.5,
+        "services": {
+          "fqp-backend": "active",
+          "fqp-scheduler": "active",
+          "fqp-worker": "active",
+          "nginx": "active"
+        },
+        "health": {
+          "/health": "ok",
+          "/health/ready": {
+            "database": "ok",
+            "redis": "ok"
+          }
+        },
+        "node": "v24.18.0",
+        "npm": "11.16.0",
+        "pending_migrations": [],
+        "backup_required_by_migration_gate": false,
+        "deploy_script_currently_blocks_dependency_file_changes": true,
+        "production_mutations": false,
+        "protected_http_smoke": {
+          "request": "GET /api/auth/me without a session cookie",
+          "result": "HTTP 401 as expected",
+          "verified_at_utc": "2026-10-21T07:50:46Z"
+        }
+      },
+      "verification": {
+        "merged_dependency_fix_ci": {
+          "run": 254,
+          "conclusion": "success",
+          "head": "d303237ba8329e1e72927d9b8a2e2c277e158037"
+        },
+        "local_dependency_audit": "0 vulnerabilities",
+        "local_frontend_tests": "86 files; 535 tests passed",
+        "local_frontend_build": "passed",
+        "release_classifier_tests": {
+          "command": "/Volumes/Nas/FQP/code/.venv/bin/python -m pytest -q tests/test_local/test_frontend_release_dependencies.py",
+          "exit_code": 0,
+          "summary": "6 passed, including Vite/Vitest closure allow, unrelated dev lock rejection, production dependency rejection, dev marker rejection, and staged helper path.",
+          "verified_at": "2026-10-21T07:50:04Z"
+        },
+        "release_runner_shell_check": "pending",
+        "focused_regression_tests": {
+          "command": "/Volumes/Nas/FQP/code/.venv/bin/python -m pytest -q tests/test_local/test_frontend_release_dependencies.py tests/test_local/test_native_database_runtime.py tests/test_auth.py",
+          "exit_code": 0,
+          "summary": "68 passed under Python 3.14.6.",
+          "verified_at": "2026-10-21T07:50:04Z"
+        },
+        "ruff_and_python_compile": {
+          "command": "/Volumes/Nas/FQP/code/.venv/bin/ruff check and format --check; Python 3.14.6 py_compile ops/server/release_dependencies.py",
+          "exit_code": 0,
+          "summary": "Ruff and Python 3.14 compile passed.",
+          "verified_at": "2026-10-21T07:50:04Z"
+        },
+        "release_runner_and_diff": {
+          "command": "bash -n ops/server/deploy.sh; git diff --check",
+          "exit_code": 0,
+          "summary": "Passed.",
+          "verified_at": "2026-10-21T07:50:04Z"
+        },
+        "classifier_real_revision_pair": {
+          "old_sha": "8420390ede836a4a130bf5a551953cfa62b6b81c",
+          "new_sha": "d592cdfd2207c2ed148f8346f02ab92a25399e8d",
+          "result": "passed; classified only Vite/Vitest dev dependency closure changes"
+        },
+        "github_ci": {
+          "run": 39565008918,
+          "head": "ab20fbc126dd96badf21db20b20b6e8eb20dcd03",
+          "conclusion": "success",
+          "jobs": {
+            "lint-and-typecheck": "success",
+            "test": "success"
+          },
+          "verified_at_utc": "2026-10-21T07:57:54Z"
+        },
+        "independent_review": {
+          "status": "passed",
+          "reviewer": "read-only independent review",
+          "summary": "No remaining blocker, major, or minor findings. Reviewed scope, staged helper path, dependency-closure classifier, rollback restoration, and conditional migration backup gate.",
+          "verified_at": "2026-10-21T07:50:46Z"
+        }
+      },
+      "deploy": {
+        "status": "pending_latest_head_ci_and_merge",
+        "reason": "CI and independent review passed for ab20fbc. Evidence update will run CI on the final PR head before merge."
+      }
     }
   },
   "preflight": {
-    "verified_at_utc": "2026-10-21T07:34:00Z",
-    "target_sha": "d592cdfd2207c2ed148f8346f02ab92a25399e8d",
-    "rollback_sha": "8420390ede836a4a130bf5a551953cfa62b6b81c",
-    "server": "FQPfootball",
-    "repo_branch": "main",
-    "repo_clean": true,
-    "server_head_matches_rollback_sha": true,
-    "remote_main_matches_target_sha": true,
-    "host_key": "OpenSSH pinned host entry matches current ED25519 host key",
-    "disk_root_used_percent": 63,
-    "memory_available_gib": 7.6,
-    "swap_used_mib": 79.5,
-    "services": {
-      "fqp-backend": "active",
-      "fqp-scheduler": "active",
-      "fqp-worker": "active",
-      "nginx": "active"
-    },
-    "health": {
-      "/health": "ok",
-      "/health/ready": {
-        "database": "ok",
-        "redis": "ok"
-      }
-    },
-    "node": "v24.18.0",
-    "npm": "11.16.0",
-    "pending_migrations": [],
-    "backup_required_by_migration_gate": false,
-    "deploy_script_currently_blocks_dependency_file_changes": true,
-    "production_mutations": false,
-    "protected_http_smoke": {
-      "request": "GET /api/auth/me without a session cookie",
-      "result": "HTTP 401 as expected",
-      "verified_at_utc": "2026-10-21T07:50:46Z"
-    }
+    "production_changes": false,
+    "production_deployment": false,
+    "branch_base_matches_origin_main": true,
+    "scope_paths": "all changed paths are listed in .vibe/SCOPE_LOCK.yaml"
   },
   "verification": {
-    "merged_dependency_fix_ci": {
-      "run": 254,
-      "conclusion": "success",
-      "head": "d303237ba8329e1e72927d9b8a2e2c277e158037"
-    },
-    "local_dependency_audit": "0 vulnerabilities",
-    "local_frontend_tests": "86 files; 535 tests passed",
-    "local_frontend_build": "passed",
-    "release_classifier_tests": {
-      "command": "/Volumes/Nas/FQP/code/.venv/bin/python -m pytest -q tests/test_local/test_frontend_release_dependencies.py",
-      "exit_code": 0,
-      "summary": "6 passed, including Vite/Vitest closure allow, unrelated dev lock rejection, production dependency rejection, dev marker rejection, and staged helper path.",
-      "verified_at": "2026-10-21T07:50:04Z"
-    },
-    "release_runner_shell_check": "pending",
-    "focused_regression_tests": {
-      "command": "/Volumes/Nas/FQP/code/.venv/bin/python -m pytest -q tests/test_local/test_frontend_release_dependencies.py tests/test_local/test_native_database_runtime.py tests/test_auth.py",
-      "exit_code": 0,
-      "summary": "68 passed under Python 3.14.6.",
-      "verified_at": "2026-10-21T07:50:04Z"
-    },
-    "ruff_and_python_compile": {
-      "command": "/Volumes/Nas/FQP/code/.venv/bin/ruff check and format --check; Python 3.14.6 py_compile ops/server/release_dependencies.py",
-      "exit_code": 0,
-      "summary": "Ruff and Python 3.14 compile passed.",
-      "verified_at": "2026-10-21T07:50:04Z"
-    },
-    "release_runner_and_diff": {
-      "command": "bash -n ops/server/deploy.sh; git diff --check",
-      "exit_code": 0,
-      "summary": "Passed.",
-      "verified_at": "2026-10-21T07:50:04Z"
-    },
-    "classifier_real_revision_pair": {
-      "old_sha": "8420390ede836a4a130bf5a551953cfa62b6b81c",
-      "new_sha": "d592cdfd2207c2ed148f8346f02ab92a25399e8d",
-      "result": "passed; classified only Vite/Vitest dev dependency closure changes"
-    },
-    "github_ci": {
-      "run": 39565008918,
-      "head": "ab20fbc126dd96badf21db20b20b6e8eb20dcd03",
-      "conclusion": "success",
-      "jobs": {
-        "lint-and-typecheck": "success",
-        "test": "success"
+    "static_checks": [
+      {
+        "command": "bash -n ops/server/deploy.sh",
+        "exit_code": 0,
+        "summary": "Deployment shell syntax passed.",
+        "verified_at_utc": "2026-10-21T08:44:38Z"
       },
-      "verified_at_utc": "2026-10-21T07:57:54Z"
-    },
-    "independent_review": {
-      "status": "passed",
-      "reviewer": "read-only independent review",
-      "summary": "No remaining blocker, major, or minor findings. Reviewed scope, staged helper path, dependency-closure classifier, rollback restoration, and conditional migration backup gate.",
-      "verified_at": "2026-10-21T07:50:46Z"
-    }
+      {
+        "command": "ast.parse on the embedded publish_frontend Python heredoc",
+        "exit_code": 0,
+        "summary": "Inline publisher Python syntax passed.",
+        "verified_at_utc": "2026-10-21T08:44:38Z"
+      },
+      {
+        "command": "YAML safe_load for .vibe/BASELINE.yaml, CHANGE_BUDGET.yaml, SCOPE_LOCK.yaml, TASK_DAG.yaml",
+        "exit_code": 0,
+        "summary": "Planning and scope YAML parsed.",
+        "verified_at_utc": "2026-10-21T08:44:38Z"
+      },
+      {
+        "command": "git diff --check",
+        "exit_code": 0,
+        "summary": "No whitespace errors.",
+        "verified_at_utc": "2026-10-21T08:44:38Z"
+      }
+    ],
+    "automated_tests": "not added or run in this change",
+    "state_harness": "not_found_in_repository_or_agent_skill_roots"
   },
   "deploy": {
-    "status": "pending_latest_head_ci_and_merge",
-    "reason": "CI and independent review passed for ab20fbc. Evidence update will run CI on the final PR head before merge."
+    "status": "not_performed",
+    "reason": "The user requested a GitHub submission, not a server deployment."
   }
 }

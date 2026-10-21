@@ -1,5 +1,5 @@
 schema_version: 1
-task: P118
+task: P119
 status: implementation_in_progress
 tasks:
   - id: P118
@@ -7,10 +7,26 @@ tasks:
     acceptance: A118
     depends_on: []
     kind: required
-    status: implementation_in_progress
+    status: completed
     files:
       - ops/server/deploy.sh
       - ops/server/release_dependencies.py
       - tests/test_local/test_frontend_release_dependencies.py
       - docs/33_自动测试代码审查与部署交付流程.md
       - docs/project-reliability-improvements.md
+  - id: P119
+    title: 同步构建后的前端静态资源到 Nginx 网页目录
+    acceptance: A119
+    depends_on:
+      - P118
+    kind: required
+    status: implementation_in_progress
+    files:
+      - ops/server/deploy.sh
+      - .vibe/BASELINE.yaml
+      - .vibe/CHANGE_BUDGET.yaml
+      - .vibe/PLAN.md
+      - .vibe/ACCEPTANCE.md
+      - .vibe/TASK_DAG.yaml
+      - .vibe/SCOPE_LOCK.yaml
+      - .vibe/EVIDENCE.json
