@@ -1,9 +1,11 @@
-max_changed_files: 51
-max_new_files: 20
+max_changed_files: 19
+max_new_files: 1
 max_dependency_additions: 0
-max_migration_files: 4
-max_public_api_changes: 0
-max_regression_tests: 300
-scope_note: Cumulative P105/01..06 plus deployment and local/Docker bootstrap hardening after
-  read-only review found unsafe migration rollback, remote-DSN remapping, missing owner setup and
-  insufficient runtime ACL coverage; no additional migration file or dependency
+max_migration_files: 0
+max_public_api_changes: 1
+max_regression_tests: 6
+scope_note: >-
+  P117 adds a unique deployment marker to the server release runner, release-aware Redis sessions,
+  a cache-free release identifier endpoint, client deployment detection, and a mandatory re-login prompt.
+  Up to six isolated auth and update-prompt regression cases are allowed after the user's continuation
+  authorized verification. No database schema or dependency changes are in scope.

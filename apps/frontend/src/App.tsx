@@ -9,7 +9,7 @@ import LoadingSpinner from './shared/components/LoadingSpinner';
 import LoginPage from './pages/LoginPage';
 
 // Lazy-load all pages
-import { lazy, Suspense, useEffect } from 'react';
+import { lazy, Suspense, useEffect, useRef } from 'react';
 
 const DashboardPage = lazy(() => import('./pages/DashboardPage'));
 const MatchesPage = lazy(() => import('./pages/MatchesPage'));
@@ -112,8 +112,62 @@ function PageOutlet() {
 
 // ---- Auth-aware content ----
 function AppContent() {
-  const { user, isLoading } = useAuth();
+  const {
+    user,
+    isLoading,
+    deploymentUpdateRequired,
+    isUpdatingForDeployment,
+    confirmDeploymentUpdate,
+  } = useAuth();
   const { translate } = useLanguage();
+  const updateButtonRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!deploymentUpdateRequired) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    updateButtonRef.current?.focus();
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [deploymentUpdateRequired]);
+
+  if (deploymentUpdateRequired) {
+    return (
+      <div className="fqp-deployment-update-overlay">
+        <section
+          className="fqp-deployment-update-dialog"
+          role="alertdialog"
+          aria-modal="true"
+          aria-labelledby="fqp-deployment-update-title"
+          aria-describedby="fqp-deployment-update-message"
+          aria-live="assertive"
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') event.preventDefault();
+            if (event.key === 'Tab') {
+              event.preventDefault();
+              updateButtonRef.current?.focus();
+            }
+          }}
+        >
+          <h1 id="fqp-deployment-update-title">{translate('服务器已更新')}</h1>
+          <p id="fqp-deployment-update-message">
+            {translate('服务器已部署新版本。为确保页面与服务端版本一致，当前登录已失效，请重新登录。')}
+          </p>
+          <button
+            ref={updateButtonRef}
+            type="button"
+            className="fqp-login-button fqp-deployment-update-action"
+            aria-busy={isUpdatingForDeployment}
+            disabled={isUpdatingForDeployment}
+            onClick={() => void confirmDeploymentUpdate()}
+          >
+            {translate(isUpdatingForDeployment ? '正在退出并刷新页面…' : '更新并重新登录')}
+          </button>
+        </section>
+      </div>
+    );
+  }
 
   if (isLoading) {
     return (

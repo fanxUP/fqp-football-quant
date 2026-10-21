@@ -1,13 +1,22 @@
-task: P105
-slice: 06-controlled-runtime-integration
-status: in_progress
-steps:
-- RED_runtime_and_job
-- GREEN_bounded_consumer
-- isolated_runtime_and_CI
-- regression_scope_review
-- checkpoint
-remaining_after_slice:
-- actual-GitHub-CI
-- production-release-runner-and-acl-hardening
-- authorized-production-admission-and-release
+schema_version: 1
+task: P117
+status: implementation_in_progress
+tasks:
+  - id: P117
+    title: 部署版本提示与强制重新登录
+    acceptance: A117
+    depends_on: []
+    kind: required
+    status: implementation_in_progress
+    files:
+      - apps/backend/src/deployment_version.py
+      - apps/backend/src/auth.py
+      - apps/backend/src/routers/auth_router.py
+      - apps/frontend/src/shared/api/auth.ts
+      - apps/frontend/src/app/AuthContext.tsx
+      - apps/frontend/src/App.tsx
+      - apps/frontend/src/app/language.ts
+      - apps/frontend/src/theme/appearance.css
+      - ops/server/deploy.sh
+      - tests/test_auth.py
+      - apps/frontend/src/App.test.tsx

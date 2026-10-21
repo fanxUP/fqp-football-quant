@@ -11,6 +11,27 @@ export interface MeResponse {
   user: string;
 }
 
+export interface DeploymentVersionResponse {
+  releaseId: string;
+}
+
+export class DeploymentChangedError extends Error {
+  constructor() {
+    super('服务器已更新');
+    this.name = 'DeploymentChangedError';
+  }
+}
+
+export async function getDeploymentVersion(): Promise<DeploymentVersionResponse> {
+  const res = await fetch(`${BASE}/release`, { cache: 'no-store' });
+  if (!res.ok) throw new Error('无法读取服务器版本');
+  const body = await res.json();
+  if (typeof body?.releaseId !== 'string' || !body.releaseId) {
+    throw new Error('服务器版本响应无效');
+  }
+  return { releaseId: body.releaseId };
+}
+
 export async function login(password: string): Promise<LoginResponse> {
   const res = await fetch(`${BASE}/login`, {
     method: 'POST',
@@ -30,6 +51,11 @@ export async function logout(): Promise<void> {
 
 export async function getMe(): Promise<MeResponse | null> {
   const res = await fetch(`${BASE}/me`);
-  if (!res.ok) return null;
+  if (res.status === 409) {
+    const body = await res.json().catch(() => ({}));
+    if (body.code === 'deployment_changed') throw new DeploymentChangedError();
+  }
+  if (res.status === 401) return null;
+  if (!res.ok) throw new Error('无法验证登录状态');
   return res.json();
 }

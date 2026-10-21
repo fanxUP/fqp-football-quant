@@ -1,11 +1,22 @@
 import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import App from './App';
 
+const authState = vi.hoisted(() => ({
+  user: 'admin' as string | null,
+  isLoading: false,
+  deploymentUpdateRequired: false,
+  isUpdatingForDeployment: false,
+  login: vi.fn(),
+  logout: vi.fn(),
+  confirmDeploymentUpdate: vi.fn(),
+}));
+
 vi.mock('./app/AuthContext', () => ({
   AuthProvider: ({ children }: { children: ReactNode }) => children,
-  useAuth: () => ({ user: 'admin', isLoading: false, login: vi.fn(), logout: vi.fn() }),
+  useAuth: () => authState,
 }));
 
 vi.mock('./app/layout/Layout', () => ({
@@ -36,6 +47,15 @@ vi.mock('./pages/NewsIntelligencePage', () => ({ default: () => <div>News intell
 
 describe('App legacy route redirects', () => {
   beforeEach(() => {
+    Object.assign(authState, {
+      user: 'admin',
+      isLoading: false,
+      deploymentUpdateRequired: false,
+      isUpdatingForDeployment: false,
+      login: vi.fn(),
+      logout: vi.fn(),
+      confirmDeploymentUpdate: vi.fn(),
+    });
     vi.stubGlobal('matchMedia', vi.fn(() => ({
       matches: false,
       addEventListener: vi.fn(),
@@ -80,5 +100,22 @@ describe('App legacy route redirects', () => {
     render(<App />);
 
     expect(await screen.findByText('News intelligence')).toBeInTheDocument();
+  });
+
+  it('blocks the old app and offers a mandatory re-login after deployment', async () => {
+    const user = userEvent.setup();
+    authState.deploymentUpdateRequired = true;
+    authState.confirmDeploymentUpdate = vi.fn();
+
+    render(<App />);
+
+    expect(screen.getByRole('alertdialog')).toBeInTheDocument();
+    expect(screen.queryByText('Dashboard')).not.toBeInTheDocument();
+    const updateButton = screen.getByRole('button', { name: '更新并重新登录' });
+    expect(updateButton).toHaveFocus();
+
+    await user.click(updateButton);
+
+    expect(authState.confirmDeploymentUpdate).toHaveBeenCalledOnce();
   });
 });
