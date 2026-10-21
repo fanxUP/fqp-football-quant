@@ -95,7 +95,7 @@
     "application_code": {
       "status": "PASS",
       "reviewer": "independent read-only review agent",
-      "summary": "Final read-only review of exact code revision c989a096545ddede3267ad957e67ff39e0cb593a passed; no blocker, major, or minor findings. Verified symlink-ancestor rejection, atomic index-last publishing, rollback SHA/state checks, and compatibility fix.",
+      "summary": "Final read-only review of exact code revision c989a096545ddede3267ad957e67ff39e0cb593a passed with no findings. Verified symlink-ancestor rejection, atomic index-last publishing, rollback SHA/state checks, and compatibility fix.",
       "revision": "c989a096545ddede3267ad957e67ff39e0cb593a",
       "verified_at": "2026-10-21T21:28:39.060128+08:00"
     },
