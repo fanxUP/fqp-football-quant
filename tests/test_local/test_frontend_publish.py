@@ -170,7 +170,7 @@ def test_deploy_runner_wires_publish_and_fails_closed_on_restore_error():
     publish_call = deploy.index("publish_frontend", publish_mark)
     assert publish_mark < publish_call
     assert 'if [[ "$FRONTEND_PUBLISH_ATTEMPTED" == true ]] && ! publish_frontend; then' in deploy
-    assert "ROLLBACK_REQUIRED: unable to restore prior frontend files" in deploy
+    assert "rollback_required 'unable to restore prior frontend files'" in deploy
     checkout_guard = deploy.index(
         'if ! git -c core.hooksPath=/dev/null checkout -B main "$ROLLBACK_SHA"'
     )
@@ -178,11 +178,15 @@ def test_deploy_runner_wires_publish_and_fails_closed_on_restore_error():
         '[[ "$(git rev-parse HEAD 2>/dev/null)" != "$ROLLBACK_SHA" ]]', checkout_guard
     )
     rollback_failure = deploy.index(
-        "ROLLBACK_REQUIRED: unable to restore the exact prior checkout", head_verification
+        "rollback_required 'unable to restore the exact prior checkout'", head_verification
     )
     prior_build = deploy.index("if ! npm --prefix apps/frontend run build; then", checkout_guard)
     assert checkout_guard < head_verification < rollback_failure < prior_build
     failure_branch = deploy[head_verification:prior_build]
-    assert 'sudo -n systemctl stop "${SERVICES[@]}"' in failure_branch
-    assert "sudo -n systemctl stop nginx" in failure_branch
+    assert "rollback_required 'unable to restore the exact prior checkout'" in failure_branch
+    assert "stop_and_confirm_services()" in deploy
+    assert 'systemctl show --property=ActiveState --value "$service"' in deploy
+    assert '[[ "$active_state" == inactive ]] || return 1' in deploy
+    assert 'stop_and_confirm_services "${SERVICES[@]}" nginx' in deploy
+    assert "all services could not be verified inactive" in deploy
     assert "has_symlink_component" in deploy
