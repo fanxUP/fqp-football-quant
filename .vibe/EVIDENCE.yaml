@@ -39,7 +39,16 @@
       "verified_at": "2026-10-21T20:03:46.910401+08:00"
     },
     "A120-DEPLOY": {
-      "status": "PENDING"
+      "status": "PASS",
+      "command": "/bin/bash -c 'set -eu; root=$(curl -sS --connect-timeout 3 --max-time 8 -o /dev/null -w \"%{http_code}\" http://100.121.47.26/); me=$(curl -sS --connect-timeout 3 --max-time 8 -o /dev/null -w \"%{http_code}\" http://100.121.47.26/api/auth/me); modules=$(curl -sS --connect-timeout 3 --max-time 8 -o /dev/null -w \"%{http_code}\" http://100.121.47.26/api/modules); printf \"frontend_http=%s auth_me_http=%s modules_http=%s\\n\" \"$root\" \"$me\" \"$modules\"; test \"$root\" = 200; test \"$me\" = 401; test \"$modules\" = 401'",
+      "exit_code": 0,
+      "summary": "frontend_http=200 auth_me_http=401 modules_http=401\n",
+      "timed_out": false,
+      "environment": "unknown",
+      "revision": "c1bdbc1947836dbde153077afff457aa2ee5755b",
+      "dirty_tree": true,
+      "tree_fingerprint": "40e3bfb3346a5c4df163c6f89b014ec8a68f69177244e436ff5d0cfdaf91ded0",
+      "verified_at": "2026-10-21T23:28:10.422609+08:00"
     },
     "A120-BUILD": {
       "status": "PASS",
@@ -314,8 +323,8 @@
     }
   },
   "quality_gate": {
-    "status": "PENDING",
-    "checked_at": null,
+    "status": "READY_TO_MERGE",
+    "checked_at": "2026-10-21T22:09:34.450458+08:00",
     "failures": []
   },
   "prior_reviews": {

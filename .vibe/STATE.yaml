@@ -1,10 +1,11 @@
 {
-  "state": "REVIEWING",
+  "state": "DONE",
   "last_transition": {
-    "from": "VERIFYING",
-    "to": "REVIEWING",
-    "at": "2026-10-21T21:10:01.815992+08:00",
-    "reason": "P120 local checks pass; final-head CI and second-pass independent review are pending."
+    "from": "VERIFIED",
+    "to": "DONE",
+    "at": "2026-10-21T23:28:20.023433+08:00",
+    "reason": "P120 safe frontend publisher is deployed and verified on 100.121.47.26; no pending migrations; no error-level journal entries in the post-deploy window."
   },
-  "mode": "STRICT"
+  "mode": "STRICT",
+  "blocked_reason": null
 }
