@@ -1,18 +1,36 @@
-# A118：前端构建开发依赖的安全发布与回退
+# P119 Acceptance
 
-1. 发布分类器只允许 `apps/frontend/package.json` 中 `devDependencies.vite` / `devDependencies.vitest` 的版本变更，以及这两个包依赖闭包内锁文件的 `dev: true` 包变化。
-2. 拒绝前端生产 `dependencies`、其他 manifest 配置、非 dev-only 锁项、Python/Node/模型桥接依赖或运行时文件变更。
-3. `--plan` 明确标注前端开发依赖刷新；常规依赖变化仍保持拒绝。
-4. 部署失败并回退时，在旧提交 checkout 后执行旧锁文件的 `npm ci --ignore-scripts`，再构建旧版本；依赖恢复失败时停止 Nginx，退出并输出 `ROLLBACK_REQUIRED`。
-5. 保持当前 release evidence、服务健康、迁移和保护 HTTP 烟测门禁。无待执行迁移时不要求新数据库备份；有迁移时继续要求新鲜备份和副本演练。
-6. 分类器的允许/拒绝路径、无关 dev lock 项拒绝、首次暂存目录加载分类器、runner shell 语法、全套 GitHub CI 通过；部署后验证服务、`/health/ready`、release ID 和关键路由。
+## A119 — Authentication fix
 
-状态：P118 已随 PR #21 合并。本轮 P119 的验收标准如下。
+- Password login succeeds with the restricted Redis runtime ACL (`~session:*`) when a stale session cookie is present.
+- Session and release-marker writes use only permitted Redis keys and commands.
+- Focused auth tests, Ruff lint and format checks pass; the PR application diff has a passing independent review and required GitHub checks.
+- Scope is exactly `apps/backend/src/auth.py` and `tests/test_auth.py`; no dependency or database migration is introduced.
 
-# A119：发布并回滚 Nginx 前端静态文件
+## A119-V4 — Workflow migration
 
-1. `--apply` 在停止服务之前确认 `/var/www/fqp` 可写且不是符号链接；当前 `--plan` 和发布证据、迁移、备份、HTTP 烟测门禁保持不变。
-2. 前端构建产物先逐项同步到网页目录，缺失或内容变化的文件通过同目录临时文件和原子替换发布；旧文件保留，不执行删除。
-3. 同步完成后检查入口引用的本地 JS/CSS 文件存在，最后原子替换 `index.html`，避免入口先引用尚未发布的资源。
-4. 发生发布失败时，回滚逻辑在旧提交重建后恢复其静态资源。若恢复失败，停止 Nginx 并输出 `ROLLBACK_REQUIRED`。
-5. 验证范围为 `bash -n ops/server/deploy.sh`、内嵌 Python `ast.parse` 和 `git diff --check`；不运行测试套件，不执行生产部署。
+- The pre-migration P118 snapshot is preserved byte-for-byte under `archive/pre-v4-p118-2026-10-21/`, verified by the manifest.
+- V4 control files parse as JSON-compatible YAML and use the V4 engine for state transitions, scope, budget, regression and merge checks.
+- The original P118 evidence, including its `evidence_update_ci_pending` status, remains archived unchanged; this migration does not assert that P118 completed.
+- `python3 -I -S -B .vibe/verify_migration.py` verifies the archive hashes, preserved P118 status, V4 control parsing and pinned engine bundle.
+- Independent read-only review has no blocker or major finding.
+
+## Deployment check (post-merge)
+
+Deployment is tracked separately from the merge acceptance: record target revision, rollback revision, migration/dependency readiness, service health and protected-route smoke in the release evidence. A successful password login smoke may be recorded only when private test credentials are available; credentials must not be stored here.
+
+# P120 Acceptance
+
+## A120 — Publish the built frontend safely
+
+- The deploy runner verifies `/var/www/fqp` is an existing writable directory and not a symlink before stopping application services.
+- Built assets are validated as regular files and copied atomically; existing hashed assets are retained.
+- The local JavaScript and CSS assets referenced by `index.html` are present and byte-identical at the destination before `index.html` is atomically switched.
+- External URLs are not mistaken for local files, traversal paths and symlink destinations fail closed, and a failed publish leaves the previous entry page in place.
+- Rollback rebuilds and republishes the previous frontend when publication was attempted; restoration failure stops Nginx and reports `ROLLBACK_REQUIRED`.
+- Focused isolated filesystem regression tests, shell syntax checks, configured GitHub CI, security review, independent read-only review and the V4 merge gate pass.
+- No application API, database schema, runtime dependency or frontend dependency changes are introduced.
+
+## A120-DEPLOY — Production release
+
+Record the exact merged `main` revision, rollback revision, migration/dependency readiness, current service state, deployment runner exit code, release marker, service health, frontend response, readiness checks, protected-route smoke and recent error logs. Apply only after the V4 quality gate passes. If a database migration is pending, satisfy the runner's fresh-backup and copy-dry-run requirements; otherwise record that they are not applicable.

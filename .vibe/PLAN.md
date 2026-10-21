@@ -1,40 +1,18 @@
-# P118 实施计划
+# P119 Plan
 
-## 范围
+1. Preserve legacy P118 files in `archive/pre-v4-p118-2026-10-21/` with SHA-256 manifest.
+2. Initialize V4 controls against main baseline `657d82d671fe0842c8c7c27c8cd85c9b509caa1e`.
+3. Run the auth ACL regression and Ruff, then check scope, budget, and regression gates.
+4. Record independent review and final-head GitHub CI.
+5. Run the V4 merge gate, merge PR #23, and deploy the merged revision with the server release runner.
+6. Verify server revision, service health, unauthenticated API behavior, and password login using private test credentials if available.
 
-为已合并的 Vite/Vitest 开发依赖修复准备可回退的服务器发布路径。发布门禁只放行前端开发依赖变更；生产依赖、Python/Node 运行时、模型桥接包仍需专门发布。失败回退时按旧提交恢复前端锁文件依赖后再构建，恢复失败则停止 Nginx 并明确报告 `ROLLBACK_REQUIRED`。
+# P120 Plan
 
-## 顺序
-
-1. 固定基线为 `d592cdf`，将任务范围限定到部署 runner、其依赖分类辅助模块、部署契约测试和发布文档。
-2. 先添加 RED 回归用例：允许仅 `vite`/`vitest` 及其开发依赖闭包的 dev-only 锁文件变化；拒绝生产依赖、运行时文件、其他直接开发依赖和无关锁文件项变更。
-3. 实现计划/应用模式分类，并在回退时重装旧提交锁文件；重装失败时 fail closed。
-4. 运行分类器回归、shell 语法、完整相关 CI；核对前端生产依赖树不变。
-5. 以固定 SHA 做服务器计划；读取服务、磁盘、内存、健康、迁移计划和保护路由烟测。无待执行迁移时不要求数据库备份。
-6. 仅在证据真实、门禁通过后部署；失败按 runner 回滚并验证服务、健康和版本。
-
-## 验收
-
-见 `ACCEPTANCE.md` 中 A118。不得移除发布证据、健康检查、迁移或 SSH 主机身份门禁。
-
-## 当前状态
-
-P118 已随 PR #21 合并；本轮以 `657d82d` 为基线。本轮 P119 仅修复并提交发布脚本，没有部署服务器。
-
-# P119 前端构建发布到 Nginx 网页目录
-
-## 目标
-
-部署 runner 在构建前端后，将 `apps/frontend/dist` 同步到服务器 Nginx 网页目录 `/var/www/fqp`，避免后端已更新而浏览器仍加载旧入口页和缺失的哈希资源。
-
-## 实施
-
-1. 在停止服务前确认网页目录存在、是普通目录且当前发布账号可写。
-2. 仅新增或原子替换构建产物；保留旧哈希资源，不做目录清空。
-3. 先发布全部 JS/CSS 等资源，确认入口引用存在后再原子替换 `index.html`。
-4. 如果发布失败，部署回滚路径重建并发布回滚版本的前端；无法恢复时停止 Nginx 并报告 `ROLLBACK_REQUIRED`。
-5. 不改动数据库、API 契约、依赖和认证逻辑。
-
-## 验证与边界
-
-本任务只修改发布脚本和执行范围元数据，不新增或运行测试。提交前运行 shell 语法、内嵌 Python 语法及 `git diff --check`；GitHub CI 结果以推送后实际记录为准。本任务不部署服务器。
+1. Preserve the completed P119 terminal state and start a separate V4 workflow for the frontend publisher.
+2. Merge the latest `main` into the existing PR #22 branch, retain the deploy runner change, and replace its legacy P119 metadata with P120 controls.
+3. Extract the inline publisher into `ops/server/publish_frontend.py` and add isolated temporary-filesystem regression coverage.
+4. Run the configured V4 evidence command, shell syntax check, scope, budget and regression gates. Review the exact final diff for filesystem, shell and rollback safety.
+5. Push the updated PR #22 head, wait for configured GitHub CI, obtain independent read-only review, and run the repository V4 merge wrapper against the exact head.
+6. Merge PR #22 only after the gate is ready. Prepare the server release plan, record rollback and migration/dependency status, deploy the exact merged `main` SHA, and verify services, readiness, frontend, protected route and recent logs.
+7. Record post-deployment evidence and transition the V4 workflow to `DONE` only after all checks pass.

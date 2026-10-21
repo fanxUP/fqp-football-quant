@@ -1,0 +1,9 @@
+{
+  "state": "DONE",
+  "last_transition": {
+    "from": "VERIFIED",
+    "to": "DONE",
+    "at": "2026-10-21T20:03:56.455720+08:00",
+    "reason": "PR #23 merged and verified on 100.121.47.26"
+  }
+}

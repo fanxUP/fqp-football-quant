@@ -3,10 +3,16 @@
 from __future__ import annotations
 
 import os
-from unittest.mock import AsyncMock, MagicMock, call, patch
+import uuid
+from unittest.mock import AsyncMock, MagicMock, patch
+from urllib.parse import urlparse
 
+import bcrypt
 import pytest
 from httpx import ASGITransport, AsyncClient
+from redis import Redis
+from redis.asyncio import Redis as AsyncRedis
+from redis.exceptions import NoPermissionError
 from starlette.requests import Request
 from starlette.responses import Response
 
@@ -84,22 +90,91 @@ class TestAuthEndpoints:
                 assert resp.json()["detail"] == "未登录"
 
     async def test_deployment_release_is_stored_with_new_session(self, monkeypatch):
-        pipeline = MagicMock()
-        pipeline.setex = MagicMock()
-        pipeline.execute = AsyncMock()
         redis = MagicMock()
-        redis.pipeline.return_value = pipeline
+        redis.eval = AsyncMock(return_value=1)
         monkeypatch.setattr(auth, "get_redis", AsyncMock(return_value=redis))
 
         response = Response()
         session_id = await auth.create_session(response)
 
-        assert pipeline.setex.call_args_list == [
-            call(f"session:{session_id}", auth.SESSION_TTL, "admin"),
-            call(f"{auth.SESSION_RELEASE_PREFIX}{session_id}", auth.SESSION_TTL, auth.RELEASE_ID),
-        ]
-        pipeline.execute.assert_awaited_once()
+        redis.eval.assert_awaited_once_with(
+            auth._CREATE_SESSION_SCRIPT,
+            2,
+            f"session:{session_id}",
+            f"{auth.SESSION_RELEASE_PREFIX}{session_id}",
+            auth.SESSION_TTL,
+            "admin",
+            auth.RELEASE_ID,
+        )
         assert auth.COOKIE_NAME in response.headers["set-cookie"]
+
+    async def test_password_login_with_stale_cookie_uses_acl_scoped_session_keys(self, monkeypatch):
+        redis_url = os.getenv("FQP_QUOTA_TEST_REDIS_URL", "")
+        if not redis_url:
+            pytest.skip("requires the isolated FQP_QUOTA_TEST_REDIS_URL Redis service")
+        parsed_url = urlparse(redis_url)
+        if parsed_url.hostname not in {"127.0.0.1", "localhost", "::1"}:
+            pytest.fail("auth ACL regression must use a loopback Redis service")
+
+        username = f"fqp_auth_test_{uuid.uuid4().hex}"
+        password = uuid.uuid4().hex
+        stale_session_id = uuid.uuid4().hex
+        stale_key = f"session:{stale_session_id}"
+        legacy_marker_key = f"session-release:{stale_session_id}"
+        admin = Redis.from_url(redis_url, decode_responses=True)
+        runtime = AsyncRedis.from_url(
+            redis_url,
+            username=username,
+            password=password,
+            decode_responses=True,
+        )
+
+        try:
+            admin.execute_command(
+                "ACL",
+                "SETUSER",
+                username,
+                "reset",
+                "on",
+                f">{password}",
+                "-@all",
+                "+ping",
+                "+select",
+                "+hello",
+                "+time",
+                "(+get +set +setex +expire +del +eval ~session:*)",
+            )
+            admin.set(stale_key, "admin", ex=3600)
+            admin.set(legacy_marker_key, "previous-release", ex=3600)
+
+            with pytest.raises(NoPermissionError):
+                await runtime.delete(stale_key, legacy_marker_key)
+
+            monkeypatch.setattr(auth, "_redis_pool", runtime)
+            password_hash = bcrypt.hashpw(b"test-password", bcrypt.gensalt(rounds=4)).decode()
+            monkeypatch.setenv("FQP_AUTH_MODE", "session")
+            monkeypatch.setenv("FQP_ADMIN_PASSWORD_HASH", password_hash)
+
+            async with AsyncClient(
+                transport=ASGITransport(app=app),
+                base_url="http://test",
+                cookies={auth.COOKIE_NAME: stale_session_id},
+            ) as client:
+                response = await client.post("/api/auth/login", json={"password": "test-password"})
+
+            assert response.status_code == 200
+            assert response.json() == {"ok": True, "user": "admin"}
+            assert admin.get(stale_key) is None
+            assert admin.get(legacy_marker_key) == "previous-release"
+
+            new_session_id = response.cookies[auth.COOKIE_NAME]
+            assert admin.get(f"session:{new_session_id}") == "admin"
+            assert admin.get(f"session:release:{new_session_id}") == auth.RELEASE_ID
+        finally:
+            admin.delete(stale_key, legacy_marker_key)
+            admin.execute_command("ACL", "DELUSER", username)
+            await runtime.aclose()
+            admin.close()
 
     async def test_previous_release_session_is_rejected_without_ttl_refresh(self, monkeypatch):
         redis = MagicMock()

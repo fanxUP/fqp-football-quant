@@ -1,32 +1,76 @@
-schema_version: 1
-task: P119
-status: implementation_in_progress
-tasks:
-  - id: P118
-    title: 安全发布并回退前端开发依赖更新
-    acceptance: A118
-    depends_on: []
-    kind: required
-    status: completed
-    files:
-      - ops/server/deploy.sh
-      - ops/server/release_dependencies.py
-      - tests/test_local/test_frontend_release_dependencies.py
-      - docs/33_自动测试代码审查与部署交付流程.md
-      - docs/project-reliability-improvements.md
-  - id: P119
-    title: 同步构建后的前端静态资源到 Nginx 网页目录
-    acceptance: A119
-    depends_on:
-      - P118
-    kind: required
-    status: verification_in_progress
-    files:
-      - ops/server/deploy.sh
-      - .vibe/BASELINE.yaml
-      - .vibe/CHANGE_BUDGET.yaml
-      - .vibe/PLAN.md
-      - .vibe/ACCEPTANCE.md
-      - .vibe/TASK_DAG.yaml
-      - .vibe/SCOPE_LOCK.yaml
-      - .vibe/EVIDENCE.json
+{
+  "schema_version": 4,
+  "current_task": "P120",
+  "tasks": {
+    "P119": {
+      "title": "修复 Redis ACL 限制下的密码登录会话创建",
+      "acceptance_id": "A119",
+      "depends_on": [],
+      "kind": "required",
+      "status": "DONE",
+      "files": [
+        "apps/backend/src/auth.py",
+        "tests/test_auth.py"
+      ],
+      "definition_of_done": [
+        "Password login succeeds with the production-style Redis ACL selector ~session:*.",
+        "Session and release-marker keys remain within the permitted session:* namespace.",
+        "The isolated Redis ACL regression passes; application diff has a passing independent review and required PR CI.",
+        "No dependency or schema migration is introduced."
+      ]
+    },
+    "P119-V4": {
+      "title": "迁移并验证 FQP 工作流记录到 V4",
+      "acceptance_id": "A119-V4",
+      "depends_on": [
+        "P119"
+      ],
+      "kind": "required",
+      "status": "DONE",
+      "files": [
+        ".vibe/archive/pre-v4-p118-2026-10-21/**",
+        ".vibe/STATE.yaml",
+        ".vibe/EVIDENCE.yaml",
+        ".vibe/SCOPE_LOCK.yaml",
+        ".vibe/CHANGE_BUDGET.yaml",
+        ".vibe/BASELINE.yaml",
+        ".vibe/TASK_DAG.yaml",
+        ".vibe/config.yaml",
+        ".vibe/engine-lock.json",
+        ".vibe/quality_gate.py",
+        ".vibe/QUALITY_GATE.md",
+        ".vibe/verify_migration.py",
+        ".vibe/ACCEPTANCE.md",
+        ".vibe/DESIGN.md",
+        ".vibe/PLAN.md"
+      ],
+      "definition_of_done": [
+        "Legacy P118 records are preserved byte-for-byte with a verified SHA-256 manifest.",
+        "V4 control documents parse as JSON-compatible YAML and cite the actual engine used for legal state transitions and gates.",
+        "The original P118 evidence remains archived with its exact evidence_update_ci_pending status and is not falsely marked complete.",
+        "Independent review has no blocker or major finding."
+      ]
+    },
+    "P120": {
+      "title": "安全发布构建后的前端静态资源",
+      "acceptance_id": "A120",
+      "depends_on": [
+        "P119-V4"
+      ],
+      "kind": "required",
+      "status": "IN_PROGRESS",
+      "files": [
+        "ops/server/deploy.sh",
+        "ops/server/publish_frontend.py",
+        "tests/test_local/test_frontend_publish.py"
+      ],
+      "definition_of_done": [
+        "Publisher rejects unsafe source trees, symlinks, missing local entry assets and path traversal.",
+        "Assets are atomically written before index.html; referenced local JS/CSS bytes match and old assets remain.",
+        "Deploy rollback restores the prior frontend or stops Nginx and reports ROLLBACK_REQUIRED.",
+        "Focused tests, lint, shell syntax, GitHub CI, independent review and V4 merge gate pass.",
+        "The merged revision is deployed and server health and critical HTTP paths pass."
+      ]
+    }
+  }
+}

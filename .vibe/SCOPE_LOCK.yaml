@@ -1,28 +1,20 @@
-mode: STRICT
-task: P119
-slice: 01-publish-built-frontend-to-nginx-root
-allowed_paths:
-  - .vibe/BASELINE.yaml
-  - .vibe/CHANGE_BUDGET.yaml
-  - .vibe/PLAN.md
-  - .vibe/ACCEPTANCE.md
-  - .vibe/TASK_DAG.yaml
-  - .vibe/SCOPE_LOCK.yaml
-  - .vibe/EVIDENCE.json
-  - ops/server/deploy.sh
-forbidden_paths:
-  - apps/backend/
-  - apps/frontend/src/
-  - sql/
-  - requirements.txt
-  - apps/model-bridge/
-max_changed_files: 8
-max_new_files: 0
-max_dependency_additions: 0
-max_migration_files: 0
-max_public_api_changes: 0
-max_regression_tests: 0
-scope_note: >-
-  Copy built frontend files to /var/www/fqp without deleting old assets; publish index.html last
-  atomically and restore the prior build's static files during rollback. Preserve all existing
-  release evidence, migration, backup, readiness, authentication, and SSH host-verification gates.
+{
+  "schema_version": 4,
+  "task_id": "P120",
+  "objective": "Safely publish the built frontend to the Nginx web root as part of a server release.",
+  "allowed_paths": [
+    "ops/server/deploy.sh",
+    "ops/server/publish_frontend.py",
+    "tests/test_local/test_frontend_publish.py"
+  ],
+  "protected_paths": [
+    "**/migrations/**",
+    "**/*.sql",
+    "**/requirements*.txt",
+    "**/pyproject.toml",
+    "**/package*.json",
+    "**/*lock*"
+  ],
+  "approved_protected_paths": [],
+  "notes": "P120 is separate from completed P119. Control-plane files under .vibe/ are excluded by the pinned V4 engine; only the three listed business paths may change."
+}

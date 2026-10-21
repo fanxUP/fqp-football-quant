@@ -1,0 +1,9 @@
+{
+  "state": "VERIFYING",
+  "last_transition": {
+    "from": "IMPLEMENTING",
+    "to": "VERIFYING",
+    "at": "2026-10-21T20:58:03.093310+08:00",
+    "reason": "P120 implementation is complete; checking filesystem behavior, deployment script syntax and build compatibility."
+  }
+}

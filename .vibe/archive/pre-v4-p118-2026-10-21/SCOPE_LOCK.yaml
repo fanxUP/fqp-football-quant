@@ -1,0 +1,34 @@
+mode: STRICT
+task: P118
+slice: 01-safe-frontend-dev-dependency-release
+allowed_paths:
+  - .vibe/BASELINE.yaml
+  - .vibe/CHANGE_BUDGET.yaml
+  - .vibe/DESIGN.md
+  - .vibe/PLAN.md
+  - .vibe/ACCEPTANCE.md
+  - .vibe/TASK_DAG.yaml
+  - .vibe/SCOPE_LOCK.yaml
+  - .vibe/EVIDENCE.json
+  - ops/server/deploy.sh
+  - ops/server/release_dependencies.py
+  - tests/test_local/test_frontend_release_dependencies.py
+  - docs/33_自动测试代码审查与部署交付流程.md
+  - docs/project-reliability-improvements.md
+forbidden_paths:
+  - apps/backend/
+  - apps/frontend/src/
+  - sql/
+  - requirements.txt
+  - apps/model-bridge/
+max_changed_files: 13
+max_new_files: 2
+max_dependency_additions: 0
+max_migration_files: 0
+max_public_api_changes: 0
+max_regression_tests: 6
+scope_note: >-
+  P118 only adds a narrow production release path for Vite/Vitest frontend devDependency updates
+  and safe rollback of that dependency tree. Do not weaken release evidence, SSH host verification,
+  migration, backup, readiness or protected HTTP smoke gates. P117 and the frontend vulnerability
+  update are already merged into baseline d592cdfd2207c2ed148f8346f02ab92a25399e8d.

@@ -1,7 +1,18 @@
-base_revision: 657d82d671fe0842c8c7c27c8cd85c9b509caa1e
-branch: fix/deploy-sync-frontend-dist
-recorded_at: '2026-10-21'
-repo: /Volumes/Nas/FQP/code
-slice: 01-publish-built-frontend-to-nginx-root
-task: P119
-mode: STRICT
+{
+  "git_revision": "275d44bc73139ce9b9e68d4decd64c096edae01f",
+  "branch": "",
+  "dirty": false,
+  "captured_at": "2026-10-21T20:55:45.812558+08:00",
+  "checks": {
+    "lint": {
+      "exit_code": 0,
+      "summary": "All checks passed!\n",
+      "timed_out": false
+    },
+    "test": {
+      "exit_code": 0,
+      "summary": "============================= test session starts ==============================\nplatform darwin -- Python 3.14.6, pytest-9.1.1, pluggy-1.7.0\nrootdir: /private/tmp/fqp-p120-baseline\nconfigfile: pyproject.toml\nplugins: mock-3.15.1, cov-7.1.0, asyncio-1.4.0, anyio-4.15.1, platformdirs-4.13.5\nasyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function\ncollected 14 items\n\ntests/test_auth.py .........s....                                        [100%]\n\n======================== 13 passed, 1 skipped in 0.46s =========================\n",
+      "timed_out": false
+    }
+  }
+}
