@@ -1,30 +1,23 @@
-# P117：部署版本提示与强制重新登录
-
-## 任务类型与风险
-
-- 类型：跨后端会话校验、前端登录状态与发布版本检测。
-- 风险：STRICT；改动会撤销全部旧版本会话并改变客户端访问状态。
-- 运行环境：生产服务器由 Git checkout 发布；后端可读取当前 checkout 的提交 SHA。
+# P118：前端构建开发依赖的可回退发布
 
 ## 目标
 
-每当服务器运行的 Git 提交发生变化，拒绝旧提交创建的会话；已打开的已登录页面最多每 30 秒发现一次版本变化，出现不可关闭的更新提示，清理旧会话后刷新到登录页。
+安全发布已经修复的前端开发依赖漏洞，同时让失败回退重建旧版前恢复旧版依赖树。
 
-## 设计
+## 边界
 
-1. 服务器发布脚本为每次目标发布和回滚原子写入 `.runtime/release-id`，值由提交 SHA、UTC 时间和 UUID 组成；后端优先读取该标识。非发布启动读取 `FQP_RELEASE_ID`，再回退到 Git HEAD 完整 SHA，Git 不可用时使用 `VERSION`。
-2. 登录时将 release ID 与 Redis session 一同写入；校验时要求 session release ID 与当前后端一致。已有但缺少 release 元数据的会话视为过期。Redis 原 session 值保持 `admin`，避免扩大会话值格式变化。
-3. 在公开的 `/api/auth/release` 提供不缓存的 release ID。`/api/auth/me` 对旧版本会话返回可识别的 `deployment_changed` 响应；登出同时删除 Redis 状态并清理 HttpOnly cookie。
-4. 前端初始化检查 session；登录后每 30 秒检查 release，页面重新获得焦点时立即检查。版本变化后阻止继续使用旧页面，显示不可跳过的可访问提示，用户确认后登出并刷新到登录页。
+- 仅针对前端 `devDependencies.vite` 和 `devDependencies.vitest` 的版本更新及其锁定传递依赖。
+- 不放行前端生产依赖、应用代码、Python 依赖、Node 运行时、Pi bridge 依赖或数据库迁移。
+- 不降低 release evidence、主机身份、服务、readiness、保护 HTTP smoke 或有迁移时的一小时备份要求。
 
-## 非目标
+## 流程
 
-- 不改密码验证、角色、会话 TTL、生产登录方式或模型供应商登录。
-- 不增加数据库迁移、依赖、服务；不自动提交、合并或实际部署。
-- 不在当前授权范围内新增或运行测试。
+1. Python 分类器读取指定 base/target 提交中的 manifest 与 lockfile。
+2. manifest 的其他根字段和开发依赖键必须完全相同，只有 Vite/Vitest 版本可改。
+3. 从两侧锁文件分别遍历 Vite/Vitest 的 `dependencies`、`optionalDependencies` 和 `peerDependencies` 闭包；只接受闭包内且两侧均标记为 `dev: true` 的变更项，拒绝无关开发依赖变更。
+4. 部署前运行 `npm ci --ignore-scripts`，随后构建新前端。
+5. 如果发布失败，checkout 回滚 SHA，再按旧锁文件执行 `npm ci --ignore-scripts`，再构建旧前端并恢复服务；旧依赖无法安装时停止 Nginx，拒绝以混合依赖继续运行。
 
 ## 主要风险控制
 
-- release ID 只用于相等性判断，不携带凭据；Redis 失效仍按现有逻辑拒绝访问。
-- 旧版本 session 不因访问而延长 TTL；保持旧记录到原 TTL，供 `/me` 向用户说明为何必须重新登录。
-- Release endpoint 设置 `no-store`；网络错误时不误登出，下一轮继续检查。
+分类器默认拒绝未知/缺失字段，任何生产包变化都回到专门依赖发布流程。生产服务不加载 Vite/Vitest；锁文件仍固定可复现构建。代码与服务回退不执行破坏性数据库回滚。

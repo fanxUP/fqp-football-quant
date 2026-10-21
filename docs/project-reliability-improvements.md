@@ -33,13 +33,13 @@
 
 - `ops/server/deploy.sh <40位主分支SHA> --plan`：拉取远端引用，要求目标等于 `origin/main`，展示差异；不切换版本、不执行 SQL。
 - `ops/server/migrate.py`：只读列出当前检出的待执行迁移，检查已执行文件的 SHA256、应用数据库角色与表/序列权限。旧账本缺失校验值时拒绝自动猜测。
-- 预先对目标提交做 CI、数据库副本 UP/DOWN、重复账本和重复发奖检查、保护接口 HTTP 验证，准备新鲜手动备份。
-- `ops/server/deploy.sh <40位主分支SHA> --apply /绝对路径/release-evidence.json` 执行发布。记录文件含：`target_sha`、带时区的 `verified_at`（24小时内）、`quality`、`migration_copy_dry_run`、`rollback_review`、`protected_http_smoke`（四项均为实际验证后的 `passed`），以及 `backup_path`、`backup_sha256`。
-- 发布前要求一小时内的备份，核对备份哈希和归档目录，要求三个服务均为 active；停止服务、切换代码、构建前端、事务迁移；启动后检查 `/health/ready`、彩票/模型曲线处理函数与服务状态。
+- 预先对目标提交做 CI、重复账本和重复发奖检查、保护接口 HTTP 验证；仅有待执行迁移时才做数据库副本演练并准备新鲜手动备份。
+- `ops/server/deploy.sh <40位主分支SHA> --apply /绝对路径/release-evidence.json` 执行发布。记录文件含：`target_sha`、带时区的 `verified_at`（24小时内）、`quality`、`rollback_review`、`protected_http_smoke`（均为实际验证后的 `passed`）；只有迁移待执行时，才另需 `migration_copy_dry_run`、`backup_path` 和 `backup_sha256`。
+- 有待执行迁移时要求一小时内的备份并核对哈希和归档目录；无待执行迁移时不要求备份。发布脚本仍要求三个服务处于 active；停止服务、切换代码、构建前端、按需事务迁移；启动后检查 `/health/ready`、彩票/模型曲线处理函数与服务状态。
 - 失败时恢复先前提交、重新构建前端、恢复服务，并轮询 `/health`。104/105 是兼容旧代码的增量结构，自动回退保留这些结构。其他迁移需要单独评估兼容性，脚本不会自动执行 DOWN。
-- 依赖或运行时版本有差异时脚本拒绝发布，需另行准备对应环境的回退方式。
+- Python/Node 运行时、模型桥接及前端生产依赖变化仍由脚本拒绝，需另行准备对应环境的回退方式。仅 `vite` / `vitest` 直接版本更新及其锁文件开发依赖闭包内、全部标记 `dev: true` 的变更可以发布；无关开发依赖变化仍拒绝。回退时先按旧提交执行 `npm ci --ignore-scripts`，再构建旧版本，恢复或构建失败则停止 Nginx 并报告 `ROLLBACK_REQUIRED`。
 - 发布脚本本轮没有在服务器运行。处理函数检查不能替代带登录会话的 HTTP 验证。
-- 首次使用新发布脚本时，从目标分支的独立归档运行，并设置 `FQP_PROJECT_ROOT=/home/admin/fqp-football-quant`，这样无需提前改变生产代码或制造未跟踪文件。
+- 首次使用新发布脚本时，从目标分支的独立归档运行，并设置 `FQP_PROJECT_ROOT=/home/admin/fqp-football-quant`；归档中的 `ops/server/deploy.sh` 与 `ops/server/release_dependencies.py` 必须保持同目录，这样无需提前改变生产代码或制造未跟踪文件。
 
 ## 手动备份与恢复
 

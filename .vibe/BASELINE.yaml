@@ -1,7 +1,7 @@
-base_revision: 2e0285e5a6c65f682c1d3118e2e188c2c3b03be2
-branch: feat/force-relogin-on-deploy
+base_revision: d592cdfd2207c2ed148f8346f02ab92a25399e8d
+branch: fix/deploy-build-dependency-rollback
 recorded_at: '2026-10-21'
 repo: /Volumes/Nas/FQP/code
-slice: 01-deployment-session-revalidation
-task: P117
+slice: 01-safe-frontend-dev-dependency-release
+task: P118
 mode: STRICT
