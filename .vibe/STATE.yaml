@@ -1,10 +1,10 @@
 {
-  "state": "REVIEWING",
+  "state": "READY_TO_MERGE",
   "last_transition": {
-    "from": "VERIFYING",
-    "to": "REVIEWING",
-    "at": "2026-10-21T21:10:01.815992+08:00",
-    "reason": "P120 local checks pass; final-head CI and second-pass independent review are pending."
+    "from": "REVIEWING",
+    "to": "READY_TO_MERGE",
+    "at": "2026-10-21T23:58:05.988175+08:00",
+    "reason": "PR 26 evidence-only closeout: deployment SHA verified on server, required CI and independent review pass, and FQP merge quality gate is READY_TO_MERGE."
   },
   "mode": "STRICT"
 }

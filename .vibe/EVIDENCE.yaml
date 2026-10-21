@@ -381,8 +381,8 @@
     }
   },
   "quality_gate": {
-    "status": "PENDING",
-    "checked_at": null,
+    "status": "READY_TO_MERGE",
+    "checked_at": "2026-10-21T23:57:30.147130+08:00",
     "failures": []
   },
   "prior_reviews": {
