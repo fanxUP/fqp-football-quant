@@ -1,9 +1,9 @@
 {
-  "state": "READY_TO_MERGE",
+  "state": "DONE",
   "last_transition": {
-    "from": "REVIEWING",
-    "to": "READY_TO_MERGE",
-    "at": "2026-10-21T19:40:05.740350+08:00",
-    "reason": "FQP preflight and live PR checks passed at c8a7546"
+    "from": "VERIFIED",
+    "to": "DONE",
+    "at": "2026-10-21T20:03:56.455720+08:00",
+    "reason": "PR #23 merged and verified on 100.121.47.26"
   }
 }

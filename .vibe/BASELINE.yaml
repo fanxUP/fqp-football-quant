@@ -1,7 +1,7 @@
 {
-  "git_revision": "657d82d671fe0842c8c7c27c8cd85c9b509caa1e",
-  "branch": "",
+  "git_revision": "f393e9ae1aacae5d145665bf47f402bfb3131ce6",
+  "branch": "chore/p119-deployment-evidence",
   "dirty": false,
-  "captured_at": "2026-10-21T18:58:22.420855+08:00",
+  "captured_at": "2026-10-21T20:02:55.366753+08:00",
   "checks": {}
 }
