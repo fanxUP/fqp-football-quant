@@ -43,7 +43,9 @@ def verify_password(password: str) -> bool:
         return False
     try:
         return bcrypt.checkpw(password.encode("utf-8"), stored_hash.encode("utf-8"))
-    except (ValueError, TypeError):
+    except ValueError:
+        return False
+    except TypeError:
         return False
 
 
