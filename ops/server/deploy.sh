@@ -39,27 +39,19 @@ if ! git diff --quiet "$ROLLBACK_SHA" "$RELEASE_SHA" -- requirements.txt require
 fi
 if [[ "$RELEASE_MODE" == '--plan' ]]; then
     git diff --stat "$ROLLBACK_SHA" "$RELEASE_SHA"
-    echo 'Plan only. Review target SQL and record copy dry-run/quality/backup evidence before --apply.'
+    echo 'Plan only. Record quality/rollback/HTTP evidence before --apply; migration copy-dry-run and a recent backup are required only when migrations are pending.'
     exit 0
 fi
 [[ -f "$RELEASE_EVIDENCE" ]] || { echo 'Missing release evidence JSON' >&2; exit 1; }
 .venv/bin/python - "$RELEASE_EVIDENCE" "$RELEASE_SHA" <<'PY'
-import hashlib, json, pathlib, subprocess, sys
+import json, pathlib, sys
 from datetime import UTC, datetime
 record = json.loads(pathlib.Path(sys.argv[1]).read_text())
-if record.get('target_sha') != sys.argv[2] or any(record.get(key) != 'passed' for key in ('quality', 'migration_copy_dry_run', 'rollback_review', 'protected_http_smoke')):
-    raise SystemExit('Release evidence must match target SHA with all required checks passed')
+if record.get('target_sha') != sys.argv[2] or any(record.get(key) != 'passed' for key in ('quality', 'rollback_review', 'protected_http_smoke')):
+    raise SystemExit('Release evidence must match target SHA with quality, rollback review, and protected HTTP smoke passed')
 verified = datetime.fromisoformat(record['verified_at'])
 if verified.tzinfo is None or not 0 <= (datetime.now(UTC) - verified).total_seconds() <= 86400:
     raise SystemExit('Release verification evidence must be from the last 24 hours')
-backup = pathlib.Path(record['backup_path'])
-if not 0 <= datetime.now(UTC).timestamp() - backup.stat().st_mtime <= 3600:
-    raise SystemExit('Pre-deployment backup must be from the last hour')
-with backup.open('rb') as stream:
-    checksum = hashlib.file_digest(stream, 'sha256').hexdigest()
-if checksum != record.get('backup_sha256'):
-    raise SystemExit('Backup checksum mismatch')
-subprocess.run(['pg_restore', '--list', str(backup)], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 PY
 sudo -n true
 sudo -n -u postgres -- test -x "$PROJECT_ROOT/.venv/bin/python" || {
@@ -160,7 +152,48 @@ sudo -n systemctl stop "${SERVICES[@]}"
 git -c core.hooksPath=/dev/null checkout -B main "$RELEASE_SHA"
 npm --prefix apps/frontend ci --ignore-scripts
 npm --prefix apps/frontend run build
-run_migration
+MIGRATION_PLAN_OUTPUT="$(run_migration)"
+printf '%s\n' "$MIGRATION_PLAN_OUTPUT"
+PENDING_MIGRATION_COUNT="$(printf '%s\n' "$MIGRATION_PLAN_OUTPUT" | .venv/bin/python -c '
+import ast
+import re
+import sys
+
+output = sys.stdin.read()
+matches = re.findall(r"^Role: [^;]+; pending migrations: (.+)$", output, re.MULTILINE)
+if len(matches) != 1:
+    raise SystemExit("Could not verify the database migration plan; refusing to continue")
+pending = ast.literal_eval(matches[0])
+if not isinstance(pending, list) or any(not isinstance(name, str) for name in pending):
+    raise SystemExit("Database migration plan has an invalid pending-migration list")
+print(len(pending))
+')"
+if (( PENDING_MIGRATION_COUNT > 0 )); then
+    .venv/bin/python - "$RELEASE_EVIDENCE" <<'PY'
+import hashlib, json, pathlib, subprocess, sys
+from datetime import UTC, datetime
+record = json.loads(pathlib.Path(sys.argv[1]).read_text())
+if record.get('migration_copy_dry_run') != 'passed':
+    raise SystemExit('Pending migrations require a passed migration copy dry-run')
+backup_path = record.get('backup_path')
+if not isinstance(backup_path, str) or not backup_path:
+    raise SystemExit('Pending migrations require a verified pre-deployment backup')
+backup = pathlib.Path(backup_path)
+try:
+    age = datetime.now(UTC).timestamp() - backup.stat().st_mtime
+except OSError as exc:
+    raise SystemExit('Pending migrations require an accessible pre-deployment backup') from exc
+if not 0 <= age <= 3600:
+    raise SystemExit('Pending migrations require a pre-deployment backup from the last hour')
+with backup.open('rb') as stream:
+    checksum = hashlib.file_digest(stream, 'sha256').hexdigest()
+if checksum != record.get('backup_sha256'):
+    raise SystemExit('Backup checksum mismatch')
+subprocess.run(['pg_restore', '--list', str(backup)], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+PY
+else
+    echo 'No pending database migrations; migration dry-run and recent-backup gates are not applicable.'
+fi
 MIGRATION_APPLY_ATTEMPTED=true
 run_migration --apply
 write_release_marker "${RELEASE_SHA}-${DEPLOYMENT_INSTANCE}-d"
