@@ -5,5 +5,6 @@
     "to": "REVIEWING",
     "at": "2026-10-21T21:10:01.815992+08:00",
     "reason": "P120 local checks pass; final-head CI and second-pass independent review are pending."
-  }
+  },
+  "mode": "STRICT"
 }

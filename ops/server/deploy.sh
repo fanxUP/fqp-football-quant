@@ -109,7 +109,13 @@ publish_frontend() {
 }
 stop_and_confirm_services() {
     local service active_state
-    for service in "$@"; do sudo -n systemctl stop "$service" || true; done
+    for service in "$@"; do
+        if [[ "$service" == nginx ]]; then
+            sudo -n systemctl stop nginx || true
+        else
+            sudo -n systemctl stop "$service" || true
+        fi
+    done
     for service in "$@"; do
         active_state="$(sudo -n systemctl show --property=ActiveState --value "$service")" || return 1
         [[ "$active_state" == inactive ]] || return 1
@@ -118,7 +124,7 @@ stop_and_confirm_services() {
 rollback_required() {
     local reason="$1"
     if stop_and_confirm_services "${SERVICES[@]}" nginx; then
-        echo "ROLLBACK_REQUIRED: $reason; application services and nginx are verified inactive." >&2
+        echo "ROLLBACK_REQUIRED: $reason; application services and nginx remain stopped after verified inactivity." >&2
     else
         echo "ROLLBACK_REQUIRED: $reason; stop was attempted but all services could not be verified inactive. Manual recovery is required." >&2
     fi

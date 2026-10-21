@@ -28,7 +28,7 @@ Deployment is tracked separately from the merge acceptance: record target revisi
 - The local JavaScript and CSS assets referenced by `index.html` are present and byte-identical at the destination before `index.html` is atomically switched.
 - External URLs are not mistaken for local files, traversal paths and symlink destinations fail closed, and a failed publish leaves the previous entry page in place.
 - Rollback rebuilds and republishes the previous frontend when publication was attempted; restoration failure stops Nginx and reports `ROLLBACK_REQUIRED`.
-- Focused isolated filesystem regression tests, shell syntax checks, configured GitHub CI, security review, independent read-only review and the V4 merge gate pass.
+- Focused isolated filesystem regression tests, shell syntax checks, configured GitHub CI, security review and independent read-only review pass. The V4 merge gate evaluates the committed evidence separately.
 - No application API, database schema, runtime dependency or frontend dependency changes are introduced.
 
 ## A120-DEPLOY — Production release

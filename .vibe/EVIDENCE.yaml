@@ -45,13 +45,13 @@
       "status": "PASS",
       "command": "/bin/bash -lc 'npm --prefix apps/frontend run build && /Volumes/Nas/FQP/code/.venv/bin/python - <<\"PY\"\nfrom pathlib import Path\nfrom tempfile import TemporaryDirectory\nfrom ops.server.publish_frontend import publish\nsource = Path(\"apps/frontend/dist\")\nwith TemporaryDirectory(prefix=\"fqp-p120-web-\") as temporary:\n    web_root = Path(temporary).resolve() / \"web\"\n    web_root.mkdir()\n    publish(source, web_root, expected_web_root=web_root)\n    assert (web_root / \"index.html\").read_bytes() == (source / \"index.html\").read_bytes()\n    print(\"Built Vite output published and entry assets verified in an isolated real-path directory\")\nPY'",
       "exit_code": 0,
-      "summary": "     4.15 kB │ gzip:   1.77 kB\ndist/assets/constants-GCdYie87.js                   4.37 kB │ gzip:   2.15 kB\ndist/assets/MatchDetailPage-BGw2NHLh.js             5.23 kB │ gzip:   2.08 kB\ndist/assets/radar-gHSAJbDR.js                       5.29 kB │ gzip:   2.31 kB\ndist/assets/ModulesPage-B2-ErH0O.js                 5.44 kB │ gzip:   1.88 kB\ndist/assets/axisAlignTicks-Cq4bKvYc.js              5.67 kB │ gzip:   2.50 kB\ndist/assets/MatchesPage-BrWBMQX6.js                 6.38 kB │ gzip:   2.60 kB\ndist/assets/scatter-GX9F4nE6.js                     6.39 kB │ gzip:   2.45 kB\ndist/assets/install-CWJREfL_.js                     6.55 kB │ gzip:   2.67 kB\ndist/assets/heatmap-C6hVjCpv.js                     6.57 kB │ gzip:   2.79 kB\ndist/assets/EventsPage-CCmbgYK8.js                  7.31 kB │ gzip:   2.65 kB\ndist/assets/points-Bk4o0kJr.js                      7.52 kB │ gzip:   2.96 kB\ndist/assets/jsx-runtime-CIxEorsV.js                 7.89 kB │ gzip:   2.98 kB\ndist/assets/OddsMovementPage-LogdOEYy.js            8.49 kB │ gzip:   3.49 kB\ndist/assets/ExecutionCenter-DWd1DUkw.js            11.50 kB │ gzip:   4.22 kB\ndist/assets/DataHealthPage-IxHH-qUt.js             11.71 kB │ gzip:   4.33 kB\ndist/assets/UpsetsPage-CC4ss0M_.js                 11.74 kB │ gzip:   3.78 kB\ndist/assets/AgentPanel-Dlk0pCb4.js                 12.13 kB │ gzip:   3.29 kB\ndist/assets/visualization-DAeIOZOW.js              12.19 kB │ gzip:   4.08 kB\ndist/assets/RosterEvidencePanel-DLv0xEI8.js        13.38 kB │ gzip:   4.98 kB\ndist/assets/pie-CrbRJEEF.js                        15.15 kB │ gzip:   6.36 kB\ndist/assets/axisHelper-DEUVdXih.js                 15.42 kB │ gzip:   5.61 kB\ndist/assets/SettingsPage-CYiSpg63.js               15.60 kB │ gzip:   5.17 kB\ndist/assets/NewsIntelligencePage-BBxfiWue.js       18.79 kB │ gzip:   5.92 kB\ndist/assets/DashboardPage-CMR6NlJO.js              18.98 kB │ gzip:   6.32 kB\ndist/assets/AgentWorkspacePage-CwLHwoKU.js         19.40 kB │ gzip:   6.46 kB\ndist/assets/BacktestPage-D0DNUsdq.js               19.78 kB │ gzip:   7.23 kB\ndist/assets/line-DgZ4oTdw.js                       20.02 kB │ gzip:   8.17 kB\ndist/assets/scaleRawExtentInfo-DpJKVGD1.js         20.21 kB │ gzip:   8.13 kB\ndist/assets/PoolPage-C3jIb8Co.js                   21.38 kB │ gzip:   4.62 kB\ndist/assets/bar-CfizbZkM.js                        22.01 kB │ gzip:   8.44 kB\ndist/assets/installSimple-D1zSL3pa.js              22.31 kB │ gzip:   8.01 kB\ndist/assets/ModelProvidersPage-Ct8EguDD.js         26.82 kB │ gzip:   8.73 kB\ndist/assets/ReviewsPage-DJ70xX5F.js                27.32 kB │ gzip:   8.85 kB\ndist/assets/MatchDetailDrawer-B8CTaPTW.js          27.96 kB │ gzip:   6.76 kB\ndist/assets/ModelsPage-CLyvTVzU.js                 45.73 kB │ gzip:  13.94 kB\ndist/assets/AnalysisPage-BNPoKZy5.js               57.23 kB │ gzip:  15.66 kB\ndist/assets/BettingCenterPage-gFlQxn6o.js          60.05 kB │ gzip:  16.91 kB\ndist/assets/TeamLogo-sEjeCsHS.js                   62.34 kB │ gzip:  12.46 kB\ndist/assets/chartRuntime-D5tu9rpq.js              164.83 kB │ gzip:  53.72 kB\ndist/assets/LightweightLineChart-BKmGpM_G.js      166.38 kB │ gzip:  54.51 kB\ndist/assets/index-ChznAFuD.js                     256.13 kB │ gzip:  83.21 kB\ndist/assets/SeriesData-B6NLPcGc.js                345.26 kB │ gzip: 116.97 kB\ndist/assets/PitchScene-X0dOTAzj.js                943.56 kB │ gzip: 250.07 kB\n\n✓ built in 1.11s\nPublished frontend to /private/var/folders/_t/x6mc_pyn1td5m8858wg18p580000gn/T/fqp-p120-web-v1mgnjn1/web; updated 884 assets; retained older assets\nBuilt Vite output published and entry assets verified in an isolated real-path directory\n[plugin builtin:vite-reporter] \n(!) Some chunks are larger than 500 kB after minification. Consider:\n- Using dynamic import() to code-split the application\n- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting\n- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.\n",
+      "summary": "     4.15 kB │ gzip:   1.77 kB\ndist/assets/constants-GCdYie87.js                   4.37 kB │ gzip:   2.15 kB\ndist/assets/MatchDetailPage-BGw2NHLh.js             5.23 kB │ gzip:   2.08 kB\ndist/assets/radar-gHSAJbDR.js                       5.29 kB │ gzip:   2.31 kB\ndist/assets/ModulesPage-B2-ErH0O.js                 5.44 kB │ gzip:   1.88 kB\ndist/assets/axisAlignTicks-Cq4bKvYc.js              5.67 kB │ gzip:   2.50 kB\ndist/assets/MatchesPage-BrWBMQX6.js                 6.38 kB │ gzip:   2.60 kB\ndist/assets/scatter-GX9F4nE6.js                     6.39 kB │ gzip:   2.45 kB\ndist/assets/install-CWJREfL_.js                     6.55 kB │ gzip:   2.67 kB\ndist/assets/heatmap-C6hVjCpv.js                     6.57 kB │ gzip:   2.79 kB\ndist/assets/EventsPage-CCmbgYK8.js                  7.31 kB │ gzip:   2.65 kB\ndist/assets/points-Bk4o0kJr.js                      7.52 kB │ gzip:   2.96 kB\ndist/assets/jsx-runtime-CIxEorsV.js                 7.89 kB │ gzip:   2.98 kB\ndist/assets/OddsMovementPage-LogdOEYy.js            8.49 kB │ gzip:   3.49 kB\ndist/assets/ExecutionCenter-DWd1DUkw.js            11.50 kB │ gzip:   4.22 kB\ndist/assets/DataHealthPage-IxHH-qUt.js             11.71 kB │ gzip:   4.33 kB\ndist/assets/UpsetsPage-CC4ss0M_.js                 11.74 kB │ gzip:   3.78 kB\ndist/assets/AgentPanel-Dlk0pCb4.js                 12.13 kB │ gzip:   3.29 kB\ndist/assets/visualization-DAeIOZOW.js              12.19 kB │ gzip:   4.08 kB\ndist/assets/RosterEvidencePanel-DLv0xEI8.js        13.38 kB │ gzip:   4.98 kB\ndist/assets/pie-CrbRJEEF.js                        15.15 kB │ gzip:   6.36 kB\ndist/assets/axisHelper-DEUVdXih.js                 15.42 kB │ gzip:   5.61 kB\ndist/assets/SettingsPage-CYiSpg63.js               15.60 kB │ gzip:   5.17 kB\ndist/assets/NewsIntelligencePage-BBxfiWue.js       18.79 kB │ gzip:   5.92 kB\ndist/assets/DashboardPage-CMR6NlJO.js              18.98 kB │ gzip:   6.32 kB\ndist/assets/AgentWorkspacePage-CwLHwoKU.js         19.40 kB │ gzip:   6.46 kB\ndist/assets/BacktestPage-D0DNUsdq.js               19.78 kB │ gzip:   7.23 kB\ndist/assets/line-DgZ4oTdw.js                       20.02 kB │ gzip:   8.17 kB\ndist/assets/scaleRawExtentInfo-DpJKVGD1.js         20.21 kB │ gzip:   8.13 kB\ndist/assets/PoolPage-C3jIb8Co.js                   21.38 kB │ gzip:   4.62 kB\ndist/assets/bar-CfizbZkM.js                        22.01 kB │ gzip:   8.44 kB\ndist/assets/installSimple-D1zSL3pa.js              22.31 kB │ gzip:   8.01 kB\ndist/assets/ModelProvidersPage-Ct8EguDD.js         26.82 kB │ gzip:   8.73 kB\ndist/assets/ReviewsPage-DJ70xX5F.js                27.32 kB │ gzip:   8.85 kB\ndist/assets/MatchDetailDrawer-B8CTaPTW.js          27.96 kB │ gzip:   6.76 kB\ndist/assets/ModelsPage-CLyvTVzU.js                 45.73 kB │ gzip:  13.94 kB\ndist/assets/AnalysisPage-BNPoKZy5.js               57.23 kB │ gzip:  15.66 kB\ndist/assets/BettingCenterPage-gFlQxn6o.js          60.05 kB │ gzip:  16.91 kB\ndist/assets/TeamLogo-sEjeCsHS.js                   62.34 kB │ gzip:  12.46 kB\ndist/assets/chartRuntime-D5tu9rpq.js              164.83 kB │ gzip:  53.72 kB\ndist/assets/LightweightLineChart-BKmGpM_G.js      166.38 kB │ gzip:  54.51 kB\ndist/assets/index-ChznAFuD.js                     256.13 kB │ gzip:  83.21 kB\ndist/assets/SeriesData-B6NLPcGc.js                345.26 kB │ gzip: 116.97 kB\ndist/assets/PitchScene-X0dOTAzj.js                943.56 kB │ gzip: 250.07 kB\n\n✓ built in 1.06s\nPublished frontend to /private/var/folders/_t/x6mc_pyn1td5m8858wg18p580000gn/T/fqp-p120-web-6gr7lu9k/web; updated 884 assets; retained older assets\nBuilt Vite output published and entry assets verified in an isolated real-path directory\n[plugin builtin:vite-reporter] \n(!) Some chunks are larger than 500 kB after minification. Consider:\n- Using dynamic import() to code-split the application\n- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting\n- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.\n",
       "timed_out": false,
       "environment": "unknown",
-      "revision": "0b0cd8c69f390d9b3019559bad6d6902a47a5454",
+      "revision": "ea559d619509f1e48fd6880ff1a15bc21de42fd7",
       "dirty_tree": true,
       "tree_fingerprint": "ddd71033743caee4d39ccab438f7a5d1e3e7b45564d9cec45ef3561485ebca18",
-      "verified_at": "2026-10-21T21:15:14.977383+08:00"
+      "verified_at": "2026-10-21T21:18:45.299109+08:00"
     },
     "A120-GATES": {
       "status": "PASS",
@@ -60,22 +60,22 @@
       "summary": "changed_files=3\nPASS: scope\nfiles_changed: 3/3\nnew_files: 2/2\nnew_dependencies_heuristic: 0/0\nschema_migration_files: 0/0\ndeclared_public_api_changes: 0/0\nPASS: change budget\ntest: regression=0/0\nlint: regression=0/0\nPASS: regression budget\n",
       "timed_out": false,
       "environment": "unknown",
-      "revision": "0b0cd8c69f390d9b3019559bad6d6902a47a5454",
+      "revision": "ea559d619509f1e48fd6880ff1a15bc21de42fd7",
       "dirty_tree": true,
-      "tree_fingerprint": "ddd71033743caee4d39ccab438f7a5d1e3e7b45564d9cec45ef3561485ebca18",
-      "verified_at": "2026-10-21T21:15:26.721176+08:00"
+      "tree_fingerprint": "40e3bfb3346a5c4df163c6f89b014ec8a68f69177244e436ff5d0cfdaf91ded0",
+      "verified_at": "2026-10-21T21:22:23.559927+08:00"
     },
     "A120-LOCAL": {
       "status": "PASS",
-      "command": "/bin/bash -lc '/Volumes/Nas/FQP/code/.venv/bin/python -m pytest -q tests/test_local/test_frontend_publish.py && /Volumes/Nas/FQP/code/.venv/bin/ruff check ops/server/publish_frontend.py tests/test_local/test_frontend_publish.py && /Volumes/Nas/FQP/code/.venv/bin/ruff format --check ops/server/publish_frontend.py tests/test_local/test_frontend_publish.py && bash -n ops/server/deploy.sh && /Volumes/Nas/FQP/code/.venv/bin/python -m py_compile ops/server/publish_frontend.py && git diff --check'",
+      "command": "/bin/bash -lc '/Volumes/Nas/FQP/code/.venv/bin/python -m pytest -q tests/test_local/test_frontend_publish.py tests/test_local/test_native_database_runtime.py::test_deploy_runner_executes_migrations_as_local_database_owner && /Volumes/Nas/FQP/code/.venv/bin/ruff check ops/server/publish_frontend.py tests/test_local/test_frontend_publish.py && /Volumes/Nas/FQP/code/.venv/bin/ruff format --check ops/server/publish_frontend.py tests/test_local/test_frontend_publish.py && bash -n ops/server/deploy.sh && /Volumes/Nas/FQP/code/.venv/bin/python -m py_compile ops/server/publish_frontend.py && git diff --check'",
       "exit_code": 0,
-      "summary": "============================= test session starts ==============================\nplatform darwin -- Python 3.14.6, pytest-9.1.1, pluggy-1.7.0\nrootdir: /Volumes/Nas/FQP/code\nconfigfile: pyproject.toml\nplugins: mock-3.15.1, cov-7.1.0, asyncio-1.4.0, anyio-4.15.1, platformdirs-4.13.5\nasyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function\ncollected 10 items\n\ntests/test_local/test_frontend_publish.py ..........                     [100%]\n\n============================== 10 passed in 0.10s ==============================\nAll checks passed!\n2 files already formatted\n",
+      "summary": "============================= test session starts ==============================\nplatform darwin -- Python 3.14.6, pytest-9.1.1, pluggy-1.7.0\nrootdir: /Volumes/Nas/FQP/code\nconfigfile: pyproject.toml\nplugins: mock-3.15.1, cov-7.1.0, asyncio-1.4.0, anyio-4.15.1, platformdirs-4.13.5\nasyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function\ncollected 11 items\n\ntests/test_local/test_frontend_publish.py ..........                     [ 90%]\ntests/test_local/test_native_database_runtime.py .                       [100%]\n\n============================== 11 passed in 0.11s ==============================\nAll checks passed!\n2 files already formatted\n",
       "timed_out": false,
       "environment": "unknown",
-      "revision": "0b0cd8c69f390d9b3019559bad6d6902a47a5454",
+      "revision": "ea559d619509f1e48fd6880ff1a15bc21de42fd7",
       "dirty_tree": true,
-      "tree_fingerprint": "ddd71033743caee4d39ccab438f7a5d1e3e7b45564d9cec45ef3561485ebca18",
-      "verified_at": "2026-10-21T21:15:03.354423+08:00"
+      "tree_fingerprint": "40e3bfb3346a5c4df163c6f89b014ec8a68f69177244e436ff5d0cfdaf91ded0",
+      "verified_at": "2026-10-21T21:22:11.292261+08:00"
     },
     "A120": {
       "status": "PENDING",
@@ -87,7 +87,7 @@
     "application_code": {
       "status": "PENDING",
       "reviewer": "independent read-only review agent",
-      "summary": "Initial review found three issues: rollback checkout was unchecked, web-root ancestor symlinks were not rejected, and the index-last test asserted only final contents. All three were fixed and local regression/build checks pass; second-pass review of the updated head is pending."
+      "summary": "The prior code review passed on ea559d6. A small deployment-runner adjustment preserves compatibility with an existing CI assertion while retaining the verified stop-state helper; final-head review is pending."
     },
     "v4_migration": {
       "status": "PASS",
@@ -96,18 +96,22 @@
       "verified_at": "2026-10-21T19:26:57.448513+08:00"
     },
     "p120_scope_and_ops": {
-      "status": "PENDING"
+      "status": "PENDING",
+      "summary": "Scope remains the three P120 business files; awaiting final-head CI and review confirmation."
     }
   },
   "security": {
-    "status": "PENDING",
-    "scope": "P120 filesystem publisher and deployment rollback",
+    "status": "PASS",
+    "scope": "P120 frontend filesystem publisher and deployment rollback",
     "checks": {
-      "path_and_symlink_safety": "pending",
-      "atomic_publication_and_index_order": "pending",
-      "shell_error_and_rollback_behavior": "pending",
-      "dependencies_or_schema": "none expected"
-    }
+      "path_and_symlink_safety": "PASS: source/destination symlinks, traversal and symlink ancestors are rejected.",
+      "atomic_publication_and_index_order": "PASS: same-directory atomic replace; local JS/CSS hashes checked before index switch.",
+      "shell_error_and_rollback_behavior": "PASS: exact prior SHA is verified; systemd inactive-state checks gate rollback recovery and stop commands are covered by compatibility regression.",
+      "credentials_or_secrets": "none added",
+      "dependencies_or_schema": "none added"
+    },
+    "reviewer": "security-gate code review plus independent read-only review",
+    "verified_at": "2026-10-21T21:22:38+08:00"
   },
   "migration": {
     "status": "NOT_APPLICABLE",
