@@ -24,6 +24,11 @@ SESSION_TTL = int(os.getenv("FQP_SESSION_TTL", "86400"))
 # Keep release markers under the existing session:* Redis ACL namespace. The
 # runtime account can then inspect, refresh, and delete both session keys.
 SESSION_RELEASE_PREFIX = "session:release:"
+_CREATE_SESSION_SCRIPT = """
+redis.call("SETEX", KEYS[1], ARGV[1], ARGV[2])
+redis.call("SETEX", KEYS[2], ARGV[1], ARGV[3])
+return 1
+"""
 
 
 # Singleton Redis connection pool
@@ -55,10 +60,15 @@ async def create_session(response: Response) -> str:
     """Create a new session in Redis and set cookie on the response."""
     session_id = str(uuid.uuid4())
     r = await get_redis()
-    pipeline = r.pipeline(transaction=True)
-    pipeline.setex(f"session:{session_id}", SESSION_TTL, "admin")
-    pipeline.setex(f"{SESSION_RELEASE_PREFIX}{session_id}", SESSION_TTL, RELEASE_ID)
-    await pipeline.execute()
+    await r.eval(
+        _CREATE_SESSION_SCRIPT,
+        2,
+        f"session:{session_id}",
+        f"{SESSION_RELEASE_PREFIX}{session_id}",
+        SESSION_TTL,
+        "admin",
+        RELEASE_ID,
+    )
     response.set_cookie(
         key=COOKIE_NAME,
         value=session_id,
