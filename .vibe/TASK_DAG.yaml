@@ -58,7 +58,7 @@
         "P119-V4"
       ],
       "kind": "required",
-      "status": "IN_PROGRESS",
+      "status": "DONE",
       "files": [
         "ops/server/deploy.sh",
         "ops/server/publish_frontend.py",
