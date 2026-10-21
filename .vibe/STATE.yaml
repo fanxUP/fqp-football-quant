@@ -1,0 +1,9 @@
+{
+  "state": "READY_TO_MERGE",
+  "last_transition": {
+    "from": "REVIEWING",
+    "to": "READY_TO_MERGE",
+    "at": "2026-10-21T19:40:05.740350+08:00",
+    "reason": "FQP preflight and live PR checks passed at c8a7546"
+  }
+}

@@ -1,22 +1,8 @@
-# P118 实施计划
+# P119 Plan
 
-## 范围
-
-为已合并的 Vite/Vitest 开发依赖修复准备可回退的服务器发布路径。发布门禁只放行前端开发依赖变更；生产依赖、Python/Node 运行时、模型桥接包仍需专门发布。失败回退时按旧提交恢复前端锁文件依赖后再构建，恢复失败则停止 Nginx 并明确报告 `ROLLBACK_REQUIRED`。
-
-## 顺序
-
-1. 固定基线为 `d592cdf`，将任务范围限定到部署 runner、其依赖分类辅助模块、部署契约测试和发布文档。
-2. 先添加 RED 回归用例：允许仅 `vite`/`vitest` 及其开发依赖闭包的 dev-only 锁文件变化；拒绝生产依赖、运行时文件、其他直接开发依赖和无关锁文件项变更。
-3. 实现计划/应用模式分类，并在回退时重装旧提交锁文件；重装失败时 fail closed。
-4. 运行分类器回归、shell 语法、完整相关 CI；核对前端生产依赖树不变。
-5. 以固定 SHA 做服务器计划；读取服务、磁盘、内存、健康、迁移计划和保护路由烟测。无待执行迁移时不要求数据库备份。
-6. 仅在证据真实、门禁通过后部署；失败按 runner 回滚并验证服务、健康和版本。
-
-## 验收
-
-见 `ACCEPTANCE.md` 中 A118。不得移除发布证据、健康检查、迁移或 SSH 主机身份门禁。
-
-## 当前状态
-
-PR #20 已合并为基线 `d592cdf`；本地与 GitHub CI 质量证据通过。生产当前 `8420390`，服务健康、迁移计划为空。P118 发布支持尚未实现；没有对生产作写入。
+1. Preserve legacy P118 files in `archive/pre-v4-p118-2026-10-21/` with SHA-256 manifest.
+2. Initialize V4 controls against main baseline `657d82d671fe0842c8c7c27c8cd85c9b509caa1e`.
+3. Run the auth ACL regression and Ruff, then check scope, budget, and regression gates.
+4. Record independent review and final-head GitHub CI.
+5. Run the V4 merge gate, merge PR #23, and deploy the merged revision with the server release runner.
+6. Verify server revision, service health, unauthenticated API behavior, and password login using private test credentials if available.

@@ -1,10 +1,20 @@
-# A118：前端构建开发依赖的安全发布与回退
+# P119 Acceptance
 
-1. 发布分类器只允许 `apps/frontend/package.json` 中 `devDependencies.vite` / `devDependencies.vitest` 的版本变更，以及这两个包依赖闭包内锁文件的 `dev: true` 包变化。
-2. 拒绝前端生产 `dependencies`、其他 manifest 配置、非 dev-only 锁项、Python/Node/模型桥接依赖或运行时文件变更。
-3. `--plan` 明确标注前端开发依赖刷新；常规依赖变化仍保持拒绝。
-4. 部署失败并回退时，在旧提交 checkout 后执行旧锁文件的 `npm ci --ignore-scripts`，再构建旧版本；依赖恢复失败时停止 Nginx，退出并输出 `ROLLBACK_REQUIRED`。
-5. 保持当前 release evidence、服务健康、迁移和保护 HTTP 烟测门禁。无待执行迁移时不要求新数据库备份；有迁移时继续要求新鲜备份和副本演练。
-6. 分类器的允许/拒绝路径、无关 dev lock 项拒绝、首次暂存目录加载分类器、runner shell 语法、全套 GitHub CI 通过；部署后验证服务、`/health/ready`、release ID 和关键路由。
+## A119 — Authentication fix
 
-状态：`implementation_in_progress`；PR #20 已合并。服务器暂未更新。
+- Password login succeeds with the restricted Redis runtime ACL (`~session:*`) when a stale session cookie is present.
+- Session and release-marker writes use only permitted Redis keys and commands.
+- Focused auth tests, Ruff lint and format checks pass; the PR application diff has a passing independent review and required GitHub checks.
+- Scope is exactly `apps/backend/src/auth.py` and `tests/test_auth.py`; no dependency or database migration is introduced.
+
+## A119-V4 — Workflow migration
+
+- The pre-migration P118 snapshot is preserved byte-for-byte under `archive/pre-v4-p118-2026-10-21/`, verified by the manifest.
+- V4 control files parse as JSON-compatible YAML and use the V4 engine for state transitions, scope, budget, regression and merge checks.
+- The original P118 evidence, including its `evidence_update_ci_pending` status, remains archived unchanged; this migration does not assert that P118 completed.
+- `python3 -I -S -B .vibe/verify_migration.py` verifies the archive hashes, preserved P118 status, V4 control parsing and pinned engine bundle.
+- Independent read-only review has no blocker or major finding.
+
+## Deployment check (post-merge)
+
+Deployment is tracked separately from the merge acceptance: record target revision, rollback revision, migration/dependency readiness, service health and protected-route smoke in the release evidence. A successful password login smoke may be recorded only when private test credentials are available; credentials must not be stored here.

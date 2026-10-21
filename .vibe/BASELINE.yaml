@@ -1,7 +1,7 @@
-base_revision: d592cdfd2207c2ed148f8346f02ab92a25399e8d
-branch: fix/deploy-build-dependency-rollback
-recorded_at: '2026-10-21'
-repo: /Volumes/Nas/FQP/code
-slice: 01-safe-frontend-dev-dependency-release
-task: P118
-mode: STRICT
+{
+  "git_revision": "657d82d671fe0842c8c7c27c8cd85c9b509caa1e",
+  "branch": "",
+  "dirty": false,
+  "captured_at": "2026-10-21T18:58:22.420855+08:00",
+  "checks": {}
+}

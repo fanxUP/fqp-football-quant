@@ -1,0 +1,46 @@
+{
+  "archive_format": 1,
+  "archived_at": "2026-10-21",
+  "reason": "Preserve the original P118 legacy workflow snapshot byte-for-byte before creating active V4 controls.",
+  "legacy_current_task": "P118",
+  "legacy_current_slice": "01-safe-frontend-dev-dependency-release",
+  "legacy_current_status": "ci_passed_for_ab20fbc; evidence_update_ci_pending",
+  "files": [
+    {
+      "path": "EVIDENCE.json",
+      "sha256": "45d422ea65ade7c9e529fd6073133a3a2a8e1ea41afe6b19fee54a9d74a72753"
+    },
+    {
+      "path": "releases/2026-10-16-cleanup.md",
+      "sha256": "3cb98cb844d81beb30572d9c2a8e98d29c53b5045958086b0a4fe61de2e168a3"
+    },
+    {
+      "path": "SCOPE_LOCK.yaml",
+      "sha256": "538fc4d4f1ca8eb57a1ec62420a169f199418aef8685f12c865243b8943caa11"
+    },
+    {
+      "path": "CHANGE_BUDGET.yaml",
+      "sha256": "ef5a597d75af5c8fff6b8d21e5d18b33f2d159edbad17bd6e7dab06b0c219ec9"
+    },
+    {
+      "path": "PLAN.md",
+      "sha256": "18c5b371b556cb3037e164f1f50937ef5d9d1db01eb0bceffb8bb1da160f0106"
+    },
+    {
+      "path": "BASELINE.yaml",
+      "sha256": "d0f79febbaa806d264dfc166e24726c7a9ef2f8b3ad29907907693cd092e1986"
+    },
+    {
+      "path": "DESIGN.md",
+      "sha256": "3b2388dab72b973997e5e4dde842195bad0e74f94ace0ce8a79751476df52347"
+    },
+    {
+      "path": "TASK_DAG.yaml",
+      "sha256": "d3615eb96719664b96ff23fc92900aeee87845c8cd785997107c5c55d74b7dd5"
+    },
+    {
+      "path": "ACCEPTANCE.md",
+      "sha256": "8be5f47806a5798d3a329d6b0cee673fa01ef9b225ff6c9fb7fe4e8d8c690c7e"
+    }
+  ]
+}
