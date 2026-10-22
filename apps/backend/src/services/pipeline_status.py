@@ -8,6 +8,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from scripts.weather_schedule import WEATHER_COLLECTION_SCHEDULE
+
 
 @dataclass(frozen=True)
 class JobDefinition:
@@ -77,7 +79,11 @@ JOB_DEFINITIONS: dict[str, JobDefinition] = {
         timedelta(hours=22),
     ),
     "weather_collection": JobDefinition(
-        "天气数据采集", "每日 09:07/15:07", "official", ("collect_weather",), timedelta(hours=22)
+        "天气数据采集",
+        WEATHER_COLLECTION_SCHEDULE,
+        "official",
+        ("collect_weather",),
+        timedelta(hours=6),
     ),
     "mle_train_models": JobDefinition(
         "MLE模型训练", "每周一 02:00", "model", max_age=timedelta(days=8)

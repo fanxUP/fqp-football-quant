@@ -4,8 +4,8 @@
     "command_timeout_seconds": 900
   },
   "commands": {
-    "test": "${FQP_TEST_PYTHON:-python3.14} -m pytest -q tests/test_scripts/test_official_crawler.py",
-    "lint": "${FQP_TEST_RUFF:-ruff} check scripts/official_crawler.py tests/test_scripts/test_official_crawler.py"
+    "test": "\"${FQP_TEST_PYTHON:-python3.14}\" -m pytest -q tests/test_jobs/test_run_scheduler.py",
+    "lint": "\"${FQP_TEST_RUFF:-ruff}\" check scripts/weather_schedule.py scripts/jobs/run_scheduler.py apps/backend/src/services/pipeline_status.py tests/test_jobs/test_run_scheduler.py"
   },
   "paths": {
     "dependency_files": [
@@ -26,7 +26,7 @@
   "quality_gate": {
     "engine_path": "/Users/estefan-macworkstation/.remote-vibe-coding/engine/vibe.py",
     "repository": "fanxUP/fqp-football-quant",
-    "pull_request": 29,
+    "pull_request": 30,
     "required_checks": [
       "test",
       "lint-and-typecheck"

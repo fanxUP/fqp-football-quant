@@ -1,8 +1,22 @@
 {
   "schema_version": 4,
-  "task_id": "P104-SALE-STATUS-CORRECTION",
-  "allowed_paths": ["scripts/official_crawler.py", "tests/test_scripts/test_official_crawler.py"],
-  "protected_paths": ["**/migrations/**", "**/*.sql", "**/requirements*.txt", "**/pyproject.toml", "**/package*.json", "**/*lock*"],
+  "task_id": "P105-WEATHER",
+  "objective": "Refresh P104 weather observations on a bounded four-hour cadence while preserving six-hour freshness semantics and the current per-run match cap.",
+  "allowed_paths": [
+    "scripts/weather_schedule.py",
+    "scripts/jobs/collect_weather.py",
+    "scripts/jobs/run_scheduler.py",
+    "apps/backend/src/services/pipeline_status.py",
+    "tests/test_jobs/test_run_scheduler.py"
+  ],
+  "protected_paths": [
+    "**/migrations/**",
+    "**/*.sql",
+    "**/requirements*.txt",
+    "**/pyproject.toml",
+    "**/package*.json",
+    "**/*lock*"
+  ],
   "approved_protected_paths": [],
-  "notes": "Correct the known official sellStatus=2 mapping only; no migrations, dependencies, public API changes, or production data access."
+  "notes": "Pin the weather cron trigger to Asia/Shanghai, derive the operations label from shared cadence constants, and update the collector module note. The collector runtime, model input, database schema, source calls, production consumer, and release target do not change."
 }

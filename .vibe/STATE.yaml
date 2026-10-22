@@ -3,7 +3,8 @@
   "last_transition": {
     "from": "REVIEWING",
     "to": "READY_TO_MERGE",
-    "at": "2026-10-23T04:12:07.243884+08:00",
-    "reason": "Independent read-only review passed and V4 merge quality gate reports READY_TO_MERGE; no repository merge or deployment has been executed."
-  }
+    "at": "2026-10-23T03:34:23.942546+08:00",
+    "reason": "P105-WEATHER local subtask acceptance, independent review, current-tree evidence, scope, budget, and regression gate pass; this records readiness only and does not merge or deploy."
+  },
+  "blocked_reason": null
 }

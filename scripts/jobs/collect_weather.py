@@ -1,6 +1,5 @@
-"""Weather data collection job.
+"""Weather data collection job; schedule is defined in run_scheduler.py.
 
-Daily job (09:00, 15:00) using OpenMeteoClient.
 Fetches weather forecasts for upcoming match stadiums and stores in
 match_weather_snapshots.
 """
