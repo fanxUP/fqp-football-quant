@@ -100,15 +100,15 @@
     },
     "A120-POST-CLOSEOUT": {
       "status": "PASS",
-      "command": "/bin/bash -c 'set -euo pipefail\n/Volumes/Nas/FQP/code/.venv/bin/python -B -c \"import ast; from pathlib import Path; ast.parse(Path(\\\"apps/backend/src/deployment_version.py\\\").read_text())\"\n/Volumes/Nas/FQP/code/.venv/bin/ruff check apps/backend/src/deployment_version.py\n/Volumes/Nas/FQP/code/.venv/bin/python -B -m pytest -q tests/test_auth.py\ngit diff --check origin/main...HEAD'",
+      "command": "/bin/bash -c 'set -euo pipefail\n/Volumes/Nas/FQP/code/.venv/bin/python -B -c \"import ast; from pathlib import Path; ast.parse(Path(\\\"apps/backend/src/deployment_version.py\\\").read_text())\"\n/Volumes/Nas/FQP/code/.venv/bin/ruff check apps/backend/src/deployment_version.py\n/Volumes/Nas/FQP/code/.venv/bin/ruff format --check apps/backend/src/deployment_version.py\n/Volumes/Nas/FQP/code/.venv/bin/python -B -m pytest -q tests/test_auth.py\ngit diff --check origin/main...HEAD'",
       "exit_code": 0,
-      "summary": "All checks passed!\n============================= test session starts ==============================\nplatform darwin -- Python 3.14.6, pytest-9.1.1, pluggy-1.7.0\nrootdir: /Volumes/Nas/FQP/code\nconfigfile: pyproject.toml\nplugins: mock-3.15.1, cov-7.1.0, asyncio-1.4.0, anyio-4.15.1, platformdirs-4.13.5\nasyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function\ncollected 14 items\n\ntests/test_auth.py .........s....                                        [100%]\n\n======================== 13 passed, 1 skipped in 0.35s =========================\n",
+      "summary": "All checks passed!\n1 file already formatted\n============================= test session starts ==============================\nplatform darwin -- Python 3.14.6, pytest-9.1.1, pluggy-1.7.0\nrootdir: /Volumes/Nas/FQP/code\nconfigfile: pyproject.toml\nplugins: mock-3.15.1, cov-7.1.0, asyncio-1.4.0, anyio-4.15.1, platformdirs-4.13.5\nasyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function\ncollected 14 items\n\ntests/test_auth.py .........s....                                        [100%]\n\n======================== 13 passed, 1 skipped in 0.34s =========================\n",
       "timed_out": false,
       "environment": "unknown",
-      "revision": "c651fe1b444ee4663c20f38e12adb6c621b2f576",
+      "revision": "c2162830cda50e346b5df0f95b2e1d7267819367",
       "dirty_tree": false,
-      "tree_fingerprint": "7a528ab3cea392231bb31a2ad0f81e0b5ac65afd9b3926eee45473838f192e86",
-      "verified_at": "2026-10-22T11:49:56.041989+08:00"
+      "tree_fingerprint": "402e0d6e7298e9f04a32cbf161b6794dd2e22a30cda6a14eef97fcdb93e98b07",
+      "verified_at": "2026-10-22T11:52:44.409013+08:00"
     }
   },
   "reviews": {
