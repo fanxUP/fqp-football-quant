@@ -52,7 +52,7 @@ def _now() -> str:
 _SALE_STATUS_MAP: dict[int, str] = {
     0: "not_started",
     1: "selling",
-    2: "selling",
+    2: "paused",
     3: "stopped",
     4: "finished",
 }
@@ -82,15 +82,37 @@ def _pool_enabled(pool: dict[str, Any], *fields: str) -> bool:
     return any(pool.get(field, 0) == 1 for field in fields)
 
 
-def _pool_is_open(pool: dict[str, Any] | None, has_odds: bool) -> bool:
-    if not pool or not pool.get("poolStatus"):
-        return has_odds
-    return str(pool["poolStatus"]).lower() == "selling"
+def _match_sale_status(match: dict[str, Any]) -> str:
+    raw_status = match.get("sellStatus")
+    allow_legacy_text = False
+    if raw_status in (None, ""):
+        raw_status = match.get("saleStatus")
+        allow_legacy_text = True
+    if isinstance(raw_status, bool):
+        return "unknown"
+    if isinstance(raw_status, int):
+        return _SALE_STATUS_MAP.get(raw_status, "unknown")
+    if isinstance(raw_status, str):
+        normalized = raw_status.strip().lower()
+        if normalized.isdigit():
+            return _SALE_STATUS_MAP.get(int(normalized), "unknown")
+        if allow_legacy_text and normalized in _SALE_STATUS_MAP.values():
+            return normalized
+    return "unknown"
 
 
-def _market_status(pool: dict[str, Any] | None, is_open: bool) -> str:
+def _pool_is_open(pool: dict[str, Any] | None, match_sale_status: str) -> bool:
+    if match_sale_status != "selling":
+        return False
+    pool_status = str((pool or {}).get("poolStatus") or "").strip().lower()
+    return pool_status == "selling"
+
+
+def _market_status(pool: dict[str, Any] | None, is_open: bool, match_sale_status: str) -> str:
     if is_open:
         return "open"
+    if match_sale_status != "selling":
+        return match_sale_status
     status = str((pool or {}).get("poolStatus") or "closed").strip().lower()
     return status or "closed"
 
@@ -153,14 +175,7 @@ def parse_matches_from_response(
             else:
                 kickoff = match_date or match_time or None
 
-            # saleStatus is a number in real API
-            sale_status_raw = sub.get("saleStatus", sub.get("sellStatus"))
-            if isinstance(sale_status_raw, int) or (
-                isinstance(sale_status_raw, str) and sale_status_raw.isdigit()
-            ):
-                sale_status = _SALE_STATUS_MAP.get(int(sale_status_raw), "unknown")
-            else:
-                sale_status = str(sale_status_raw) if sale_status_raw else "unknown"
+            sale_status = _match_sale_status(sub)
 
             # The match-list endpoint exposes HAD/HHAD in oddsList, while
             # poolList is authoritative for all five available play types.
@@ -187,7 +202,7 @@ def parse_matches_from_response(
                 else:
                     handicap_val = None
 
-                is_open = _pool_is_open(pool, bool(odds))
+                is_open = _pool_is_open(pool, sale_status)
                 raw_market = {**odds, "_pool": pool or {}}
                 markets.append(
                     {
@@ -202,7 +217,7 @@ def parse_matches_from_response(
                         and _pool_enabled(
                             pool or {}, "allUp", "bettingAllup", "cbtAllUp", "intAllUp"
                         ),
-                        "market_status": _market_status(pool, is_open),
+                        "market_status": _market_status(pool, is_open, sale_status),
                         "raw_json": raw_market,
                     }
                 )
@@ -244,6 +259,9 @@ def parse_odds_snapshots_from_match(
     A match with HAD + HHAD = 6 snapshot rows (3 options × 2 play types).
     """
     snapshots: list[dict] = []
+    match_sale_status = _match_sale_status(match_raw)
+    if match_sale_status != "selling":
+        return snapshots
     snap_time = snapshot_time or _now()
     match_raw.get("kickoffTime") or match_raw.get("matchTime")
     sale_stop = match_raw.get("stopSaleTime") or match_raw.get("saleStopTime")
@@ -268,7 +286,7 @@ def parse_odds_snapshots_from_match(
     for pool_code, odds in odds_by_pool.items():
         play_type = POOL_CODE_MAP.get(pool_code, pool_code.lower())
         pool = pools_by_code.get(pool_code)
-        is_open = _pool_is_open(pool, True)
+        is_open = _pool_is_open(pool, match_sale_status)
         if not is_open:
             continue
         is_single = _pool_enabled(pool or {}, "single", "bettingSingle", "cbtSingle", "intSingle")

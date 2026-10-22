@@ -1,27 +1,25 @@
 {
   "schema_version": 4,
-  "current_task": "P121",
+  "current_task": "P104-SALE-STATUS-CORRECTION",
   "tasks": {
-    "P121": {
-      "title": "单一旧模型接入 P104 观测数据（Maher-Poisson SPF 影子模式）",
-      "acceptance_id": "A121",
+    "P104-SALE-STATUS-CORRECTION": {
+      "title": "纠正官方竞彩 sellStatus 与玩法开放状态映射",
+      "acceptance_id": "A104-SALE-STATUS",
       "depends_on": [],
       "kind": "required",
       "status": "DONE",
       "files": [
-        "scripts/maher_goal_rate_runtime.py",
-        "scripts/observed_maher_shadow.py",
-        "scripts/jobs/run_model_prediction.py",
-        "scripts/prediction_input_runtime.py",
-        "scripts/prediction_input_revisions.py",
-        "scripts/features/build_weather_features.py",
-        "tests/test_computation/test_prediction_input_runtime_postgres.py"
+        "scripts/official_crawler.py",
+        "tests/test_scripts/test_official_crawler.py"
       ],
       "definition_of_done": [
-        "The current trained Maher-Poisson SPF shadow consumer uses validated temperature from the exact P104 batch only.",
-        "The model result is traceable and idempotently retained with the P105 consumption receipt.",
-        "No official predictions, recommendation, ticket, finance, settlement, schema, provider, or public API is changed.",
-        "Focused fixed-fixture and isolated PostgreSQL regression, static checks, and V4 scope/budget gates pass."
+        "Official sellStatus=2 is normalized as paused, not selling.",
+        "A match-level state other than selling closes markets and current open-odds snapshots even if poolStatus says Selling.",
+        "A selling match opens a market only when the corresponding pool explicitly has poolStatus=Selling; missing pool records/status fail closed despite odds or pool flags. Unknown and missing match-level status also fail closed.",
+        "Boolean sellStatus values are unknown, not integer status codes.",
+        "Nonnumeric official sellStatus values fail closed; known text statuses are accepted only through the legacy saleStatus alias when sellStatus is absent.",
+        "The parser never infers sale_stop_time from status or kickoff.",
+        "Fixed-sample regressions, static checks, scope, and change budget pass."
       ]
     }
   }

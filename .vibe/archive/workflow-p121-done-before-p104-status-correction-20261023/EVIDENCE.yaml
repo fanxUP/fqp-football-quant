@@ -1,0 +1,47 @@
+{
+  "schema_version": 4,
+  "current_task": "P121",
+  "acceptance": {
+    "A121": {
+      "status": "PASS",
+      "command": "bash /private/tmp/fqp-p121-final-verify.sh",
+      "exit_code": 0,
+      "summary": "============================= test session starts ==============================\nplatform darwin -- Python 3.14.6, pytest-9.1.1, pluggy-1.7.0\nrootdir: /Volumes/Nas/FQP/worktrees/p106-observed-maher-spf\nconfigfile: pyproject.toml\nplugins: mock-3.15.1, cov-7.1.0, asyncio-1.4.0, anyio-4.15.1, platformdirs-4.13.5\nasyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function\ncollected 85 items\n\ntests/test_scripts/test_run_model_prediction.py ........................ [ 28%]\n........                                                                 [ 37%]\ntests/test_computation/test_prediction_semantics.py .................... [ 61%]\n...............................                                          [ 97%]\ntests/test_features/test_build_weather_features.py ..                    [100%]\n\n============================== 85 passed in 2.60s ==============================\n============================= test session starts ==============================\nplatform linux -- Python 3.14.9, pytest-9.1.1, pluggy-1.7.0\nrootdir: /workspace\nconfigfile: pyproject.toml\nplugins: anyio-4.15.1\ncollected 32 items\n\ntests/test_computation/test_prediction_input_runtime_postgres.py ....... [ 21%]\n.........................                                                [100%]\n\n============================== 32 passed in 5.96s ==============================\nAll checks passed!\n7 files already formatted\nWARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.\n",
+      "timed_out": false,
+      "environment": "unknown",
+      "revision": "96c5f9526e08db1f33317194c3f1df3cc666b58e",
+      "dirty_tree": true,
+      "tree_fingerprint": "7824cb1118d3225e83e49a76a882e2e4abdb623cc539c931fac4b90a43bf6c7d",
+      "verified_at": "2026-10-22T20:26:43.082601+08:00"
+    },
+    "A121-LOCAL-TESTS": {
+      "status": "PASS",
+      "command": "/Volumes/Nas/FQP/code/.venv/bin/python -m pytest -q tests/test_computation/test_prediction_input_runtime_postgres.py tests/test_scripts/test_run_model_prediction.py tests/test_computation/test_prediction_semantics.py tests/test_features/test_build_weather_features.py",
+      "exit_code": 0,
+      "summary": "============================= test session starts ==============================\nplatform darwin -- Python 3.14.6, pytest-9.1.1, pluggy-1.7.0\nrootdir: /Volumes/Nas/FQP/worktrees/p106-observed-maher-spf\nconfigfile: pyproject.toml\nplugins: mock-3.15.1, cov-7.1.0, asyncio-1.4.0, anyio-4.15.1, platformdirs-4.13.5\nasyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function\ncollected 117 items\n\ntests/test_computation/test_prediction_input_runtime_postgres.py ...ssss [  5%]\nsssssssssssssssssssssssss                                                [ 27%]\ntests/test_scripts/test_run_model_prediction.py ........................ [ 47%]\n........                                                                 [ 54%]\ntests/test_computation/test_prediction_semantics.py .................... [ 71%]\n...............................                                          [ 98%]\ntests/test_features/test_build_weather_features.py ..                    [100%]\n\n======================== 88 passed, 29 skipped in 1.00s ========================\n",
+      "timed_out": false,
+      "environment": "unknown",
+      "revision": "b4a376880da19e7154986d051796c982d164455e",
+      "dirty_tree": true,
+      "tree_fingerprint": "d5d0c4dd90ef68ba554c1085542dad68732be5988632d678e1de6256a7c11530",
+      "verified_at": "2026-10-22T19:10:43.601709+08:00"
+    },
+    "A121-LOCAL-STATIC": {
+      "status": "PASS",
+      "command": "bash -lc '/Volumes/Nas/FQP/code/.venv/bin/ruff check scripts/maher_goal_rate_runtime.py scripts/observed_maher_shadow.py scripts/features/build_weather_features.py scripts/jobs/run_model_prediction.py scripts/prediction_input_revisions.py scripts/prediction_input_runtime.py tests/test_computation/test_prediction_input_runtime_postgres.py && /Volumes/Nas/FQP/code/.venv/bin/ruff format --check scripts/maher_goal_rate_runtime.py scripts/observed_maher_shadow.py scripts/features/build_weather_features.py scripts/jobs/run_model_prediction.py scripts/prediction_input_revisions.py scripts/prediction_input_runtime.py tests/test_computation/test_prediction_input_runtime_postgres.py && /Volumes/Nas/FQP/code/.venv/bin/python -m compileall -q scripts/maher_goal_rate_runtime.py scripts/observed_maher_shadow.py scripts/features/build_weather_features.py scripts/jobs/run_model_prediction.py scripts/prediction_input_revisions.py scripts/prediction_input_runtime.py tests/test_computation/test_prediction_input_runtime_postgres.py && git diff --check'",
+      "exit_code": 0,
+      "summary": "All checks passed!\n7 files already formatted\n",
+      "timed_out": false,
+      "environment": "unknown",
+      "revision": "b4a376880da19e7154986d051796c982d164455e",
+      "dirty_tree": true,
+      "tree_fingerprint": "d5d0c4dd90ef68ba554c1085542dad68732be5988632d678e1de6256a7c11530",
+      "verified_at": "2026-10-22T19:10:51.888318+08:00"
+    }
+  },
+  "quality_gate": {
+    "status": "READY_TO_MERGE",
+    "checked_at": "2026-10-22T20:27:03.117510+08:00",
+    "failures": []
+  }
+}

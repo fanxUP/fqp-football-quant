@@ -1,0 +1,29 @@
+{
+  "schema_version": 4,
+  "execution": {
+    "command_timeout_seconds": 900
+  },
+  "commands": {
+    "test": "\"${FQP_TEST_PYTHON:-python3.14}\" -m pytest -q tests/test_computation/test_prediction_input_runtime_postgres.py",
+    "lint": "\"${FQP_TEST_RUFF:-ruff}\" check scripts/maher_goal_rate_runtime.py scripts/observed_maher_shadow.py scripts/jobs/run_model_prediction.py scripts/features/build_weather_features.py scripts/prediction_input_runtime.py scripts/prediction_input_revisions.py tests/test_computation/test_prediction_input_runtime_postgres.py"
+  },
+  "paths": {
+    "dependency_files": [
+      "requirements.txt",
+      "requirements-dev.txt",
+      "pyproject.toml",
+      "apps/backend/requirements.txt",
+      "apps/backend/pyproject.toml",
+      "apps/frontend/package.json",
+      "apps/frontend/package-lock.json"
+    ],
+    "migrations": [
+      "**/migrations/**",
+      "**/*.sql"
+    ],
+    "ignore_untracked": []
+  },
+  "quality_gate": {
+    "engine_path": "/Users/estefan-macworkstation/.remote-vibe-coding/engine/vibe.py"
+  }
+}

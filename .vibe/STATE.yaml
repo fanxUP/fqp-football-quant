@@ -3,8 +3,7 @@
   "last_transition": {
     "from": "REVIEWING",
     "to": "READY_TO_MERGE",
-    "at": "2026-10-22T20:27:04.265360+08:00",
-    "reason": "Scope, change budget, regression commands, fresh A121 evidence, and independent review all pass."
-  },
-  "blocked_reason": null
+    "at": "2026-10-23T04:12:07.243884+08:00",
+    "reason": "Independent read-only review passed and V4 merge quality gate reports READY_TO_MERGE; no repository merge or deployment has been executed."
+  }
 }

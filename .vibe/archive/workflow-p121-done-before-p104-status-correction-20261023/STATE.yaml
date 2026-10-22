@@ -1,0 +1,10 @@
+{
+  "state": "DONE",
+  "last_transition": {
+    "from": "READY_TO_MERGE",
+    "to": "DONE",
+    "at": "2026-10-23T03:55:32.439072+08:00",
+    "reason": "P121 is already merged and deployed as PR #28 on c62456b; close its local workflow before starting the separate official sale-status correction."
+  },
+  "blocked_reason": null
+}

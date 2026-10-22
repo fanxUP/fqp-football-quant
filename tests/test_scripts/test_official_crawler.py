@@ -92,7 +92,14 @@ def test_current_pool_flags_drive_single_and_pass_availability():
         "awayTeamAllName": "江原FC",
         "sellStatus": "1",
         "oddsList": [{"poolCode": "CRS", "h": 8.5, "d": 5.5, "a": 7.3}],
-        "poolList": [{"poolCode": "CRS", "cbtSingle": 1, "cbtAllUp": 1}],
+        "poolList": [
+            {
+                "poolCode": "CRS",
+                "poolStatus": "Selling",
+                "cbtSingle": 1,
+                "cbtAllUp": 1,
+            }
+        ],
     }
     raw = {
         "value": {"matchInfoList": [{"businessDate": "2026-07-12", "subMatchList": [sub_match]}]}
@@ -142,6 +149,120 @@ def test_pool_list_builds_all_official_markets_and_respects_sale_status():
     assert by_play["bf"]["market_status"] == "stopped"
 
 
+def test_official_paused_match_overrides_selling_pool_and_compatibility_alias():
+    sub_match = {
+        "matchNumStr": "周五201",
+        "matchDate": "2026-07-17",
+        "matchTime": "20:00",
+        "leagueAllName": "测试联赛",
+        "homeTeamAllName": "主队",
+        "awayTeamAllName": "客队",
+        "sellStatus": "2",
+        "saleStatus": "1",
+        "oddsList": [{"poolCode": "HAD", "h": 2.0, "d": 3.0, "a": 4.0}],
+        "poolList": [{"poolCode": "HAD", "poolStatus": "Selling", "cbtSingle": 1, "cbtAllUp": 1}],
+    }
+    raw = {
+        "value": {"matchInfoList": [{"businessDate": "2026-07-17", "subMatchList": [sub_match]}]}
+    }
+
+    match = parse_matches_from_response(raw, "2026-07-17")[0]
+    market = match["_markets"][0]
+
+    assert match["sale_status"] == "paused"
+    assert match["sale_stop_time"] is None
+    assert market["is_open"] is False
+    assert market["market_status"] == "paused"
+    assert market["is_single_allowed"] is False
+    assert market["is_pass_allowed"] is False
+    assert parse_odds_snapshots_from_match(sub_match, "2026-07-17T12:00:00") == []
+
+
+def test_missing_or_unknown_match_sale_status_fails_closed():
+    for sale_fields in (
+        {},
+        {"sellStatus": "99"},
+        {"sellStatus": "selling", "saleStatus": "1"},
+        {"sellStatus": True},
+        {"sellStatus": False},
+    ):
+        sub_match = {
+            "matchNumStr": "周五202",
+            "matchDate": "2026-07-17",
+            "matchTime": "20:00",
+            "leagueAllName": "测试联赛",
+            "homeTeamAllName": "主队",
+            "awayTeamAllName": "客队",
+            **sale_fields,
+            "oddsList": [{"poolCode": "HAD", "h": 2.0, "d": 3.0, "a": 4.0}],
+            "poolList": [
+                {"poolCode": "HAD", "poolStatus": "Selling", "cbtSingle": 1, "cbtAllUp": 1}
+            ],
+        }
+        raw = {
+            "value": {
+                "matchInfoList": [{"businessDate": "2026-07-17", "subMatchList": [sub_match]}]
+            }
+        }
+
+        match = parse_matches_from_response(raw, "2026-07-17")[0]
+
+        assert match["sale_status"] == "unknown"
+        assert match["_markets"][0]["is_open"] is False
+        assert parse_odds_snapshots_from_match(sub_match, "2026-07-17T12:00:00") == []
+
+
+def test_legacy_sale_status_alias_fallback_accepts_known_status_values():
+    for legacy_status in (1, "1", "selling"):
+        sub_match = {
+            "matchNumStr": "周五203",
+            "matchDate": "2026-07-17",
+            "matchTime": "20:00",
+            "leagueAllName": "测试联赛",
+            "homeTeamAllName": "主队",
+            "awayTeamAllName": "客队",
+            "saleStatus": legacy_status,
+            "oddsList": [{"poolCode": "HAD", "h": 2.0, "d": 3.0, "a": 4.0}],
+            "poolList": [
+                {"poolCode": "HAD", "poolStatus": "Selling", "cbtSingle": 1, "cbtAllUp": 1}
+            ],
+        }
+        raw = {
+            "value": {
+                "matchInfoList": [{"businessDate": "2026-07-17", "subMatchList": [sub_match]}]
+            }
+        }
+
+        match = parse_matches_from_response(raw, "2026-07-17")[0]
+        snapshots = parse_odds_snapshots_from_match(sub_match, "2026-07-17T12:00:00")
+
+        assert match["sale_status"] == "selling"
+        assert match["_markets"][0]["is_open"] is True
+        assert len(snapshots) == 3
+
+
+def test_non_selling_pool_does_not_generate_odds_snapshots():
+    sub_match = {
+        "matchNumStr": "周五204",
+        "matchDate": "2026-07-17",
+        "matchTime": "20:00",
+        "leagueAllName": "测试联赛",
+        "homeTeamAllName": "主队",
+        "awayTeamAllName": "客队",
+        "sellStatus": "1",
+        "oddsList": [{"poolCode": "HAD", "h": 2.0, "d": 3.0, "a": 4.0}],
+        "poolList": [{"poolCode": "HAD", "poolStatus": "Stopped", "cbtSingle": 1, "cbtAllUp": 1}],
+    }
+
+    match = parse_matches_from_response(
+        {"value": {"matchInfoList": [{"businessDate": "2026-07-17", "subMatchList": [sub_match]}]}},
+        "2026-07-17",
+    )[0]
+
+    assert match["_markets"][0]["is_open"] is False
+    assert parse_odds_snapshots_from_match(sub_match, "2026-07-17T12:00:00") == []
+
+
 def test_match_calculator_payload_parses_all_five_play_odds():
     sub_match = {
         "matchNumStr": "周一203",
@@ -150,6 +271,7 @@ def test_match_calculator_payload_parses_all_five_play_odds():
         "leagueAllName": "测试联赛",
         "homeTeamAllName": "主队",
         "awayTeamAllName": "客队",
+        "sellStatus": "1",
         "poolList": [
             {"poolCode": code, "poolStatus": "Selling", "cbtSingle": 1, "cbtAllUp": 1}
             for code in ("HAD", "HHAD", "CRS", "TTG", "HAFU")
@@ -193,7 +315,7 @@ def test_match_calculator_payload_parses_all_five_play_odds():
     assert all(item["is_pass_allowed"] is True for item in snapshots)
 
 
-def test_missing_pool_code_is_ignored_and_missing_permissions_fail_closed():
+def test_missing_pool_code_and_pool_status_fail_closed_even_with_odds():
     sub_match = {
         "matchNumStr": "周一201",
         "matchDate": "2026-07-14",
@@ -216,9 +338,33 @@ def test_missing_pool_code_is_ignored_and_missing_permissions_fail_closed():
     snapshots = parse_odds_snapshots_from_match(sub_match, "2026-07-13T12:00:00")
 
     assert [market["play_type"] for market in match["_markets"]] == ["spf"]
-    assert {snapshot["play_type"] for snapshot in snapshots} == {"spf"}
-    assert all(snapshot["is_single_allowed"] is False for snapshot in snapshots)
-    assert all(snapshot["is_pass_allowed"] is False for snapshot in snapshots)
+    assert match["_markets"][0]["is_open"] is False
+    assert match["_markets"][0]["market_status"] == "closed"
+    assert snapshots == []
+
+
+def test_missing_pool_status_fails_closed_even_when_pool_flags_and_odds_exist():
+    sub_match = {
+        "matchNumStr": "周一202",
+        "matchDate": "2026-07-14",
+        "matchTime": "01:00",
+        "leagueAllName": "测试联赛",
+        "homeTeamAllName": "主队",
+        "awayTeamAllName": "客队",
+        "sellStatus": "1",
+        "oddsList": [{"poolCode": "HAD", "h": 2.1, "d": 3.1, "a": 4.1}],
+        "poolList": [{"poolCode": "HAD", "cbtSingle": 1, "cbtAllUp": 1}],
+    }
+    raw = {
+        "value": {"matchInfoList": [{"businessDate": "2026-07-13", "subMatchList": [sub_match]}]}
+    }
+
+    match = parse_matches_from_response(raw, "2026-07-13")[0]
+    snapshots = parse_odds_snapshots_from_match(sub_match, "2026-07-13T12:00:00")
+
+    assert match["_markets"][0]["is_open"] is False
+    assert match["_markets"][0]["market_status"] == "closed"
+    assert snapshots == []
 
 
 def test_blocked_official_results_are_reported_without_third_party_fallback():
