@@ -1,0 +1,20 @@
+{
+  "schema_version": 4,
+  "task_id": "P120",
+  "objective": "Safely publish the built frontend to the Nginx web root as part of a server release.",
+  "allowed_paths": [
+    "ops/server/deploy.sh",
+    "ops/server/publish_frontend.py",
+    "tests/test_local/test_frontend_publish.py"
+  ],
+  "protected_paths": [
+    "**/migrations/**",
+    "**/*.sql",
+    "**/requirements*.txt",
+    "**/pyproject.toml",
+    "**/package*.json",
+    "**/*lock*"
+  ],
+  "approved_protected_paths": [],
+  "notes": "P120 is separate from completed P119. Control-plane files under .vibe/ are excluded by the pinned V4 engine; only the three listed business paths may change."
+}

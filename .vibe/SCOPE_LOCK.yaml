@@ -1,11 +1,15 @@
 {
   "schema_version": 4,
-  "task_id": "P120",
-  "objective": "Safely publish the built frontend to the Nginx web root as part of a server release.",
+  "task_id": "P121",
+  "objective": "Run one existing trained Maher-Poisson SPF shadow consumer on exact P104 batches using validated observed temperature and retain auditable output.",
   "allowed_paths": [
-    "ops/server/deploy.sh",
-    "ops/server/publish_frontend.py",
-    "tests/test_local/test_frontend_publish.py"
+    "scripts/maher_goal_rate_runtime.py",
+    "scripts/observed_maher_shadow.py",
+    "scripts/jobs/run_model_prediction.py",
+    "scripts/prediction_input_runtime.py",
+    "scripts/prediction_input_revisions.py",
+    "scripts/features/build_weather_features.py",
+    "tests/test_computation/test_prediction_input_runtime_postgres.py"
   ],
   "protected_paths": [
     "**/migrations/**",
@@ -16,5 +20,5 @@
     "**/*lock*"
   ],
   "approved_protected_paths": [],
-  "notes": "P120 is separate from completed P119. Control-plane files under .vibe/ are excluded by the pinned V4 engine; only the three listed business paths may change."
+  "notes": "One model family and SPF only. P104 exact batches and P105 receipts are reused. No inference is published to production prediction tables."
 }

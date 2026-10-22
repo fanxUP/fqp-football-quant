@@ -1,18 +1,21 @@
-# P119 Plan
+# P121 — 单一旧模型观测影子接入
 
-1. Preserve legacy P118 files in `archive/pre-v4-p118-2026-10-21/` with SHA-256 manifest.
-2. Initialize V4 controls against main baseline `657d82d671fe0842c8c7c27c8cd85c9b509caa1e`.
-3. Run the auth ACL regression and Ruff, then check scope, budget, and regression gates.
-4. Record independent review and final-head GitHub CI.
-5. Run the V4 merge gate, merge PR #23, and deploy the merged revision with the server release runner.
-6. Verify server revision, service health, unauthenticated API behavior, and password login using private test credentials if available.
+## 目标
 
-# P120 Plan
+将现有 Maher-Poisson 的 SPF 预测算法接入 P104 的精确观测批次。只生成影子结果，记录来源与模型版本，不进入正式预测、委员会、推荐、彩票或资金链路。
 
-1. Preserve the completed P119 terminal state and start a separate V4 workflow for the frontend publisher.
-2. Merge the latest `main` into the existing PR #22 branch, retain the deploy runner change, and replace its legacy P119 metadata with P120 controls.
-3. Extract the inline publisher into `ops/server/publish_frontend.py` and add isolated temporary-filesystem regression coverage.
-4. Run the configured V4 evidence command, shell syntax check, scope, budget and regression gates. Review the exact final diff for filesystem, shell and rollback safety.
-5. Push the updated PR #22 head, wait for configured GitHub CI, obtain independent read-only review, and run the repository V4 merge wrapper against the exact head.
-6. Merge PR #22 only after the gate is ready. Prepare the server release plan, record rollback and migration/dependency status, deploy the exact merged `main` SHA, and verify services, readiness, frontend, protected route and recent logs.
-7. Record post-deployment evidence and transition the V4 workflow to `DONE` only after all checks pass.
+## 执行步骤
+
+1. 固定模型范围为一个已激活且已收敛的 Maher-Poisson 参数版本及 SPF；缺少合格版本时明确跳过，不用赔率拟合冒充独立模型。
+2. 从独立 P105 SPF 影子消费者读取精确 P104 批次、cutoff 与输入版本；当前仅使用有来源回执的气温值，并复用既有天气公式的温度项计算 SPF。
+3. 首发名单与伤停状态只记录证据状态；不把名单确认等同阵容强度，不把未覆盖/未映射的伤停报告变成影响分。
+4. 在隔离固定样本和 PostgreSQL 中验证概率、缺失输入、市场数据隔离、回执幂等性及旧模型入口兼容。
+4. 通过后只提交本地候选；GitHub、生产部署、启用实时来源和效果推广需分别授权。
+
+## 明确不做
+
+- 不训练或替换全部模型，不调整现行出票或推荐。
+- 不把赔率推导的 lambda 标为独立模型，不填补缺失特征。
+- 不把 P104 尚未产出的首发强度、伤停影响或完整度作为模型输入；球员贡献映射留给 P108。
+- 不迁移或回填生产数据，不接真实供应商，不改数据库 schema。
+- 本切片不宣称完整 P106/A106，也不宣称预测效果提升。

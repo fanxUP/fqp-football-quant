@@ -4,8 +4,8 @@
     "command_timeout_seconds": 900
   },
   "commands": {
-    "test": "\"${FQP_TEST_PYTHON:-python3.14}\" -m pytest -q tests/test_local/test_frontend_publish.py",
-    "lint": "\"${FQP_TEST_RUFF:-ruff}\" check ops/server/publish_frontend.py tests/test_local/test_frontend_publish.py"
+    "test": "\"${FQP_TEST_PYTHON:-python3.14}\" -m pytest -q tests/test_computation/test_prediction_input_runtime_postgres.py",
+    "lint": "\"${FQP_TEST_RUFF:-ruff}\" check scripts/maher_goal_rate_runtime.py scripts/observed_maher_shadow.py scripts/jobs/run_model_prediction.py scripts/features/build_weather_features.py scripts/prediction_input_runtime.py scripts/prediction_input_revisions.py tests/test_computation/test_prediction_input_runtime_postgres.py"
   },
   "paths": {
     "dependency_files": [
@@ -24,13 +24,6 @@
     "ignore_untracked": []
   },
   "quality_gate": {
-    "engine_path": "~/.remote-vibe-coding/engine/vibe.py",
-    "repository": "fanxUP/fqp-football-quant",
-    "pull_request": 26,
-    "required_checks": [
-      "test",
-      "lint-and-typecheck"
-    ],
-    "preflight": "python3 -I -S -B .vibe/quality_gate.py --repo ."
+    "engine_path": "/Users/estefan-macworkstation/.remote-vibe-coding/engine/vibe.py"
   }
 }

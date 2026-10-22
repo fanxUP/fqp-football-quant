@@ -1,36 +1,12 @@
-# P119 Acceptance
+# P121 验收
 
-## A119 — Authentication fix
+## A121 — Maher-Poisson SPF 观测影子接入
 
-- Password login succeeds with the restricted Redis runtime ACL (`~session:*`) when a stale session cookie is present.
-- Session and release-marker writes use only permitted Redis keys and commands.
-- Focused auth tests, Ruff lint and format checks pass; the PR application diff has a passing independent review and required GitHub checks.
-- Scope is exactly `apps/backend/src/auth.py` and `tests/test_auth.py`; no dependency or database migration is introduced.
-
-## A119-V4 — Workflow migration
-
-- The pre-migration P118 snapshot is preserved byte-for-byte under `archive/pre-v4-p118-2026-10-21/`, verified by the manifest.
-- V4 control files parse as JSON-compatible YAML and use the V4 engine for state transitions, scope, budget, regression and merge checks.
-- The original P118 evidence, including its `evidence_update_ci_pending` status, remains archived unchanged; this migration does not assert that P118 completed.
-- `python3 -I -S -B .vibe/verify_migration.py` verifies the archive hashes, preserved P118 status, V4 control parsing and pinned engine bundle.
-- Independent read-only review has no blocker or major finding.
-
-## Deployment check (post-merge)
-
-Deployment is tracked separately from the merge acceptance: record target revision, rollback revision, migration/dependency readiness, service health and protected-route smoke in the release evidence. A successful password login smoke may be recorded only when private test credentials are available; credentials must not be stored here.
-
-# P120 Acceptance
-
-## A120 — Publish the built frontend safely
-
-- The deploy runner verifies `/var/www/fqp` and every ancestor path component are free of symlinks, and that the root is an existing writable directory, before stopping application services.
-- Built assets are validated as regular files and copied atomically; existing hashed assets are retained.
-- The local JavaScript and CSS assets referenced by `index.html` are present and byte-identical at the destination before `index.html` is atomically switched.
-- External URLs are not mistaken for local files, traversal paths and symlink destinations fail closed, and a failed publish leaves the previous entry page in place.
-- Rollback rebuilds and republishes the previous frontend when publication was attempted; restoration failure stops Nginx and reports `ROLLBACK_REQUIRED`.
-- Focused isolated filesystem regression tests, shell syntax checks, configured GitHub CI, security review and independent read-only review pass. The V4 merge gate evaluates the committed evidence separately.
-- No application API, database schema, runtime dependency or frontend dependency changes are introduced.
-
-## A120-DEPLOY — Production release
-
-Record the exact merged `main` revision, rollback revision, migration/dependency readiness, current service state, deployment runner exit code, release marker, service health, frontend response, readiness checks, protected-route smoke and recent error logs. Apply only after the V4 quality gate passes. If a database migration is pending, satisfy the runner's fresh-backup and copy-dry-run requirements; otherwise record that they are not applicable.
+- 独立影子消费者从精确 P104 batch 读取并记录 match、输入版本、batch、cutoff、as_of、模型版本、计算版本和来源修订号。
+- 只有气温字段为有效观测且 Maher 参数收敛时才计算概率；温度修正复用既有天气公式的温度项，其他未观测天气维度保持未知，不从赔率估算独立 lambda。
+- 影子结果含可核验的 1X2 概率、温度输入、使用字段、调整前后 lambda 和调整原因，写入不可变消费回执；重复消费不重复生成结果。
+- 首发与伤停状态只进入证据审计；不声称已使用球员强度或缺阵影响。对应派生依赖 P108，不属于本切片。
+- profile 强制 `rollout_mode=shadow`；现有 `model_predictions`、committee、推荐、彩票、资金、结算均不受影响。
+- 无模型版本、身份/时点无效或观测不够时安全记录不可用/待核实；原有 P105 消费者失败恢复与 RQSPF 路径保持通过。
+- 固定样本单元和隔离 PostgreSQL 回归通过，Ruff、格式、类型/范围检查通过；无新依赖、迁移或公开 API。
+- 不以本切片通过声称完整 P106/A106、效果提升或生产部署完成。
