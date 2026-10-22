@@ -41,7 +41,7 @@
   },
   "quality_gate": {
     "status": "READY_TO_MERGE",
-    "checked_at": "2026-10-23T04:28:33.723891+08:00",
+    "checked_at": "2026-10-23T04:33:40.573870+08:00",
     "failures": []
   },
   "reviews": {
@@ -49,6 +49,41 @@
       "status": "PASS",
       "reviewed_at": "2026-10-23T04:11:58+08:00",
       "summary": "Independent read-only review confirms official status handling, fail-closed pool and snapshot behavior, legacy alias coverage, and workflow/archive documentation are aligned. No new findings."
+    },
+    "status": "PASS",
+    "application_code": {
+      "status": "PASS",
+      "review_id": "A104-SALE-STATUS-INDEPENDENT",
+      "reviewed_at": "2026-10-23T04:11:58+08:00",
+      "summary": "Independent read-only review confirms official status handling, fail-closed pool and snapshot behavior, legacy alias coverage, and workflow/archive documentation are aligned. No new findings."
+    },
+    "v4_migration": {
+      "status": "PASS",
+      "reviewed_at": "2026-10-23T04:36:25+08:00",
+      "summary": "Read-only migration impact review found no SQL migration, schema, ORM, or database contract changes; migration is not applicable. The V4 archive/control verifier passed (9 archived files, 8 controls, 14 pinned engine sources)."
     }
+  },
+  "security": {
+    "status": "PASS",
+    "reviewed_at": "2026-10-23T04:36:25+08:00",
+    "mode": "read-only review",
+    "findings": [],
+    "summary": "Reviewed the exact PR diff: no credentials, SQL/command/path construction, authorization changes, unsafe shell, permission changes, public exposure, or dependency changes. The change only tightens official sales-status parsing and closes unknown/non-selling market and odds-snapshot paths."
+  },
+  "migration": {
+    "status": "NOT_APPLICABLE",
+    "reviewed_at": "2026-10-23T04:36:25+08:00",
+    "summary": "No migration or database schema changes are included in this PR."
+  },
+  "external_ci": {
+    "status": "passed",
+    "verified_at": "2026-10-23T04:35:08+08:00",
+    "head_sha": "7fdbe23e494a59ae7db5cf8944e4ea4e00329549",
+    "run_id": "39849341438",
+    "checks": {
+      "test": "passed",
+      "lint-and-typecheck": "passed"
+    },
+    "summary": "Both configured GitHub CI checks passed on the original PR head; the preflight will also require fresh live checks on the final head."
   }
 }
