@@ -16,6 +16,8 @@ from datetime import time as clock_time
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from scripts.weather_schedule import weather_collection_cron
+
 # Sporttery may add matches or change sale/pool permissions after midnight.
 # Refresh at :10 and :40 so the betting terminal never relies on a stale daily snapshot.
 OFFICIAL_SCHEDULE_CRON = {"minute": "10,40"}
@@ -565,7 +567,7 @@ def main() -> None:
                 id="refresh_pre_match_features",
             )
 
-            # Daily at 09:00 and 15:00: collect weather forecasts
+            # Refresh weather before its six-hour P104 freshness window expires.
             scheduler.add_job(
                 _audited_job(
                     "collect_weather",
@@ -574,8 +576,7 @@ def main() -> None:
                     lambda: __import__("scripts.jobs.collect_weather", fromlist=["run"]).run(),
                 ),
                 "cron",
-                hour="9,15",
-                minute=7,
+                **weather_collection_cron(),
                 id="collect_weather",
             )
 

@@ -15,3 +15,9 @@
 ## 证据边界
 
 影子结果证明计算实际读取了观测字段，不证明新输入带来预测提升。真实前瞻覆盖、时间切分回测、manifest/完整 run 与发布门槛仍由 P106 后续切片完成；正式启用由 P115 管理。
+# P105-WEATHER 设计
+
+- 定义唯一来源常量 `WEATHER_COLLECTION_HOURS` 与 `WEATHER_COLLECTION_MINUTE`，供 scheduler 和运维状态说明共用，避免时间配置分叉。
+- 将小时定为 0、4、8、12、16、20，分钟为 7。APScheduler 已用 Asia/Shanghai 配置 cron 时区；四小时轮询给六小时的 observation freshness 留两小时调度与执行余量。
+- 保持 collector 当前每次最多 50 场及 Open-Meteo 客户端节流；按每次请求一次成功计算，基线约 50×6=300 次/日；计入最多 3 次请求尝试，保守上界约 900 次/日。失败或跳过时不制造新事实，模型读取仍按既有 6 小时有效期降级。
+- 不尝试从全局销售营业时间、开赛时点或 `saleStatus` 推断逐场停售时间。

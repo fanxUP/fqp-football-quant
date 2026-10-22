@@ -4,6 +4,8 @@ from datetime import time as clock_time
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+from apscheduler.schedulers.background import BackgroundScheduler
+
 from apps.backend.src.services.pipeline_status import JOB_DEFINITIONS
 from scripts.jobs.run_scheduler import (
     MODEL_PREDICTION_CRON,
@@ -22,6 +24,14 @@ from scripts.jobs.run_scheduler import (
     _scheduler_timezone_name,
     _should_retry_season_reconciliation,
     _should_run_recommendation_catchup,
+)
+from scripts.weather_schedule import (
+    WEATHER_COLLECTION_HOURS,
+    WEATHER_COLLECTION_INTERVAL_HOURS,
+    WEATHER_COLLECTION_MINUTE,
+    WEATHER_COLLECTION_SCHEDULE,
+    WEATHER_COLLECTION_TIMEZONE,
+    weather_collection_cron,
 )
 
 
@@ -174,6 +184,48 @@ def test_scheduler_collects_lineups_in_the_pre_match_window_every_30_minutes():
 def test_pipeline_schedule_labels_match_enrichment_cron():
     assert JOB_DEFINITIONS["injury_collection"].schedule == "每日 00:07"
     assert JOB_DEFINITIONS["lineup_collection"].schedule == "每30分钟（:12/:42）"
+
+
+def test_weather_schedule_stays_fresh_and_uses_shanghai_even_if_global_timezone_changes(
+    monkeypatch,
+):
+    minute_slots = [hour * 60 + WEATHER_COLLECTION_MINUTE for hour in WEATHER_COLLECTION_HOURS]
+    wrapped_gaps = [
+        next_slot - current_slot
+        for current_slot, next_slot in zip(
+            minute_slots, [*minute_slots[1:], minute_slots[0] + 24 * 60], strict=True
+        )
+    ]
+
+    assert WEATHER_COLLECTION_INTERVAL_HOURS == 4
+    assert WEATHER_COLLECTION_HOURS == tuple(range(0, 24, WEATHER_COLLECTION_INTERVAL_HOURS))
+    assert WEATHER_COLLECTION_MINUTE == 7
+    assert wrapped_gaps == [240] * 6
+    assert max(wrapped_gaps) < 6 * 60
+    expected_clocks = "/".join(
+        f"{hour:02d}:{WEATHER_COLLECTION_MINUTE:02d}" for hour in WEATHER_COLLECTION_HOURS
+    )
+    assert WEATHER_COLLECTION_TIMEZONE == "Asia/Shanghai"
+    assert WEATHER_COLLECTION_SCHEDULE == (
+        f"每{WEATHER_COLLECTION_INTERVAL_HOURS}小时（{expected_clocks}，北京时间）"
+    )
+    assert weather_collection_cron() == {
+        "hour": "0,4,8,12,16,20",
+        "minute": 7,
+        "timezone": "Asia/Shanghai",
+    }
+    assert JOB_DEFINITIONS["weather_collection"].schedule == WEATHER_COLLECTION_SCHEDULE
+
+    monkeypatch.setenv("FQP_TIMEZONE", "Asia/Hong_Kong")
+    scheduler = BackgroundScheduler(timezone=_scheduler_timezone_name())
+    scheduler.add_job(lambda: None, "cron", **weather_collection_cron(), id="weather-timezone-test")
+    job = scheduler.get_job("weather-timezone-test")
+    assert job is not None
+    assert str(job.trigger.timezone) == WEATHER_COLLECTION_TIMEZONE
+
+    scheduler_source = Path("scripts/jobs/run_scheduler.py").read_text()
+    assert "**weather_collection_cron()" in scheduler_source
+    assert 'id="collect_weather"' in scheduler_source
 
 
 def test_scheduler_refreshes_features_after_lineup_collection_before_prediction():

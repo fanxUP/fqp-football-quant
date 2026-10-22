@@ -1,27 +1,24 @@
 {
   "schema_version": 4,
-  "current_task": "P121",
+  "current_task": "P105-WEATHER",
   "tasks": {
-    "P121": {
-      "title": "单一旧模型接入 P104 观测数据（Maher-Poisson SPF 影子模式）",
-      "acceptance_id": "A121",
+    "P105-WEATHER": {
+      "title": "提升 P104 天气观测采集时效",
+      "acceptance_id": "A105-WEATHER",
       "depends_on": [],
-      "kind": "required",
+      "kind": "enabling_change",
       "status": "DONE",
       "files": [
-        "scripts/maher_goal_rate_runtime.py",
-        "scripts/observed_maher_shadow.py",
-        "scripts/jobs/run_model_prediction.py",
-        "scripts/prediction_input_runtime.py",
-        "scripts/prediction_input_revisions.py",
-        "scripts/features/build_weather_features.py",
-        "tests/test_computation/test_prediction_input_runtime_postgres.py"
+        "scripts/weather_schedule.py",
+        "scripts/jobs/collect_weather.py",
+        "scripts/jobs/run_scheduler.py",
+        "apps/backend/src/services/pipeline_status.py",
+        "tests/test_jobs/test_run_scheduler.py"
       ],
       "definition_of_done": [
-        "The current trained Maher-Poisson SPF shadow consumer uses validated temperature from the exact P104 batch only.",
-        "The model result is traceable and idempotently retained with the P105 consumption receipt.",
-        "No official predictions, recommendation, ticket, finance, settlement, schema, provider, or public API is changed.",
-        "Focused fixed-fixture and isolated PostgreSQL regression, static checks, and V4 scope/budget gates pass."
+        "The collector is scheduled at six Asia/Shanghai times exactly four hours apart, before the six-hour P104 freshness window expires.",
+        "The operations UI reports the same schedule using a shared schedule definition; the collector module documentation points to the scheduler rather than stale clock times.",
+        "Focused local regression, lint, diff, scope, and budget checks pass; no production source or database is touched."
       ]
     }
   }
