@@ -13,7 +13,6 @@ Odds processing chain:
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
@@ -41,6 +40,15 @@ from scripts.hist_gradient_boosting_shadow_model import (
 from scripts.knn_shadow_model import load_probabilities as load_knn_shadow_probabilities
 from scripts.lda_shadow_model import load_probabilities as load_lda_shadow_probabilities
 from scripts.logistic_shadow_model import load_probabilities as load_logistic_shadow_probabilities
+from scripts.maher_goal_rate_runtime import (
+    MIN_MAHER_MATCHES as _MIN_MAHER_MATCHES,
+)
+from scripts.maher_goal_rate_runtime import (
+    TrainedGoalRates,
+)
+from scripts.maher_goal_rate_runtime import (
+    load_trained_goal_rates as _load_trained_goal_rates,
+)
 from scripts.market_metric_validation import MarketMetricValidationError, validate_market
 from scripts.mlp_shadow_model import load_probabilities as load_mlp_shadow_probabilities
 from scripts.model_signal_policy import (
@@ -78,7 +86,7 @@ from scripts.xgboost_shadow_model import load_probabilities as load_xgboost_shad
 # independent Poisson predicts.
 DEFAULT_RHO = -0.08
 MIN_ELO_MATCHES = 5
-MIN_MAHER_MATCHES = 5
+MIN_MAHER_MATCHES = _MIN_MAHER_MATCHES
 MIN_GLICKO2_MATCHES = 8
 MAX_GLICKO2_DEVIATION = 160.0
 MIN_BIVARIATE_TRAINING_MATCHES = 100
@@ -101,64 +109,6 @@ def _safe_fair_odds(model_probability: float) -> float | None:
     if not math.isfinite(fair_odds) or fair_odds > MAX_STORABLE_FAIR_ODDS:
         return None
     return round(fair_odds, 4)
-
-
-@dataclass(frozen=True)
-class TrainedGoalRates:
-    home_lambda: float
-    away_lambda: float
-    minimum_team_matches: int
-    training_matches: int
-
-
-def _load_trained_goal_rates(
-    model_parameters: dict[str, dict[str, Any]],
-    feature_snapshot: dict[str, Any] | None,
-) -> TrainedGoalRates | None:
-    """Build independent goal rates from a converged historical Maher fit."""
-    parameters = model_parameters.get("maher_poisson")
-    if not parameters or parameters.get("converged") is not True or not feature_snapshot:
-        return None
-    home_team_id = feature_snapshot.get("home_team_id")
-    away_team_id = feature_snapshot.get("away_team_id")
-    if not home_team_id or not away_team_id:
-        return None
-
-    home_key = str(home_team_id)
-    away_key = str(away_team_id)
-    attack = parameters.get("attack") or {}
-    defense = parameters.get("defense") or {}
-    match_counts = parameters.get("team_match_counts") or {}
-    required_keys = (home_key, away_key)
-    if any(
-        key not in attack or key not in defense or key not in match_counts for key in required_keys
-    ):
-        return None
-    minimum_team_matches = min(int(match_counts[home_key]), int(match_counts[away_key]))
-    if minimum_team_matches < MIN_MAHER_MATCHES:
-        return None
-
-    home_lambda = math.exp(
-        float(attack[home_key])
-        + float(defense[away_key])
-        + float(parameters.get("home_advantage", 0.0))
-        + float(parameters.get("league_intercept", 0.0))
-    )
-    away_lambda = math.exp(
-        float(attack[away_key])
-        + float(defense[home_key])
-        + float(parameters.get("league_intercept", 0.0))
-    )
-    if not all(
-        math.isfinite(value) and 0.05 <= value <= 8.0 for value in (home_lambda, away_lambda)
-    ):
-        return None
-    return TrainedGoalRates(
-        home_lambda=home_lambda,
-        away_lambda=away_lambda,
-        minimum_team_matches=minimum_team_matches,
-        training_matches=int(parameters.get("n_matches") or 0),
-    )
 
 
 def _load_trained_bivariate_shared_component(

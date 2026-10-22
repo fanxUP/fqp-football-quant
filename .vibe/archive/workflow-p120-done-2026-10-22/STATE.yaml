@@ -1,0 +1,10 @@
+{
+  "state": "DONE",
+  "last_transition": {
+    "from": "READY_TO_MERGE",
+    "to": "DONE",
+    "at": "2026-10-22T02:10:34.481971+08:00",
+    "reason": "PR #27 has merged and commit 38fd713ec85232b7ef593a6e5cfd5312ac3c0e2b is deployed; server services, readiness, HTTP smoke and release marker were verified, and the temporary deployment privilege was removed."
+  },
+  "mode": "STRICT"
+}

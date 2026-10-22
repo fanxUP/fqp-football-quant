@@ -158,6 +158,7 @@ def complete_prediction_input_revision(
     batch_id: int,
     play_type: str,
     profiles: Sequence[InputProfile],
+    extra_result_refs: dict | None = None,
     max_age_seconds: int = 60,
 ) -> dict:
     """Atomically retain mode decision, exact batch/cutoff and the 109 receipt.
@@ -170,6 +171,10 @@ def complete_prediction_input_revision(
         raise ValueError("pilot supports explicit spf/rqspf only")
     if type(max_age_seconds) is not int or not 1 <= max_age_seconds <= 300:
         raise ValueError("max_age_seconds must be 1..300")
+    if extra_result_refs is not None:
+        if not isinstance(extra_result_refs, dict) or set(extra_result_refs) - {"maher_shadow"}:
+            raise ValueError("only the bounded Maher shadow result reference is supported")
+        _canonical(extra_result_refs, 8192)
     _read_transaction(conn)
 
     def publish(conn: Any, current_claim: InputUpdateClaim) -> dict:
@@ -231,7 +236,20 @@ def complete_prediction_input_revision(
                     expiry,
                 ),
             )
-            return {"input_revision_id": int(cur.fetchone()[0])}
+            refs = {"input_revision_id": int(cur.fetchone()[0])}
+            if extra_result_refs:
+                shadow = extra_result_refs.get("maher_shadow")
+                if (
+                    not isinstance(shadow, dict)
+                    or shadow.get("match_id") != current_claim.match_id
+                    or shadow.get("input_version") != current_claim.input_version
+                    or shadow.get("feature_batch_id") != batch_id
+                    or shadow.get("observation_cutoff_id") != batch["cutoff_id"]
+                    or shadow.get("play_type") != play_type
+                ):
+                    raise ValueError("shadow result reference does not match the exact input claim")
+                refs.update(extra_result_refs)
+            return refs
 
     return complete_input_update(conn, claim, publish)
 

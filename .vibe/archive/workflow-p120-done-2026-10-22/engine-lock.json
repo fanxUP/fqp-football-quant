@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "engine": "shared V4 Python engine",
+  "sha256": {
+    "baseline.py": "5bb3cdc88d491ad8d747d05a7674b1940e76fabb623ac204bfa6919eec50625c",
+    "budget.py": "80d32071038ab8796e09b5d78b481365f3192537a08d9d57924e819a2e2a2e5a",
+    "common.py": "2add12efc73380d06aab243b24b98cae77c36220cefcaeeee15104e2daf5bb51",
+    "detect.py": "597134ece9df3656a8e50eab7aaf567d6de6677575df0c826501b74ef42af7b0",
+    "evidence.py": "dd28c49dfccbf9475146b494d75939c7b37e799ebdd26dcd50dc7fb408d02b13",
+    "exec_cmd.py": "1afc32f8a792b27753f0eda290215fc82d03cfbbf5ec1e33f328a1f0539bc18e",
+    "gate.py": "f3915740dbe1540d3c727bb3298d42b1b74220b0c73c0a37f35eb9c476153f7e",
+    "model_router.py": "2e27050a852999d5344c1449e2b6c83a07856c06f650b103d56d3ea785680523",
+    "regression.py": "db8b3375c19110eecceba6e4193eea3461962f4d20c215dfe133009e8e46557c",
+    "risk.py": "e77c314bcc6583fb0f55ad57ad691a3f7c7bb089f386e432aed390e6e66e8f98",
+    "scope.py": "59b2530165c73207056c00ab4378e51a2b807487c5e7d4296dac2196539ba96d",
+    "state.py": "4d022a1b49301e7e711466fe6dbb6dfbe77a60380aa4ceaa294d837aef9d2c11",
+    "task.py": "2f5ba5435ff092814b4cc03bd9af1c8229986a8abaac09629f33ef77052b2752",
+    "vibe.py": "9892d4806154276c647a0514efaae5029e38e7accfebe04cb38bd7ec9d2d8254"
+  }
+}

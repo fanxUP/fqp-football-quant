@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import math
 import os
 from datetime import UTC, datetime
 from typing import Any
@@ -51,7 +52,7 @@ def compute_weather_impact(weather: dict[str, Any]) -> dict[str, float]:
     impact += min(rain / 15.0, 1.0) * 30
     impact += min(wind / 35.0, 1.0) * 25
     impact += min(gust / 50.0, 1.0) * 15
-    impact += max(0.0, (temp - 28) / 12.0) * 15
+    impact += _temperature_impact_score(temp)
     impact += max(0.0, (humidity - 75) / 25.0) * 15
     impact = max(0.0, min(100.0, impact))
 
@@ -61,6 +62,27 @@ def compute_weather_impact(weather: dict[str, Any]) -> dict[str, float]:
         "goal_expectation_adjustment": round(-impact / 1000.0, 6),
         "uncertainty_adjustment": round(impact / 500.0, 6),
     }
+
+
+def _temperature_impact_score(temperature_celsius: float) -> float:
+    """Existing heat component, factored for use with a temperature-only observation."""
+    return max(0.0, (temperature_celsius - 28.0) / 12.0) * 15.0
+
+
+def compute_temperature_goal_expectation_adjustment(temperature_celsius: Any) -> float:
+    """Compute the bounded goal adjustment from observed temperature alone.
+
+    Rain, wind and humidity are not inferred. P104 callers may use this helper
+    only when the temperature claim itself is verified and fresh.
+    """
+    if (
+        isinstance(temperature_celsius, bool)
+        or not isinstance(temperature_celsius, (int, float))
+        or not math.isfinite(float(temperature_celsius))
+        or not -100.0 <= float(temperature_celsius) <= 70.0
+    ):
+        raise ValueError("temperature must be finite Celsius in [-100, 70]")
+    return round(-_temperature_impact_score(float(temperature_celsius)) / 1000.0, 6)
 
 
 # ---------------------------------------------------------------------------
