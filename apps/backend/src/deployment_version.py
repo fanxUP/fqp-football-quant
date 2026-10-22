@@ -34,7 +34,9 @@ def _load_release_id() -> str:
         commit = result.stdout.strip()
         if re.fullmatch(r"[0-9a-f]{40}", commit):
             return commit
-    except (OSError, subprocess.SubprocessError):
+    except OSError:
+        pass
+    except subprocess.SubprocessError:
         pass
 
     try:
