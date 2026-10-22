@@ -1,0 +1,24 @@
+{
+  "schema_version": 4,
+  "task_id": "P121",
+  "objective": "Run one existing trained Maher-Poisson SPF shadow consumer on exact P104 batches using validated observed temperature and retain auditable output.",
+  "allowed_paths": [
+    "scripts/maher_goal_rate_runtime.py",
+    "scripts/observed_maher_shadow.py",
+    "scripts/jobs/run_model_prediction.py",
+    "scripts/prediction_input_runtime.py",
+    "scripts/prediction_input_revisions.py",
+    "scripts/features/build_weather_features.py",
+    "tests/test_computation/test_prediction_input_runtime_postgres.py"
+  ],
+  "protected_paths": [
+    "**/migrations/**",
+    "**/*.sql",
+    "**/requirements*.txt",
+    "**/pyproject.toml",
+    "**/package*.json",
+    "**/*lock*"
+  ],
+  "approved_protected_paths": [],
+  "notes": "One model family and SPF only. P104 exact batches and P105 receipts are reused. No inference is published to production prediction tables."
+}
