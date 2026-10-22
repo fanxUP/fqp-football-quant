@@ -3,7 +3,8 @@
   "last_transition": {
     "from": "REVIEWING",
     "to": "READY_TO_MERGE",
-    "at": "2026-10-22T20:20:04.462324+08:00",
-    "reason": "Fresh configured regression commands pass with the project Python/Ruff toolchain; scope, budget, A121 evidence and independent review are current."
-  }
+    "at": "2026-10-22T20:27:04.265360+08:00",
+    "reason": "Scope, change budget, regression commands, fresh A121 evidence, and independent review all pass."
+  },
+  "blocked_reason": null
 }

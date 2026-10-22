@@ -215,6 +215,20 @@ def test_maher_shadow_fails_closed_without_temperature_model_or_exact_batch():
     assert missing_temperature["status"] == "observation_unavailable"
     assert missing_temperature["probabilities"] is None
 
+    invalid_temperature_batch, invalid_temperature_input, _ = _shadow_fixture(temperature=18.0)
+    invalid_temperature_input["snapshot"]["temperature_2m"] = None
+    invalid_temperature = build_observed_maher_shadow(
+        model_version_id=91,
+        model_parameters=_trained_maher_parameters(),
+        feature_input=invalid_temperature_input,
+        batch=invalid_temperature_batch,
+        input_version=3,
+        as_of="2026-10-22T12:00:00+00:00",
+    )
+    assert invalid_temperature["status"] == "observation_unavailable"
+    assert invalid_temperature["reason"] == "temperature_invalid"
+    assert invalid_temperature["probabilities"] is None
+
     _, usable_input, _ = _shadow_fixture(temperature=18.0)
     unavailable_model = build_observed_maher_shadow(
         model_version_id=None,

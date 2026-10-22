@@ -161,6 +161,8 @@ def build_observed_maher_shadow(
         return dict(base, status="observation_unavailable", reason="temperature_not_observed")
 
     temperature = snapshot.get("temperature_2m")
+    if isinstance(temperature, bool) or not isinstance(temperature, (int, float)):
+        return dict(base, status="observation_unavailable", reason="temperature_invalid")
     try:
         weather_adjustment = compute_temperature_goal_expectation_adjustment(temperature)
     except ValueError:
