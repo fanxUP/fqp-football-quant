@@ -24,6 +24,13 @@
     "ignore_untracked": []
   },
   "quality_gate": {
-    "engine_path": "/Users/estefan-macworkstation/.remote-vibe-coding/engine/vibe.py"
+    "engine_path": "/Users/estefan-macworkstation/.remote-vibe-coding/engine/vibe.py",
+    "repository": "fanxUP/fqp-football-quant",
+    "pull_request": 30,
+    "required_checks": [
+      "test",
+      "lint-and-typecheck"
+    ],
+    "preflight": "python3 -I -S -B .vibe/quality_gate.py --repo ."
   }
 }
