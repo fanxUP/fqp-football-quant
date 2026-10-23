@@ -8,6 +8,7 @@ from scripts.market_metric_validation import (
     MarketMetricValidationError,
     validate_market,
 )
+from scripts.model_prediction_run_storage import store_prediction_group
 from scripts.model_signal_policy import MODEL_MARKETS, disagreement_diagnostic, supports_market
 from scripts.model_storage import store_model_prediction
 from scripts.odds_conversion import normalize_probabilities
@@ -19,11 +20,11 @@ def _latest_official_odds(
     conn: Any,
     match_id: int,
     predict_time: str,
-) -> dict[str, dict[str, tuple[int, float]]]:
+) -> dict[str, dict[str, tuple[int, float, str]]]:
     with conn.cursor() as cur:
         cur.execute(
             """SELECT DISTINCT ON (play_type, option_code)
-                      id, play_type, option_code, sp_value
+                      id, play_type, option_code, sp_value, snapshot_time
                FROM official_odds_snapshots
                WHERE match_id = %s
                  AND play_type IN ('bf', 'zjq', 'bqc')
@@ -36,10 +37,13 @@ def _latest_official_odds(
         rows = cur.fetchall()
 
     odds: dict[str, dict[str, tuple[int, float]]] = {}
-    for snapshot_id, play_type, option_code, sp_value in rows:
+    for snapshot_id, play_type, option_code, sp_value, snapshot_time in rows:
         odds.setdefault(str(play_type), {})[str(option_code)] = (
             int(snapshot_id),
             float(sp_value),
+            snapshot_time.isoformat()
+            if hasattr(snapshot_time, "isoformat")
+            else str(snapshot_time),
         )
     return odds
 
@@ -115,11 +119,14 @@ def store_derived_play_predictions(
     model_independence: dict[str, bool] | None = None,
     rollout_modes: dict[str, str] | None = None,
     input_fence: PredictionInputFence | None = None,
+    prediction_run_id: str | None = None,
+    model_artifact_identities: dict[str, dict[str, Any]] | None = None,
 ) -> int:
     """Store unfiltered model history for every open official derived option."""
     official_odds = _latest_official_odds(conn, match_id, predict_time)
     model_independence = model_independence or {}
     rollout_modes = rollout_modes or {}
+    model_artifact_identities = model_artifact_identities or {}
     stored = 0
 
     for play_type, option_odds in official_odds.items():
@@ -150,6 +157,7 @@ def store_derived_play_predictions(
             ) in model_probabilities.items()
         }
         snapshot_ids = {option: value[0] for option, value in option_odds.items()}
+        snapshot_times = {option: value[2] for option, value in option_odds.items()}
         validated_metrics = {}
         for model_name in capabilities:
             if active_models.get(model_name) is None:
@@ -164,22 +172,23 @@ def store_derived_play_predictions(
             except MarketMetricValidationError:
                 continue
 
-        for option_code, (snapshot_id, _sp_value) in option_odds.items():
-            diagnostic = disagreement_diagnostic(
-                {name: pair[1] for name, pair in model_probabilities.items()},
-                active_models,
-                model_independence,
-                rollout_modes,
-                set(validated_metrics),
-                option_code,
-            )
-            disagreement = diagnostic["model_std"]
-            market_probability = market_probabilities.get(option_code, 0.0)
-            for model_name in capabilities:
-                model_version_id = active_models.get(model_name)
-                if model_version_id is None or model_name not in validated_metrics:
-                    continue
-                raw_probabilities, adjusted_probabilities = model_probabilities[model_name]
+        for model_name in capabilities:
+            model_version_id = active_models.get(model_name)
+            if model_version_id is None or model_name not in validated_metrics:
+                continue
+            raw_probabilities, adjusted_probabilities = model_probabilities[model_name]
+            group_predictions: list[dict[str, Any]] = []
+            for option_code, (snapshot_id, sp_value, _snapshot_time) in option_odds.items():
+                diagnostic = disagreement_diagnostic(
+                    {name: pair[1] for name, pair in model_probabilities.items()},
+                    active_models,
+                    model_independence,
+                    rollout_modes,
+                    set(validated_metrics),
+                    option_code,
+                )
+                disagreement = diagnostic["model_std"]
+                market_probability = market_probabilities.get(option_code, 0.0)
                 raw_probability = raw_probabilities.get(option_code, 0.0)
                 model_probability = adjusted_probabilities.get(option_code, 0.0)
                 metric = validated_metrics[model_name][option_code]
@@ -187,56 +196,95 @@ def store_derived_play_predictions(
                 stored_market_probability = round(market_probability, 6)
                 stored_break_even = round(metric.break_even_probability, 6)
                 fair_odds = 1.0 / model_probability if model_probability > 0 else None
-                store_model_prediction(
-                    conn,
-                    {
-                        **({"input_fence": input_fence} if input_fence is not None else {}),
-                        "match_id": match_id,
-                        "model_version_id": model_version_id,
-                        "odds_snapshot_id": snapshot_id,
-                        "feature_snapshot_id": feature_snapshot_id,
-                        "predict_time": predict_time,
-                        "play_type": play_type,
-                        "option_code": option_code,
-                        "raw_model_probability": round(raw_probability, 6),
-                        "model_probability": stored_model_probability,
-                        "market_probability": stored_market_probability,
-                        "probability_lower_bound": None,
-                        "probability_upper_bound": None,
-                        "uncertainty_score": disagreement,
-                        "adjusted_probability": round(model_probability, 6),
-                        "fair_odds": round(fair_odds, 4) if fair_odds else None,
-                        "ev": round(stored_model_probability * _sp_value - 1.0, 6),
-                        "break_even_probability": stored_break_even,
-                        "market_edge": round(
-                            stored_model_probability - stored_market_probability, 6
-                        ),
-                        "breakeven_edge": round(stored_model_probability - stored_break_even, 6),
-                        "validation_status": "valid",
-                        "validation_errors": [],
-                        "calculation_version": "market_metrics_v2",
-                        "confidence_score": None,
-                        "risk_score": None,
-                        "uncertainty_reason": {
-                            "model_std": disagreement,
-                            "disagreement": diagnostic,
-                            "confidence_status": "uncalibrated",
-                            "interval_status": "not_estimated",
-                            "risk_status": "not_estimated",
-                            "rollout_mode": rollout_modes.get(model_name, "live"),
-                            "derived_from": "official_market"
-                            if model_name == "market_baseline"
-                            else "score_matrix",
-                            "model_capability": play_type,
-                            "model_independent": model_name != "market_baseline"
-                            and model_independence.get(model_name, False),
-                            "recommendation_filtered": False,
-                            "feature_adjustment": {
-                                "applied": abs(raw_probability - model_probability) > 1e-9,
-                                "snapshot_id": feature_snapshot_id,
-                            },
+                prediction = {
+                    **({"input_fence": input_fence} if input_fence is not None else {}),
+                    "match_id": match_id,
+                    "model_version_id": model_version_id,
+                    "odds_snapshot_id": snapshot_id,
+                    "feature_snapshot_id": feature_snapshot_id,
+                    "predict_time": predict_time,
+                    "play_type": play_type,
+                    "option_code": option_code,
+                    "raw_model_probability": round(raw_probability, 6),
+                    "model_probability": stored_model_probability,
+                    "market_probability": stored_market_probability,
+                    "probability_lower_bound": None,
+                    "probability_upper_bound": None,
+                    "uncertainty_score": disagreement,
+                    "adjusted_probability": round(model_probability, 6),
+                    "fair_odds": round(fair_odds, 4) if fair_odds else None,
+                    "ev": round(stored_model_probability * sp_value - 1.0, 6),
+                    "break_even_probability": stored_break_even,
+                    "market_edge": round(stored_model_probability - stored_market_probability, 6),
+                    "breakeven_edge": round(stored_model_probability - stored_break_even, 6),
+                    "validation_status": "valid",
+                    "validation_errors": [],
+                    "calculation_version": "market_metrics_v2",
+                    "confidence_score": None,
+                    "risk_score": None,
+                    "uncertainty_reason": {
+                        "model_std": disagreement,
+                        "disagreement": diagnostic,
+                        "confidence_status": "uncalibrated",
+                        "interval_status": "not_estimated",
+                        "risk_status": "not_estimated",
+                        "rollout_mode": rollout_modes.get(model_name, "live"),
+                        "derived_from": "official_market"
+                        if model_name == "market_baseline"
+                        else "score_matrix",
+                        "model_capability": play_type,
+                        "model_independent": model_name != "market_baseline"
+                        and model_independence.get(model_name, False),
+                        "recommendation_filtered": False,
+                        "feature_adjustment": {
+                            "applied": abs(raw_probability - model_probability) > 1e-9,
+                            "snapshot_id": feature_snapshot_id,
                         },
                     },
+                }
+                if prediction_run_id is None:
+                    store_model_prediction(conn, prediction)
+                else:
+                    group_predictions.append(prediction)
+            if prediction_run_id is not None and group_predictions:
+                raw_matrix, adjusted_matrix = (
+                    (raw_poisson_matrix, poisson_matrix)
+                    if model_name == "maher_poisson"
+                    else (raw_dc_matrix, dc_matrix)
+                    if model_name == "dixon_coles"
+                    else (None, None)
                 )
-                stored += 1
+                identity = model_artifact_identities.get(model_name)
+                fence = input_fence.payload() if input_fence is not None else None
+                store_prediction_group(
+                    conn,
+                    run_id=prediction_run_id,
+                    metadata={
+                        "match_id": match_id,
+                        "model_version_id": model_version_id,
+                        "play_type": play_type,
+                        "market_variant": "",
+                        "predict_time": predict_time,
+                        "expected_options": list(official_options),
+                        "odds_snapshot_ids": snapshot_ids,
+                        "odds_snapshot_times": snapshot_times,
+                        "feature_snapshot_id": feature_snapshot_id,
+                        "input_fence": fence,
+                        "score_matrix": (
+                            {"raw": raw_matrix, "adjusted": adjusted_matrix}
+                            if adjusted_matrix is not None
+                            else None
+                        ),
+                        "artifact_identity": identity,
+                        "provenance_status": (
+                            identity.get("provenance_status", "incomplete")
+                            if identity
+                            else "incomplete"
+                        ),
+                    },
+                    predictions=group_predictions,
+                )
+            stored += (
+                len(group_predictions) if prediction_run_id is not None else len(official_options)
+            )
     return stored

@@ -46,7 +46,7 @@ LATEST_PREDICTIONS_CTE = """
             source_mp.option_code
         ) source_mp.*,
           source_mv.model_name AS canonical_model_name
-        FROM model_predictions source_mp
+        FROM model_prediction_latest_rows source_mp
         JOIN model_versions source_mv ON source_mv.id = source_mp.model_version_id
         JOIN official_matches source_match ON source_match.id = source_mp.match_id
         JOIN official_results source_result ON source_result.match_id = source_mp.match_id
@@ -73,7 +73,7 @@ MARKET_BASELINE_BRIER_CTES = """
             source_mp.match_id,
             source_mp.option_code,
             source_mp.model_probability
-        FROM model_predictions source_mp
+        FROM model_prediction_latest_rows source_mp
         JOIN model_versions source_mv ON source_mv.id = source_mp.model_version_id
         JOIN official_matches source_match ON source_match.id = source_mp.match_id
         JOIN official_results source_result ON source_result.match_id = source_mp.match_id

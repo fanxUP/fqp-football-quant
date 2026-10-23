@@ -303,7 +303,7 @@ def list_predictions(
             cur.execute(
                 f"""
                 WITH recent AS MATERIALIZED (
-                    SELECT mp.* FROM model_predictions mp
+                    SELECT mp.* FROM model_prediction_latest_rows mp
                     JOIN model_versions mv ON mv.id = mp.model_version_id
                     JOIN official_matches m ON m.id = mp.match_id
                     WHERE mp.validation_status = 'valid'
@@ -406,7 +406,7 @@ def list_predictions(
                         AVG(mp.confidence_score) AS avg_confidence,
                         COUNT(DISTINCT mv.model_name) AS model_count,
                         MAX(mp.predict_time) AS latest_predict_time
-                    FROM model_predictions mp
+                    FROM model_prediction_latest_rows mp
                     JOIN model_versions mv ON mv.id = mp.model_version_id
                     JOIN official_matches m ON m.id = mp.match_id
                     WHERE {aggregate_where}
@@ -544,7 +544,7 @@ def get_prediction_model_overview():
                 LEFT JOIN LATERAL (
                     SELECT COUNT(DISTINCT mp.match_id) AS valid_prediction_match_count,
                            MAX(mp.predict_time) AS latest_prediction_at
-                    FROM model_predictions mp
+                    FROM model_prediction_latest_rows mp
                     WHERE mp.model_version_id = cv.id
                       AND mp.validation_status = 'valid'
                 ) prediction_stats ON true

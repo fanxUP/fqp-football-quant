@@ -23,6 +23,7 @@ from __future__ import annotations
 import math
 import os
 import sys
+from datetime import date, datetime
 from typing import Any
 
 # Ensure project root is on sys.path for both direct execution and Docker imports
@@ -35,7 +36,16 @@ from psycopg2.extras import Json  # noqa: E402
 
 from scripts.bivariate_poisson_model import bivariate_score_probability  # noqa: E402
 from scripts.business_time import business_now  # noqa: E402
+from scripts.model_artifact_identity import (  # noqa: E402
+    attach_artifact_identity,
+    verify_artifact_identity,
+)
 from scripts.poisson_model import poisson_pmf  # noqa: E402
+from scripts.training_manifest import (  # noqa: E402
+    CandidateMatch,
+    TrainingDataset,
+    build_training_dataset,
+)
 
 # —— 负对数似然函数 ——
 
@@ -200,160 +210,118 @@ def _load_match_data(
     list[int],  # home_goals
     list[int],  # away_goals
 ]:
-    """从 DB 加载历史比赛数据用于训练。
+    """Load Maher fit arrays from the same materialized rows as the manifest.
 
-    Returns:
-        (team_ids, team_to_idx, home_idx, away_idx, home_goals, away_goals)
+    Returns the legacy six-element tuple for existing trainer callers.
     """
+    dataset = _load_training_dataset(conn, min_matches=min_matches, league_id=league_id)
+    return _training_arrays(dataset)
+
+
+def _load_training_dataset(
+    conn: Any,
+    min_matches: int = 3,
+    league_id: int | None = None,
+    cutoff_at: datetime | None = None,
+) -> TrainingDataset:
+    """Materialize candidate rows once, then derive both samples and manifest."""
+    del league_id  # official_matches has no competition_id column
+    if cutoff_at is not None and cutoff_at.tzinfo is not None and cutoff_at.utcoffset() is not None:
+        raise ValueError("cutoff_at must be timezone-naive to match TIMESTAMP columns")
+    cutoff_clause = "WHERE m.kickoff_time < %s" if cutoff_at is not None else ""
+    params = (cutoff_at,) if cutoff_at is not None else ()
     cur = conn.cursor()
-
-    where = "LOWER(m.match_status) = 'settled'"
-    params: tuple = (min_matches,)
-    # league_id filter not available (no competition_id on official_matches)
-
     cur.execute(
         f"""
-        WITH settled AS (
-            SELECT m.kickoff_time, t1.id AS home_team_id, t2.id AS away_team_id,
-                   r.full_home_goals, r.full_away_goals
-            FROM official_matches m
-            JOIN official_results r ON r.match_id = m.id
-            JOIN LATERAL (
-                SELECT candidate.id
-                FROM teams candidate
-                WHERE candidate.team_name_cn = m.home_team_name
-                ORDER BY candidate.id
-                LIMIT 1
-            ) t1 ON true
-            JOIN LATERAL (
-                SELECT candidate.id
-                FROM teams candidate
-                WHERE candidate.team_name_cn = m.away_team_name
-                ORDER BY candidate.id
-                LIMIT 1
-            ) t2 ON true
-            WHERE {where}
-              AND r.full_home_goals IS NOT NULL
-              AND r.full_away_goals IS NOT NULL
-        ), eligible_teams AS (
-            SELECT team_id
-            FROM (
-                SELECT home_team_id AS team_id FROM settled
-                UNION ALL
-                SELECT away_team_id AS team_id FROM settled
-            ) appearances
-            GROUP BY team_id
-            HAVING COUNT(*) >= %s
-        )
-        SELECT s.home_team_id, s.away_team_id,
-               s.full_home_goals, s.full_away_goals
-        FROM settled s
-        JOIN eligible_teams home_eligible ON home_eligible.team_id = s.home_team_id
-        JOIN eligible_teams away_eligible ON away_eligible.team_id = s.away_team_id
-        ORDER BY s.kickoff_time ASC
-    """,
+        SELECT m.id AS match_id,
+               r.id AS result_id,
+               m.kickoff_time,
+               r.official_publish_time,
+               t1.id AS home_team_id,
+               t1.candidate_ids AS home_team_candidate_ids,
+               t2.id AS away_team_id,
+               t2.candidate_ids AS away_team_candidate_ids,
+               r.full_home_goals,
+               r.full_away_goals,
+               m.match_status
+        FROM official_matches m
+        LEFT JOIN official_results r ON r.match_id = m.id
+        LEFT JOIN LATERAL (
+            SELECT CASE WHEN COUNT(candidate.id) = 1 THEN MIN(candidate.id) END AS id,
+                   array_agg(candidate.id ORDER BY candidate.id) AS candidate_ids
+            FROM teams candidate
+            WHERE candidate.team_name_cn = m.home_team_name
+        ) t1 ON true
+        LEFT JOIN LATERAL (
+            SELECT CASE WHEN COUNT(candidate.id) = 1 THEN MIN(candidate.id) END AS id,
+                   array_agg(candidate.id ORDER BY candidate.id) AS candidate_ids
+            FROM teams candidate
+            WHERE candidate.team_name_cn = m.away_team_name
+        ) t2 ON true
+        {cutoff_clause}
+        ORDER BY m.kickoff_time ASC, m.id ASC, r.id ASC
+        """,
         params,
     )
-
-    rows = cur.fetchall()
-
-    # Build team index
-    team_set: set[int] = set()
-    match_home: list[int] = []
-    match_away: list[int] = []
-    match_hg: list[int] = []
-    match_ag: list[int] = []
-
-    for r in rows:
-        htid, atid, hg, ag = int(r[0]), int(r[1]), int(r[2]), int(r[3])
-        team_set.add(htid)
-        team_set.add(atid)
-        match_home.append(htid)
-        match_away.append(atid)
-        match_hg.append(hg)
-        match_ag.append(ag)
-
-    team_ids = sorted(team_set)
-    team_to_idx = {tid: i for i, tid in enumerate(team_ids)}
-    home_idx = [team_to_idx[t] for t in match_home]
-    away_idx = [team_to_idx[t] for t in match_away]
-
-    return team_ids, team_to_idx, home_idx, away_idx, match_hg, match_ag
-
-
-def _load_training_window(conn: Any, min_matches: int = 5) -> tuple[Any, Any]:
-    """Return the exact historical date range eligible for MLE training."""
-    with conn.cursor() as cur:
-        cur.execute(
-            """
-            WITH settled AS (
-                SELECT m.kickoff_time, t1.id AS home_team_id, t2.id AS away_team_id
-                FROM official_matches m
-                JOIN official_results r ON r.match_id = m.id
-                JOIN LATERAL (
-                    SELECT candidate.id
-                    FROM teams candidate
-                    WHERE candidate.team_name_cn = m.home_team_name
-                    ORDER BY candidate.id
-                    LIMIT 1
-                ) t1 ON true
-                JOIN LATERAL (
-                    SELECT candidate.id
-                    FROM teams candidate
-                    WHERE candidate.team_name_cn = m.away_team_name
-                    ORDER BY candidate.id
-                    LIMIT 1
-                ) t2 ON true
-                WHERE LOWER(m.match_status) = 'settled'
-                  AND r.full_home_goals IS NOT NULL
-                  AND r.full_away_goals IS NOT NULL
-            ), eligible_teams AS (
-                SELECT team_id
-                FROM (
-                    SELECT home_team_id AS team_id FROM settled
-                    UNION ALL
-                    SELECT away_team_id AS team_id FROM settled
-                ) appearances
-                GROUP BY team_id
-                HAVING COUNT(*) >= %s
-            )
-            SELECT MIN(s.kickoff_time)::date, MAX(s.kickoff_time)::date
-            FROM settled s
-            JOIN eligible_teams home_eligible ON home_eligible.team_id = s.home_team_id
-            JOIN eligible_teams away_eligible ON away_eligible.team_id = s.away_team_id
-            """,
-            (min_matches,),
+    candidates = [
+        CandidateMatch(
+            match_id=row[0],
+            result_id=row[1],
+            kickoff_at=row[2],
+            official_publish_time=row[3],
+            home_team_id=row[4],
+            home_team_candidate_ids=tuple(row[5] or ()),
+            away_team_id=row[6],
+            away_team_candidate_ids=tuple(row[7] or ()),
+            home_goals=row[8],
+            away_goals=row[9],
+            match_status=row[10],
         )
-        row = cur.fetchone()
-    return (row[0], row[1]) if row else (None, None)
+        for row in cur.fetchall()
+    ]
+    return build_training_dataset(
+        candidates,
+        min_matches=min_matches,
+        cutoff_at=cutoff_at,
+    )
+
+
+def _training_arrays(
+    dataset: TrainingDataset,
+) -> tuple[list[int], dict[int, int], list[int], list[int], list[int], list[int]]:
+    """Convert the manifest's exact included sample sequence to fitter arrays."""
+    team_ids = sorted(
+        {
+            team_id
+            for sample in dataset.samples
+            for team_id in (sample.home_team_id, sample.away_team_id)
+        }
+    )
+    team_to_idx = {team_id: index for index, team_id in enumerate(team_ids)}
+    home_idx = [team_to_idx[sample.home_team_id] for sample in dataset.samples]
+    away_idx = [team_to_idx[sample.away_team_id] for sample in dataset.samples]
+    home_goals = [sample.home_goals for sample in dataset.samples]
+    away_goals = [sample.away_goals for sample in dataset.samples]
+    return team_ids, team_to_idx, home_idx, away_idx, home_goals, away_goals
 
 
 # —— 主拟合函数 ——
 
 
-def fit_maher_poisson(
-    conn: Any,
-    league_id: int | None = None,
-) -> dict[str, Any]:
-    """用 MLE 拟合 Maher Poisson 模型参数。
-
-    Args:
-        conn: DB 连接
-        league_id: 联赛 ID（None = 全局）
-
-    Returns:
-        {"attack": {team_id: val, ...},
-         "defense": {team_id: val, ...},
-         "home_advantage": float,
-         "league_intercept": float,
-         "n_matches": int,
-         "n_teams": int,
-         "nll": float,
-         "converged": bool}
-    """
-    team_ids, team_to_idx, home_idx, away_idx, hg_vec, ag_vec = _load_match_data(
-        conn,
-        league_id=league_id,
+def fit_maher_poisson_dataset(dataset: TrainingDataset) -> dict[str, Any]:
+    """Fit only the already-materialized dataset; this function never touches a DB."""
+    if not isinstance(dataset, TrainingDataset):
+        raise TypeError("dataset must be a TrainingDataset")
+    team_ids, team_to_idx, home_idx, away_idx, hg_vec, ag_vec = _training_arrays(dataset)
+    training_start_date = (
+        date.fromisoformat(dataset.manifest.training_start[:10])
+        if dataset.manifest.training_start
+        else None
+    )
+    training_end_date = (
+        date.fromisoformat(dataset.manifest.training_end[:10])
+        if dataset.manifest.training_end
+        else None
     )
 
     n_teams = len(team_ids)
@@ -364,6 +332,9 @@ def fit_maher_poisson(
             "error": f"Insufficient data: {n_teams} teams, {n_matches} matches",
             "n_matches": n_matches,
             "n_teams": n_teams,
+            "training_start_date": training_start_date,
+            "training_end_date": training_end_date,
+            "training_manifest": dataset.manifest.to_dict(),
         }
 
     # 初始猜测
@@ -425,7 +396,19 @@ def fit_maher_poisson(
         "optimizer_message": optimizer_message,
         "optimizer_iterations": optimizer_iterations,
         "optimizer_gradient_norm": optimizer_gradient_norm,
+        "training_start_date": training_start_date,
+        "training_end_date": training_end_date,
+        "training_manifest": dataset.manifest.to_dict(),
     }
+
+
+def fit_maher_poisson(
+    conn: Any,
+    league_id: int | None = None,
+) -> dict[str, Any]:
+    """Materialize the official training data, then fit Maher Poisson."""
+    dataset = _load_training_dataset(conn, league_id=league_id)
+    return fit_maher_poisson_dataset(dataset)
 
 
 def fit_dixon_coles_rho(
@@ -444,7 +427,11 @@ def fit_dixon_coles_rho(
         {"rho": float, "n_low_score_matches": int, "nll": float}
     """
     if "error" in maher_params:
-        return {"rho": -0.08, "error": "no valid maher params", "n_low_score_matches": 0}
+        return {
+            "rho": -0.08,
+            "error": "no valid maher params",
+            "n_low_score_matches": 0,
+        }
 
     attack = maher_params["attack"]
     defense = maher_params["defense"]
@@ -590,9 +577,6 @@ def fit_all_models(
 
     dc_rho = fit_dixon_coles_rho(conn, maher, league_id=league_id)
     bivariate = fit_bivariate_poisson_shared(conn, maher, league_id=league_id)
-    training_start_date, training_end_date = _load_training_window(conn)
-    maher["training_start_date"] = training_start_date
-    maher["training_end_date"] = training_end_date
     return {
         "maher_poisson": maher,
         "dixon_coles_rho": dc_rho,
@@ -627,20 +611,42 @@ def run(dry_run: bool = False) -> dict[str, Any]:
                 "optimizer_message": maher.get("optimizer_message"),
             }
         if "error" in dc:
-            return {"status": "error", "error": f"Dixon-Coles fit failed: {dc['error']}"}
+            return {
+                "status": "error",
+                "error": f"Dixon-Coles fit failed: {dc['error']}",
+            }
 
         # Each training run creates immutable versions. Historical predictions
         # keep pointing to their original parameters, while only the new pair
         # becomes active for subsequent prediction runs.
-        cur = conn.cursor()
-        version = f"mle-{business_now().strftime('%Y%m%dT%H%M%S%f')}"
         training_start_date = maher.get("training_start_date")
         training_end_date = maher.get("training_end_date")
+        training_manifest = maher.get("training_manifest")
         maher_params = dict(maher)
+        maher_params.pop("training_manifest", None)
         for field in ("training_start_date", "training_end_date"):
             value = maher_params.get(field)
             if value is not None and hasattr(value, "isoformat"):
                 maher_params[field] = value.isoformat()
+        try:
+            maher_params = attach_artifact_identity(maher_params, training_manifest)
+            verify_artifact_identity(
+                maher_params,
+                expected_manifest_sha256=(
+                    training_manifest.get("sha256") if isinstance(training_manifest, dict) else None
+                ),
+            )
+        except (TypeError, ValueError) as exc:
+            return {
+                "status": "error",
+                "error": f"Maher artifact identity invalid: {exc}",
+            }
+
+        # Each training run creates immutable versions. Historical predictions
+        # keep pointing at their original parameters, while only the new pair
+        # becomes active for subsequent prediction runs.
+        cur = conn.cursor()
+        version = f"mle-{business_now().strftime('%Y%m%dT%H%M%S%f')}"
         cur.execute(
             """UPDATE model_versions
                SET is_active = false

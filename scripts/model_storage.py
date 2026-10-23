@@ -61,8 +61,8 @@ def _validate_prediction_payload(pred: dict) -> None:
 # ---------------------------------------------------------------------------
 
 
-def store_model_prediction(conn: Any, pred: dict) -> int | None:
-    """Insert a single model prediction row. Returns the new id."""
+def store_model_prediction(conn: Any, pred: dict, *, commit: bool = True) -> int | None:
+    """Insert a prediction row; callers may defer commit for a full output group."""
     _validate_prediction_payload(pred)
     reason = dict(pred.get("uncertainty_reason") or {})
     if "input_fence" in reason:
@@ -136,7 +136,8 @@ def store_model_prediction(conn: Any, pred: dict) -> int | None:
             },
         )
         row = cur.fetchone()
-    conn.commit()
+    if commit:
+        conn.commit()
     return row[0] if row else None
 
 

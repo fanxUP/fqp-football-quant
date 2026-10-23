@@ -9,12 +9,12 @@ def test_derived_history_stores_every_official_option_for_each_capable_model():
     conn = MagicMock()
     cursor = conn.cursor.return_value.__enter__.return_value
     cursor.fetchall.return_value = [
-        (101, "zjq", "0", 1.5),
-        (102, "zjq", "7", 1.8),
-        (201, "bf", "1:0", 1.5),
-        (202, "bf", "other_h", 1.8),
-        (301, "bqc", "33", 1.5),
-        (302, "bqc", "10", 1.8),
+        (101, "zjq", "0", 1.5, "2026-07-16T13:00:00"),
+        (102, "zjq", "7", 1.8, "2026-07-16T13:00:00"),
+        (201, "bf", "1:0", 1.5, "2026-07-16T13:00:00"),
+        (202, "bf", "other_h", 1.8, "2026-07-16T13:00:00"),
+        (301, "bqc", "33", 1.5, "2026-07-16T13:00:00"),
+        (302, "bqc", "10", 1.8, "2026-07-16T13:00:00"),
     ]
     raw_poisson = score_matrix(1.3, 1.1)
     adjusted_poisson = score_matrix(1.6, 0.9)
@@ -102,7 +102,10 @@ def test_derived_history_does_nothing_without_official_odds():
 def test_half_full_time_has_only_market_baseline_until_joint_model_is_validated():
     conn = MagicMock()
     cursor = conn.cursor.return_value.__enter__.return_value
-    cursor.fetchall.return_value = [(301, "bqc", "33", 1.5), (302, "bqc", "10", 1.8)]
+    cursor.fetchall.return_value = [
+        (301, "bqc", "33", 1.5, "2026-10-17T09:00:00"),
+        (302, "bqc", "10", 1.8, "2026-10-17T09:00:00"),
+    ]
     matrix = score_matrix(1.7, 0.9)
     with patch("scripts.derived_play_predictions.store_model_prediction") as store:
         count = store_derived_play_predictions(
@@ -130,7 +133,10 @@ def test_half_full_time_has_only_market_baseline_until_joint_model_is_validated(
 def test_same_goal_family_and_market_baseline_cannot_manufacture_derived_confidence():
     conn = MagicMock()
     cursor = conn.cursor.return_value.__enter__.return_value
-    cursor.fetchall.return_value = [(101, "zjq", "0", 1.5), (102, "zjq", "7", 1.8)]
+    cursor.fetchall.return_value = [
+        (101, "zjq", "0", 1.5, "2026-10-17T09:00:00"),
+        (102, "zjq", "7", 1.8, "2026-10-17T09:00:00"),
+    ]
     matrix = score_matrix(1.7, 0.9)
     with patch("scripts.derived_play_predictions.store_model_prediction") as store:
         count = store_derived_play_predictions(

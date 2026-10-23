@@ -63,7 +63,7 @@ def test_daily_review_only_counts_prematch_features_and_predictions(mock_conn):
 
     queries = [" ".join(call.args[0].split()) for call in cur.execute.call_args_list]
     feature_query = next(q for q in queries if "FROM match_feature_snapshots fs" in q)
-    prediction_query = next(q for q in queries if "FROM model_predictions mp" in q)
+    prediction_query = next(q for q in queries if "FROM model_prediction_latest_rows mp" in q)
     ticket_queries = [q for q in queries if "FROM simulation_tickets" in q]
     error_query = next(q for q in queries if "FROM prediction_error_analysis" in q)
 

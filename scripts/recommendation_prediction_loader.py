@@ -16,7 +16,7 @@ def load_actionable_predictions(conn: Any, model_names: list[str]) -> list[tuple
                 SELECT DISTINCT ON (
                     mp.match_id, mp.model_version_id, mp.play_type, mp.option_code
                 ) mp.id
-                FROM model_predictions mp
+                FROM model_prediction_latest_rows mp
                 JOIN official_matches m ON m.id = mp.match_id
                 JOIN model_versions mv ON mv.id = mp.model_version_id
                 WHERE mp.play_type IN ('spf', 'rqspf', 'bf', 'zjq', 'bqc')

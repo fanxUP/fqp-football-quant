@@ -146,7 +146,14 @@ def test_bayesian_form_requires_both_teams_to_have_settled_history() -> None:
 def test_xgboost_shadow_prediction_never_enters_committee_votes() -> None:
     conn = MagicMock()
     cursor = conn.cursor.return_value.__enter__.return_value
-    cursor.fetchall.side_effect = [[(11, "h", 2.1), (12, "d", 3.2), (13, "a", 3.6)], []]
+    cursor.fetchall.side_effect = [
+        [
+            (11, "h", 2.1, "2026-08-09T13:00:00"),
+            (12, "d", 3.2, "2026-08-09T13:00:00"),
+            (13, "a", 3.6, "2026-08-09T13:00:00"),
+        ],
+        [],
+    ]
 
     with (
         patch(
@@ -215,7 +222,11 @@ def test_bivariate_shadow_prediction_never_enters_committee_votes() -> None:
     conn = MagicMock()
     cursor = conn.cursor.return_value.__enter__.return_value
     cursor.fetchall.side_effect = [
-        [(11, "h", 2.1), (12, "d", 3.2), (13, "a", 3.6)],
+        [
+            (11, "h", 2.1, "2026-08-09T13:00:00"),
+            (12, "d", 3.2, "2026-08-09T13:00:00"),
+            (13, "a", 3.6, "2026-08-09T13:00:00"),
+        ],
         [],
     ]
     parameters = {
@@ -360,7 +371,13 @@ def test_glicko2_requires_sufficient_history_and_low_rating_deviation() -> None:
     assert cursor.execute.call_args.args[1] == (10, 20)
 
 
-def _run_with_odds(odds_rows):
+def _run_with_odds(
+    odds_rows,
+    output_group_counts=None,
+    *,
+    play_type="spf",
+    active_models=None,
+):
     conn = MagicMock()
     cursor = conn.cursor.return_value.__enter__.return_value
     cursor.fetchall.return_value = odds_rows
@@ -375,11 +392,15 @@ def _run_with_odds(odds_rows):
             mid=101,
             home_team_name="主队",
             away_team_name="客队",
-            play_type="spf",
-            active_models={"market_baseline": 1},
+            play_type=play_type,
+            active_models=active_models or {"market_baseline": 1},
             rho=-0.08,
             mle_rho=None,
             predict_time="2026-07-13T14:00:00",
+            prediction_run_id="00000000-0000-0000-0000-000000000001"
+            if output_group_counts is not None
+            else None,
+            output_group_counts=output_group_counts,
         )
 
     return result, store_prediction, store_vote
@@ -393,8 +414,32 @@ def test_prediction_skips_match_without_official_odds():
     store_vote.assert_not_called()
 
 
+def test_prediction_counts_missing_odds_as_skipped_expected_group():
+    output_group_counts = {}
+
+    result, _store_prediction, _store_vote = _run_with_odds([], output_group_counts)
+
+    assert result == (0, 0)
+    assert output_group_counts == {"expected": 1, "completed": 0}
+
+
+def test_missing_rqspf_odds_count_models_that_need_a_handicap():
+    output_group_counts = {}
+
+    _run_with_odds(
+        [],
+        output_group_counts,
+        play_type="rqspf",
+        active_models={"maher_poisson": 1},
+    )
+
+    assert output_group_counts == {"expected": 1, "completed": 0}
+
+
 def test_prediction_skips_incomplete_spf_market_instead_of_inventing_odds():
-    result, store_prediction, store_vote = _run_with_odds([(11, "h", 2.1), (12, "d", 3.2)])
+    result, store_prediction, store_vote = _run_with_odds(
+        [(11, "h", 2.1, "2026-08-09T13:00:00"), (12, "d", 3.2, "2026-08-09T13:00:00")]
+    )
 
     assert result == (0, 0)
     store_prediction.assert_not_called()
@@ -429,6 +474,36 @@ def test_prediction_job_does_not_fallback_to_spf_when_no_market_is_open():
     predict.assert_not_called()
 
 
+def test_run_impl_aggregates_missing_prediction_group_counts():
+    conn = MagicMock()
+    cursor = conn.cursor.return_value.__enter__.return_value
+    cursor.fetchall.side_effect = [
+        [(1, "market_baseline", {})],
+        [(101, "主队", "客队")],
+        [(101, "spf")],
+    ]
+    cursor.fetchone.return_value = None
+    db_context = MagicMock()
+    db_context.__enter__.return_value = conn
+
+    def skip_groups(*_args, output_group_counts, **_kwargs):
+        output_group_counts.update(expected=2, completed=0)
+        return 0, 0
+
+    with (
+        patch("scripts.jobs.run_model_prediction.get_db", return_value=db_context),
+        patch(
+            "scripts.jobs.run_model_prediction._predict_match_play_type",
+            side_effect=skip_groups,
+        ),
+    ):
+        result = _run_impl()
+
+    assert result["output_groups_expected"] == 2
+    assert result["output_groups_completed"] == 0
+    assert result["output_groups_skipped"] == 2
+
+
 def test_match_specific_prediction_still_requires_a_sellable_future_match():
     conn = MagicMock()
     cursor = conn.cursor.return_value.__enter__.return_value
@@ -452,7 +527,11 @@ def test_poisson_prediction_persists_raw_and_feature_adjusted_probabilities():
     conn = MagicMock()
     cursor = conn.cursor.return_value.__enter__.return_value
     cursor.fetchall.side_effect = [
-        [(11, "h", 2.1), (12, "d", 3.2), (13, "a", 3.6)],
+        [
+            (11, "h", 2.1, "2026-07-16T13:00:00"),
+            (12, "d", 3.2, "2026-07-16T13:00:00"),
+            (13, "a", 3.6, "2026-07-16T13:00:00"),
+        ],
         [],
     ]
     adjustment = GoalRateAdjustment(
@@ -498,7 +577,11 @@ def test_converged_historical_maher_model_is_persisted_as_independent() -> None:
     conn = MagicMock()
     cursor = conn.cursor.return_value.__enter__.return_value
     cursor.fetchall.side_effect = [
-        [(11, "h", 2.1), (12, "d", 3.2), (13, "a", 3.6)],
+        [
+            (11, "h", 2.1, "2026-07-16T13:00:00"),
+            (12, "d", 3.2, "2026-07-16T13:00:00"),
+            (13, "a", 3.6, "2026-07-16T13:00:00"),
+        ],
         [],
     ]
     parameters = {
@@ -546,7 +629,11 @@ def test_spf_prediction_includes_complete_derived_history_in_count():
     conn = MagicMock()
     cursor = conn.cursor.return_value.__enter__.return_value
     cursor.fetchall.side_effect = [
-        [(11, "h", 2.1), (12, "d", 3.2), (13, "a", 3.6)],
+        [
+            (11, "h", 2.1, "2026-07-16T13:00:00"),
+            (12, "d", 3.2, "2026-07-16T13:00:00"),
+            (13, "a", 3.6, "2026-07-16T13:00:00"),
+        ],
         [],
     ]
 
@@ -582,7 +669,11 @@ def test_each_prediction_binds_its_matching_official_option_snapshot():
     conn = MagicMock()
     cursor = conn.cursor.return_value.__enter__.return_value
     cursor.fetchall.side_effect = [
-        [(11, "h", 2.1), (12, "d", 3.2), (13, "a", 3.6)],
+        [
+            (11, "h", 2.1, "2026-07-16T13:00:00"),
+            (12, "d", 3.2, "2026-07-16T13:00:00"),
+            (13, "a", 3.6, "2026-07-16T13:00:00"),
+        ],
         [],
     ]
 
@@ -617,6 +708,13 @@ def test_prediction_job_requires_odds_and_feature_snapshot_jobs() -> None:
     with (
         patch("scripts.jobs.run_model_prediction.start_tracked_job", return_value=9) as start,
         patch("scripts.jobs.run_model_prediction.finish_tracked_job"),
+        patch("scripts.jobs.run_model_prediction.get_db"),
+        patch(
+            "scripts.jobs.run_model_prediction.fingerprint_runtime_sources",
+            return_value={"files": {}, "sha256": "a" * 64},
+        ),
+        patch("scripts.jobs.run_model_prediction.create_prediction_run"),
+        patch("scripts.jobs.run_model_prediction.finalize_prediction_run"),
         patch(
             "scripts.jobs.run_model_prediction._run_impl",
             return_value={"status": "ok", "predictions": 0},
@@ -628,6 +726,57 @@ def test_prediction_job_requires_odds_and_feature_snapshot_jobs() -> None:
         "official_odds_snapshot",
         "feature_snapshot_build",
     ]
+
+
+def test_prediction_job_records_run_identity_and_preserves_partial_status() -> None:
+    with (
+        patch("scripts.jobs.run_model_prediction.start_tracked_job", return_value=9),
+        patch("scripts.jobs.run_model_prediction.finish_tracked_job"),
+        patch("scripts.jobs.run_model_prediction.get_db"),
+        patch(
+            "scripts.jobs.run_model_prediction.fingerprint_runtime_sources",
+            return_value={"files": {}, "sha256": "a" * 64},
+        ),
+        patch("scripts.jobs.run_model_prediction.create_prediction_run") as create_run,
+        patch("scripts.jobs.run_model_prediction.finalize_prediction_run") as finalize_run,
+        patch(
+            "scripts.jobs.run_model_prediction._run_impl",
+            return_value={
+                "status": "ok",
+                "predictions": 3,
+                "input_updates_skipped": 1,
+                "output_groups_skipped": 2,
+            },
+        ) as run_impl,
+    ):
+        result = run()
+
+    prediction_run_id = create_run.call_args.kwargs["run_id"]
+    assert create_run.call_args.kwargs["ai_job_run_id"] == 9
+    assert run_impl.call_args.kwargs["prediction_run_id"] == prediction_run_id
+    assert finalize_run.call_args.kwargs["run_status"] == "partial"
+    assert result["input_updates_skipped"] == 1
+
+
+def test_prediction_job_marks_missing_output_groups_partial() -> None:
+    with (
+        patch("scripts.jobs.run_model_prediction.start_tracked_job", return_value=9),
+        patch("scripts.jobs.run_model_prediction.finish_tracked_job"),
+        patch("scripts.jobs.run_model_prediction.get_db"),
+        patch(
+            "scripts.jobs.run_model_prediction.fingerprint_runtime_sources",
+            return_value={"files": {}, "sha256": "a" * 64},
+        ),
+        patch("scripts.jobs.run_model_prediction.create_prediction_run"),
+        patch("scripts.jobs.run_model_prediction.finalize_prediction_run") as finalize_run,
+        patch(
+            "scripts.jobs.run_model_prediction._run_impl",
+            return_value={"status": "ok", "predictions": 0, "output_groups_skipped": 1},
+        ),
+    ):
+        run()
+
+    assert finalize_run.call_args.kwargs["run_status"] == "partial"
 
 
 def test_input_fence_is_captured_before_feature_or_odds_reads(legacy_input_fence):

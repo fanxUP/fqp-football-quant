@@ -23,9 +23,13 @@ import math
 import os
 import sys
 from collections import defaultdict
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from datetime import date, datetime
+from datetime import date, datetime, time, timedelta
+from pathlib import Path
 from typing import Any
+
+from scripts.training_manifest import CandidateMatch
 
 # Ensure project root on sys.path
 _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -139,6 +143,41 @@ class WindowResult:
     model_metrics: dict[str, dict] = field(default_factory=dict)
 
 
+@dataclass(frozen=True)
+class ResearchMatch:
+    """One bounded, materialized official match and its prediction-time market."""
+
+    candidate: CandidateMatch
+    business_date: date
+    prediction_as_of: datetime
+    odds_by_option: Mapping[str, float]
+    odds_snapshot_times: Mapping[str, datetime | str]
+    odds_snapshot_ids: Mapping[str, int] = field(default_factory=dict)
+    result_status: str = "final"
+    team_identity: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class ResearchEvaluationConfig:
+    """Resource and chronology limits for offline P106-04 evaluation."""
+
+    fold_count: int = 3
+    test_window_days: int = 30
+    holdout_days: int = 30
+    min_team_matches: int = 5
+    prediction_lead_minutes: int = 60
+    max_matches: int = 5000
+    max_report_bytes: int = 5_000_000
+
+
+@dataclass(frozen=True)
+class ResearchTimeSplit:
+    index: int | None
+    test_start: date
+    test_end: date
+    final_holdout: bool = False
+
+
 # —— 引擎核心 ——
 
 
@@ -214,7 +253,7 @@ class BacktestEngine:
                                      source_mp.play_type
                         ORDER BY source_mp.predict_time DESC
                     ) AS prediction_rank
-                FROM model_predictions source_mp
+                FROM model_prediction_latest_rows source_mp
                 JOIN official_matches source_m ON source_m.id = source_mp.match_id
                 WHERE source_mp.predict_time < source_m.kickoff_time
                   AND source_mp.validation_status = 'valid'
@@ -947,6 +986,889 @@ def run_backtest_from_config(
             result["store_error"] = str(e)
 
     return result
+
+
+# —— P106-04: isolated time-split research evaluation ——
+
+
+def _validate_research_config(config: ResearchEvaluationConfig) -> None:
+    if not isinstance(config, ResearchEvaluationConfig):
+        raise TypeError("config must be a ResearchEvaluationConfig")
+    if not 1 <= config.fold_count <= 5:
+        raise ValueError("fold_count must be between 1 and 5")
+    if not 1 <= config.test_window_days <= 90:
+        raise ValueError("test_window_days must be between 1 and 90")
+    if not 1 <= config.holdout_days <= 90:
+        raise ValueError("holdout_days must be between 1 and 90")
+    if config.min_team_matches < 1:
+        raise ValueError("min_team_matches must be positive")
+    if not 1 <= config.prediction_lead_minutes <= 10080:
+        raise ValueError("prediction_lead_minutes must be between 1 and 10080")
+    if not 1 <= config.max_matches <= 5000:
+        raise ValueError("max_matches must be between 1 and 5000")
+    if not 1024 <= config.max_report_bytes <= 5_000_000:
+        raise ValueError("max_report_bytes must be between 1024 and 5000000")
+
+
+def build_research_time_splits(
+    matches: Sequence[ResearchMatch],
+    config: ResearchEvaluationConfig | None = None,
+) -> list[ResearchTimeSplit]:
+    """Build non-overlapping calendar windows and reserve the newest block."""
+    config = config or ResearchEvaluationConfig()
+    _validate_research_config(config)
+    if not matches:
+        raise ValueError("research evaluation requires materialized matches")
+    dates = sorted({row.business_date for row in matches})
+    latest_date = dates[-1]
+    holdout_start = latest_date - timedelta(days=config.holdout_days - 1)
+    splits: list[ResearchTimeSplit] = []
+    first_test_start: date | None = None
+
+    for index in range(config.fold_count):
+        days_before_holdout = 1 + (config.fold_count - index - 1) * config.test_window_days
+        test_end = holdout_start - timedelta(days=days_before_holdout)
+        test_start = test_end - timedelta(days=config.test_window_days - 1)
+        first_test_start = test_start if first_test_start is None else first_test_start
+        splits.append(
+            ResearchTimeSplit(
+                index=index,
+                test_start=test_start,
+                test_end=test_end,
+            )
+        )
+
+    if first_test_start is None or dates[0] >= first_test_start:
+        raise ValueError("materialized history does not precede the first test window")
+    splits.append(
+        ResearchTimeSplit(
+            index=None,
+            test_start=holdout_start,
+            test_end=latest_date,
+            final_holdout=True,
+        )
+    )
+    if any(
+        left.test_end >= right.test_start for left, right in zip(splits, splits[1:], strict=False)
+    ):
+        raise ValueError("research test windows overlap")
+    return splits
+
+
+def _research_datetime(value: datetime | str) -> datetime:
+    normalized = datetime.fromisoformat(value) if isinstance(value, str) else value
+    if not isinstance(normalized, datetime):
+        raise TypeError("research timestamps must be datetimes")
+    if normalized.tzinfo is not None and normalized.utcoffset() is not None:
+        raise ValueError("research timestamps must use the naive Beijing DB convention")
+    return normalized
+
+
+def _research_source_snapshot(matches: Sequence[ResearchMatch]) -> str:
+    from scripts.model_prediction_run_identity import content_sha256
+
+    snapshot = []
+    for row in sorted(matches, key=lambda item: (item.business_date, item.candidate.match_id)):
+        candidate = row.candidate
+        snapshot.append(
+            {
+                "match_id": candidate.match_id,
+                "result_id": candidate.result_id,
+                "business_date": row.business_date.isoformat(),
+                "kickoff_at": _research_datetime(candidate.kickoff_at).isoformat(),
+                "official_publish_time": (
+                    _research_datetime(candidate.official_publish_time).isoformat()
+                    if candidate.official_publish_time is not None
+                    else None
+                ),
+                "home_team_id": candidate.home_team_id,
+                "away_team_id": candidate.away_team_id,
+                "team_identity": row.team_identity,
+                "home_goals": candidate.home_goals,
+                "away_goals": candidate.away_goals,
+                "match_status": candidate.match_status,
+                "result_status": row.result_status,
+                "prediction_as_of": _research_datetime(row.prediction_as_of).isoformat(),
+                "odds_by_option": dict(sorted(row.odds_by_option.items())),
+                "odds_snapshot_times": {
+                    option: _research_datetime(timestamp).isoformat()
+                    for option, timestamp in sorted(row.odds_snapshot_times.items())
+                },
+                "odds_snapshot_ids": dict(sorted(row.odds_snapshot_ids.items())),
+            }
+        )
+    return content_sha256(snapshot)
+
+
+def _research_code_fingerprint() -> dict[str, Any]:
+    from scripts.model_prediction_run_identity import fingerprint_runtime_sources
+
+    return fingerprint_runtime_sources(
+        Path(_PROJECT_ROOT),
+        (
+            "scripts/backtest_engine.py",
+            "scripts/mle_trainer.py",
+            "scripts/training_manifest.py",
+            "scripts/model_artifact_identity.py",
+            "scripts/maher_goal_rate_runtime.py",
+            "scripts/poisson_model.py",
+            "scripts/evaluation_metrics.py",
+            "scripts/odds_conversion.py",
+        ),
+    )
+
+
+def _research_actual(candidate: CandidateMatch) -> str | None:
+    if candidate.home_goals is None or candidate.away_goals is None:
+        return None
+    if candidate.home_goals > candidate.away_goals:
+        return "3"
+    if candidate.home_goals == candidate.away_goals:
+        return "1"
+    return "0"
+
+
+def _research_market_probabilities(row: ResearchMatch) -> dict[str, float] | None:
+    from scripts.odds_conversion import normalize_probabilities
+
+    if set(row.odds_by_option) != {"3", "1", "0"}:
+        return None
+    if set(row.odds_snapshot_times) != {"3", "1", "0"}:
+        return None
+    if set(row.odds_snapshot_ids) != {"3", "1", "0"}:
+        raise ValueError("market_snapshot_identity_missing")
+    as_of = _research_datetime(row.prediction_as_of)
+    snapshot_times = {
+        option: _research_datetime(timestamp)
+        for option, timestamp in row.odds_snapshot_times.items()
+    }
+    if any(timestamp > as_of for timestamp in snapshot_times.values()):
+        raise ValueError("odds_snapshot_after_prediction_as_of")
+    odds = {option: float(row.odds_by_option[option]) for option in ("3", "1", "0")}
+    if any(not math.isfinite(value) or value <= 1 for value in odds.values()):
+        raise ValueError("invalid_market_odds")
+    try:
+        probabilities = normalize_probabilities(odds)
+    except (TypeError, ValueError, ZeroDivisionError) as exc:
+        raise ValueError("invalid_market_odds") from exc
+    return {option: probabilities[option] for option in ("3", "1", "0")}
+
+
+def _research_prediction_probabilities(
+    fitted_parameters: Mapping[str, Any],
+    home_team_id: int,
+    away_team_id: int,
+) -> dict[str, float] | None:
+    from scripts.maher_goal_rate_runtime import load_trained_goal_rates
+    from scripts.poisson_model import derive_1x2, score_matrix
+
+    if fitted_parameters.get("converged") is not True:
+        return None
+    normalized = dict(fitted_parameters)
+    for name in ("attack", "defense", "team_match_counts"):
+        values = fitted_parameters.get(name)
+        if not isinstance(values, Mapping):
+            return None
+        normalized[name] = {str(key): value for key, value in values.items()}
+    rates = load_trained_goal_rates(
+        {"maher_poisson": normalized},
+        {"home_team_id": home_team_id, "away_team_id": away_team_id},
+    )
+    if rates is None:
+        return None
+    return derive_1x2(score_matrix(rates.home_lambda, rates.away_lambda))
+
+
+def _research_metric_summary(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    metrics: dict[str, Any] = {"sample_count": len(rows)}
+    for name in ("brier_score", "log_loss", "rps"):
+        values = [float(row[name]) for row in rows if row.get(name) is not None]
+        metrics[name] = round(math.fsum(values) / len(values), 8) if values else None
+    return metrics
+
+
+def _evaluate_research_window(
+    matches: Sequence[ResearchMatch],
+    split: ResearchTimeSplit,
+    config: ResearchEvaluationConfig,
+    code_fingerprint: Mapping[str, Any],
+) -> dict[str, Any]:
+    from scripts.evaluation_metrics import compute_match_metrics
+    from scripts.mle_trainer import fit_maher_poisson_dataset
+    from scripts.model_artifact_identity import attach_artifact_identity
+    from scripts.model_prediction_run_identity import content_sha256
+    from scripts.training_manifest import build_training_dataset
+
+    cutoff_at = datetime.combine(split.test_start, time.min) - timedelta(microseconds=1)
+    unconfirmed_training = [
+        row
+        for row in matches
+        if row.result_status not in {"final", "confirmed"}
+        and _research_datetime(row.candidate.kickoff_at) < cutoff_at
+    ]
+    dataset = build_training_dataset(
+        (row.candidate for row in matches if row.result_status in {"final", "confirmed"}),
+        min_matches=config.min_team_matches,
+        cutoff_at=cutoff_at,
+    )
+    fitted = fit_maher_poisson_dataset(dataset)
+    if "error" in fitted:
+        raise ValueError(
+            f"fold {split.index if split.index is not None else 'holdout'} cannot fit: {fitted['error']}"
+        )
+    if fitted.get("converged") is not True:
+        raise ValueError("Maher-SPF fold fit did not converge")
+    manifest = dataset.manifest.to_dict()
+    artifact_parameters = {
+        key: value
+        for key, value in fitted.items()
+        if key not in {"training_manifest", "training_start_date", "training_end_date"}
+    }
+    artifact = attach_artifact_identity(artifact_parameters, manifest)
+    artifact_identity = artifact["_artifact_identity"]
+    fit_match_ids = [sample.match_id for sample in dataset.samples]
+    if fit_match_ids != [sample["match_id"] for sample in manifest["included"]]:
+        raise ValueError("training manifest and Maher fit inputs differ")
+
+    model_metrics: list[dict[str, Any]] = []
+    market_metrics: list[dict[str, Any]] = []
+    predictions: list[dict[str, Any]] = []
+    excluded: list[dict[str, Any]] = []
+    scoped_matches = [
+        row for row in matches if split.test_start <= row.business_date <= split.test_end
+    ]
+    if not scoped_matches:
+        raise ValueError("test window contains no materialized matches")
+
+    for row in sorted(scoped_matches, key=lambda item: item.candidate.match_id):
+        candidate = row.candidate
+        actual = _research_actual(candidate)
+        reason: str | None = None
+        if row.result_status not in {"final", "confirmed"}:
+            reason = "official_result_not_final"
+        elif candidate.home_team_id is None or candidate.away_team_id is None:
+            ambiguous_side = next(
+                (
+                    side
+                    for side in ("home", "away")
+                    if row.team_identity.get(side, {}).get("name_match_count", 0) > 1
+                ),
+                None,
+            )
+            reason = "team_identity_ambiguous" if ambiguous_side else "team_unmapped"
+        elif actual is None:
+            reason = "official_score_missing"
+        elif _research_datetime(row.prediction_as_of) >= _research_datetime(candidate.kickoff_at):
+            reason = "prediction_as_of_not_before_kickoff"
+        elif _research_datetime(row.prediction_as_of) != (
+            _research_datetime(candidate.kickoff_at)
+            - timedelta(minutes=config.prediction_lead_minutes)
+        ):
+            reason = "prediction_as_of_does_not_match_config"
+        else:
+            try:
+                market = _research_market_probabilities(row)
+            except ValueError as exc:
+                reason = str(exc)
+                market = None
+            if reason is None and market is None:
+                reason = "incomplete_market_vector"
+        if reason is None:
+            assert candidate.home_team_id is not None
+            assert candidate.away_team_id is not None
+            model = _research_prediction_probabilities(
+                fitted, candidate.home_team_id, candidate.away_team_id
+            )
+            if model is None:
+                reason = "team_history_or_model_rate_unavailable"
+        if reason is not None:
+            exclusion = {"match_id": candidate.match_id, "reason": reason}
+            if row.team_identity:
+                exclusion["team_identity"] = row.team_identity
+            excluded.append(exclusion)
+            continue
+
+        model_metric = compute_match_metrics(model, market, actual, "maher_poisson")
+        market_metric = compute_match_metrics(market, market, actual, "market_baseline")
+        model_row = {name: model_metric[name] for name in ("brier_score", "log_loss", "rps")}
+        market_row = {name: market_metric[name] for name in ("brier_score", "log_loss", "rps")}
+        model_metrics.append(model_row)
+        market_metrics.append(market_row)
+        predictions.append(
+            {
+                "match_id": candidate.match_id,
+                "business_date": row.business_date.isoformat(),
+                "play_type": "spf",
+                "prediction_as_of": _research_datetime(row.prediction_as_of).isoformat(),
+                "actual_result": actual,
+                "model_probabilities": model,
+                "market_probabilities": market,
+                "odds_by_option": dict(sorted(row.odds_by_option.items())),
+                "odds_snapshot_times": {
+                    option: _research_datetime(timestamp).isoformat()
+                    for option, timestamp in sorted(row.odds_snapshot_times.items())
+                },
+                "odds_snapshot_ids": dict(sorted(row.odds_snapshot_ids.items())),
+                "metrics": {"model": model_row, "market_baseline": market_row},
+            }
+        )
+
+    if not predictions:
+        raise ValueError("test window has no paired model/market observations")
+    model_ids = [row["match_id"] for row in predictions]
+    market_ids = [row["match_id"] for row in predictions]
+    if model_ids != market_ids:
+        raise ValueError("model and market baseline samples are not paired")
+    excluded_counts: dict[str, int] = {}
+    for row in excluded:
+        excluded_counts[row["reason"]] = excluded_counts.get(row["reason"], 0) + 1
+    training_excluded = [
+        {"match_id": sample["match_id"], "reason": sample["reason"]}
+        for sample in manifest["excluded"]
+    ]
+    training_excluded.extend(
+        {"match_id": row.candidate.match_id, "reason": "official_result_not_final"}
+        for row in unconfirmed_training
+    )
+    training_excluded.sort(key=lambda sample: (sample["match_id"], sample["reason"]))
+    training_excluded_counts: dict[str, int] = {}
+    for sample in training_excluded:
+        training_excluded_counts[sample["reason"]] = (
+            training_excluded_counts.get(sample["reason"], 0) + 1
+        )
+
+    return {
+        "window_index": split.index,
+        "final_holdout": split.final_holdout,
+        "test_start": split.test_start.isoformat(),
+        "test_end": split.test_end.isoformat(),
+        "train_cutoff": manifest["cutoff_at"],
+        "source_code_fingerprint_sha256": code_fingerprint["sha256"],
+        "training_match_count": len(dataset.samples),
+        "training_sample_ids_sha256": content_sha256(fit_match_ids),
+        "training_manifest_sha256": manifest["sha256"],
+        "training_excluded_by_reason": training_excluded_counts,
+        "training_excluded": training_excluded,
+        "artifact_identity_sha256": artifact_identity["identity_sha256"],
+        "artifact_parameters_sha256": artifact_identity["sha256"],
+        "fit_input_manifest_sha256": manifest["sha256"],
+        "candidate_count": len(scoped_matches),
+        "sample_count": len(predictions),
+        "model_match_ids": model_ids,
+        "market_match_ids": market_ids,
+        "model_market_match_ids": model_ids,
+        "excluded_by_reason": excluded_counts,
+        "excluded": excluded,
+        "metrics": {
+            "model": _research_metric_summary(model_metrics),
+            "market_baseline": _research_metric_summary(market_metrics),
+        },
+        "predictions": predictions,
+    }
+
+
+def evaluate_research_reconstruction(
+    matches: Sequence[ResearchMatch],
+    config: ResearchEvaluationConfig | None = None,
+) -> dict[str, Any]:
+    """Refit Maher-SPF per chronological fold and once on a sealed final block."""
+    config = config or ResearchEvaluationConfig()
+    _validate_research_config(config)
+    if len(matches) > config.max_matches:
+        raise ValueError("materialized match count exceeds configured max_matches")
+    match_ids = [row.candidate.match_id for row in matches]
+    if len(match_ids) != len(set(match_ids)):
+        raise ValueError("research matches must contain unique match IDs")
+    if any(
+        _research_datetime(row.candidate.kickoff_at).date() != row.business_date for row in matches
+    ):
+        raise ValueError("business_date must match the Beijing-local kickoff date")
+    normalized_matches = sorted(
+        matches, key=lambda row: (row.business_date, row.candidate.match_id)
+    )
+    splits = build_research_time_splits(normalized_matches, config)
+    code_fingerprint = _research_code_fingerprint()
+    snapshot_sha256 = _research_source_snapshot(normalized_matches)
+
+    fold_reports = [
+        _evaluate_research_window(normalized_matches, split, config, code_fingerprint)
+        for split in splits[:-1]
+    ]
+    final_report = _evaluate_research_window(
+        normalized_matches, splits[-1], config, code_fingerprint
+    )
+    final_report["evaluation_count"] = 1
+    exclusion_counts: dict[str, int] = {}
+    for window in [*fold_reports, final_report]:
+        for reason, count in window["excluded_by_reason"].items():
+            exclusion_counts[reason] = exclusion_counts.get(reason, 0) + count
+
+    report = {
+        "schema_version": "fqp.model-time-split-evaluation/v1",
+        "evaluation_mode": "research_reconstruction",
+        "play_type": "spf",
+        "model_name": "maher_poisson",
+        "baseline": {
+            "name": "proportional_de-vig_market",
+            "source": "complete official SPF odds vector available by each match prediction_as_of",
+            "normalizer": "scripts.odds_conversion.normalize_probabilities",
+        },
+        "source_snapshot_sha256": snapshot_sha256,
+        "team_identity_audit": [
+            {
+                "match_id": row.candidate.match_id,
+                "business_date": row.business_date.isoformat(),
+                "home": dict(row.team_identity["home"]),
+                "away": dict(row.team_identity["away"]),
+            }
+            for row in normalized_matches
+            if row.team_identity
+            and any(
+                row.team_identity.get(side, {}).get("name_match_count") != 1
+                for side in ("home", "away")
+            )
+        ],
+        "source_code_fingerprint": dict(code_fingerprint),
+        "config": {
+            "fold_count": config.fold_count,
+            "test_window_days": config.test_window_days,
+            "holdout_days": config.holdout_days,
+            "min_team_matches": config.min_team_matches,
+            "prediction_lead_minutes": config.prediction_lead_minutes,
+            "max_matches": config.max_matches,
+        },
+        "folds": fold_reports,
+        "final_holdout": final_report,
+        "excluded_by_reason": exclusion_counts,
+        "official_prediction_writes": 0,
+        "claims_model_beats_market": False,
+    }
+    encoded = json.dumps(report, ensure_ascii=False, sort_keys=True, allow_nan=False).encode()
+    if len(encoded) > config.max_report_bytes:
+        raise ValueError("research evaluation report exceeds configured size limit")
+    return report
+
+
+def _execute_read_only_snapshot(conn: Any, sql: str, params: Sequence[Any]) -> list[dict[str, Any]]:
+    """Execute one bounded query in a fresh, closed repeatable-read snapshot."""
+    try:
+        from psycopg2.extensions import TRANSACTION_STATUS_IDLE
+    except ImportError as exc:
+        raise RuntimeError("psycopg2 is required for PostgreSQL research reads") from exc
+    if not callable(getattr(conn, "get_transaction_status", None)):
+        raise TypeError("research materialization requires a psycopg2 connection")
+    if conn.get_transaction_status() != TRANSACTION_STATUS_IDLE:
+        raise ValueError("research materialization requires an idle connection")
+    cursor = conn.cursor()
+    try:
+        cursor.execute("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY")
+        cursor.execute("SET LOCAL lock_timeout = '2s'")
+        cursor.execute("SET LOCAL statement_timeout = '15s'")
+        cursor.execute(sql, tuple(params))
+        names = [column[0] for column in cursor.description]
+        return [dict(zip(names, row, strict=True)) for row in cursor.fetchall()]
+    finally:
+        try:
+            conn.rollback()
+        finally:
+            cursor.close()
+
+
+def load_research_matches(
+    conn: Any,
+    *,
+    max_matches: int = 5000,
+    prediction_lead_minutes: int = 60,
+) -> list[ResearchMatch]:
+    """Read a bounded official-result/odds snapshot, then close its transaction."""
+    if not 1 <= max_matches <= 5000:
+        raise ValueError("max_matches must be between 1 and 5000")
+    if not 1 <= prediction_lead_minutes <= 10080:
+        raise ValueError("prediction_lead_minutes must be between 1 and 10080")
+    sql = """
+        WITH selected_matches AS (
+            SELECT m.id AS match_id,
+                   m.business_date,
+                   m.kickoff_time,
+                   m.match_status,
+                   m.home_team_name,
+                   m.away_team_name,
+                   r.id AS result_id,
+                   r.official_publish_time,
+                   r.full_home_goals AS home_goals,
+                   r.full_away_goals AS away_goals,
+                   r.result_status,
+                   home_team.id AS home_team_id,
+                   home_team.name_match_count AS home_team_name_match_count,
+                   home_team.candidate_team_ids AS home_team_candidate_team_ids,
+                   away_team.id AS away_team_id,
+                   away_team.name_match_count AS away_team_name_match_count,
+                   away_team.candidate_team_ids AS away_team_candidate_team_ids
+            FROM official_matches m
+            JOIN official_results r ON r.match_id=m.id
+            LEFT JOIN LATERAL (
+                SELECT CASE WHEN COUNT(*) = 1 THEN MIN(t.id) END AS id,
+                       COUNT(*)::integer AS name_match_count,
+                       COALESCE(
+                           array_agg(t.id ORDER BY t.id) FILTER (WHERE t.id IS NOT NULL),
+                           ARRAY[]::BIGINT[]
+                       ) AS candidate_team_ids
+                FROM teams t
+                WHERE t.team_name_cn=m.home_team_name
+            ) home_team ON true
+            LEFT JOIN LATERAL (
+                SELECT CASE WHEN COUNT(*) = 1 THEN MIN(t.id) END AS id,
+                       COUNT(*)::integer AS name_match_count,
+                       COALESCE(
+                           array_agg(t.id ORDER BY t.id) FILTER (WHERE t.id IS NOT NULL),
+                           ARRAY[]::BIGINT[]
+                       ) AS candidate_team_ids
+                FROM teams t
+                WHERE t.team_name_cn=m.away_team_name
+            ) away_team ON true
+            WHERE r.result_status IN ('final','confirmed')
+              AND m.business_date IS NOT NULL
+              AND m.kickoff_time IS NOT NULL
+            ORDER BY m.business_date DESC, m.id DESC
+            LIMIT %s
+        )
+        SELECT selected_matches.*,
+               odds.id AS odds_snapshot_id,
+               odds.option_code,
+               odds.sp_value,
+               odds.snapshot_time
+        FROM selected_matches
+        LEFT JOIN LATERAL (
+            SELECT DISTINCT ON (CASE o.option_code
+                                   WHEN 'h' THEN '3' WHEN 'd' THEN '1' WHEN 'a' THEN '0'
+                                   ELSE o.option_code END)
+                   o.id,
+                   CASE o.option_code
+                       WHEN 'h' THEN '3' WHEN 'd' THEN '1' WHEN 'a' THEN '0'
+                       ELSE o.option_code
+                   END AS option_code,
+                   o.sp_value, o.snapshot_time
+            FROM official_odds_snapshots o
+            WHERE o.match_id=selected_matches.match_id
+              AND o.play_type='spf'
+              AND o.is_open=true
+              AND o.sp_value > 1
+              AND o.option_code IN ('h','d','a','3','1','0')
+              AND o.snapshot_time <= selected_matches.kickoff_time
+                    - (%s * INTERVAL '1 minute')
+            ORDER BY CASE o.option_code
+                         WHEN 'h' THEN '3' WHEN 'd' THEN '1' WHEN 'a' THEN '0'
+                         ELSE o.option_code END,
+                     o.snapshot_time DESC, o.id DESC
+        ) odds ON true
+        ORDER BY selected_matches.business_date,
+                 selected_matches.match_id,
+                 odds.option_code
+    """
+    rows = _execute_read_only_snapshot(conn, sql, (max_matches + 1, prediction_lead_minutes))
+    matches: dict[int, ResearchMatch] = {}
+    for row in rows:
+        match_id = int(row["match_id"])
+        if match_id not in matches:
+            kickoff = _research_datetime(row["kickoff_time"])
+            candidate = CandidateMatch(
+                match_id=match_id,
+                result_id=int(row["result_id"]),
+                kickoff_at=kickoff,
+                home_team_id=(
+                    int(row["home_team_id"]) if row["home_team_id"] is not None else None
+                ),
+                away_team_id=(
+                    int(row["away_team_id"]) if row["away_team_id"] is not None else None
+                ),
+                home_goals=(int(row["home_goals"]) if row["home_goals"] is not None else None),
+                away_goals=(int(row["away_goals"]) if row["away_goals"] is not None else None),
+                match_status=row["match_status"],
+                official_publish_time=row["official_publish_time"],
+            )
+            matches[match_id] = ResearchMatch(
+                candidate=candidate,
+                business_date=row["business_date"],
+                prediction_as_of=kickoff - timedelta(minutes=prediction_lead_minutes),
+                odds_by_option={},
+                odds_snapshot_times={},
+                odds_snapshot_ids={},
+                result_status=str(row["result_status"] or "").lower(),
+                team_identity={
+                    "home": {
+                        "team_name": row["home_team_name"],
+                        "selected_team_id": (
+                            int(row["home_team_id"]) if row["home_team_id"] is not None else None
+                        ),
+                        "name_match_count": int(row["home_team_name_match_count"]),
+                        "candidate_team_ids": [
+                            int(team_id) for team_id in row["home_team_candidate_team_ids"]
+                        ],
+                    },
+                    "away": {
+                        "team_name": row["away_team_name"],
+                        "selected_team_id": (
+                            int(row["away_team_id"]) if row["away_team_id"] is not None else None
+                        ),
+                        "name_match_count": int(row["away_team_name_match_count"]),
+                        "candidate_team_ids": [
+                            int(team_id) for team_id in row["away_team_candidate_team_ids"]
+                        ],
+                    },
+                },
+            )
+        current = matches[match_id]
+        if row["option_code"] is not None:
+            odds = dict(current.odds_by_option)
+            times = dict(current.odds_snapshot_times)
+            ids = dict(current.odds_snapshot_ids)
+            option = str(row["option_code"])
+            odds[option] = float(row["sp_value"])
+            times[option] = row["snapshot_time"]
+            ids[option] = int(row["odds_snapshot_id"])
+            matches[match_id] = ResearchMatch(
+                candidate=current.candidate,
+                business_date=current.business_date,
+                prediction_as_of=current.prediction_as_of,
+                odds_by_option=odds,
+                odds_snapshot_times=times,
+                odds_snapshot_ids=ids,
+                result_status=current.result_status,
+                team_identity=current.team_identity,
+            )
+    if len(matches) > max_matches:
+        raise ValueError("materialized match count exceeds max_matches")
+    return sorted(matches.values(), key=lambda row: (row.business_date, row.candidate.match_id))
+
+
+def evaluate_prediction_replay(conn: Any, prediction_run_id: str) -> dict[str, Any]:
+    """Evaluate only complete, stored SPF groups from one P106-03 prediction run."""
+    from scripts.evaluation_metrics import compute_match_metrics
+
+    if not isinstance(prediction_run_id, str) or not prediction_run_id.strip():
+        raise ValueError("prediction_run_id is required")
+    sql = """
+        SELECT g.id AS group_id, g.match_id, g.play_type, g.predict_time,
+               g.expected_options, g.probability_vector, g.output_sha256,
+               g.odds_snapshot_ids, g.odds_snapshot_times,
+               g.artifact_identity, g.input_fence, g.model_version_id,
+               g.provenance_status AS group_provenance_status,
+               g.group_status, r.run_status, r.provenance_status AS run_provenance_status,
+               r.run_manifest_sha256, r.model_manifest_sha256, r.input_manifest_sha256,
+               m.kickoff_time,
+               result.result_status, result.spf_result,
+               outputs.market_vector, outputs.output_snapshot_ids, outputs.option_count
+        FROM model_prediction_groups g
+        JOIN model_prediction_runs r ON r.id=g.run_id
+        JOIN official_matches m ON m.id=g.match_id
+        LEFT JOIN LATERAL (
+            SELECT result_status, spf_result
+            FROM official_results
+            WHERE match_id=g.match_id
+            ORDER BY official_publish_time DESC NULLS LAST, id DESC
+            LIMIT 1
+        ) result ON true
+        LEFT JOIN LATERAL (
+            SELECT jsonb_object_agg(option_map.option_code, mp.market_probability) AS market_vector,
+                   jsonb_object_agg(option_map.option_code, mp.odds_snapshot_id) AS output_snapshot_ids,
+                   COUNT(DISTINCT option_map.option_code) AS option_count
+            FROM model_prediction_group_options option_map
+            JOIN model_predictions mp ON mp.id=option_map.prediction_id
+            WHERE option_map.group_id=g.id
+        ) outputs ON true
+        WHERE g.run_id=%s
+        ORDER BY g.match_id, g.id
+    """
+    rows = _execute_read_only_snapshot(conn, sql, (prediction_run_id,))
+    if not rows:
+        raise ValueError("prediction run has no stored output groups")
+
+    evaluated = []
+    excluded: list[dict[str, Any]] = []
+    run_manifest_sha256 = None
+    for row in rows:
+        run_manifest_sha256 = row["run_manifest_sha256"]
+        reason = None
+        if row["group_status"] != "complete":
+            reason = "prediction_group_incomplete"
+        elif row["run_status"] not in {"completed", "partial"}:
+            reason = "prediction_run_not_published"
+        elif (
+            row["group_provenance_status"] != "complete"
+            or row["run_provenance_status"] != "complete"
+        ):
+            reason = "prediction_provenance_incomplete"
+        elif not isinstance(row["artifact_identity"], Mapping):
+            reason = "artifact_identity_missing"
+        elif row["artifact_identity"].get("provenance_status") != "complete":
+            reason = "artifact_identity_incomplete"
+        elif row["play_type"] != "spf":
+            reason = "unsupported_play_type"
+        elif row["predict_time"] >= row["kickoff_time"]:
+            reason = "prediction_not_before_kickoff"
+        elif row["result_status"] not in {"final", "confirmed"} or row["spf_result"] not in {
+            "3",
+            "1",
+            "0",
+        }:
+            reason = "official_result_not_final"
+        expected = sorted(str(option) for option in (row["expected_options"] or []))
+        model = row["probability_vector"] or {}
+        market = row["market_vector"] or {}
+        if reason is None and (expected != ["0", "1", "3"] or row["option_count"] != 3):
+            reason = "incomplete_prediction_group"
+        if reason is None and (set(model) != {"3", "1", "0"} or set(market) != {"3", "1", "0"}):
+            reason = "incomplete_probability_vector"
+        if reason is None:
+            recorded_ids = row["odds_snapshot_ids"] or {}
+            output_ids = row["output_snapshot_ids"] or {}
+            recorded_times = row["odds_snapshot_times"] or {}
+            if (
+                set(recorded_ids) != {"3", "1", "0"}
+                or set(output_ids) != {"3", "1", "0"}
+                or set(recorded_times) != {"3", "1", "0"}
+                or any(str(recorded_ids[key]) != str(output_ids[key]) for key in recorded_ids)
+            ):
+                reason = "market_snapshot_identity_missing"
+            elif any(
+                _research_datetime(recorded_times[key]) > row["predict_time"]
+                for key in ("3", "1", "0")
+            ):
+                reason = "market_snapshot_after_prediction_time"
+        if reason is not None:
+            excluded.append({"match_id": int(row["match_id"]), "reason": reason})
+            continue
+        try:
+            model_probs = {option: float(model[option]) for option in ("3", "1", "0")}
+            market_probs = {option: float(market[option]) for option in ("3", "1", "0")}
+        except TypeError, ValueError:
+            excluded.append(
+                {"match_id": int(row["match_id"]), "reason": "invalid_probability_vector"}
+            )
+            continue
+        if any(
+            not math.isfinite(value) or value < 0
+            for value in (*model_probs.values(), *market_probs.values())
+        ):
+            excluded.append(
+                {"match_id": int(row["match_id"]), "reason": "invalid_probability_vector"}
+            )
+            continue
+        if not math.isclose(math.fsum(model_probs.values()), 1.0, abs_tol=1e-5) or not math.isclose(
+            math.fsum(market_probs.values()), 1.0, abs_tol=1e-5
+        ):
+            excluded.append(
+                {"match_id": int(row["match_id"]), "reason": "unnormalized_probability_vector"}
+            )
+            continue
+        model_metric = compute_match_metrics(
+            model_probs, market_probs, row["spf_result"], "stored_prediction"
+        )
+        market_metric = compute_match_metrics(
+            market_probs, market_probs, row["spf_result"], "market_baseline"
+        )
+        evaluated.append(
+            {
+                "group_id": str(row["group_id"]),
+                "match_id": int(row["match_id"]),
+                "model_version_id": int(row["model_version_id"]),
+                "play_type": "spf",
+                "predict_time": row["predict_time"].isoformat(),
+                "output_sha256": row["output_sha256"],
+                "artifact_identity": row["artifact_identity"],
+                "input_fence": row["input_fence"],
+                "odds_snapshot_ids": row["odds_snapshot_ids"],
+                "odds_snapshot_times": row["odds_snapshot_times"],
+                "model_probabilities": model_probs,
+                "market_probabilities": market_probs,
+                "actual_result": row["spf_result"],
+                "metrics": {
+                    "model": {
+                        name: model_metric[name] for name in ("brier_score", "log_loss", "rps")
+                    },
+                    "market_baseline": {
+                        name: market_metric[name] for name in ("brier_score", "log_loss", "rps")
+                    },
+                },
+            }
+        )
+    if not evaluated:
+        raise ValueError("prediction run has no complete paired SPF observations")
+    model_ids = [row["match_id"] for row in evaluated]
+    market_ids = [row["match_id"] for row in evaluated]
+    return {
+        "schema_version": "fqp.model-time-split-evaluation/v1",
+        "evaluation_mode": "prediction_replay",
+        "prediction_run_id": prediction_run_id,
+        "prediction_run_manifest_sha256": run_manifest_sha256,
+        "model_manifest_sha256": rows[0]["model_manifest_sha256"],
+        "input_manifest_sha256": rows[0]["input_manifest_sha256"],
+        "play_type": "spf",
+        "sample_count": len(evaluated),
+        "model_match_ids": model_ids,
+        "market_match_ids": market_ids,
+        "model_market_match_ids": model_ids,
+        "metrics": {
+            "model": _research_metric_summary([row["metrics"]["model"] for row in evaluated]),
+            "market_baseline": _research_metric_summary(
+                [row["metrics"]["market_baseline"] for row in evaluated]
+            ),
+        },
+        "excluded": excluded,
+        "predictions": evaluated,
+        "official_prediction_writes": 0,
+    }
+
+
+def store_research_evaluation_run(
+    conn: Any,
+    report: Mapping[str, Any],
+    *,
+    name: str,
+) -> int:
+    """Atomically store a bounded, mode-tagged report in existing backtest JSONB."""
+    if report.get("evaluation_mode") not in {"research_reconstruction", "prediction_replay"}:
+        raise ValueError("evaluation_mode must distinguish research from stored prediction replay")
+    if not isinstance(name, str) or not name.strip() or len(name) > 255:
+        raise ValueError("research evaluation name must contain 1 to 255 characters")
+    payload = json.dumps(dict(report), ensure_ascii=False, sort_keys=True, allow_nan=False)
+    if len(payload.encode("utf-8")) > 5_000_000:
+        raise ValueError("research evaluation report exceeds 5 MB")
+    try:
+        from psycopg2.extensions import TRANSACTION_STATUS_IDLE
+    except ImportError as exc:
+        raise RuntimeError("psycopg2 is required for research evaluation storage") from exc
+    if not callable(getattr(conn, "get_transaction_status", None)):
+        raise TypeError("research result storage requires a psycopg2 connection")
+    if conn.get_transaction_status() != TRANSACTION_STATUS_IDLE:
+        raise ValueError("research result storage requires an idle connection")
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                """INSERT INTO backtest_runs (name, description, config, status, started_at)
+                   VALUES (%s, %s, %s::jsonb, 'running', NOW()) RETURNING id""",
+                (
+                    name.strip(),
+                    "Offline P106-04 evaluation; not an official prediction run.",
+                    payload,
+                ),
+            )
+            row = cursor.fetchone()
+            if row is None:
+                raise RuntimeError("research backtest run ID was not returned")
+            run_id = int(row[0])
+            cursor.execute(
+                """UPDATE backtest_runs SET status='completed', finished_at=NOW()
+                   WHERE id=%s AND status='running'""",
+                (run_id,),
+            )
+            if cursor.rowcount != 1:
+                raise RuntimeError("research backtest run could not be completed")
+        conn.commit()
+        return run_id
+    except Exception:
+        conn.rollback()
+        raise
 
 
 # —— 自测 ——

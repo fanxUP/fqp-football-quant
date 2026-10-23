@@ -13,12 +13,15 @@ Odds processing chain:
 from __future__ import annotations
 
 import math
+import uuid
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 from psycopg2.errors import LockNotAvailable
 
 from apps.backend.src.db import get_db
+from apps.backend.src.deployment_version import RELEASE_ID
 from scripts.adaboost_shadow_model import load_probabilities as load_adaboost_shadow_probabilities
 from scripts.agents.task_queue import finish_tracked_job, start_tracked_job
 from scripts.bayesian_form_model import probabilities_from_team_outcomes
@@ -51,6 +54,17 @@ from scripts.maher_goal_rate_runtime import (
 )
 from scripts.market_metric_validation import MarketMetricValidationError, validate_market
 from scripts.mlp_shadow_model import load_probabilities as load_mlp_shadow_probabilities
+from scripts.model_prediction_run_identity import (
+    build_model_artifact_identity,
+    fingerprint_runtime_sources,
+)
+from scripts.model_prediction_run_storage import (
+    create_prediction_run,
+    fail_prediction_run,
+    finalize_prediction_run,
+    store_prediction_group,
+    update_prediction_run_manifest,
+)
 from scripts.model_signal_policy import (
     MODEL_FAMILIES,
     committee_weights,
@@ -85,6 +99,45 @@ from scripts.xgboost_shadow_model import load_probabilities as load_xgboost_shad
 # Negative means low scores (0:0, 1:0, 0:1, 1:1) are less common than
 # independent Poisson predicts.
 DEFAULT_RHO = -0.08
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+_PREDICTION_SOURCE_PATHS = (
+    "scripts/jobs/run_model_prediction.py",
+    "apps/backend/src/db.py",
+    "apps/backend/src/deployment_version.py",
+    "scripts/agents/task_queue.py",
+    "scripts/bayesian_form_model.py",
+    "scripts/bivariate_poisson_model.py",
+    "scripts/business_time.py",
+    "scripts/dixon_coles_model.py",
+    "scripts/elo_model.py",
+    "scripts/extra_trees_shadow_model.py",
+    "scripts/feature_adjustment.py",
+    "scripts/feature_storage.py",
+    "scripts/glicko2_model.py",
+    "scripts/hist_gradient_boosting_shadow_model.py",
+    "scripts/knn_shadow_model.py",
+    "scripts/lda_shadow_model.py",
+    "scripts/logistic_shadow_model.py",
+    "scripts/maher_goal_rate_runtime.py",
+    "scripts/market_metric_validation.py",
+    "scripts/model_signal_policy.py",
+    "scripts/mlp_shadow_model.py",
+    "scripts/naive_bayes_shadow_model.py",
+    "scripts/negative_binomial_model.py",
+    "scripts/odds_conversion.py",
+    "scripts/poisson_model.py",
+    "scripts/random_forest_shadow_model.py",
+    "scripts/svm_shadow_model.py",
+    "scripts/xgboost_shadow_model.py",
+    "scripts/adaboost_shadow_model.py",
+    "scripts/model_storage.py",
+    "scripts/derived_play_predictions.py",
+    "scripts/model_prediction_run_identity.py",
+    "scripts/model_prediction_run_storage.py",
+    "scripts/model_prediction_run_loader.py",
+    "scripts/prediction_input_fence.py",
+    "scripts/prediction_input_updates.py",
+)
 MIN_ELO_MATCHES = 5
 MIN_MAHER_MATCHES = _MIN_MAHER_MATCHES
 MIN_GLICKO2_MATCHES = 8
@@ -406,7 +459,11 @@ def _load_trained_glicko2_probabilities(
     return glicko2_predict_1x2(states[0], states[1])
 
 
-def _run_impl(match_id: int | None = None, dry_run: bool = False) -> dict[str, Any]:
+def _run_impl(
+    match_id: int | None = None,
+    dry_run: bool = False,
+    prediction_run_id: uuid.UUID | str | None = None,
+) -> dict[str, Any]:
     """Run model predictions for active matches."""
     if dry_run:
         return {"status": "dry_run", "message": "model prediction run (dry run)"}
@@ -436,6 +493,43 @@ def _run_impl(match_id: int | None = None, dry_run: bool = False) -> dict[str, A
             conn.commit()
             if row:
                 active_models["market_baseline"] = row[0]
+
+        model_artifact_identities = {}
+        if prediction_run_id is not None:
+            for model_name, model_version_id in active_models.items():
+                try:
+                    model_artifact_identities[model_name] = build_model_artifact_identity(
+                        model_version_id,
+                        model_name,
+                        model_parameters.get(model_name, {}),
+                        artifact_root=_PROJECT_ROOT,
+                    )
+                except Exception:
+                    model_artifact_identities[model_name] = {
+                        "model_version_id": int(model_version_id),
+                        "model_name": model_name,
+                        "provenance_status": "incomplete",
+                        "parameters_sha256": None,
+                        "artifact": None,
+                        "reason": "artifact_identity_unavailable",
+                    }
+        model_manifest = [
+            model_artifact_identities[name] for name in sorted(model_artifact_identities)
+        ]
+        run_provenance_status = (
+            "complete"
+            if model_manifest
+            and all(item["provenance_status"] == "complete" for item in model_manifest)
+            else "incomplete"
+        )
+        if prediction_run_id is not None:
+            update_prediction_run_manifest(
+                conn,
+                run_id=prediction_run_id,
+                model_manifest=model_manifest,
+                input_manifest={"match_id_filter": match_id, "predict_time": predict_time},
+                provenance_status=run_provenance_status,
+            )
         if not active_models:
             return {"status": "error", "error": "no active model versions"}
 
@@ -482,12 +576,27 @@ def _run_impl(match_id: int | None = None, dry_run: bool = False) -> dict[str, A
                 )
                 match_rows = cur.fetchall()
 
+        if prediction_run_id is not None:
+            update_prediction_run_manifest(
+                conn,
+                run_id=prediction_run_id,
+                model_manifest=model_manifest,
+                input_manifest={
+                    "match_id_filter": match_id,
+                    "match_ids": sorted(int(row[0]) for row in match_rows),
+                    "predict_time": predict_time,
+                },
+                provenance_status=run_provenance_status,
+            )
+
         if not match_rows:
             return {"status": "ok", "predictions": 0, "note": "no matches to predict"}
 
         total_predictions = 0
         total_votes = 0
         input_updates_skipped = 0
+        output_groups_expected = 0
+        output_groups_completed = 0
 
         # 3. Load available markets: only predict for play types that are open
         match_ids = [r[0] for r in match_rows]
@@ -511,6 +620,24 @@ def _run_impl(match_id: int | None = None, dry_run: bool = False) -> dict[str, A
                 available_markets[mid] = []
             available_markets[mid].append(pt)
 
+        if prediction_run_id is not None:
+            update_prediction_run_manifest(
+                conn,
+                run_id=prediction_run_id,
+                model_manifest=model_manifest,
+                input_manifest={
+                    "match_id_filter": match_id,
+                    "match_ids": sorted(int(row[0]) for row in match_rows),
+                    "markets": sorted(
+                        (int(mid), str(play_type))
+                        for mid, play_types in available_markets.items()
+                        for play_type in play_types
+                    ),
+                    "predict_time": predict_time,
+                },
+                provenance_status=run_provenance_status,
+            )
+
         if not available_markets:
             return {
                 "status": "ok",
@@ -528,6 +655,7 @@ def _run_impl(match_id: int | None = None, dry_run: bool = False) -> dict[str, A
             )
             play_types = available_markets.get(mid, [])
             for play_type in play_types:
+                output_group_counts: dict[str, int] = {}
                 try:
                     p, v = _predict_match_play_type(
                         conn,
@@ -540,6 +668,9 @@ def _run_impl(match_id: int | None = None, dry_run: bool = False) -> dict[str, A
                         mle_rho,
                         predict_time,
                         model_parameters,
+                        prediction_run_id=prediction_run_id,
+                        model_artifact_identities=model_artifact_identities,
+                        output_group_counts=output_group_counts,
                     )
                 except InputUpdateSuperseded, LockNotAvailable:
                     # Other matches remain available. Any already committed
@@ -549,12 +680,17 @@ def _run_impl(match_id: int | None = None, dry_run: bool = False) -> dict[str, A
                     continue
                 total_predictions += p
                 total_votes += v
+                output_groups_expected += output_group_counts.get("expected", 0)
+                output_groups_completed += output_group_counts.get("completed", 0)
 
     return {
         "status": "ok",
         "predictions": total_predictions,
         "votes": total_votes,
         "matches_processed": len(match_rows),
+        "output_groups_expected": output_groups_expected,
+        "output_groups_completed": output_groups_completed,
+        "output_groups_skipped": max(0, output_groups_expected - output_groups_completed),
         **({"input_updates_skipped": input_updates_skipped} if input_updates_skipped else {}),
     }
 
@@ -567,11 +703,67 @@ def run(match_id: int | None = None, dry_run: bool = False) -> dict[str, Any]:
         {"dry_run": dry_run, "match_id": match_id},
         dependencies=[] if dry_run else ["official_odds_snapshot", "feature_snapshot_build"],
     )
+    if dry_run:
+        try:
+            result = _run_impl(match_id=match_id, dry_run=True)
+            finish_tracked_job(run_id, result.get("status", "completed"), {"result": result})
+            return result
+        except Exception as exc:
+            finish_tracked_job(run_id, "failed", error=str(exc))
+            raise
+
+    prediction_run_id = uuid.uuid4()
+    prediction_run_created = False
     try:
-        result = _run_impl(match_id=match_id, dry_run=dry_run)
+        try:
+            code_fingerprint = fingerprint_runtime_sources(_PROJECT_ROOT, _PREDICTION_SOURCE_PATHS)
+        except Exception:
+            code_fingerprint = {
+                "files": {},
+                "sha256": None,
+                "provenance_status": "incomplete",
+                "reason": "runtime_source_fingerprint_unavailable",
+            }
+        with get_db() as conn:
+            create_prediction_run(
+                conn,
+                run_id=prediction_run_id,
+                ai_job_run_id=run_id,
+                release_id=RELEASE_ID,
+                code_fingerprint=code_fingerprint,
+                model_manifest=[],
+                input_manifest={"match_id_filter": match_id},
+                provenance_status="incomplete",
+            )
+        prediction_run_created = True
+        result = _run_impl(
+            match_id=match_id,
+            dry_run=False,
+            prediction_run_id=prediction_run_id,
+        )
+        run_status = (
+            "failed"
+            if result.get("status") == "error"
+            else "partial"
+            if result.get("input_updates_skipped") or result.get("output_groups_skipped")
+            else "completed"
+        )
+        with get_db() as conn:
+            finalize_prediction_run(
+                conn,
+                run_id=prediction_run_id,
+                run_status=run_status,
+                error_message=result.get("error") if run_status == "failed" else None,
+            )
         finish_tracked_job(run_id, result.get("status", "completed"), {"result": result})
         return result
     except Exception as exc:
+        if prediction_run_created:
+            try:
+                with get_db() as conn:
+                    fail_prediction_run(conn, prediction_run_id, str(exc))
+            except Exception:
+                pass
         finish_tracked_job(run_id, "failed", error=str(exc))
         raise
 
@@ -587,6 +779,9 @@ def _predict_match_play_type(
     mle_rho: float | None,
     predict_time: str,
     model_parameters: dict[str, dict[str, Any]] | None = None,
+    prediction_run_id: uuid.UUID | str | None = None,
+    model_artifact_identities: dict[str, dict[str, Any]] | None = None,
+    output_group_counts: dict[str, int] | None = None,
 ) -> tuple[int, int]:
     """Run prediction pipeline for a single match + play type.
 
@@ -600,12 +795,21 @@ def _predict_match_play_type(
     feature_snapshot = _latest_feature_snapshot(conn, mid, as_of=predict_time)
     feature_snapshot_id = feature_snapshot.get("id") if feature_snapshot else None
     model_parameters = model_parameters or {}
+    model_artifact_identities = model_artifact_identities or {}
+
+    def record_expected_groups(handicap_value: float | None) -> None:
+        if output_group_counts is None or prediction_run_id is None:
+            return
+        output_group_counts["expected"] = sum(
+            supports_market(name, play_type, handicap_value) for name in active_models
+        )
+        output_group_counts["completed"] = 0
 
     # 1. Load latest odds for this play type
     with conn.cursor() as cur:
         cur.execute(
             """
-            SELECT id, option_code, sp_value
+            SELECT id, option_code, sp_value, snapshot_time
             FROM official_odds_snapshots
             WHERE match_id = %s AND play_type = %s
               AND is_open = true
@@ -616,18 +820,26 @@ def _predict_match_play_type(
         odds_rows = cur.fetchall()
 
     if not odds_rows:
+        record_expected_groups(0.0)
         return 0, 0
 
     odds_dict: dict[str, float] = {}
     snapshot_ids: dict[str, int] = {}
+    snapshot_times: dict[str, str] = {}
     for row in odds_rows:
-        snap_id, opt, sp = row
+        snap_id, opt, sp, snapshot_time = row
         code = OPTION_MAP.get(opt, opt)
         if code not in odds_dict:
             odds_dict[code] = float(sp)
             snapshot_ids[code] = int(snap_id)
+            snapshot_times[code] = (
+                snapshot_time.isoformat()
+                if hasattr(snapshot_time, "isoformat")
+                else str(snapshot_time)
+            )
 
     if not {"3", "1", "0"}.issubset(odds_dict):
+        record_expected_groups(0.0)
         return 0, 0
 
     # 2. Odds processing
@@ -654,6 +866,8 @@ def _predict_match_play_type(
                         handicap = value
                 except TypeError, ValueError, OverflowError:
                     pass
+
+    record_expected_groups(handicap)
 
     # 4. Poisson model
     poisson_matrix = None
@@ -819,6 +1033,8 @@ def _predict_match_play_type(
             rollout_modes={
                 name: str(p.get("rollout_mode") or "live") for name, p in model_parameters.items()
             },
+            prediction_run_id=str(prediction_run_id) if prediction_run_id is not None else None,
+            model_artifact_identities=model_artifact_identities,
         )
 
     # 5. Elo model. Cold-start ratings are placeholders and must not become
@@ -1032,6 +1248,7 @@ def _predict_match_play_type(
         )
         trained_rate_source = trained_goal_rates if score_source_used else None
 
+        group_predictions: list[dict[str, Any]] = []
         for opt_code in ("3", "1", "0"):
             model_p = probs.get(opt_code, 0.0)
             raw_model_p = raw_probs.get(opt_code, model_p)
@@ -1146,8 +1363,56 @@ def _predict_match_play_type(
                     },
                 },
             }
-            store_model_prediction(conn, pred)
-            total_p += 1
+            if prediction_run_id is None:
+                store_model_prediction(conn, pred)
+                total_p += 1
+            else:
+                group_predictions.append(pred)
+
+        if prediction_run_id is not None and group_predictions:
+            identity = model_artifact_identities.get(model_name)
+            score_matrices = {
+                "maher_poisson": (raw_poisson_matrix, poisson_matrix),
+                "dixon_coles": (raw_dc_matrix, dc_matrix),
+                "bivariate_poisson": (raw_bivariate_matrix, bivariate_matrix),
+                "negative_binomial_shadow": (
+                    raw_negative_binomial_matrix,
+                    negative_binomial_matrix,
+                ),
+            }
+            raw_matrix, adjusted_matrix = score_matrices.get(model_name, (None, None))
+            input_payload = input_fence.payload() if input_fence is not None else None
+            store_prediction_group(
+                conn,
+                run_id=prediction_run_id,
+                metadata={
+                    "match_id": mid,
+                    "model_version_id": mv_id,
+                    "play_type": play_type,
+                    "market_variant": f"handicap={handicap}" if handicap is not None else "",
+                    "predict_time": predict_time,
+                    "expected_options": ["3", "1", "0"],
+                    "odds_snapshot_ids": snapshot_ids,
+                    "odds_snapshot_times": snapshot_times,
+                    "feature_snapshot_id": feature_snapshot_id,
+                    "input_fence": input_payload,
+                    "score_matrix": (
+                        {"raw": raw_matrix, "adjusted": adjusted_matrix}
+                        if adjusted_matrix is not None
+                        else None
+                    ),
+                    "artifact_identity": identity,
+                    "provenance_status": (
+                        identity.get("provenance_status", "incomplete")
+                        if identity
+                        else "incomplete"
+                    ),
+                },
+                predictions=group_predictions,
+            )
+            if output_group_counts is not None:
+                output_group_counts["completed"] = output_group_counts.get("completed", 0) + 1
+            total_p += len(group_predictions)
 
         # Committee votes represent independent model opinions. Market-seeded
         # fallbacks remain available as benchmark predictions but must never

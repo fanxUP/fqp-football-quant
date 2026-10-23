@@ -71,7 +71,7 @@ def run_pool_analysis(
                     WITH latest_model_options AS (
                         SELECT DISTINCT ON (mp.model_version_id, mp.option_code)
                                mp.model_version_id, mp.option_code, mp.model_probability
-                        FROM model_predictions mp
+                        FROM model_prediction_latest_rows mp
                         JOIN model_versions mv ON mv.id = mp.model_version_id
                         WHERE mp.match_id = m.id
                           AND mp.play_type = 'spf'

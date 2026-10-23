@@ -532,7 +532,7 @@ def get_match_detail(match_id: int):
                     mv.model_name, mp.play_type, mp.option_code,
                     mp.model_probability, mp.market_probability, mp.fair_odds, mp.ev,
                     mp.confidence_score, mp.predict_time
-                FROM model_predictions mp
+                FROM model_prediction_latest_rows mp
                 JOIN model_versions mv ON mv.id = mp.model_version_id
                 WHERE mp.match_id = %s
                   AND mp.predict_time < %s

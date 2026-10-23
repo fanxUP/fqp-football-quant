@@ -39,7 +39,7 @@ def generate_shadow_predictions(conn: Any) -> int:
                        prediction.option_code, prediction.model_probability,
                        prediction.predict_time, feature.snapshot_id,
                        feature.home_net_impact, feature.away_net_impact
-                FROM model_predictions prediction
+                FROM model_prediction_latest_rows prediction
                 JOIN model_versions model ON model.id = prediction.model_version_id
                 JOIN latest_feature feature ON feature.match_id = prediction.match_id
                 WHERE prediction.play_type = 'spf'
