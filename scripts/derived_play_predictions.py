@@ -36,7 +36,7 @@ def _latest_official_odds(
         )
         rows = cur.fetchall()
 
-    odds: dict[str, dict[str, tuple[int, float]]] = {}
+    odds: dict[str, dict[str, tuple[int, float, str]]] = {}
     for snapshot_id, play_type, option_code, sp_value, snapshot_time in rows:
         odds.setdefault(str(play_type), {})[str(option_code)] = (
             int(snapshot_id),

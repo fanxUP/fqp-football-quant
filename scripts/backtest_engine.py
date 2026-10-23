@@ -1227,7 +1227,8 @@ def _evaluate_research_window(
     artifact = attach_artifact_identity(artifact_parameters, manifest)
     artifact_identity = artifact["_artifact_identity"]
     fit_match_ids = [sample.match_id for sample in dataset.samples]
-    if fit_match_ids != [sample["match_id"] for sample in manifest["included"]]:
+    manifest_match_ids = [sample.match_id for sample in dataset.manifest.included]
+    if fit_match_ids != manifest_match_ids:
         raise ValueError("training manifest and Maher fit inputs differ")
 
     model_metrics: list[dict[str, Any]] = []
@@ -1244,6 +1245,8 @@ def _evaluate_research_window(
         candidate = row.candidate
         actual = _research_actual(candidate)
         reason: str | None = None
+        market: dict[str, float] | None = None
+        model: dict[str, float] | None = None
         if row.result_status not in {"final", "confirmed"}:
             reason = "official_result_not_final"
         elif candidate.home_team_id is None or candidate.away_team_id is None:
@@ -1288,6 +1291,10 @@ def _evaluate_research_window(
             excluded.append(exclusion)
             continue
 
+        assert actual is not None
+        assert market is not None
+        assert model is not None
+
         model_metric = compute_match_metrics(model, market, actual, "maher_poisson")
         market_metric = compute_match_metrics(market, market, actual, "market_baseline")
         model_row = {name: model_metric[name] for name in ("brier_score", "log_loss", "rps")}
@@ -1320,15 +1327,16 @@ def _evaluate_research_window(
     if model_ids != market_ids:
         raise ValueError("model and market baseline samples are not paired")
     excluded_counts: dict[str, int] = {}
-    for row in excluded:
-        excluded_counts[row["reason"]] = excluded_counts.get(row["reason"], 0) + 1
-    training_excluded = [
-        {"match_id": sample["match_id"], "reason": sample["reason"]}
-        for sample in manifest["excluded"]
+    for excluded_row in excluded:
+        reason = str(excluded_row["reason"])
+        excluded_counts[reason] = excluded_counts.get(reason, 0) + 1
+    training_excluded: list[dict[str, Any]] = [
+        {"match_id": sample.match_id, "reason": sample.reason}
+        for sample in dataset.manifest.excluded
     ]
     training_excluded.extend(
-        {"match_id": row.candidate.match_id, "reason": "official_result_not_final"}
-        for row in unconfirmed_training
+        {"match_id": training_row.candidate.match_id, "reason": "official_result_not_final"}
+        for training_row in unconfirmed_training
     )
     training_excluded.sort(key=lambda sample: (sample["match_id"], sample["reason"]))
     training_excluded_counts: dict[str, int] = {}
