@@ -247,7 +247,15 @@ WITH latest_groups AS (
     ORDER BY g.match_id, mv.model_name, g.play_type,
              g.predict_time DESC, g.created_at DESC, g.id DESC
 ), grouped_rows AS (
-    SELECT mp.*, g.run_id AS prediction_run_id,
+    SELECT mp.id, mp.match_id, mp.model_version_id, mp.odds_snapshot_id,
+           mp.feature_snapshot_id, mp.predict_time, mp.play_type, mp.option_code,
+           mp.raw_model_probability, mp.model_probability, mp.market_probability,
+           mp.probability_lower_bound, mp.probability_upper_bound, mp.uncertainty_score,
+           mp.adjusted_probability, mp.fair_odds, mp.ev, mp.confidence_score, mp.risk_score,
+           mp.break_even_probability, mp.market_edge, mp.breakeven_edge,
+           mp.validation_status, mp.validation_errors, mp.calculation_version,
+           mp.uncertainty_reason, mp.created_at,
+           g.run_id AS prediction_run_id,
            g.id AS prediction_group_id,
            g.provenance_status AS group_provenance_status
     FROM latest_groups latest
