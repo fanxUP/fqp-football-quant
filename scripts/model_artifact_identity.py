@@ -32,9 +32,7 @@ def _normalize_json(value: Any) -> Any:
             else:
                 raise TypeError("JSON object keys must be strings or integers")
             if normalized_key in normalized:
-                raise ValueError(
-                    f"JSON object key collision after normalization: {normalized_key}"
-                )
+                raise ValueError(f"JSON object key collision after normalization: {normalized_key}")
             normalized[normalized_key] = _normalize_json(item)
         return normalized
     if isinstance(value, (list, tuple)):
@@ -60,9 +58,7 @@ def canonical_json_bytes(value: Any) -> bytes:
             allow_nan=False,
         ).encode("utf-8")
     except (UnicodeEncodeError, ValueError) as exc:
-        raise ValueError(
-            f"value cannot be encoded as canonical UTF-8 JSON: {exc}"
-        ) from exc
+        raise ValueError(f"value cannot be encoded as canonical UTF-8 JSON: {exc}") from exc
 
 
 def _is_sha256(value: Any) -> bool:
@@ -98,9 +94,7 @@ def _source_fingerprints(source_root: Path) -> dict[str, str]:
         try:
             content = path.read_bytes()
         except OSError as exc:
-            raise ValueError(
-                f"source fingerprint unavailable for {relative_path}: {exc}"
-            ) from exc
+            raise ValueError(f"source fingerprint unavailable for {relative_path}: {exc}") from exc
         fingerprints[relative_path] = hashlib.sha256(content).hexdigest()
     return fingerprints
 
@@ -110,9 +104,7 @@ def _default_source_root() -> Path:
 
 
 def _metadata_digest(metadata: Mapping[str, Any]) -> str:
-    payload = {
-        key: value for key, value in metadata.items() if key != "identity_sha256"
-    }
+    payload = {key: value for key, value in metadata.items() if key != "identity_sha256"}
     return hashlib.sha256(canonical_json_bytes(payload)).hexdigest()
 
 
@@ -190,10 +182,7 @@ def verify_artifact_identity(
     manifest_sha256 = metadata.get("training_manifest_sha256")
     if not _is_sha256(manifest_sha256):
         raise ValueError("artifact training manifest SHA-256 is invalid")
-    if (
-        expected_manifest_sha256 is not None
-        and manifest_sha256 != expected_manifest_sha256
-    ):
+    if expected_manifest_sha256 is not None and manifest_sha256 != expected_manifest_sha256:
         raise ValueError("artifact training manifest does not match expected manifest")
     if (
         not isinstance(metadata.get("preprocessing_version"), str)
@@ -214,9 +203,7 @@ def verify_artifact_identity(
         raise ValueError("artifact identity metadata hash does not match content")
 
     recorded_sources = metadata.get("source_files")
-    if not isinstance(recorded_sources, Mapping) or set(recorded_sources) != set(
-        SOURCE_PATHS
-    ):
+    if not isinstance(recorded_sources, Mapping) or set(recorded_sources) != set(SOURCE_PATHS):
         raise ValueError("artifact source fingerprint list is invalid")
     if any(not _is_sha256(value) for value in recorded_sources.values()):
         raise ValueError("artifact source fingerprint is invalid")
