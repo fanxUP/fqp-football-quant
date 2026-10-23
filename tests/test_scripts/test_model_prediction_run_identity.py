@@ -11,6 +11,9 @@ from scripts.model_prediction_run_identity import (
     canonical_json_bytes,
     content_sha256,
     fingerprint_runtime_sources,
+    verify_prediction_artifact_binding,
+    verify_prediction_group_output_manifest,
+    verify_prediction_run_manifest,
 )
 
 
@@ -50,6 +53,95 @@ def test_run_manifest_is_stable_and_contains_runtime_and_input_fences(tmp_path) 
     assert first["input_manifest"]["match_ids"] == [4, 9]
     assert first["sha256"] == content_sha256(
         {key: value for key, value in first.items() if key != "sha256"}
+    )
+
+
+def test_prediction_run_manifest_verifier_rejects_tampered_components(tmp_path) -> None:
+    models = [{"model_name": "market_baseline", "model_version_id": 7}]
+    inputs = {"match_ids": [10, 11], "markets": [[10, "spf"]]}
+    manifest = build_run_manifest(
+        release_id="release-1",
+        source_root=tmp_path,
+        source_paths=(),
+        model_manifest=models,
+        input_manifest=inputs,
+    )
+
+    verify_prediction_run_manifest(
+        run_manifest=manifest,
+        run_manifest_sha256=manifest["sha256"],
+        model_manifest=models,
+        model_manifest_sha256=content_sha256(models),
+        input_manifest=inputs,
+        input_manifest_sha256=content_sha256(inputs),
+    )
+
+    tampered_inputs = {**inputs, "match_ids": [10, 12]}
+    with pytest.raises(ValueError, match="input manifest"):
+        verify_prediction_run_manifest(
+            run_manifest=manifest,
+            run_manifest_sha256=manifest["sha256"],
+            model_manifest=models,
+            model_manifest_sha256=content_sha256(models),
+            input_manifest=tampered_inputs,
+            input_manifest_sha256=content_sha256(inputs),
+        )
+
+
+def test_prediction_artifact_identity_must_match_run_model_manifest() -> None:
+    identity = {
+        "model_version_id": 7,
+        "model_name": "market_baseline",
+        "provenance_status": "complete",
+        "parameters_sha256": "a" * 64,
+        "artifact": {
+            "kind": "inline_parameters",
+            "format": "application/json",
+            "size_bytes": 2,
+            "sha256": "a" * 64,
+        },
+    }
+    verify_prediction_artifact_binding([identity], identity, model_version_id=7)
+
+    forged = {**identity, "parameters_sha256": "b" * 64}
+    with pytest.raises(ValueError, match="does not match"):
+        verify_prediction_artifact_binding([identity], forged, model_version_id=7)
+
+
+def test_group_manifest_verifies_the_exact_persisted_json_bytes() -> None:
+    manifest = {
+        "match_id": 1,
+        "model_version_id": 2,
+        "play_type": "spf",
+        "market_variant": "",
+        "predict_time": "2026-10-23T10:00:00",
+        "expected_options": ["0", "1", "3"],
+        "probability_vector": {"0": 0.2, "1": 0.3, "3": 0.5},
+        "prediction_outputs": [
+            {"option_code": "0", "model_probability": 0.2},
+            {"option_code": "1", "model_probability": 0.3},
+            {"option_code": "3", "model_probability": 0.5},
+        ],
+    }
+    persisted_bytes = b'{ "match_id": 1, "model_version_id": 2, "play_type": "spf", '
+    persisted_bytes += b'"market_variant": "", "predict_time": "2026-10-23T10:00:00", '
+    persisted_bytes += b'"expected_options": ["0", "1", "3"], '
+    persisted_bytes += b'"probability_vector": {"0": 0.2, "1": 0.3, "3": 0.5}, '
+    persisted_bytes += b'"prediction_outputs": [{"option_code": "0", "model_probability": 0.2}, '
+    persisted_bytes += b'{"option_code": "1", "model_probability": 0.3}, '
+    persisted_bytes += b'{"option_code": "3", "model_probability": 0.5}] }'
+
+    verify_prediction_group_output_manifest(
+        output_manifest=manifest,
+        output_sha256=hashlib.sha256(persisted_bytes).hexdigest(),
+        output_manifest_canonical=persisted_bytes,
+        match_id=1,
+        model_version_id=2,
+        play_type="spf",
+        market_variant="",
+        predict_time="2026-10-23T10:00:00",
+        expected_options=["0", "1", "3"],
+        probability_vector={"0": 0.2, "1": 0.3, "3": 0.5},
     )
 
 

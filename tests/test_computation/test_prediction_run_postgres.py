@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 import copy
+import hashlib
+import json
 import os
 import uuid
 from pathlib import Path
 from urllib.parse import urlparse
 
 import pytest
-from psycopg2.errors import RaiseException, StringDataRightTruncation
+from psycopg2.errors import LockNotAvailable, RaiseException, StringDataRightTruncation
 
 
 @pytest.fixture
@@ -192,13 +194,16 @@ def test_maher_training_query_excludes_ambiguous_team_names_with_candidate_audit
     ]
 
 
-def test_prediction_groups_publish_atomically_and_are_read_group_first(isolated_database):
-    from scripts.model_prediction_run_identity import content_sha256
+def test_prediction_groups_publish_atomically_and_are_read_group_first(
+    isolated_database, monkeypatch
+):
+    from scripts.model_prediction_run_identity import canonical_json_bytes, content_sha256
     from scripts.model_prediction_run_loader import load_latest_prediction_group
     from scripts.model_prediction_run_storage import (
         create_prediction_run,
         finalize_prediction_run,
         store_prediction_group,
+        update_prediction_run_manifest,
     )
 
     conn, _schema_name = isolated_database
@@ -218,10 +223,10 @@ def test_prediction_groups_publish_atomically_and_are_read_group_first(isolated_
         run_id=run_id,
         ai_job_run_id=job_id,
         release_id="test-release",
-        code_fingerprint={"sha256": "a" * 64},
+        code_fingerprint={"files": {}, "sha256": content_sha256({})},
         model_manifest=[{"model_version_id": model_version_id}],
         input_manifest={"match_ids": [match_id]},
-        provenance_status="complete",
+        provenance_status="incomplete",
     )
     with pytest.raises(RaiseException, match="prediction run identity is immutable"):
         with conn.cursor() as cursor:
@@ -270,7 +275,28 @@ def test_prediction_groups_publish_atomically_and_are_read_group_first(isolated_
         metadata=metadata,
         predictions=predictions,
     )
-    finalize_prediction_run(conn, run_id=run_id, run_status="completed")
+    with pytest.raises(
+        RaiseException, match="prediction run manifest is immutable after output begins"
+    ):
+        with conn.cursor() as cursor:
+            cursor.execute(
+                "UPDATE model_prediction_runs SET input_manifest='{}'::jsonb WHERE id=%s",
+                (str(run_id),),
+            )
+    conn.rollback()
+    finalize_prediction_run(
+        conn,
+        run_id=run_id,
+        run_status="completed",
+        output_summary={
+            "expected_groups": 1,
+            "completed_groups": 1,
+            "skipped_groups": 0,
+            "missing_groups": [],
+            "input_updates_skipped": 0,
+            "completion_reason": "predictions_completed",
+        },
+    )
     with pytest.raises(RaiseException, match="terminal prediction runs are immutable"):
         with conn.cursor() as cursor:
             cursor.execute(
@@ -283,47 +309,98 @@ def test_prediction_groups_publish_atomically_and_are_read_group_first(isolated_
         cursor.execute("INSERT INTO ai_job_runs DEFAULT VALUES RETURNING id")
         next_job_id = cursor.fetchone()[0]
     next_run_id = uuid.uuid4()
+    artifact_identity = {
+        "model_version_id": model_version_id,
+        "model_name": "maher_poisson",
+        "provenance_status": "complete",
+        "parameters_sha256": "a" * 64,
+        "artifact": {"kind": "inline_parameters", "sha256": "a" * 64, "size_bytes": 0},
+        "training_manifest_sha256": "b" * 64,
+        "training_identity_sha256": "c" * 64,
+    }
     create_prediction_run(
         conn,
         run_id=next_run_id,
         ai_job_run_id=next_job_id,
         release_id="test-release-2",
-        code_fingerprint={"sha256": "c" * 64},
+        code_fingerprint={"files": {}, "sha256": content_sha256({})},
         model_manifest=[{"model_version_id": model_version_id}],
         input_manifest={"match_ids": [match_id]},
+        provenance_status="incomplete",
+    )
+    update_prediction_run_manifest(
+        conn,
+        run_id=next_run_id,
+        model_manifest=[artifact_identity],
+        input_manifest={"match_ids": [match_id], "predict_time": "2026-10-23T10:00:00"},
         provenance_status="complete",
     )
     # Two runs at the exact same prediction timestamp must still publish one
     # complete vector based on the run/group tie-breaker.
-    next_metadata = {**metadata}
+    next_metadata = {
+        **metadata,
+        "artifact_identity": artifact_identity,
+        "provenance_status": "complete",
+    }
     next_predictions = copy.deepcopy(predictions)
     for row, probability in zip(next_predictions, (0.2, 0.3, 0.5), strict=True):
         row["model_probability"] = probability
         row["raw_model_probability"] = probability
         row["market_probability"] = probability
-    next_group_id = store_prediction_group(
+    from scripts import model_prediction_run_storage as storage
+
+    with monkeypatch.context() as patcher:
+        patcher.setattr(
+            storage,
+            "canonical_json_bytes",
+            lambda value: json.dumps(value, ensure_ascii=False, indent=1).encode("utf-8"),
+        )
+        next_group_id = store_prediction_group(
+            conn,
+            run_id=next_run_id,
+            metadata=next_metadata,
+            predictions=next_predictions,
+        )
+    finalize_prediction_run(
         conn,
         run_id=next_run_id,
-        metadata=next_metadata,
-        predictions=next_predictions,
+        run_status="partial",
+        output_summary={
+            "expected_groups": 1,
+            "completed_groups": 1,
+            "skipped_groups": 0,
+            "missing_groups": [],
+            "input_updates_skipped": 1,
+            "completion_reason": "input_update_unavailable",
+        },
     )
-    finalize_prediction_run(conn, run_id=next_run_id, run_status="partial")
 
     loaded = load_latest_prediction_group(
         conn, match_id=match_id, model_version_id=model_version_id, play_type="spf"
     )
     assert str(loaded["group_id"]) == str(next_group_id)
     assert str(loaded["group_id"]) != str(group_id)
+    assert loaded["status"] == "complete", loaded.get("integrity_error")
     assert sorted(row["option_code"] for row in loaded["options"]) == ["0", "1", "3"]
     assert loaded["probability_vector"] == {"0": 0.5, "1": 0.3, "3": 0.2}
+    with conn.cursor() as cursor:
+        cursor.execute(
+            "SELECT output_manifest, output_manifest_canonical "
+            "FROM model_prediction_groups WHERE id=%s",
+            (str(next_group_id),),
+        )
+        persisted_manifest, persisted_bytes = cursor.fetchone()
+    persisted_bytes = bytes(persisted_bytes)
+    assert json.loads(persisted_bytes.decode("utf-8")) == persisted_manifest
+    assert persisted_bytes != canonical_json_bytes(persisted_manifest)
 
     with conn.cursor() as cursor:
         cursor.execute(
-            "SELECT output_manifest, output_sha256 FROM model_prediction_groups WHERE id=%s",
+            "SELECT output_sha256 FROM model_prediction_groups WHERE id=%s",
             (str(next_group_id),),
         )
-        output_manifest, output_sha256 = cursor.fetchone()
-        assert content_sha256(output_manifest) == output_sha256
+        output_sha256 = cursor.fetchone()[0]
+        assert hashlib.sha256(persisted_bytes).hexdigest() == output_sha256
         with pytest.raises(RaiseException, match="run-aware prediction rows are immutable"):
             cursor.execute(
                 "UPDATE model_predictions SET model_probability=0.7 WHERE id=%s",
@@ -352,6 +429,43 @@ def test_prediction_groups_publish_atomically_and_are_read_group_first(isolated_
         assert status_row[3] == content_sha256(
             {key: value for key, value in status_row[2].items() if key != "sha256"}
         )
+    with conn.cursor() as cursor:
+        cursor.execute("INSERT INTO ai_job_runs DEFAULT VALUES RETURNING id")
+        duplicate_job_id = cursor.fetchone()[0]
+    duplicate_run_id = uuid.uuid4()
+    create_prediction_run(
+        conn,
+        run_id=duplicate_run_id,
+        ai_job_run_id=duplicate_job_id,
+        release_id="test-duplicate-output-keys",
+        code_fingerprint={"files": {}, "sha256": content_sha256({})},
+        model_manifest=[artifact_identity],
+        input_manifest={"match_ids": [match_id]},
+        provenance_status="complete",
+    )
+    from scripts import model_prediction_run_storage as storage
+
+    def serialize_with_duplicate_match_key(value):
+        raw = canonical_json_bytes(value)
+        if isinstance(value, dict) and "prediction_outputs" in value:
+            return raw[:-1] + f',"match_id":{value["match_id"]}}}'.encode()
+        return raw
+
+    with monkeypatch.context() as patcher:
+        patcher.setattr(storage, "canonical_json_bytes", serialize_with_duplicate_match_key)
+        with pytest.raises(RaiseException, match="duplicate JSON object keys"):
+            store_prediction_group(
+                conn,
+                run_id=duplicate_run_id,
+                metadata=next_metadata,
+                predictions=next_predictions,
+            )
+    with conn.cursor() as cursor:
+        cursor.execute(
+            "SELECT COUNT(*) FROM model_prediction_groups WHERE run_id=%s",
+            (str(duplicate_run_id),),
+        )
+        assert cursor.fetchone()[0] == 0
         cursor.execute("INSERT INTO official_matches DEFAULT VALUES RETURNING id")
         legacy_match_id = cursor.fetchone()[0]
         for option, probability in (("3", 0.4), ("1", 0.35), ("0", 0.25)):
@@ -413,6 +527,933 @@ def test_prediction_group_cannot_be_inserted_as_complete(isolated_database):
                    )""",
                 (str(uuid.uuid4()), str(run_id), match_id, model_version_id, "e" * 64),
             )
+    conn.rollback()
+
+
+def test_prediction_run_cannot_be_completed_with_reported_missing_groups(isolated_database):
+    from psycopg2 import Binary
+    from psycopg2.extras import Json
+
+    from scripts.model_prediction_run_identity import canonical_json_bytes, content_sha256
+
+    conn, _schema_name = isolated_database
+    from scripts.model_prediction_run_storage import create_prediction_run
+
+    with conn.cursor() as cursor:
+        cursor.execute("INSERT INTO ai_job_runs DEFAULT VALUES RETURNING id")
+        job_id = cursor.fetchone()[0]
+    run_id = uuid.uuid4()
+    create_prediction_run(
+        conn,
+        run_id=run_id,
+        ai_job_run_id=job_id,
+        release_id="test-completion-integrity",
+        code_fingerprint={"sha256": "c" * 64},
+        model_manifest=[],
+        input_manifest={},
+        provenance_status="incomplete",
+    )
+
+    summary = {
+        "expected_groups": 1,
+        "completed_groups": 0,
+        "skipped_groups": 1,
+        "missing_groups": [{"reason": "odds_missing"}],
+        "input_updates_skipped": 0,
+        "completion_reason": "missing_output",
+    }
+    output_manifest = {"groups": [], "summary": summary}
+    with pytest.raises(
+        RaiseException, match="completed prediction run cannot have skipped outputs"
+    ):
+        with conn.cursor() as cursor:
+            cursor.execute(
+                """UPDATE model_prediction_runs
+                   SET run_status='completed', finished_at=clock_timestamp(),
+                       output_manifest_sha256=%s,
+                       output_summary=%s, output_manifest=%s,
+                       output_manifest_canonical=%s
+                   WHERE id=%s""",
+                (
+                    content_sha256(output_manifest),
+                    Json(summary),
+                    Json(output_manifest),
+                    Binary(canonical_json_bytes(output_manifest)),
+                    str(run_id),
+                ),
+            )
+    conn.rollback()
+
+
+def test_prediction_run_output_manifest_digest_is_checked_by_database(isolated_database):
+    from psycopg2 import Binary
+    from psycopg2.extras import Json
+
+    from scripts.model_prediction_run_identity import canonical_json_bytes
+    from scripts.model_prediction_run_storage import create_prediction_run
+
+    conn, _schema_name = isolated_database
+    with conn.cursor() as cursor:
+        cursor.execute("INSERT INTO ai_job_runs DEFAULT VALUES RETURNING id")
+        job_id = cursor.fetchone()[0]
+    run_id = uuid.uuid4()
+    create_prediction_run(
+        conn,
+        run_id=run_id,
+        ai_job_run_id=job_id,
+        release_id="test-run-output-hash",
+        code_fingerprint={"sha256": "e" * 64},
+        model_manifest=[],
+        input_manifest={},
+        provenance_status="incomplete",
+    )
+    summary = {
+        "expected_groups": 0,
+        "completed_groups": 0,
+        "skipped_groups": 0,
+        "missing_groups": [],
+        "input_updates_skipped": 0,
+        "completion_reason": "no_predictable_inputs",
+    }
+    output_manifest = {"groups": [], "summary": summary}
+    with pytest.raises(RaiseException, match="prediction run output manifest SHA-256"):
+        with conn.cursor() as cursor:
+            cursor.execute(
+                """UPDATE model_prediction_runs
+                   SET run_status='completed', finished_at=clock_timestamp(),
+                       output_summary=%s, output_manifest=%s,
+                       output_manifest_canonical=%s, output_manifest_sha256=%s
+                   WHERE id=%s""",
+                (
+                    Json(summary),
+                    Json(output_manifest),
+                    Binary(canonical_json_bytes(output_manifest)),
+                    "d" * 64,
+                    str(run_id),
+                ),
+            )
+    conn.rollback()
+
+
+def test_failed_run_without_output_summary_preserves_unknown_counts(isolated_database):
+    from scripts.model_prediction_run_storage import create_prediction_run, fail_prediction_run
+
+    conn, _schema_name = isolated_database
+    with conn.cursor() as cursor:
+        cursor.execute("INSERT INTO ai_job_runs DEFAULT VALUES RETURNING id")
+        job_id = cursor.fetchone()[0]
+    run_id = uuid.uuid4()
+    create_prediction_run(
+        conn,
+        run_id=run_id,
+        ai_job_run_id=job_id,
+        release_id="test-failed-summary-unknown",
+        code_fingerprint={"sha256": "f" * 64},
+        model_manifest=[],
+        input_manifest={},
+        provenance_status="incomplete",
+    )
+
+    fail_prediction_run(conn, run_id, "failed before output summary was produced")
+
+    with conn.cursor() as cursor:
+        cursor.execute(
+            "SELECT run_status, output_summary, output_manifest "
+            "FROM model_prediction_runs WHERE id=%s",
+            (str(run_id),),
+        )
+        run_status, summary, output_manifest = cursor.fetchone()
+    assert run_status == "failed"
+    assert summary["expected_groups"] is None
+    assert summary["completed_groups"] == 0
+    assert summary["skipped_groups"] is None
+    assert summary["input_updates_skipped"] is None
+    assert summary["counts_complete"] is False
+    assert output_manifest["summary"] == summary
+
+
+@pytest.mark.parametrize(
+    "fractional_field",
+    ("completed_groups", "expected_groups", "skipped_groups", "input_updates_skipped"),
+)
+def test_prediction_run_summary_rejects_fractional_counts(isolated_database, fractional_field):
+    from psycopg2 import Binary
+    from psycopg2.extras import Json
+
+    from scripts.model_prediction_run_identity import canonical_json_bytes
+    from scripts.model_prediction_run_storage import create_prediction_run
+
+    conn, _schema_name = isolated_database
+    with conn.cursor() as cursor:
+        cursor.execute("INSERT INTO ai_job_runs DEFAULT VALUES RETURNING id")
+        job_id = cursor.fetchone()[0]
+    run_id = uuid.uuid4()
+    create_prediction_run(
+        conn,
+        run_id=run_id,
+        ai_job_run_id=job_id,
+        release_id=f"test-fractional-summary-{fractional_field}",
+        code_fingerprint={"sha256": "c" * 64},
+        model_manifest=[],
+        input_manifest={},
+        provenance_status="incomplete",
+    )
+    summary = {
+        "expected_groups": 0,
+        "completed_groups": 0,
+        "skipped_groups": 0,
+        "missing_groups": [],
+        "input_updates_skipped": 0,
+        "completion_reason": "failed_before_output_summary",
+    }
+    summary[fractional_field] = 0.4
+    output_manifest = {"groups": [], "summary": summary}
+    output_bytes = canonical_json_bytes(output_manifest)
+    with pytest.raises(RaiseException, match="summary counts must be integers"):
+        with conn.cursor() as cursor:
+            cursor.execute(
+                """UPDATE model_prediction_runs
+                   SET run_status='failed', finished_at=clock_timestamp(),
+                       output_summary=%s, output_manifest=%s,
+                       output_manifest_canonical=%s, output_manifest_sha256=%s,
+                       error_message='fractional summary probe'
+                   WHERE id=%s""",
+                (
+                    Json(summary),
+                    Json(output_manifest),
+                    Binary(output_bytes),
+                    hashlib.sha256(output_bytes).hexdigest(),
+                    str(run_id),
+                ),
+            )
+    conn.rollback()
+
+
+def test_manifest_validation_helper_is_executable_by_application_role(isolated_database):
+    import psycopg2
+    from psycopg2 import sql
+    from psycopg2.extras import Json
+
+    from scripts.model_prediction_run_storage import create_prediction_run
+
+    conn, schema_name = isolated_database
+    with conn.cursor() as cursor:
+        cursor.execute("INSERT INTO ai_job_runs DEFAULT VALUES RETURNING id")
+        job_id = cursor.fetchone()[0]
+        cursor.execute(
+            "INSERT INTO model_versions (model_name) VALUES ('market_baseline') RETURNING id"
+        )
+        model_version_id = cursor.fetchone()[0]
+        cursor.execute("INSERT INTO official_matches DEFAULT VALUES RETURNING id")
+        match_id = cursor.fetchone()[0]
+        cursor.execute(
+            sql.SQL("GRANT USAGE ON SCHEMA {} TO fqp").format(sql.Identifier(schema_name))
+        )
+    run_id = uuid.uuid4()
+    create_prediction_run(
+        conn,
+        run_id=run_id,
+        ai_job_run_id=job_id,
+        release_id="test-manifest-helper-application-role",
+        code_fingerprint={"sha256": "a" * 64},
+        model_manifest=[],
+        input_manifest={"match_ids": [match_id]},
+        provenance_status="incomplete",
+    )
+
+    raw_manifest = f'{{"match_id":{match_id},"match_id":{match_id}}}'.encode()
+    with conn.cursor() as cursor:
+        cursor.execute("SET LOCAL ROLE fqp")
+        cursor.execute(
+            """INSERT INTO model_prediction_groups (
+                   id, run_id, match_id, model_version_id, play_type, market_variant,
+                   predict_time, expected_options, probability_vector, odds_snapshot_ids,
+                   odds_snapshot_times, output_manifest, output_manifest_canonical,
+                   provenance_status, output_sha256, group_status, created_at
+               ) VALUES (
+                   %s, %s, %s, %s, 'spf', '', '2026-10-23T10:00:00',
+                   %s, %s, %s, %s, %s, %s, 'incomplete', %s, 'building', clock_timestamp()
+               )""",
+            (
+                str(uuid.uuid4()),
+                str(run_id),
+                match_id,
+                model_version_id,
+                Json(["0", "1", "3"]),
+                Json({}),
+                Json({}),
+                Json({}),
+                Json({"match_id": match_id}),
+                psycopg2.Binary(raw_manifest),
+                hashlib.sha256(raw_manifest).hexdigest(),
+            ),
+        )
+        with pytest.raises(RaiseException, match="duplicate JSON object keys"):
+            cursor.execute(
+                """UPDATE model_prediction_groups
+                   SET group_status='complete', completed_at=clock_timestamp()
+                   WHERE run_id=%s""",
+                (str(run_id),),
+            )
+    conn.rollback()
+
+
+def test_option_insert_waits_for_group_publication_and_is_rejected(isolated_database):
+    import psycopg2
+    from psycopg2 import sql
+    from psycopg2.extras import Json
+
+    from scripts.model_prediction_run_storage import (
+        build_prediction_group_payload,
+        create_prediction_run,
+    )
+    from scripts.model_storage import store_model_prediction
+
+    conn, schema_name = isolated_database
+    with conn.cursor() as cursor:
+        cursor.execute("INSERT INTO ai_job_runs DEFAULT VALUES RETURNING id")
+        job_id = cursor.fetchone()[0]
+        cursor.execute(
+            "INSERT INTO model_versions (model_name) VALUES ('market_baseline') RETURNING id"
+        )
+        model_version_id = cursor.fetchone()[0]
+        cursor.execute("INSERT INTO official_matches DEFAULT VALUES RETURNING id")
+        match_id = cursor.fetchone()[0]
+    run_id = uuid.uuid4()
+    create_prediction_run(
+        conn,
+        run_id=run_id,
+        ai_job_run_id=job_id,
+        release_id="test-option-publication-lock",
+        code_fingerprint={"sha256": "b" * 64},
+        model_manifest=[],
+        input_manifest={"match_ids": [match_id]},
+        provenance_status="incomplete",
+    )
+
+    metadata = {
+        "match_id": match_id,
+        "model_version_id": model_version_id,
+        "play_type": "spf",
+        "market_variant": "",
+        "predict_time": "2026-10-23T10:00:00",
+        "expected_options": ["3", "1", "0"],
+        "odds_snapshot_ids": {"3": 30, "1": 31, "0": 32},
+        "feature_snapshot_id": 77,
+    }
+    predictions = [
+        {
+            "match_id": match_id,
+            "model_version_id": model_version_id,
+            "odds_snapshot_id": 30 + index,
+            "feature_snapshot_id": 77,
+            "predict_time": "2026-10-23T10:00:00",
+            "play_type": "spf",
+            "option_code": option,
+            "raw_model_probability": probability,
+            "model_probability": probability,
+            "market_probability": probability,
+            "break_even_probability": probability,
+            "market_edge": 0.0,
+            "breakeven_edge": 0.0,
+            "ev": 0.0,
+            "validation_status": "valid",
+            "validation_errors": [],
+            "calculation_version": "test-v1",
+        }
+        for index, (option, probability) in enumerate((("3", 0.5), ("1", 0.25), ("0", 0.25)))
+    ]
+    payload = build_prediction_group_payload(
+        run_id=run_id,
+        metadata=metadata,
+        predictions=predictions,
+    )
+    group_id = uuid.uuid4()
+    with conn.cursor() as cursor:
+        cursor.execute(
+            """INSERT INTO model_prediction_groups (
+                   id, run_id, match_id, model_version_id, play_type, market_variant,
+                   predict_time, expected_options, probability_vector, score_matrix,
+                   odds_snapshot_ids, odds_snapshot_times, feature_snapshot_id,
+                   input_fence, artifact_identity, output_manifest,
+                   output_manifest_canonical, provenance_status, output_sha256,
+                   group_status, created_at
+               ) VALUES (
+                   %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                   %s, %s, %s, 'building', clock_timestamp()
+               )""",
+            (
+                str(group_id),
+                str(run_id),
+                match_id,
+                model_version_id,
+                payload["play_type"],
+                payload["market_variant"],
+                payload["predict_time"],
+                Json(payload["expected_options"]),
+                Json(payload["probability_vector"]),
+                Json(payload["score_matrix"]) if payload["score_matrix"] is not None else None,
+                Json(payload["odds_snapshot_ids"]),
+                Json(payload["odds_snapshot_times"]),
+                payload["feature_snapshot_id"],
+                None,
+                None,
+                Json(payload["output_manifest"]),
+                psycopg2.Binary(payload["output_manifest_canonical"]),
+                payload["provenance_status"],
+                payload["output_sha256"],
+            ),
+        )
+    for ordinal, prediction in enumerate(payload["predictions"]):
+        prediction_id = store_model_prediction(conn, dict(prediction), commit=False)
+        with conn.cursor() as cursor:
+            cursor.execute(
+                """INSERT INTO model_prediction_group_options
+                       (group_id, option_code, prediction_id, ordinal)
+                   VALUES (%s, %s, %s, %s)""",
+                (str(group_id), prediction["option_code"], prediction_id, ordinal),
+            )
+    conn.commit()
+    with conn.cursor() as cursor:
+        cursor.execute(
+            """UPDATE model_prediction_groups
+               SET group_status='complete', completed_at=clock_timestamp()
+               WHERE id=%s""",
+            (str(group_id),),
+        )
+
+    option_conn = psycopg2.connect(os.environ["FQP_P106_TEST_DATABASE_URL"])
+    try:
+        with option_conn.cursor() as cursor:
+            cursor.execute(sql.SQL("SET search_path TO {}").format(sql.Identifier(schema_name)))
+            cursor.execute("SET lock_timeout = '150ms'")
+            cursor.execute(
+                """INSERT INTO model_predictions (
+                       match_id, model_version_id, predict_time, play_type, option_code,
+                       model_probability, validation_status, calculation_version
+                   ) VALUES (%s, %s, '2026-10-23T10:00:00', 'spf', 'X', 0.01,
+                             'valid', 'test-v1') RETURNING id""",
+                (match_id, model_version_id),
+            )
+            extra_prediction_id = cursor.fetchone()[0]
+        option_conn.commit()
+        with pytest.raises(LockNotAvailable):
+            with option_conn.cursor() as cursor:
+                cursor.execute(
+                    """INSERT INTO model_prediction_group_options
+                           (group_id, option_code, prediction_id, ordinal)
+                       VALUES (%s, 'X', %s, 3)""",
+                    (str(group_id), extra_prediction_id),
+                )
+        option_conn.rollback()
+
+        conn.commit()
+        with pytest.raises(RaiseException, match="completed prediction groups are immutable"):
+            with option_conn.cursor() as cursor:
+                cursor.execute(
+                    """INSERT INTO model_prediction_group_options
+                           (group_id, option_code, prediction_id, ordinal)
+                       VALUES (%s, 'X', %s, 3)""",
+                    (str(group_id), extra_prediction_id),
+                )
+        option_conn.rollback()
+        with pytest.raises(RaiseException, match="prediction group option mappings are immutable"):
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    """UPDATE model_prediction_group_options
+                       SET group_id=%s WHERE group_id=%s AND option_code='3'""",
+                    (str(group_id), str(group_id)),
+                )
+        conn.rollback()
+    finally:
+        option_conn.close()
+
+
+def test_option_insert_serializes_against_unmapped_prediction_update(isolated_database):
+    import psycopg2
+    from psycopg2 import sql
+    from psycopg2.extras import Json
+
+    from scripts.model_prediction_run_storage import (
+        build_prediction_group_payload,
+        create_prediction_run,
+    )
+    from scripts.model_storage import store_model_prediction
+
+    conn, schema_name = isolated_database
+    with conn.cursor() as cursor:
+        cursor.execute("INSERT INTO ai_job_runs DEFAULT VALUES RETURNING id")
+        job_id = cursor.fetchone()[0]
+        cursor.execute(
+            "INSERT INTO model_versions (model_name) VALUES ('market_baseline') RETURNING id"
+        )
+        model_version_id = cursor.fetchone()[0]
+        cursor.execute("INSERT INTO official_matches DEFAULT VALUES RETURNING id")
+        match_id = cursor.fetchone()[0]
+    run_id = uuid.uuid4()
+    create_prediction_run(
+        conn,
+        run_id=run_id,
+        ai_job_run_id=job_id,
+        release_id="test-option-prediction-update-lock",
+        code_fingerprint={"sha256": "d" * 64},
+        model_manifest=[],
+        input_manifest={"match_ids": [match_id]},
+        provenance_status="incomplete",
+    )
+
+    metadata = {
+        "match_id": match_id,
+        "model_version_id": model_version_id,
+        "play_type": "spf",
+        "market_variant": "",
+        "predict_time": "2026-10-23T10:00:00",
+        "expected_options": ["X"],
+        "odds_snapshot_ids": {"X": 44},
+        "feature_snapshot_id": 77,
+    }
+    payload = build_prediction_group_payload(
+        run_id=run_id,
+        metadata=metadata,
+        predictions=[
+            {
+                "match_id": match_id,
+                "model_version_id": model_version_id,
+                "odds_snapshot_id": 44,
+                "feature_snapshot_id": 77,
+                "predict_time": metadata["predict_time"],
+                "play_type": "spf",
+                "option_code": "X",
+                "model_probability": 0.5,
+                "market_probability": 0.5,
+                "break_even_probability": 0.5,
+                "market_edge": 0.0,
+                "breakeven_edge": 0.0,
+                "ev": 0.0,
+                "validation_status": "valid",
+                "calculation_version": "test-v1",
+            }
+        ],
+    )
+    group_id = uuid.uuid4()
+    with conn.cursor() as cursor:
+        cursor.execute(
+            """INSERT INTO model_prediction_groups (
+                   id, run_id, match_id, model_version_id, play_type, market_variant,
+                   predict_time, expected_options, probability_vector, score_matrix,
+                   odds_snapshot_ids, odds_snapshot_times, feature_snapshot_id,
+                   input_fence, artifact_identity, output_manifest, output_manifest_canonical,
+                   provenance_status, output_sha256, group_status
+               ) VALUES (
+                   %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                   %s, %s, 'building'
+               )""",
+            (
+                str(group_id),
+                str(run_id),
+                match_id,
+                model_version_id,
+                payload["play_type"],
+                payload["market_variant"],
+                payload["predict_time"],
+                Json(payload["expected_options"]),
+                Json(payload["probability_vector"]),
+                None,
+                Json(payload["odds_snapshot_ids"]),
+                Json(payload["odds_snapshot_times"]),
+                payload["feature_snapshot_id"],
+                None,
+                None,
+                Json(payload["output_manifest"]),
+                psycopg2.Binary(payload["output_manifest_canonical"]),
+                payload["provenance_status"],
+                payload["output_sha256"],
+            ),
+        )
+    prediction_id = store_model_prediction(conn, dict(payload["predictions"][0]), commit=False)
+    conn.commit()
+
+    update_conn = psycopg2.connect(os.environ["FQP_P106_TEST_DATABASE_URL"])
+    option_conn = psycopg2.connect(os.environ["FQP_P106_TEST_DATABASE_URL"])
+    try:
+        for other_conn in (update_conn, option_conn):
+            with other_conn.cursor() as cursor:
+                cursor.execute(sql.SQL("SET search_path TO {}").format(sql.Identifier(schema_name)))
+            other_conn.commit()
+        with update_conn.cursor() as cursor:
+            cursor.execute(
+                "UPDATE model_predictions SET model_probability=0.9 WHERE id=%s",
+                (prediction_id,),
+            )
+
+        with option_conn.cursor() as cursor:
+            cursor.execute("SET lock_timeout = '150ms'")
+        option_conn.commit()
+        with pytest.raises(LockNotAvailable):
+            with option_conn.cursor() as cursor:
+                cursor.execute(
+                    """INSERT INTO model_prediction_group_options
+                           (group_id, option_code, prediction_id, ordinal)
+                       VALUES (%s, 'X', %s, 0)""",
+                    (str(group_id), prediction_id),
+                )
+        option_conn.rollback()
+        update_conn.commit()
+
+        with option_conn.cursor() as cursor:
+            cursor.execute(
+                """INSERT INTO model_prediction_group_options
+                       (group_id, option_code, prediction_id, ordinal)
+                   VALUES (%s, 'X', %s, 0)""",
+                (str(group_id), prediction_id),
+            )
+        option_conn.commit()
+
+        with pytest.raises(
+            RaiseException,
+            match="prediction group vector does not match mapped prediction rows",
+        ):
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    """UPDATE model_prediction_groups
+                       SET group_status='complete', completed_at=clock_timestamp()
+                       WHERE id=%s""",
+                    (str(group_id),),
+                )
+        conn.rollback()
+    finally:
+        update_conn.close()
+        option_conn.close()
+
+
+def test_run_group_and_finalization_operations_serialize_on_parent_run(isolated_database):
+    import psycopg2
+    from psycopg2 import sql
+    from psycopg2.extras import Json
+
+    from scripts.model_prediction_run_storage import (
+        create_prediction_run,
+        finalize_prediction_run,
+    )
+
+    conn, schema_name = isolated_database
+    with conn.cursor() as cursor:
+        cursor.execute("INSERT INTO ai_job_runs DEFAULT VALUES RETURNING id")
+        job_id = cursor.fetchone()[0]
+        cursor.execute(
+            "INSERT INTO model_versions (model_name) VALUES ('market_baseline') RETURNING id"
+        )
+        model_version_id = cursor.fetchone()[0]
+        cursor.execute("INSERT INTO official_matches DEFAULT VALUES RETURNING id")
+        match_id = cursor.fetchone()[0]
+    run_id = uuid.uuid4()
+    create_prediction_run(
+        conn,
+        run_id=run_id,
+        ai_job_run_id=job_id,
+        release_id="test-run-group-serialization",
+        code_fingerprint={"sha256": "1" * 64},
+        model_manifest=[],
+        input_manifest={"match_ids": [match_id]},
+        provenance_status="incomplete",
+    )
+
+    group_conn = psycopg2.connect(os.environ["FQP_P106_TEST_DATABASE_URL"])
+    try:
+        with group_conn.cursor() as cursor:
+            cursor.execute(sql.SQL("SET search_path TO {}").format(sql.Identifier(schema_name)))
+        group_conn.commit()
+        with group_conn.cursor() as cursor:
+            cursor.execute(
+                """INSERT INTO model_prediction_groups (
+                       id, run_id, match_id, model_version_id, play_type, market_variant,
+                       predict_time, expected_options, probability_vector, odds_snapshot_ids,
+                       odds_snapshot_times, output_manifest, output_manifest_canonical,
+                       provenance_status, output_sha256, group_status, created_at
+                   ) VALUES (
+                       %s, %s, %s, %s, 'spf', '', '2026-10-23T10:00:00',
+                       %s, %s, %s, %s, %s, %s, 'incomplete', %s, 'building', clock_timestamp()
+                   )""",
+                (
+                    str(uuid.uuid4()),
+                    str(run_id),
+                    match_id,
+                    model_version_id,
+                    Json(["0", "1", "3"]),
+                    Json({}),
+                    Json({}),
+                    Json({}),
+                    Json({}),
+                    psycopg2.Binary(b"{}"),
+                    hashlib.sha256(b"{}").hexdigest(),
+                ),
+            )
+
+        with conn.cursor() as cursor:
+            cursor.execute("SET lock_timeout = '150ms'")
+        conn.commit()
+        try:
+            with pytest.raises(LockNotAvailable):
+                with conn.cursor() as cursor:
+                    cursor.execute(
+                        "UPDATE model_prediction_runs SET input_manifest=%s WHERE id=%s",
+                        (Json({"changed": True}), str(run_id)),
+                    )
+        finally:
+            conn.rollback()
+        group_conn.rollback()
+
+        with group_conn.cursor() as cursor:
+            cursor.execute(
+                "SELECT id FROM model_prediction_runs WHERE id=%s FOR UPDATE",
+                (str(run_id),),
+            )
+        try:
+            with pytest.raises(LockNotAvailable):
+                finalize_prediction_run(
+                    conn,
+                    run_id=run_id,
+                    run_status="completed",
+                    output_summary={
+                        "expected_groups": 1,
+                        "completed_groups": 1,
+                        "skipped_groups": 0,
+                        "missing_groups": [],
+                        "input_updates_skipped": 0,
+                        "completion_reason": "one_expected_group",
+                    },
+                )
+        finally:
+            conn.rollback()
+        group_conn.commit()
+    finally:
+        group_conn.close()
+
+
+@pytest.mark.parametrize(
+    ("attack", "error_pattern"),
+    [
+        ("wrong_digest", "prediction output manifest SHA-256 does not match content"),
+        ("predict_time", "prediction output manifest does not match its group"),
+        (
+            "market_probability",
+            "prediction output manifest options do not match stored rows",
+        ),
+    ],
+)
+def test_prediction_group_publication_checks_all_manifest_fields(
+    isolated_database, attack, error_pattern
+):
+    from psycopg2 import Binary
+    from psycopg2.extras import Json
+
+    from scripts.model_prediction_run_identity import canonical_json_bytes, content_sha256
+    from scripts.model_prediction_run_storage import (
+        build_prediction_group_payload,
+        create_prediction_run,
+    )
+    from scripts.model_storage import store_model_prediction
+
+    conn, _schema_name = isolated_database
+    with conn.cursor() as cursor:
+        cursor.execute("INSERT INTO ai_job_runs DEFAULT VALUES RETURNING id")
+        job_id = cursor.fetchone()[0]
+        cursor.execute(
+            "INSERT INTO model_versions (model_name) VALUES ('market_baseline') RETURNING id"
+        )
+        model_version_id = cursor.fetchone()[0]
+        cursor.execute("INSERT INTO official_matches DEFAULT VALUES RETURNING id")
+        match_id = cursor.fetchone()[0]
+    run_id = uuid.uuid4()
+    create_prediction_run(
+        conn,
+        run_id=run_id,
+        ai_job_run_id=job_id,
+        release_id="test-output-hash",
+        code_fingerprint={"sha256": "e" * 64},
+        model_manifest=[],
+        input_manifest={},
+        provenance_status="incomplete",
+    )
+    metadata = {
+        "match_id": match_id,
+        "model_version_id": model_version_id,
+        "play_type": "spf",
+        "predict_time": "2026-10-23T10:00:00",
+        "expected_options": ["3", "1", "0"],
+        "feature_snapshot_id": 77,
+        "odds_snapshot_ids": {"3": 10, "1": 11, "0": 12},
+        "odds_snapshot_times": {},
+    }
+    predictions = [
+        {
+            "match_id": match_id,
+            "model_version_id": model_version_id,
+            "odds_snapshot_id": index + 10,
+            "feature_snapshot_id": 77,
+            "predict_time": "2026-10-23T10:00:00",
+            "play_type": "spf",
+            "option_code": option,
+            "model_probability": probability,
+            "market_probability": probability,
+            "break_even_probability": probability,
+            "market_edge": 0.0,
+            "breakeven_edge": 0.0,
+            "ev": 0.0,
+            "validation_status": "valid",
+            "calculation_version": "test-v1",
+        }
+        for index, (option, probability) in enumerate((("3", 0.5), ("1", 0.25), ("0", 0.25)))
+    ]
+    payload = build_prediction_group_payload(
+        run_id=run_id,
+        metadata=metadata,
+        predictions=predictions,
+    )
+    assert payload["output_sha256"] == content_sha256(payload["output_manifest"])
+    if attack == "predict_time":
+        payload["output_manifest"]["predict_time"] = "2026-10-23T11:00:00"
+        payload["output_manifest_canonical"] = canonical_json_bytes(payload["output_manifest"])
+        payload["output_sha256"] = content_sha256(payload["output_manifest"])
+    elif attack == "market_probability":
+        payload["output_manifest"]["prediction_outputs"][0]["market_probability"] = 0.99
+        payload["output_manifest_canonical"] = canonical_json_bytes(payload["output_manifest"])
+        payload["output_sha256"] = content_sha256(payload["output_manifest"])
+    elif attack == "wrong_digest":
+        payload["output_sha256"] = "f" * 64
+    group_id = uuid.uuid4()
+    with conn.cursor() as cursor:
+        cursor.execute(
+            """INSERT INTO model_prediction_groups (
+                   id, run_id, match_id, model_version_id, play_type, market_variant,
+                   predict_time, expected_options, probability_vector, score_matrix,
+                   odds_snapshot_ids, odds_snapshot_times, feature_snapshot_id,
+                   input_fence, artifact_identity, output_manifest, output_manifest_canonical,
+                   provenance_status, output_sha256, group_status
+               ) VALUES (
+                   %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                   'building'
+               )""",
+            (
+                str(group_id),
+                str(run_id),
+                match_id,
+                model_version_id,
+                "spf",
+                "",
+                payload["predict_time"],
+                Json(payload["expected_options"]),
+                Json(payload["probability_vector"]),
+                None,
+                Json(payload["odds_snapshot_ids"]),
+                Json(payload["odds_snapshot_times"]),
+                payload["feature_snapshot_id"],
+                None,
+                None,
+                Json(payload["output_manifest"]),
+                Binary(payload["output_manifest_canonical"]),
+                "incomplete",
+                payload["output_sha256"],
+            ),
+        )
+    for ordinal, prediction in enumerate(payload["predictions"]):
+        prediction_id = store_model_prediction(conn, dict(prediction), commit=False)
+        with conn.cursor() as cursor:
+            cursor.execute(
+                """INSERT INTO model_prediction_group_options
+                       (group_id, option_code, prediction_id, ordinal)
+                   VALUES (%s, %s, %s, %s)""",
+                (str(group_id), prediction["option_code"], prediction_id, ordinal),
+            )
+
+    with pytest.raises(RaiseException, match=error_pattern):
+        with conn.cursor() as cursor:
+            cursor.execute(
+                """UPDATE model_prediction_groups
+                   SET group_status='complete', completed_at=clock_timestamp()
+                   WHERE id=%s""",
+                (str(group_id),),
+            )
+    conn.rollback()
+
+
+def test_prediction_group_artifact_must_match_parent_run_manifest(isolated_database):
+    from scripts.model_prediction_run_storage import (
+        create_prediction_run,
+        store_prediction_group,
+    )
+
+    conn, _schema_name = isolated_database
+    with conn.cursor() as cursor:
+        cursor.execute("INSERT INTO ai_job_runs DEFAULT VALUES RETURNING id")
+        job_id = cursor.fetchone()[0]
+        cursor.execute(
+            "INSERT INTO model_versions (model_name) VALUES ('market_baseline') RETURNING id"
+        )
+        model_version_id = cursor.fetchone()[0]
+        cursor.execute("INSERT INTO official_matches DEFAULT VALUES RETURNING id")
+        match_id = cursor.fetchone()[0]
+    run_id = uuid.uuid4()
+    recorded_identity = {
+        "model_version_id": model_version_id,
+        "model_name": "market_baseline",
+        "provenance_status": "complete",
+        "parameters_sha256": "a" * 64,
+        "artifact": {
+            "kind": "inline_parameters",
+            "format": "application/json",
+            "size_bytes": 1,
+            "sha256": "a" * 64,
+        },
+    }
+    forged_identity = {**recorded_identity, "parameters_sha256": "b" * 64}
+    create_prediction_run(
+        conn,
+        run_id=run_id,
+        ai_job_run_id=job_id,
+        release_id="test-artifact-binding",
+        code_fingerprint={"sha256": "e" * 64},
+        model_manifest=[recorded_identity],
+        input_manifest={"match_ids": [match_id]},
+        provenance_status="complete",
+    )
+    predictions = [
+        {
+            "match_id": match_id,
+            "model_version_id": model_version_id,
+            "odds_snapshot_id": 10 + index,
+            "feature_snapshot_id": 77,
+            "predict_time": "2026-10-23T10:00:00",
+            "play_type": "spf",
+            "option_code": option,
+            "model_probability": probability,
+            "market_probability": probability,
+            "break_even_probability": probability,
+            "market_edge": 0.0,
+            "breakeven_edge": 0.0,
+            "ev": 0.0,
+            "validation_status": "valid",
+            "validation_errors": [],
+            "calculation_version": "artifact-binding-test",
+        }
+        for index, (option, probability) in enumerate((("3", 0.5), ("1", 0.25), ("0", 0.25)))
+    ]
+
+    with pytest.raises(RaiseException, match="artifact identity does not match parent run"):
+        store_prediction_group(
+            conn,
+            run_id=run_id,
+            metadata={
+                "match_id": match_id,
+                "model_version_id": model_version_id,
+                "play_type": "spf",
+                "predict_time": "2026-10-23T10:00:00",
+                "expected_options": ["3", "1", "0"],
+                "artifact_identity": forged_identity,
+                "provenance_status": "complete",
+            },
+            predictions=predictions,
+        )
     conn.rollback()
 
 
@@ -639,6 +1680,7 @@ def test_research_evaluation_reads_one_bounded_snapshot_and_stores_outside_predi
 
 def test_prediction_replay_uses_only_complete_groups_from_the_requested_run(isolated_database):
     from scripts.backtest_engine import evaluate_prediction_replay
+    from scripts.model_prediction_run_identity import content_sha256
     from scripts.model_prediction_run_storage import (
         create_prediction_run,
         finalize_prediction_run,
@@ -673,25 +1715,39 @@ def test_prediction_replay_uses_only_complete_groups_from_the_requested_run(isol
                 (match_id, f"{day}T23:00:00"),
             )
 
+    artifact_identity = {
+        "model_version_id": model_version_id,
+        "model_name": "maher_poisson",
+        "provenance_status": "complete",
+        "parameters_sha256": "f" * 64,
+        "artifact": {
+            "kind": "inline_parameters",
+            "format": "application/json",
+            "size_bytes": 8,
+            "sha256": "f" * 64,
+        },
+        "training_manifest_sha256": "a" * 64,
+        "training_identity_sha256": "b" * 64,
+    }
     first_run_id = uuid.uuid4()
     create_prediction_run(
         conn,
         run_id=first_run_id,
         ai_job_run_id=first_job_id,
         release_id="p106-replay-test",
-        code_fingerprint={"sha256": "d" * 64},
-        model_manifest=[{"model_version_id": model_version_id, "model_name": "maher_poisson"}],
+        code_fingerprint={"files": {}, "sha256": content_sha256({})},
+        model_manifest=[artifact_identity],
         input_manifest={"match_ids": match_ids[:1]},
         provenance_status="complete",
     )
     probabilities = {"3": 0.55, "1": 0.25, "0": 0.20}
     market = {"3": 0.50, "1": 0.28, "0": 0.22}
 
-    def store_group(run_id, match_id, predict_time):
+    def store_group(run_id, match_id, predict_time, play_type="spf"):
         metadata = {
             "match_id": match_id,
             "model_version_id": model_version_id,
-            "play_type": "spf",
+            "play_type": play_type,
             "predict_time": predict_time,
             "expected_options": ["3", "1", "0"],
             "odds_snapshot_ids": {"3": 1, "1": 2, "0": 3},
@@ -700,11 +1756,7 @@ def test_prediction_replay_uses_only_complete_groups_from_the_requested_run(isol
                 "1": "2025-02-01T18:40:00",
                 "0": "2025-02-01T18:40:00",
             },
-            "artifact_identity": {
-                "model_version_id": model_version_id,
-                "provenance_status": "complete",
-                "parameters_sha256": "f" * 64,
-            },
+            "artifact_identity": artifact_identity,
             "provenance_status": "complete",
         }
         predictions = [
@@ -714,7 +1766,7 @@ def test_prediction_replay_uses_only_complete_groups_from_the_requested_run(isol
                 "odds_snapshot_id": index + 1,
                 "feature_snapshot_id": 77,
                 "predict_time": predict_time,
-                "play_type": "spf",
+                "play_type": play_type,
                 "option_code": option,
                 "raw_model_probability": probabilities[option],
                 "model_probability": probabilities[option],
@@ -734,7 +1786,20 @@ def test_prediction_replay_uses_only_complete_groups_from_the_requested_run(isol
         )
 
     store_group(first_run_id, match_ids[0], "2025-02-01T19:00:00")
-    finalize_prediction_run(conn, run_id=first_run_id, run_status="completed")
+    store_group(first_run_id, match_ids[0], "2025-02-01T19:00:00", play_type="rqspf")
+    finalize_prediction_run(
+        conn,
+        run_id=first_run_id,
+        run_status="completed",
+        output_summary={
+            "expected_groups": 2,
+            "completed_groups": 2,
+            "skipped_groups": 0,
+            "missing_groups": [],
+            "input_updates_skipped": 0,
+            "completion_reason": "predictions_completed",
+        },
+    )
 
     cursor = conn.cursor()
     cursor.execute("INSERT INTO ai_job_runs DEFAULT VALUES RETURNING id")
@@ -746,13 +1811,25 @@ def test_prediction_replay_uses_only_complete_groups_from_the_requested_run(isol
         run_id=other_run_id,
         ai_job_run_id=second_job_id,
         release_id="p106-replay-test-other",
-        code_fingerprint={"sha256": "e" * 64},
-        model_manifest=[{"model_version_id": model_version_id, "model_name": "maher_poisson"}],
+        code_fingerprint={"files": {}, "sha256": content_sha256({})},
+        model_manifest=[artifact_identity],
         input_manifest={"match_ids": match_ids[1:]},
         provenance_status="complete",
     )
     store_group(other_run_id, match_ids[1], "2025-02-02T19:00:00")
-    finalize_prediction_run(conn, run_id=other_run_id, run_status="completed")
+    finalize_prediction_run(
+        conn,
+        run_id=other_run_id,
+        run_status="completed",
+        output_summary={
+            "expected_groups": 1,
+            "completed_groups": 1,
+            "skipped_groups": 0,
+            "missing_groups": [],
+            "input_updates_skipped": 0,
+            "completion_reason": "predictions_completed",
+        },
+    )
 
     report = evaluate_prediction_replay(conn, str(first_run_id))
     assert report["evaluation_mode"] == "prediction_replay"
@@ -761,6 +1838,17 @@ def test_prediction_replay_uses_only_complete_groups_from_the_requested_run(isol
     assert report["model_market_match_ids"] == [match_ids[0]]
     assert report["predictions"][0]["output_sha256"]
     assert report["predictions"][0]["artifact_identity"]["provenance_status"] == "complete"
+    assert report["sample_count"] == 1
+    assert report["excluded"] == [{"match_id": match_ids[0], "reason": "unsupported_play_type"}]
+    from scripts.model_prediction_run_loader import load_latest_prediction_group
+
+    loaded = load_latest_prediction_group(
+        conn,
+        match_id=match_ids[0],
+        model_version_id=model_version_id,
+        play_type="spf",
+    )
+    assert loaded["status"] == "complete"
 
 
 def test_z_down_migration_removes_only_p106_objects(isolated_database):

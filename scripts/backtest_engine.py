@@ -1652,17 +1652,30 @@ def load_research_matches(
 def evaluate_prediction_replay(conn: Any, prediction_run_id: str) -> dict[str, Any]:
     """Evaluate only complete, stored SPF groups from one P106-03 prediction run."""
     from scripts.evaluation_metrics import compute_match_metrics
+    from scripts.model_prediction_run_identity import (
+        verify_prediction_artifact_binding,
+        verify_prediction_group_output_manifest,
+        verify_prediction_run_manifest,
+        verify_prediction_run_output_manifest,
+    )
 
     if not isinstance(prediction_run_id, str) or not prediction_run_id.strip():
         raise ValueError("prediction_run_id is required")
     sql = """
         SELECT g.id AS group_id, g.match_id, g.play_type, g.predict_time,
                g.expected_options, g.probability_vector, g.output_sha256,
+               g.output_manifest AS group_output_manifest,
+               g.output_manifest_canonical AS group_output_manifest_canonical,
                g.odds_snapshot_ids, g.odds_snapshot_times,
                g.artifact_identity, g.input_fence, g.model_version_id,
                g.provenance_status AS group_provenance_status,
                g.group_status, r.run_status, r.provenance_status AS run_provenance_status,
                r.run_manifest_sha256, r.model_manifest_sha256, r.input_manifest_sha256,
+               r.run_manifest, r.model_manifest, r.input_manifest,
+               r.output_summary, r.output_manifest_sha256,
+               r.output_manifest AS run_output_manifest,
+               r.output_manifest_canonical AS run_output_manifest_canonical,
+               g.market_variant, mv.model_name,
                m.kickoff_time,
                result.result_status, result.spf_result,
                outputs.market_vector, outputs.output_snapshot_ids, outputs.option_count
@@ -1684,8 +1697,9 @@ def evaluate_prediction_replay(conn: Any, prediction_run_id: str) -> dict[str, A
             JOIN model_predictions mp ON mp.id=option_map.prediction_id
             WHERE option_map.group_id=g.id
         ) outputs ON true
+        JOIN model_versions mv ON mv.id=g.model_version_id
         WHERE g.run_id=%s
-        ORDER BY g.match_id, g.id
+        ORDER BY g.match_id, g.model_version_id, g.play_type, g.market_variant, g.id
     """
     rows = _execute_read_only_snapshot(conn, sql, (prediction_run_id,))
     if not rows:
@@ -1694,11 +1708,42 @@ def evaluate_prediction_replay(conn: Any, prediction_run_id: str) -> dict[str, A
     evaluated = []
     excluded: list[dict[str, Any]] = []
     run_manifest_sha256 = None
+    run_integrity_error = None
+    try:
+        first = rows[0]
+        verify_prediction_run_manifest(
+            run_manifest=first["run_manifest"],
+            run_manifest_sha256=first["run_manifest_sha256"],
+            model_manifest=first["model_manifest"],
+            model_manifest_sha256=first["model_manifest_sha256"],
+            input_manifest=first["input_manifest"],
+            input_manifest_sha256=first["input_manifest_sha256"],
+        )
+        output_summary = first["output_summary"]
+        if not isinstance(output_summary, Mapping):
+            raise ValueError("prediction output summary is missing")
+        completed_hashes = [
+            row["output_sha256"] for row in rows if row["group_status"] == "complete"
+        ]
+        verify_prediction_run_output_manifest(
+            output_manifest=first["run_output_manifest"],
+            output_manifest_sha256=first["output_manifest_sha256"],
+            output_manifest_canonical=first["run_output_manifest_canonical"],
+            output_summary=output_summary,
+            expected_group_hashes=completed_hashes,
+        )
+        if int(output_summary.get("completed_groups", -1)) != len(completed_hashes) or int(
+            output_summary.get("skipped_groups", -1)
+        ) != len(output_summary.get("missing_groups", [])):
+            raise ValueError("prediction run output summary is inconsistent")
+    except (TypeError, ValueError) as exc:
+        run_integrity_error = str(exc)
+
     for row in rows:
         run_manifest_sha256 = row["run_manifest_sha256"]
-        reason = None
+        reason = "prediction_run_integrity_invalid" if run_integrity_error else None
         if row["group_status"] != "complete":
-            reason = "prediction_group_incomplete"
+            reason = reason or "prediction_group_incomplete"
         elif row["run_status"] not in {"completed", "partial"}:
             reason = "prediction_run_not_published"
         elif (
@@ -1710,16 +1755,38 @@ def evaluate_prediction_replay(conn: Any, prediction_run_id: str) -> dict[str, A
             reason = "artifact_identity_missing"
         elif row["artifact_identity"].get("provenance_status") != "complete":
             reason = "artifact_identity_incomplete"
-        elif row["play_type"] != "spf":
-            reason = "unsupported_play_type"
-        elif row["predict_time"] >= row["kickoff_time"]:
-            reason = "prediction_not_before_kickoff"
-        elif row["result_status"] not in {"final", "confirmed"} or row["spf_result"] not in {
-            "3",
-            "1",
-            "0",
-        }:
-            reason = "official_result_not_final"
+        if reason is None:
+            try:
+                verify_prediction_group_output_manifest(
+                    output_manifest=row["group_output_manifest"],
+                    output_sha256=row["output_sha256"],
+                    output_manifest_canonical=row["group_output_manifest_canonical"],
+                    match_id=int(row["match_id"]),
+                    model_version_id=int(row["model_version_id"]),
+                    play_type=str(row["play_type"]),
+                    market_variant=str(row["market_variant"] or ""),
+                    predict_time=row["predict_time"],
+                    expected_options=row["expected_options"],
+                    probability_vector=row["probability_vector"],
+                )
+                verify_prediction_artifact_binding(
+                    row["model_manifest"],
+                    row["artifact_identity"],
+                    model_version_id=int(row["model_version_id"]),
+                )
+            except TypeError, ValueError:
+                reason = "prediction_group_integrity_invalid"
+        if reason is None:
+            if row["play_type"] != "spf":
+                reason = "unsupported_play_type"
+            elif row["predict_time"] >= row["kickoff_time"]:
+                reason = "prediction_not_before_kickoff"
+            elif row["result_status"] not in {"final", "confirmed"} or row["spf_result"] not in {
+                "3",
+                "1",
+                "0",
+            }:
+                reason = "official_result_not_final"
         expected = sorted(str(option) for option in (row["expected_options"] or []))
         model = row["probability_vector"] or {}
         market = row["market_vector"] or {}

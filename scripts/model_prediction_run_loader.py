@@ -4,6 +4,13 @@ from __future__ import annotations
 
 from typing import Any
 
+from scripts.model_prediction_run_identity import (
+    verify_prediction_artifact_binding,
+    verify_prediction_group_output_manifest,
+    verify_prediction_run_manifest,
+    verify_prediction_run_output_manifest,
+)
+
 
 def load_latest_prediction_group(
     conn: Any,
@@ -25,18 +32,28 @@ def load_latest_prediction_group(
         params += (market_variant,)
     with conn.cursor() as cur:
         cur.execute(
-            f"""SELECT id, run_id, match_id, model_version_id, play_type,
-                      market_variant, predict_time, expected_options,
-                      probability_vector, output_sha256, provenance_status
-               FROM model_prediction_groups
-               WHERE match_id = %s AND model_version_id = %s AND play_type = %s
-                 AND group_status = 'complete' {variant_filter}
-                 AND EXISTS (
-                     SELECT 1 FROM model_prediction_runs r
-                     WHERE r.id=model_prediction_groups.run_id
-                       AND r.run_status IN ('completed','partial')
-                 )
-               ORDER BY predict_time DESC, created_at DESC, id DESC
+            f"""SELECT g.id, g.run_id, g.match_id, g.model_version_id, g.play_type,
+                      g.market_variant, g.predict_time, g.expected_options,
+                      g.probability_vector, g.output_sha256, g.provenance_status,
+                      g.output_manifest, g.output_manifest_canonical,
+                      r.run_status, r.provenance_status,
+                      r.run_manifest, r.run_manifest_sha256,
+                      r.model_manifest, r.model_manifest_sha256,
+                      r.input_manifest, r.input_manifest_sha256,
+                      r.output_summary, r.output_manifest,
+                      r.output_manifest_sha256, r.output_manifest_canonical,
+                      (SELECT COALESCE(
+                           jsonb_agg(g2.output_sha256 ORDER BY g2.match_id,
+                                     g2.model_version_id, g2.play_type,
+                                     g2.market_variant, g2.id), '[]'::jsonb)
+                       FROM model_prediction_groups g2
+                       WHERE g2.run_id=r.id AND g2.group_status='complete')
+               FROM model_prediction_groups g
+               JOIN model_prediction_runs r ON r.id=g.run_id
+               WHERE g.match_id = %s AND g.model_version_id = %s AND g.play_type = %s
+                 AND g.group_status = 'complete' {variant_filter}
+                 AND r.run_status IN ('completed','partial')
+               ORDER BY g.predict_time DESC, g.created_at DESC, g.id DESC
                LIMIT 1""",
             params,
         )
@@ -55,7 +72,77 @@ def load_latest_prediction_group(
             vector,
             digest,
             provenance,
+            output_manifest,
+            output_manifest_canonical,
+            run_status,
+            run_provenance,
+            run_manifest,
+            run_manifest_sha256,
+            model_manifest,
+            model_manifest_sha256,
+            input_manifest,
+            input_manifest_sha256,
+            output_summary,
+            run_output_manifest,
+            run_output_manifest_sha256,
+            run_output_manifest_canonical,
+            run_output_hashes,
         ) = group
+        try:
+            verify_prediction_run_manifest(
+                run_manifest=run_manifest,
+                run_manifest_sha256=run_manifest_sha256,
+                model_manifest=model_manifest,
+                model_manifest_sha256=model_manifest_sha256,
+                input_manifest=input_manifest,
+                input_manifest_sha256=input_manifest_sha256,
+            )
+            verify_prediction_run_output_manifest(
+                output_manifest=run_output_manifest,
+                output_manifest_sha256=run_output_manifest_sha256,
+                output_manifest_canonical=run_output_manifest_canonical,
+                output_summary=output_summary,
+                expected_group_hashes=run_output_hashes,
+                required_group_sha256=digest,
+            )
+            verify_prediction_group_output_manifest(
+                output_manifest=output_manifest,
+                output_sha256=digest,
+                output_manifest_canonical=output_manifest_canonical,
+                match_id=int(mid),
+                model_version_id=int(model_id),
+                play_type=str(group_play_type),
+                market_variant=str(variant or ""),
+                predict_time=predict_time,
+                expected_options=expected,
+                probability_vector=vector,
+            )
+            if provenance == "complete" and run_provenance == "complete":
+                verify_prediction_artifact_binding(
+                    model_manifest,
+                    output_manifest.get("artifact_identity"),
+                    model_version_id=int(model_id),
+                )
+            elif provenance == "complete" or run_provenance == "complete":
+                raise ValueError("prediction group and run provenance statuses disagree")
+        except (TypeError, ValueError) as exc:
+            return {
+                "status": "invalid_integrity",
+                "group_id": group_id,
+                "run_id": run_id,
+                "match_id": mid,
+                "model_version_id": model_id,
+                "play_type": group_play_type,
+                "market_variant": variant,
+                "predict_time": predict_time,
+                "expected_options": list(expected),
+                "probability_vector": dict(vector),
+                "output_sha256": digest,
+                "provenance_status": provenance,
+                "run_provenance_status": run_provenance,
+                "integrity_error": str(exc),
+                "options": [],
+            }
         with conn.cursor() as cur:
             cur.execute(
                 """SELECT mp.id, option_map.option_code, mp.model_probability,
@@ -81,11 +168,18 @@ def load_latest_prediction_group(
             }
             for row in rows
         ]
-        status = (
-            "complete"
-            if sorted(item["option_code"] for item in options) == sorted(expected)
-            else "incomplete_group"
-        )
+        loaded_vector = {
+            item["option_code"]: item["model_probability"]
+            for item in options
+            if item["model_probability"] is not None
+        }
+        status = "complete"
+        if sorted(item["option_code"] for item in options) != sorted(expected):
+            status = "incomplete_group"
+        elif loaded_vector != dict(vector):
+            status = "invalid_integrity"
+        if status != "complete":
+            options = []
         return {
             "status": status,
             "group_id": group_id,
@@ -99,6 +193,12 @@ def load_latest_prediction_group(
             "probability_vector": dict(vector),
             "output_sha256": digest,
             "provenance_status": provenance,
+            "run_provenance_status": run_provenance,
+            **(
+                {"integrity_error": "stored options disagree with the hashed probability vector"}
+                if status == "invalid_integrity"
+                else {}
+            ),
             "options": options,
         }
 

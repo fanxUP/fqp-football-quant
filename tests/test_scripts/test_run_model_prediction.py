@@ -420,7 +420,10 @@ def test_prediction_counts_missing_odds_as_skipped_expected_group():
     result, _store_prediction, _store_vote = _run_with_odds([], output_group_counts)
 
     assert result == (0, 0)
-    assert output_group_counts == {"expected": 1, "completed": 0}
+    assert output_group_counts["expected"] == 1
+    assert output_group_counts["completed"] == 0
+    assert output_group_counts["expected_models"] == [("market_baseline", 1)]
+    assert output_group_counts["skipped"][0]["reason"] == "official_odds_missing"
 
 
 def test_missing_rqspf_odds_count_models_that_need_a_handicap():
@@ -433,7 +436,10 @@ def test_missing_rqspf_odds_count_models_that_need_a_handicap():
         active_models={"maher_poisson": 1},
     )
 
-    assert output_group_counts == {"expected": 1, "completed": 0}
+    assert output_group_counts["expected"] == 1
+    assert output_group_counts["completed"] == 0
+    assert output_group_counts["expected_models"] == [("maher_poisson", 1)]
+    assert output_group_counts["skipped"][0]["reason"] == "official_odds_missing"
 
 
 def test_prediction_skips_incomplete_spf_market_instead_of_inventing_odds():
@@ -444,6 +450,40 @@ def test_prediction_skips_incomplete_spf_market_instead_of_inventing_odds():
     assert result == (0, 0)
     store_prediction.assert_not_called()
     store_vote.assert_not_called()
+
+
+def test_market_validation_failure_is_recorded_as_a_missing_output_group():
+    from scripts.market_metric_validation import MarketMetricValidationError
+
+    counts = {}
+    with (
+        patch(
+            "scripts.jobs.run_model_prediction.validate_market",
+            side_effect=MarketMetricValidationError("invalid market fixture"),
+        ),
+        patch("scripts.jobs.run_model_prediction.store_derived_play_predictions", return_value=0),
+    ):
+        result, _store_prediction, _store_vote = _run_with_odds(
+            [
+                (11, "h", 2.1, "2026-08-09T13:00:00"),
+                (12, "d", 3.2, "2026-08-09T13:00:00"),
+                (13, "a", 3.6, "2026-08-09T13:00:00"),
+            ],
+            counts,
+        )
+
+    assert result == (0, 0)
+    assert counts["expected"] == 1
+    assert counts["completed"] == 0
+    assert counts["skipped"] == [
+        {
+            "match_id": 101,
+            "model_version_id": 1,
+            "model_name": "market_baseline",
+            "play_type": "spf",
+            "reason": "market_validation_failed",
+        }
+    ]
 
 
 def test_prediction_job_does_not_fallback_to_spf_when_no_market_is_open():
@@ -470,6 +510,11 @@ def test_prediction_job_does_not_fallback_to_spf_when_no_market_is_open():
         "votes": 0,
         "matches_processed": 0,
         "note": "no matches with open official markets",
+        "completion_reason": "no_open_markets",
+        "output_groups_expected": 0,
+        "output_groups_completed": 0,
+        "output_groups_skipped": 0,
+        "output_group_skips": [],
     }
     predict.assert_not_called()
 
@@ -487,7 +532,26 @@ def test_run_impl_aggregates_missing_prediction_group_counts():
     db_context.__enter__.return_value = conn
 
     def skip_groups(*_args, output_group_counts, **_kwargs):
-        output_group_counts.update(expected=2, completed=0)
+        output_group_counts.update(
+            expected=2,
+            completed=0,
+            skipped=[
+                {
+                    "match_id": 101,
+                    "model_version_id": 1,
+                    "model_name": "market_baseline",
+                    "play_type": "spf",
+                    "reason": "official_odds_incomplete",
+                },
+                {
+                    "match_id": 101,
+                    "model_version_id": 2,
+                    "model_name": "maher_poisson",
+                    "play_type": "spf",
+                    "reason": "official_odds_incomplete",
+                },
+            ],
+        )
         return 0, 0
 
     with (
@@ -502,6 +566,44 @@ def test_run_impl_aggregates_missing_prediction_group_counts():
     assert result["output_groups_expected"] == 2
     assert result["output_groups_completed"] == 0
     assert result["output_groups_skipped"] == 2
+    assert result["completion_reason"] == "expected_output_groups_missing"
+    assert [item["reason"] for item in result["output_group_skips"]] == [
+        "official_odds_incomplete",
+        "official_odds_incomplete",
+    ]
+
+
+def test_prediction_without_odds_records_each_expected_group_as_skipped():
+    conn = MagicMock()
+    conn.cursor.return_value.__enter__.return_value.fetchall.return_value = []
+    counts = {}
+
+    with patch("scripts.jobs.run_model_prediction._latest_feature_snapshot", return_value=None):
+        assert _predict_match_play_type(
+            conn,
+            101,
+            "主队",
+            "客队",
+            "spf",
+            {"market_baseline": 7},
+            -0.08,
+            None,
+            "2026-10-23T10:00:00",
+            prediction_run_id="test-run",
+            output_group_counts=counts,
+        ) == (0, 0)
+
+    assert counts["expected"] == 1
+    assert counts["completed"] == 0
+    assert counts["skipped"] == [
+        {
+            "match_id": 101,
+            "model_version_id": 7,
+            "model_name": "market_baseline",
+            "play_type": "spf",
+            "reason": "official_odds_missing",
+        }
+    ]
 
 
 def test_match_specific_prediction_still_requires_a_sellable_future_match():
@@ -515,7 +617,16 @@ def test_match_specific_prediction_still_requires_a_sellable_future_match():
     with patch("scripts.jobs.run_model_prediction.get_db", return_value=db_context):
         result = _run_impl(match_id=101)
 
-    assert result == {"status": "ok", "predictions": 0, "note": "no matches to predict"}
+    assert result == {
+        "status": "ok",
+        "predictions": 0,
+        "note": "no matches to predict",
+        "completion_reason": "no_matches",
+        "output_groups_expected": 0,
+        "output_groups_completed": 0,
+        "output_groups_skipped": 0,
+        "output_group_skips": [],
+    }
     queries = [" ".join(call.args[0].split()) for call in cursor.execute.call_args_list]
     match_query = next(q for q in queries if "FROM official_matches WHERE id = %s" in q)
     assert "sale_status = 'selling'" in match_query
@@ -745,7 +856,26 @@ def test_prediction_job_records_run_identity_and_preserves_partial_status() -> N
                 "status": "ok",
                 "predictions": 3,
                 "input_updates_skipped": 1,
+                "output_groups_expected": 3,
+                "output_groups_completed": 1,
                 "output_groups_skipped": 2,
+                "output_group_skips": [
+                    {
+                        "match_id": 101,
+                        "model_version_id": 8,
+                        "model_name": "maher_poisson",
+                        "play_type": "spf",
+                        "reason": "official_odds_incomplete",
+                    },
+                    {
+                        "match_id": 102,
+                        "model_version_id": 8,
+                        "model_name": "maher_poisson",
+                        "play_type": "spf",
+                        "reason": "input_update_superseded",
+                    },
+                ],
+                "completion_reason": "expected_output_groups_missing",
             },
         ) as run_impl,
     ):
@@ -755,6 +885,29 @@ def test_prediction_job_records_run_identity_and_preserves_partial_status() -> N
     assert create_run.call_args.kwargs["ai_job_run_id"] == 9
     assert run_impl.call_args.kwargs["prediction_run_id"] == prediction_run_id
     assert finalize_run.call_args.kwargs["run_status"] == "partial"
+    assert finalize_run.call_args.kwargs["output_summary"] == {
+        "expected_groups": 3,
+        "completed_groups": 1,
+        "skipped_groups": 2,
+        "missing_groups": [
+            {
+                "match_id": 101,
+                "model_version_id": 8,
+                "model_name": "maher_poisson",
+                "play_type": "spf",
+                "reason": "official_odds_incomplete",
+            },
+            {
+                "match_id": 102,
+                "model_version_id": 8,
+                "model_name": "maher_poisson",
+                "play_type": "spf",
+                "reason": "input_update_superseded",
+            },
+        ],
+        "input_updates_skipped": 1,
+        "completion_reason": "expected_output_groups_missing",
+    }
     assert result["input_updates_skipped"] == 1
 
 
@@ -771,12 +924,65 @@ def test_prediction_job_marks_missing_output_groups_partial() -> None:
         patch("scripts.jobs.run_model_prediction.finalize_prediction_run") as finalize_run,
         patch(
             "scripts.jobs.run_model_prediction._run_impl",
-            return_value={"status": "ok", "predictions": 0, "output_groups_skipped": 1},
+            return_value={
+                "status": "ok",
+                "predictions": 0,
+                "output_groups_expected": 1,
+                "output_groups_completed": 0,
+                "output_groups_skipped": 1,
+                "output_group_skips": [
+                    {
+                        "match_id": 101,
+                        "model_version_id": 8,
+                        "model_name": "maher_poisson",
+                        "play_type": "spf",
+                        "reason": "official_odds_missing",
+                    }
+                ],
+                "completion_reason": "expected_output_groups_missing",
+            },
         ),
     ):
         run()
 
     assert finalize_run.call_args.kwargs["run_status"] == "partial"
+
+
+def test_prediction_job_persists_no_input_completion_reason() -> None:
+    with (
+        patch("scripts.jobs.run_model_prediction.start_tracked_job", return_value=9),
+        patch("scripts.jobs.run_model_prediction.finish_tracked_job"),
+        patch("scripts.jobs.run_model_prediction.get_db"),
+        patch(
+            "scripts.jobs.run_model_prediction.fingerprint_runtime_sources",
+            return_value={"files": {}, "sha256": "a" * 64},
+        ),
+        patch("scripts.jobs.run_model_prediction.create_prediction_run"),
+        patch("scripts.jobs.run_model_prediction.finalize_prediction_run") as finalize_run,
+        patch(
+            "scripts.jobs.run_model_prediction._run_impl",
+            return_value={
+                "status": "ok",
+                "predictions": 0,
+                "completion_reason": "no_open_markets",
+                "output_groups_expected": 0,
+                "output_groups_completed": 0,
+                "output_groups_skipped": 0,
+                "output_group_skips": [],
+            },
+        ),
+    ):
+        run()
+
+    assert finalize_run.call_args.kwargs["run_status"] == "completed"
+    assert finalize_run.call_args.kwargs["output_summary"] == {
+        "expected_groups": 0,
+        "completed_groups": 0,
+        "skipped_groups": 0,
+        "missing_groups": [],
+        "input_updates_skipped": 0,
+        "completion_reason": "no_open_markets",
+    }
 
 
 def test_input_fence_is_captured_before_feature_or_odds_reads(legacy_input_fence):

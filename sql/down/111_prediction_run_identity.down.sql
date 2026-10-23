@@ -10,6 +10,7 @@ DROP TRIGGER IF EXISTS trg_immutable_run_aware_prediction ON model_predictions;
 DROP TRIGGER IF EXISTS trg_immutable_prediction_run ON model_prediction_runs;
 DROP FUNCTION IF EXISTS enforce_prediction_group_starts_building();
 DROP FUNCTION IF EXISTS enforce_model_prediction_run_lifecycle();
+DROP FUNCTION IF EXISTS prediction_manifest_bytes_have_unique_keys(BYTEA);
 DROP FUNCTION IF EXISTS reject_mapped_prediction_mutation();
 DROP FUNCTION IF EXISTS reject_published_prediction_group_mutation();
 DROP FUNCTION IF EXISTS validate_model_prediction_group_options();

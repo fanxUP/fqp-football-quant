@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import hashlib
 import uuid
 from collections.abc import Mapping, Sequence
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import Any
 
+from psycopg2 import Binary
 from psycopg2.extras import Json
 
-from scripts.model_prediction_run_identity import content_sha256
+from scripts.model_prediction_run_identity import canonical_json_bytes, content_sha256
 from scripts.model_storage import store_model_prediction
 
 
@@ -27,6 +30,74 @@ def _expected_options(metadata: Mapping[str, Any]) -> list[str]:
     if len(set(options)) != len(options):
         raise ValueError("expected options must be unique")
     return sorted(options)
+
+
+_PREDICTION_OUTPUT_FIELDS = (
+    "match_id",
+    "model_version_id",
+    "odds_snapshot_id",
+    "feature_snapshot_id",
+    "predict_time",
+    "play_type",
+    "option_code",
+    "raw_model_probability",
+    "model_probability",
+    "market_probability",
+    "probability_lower_bound",
+    "probability_upper_bound",
+    "uncertainty_score",
+    "adjusted_probability",
+    "fair_odds",
+    "ev",
+    "confidence_score",
+    "risk_score",
+    "break_even_probability",
+    "market_edge",
+    "breakeven_edge",
+    "validation_status",
+    "validation_errors",
+    "calculation_version",
+    "uncertainty_reason",
+)
+_PREDICTION_NUMERIC_SCALES = {
+    "raw_model_probability": 6,
+    "model_probability": 6,
+    "market_probability": 6,
+    "probability_lower_bound": 6,
+    "probability_upper_bound": 6,
+    "uncertainty_score": 6,
+    "adjusted_probability": 6,
+    "fair_odds": 4,
+    "ev": 6,
+    "confidence_score": 4,
+    "risk_score": 4,
+    "break_even_probability": 6,
+    "market_edge": 6,
+    "breakeven_edge": 6,
+}
+
+
+def _stored_prediction_fields(prediction: Mapping[str, Any]) -> dict[str, Any]:
+    fields = {name: prediction.get(name) for name in _PREDICTION_OUTPUT_FIELDS}
+    fields["raw_model_probability"] = prediction.get(
+        "raw_model_probability", prediction.get("model_probability")
+    )
+    fields["validation_errors"] = prediction.get("validation_errors", [])
+    fields["uncertainty_reason"] = dict(prediction.get("uncertainty_reason") or {})
+    for name, scale in _PREDICTION_NUMERIC_SCALES.items():
+        value = fields[name]
+        if value is None:
+            continue
+        if isinstance(value, bool):
+            raise ValueError(f"prediction output {name} must be numeric")
+        try:
+            number = Decimal(str(value))
+        except (InvalidOperation, TypeError, ValueError) as exc:
+            raise ValueError(f"prediction output {name} must be numeric") from exc
+        if not number.is_finite():
+            raise ValueError(f"prediction output {name} must be finite")
+        fields[name] = float(number.quantize(Decimal(1).scaleb(-scale), rounding=ROUND_HALF_UP))
+    return fields
 
 
 def _run_manifest(
@@ -107,8 +178,16 @@ def build_prediction_group_payload(
         )
     if len(prediction_times) != 1:
         raise ValueError("prediction options must share one prediction time")
-    ordered_predictions = [by_option[option] for option in expected]
-    vector = {option: float(by_option[option]["model_probability"]) for option in expected}
+    source_predictions = [by_option[option] for option in expected]
+    stored_fields = [_stored_prediction_fields(item) for item in source_predictions]
+    ordered_predictions = [
+        {**dict(source), **fields}
+        for source, fields in zip(source_predictions, stored_fields, strict=True)
+    ]
+    vector = {
+        option: float(fields["model_probability"])
+        for option, fields in zip(expected, stored_fields, strict=True)
+    }
     market_variant = str(metadata.get("market_variant") or "")
     predict_time = metadata.get("predict_time") or ordered_predictions[0].get("predict_time")
     if str(predict_time) not in prediction_times:
@@ -126,10 +205,7 @@ def build_prediction_group_payload(
     provenance_status = str(metadata.get("provenance_status") or "incomplete")
     if provenance_status not in {"complete", "incomplete"}:
         raise ValueError("provenance_status must be complete or incomplete")
-    prediction_outputs = [
-        {key: value for key, value in dict(by_option[option]).items() if key not in {"input_fence"}}
-        for option in expected
-    ]
+    prediction_outputs = stored_fields
     output_payload = {
         "match_id": int(metadata["match_id"]),
         "model_version_id": int(metadata["model_version_id"]),
@@ -146,10 +222,13 @@ def build_prediction_group_payload(
         "artifact_identity": artifact_identity,
         "prediction_outputs": prediction_outputs,
     }
+    output_manifest_canonical = canonical_json_bytes(output_payload)
     return {
         **output_payload,
         "run_id": normalized_run_id,
-        "output_sha256": content_sha256(output_payload),
+        "output_manifest": output_payload,
+        "output_manifest_canonical": output_manifest_canonical,
+        "output_sha256": hashlib.sha256(output_manifest_canonical).hexdigest(),
         "predictions": ordered_predictions,
         "provenance_status": provenance_status,
     }
@@ -215,7 +294,7 @@ def update_prediction_run_manifest(
     with conn.cursor() as cur:
         cur.execute(
             """SELECT release_id, code_fingerprint FROM model_prediction_runs
-               WHERE id=%s AND run_status='running'""",
+               WHERE id=%s AND run_status='running' FOR UPDATE""",
             (str(normalized_run_id),),
         )
         row = cur.fetchone()
@@ -251,6 +330,78 @@ def update_prediction_run_manifest(
     conn.commit()
 
 
+def _normalized_output_summary(
+    summary: Mapping[str, Any] | None,
+    *,
+    completed_groups: int,
+    run_status: str,
+    error_message: str | None,
+) -> dict[str, Any]:
+    if summary is None:
+        if run_status != "failed":
+            raise ValueError("prediction output summary is required for completed or partial runs")
+        summary = {
+            "expected_groups": None,
+            "completed_groups": completed_groups,
+            "skipped_groups": None,
+            "missing_groups": [],
+            "input_updates_skipped": None,
+            "counts_complete": False,
+            "completion_reason": "run_failed_before_output_summary",
+        }
+    if not isinstance(summary, Mapping):
+        raise ValueError("prediction output summary must be a mapping")
+    normalized = dict(summary)
+    counts_complete = normalized.setdefault("counts_complete", True)
+    if not isinstance(counts_complete, bool):
+        raise ValueError("prediction output summary counts_complete must be a boolean")
+    integer_fields = ["completed_groups"]
+    if counts_complete:
+        integer_fields.extend(("expected_groups", "skipped_groups", "input_updates_skipped"))
+    elif run_status != "failed":
+        raise ValueError("unknown prediction output counts are allowed only for failed runs")
+    for field in integer_fields:
+        value = normalized.get(field)
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            raise ValueError(f"prediction output summary {field} must be a non-negative integer")
+    missing_groups = normalized.get("missing_groups")
+    if not isinstance(missing_groups, list) or any(
+        not isinstance(item, Mapping) or not isinstance(item.get("reason"), str)
+        for item in missing_groups
+    ):
+        raise ValueError("prediction output summary missing_groups must contain reasoned records")
+    if normalized["completed_groups"] != completed_groups:
+        raise ValueError("prediction output summary count does not match completed groups")
+    if counts_complete:
+        if normalized["expected_groups"] != (
+            normalized["completed_groups"] + normalized["skipped_groups"]
+        ):
+            raise ValueError("prediction output summary expected count is inconsistent")
+        if len(missing_groups) != normalized["skipped_groups"]:
+            raise ValueError("prediction output summary requires one reason per skipped group")
+    elif (
+        any(
+            normalized.get(field) is not None
+            for field in ("expected_groups", "skipped_groups", "input_updates_skipped")
+        )
+        or missing_groups
+    ):
+        raise ValueError("unknown prediction output counts must be represented without estimates")
+    completion_reason = normalized.get("completion_reason")
+    if not isinstance(completion_reason, str) or not completion_reason.strip():
+        raise ValueError("prediction output summary completion_reason is required")
+    if run_status == "completed" and (
+        not counts_complete or normalized["skipped_groups"] or normalized["input_updates_skipped"]
+    ):
+        raise ValueError("completed prediction run cannot have skipped output groups")
+    if run_status == "partial" and not (
+        counts_complete
+        and (normalized["skipped_groups"] or normalized["input_updates_skipped"] or error_message)
+    ):
+        raise ValueError("partial prediction run requires a recorded omission or failure")
+    return normalized
+
+
 def store_prediction_group(
     conn: Any,
     *,
@@ -258,11 +409,34 @@ def store_prediction_group(
     metadata: Mapping[str, Any],
     predictions: Sequence[Mapping[str, Any]],
 ) -> uuid.UUID:
-    payload = build_prediction_group_payload(
-        run_id=run_id, metadata=metadata, predictions=predictions
-    )
     group_id = uuid.uuid4()
     try:
+        normalized_predictions: list[dict[str, Any]] = []
+        bound_input_fences: dict[str, dict[str, Any]] = {}
+        for prediction in predictions:
+            normalized = dict(prediction)
+            token = normalized.get("input_fence")
+            if token is not None:
+                from scripts.prediction_input_fence import bind_prediction_input_fence
+
+                bound = bind_prediction_input_fence(
+                    conn,
+                    int(normalized["match_id"]),
+                    token,
+                    odds_snapshot_id=normalized.get("odds_snapshot_id"),
+                )
+                reason = dict(normalized.get("uncertainty_reason") or {})
+                if "input_fence" in reason:
+                    raise ValueError(
+                        "input_fence is reserved for the internal pre-computation token"
+                    )
+                reason["input_fence"] = bound
+                normalized["uncertainty_reason"] = reason
+                bound_input_fences[str(normalized.get("option_code", ""))] = bound
+            normalized_predictions.append(normalized)
+        payload = build_prediction_group_payload(
+            run_id=run_id, metadata=metadata, predictions=normalized_predictions
+        )
         with conn.cursor() as cur:
             cur.execute(
                 """INSERT INTO model_prediction_groups (
@@ -270,9 +444,10 @@ def store_prediction_group(
                        predict_time, expected_options, probability_vector, score_matrix,
                        odds_snapshot_ids, odds_snapshot_times, feature_snapshot_id,
                        input_fence, artifact_identity, output_manifest,
-                       provenance_status, output_sha256, group_status, created_at
+                       output_manifest_canonical, provenance_status, output_sha256,
+                       group_status, created_at
                    ) VALUES (
-                       %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                       %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
                        'building', clock_timestamp()
                    )""",
                 (
@@ -293,20 +468,19 @@ def store_prediction_group(
                     Json(payload["artifact_identity"])
                     if payload["artifact_identity"] is not None
                     else None,
-                    Json(
-                        {
-                            key: value
-                            for key, value in payload.items()
-                            if key
-                            not in {"run_id", "output_sha256", "predictions", "provenance_status"}
-                        }
-                    ),
+                    Json(payload["output_manifest"]),
+                    Binary(payload["output_manifest_canonical"]),
                     payload["provenance_status"],
                     payload["output_sha256"],
                 ),
             )
         for ordinal, prediction in enumerate(payload["predictions"]):
-            prediction_id = store_model_prediction(conn, dict(prediction), commit=False)
+            prediction_id = store_model_prediction(
+                conn,
+                dict(prediction),
+                commit=False,
+                bound_input_fence=bound_input_fences.get(str(prediction["option_code"])),
+            )
             if prediction_id is None:
                 raise RuntimeError("prediction option insert returned no row id")
             with conn.cursor() as cur:
@@ -338,11 +512,19 @@ def finalize_prediction_run(
     run_id: uuid.UUID | str,
     run_status: str,
     error_message: str | None = None,
+    output_summary: Mapping[str, Any] | None = None,
 ) -> None:
     normalized_run_id = _uuid(run_id)
     if run_status not in {"completed", "partial", "failed"}:
         raise ValueError("terminal run_status must be completed, partial, or failed")
     with conn.cursor() as cur:
+        cur.execute(
+            """SELECT id FROM model_prediction_runs
+               WHERE id=%s AND run_status='running' FOR UPDATE""",
+            (str(normalized_run_id),),
+        )
+        if cur.fetchone() is None:
+            raise ValueError("running prediction run was not found")
         cur.execute(
             """SELECT output_sha256 FROM model_prediction_groups
                WHERE run_id = %s AND group_status = 'complete'
@@ -350,13 +532,30 @@ def finalize_prediction_run(
             (str(normalized_run_id),),
         )
         outputs = [row[0] for row in cur.fetchall()]
-        output_manifest_sha256 = content_sha256(outputs)
+        summary = _normalized_output_summary(
+            output_summary,
+            completed_groups=len(outputs),
+            run_status=run_status,
+            error_message=error_message,
+        )
+        output_manifest = {"groups": outputs, "summary": summary}
+        output_manifest_canonical = canonical_json_bytes(output_manifest)
+        output_manifest_sha256 = hashlib.sha256(output_manifest_canonical).hexdigest()
         cur.execute(
             """UPDATE model_prediction_runs
-               SET run_status = %s, output_manifest_sha256 = %s,
+               SET run_status = %s, output_manifest_sha256 = %s, output_summary = %s,
+                   output_manifest = %s, output_manifest_canonical = %s,
                    error_message = %s, finished_at = clock_timestamp()
                WHERE id = %s AND run_status = 'running'""",
-            (run_status, output_manifest_sha256, error_message, str(normalized_run_id)),
+            (
+                run_status,
+                output_manifest_sha256,
+                Json(summary),
+                Json(output_manifest),
+                Binary(output_manifest_canonical),
+                error_message,
+                str(normalized_run_id),
+            ),
         )
         if cur.rowcount != 1:
             raise ValueError("running prediction run was not found")
@@ -365,16 +564,9 @@ def finalize_prediction_run(
 
 def fail_prediction_run(conn: Any, run_id: uuid.UUID | str, error_message: str) -> None:
     normalized_run_id = _uuid(run_id)
-    with conn.cursor() as cur:
-        cur.execute(
-            """SELECT COUNT(*) FROM model_prediction_groups
-               WHERE run_id = %s AND group_status = 'complete'""",
-            (str(normalized_run_id),),
-        )
-        has_groups = int(cur.fetchone()[0]) > 0
     finalize_prediction_run(
         conn,
         run_id=normalized_run_id,
-        run_status="partial" if has_groups else "failed",
+        run_status="failed",
         error_message=error_message,
     )

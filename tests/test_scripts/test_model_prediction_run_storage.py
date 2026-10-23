@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import hashlib
 import uuid
 
 import pytest
 
+from scripts.model_prediction_run_identity import canonical_json_bytes
 from scripts.model_prediction_run_storage import (
+    _normalized_output_summary,
     build_prediction_group_payload,
     store_prediction_group,
 )
@@ -106,6 +109,8 @@ def test_prediction_group_payload_hash_covers_vector_and_input_references() -> N
 
     assert first["probability_vector"] == {"0": 0.25, "1": 0.25, "3": 0.5}
     assert first["output_sha256"] != altered["output_sha256"]
+    assert first["output_manifest_canonical"] == canonical_json_bytes(first["output_manifest"])
+    assert hashlib.sha256(first["output_manifest_canonical"]).hexdigest() == first["output_sha256"]
 
 
 def test_storage_rolls_back_when_an_option_insert_fails() -> None:
@@ -138,3 +143,32 @@ def test_storage_rolls_back_when_an_option_insert_fails() -> None:
         )
     assert conn.rolled_back is True
     assert conn.committed is False
+
+
+def test_partial_run_requires_an_explicit_output_summary() -> None:
+    with pytest.raises(ValueError, match="output summary is required"):
+        _normalized_output_summary(
+            None,
+            completed_groups=1,
+            run_status="partial",
+            error_message="failed after writing one group",
+        )
+
+
+def test_failed_run_without_summary_marks_output_counts_unknown() -> None:
+    summary = _normalized_output_summary(
+        None,
+        completed_groups=1,
+        run_status="failed",
+        error_message="failed before completion summary was produced",
+    )
+
+    assert summary == {
+        "expected_groups": None,
+        "completed_groups": 1,
+        "skipped_groups": None,
+        "missing_groups": [],
+        "input_updates_skipped": None,
+        "counts_complete": False,
+        "completion_reason": "run_failed_before_output_summary",
+    }

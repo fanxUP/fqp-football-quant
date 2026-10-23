@@ -13,11 +13,19 @@ def test_prediction_run_migration_is_additive_and_has_group_publication_view() -
     assert "CREATE TRIGGER trg_prediction_group_must_start_building" in migration
     assert "CREATE TABLE IF NOT EXISTS model_prediction_group_options" in migration
     assert "CREATE OR REPLACE VIEW model_prediction_latest_rows" in migration
+    assert "output_manifest_canonical BYTEA NOT NULL" in migration
+    assert "output_summary JSONB NOT NULL" in migration
+    assert "prediction_manifest_bytes_have_unique_keys" in migration
+    assert "counts_complete" in migration
+    assert "FOR UPDATE" in migration
+    assert "prediction run manifest is immutable after output begins" in migration
+    assert "pg_catalog.sha256(NEW.output_manifest_canonical)" in migration
     assert "ALTER TABLE model_predictions" not in migration
     assert "UPDATE model_predictions" not in migration
     assert "DROP TABLE IF EXISTS model_prediction_group_options" in down
     assert "DROP TABLE IF EXISTS model_prediction_groups" in down
     assert "DROP TABLE IF EXISTS model_prediction_runs" in down
+    assert "DROP FUNCTION IF EXISTS prediction_manifest_bytes_have_unique_keys(BYTEA)" in down
 
 
 def test_migration_has_bounded_lock_and_statement_timeouts() -> None:

@@ -590,13 +590,23 @@ def _run_impl(
             )
 
         if not match_rows:
-            return {"status": "ok", "predictions": 0, "note": "no matches to predict"}
+            return {
+                "status": "ok",
+                "predictions": 0,
+                "note": "no matches to predict",
+                "completion_reason": "no_matches",
+                "output_groups_expected": 0,
+                "output_groups_completed": 0,
+                "output_groups_skipped": 0,
+                "output_group_skips": [],
+            }
 
         total_predictions = 0
         total_votes = 0
         input_updates_skipped = 0
         output_groups_expected = 0
         output_groups_completed = 0
+        output_group_skips: list[dict[str, Any]] = []
 
         # 3. Load available markets: only predict for play types that are open
         match_ids = [r[0] for r in match_rows]
@@ -645,6 +655,11 @@ def _run_impl(
                 "votes": 0,
                 "matches_processed": 0,
                 "note": "no matches with open official markets",
+                "completion_reason": "no_open_markets",
+                "output_groups_expected": 0,
+                "output_groups_completed": 0,
+                "output_groups_skipped": 0,
+                "output_group_skips": [],
             }
 
         for match_row in match_rows:
@@ -655,7 +670,7 @@ def _run_impl(
             )
             play_types = available_markets.get(mid, [])
             for play_type in play_types:
-                output_group_counts: dict[str, int] = {}
+                output_group_counts: dict[str, Any] = {}
                 try:
                     p, v = _predict_match_play_type(
                         conn,
@@ -677,11 +692,44 @@ def _run_impl(
                     # options from this calculation are invalidated on reads.
                     conn.rollback()
                     input_updates_skipped += 1
+                    skipped_models = [
+                        (model_name, model_version_id)
+                        for model_name, model_version_id in active_models.items()
+                        if supports_market(model_name, play_type, 0.0)
+                    ]
+                    output_groups_expected += len(skipped_models)
+                    output_group_skips.extend(
+                        {
+                            "match_id": int(mid),
+                            "model_version_id": int(model_version_id),
+                            "model_name": model_name,
+                            "play_type": str(play_type),
+                            "reason": "input_update_unavailable",
+                        }
+                        for model_name, model_version_id in skipped_models
+                    )
                     continue
                 total_predictions += p
                 total_votes += v
                 output_groups_expected += output_group_counts.get("expected", 0)
                 output_groups_completed += output_group_counts.get("completed", 0)
+                output_group_skips.extend(output_group_counts.get("skipped", []))
+
+    output_group_skips.sort(
+        key=lambda item: (
+            int(item.get("match_id", 0)),
+            str(item.get("play_type", "")),
+            int(item.get("model_version_id", 0)),
+        )
+    )
+    output_groups_skipped = max(0, output_groups_expected - output_groups_completed)
+    completion_reason = (
+        "no_supported_models_for_open_markets"
+        if output_groups_expected == 0
+        else "expected_output_groups_missing"
+        if output_groups_skipped
+        else "predictions_completed"
+    )
 
     return {
         "status": "ok",
@@ -690,7 +738,9 @@ def _run_impl(
         "matches_processed": len(match_rows),
         "output_groups_expected": output_groups_expected,
         "output_groups_completed": output_groups_completed,
-        "output_groups_skipped": max(0, output_groups_expected - output_groups_completed),
+        "output_groups_skipped": output_groups_skipped,
+        "output_group_skips": output_group_skips,
+        "completion_reason": completion_reason,
         **({"input_updates_skipped": input_updates_skipped} if input_updates_skipped else {}),
     }
 
@@ -748,12 +798,24 @@ def run(match_id: int | None = None, dry_run: bool = False) -> dict[str, Any]:
             if result.get("input_updates_skipped") or result.get("output_groups_skipped")
             else "completed"
         )
+        output_summary = {
+            "expected_groups": int(result.get("output_groups_expected", 0)),
+            "completed_groups": int(result.get("output_groups_completed", 0)),
+            "skipped_groups": int(result.get("output_groups_skipped", 0)),
+            "missing_groups": list(result.get("output_group_skips", [])),
+            "input_updates_skipped": int(result.get("input_updates_skipped", 0)),
+            "completion_reason": str(
+                result.get("completion_reason")
+                or ("prediction_job_error" if run_status == "failed" else "predictions_completed")
+            ),
+        }
         with get_db() as conn:
             finalize_prediction_run(
                 conn,
                 run_id=prediction_run_id,
                 run_status=run_status,
                 error_message=result.get("error") if run_status == "failed" else None,
+                output_summary=output_summary,
             )
         finish_tracked_job(run_id, result.get("status", "completed"), {"result": result})
         return result
@@ -797,13 +859,34 @@ def _predict_match_play_type(
     model_parameters = model_parameters or {}
     model_artifact_identities = model_artifact_identities or {}
 
-    def record_expected_groups(handicap_value: float | None) -> None:
+    def record_expected_groups(
+        handicap_value: float | None, *, skipped_reason: str | None = None
+    ) -> None:
         if output_group_counts is None or prediction_run_id is None:
             return
-        output_group_counts["expected"] = sum(
-            supports_market(name, play_type, handicap_value) for name in active_models
-        )
+        expected_models = [
+            (name, int(model_version_id))
+            for name, model_version_id in active_models.items()
+            if supports_market(name, play_type, handicap_value)
+        ]
+        output_group_counts["expected"] = len(expected_models)
         output_group_counts["completed"] = 0
+        output_group_counts["expected_models"] = expected_models
+        output_group_counts["completed_model_version_ids"] = []
+        output_group_counts["skipped"] = (
+            [
+                {
+                    "match_id": int(mid),
+                    "model_version_id": model_version_id,
+                    "model_name": model_name,
+                    "play_type": str(play_type),
+                    "reason": skipped_reason,
+                }
+                for model_name, model_version_id in expected_models
+            ]
+            if skipped_reason
+            else []
+        )
 
     # 1. Load latest odds for this play type
     with conn.cursor() as cur:
@@ -820,7 +903,7 @@ def _predict_match_play_type(
         odds_rows = cur.fetchall()
 
     if not odds_rows:
-        record_expected_groups(0.0)
+        record_expected_groups(0.0, skipped_reason="official_odds_missing")
         return 0, 0
 
     odds_dict: dict[str, float] = {}
@@ -839,7 +922,7 @@ def _predict_match_play_type(
             )
 
     if not {"3", "1", "0"}.issubset(odds_dict):
-        record_expected_groups(0.0)
+        record_expected_groups(0.0, skipped_reason="official_odds_incomplete")
         return 0, 0
 
     # 2. Odds processing
@@ -1230,6 +1313,22 @@ def _predict_match_play_type(
                 snapshot_ids=snapshot_ids,
             )
         except MarketMetricValidationError:
+            model_version_id = active_models.get(name)
+            if (
+                prediction_run_id is not None
+                and output_group_counts is not None
+                and model_version_id is not None
+                and supports_market(name, play_type, handicap)
+            ):
+                output_group_counts.setdefault("skipped", []).append(
+                    {
+                        "match_id": int(mid),
+                        "model_version_id": int(model_version_id),
+                        "model_name": name,
+                        "play_type": str(play_type),
+                        "reason": "market_validation_failed",
+                    }
+                )
             continue
 
     vote_weights = committee_weights(
@@ -1412,6 +1511,7 @@ def _predict_match_play_type(
             )
             if output_group_counts is not None:
                 output_group_counts["completed"] = output_group_counts.get("completed", 0) + 1
+                output_group_counts.setdefault("completed_model_version_ids", []).append(int(mv_id))
             total_p += len(group_predictions)
 
         # Committee votes represent independent model opinions. Market-seeded
@@ -1437,6 +1537,23 @@ def _predict_match_play_type(
             }
             store_committee_vote(conn, vote)
             total_v += 1
+
+    if output_group_counts is not None and prediction_run_id is not None:
+        completed_ids = set(output_group_counts.get("completed_model_version_ids", []))
+        skipped_ids = {
+            int(item["model_version_id"]) for item in output_group_counts.get("skipped", [])
+        }
+        for model_name, model_version_id in output_group_counts.get("expected_models", []):
+            if model_version_id not in completed_ids and model_version_id not in skipped_ids:
+                output_group_counts.setdefault("skipped", []).append(
+                    {
+                        "match_id": int(mid),
+                        "model_version_id": model_version_id,
+                        "model_name": model_name,
+                        "play_type": str(play_type),
+                        "reason": "model_output_not_published",
+                    }
+                )
 
     return total_p, total_v
 
