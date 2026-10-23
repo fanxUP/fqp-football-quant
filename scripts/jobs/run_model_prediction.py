@@ -847,7 +847,7 @@ def _predict_match_play_type(
     model_parameters: dict[str, dict[str, Any]] | None = None,
     prediction_run_id: uuid.UUID | str | None = None,
     model_artifact_identities: dict[str, dict[str, Any]] | None = None,
-    output_group_counts: dict[str, int] | None = None,
+    output_group_counts: dict[str, Any] | None = None,
 ) -> tuple[int, int]:
     """Run prediction pipeline for a single match + play type.
 
