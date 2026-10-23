@@ -1058,3 +1058,57 @@ def test_input_lock_contention_does_not_abort_other_match_predictions():
         result = _run_impl()
     assert result["predictions"] == 3 and predict.call_count == 2
     conn.rollback.assert_called_once()
+
+
+def test_superseded_rqspf_without_handicap_uses_recorded_expected_models():
+    from scripts.prediction_input_updates import InputUpdateSuperseded
+
+    conn = MagicMock()
+    cursor = conn.cursor.return_value.__enter__.return_value
+    cursor.fetchall.side_effect = [
+        [(1, "market_baseline", {}), (2, "maher_poisson", {})],
+        [(101, "a", "b")],
+        [(101, "rqspf")],
+    ]
+    cursor.fetchone.return_value = None
+
+    def supersede_after_eligibility(*_args, output_group_counts, **_kwargs):
+        # A missing RQSPF handicap excludes the goal-rate model. Preserve the
+        # eligibility calculated by the prediction path when the write fails.
+        output_group_counts.update(
+            {
+                "expected": 1,
+                "completed": 0,
+                "expected_models": [("market_baseline", 1)],
+                "completed_model_version_ids": [],
+                "skipped": [],
+            }
+        )
+        raise InputUpdateSuperseded("changed")
+
+    with (
+        patch("scripts.jobs.run_model_prediction.get_db") as db,
+        patch(
+            "scripts.jobs.run_model_prediction.build_model_artifact_identity",
+            return_value={"provenance_status": "incomplete"},
+        ),
+        patch("scripts.jobs.run_model_prediction.update_prediction_run_manifest"),
+        patch(
+            "scripts.jobs.run_model_prediction._predict_match_play_type",
+            side_effect=supersede_after_eligibility,
+        ),
+    ):
+        db.return_value.__enter__.return_value = conn
+        result = _run_impl(prediction_run_id="00000000-0000-0000-0000-000000000001")
+
+    assert result["output_groups_expected"] == 1
+    assert result["output_groups_skipped"] == 1
+    assert result["output_group_skips"] == [
+        {
+            "match_id": 101,
+            "model_version_id": 1,
+            "model_name": "market_baseline",
+            "play_type": "rqspf",
+            "reason": "input_update_unavailable",
+        }
+    ]

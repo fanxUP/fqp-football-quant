@@ -692,11 +692,15 @@ def _run_impl(
                     # options from this calculation are invalidated on reads.
                     conn.rollback()
                     input_updates_skipped += 1
-                    skipped_models = [
-                        (model_name, model_version_id)
-                        for model_name, model_version_id in active_models.items()
-                        if supports_market(model_name, play_type, 0.0)
-                    ]
+                    skipped_models = output_group_counts.get("expected_models")
+                    if skipped_models is None:
+                        # If the failure happened before the handicap was
+                        # observed, only count models eligible without it.
+                        skipped_models = [
+                            (model_name, model_version_id)
+                            for model_name, model_version_id in active_models.items()
+                            if supports_market(model_name, play_type, None)
+                        ]
                     output_groups_expected += len(skipped_models)
                     output_group_skips.extend(
                         {
