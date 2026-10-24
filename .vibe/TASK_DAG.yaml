@@ -1,24 +1,24 @@
 {
   "schema_version": 4,
-  "current_task": "P105-WEATHER",
+  "current_task": "P106-DERIVED-OUTPUT-GROUP-COUNTS",
   "tasks": {
-    "P105-WEATHER": {
-      "title": "提升 P104 天气观测采集时效",
-      "acceptance_id": "A105-WEATHER",
+    "P106-DERIVED-OUTPUT-GROUP-COUNTS": {
+      "title": "Count persisted primary and derived prediction groups consistently",
+      "acceptance_id": "A106-OUTPUT-GROUP-COUNTS",
       "depends_on": [],
-      "kind": "enabling_change",
-      "status": "DONE",
+      "kind": "correctness_hotfix",
+      "status": "IN_PROGRESS",
       "files": [
-        "scripts/weather_schedule.py",
-        "scripts/jobs/collect_weather.py",
-        "scripts/jobs/run_scheduler.py",
-        "apps/backend/src/services/pipeline_status.py",
-        "tests/test_jobs/test_run_scheduler.py"
+        "scripts/derived_play_predictions.py",
+        "scripts/jobs/run_model_prediction.py",
+        "tests/test_scripts/test_derived_play_predictions.py",
+        "tests/test_scripts/test_run_model_prediction.py"
       ],
       "definition_of_done": [
-        "The collector is scheduled at six Asia/Shanghai times exactly four hours apart, before the six-hour P104 freshness window expires.",
-        "The operations UI reports the same schedule using a shared schedule definition; the collector module documentation points to the scheduler rather than stale clock times.",
-        "Focused local regression, lint, diff, scope, and budget checks pass; no production source or database is touched."
+        "The run summary counts complete BF, ZJQ, and BQC prediction groups alongside primary groups, without confusing prediction option rows with output groups.",
+        "Every expected but uncompleted derived group has a reasoned skip record, including market validation failures and input-update interruptions.",
+        "Focused local regression and configured GitHub CI pass; an independent read-only review finds no blocker or major issue.",
+        "A green PR is ready for the existing production release process; production P106 acceptance is recorded separately after deployment and the next natural scheduled run."
       ]
     }
   }

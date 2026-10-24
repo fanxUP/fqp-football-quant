@@ -1,10 +1,10 @@
 {
-  "state": "READY_TO_MERGE",
+  "state": "REVIEWING",
   "last_transition": {
-    "from": "REVIEWING",
-    "to": "READY_TO_MERGE",
-    "at": "2026-10-23T03:34:23.942546+08:00",
-    "reason": "P105-WEATHER local subtask acceptance, independent review, current-tree evidence, scope, budget, and regression gate pass; this records readiness only and does not merge or deploy."
+    "from": "VERIFYING",
+    "to": "REVIEWING",
+    "at": "2026-10-24T15:05:25.874302+08:00",
+    "reason": "A106 focused test and static evidence recorded; scope, budget, and independent code review passed."
   },
   "blocked_reason": null
 }

@@ -1,6 +1,6 @@
 {
   "schema_version": 4,
-  "task_id": "P106-PROVENANCE-PROPAGATION-HOTFIX",
+  "task_id": "P106-DERIVED-OUTPUT-GROUP-COUNTS",
   "max_files_changed": 4,
   "max_new_files": 0,
   "max_new_dependencies": 0,

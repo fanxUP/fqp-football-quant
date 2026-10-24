@@ -1,6 +1,6 @@
 {
   "schema_version": 4,
-  "current_task": "P105-WEATHER",
+  "current_task": "P106-DERIVED-OUTPUT-GROUP-COUNTS",
   "acceptance": {
     "A121": {
       "status": "PASS",
@@ -121,6 +121,30 @@
       "dirty_tree": true,
       "tree_fingerprint": "9c268670b6ee0aa92c5317cc95fae4936bdd5f98a99ce543d26e220cbd2e19c4",
       "verified_at": "2026-10-23T03:30:31.454852+08:00"
+    },
+    "A106-OUTPUT-GROUP-COUNTS": {
+      "status": "PASS",
+      "command": "/Volumes/Nas/FQP/code/.venv/bin/python -m pytest tests/test_scripts/test_derived_play_predictions.py tests/test_scripts/test_run_model_prediction.py -q",
+      "exit_code": 0,
+      "summary": "============================= test session starts ==============================\nplatform darwin -- Python 3.14.6, pytest-9.1.1, pluggy-1.7.0\nrootdir: /private/tmp/fqp-p106-output-counts\nconfigfile: pyproject.toml\nplugins: mock-3.15.1, cov-7.1.0, asyncio-1.4.0, anyio-4.15.1, platformdirs-4.13.5\nasyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function\ncollected 60 items\n\ntests/test_scripts/test_derived_play_predictions.py ........             [ 13%]\ntests/test_scripts/test_run_model_prediction.py ........................ [ 53%]\n............................                                             [100%]\n\n============================== 60 passed in 0.73s ==============================\n",
+      "timed_out": false,
+      "environment": "unknown",
+      "revision": "0cc569321205a29a984329cdc9639e4643b11071",
+      "dirty_tree": true,
+      "tree_fingerprint": "6624d6f5e05e1a377c54faea82849168079f6e019550f665fc8c3d905378a7d9",
+      "verified_at": "2026-10-24T15:05:01.280909+08:00"
+    },
+    "A106-LOCAL-STATIC": {
+      "status": "PASS",
+      "command": "/bin/sh -c '/Volumes/Nas/FQP/code/.venv/bin/ruff check scripts/derived_play_predictions.py scripts/jobs/run_model_prediction.py tests/test_scripts/test_derived_play_predictions.py tests/test_scripts/test_run_model_prediction.py && /Volumes/Nas/FQP/code/.venv/bin/ruff format --check scripts/derived_play_predictions.py scripts/jobs/run_model_prediction.py tests/test_scripts/test_derived_play_predictions.py tests/test_scripts/test_run_model_prediction.py && /Volumes/Nas/FQP/code/.venv/bin/mypy scripts/jobs/run_model_prediction.py scripts/derived_play_predictions.py --explicit-package-bases && /Volumes/Nas/FQP/code/.venv/bin/python -m compileall -q scripts/derived_play_predictions.py scripts/jobs/run_model_prediction.py && git diff --check && python3 /Users/estefan-macworkstation/.remote-vibe-coding/engine/vibe.py --repo . scope check && python3 /Users/estefan-macworkstation/.remote-vibe-coding/engine/vibe.py --repo . budget check'",
+      "exit_code": 0,
+      "summary": "All checks passed!\n4 files already formatted\napps/backend/src/db.py:100: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]\nSuccess: no issues found in 2 source files\nchanged_files=4\nPASS: scope\nfiles_changed: 4/4\nnew_files: 0/0\nnew_dependencies_heuristic: 0/0\nschema_migration_files: 0/0\ndeclared_public_api_changes: 0/0\nPASS: change budget\n",
+      "timed_out": false,
+      "environment": "unknown",
+      "revision": "0cc569321205a29a984329cdc9639e4643b11071",
+      "dirty_tree": true,
+      "tree_fingerprint": "6624d6f5e05e1a377c54faea82849168079f6e019550f665fc8c3d905378a7d9",
+      "verified_at": "2026-10-24T15:05:09.680241+08:00"
     }
   },
   "reviews": {
@@ -134,43 +158,45 @@
     "status": "PASS",
     "application_code": {
       "status": "PASS",
-      "review_id": "P105-WEATHER",
-      "reviewed_at": "2026-10-23T03:33:15+08:00",
-      "summary": "Initial MAJOR/MINOR findings and the residual request-budget documentation mismatch were closed. Final review confirmed explicit Asia/Shanghai scheduling with an override regression, cadence-derived operations copy, and a 300/day successful-request baseline with a 900/day retry upper bound."
+      "review_id": "A106-DERIVED-OUTPUT-GROUP-COUNTS",
+      "reviewed_at": "2026-10-24T15:05:52.065978+08:00",
+      "summary": "Independent read-only review closed the prior MAJOR; expected groups are preregistered from the full official odds set, and the interruption regression exercises the real producer and outer run aggregation."
     },
     "v4_migration": {
       "status": "PASS",
       "reviewed_at": "2026-10-23T04:36:25+08:00",
       "summary": "Read-only migration impact review found no SQL migration, schema, ORM, or database contract changes; migration is not applicable. The V4 archive/control verifier passed (9 archived files, 8 controls, 14 pinned engine sources)."
+    },
+    "A106-DERIVED-OUTPUT-GROUP-COUNTS": {
+      "status": "PASS",
+      "review_mode": "independent read-only",
+      "findings": [],
+      "summary": "复审确认完整 official_odds 在写入前登记全部派生组；首组输入更新中断后 7 个 BF/BQC/ZJQ 组均进入 expected/skipped。真实 producer 回归覆盖此路径；无 blocker 或 major。",
+      "reviewed_at": "2026-10-24T15:05:52.065978+08:00"
     }
   },
   "quality_gate": {
-    "status": "READY_TO_MERGE",
-    "checked_at": "2026-10-23T04:48:56.748841+08:00",
-    "failures": []
+    "status": "IN_PROGRESS",
+    "checked_at": "2026-10-24T15:05:52.065978+08:00",
+    "failures": [
+      "A106 PR, fresh CI, merge, and production deployment are pending."
+    ]
   },
   "security": {
     "status": "PASS",
-    "reviewed_at": "2026-10-23T04:36:25+08:00",
-    "mode": "read-only review",
+    "reviewed_at": "2026-10-24T15:05:52.065978+08:00",
+    "mode": "read-only diff review",
     "findings": [],
-    "summary": "Reviewed the exact PR diff: no credentials, SQL/command/path construction, authorization changes, unsafe shell, permission changes, public exposure, or dependency changes. The change only schedules the existing weather collector every four hours in Asia/Shanghai; it adds no network endpoint or privilege."
+    "summary": "审查本轮四个业务改动文件：无凭据、命令/SQL/路径拼接、权限或鉴权变更、外部网络调用、危险 shell、新依赖或供应链改动；不涉及生产配置及公开接口。"
   },
   "migration": {
     "status": "NOT_APPLICABLE",
-    "reviewed_at": "2026-10-23T04:36:25+08:00",
-    "summary": "No migration or database schema changes are included in this PR."
+    "reviewed_at": "2026-10-24T15:05:52.065978+08:00",
+    "summary": "本轮不改数据库 schema、SQL migration、ORM 契约或索引；只调整运行汇总和派生组计数。"
   },
   "external_ci": {
-    "status": "passed",
-    "verified_at": "2026-10-23T04:35:50+08:00",
-    "head_sha": "152be0f9514606b41ac952462d75652171a528b9",
-    "run_id": "39849344020",
-    "checks": {
-      "test": "passed",
-      "lint-and-typecheck": "passed"
-    },
-    "summary": "Both configured GitHub CI checks passed on the original PR head; the preflight will also require fresh live checks on the final head."
+    "status": "pending",
+    "summary": "A106 PR 尚未创建；将只采信新 PR 当前 head 的 test 与 lint-and-typecheck 实时检查。"
   },
   "upstream_evidence": {
     "P104-SALE-STATUS-CORRECTION": {
