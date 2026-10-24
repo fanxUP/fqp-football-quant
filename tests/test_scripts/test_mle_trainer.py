@@ -181,6 +181,9 @@ def test_mle_run_adapts_parameter_dicts_for_jsonb_without_missing_updated_at_col
     conn = MagicMock()
     cur = MagicMock()
     conn.cursor.return_value = cur
+    cur.__enter__.return_value = cur
+    cur.__exit__.return_value = False
+    cur.fetchone.side_effect = [(41,), (42,), (43,)]
     db_context = MagicMock()
     db_context.__enter__.return_value = conn
     trained = {
@@ -211,12 +214,21 @@ def test_mle_run_adapts_parameter_dicts_for_jsonb_without_missing_updated_at_col
         result = run()
 
     assert result["status"] == "ok"
-    assert cur.execute.call_count == 5
+    assert cur.execute.call_count == 6
     for call in cur.execute.call_args_list:
         query = call.args[0]
         assert "updated_at" not in query
-    insert_calls = cur.execute.call_args_list[2:]
+    insert_calls = [
+        call for call in cur.execute.call_args_list if "INSERT INTO model_versions" in call.args[0]
+    ]
     assert all(isinstance(call.args[1][5], Json) for call in insert_calls)
+    manifest_call = next(
+        call
+        for call in cur.execute.call_args_list
+        if "INSERT INTO model_training_manifests" in call.args[0]
+    )
+    assert manifest_call.args[1][0] == 41
+    assert manifest_call.args[1][1].adapted["sha256"] == _sample_training_manifest()["sha256"]
     conn.commit.assert_called_once()
 
 
@@ -328,6 +340,9 @@ def test_mle_run_creates_new_active_versions_without_overwriting_history():
     conn = MagicMock()
     cur = MagicMock()
     conn.cursor.return_value = cur
+    cur.__enter__.return_value = cur
+    cur.__exit__.return_value = False
+    cur.fetchone.side_effect = [(41,), (42,), (43,)]
     db_context = MagicMock()
     db_context.__enter__.return_value = conn
     trained = {
@@ -364,10 +379,21 @@ def test_mle_run_creates_new_active_versions_without_overwriting_history():
     assert queries[0].startswith("UPDATE model_versions SET is_active = false")
     assert queries[1].startswith("UPDATE model_versions SET is_active = false")
     assert sum(query.startswith("INSERT INTO model_versions") for query in queries) == 3
-    assert all("training_start_date" in query for query in queries[2:])
-    assert all("training_end_date" in query for query in queries[2:])
-    assert all("is_active" in query for query in queries[2:])
-    insert_params = [call.args[1] for call in cur.execute.call_args_list[2:]]
+    assert sum(query.startswith("INSERT INTO model_training_manifests") for query in queries) == 1
+    assert queries.index(
+        next(q for q in queries if q.startswith("INSERT INTO model_training_manifests"))
+    ) > queries.index(next(q for q in queries if q.startswith("INSERT INTO model_versions")))
+    model_insert_queries = [
+        query for query in queries if query.startswith("INSERT INTO model_versions")
+    ]
+    assert all("training_start_date" in query for query in model_insert_queries)
+    assert all("training_end_date" in query for query in model_insert_queries)
+    assert all("is_active" in query for query in model_insert_queries)
+    insert_params = [
+        call.args[1]
+        for call in cur.execute.call_args_list
+        if "INSERT INTO model_versions" in call.args[0]
+    ]
     assert {params[0] for params in insert_params} == {
         "maher_poisson",
         "dixon_coles",
@@ -389,6 +415,63 @@ def test_mle_run_creates_new_active_versions_without_overwriting_history():
         == (_sample_training_manifest()["sha256"])
     )
     assert maher_parameters["_artifact_identity"]["model_name"] == "maher_poisson"
+    manifest_insert = next(
+        call.args[1]
+        for call in cur.execute.call_args_list
+        if "INSERT INTO model_training_manifests" in call.args[0]
+    )
+    assert manifest_insert[0] == 41
+    assert manifest_insert[1].adapted["sha256"] == _sample_training_manifest()["sha256"]
+    assert result["model_version_ids"] == {
+        "maher_poisson": 41,
+        "dixon_coles": 42,
+        "bivariate_poisson": 43,
+    }
+
+
+def test_mle_run_rolls_back_activation_when_manifest_persistence_fails():
+    from contextlib import contextmanager
+
+    conn = MagicMock()
+    cur = MagicMock()
+    conn.cursor.return_value = cur
+    cur.fetchone.return_value = (41,)
+    trained = {
+        "maher_poisson": {
+            "attack": {1: 0.1},
+            "defense": {1: -0.1},
+            "home_advantage": 0.2,
+            "league_intercept": 0.4,
+            "n_matches": 20,
+            "n_teams": 2,
+            "nll": 10.0,
+            "converged": True,
+            "training_manifest": _sample_training_manifest(),
+        },
+        "dixon_coles_rho": {"rho": -0.08, "nll": 5.0, "n_low_score_matches": 6},
+    }
+
+    @contextmanager
+    def transactional_connection():
+        try:
+            yield conn
+        except Exception:
+            conn.rollback()
+            raise
+
+    with (
+        patch("apps.backend.src.db.get_db", return_value=transactional_connection()),
+        patch("scripts.mle_trainer.fit_all_models", return_value=trained),
+        patch(
+            "scripts.model_training_manifest_storage.persist_training_manifest",
+            side_effect=RuntimeError("manifest insert failed"),
+        ),
+        pytest.raises(RuntimeError, match="manifest insert failed"),
+    ):
+        run()
+
+    conn.rollback.assert_called_once()
+    conn.commit.assert_not_called()
 
 
 def test_mle_run_rejects_missing_manifest_before_deactivating_active_version():

@@ -672,6 +672,7 @@ def run(dry_run: bool = False) -> dict[str, Any]:
                 "Dixon-Coles low-score adjustment fitted from settled official match history.",
             ),
         )
+        model_version_ids: dict[str, int] = {}
         if bivariate.get("converged") is True:
             cur.execute(
                 """UPDATE model_versions
@@ -694,7 +695,8 @@ def run(dry_run: bool = False) -> dict[str, Any]:
                        model_name, model_type, version,
                        training_start_date, training_end_date,
                        parameters_json, description, is_active
-                   ) VALUES (%s, %s, %s, %s, %s, %s, %s, true)""",
+                   ) VALUES (%s, %s, %s, %s, %s, %s, %s, true)
+                   RETURNING id""",
                 (
                     model_name,
                     model_type,
@@ -705,6 +707,16 @@ def run(dry_run: bool = False) -> dict[str, Any]:
                     description,
                 ),
             )
+            row = cur.fetchone()
+            if row is None or row[0] is None:
+                raise RuntimeError(f"model version insert returned no identity: {model_name}")
+            model_version_ids[model_name] = int(row[0])
+            if model_name == "maher_poisson":
+                from scripts.model_training_manifest_storage import persist_training_manifest
+
+                if not isinstance(training_manifest, dict):
+                    raise RuntimeError("Maher training manifest is missing during persistence")
+                persist_training_manifest(conn, model_version_ids[model_name], training_manifest)
 
         conn.commit()
 
@@ -726,6 +738,8 @@ def run(dry_run: bool = False) -> dict[str, Any]:
                 "converged": bivariate.get("converged", False),
             },
             "model_version": version,
+            "model_version_ids": model_version_ids,
+            "training_manifest_sha256": training_manifest.get("sha256"),
             "training_start_date": str(training_start_date) if training_start_date else None,
             "training_end_date": str(training_end_date) if training_end_date else None,
         }

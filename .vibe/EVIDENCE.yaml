@@ -1,6 +1,6 @@
 {
   "schema_version": 4,
-  "current_task": "P106-DERIVED-OUTPUT-GROUP-COUNTS",
+  "current_task": "P106-MANIFEST-PERSISTENCE",
   "acceptance": {
     "A121": {
       "status": "PASS",
@@ -124,15 +124,15 @@
     },
     "A106-OUTPUT-GROUP-COUNTS": {
       "status": "PASS",
-      "command": "/Volumes/Nas/FQP/code/.venv/bin/python -m pytest tests/test_scripts/test_derived_play_predictions.py tests/test_scripts/test_run_model_prediction.py -q",
+      "command": ".venv/bin/python -m pytest tests/test_scripts/test_derived_play_predictions.py tests/test_scripts/test_run_model_prediction.py -q",
       "exit_code": 0,
-      "summary": "============================= test session starts ==============================\nplatform darwin -- Python 3.14.6, pytest-9.1.1, pluggy-1.7.0\nrootdir: /private/tmp/fqp-p106-output-counts\nconfigfile: pyproject.toml\nplugins: mock-3.15.1, cov-7.1.0, asyncio-1.4.0, anyio-4.15.1, platformdirs-4.13.5\nasyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function\ncollected 60 items\n\ntests/test_scripts/test_derived_play_predictions.py ........             [ 13%]\ntests/test_scripts/test_run_model_prediction.py ........................ [ 53%]\n............................                                             [100%]\n\n============================== 60 passed in 0.73s ==============================\n",
+      "summary": "============================= test session starts ==============================\nplatform darwin -- Python 3.14.6, pytest-9.1.1, pluggy-1.7.0\nrootdir: /Volumes/Nas/FQP/worktrees/p106-training-manifest-persistence\nconfigfile: pyproject.toml\nplugins: mock-3.15.1, cov-7.1.0, asyncio-1.4.0, anyio-4.15.1\nasyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function\ncollected 61 items\n\ntests/test_scripts/test_derived_play_predictions.py ........             [ 13%]\ntests/test_scripts/test_run_model_prediction.py ........................ [ 52%]\n.............................                                            [100%]\n\n=============================== warnings summary ===============================\n.venv/lib/python3.14/site-packages/fastapi/testclient.py:1\n  /Volumes/Nas/FQP/worktrees/p106-training-manifest-persistence/.venv/lib/python3.14/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.\n    from starlette.testclient import TestClient as TestClient  # noqa\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n======================== 61 passed, 1 warning in 0.79s =========================\n",
       "timed_out": false,
       "environment": "unknown",
-      "revision": "0cc569321205a29a984329cdc9639e4643b11071",
+      "revision": "14c1b67450d7475b38b71d8ad4ba2ab5c6c8a69e",
       "dirty_tree": true,
-      "tree_fingerprint": "6624d6f5e05e1a377c54faea82849168079f6e019550f665fc8c3d905378a7d9",
-      "verified_at": "2026-10-24T15:05:01.280909+08:00"
+      "tree_fingerprint": "2de90395bde4eeea09747c5e4715c590e59aaabb662c342bfe7ce3b87d796aef",
+      "verified_at": "2026-10-24T18:56:59.044943+08:00"
     },
     "A106-LOCAL-STATIC": {
       "status": "PASS",
@@ -145,6 +145,18 @@
       "dirty_tree": true,
       "tree_fingerprint": "6624d6f5e05e1a377c54faea82849168079f6e019550f665fc8c3d905378a7d9",
       "verified_at": "2026-10-24T15:05:09.680241+08:00"
+    },
+    "A106-05": {
+      "status": "PASS",
+      "command": "/private/tmp/fqp-p106-manifest-persistence-verify-20261024.sh",
+      "exit_code": 0,
+      "summary": "============================= test session starts ==============================\nplatform darwin -- Python 3.14.6, pytest-9.1.1, pluggy-1.7.0\nrootdir: /Volumes/Nas/FQP/worktrees/p106-training-manifest-persistence\nconfigfile: pyproject.toml\nplugins: mock-3.15.1, cov-7.1.0, asyncio-1.4.0, anyio-4.15.1\nasyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function\ncollected 113 items\n\ntests/test_scripts/test_model_prediction_run_identity.py ..........      [  8%]\ntests/test_scripts/test_mle_trainer.py ...........                       [ 18%]\ntests/test_scripts/test_run_model_prediction.py ........................ [ 39%]\n.............................                                            [ 65%]\ntests/test_scripts/test_derived_play_predictions.py ........             [ 72%]\ntests/test_computation/test_prediction_run_postgres.py sssssssssssssssss [ 87%]\nssssssssssss                                                             [ 98%]\ntests/test_sql/test_model_training_manifest_schema.py ..                 [100%]\n\n=============================== warnings summary ===============================\n.venv/lib/python3.14/site-packages/fastapi/testclient.py:1\n  /Volumes/Nas/FQP/worktrees/p106-training-manifest-persistence/.venv/lib/python3.14/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.\n    from starlette.testclient import TestClient as TestClient  # noqa\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n================== 84 passed, 29 skipped, 1 warning in 0.86s ===================\nCREATE DATABASE\n============================= test session starts ==============================\nplatform darwin -- Python 3.14.6, pytest-9.1.1, pluggy-1.7.0\nrootdir: /Volumes/Nas/FQP/worktrees/p106-training-manifest-persistence\nconfigfile: pyproject.toml\nplugins: mock-3.15.1, cov-7.1.0, asyncio-1.4.0, anyio-4.15.1\nasyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function\ncollected 29 items\n\ntests/test_computation/test_prediction_run_postgres.py ................. [ 58%]\n............                                                             [100%]\n\n=============================== warnings summary ===============================\n.venv/lib/python3.14/site-packages/fastapi/testclient.py:1\n  /Volumes/Nas/FQP/worktrees/p106-training-manifest-persistence/.venv/lib/python3.14/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.\n    from starlette.testclient import TestClient as TestClient  # noqa\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n======================== 29 passed, 1 warning in 5.94s =========================\nCREATE DATABASE\nRole: postgres; pending migrations: ['112_model_training_manifest.sql']\nRead-only migration plan complete\nApplying 112_model_training_manifest.sql\nMigration apply complete\nAll checks passed!\n10 files already formatted\napps/backend/src/db.py:100: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]\nSuccess: no issues found in 5 source files\nchanged_files=11\nPASS: scope\nfiles_changed: 11/12\nnew_files: 3/3\nnew_dependencies_heuristic: 0/0\nschema_migration_files: 1/1\ndeclared_public_api_changes: 0/0\nPASS: change budget\ntest: regression=0/0\nlint: regression=0/0\ntypecheck: regression=0/0\nPASS: regression budget\n",
+      "timed_out": false,
+      "environment": "unknown",
+      "revision": "14c1b67450d7475b38b71d8ad4ba2ab5c6c8a69e",
+      "dirty_tree": true,
+      "tree_fingerprint": "2de90395bde4eeea09747c5e4715c590e59aaabb662c342bfe7ce3b87d796aef",
+      "verified_at": "2026-10-24T18:57:47.811698+08:00"
     }
   },
   "reviews": {
@@ -173,35 +185,37 @@
       "findings": [],
       "summary": "复审确认完整 official_odds 在写入前登记全部派生组；首组输入更新中断后 7 个 BF/BQC/ZJQ 组均进入 expected/skipped。真实 producer 回归覆盖此路径；没有阻塞合并的问题。",
       "reviewed_at": "2026-10-24T15:05:52.065978+08:00"
+    },
+    "A106-05": {
+      "status": "PASS",
+      "review_mode": "independent read-only",
+      "findings": [],
+      "reviewed_at": "2026-10-24T18:58:07.388834+08:00",
+      "summary": "独立复审确认训练数组与清单来自同一物化数据集；训练版本、清单和活动切换同事务提交；迁移 112 的 append-only、完整性检查、模型版本外键和 fqp 权限符合设计。预测清单缺失/损坏时来源 incomplete，不阻断普通预测。复审确认损坏 canonical bytes 与 fqp 实际权限两项 PostgreSQL 回归有效；无 blocker/major。"
     }
   },
   "quality_gate": {
-    "status": "READY_TO_MERGE",
-    "checked_at": "2026-10-24T15:15:23.092304+08:00",
-    "failures": []
+    "status": "PENDING",
+    "checked_at": "2026-10-24T18:58:07.388834+08:00",
+    "failures": [
+      "exact_head_ci_pending"
+    ]
   },
   "security": {
     "status": "PASS",
-    "reviewed_at": "2026-10-24T15:05:52.065978+08:00",
-    "mode": "read-only diff review",
+    "reviewed_at": "2026-10-24T18:58:07.388834+08:00",
+    "mode": "exact diff and migration review",
     "findings": [],
-    "summary": "审查本轮四个业务改动文件：无凭据、命令/SQL/路径拼接、权限或鉴权变更、外部网络调用、危险 shell、新依赖或供应链改动；不涉及生产配置及公开接口。"
+    "summary": "检查本轮业务代码和 SQL 112：新增数据库值使用参数绑定，动态 SQL 标识符由 %I 引用；无凭据、外部网络调用、危险 shell、公开 API 或依赖变化。应用角色仅 SELECT/INSERT，实际 PostgreSQL 回归拒绝 UPDATE/DELETE。"
   },
   "migration": {
-    "status": "NOT_APPLICABLE",
-    "reviewed_at": "2026-10-24T15:05:52.065978+08:00",
-    "summary": "本轮不改数据库 schema、SQL migration、ORM 契约或索引；只调整运行汇总和派生组计数。"
+    "status": "PASS",
+    "reviewed_at": "2026-10-24T18:58:07.388834+08:00",
+    "summary": "SQL 112 为加法迁移：锁超时 2s、语句超时 15s，新增 append-only 清单表、FK 到 model_versions，不回填历史模型。已将 schema 副本克隆自应用 111 的 fqp_p106_rehearsal，生产迁移器只计划 112 并成功应用；账本 checksum 为 bdb25a0d292585da9a00f957b704401efce4279ea0d898cb7e237b82536da907。演练核验模型版本 1、manifest 0、FK 1、fqp SELECT/INSERT=true 且 UPDATE/DELETE=false。恢复策略为回滚应用版本并保留兼容的新增表；不执行破坏性 down migration。"
   },
   "external_ci": {
-    "status": "passed",
-    "verified_at": "2026-10-24T15:14:49.674969+08:00",
-    "head_sha": "95d3d53b133a5203634329faad401665601a654c",
-    "run_id": "40072861527",
-    "checks": {
-      "test": "passed",
-      "lint-and-typecheck": "passed"
-    },
-    "summary": "PR #35 上 test 与 lint-and-typecheck 已完成成功；V4 preflight 还会核验最终 PR head 的实时检查。"
+    "status": "pending",
+    "summary": "本轮精确提交的 GitHub CI 尚未运行；推送后须等待所有必需检查通过。"
   },
   "upstream_evidence": {
     "P104-SALE-STATUS-CORRECTION": {

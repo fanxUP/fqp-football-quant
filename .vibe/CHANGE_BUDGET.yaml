@@ -1,10 +1,10 @@
 {
   "schema_version": 4,
-  "task_id": "P106-DERIVED-OUTPUT-GROUP-COUNTS",
-  "max_files_changed": 4,
-  "max_new_files": 0,
+  "task_id": "P106-MANIFEST-PERSISTENCE",
+  "max_files_changed": 12,
+  "max_new_files": 3,
   "max_new_dependencies": 0,
-  "max_schema_migrations": 0,
+  "max_schema_migrations": 1,
   "max_public_api_changes": 0,
   "declared_public_api_changes": 0,
   "regression_budget": {

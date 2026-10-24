@@ -484,11 +484,22 @@ def _run_impl(
         if prediction_run_id is not None:
             for model_name, model_version_id in active_models.items():
                 try:
+                    training_manifest = None
+                    if model_name == "maher_poisson":
+                        from scripts.model_training_manifest_storage import load_training_manifest
+
+                        try:
+                            training_manifest = load_training_manifest(conn, model_version_id)
+                        except ValueError:
+                            # Invalid persisted audit data remains incomplete, but must not
+                            # suppress ordinary predictions for this legacy-safe path.
+                            training_manifest = {}
                     model_artifact_identities[model_name] = build_model_artifact_identity(
                         model_version_id,
                         model_name,
                         model_parameters.get(model_name, {}),
                         artifact_root=_PROJECT_ROOT,
+                        training_manifest=training_manifest,
                     )
                 except Exception:
                     model_artifact_identities[model_name] = {

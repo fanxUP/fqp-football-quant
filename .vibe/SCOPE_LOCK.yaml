@@ -1,12 +1,28 @@
 {
   "schema_version": 4,
-  "task_id": "P106-DERIVED-OUTPUT-GROUP-COUNTS",
-  "objective": "Count derived prediction groups in the run output summary so finalization compares the summary with persisted group rows, not option-row counts.",
+  "task_id": "P106-MANIFEST-PERSISTENCE",
+  "objective": "Persist each new Maher model's exact canonical training manifest in the same transaction as model activation, then require a valid stored manifest before labeling prediction provenance complete.",
   "allowed_paths": [
-    "scripts/derived_play_predictions.py",
+    ".vibe/ACCEPTANCE.md",
+    ".vibe/BASELINE.yaml",
+    ".vibe/CHANGE_BUDGET.yaml",
+    ".vibe/EVIDENCE.yaml",
+    ".vibe/PLAN.md",
+    ".vibe/SCOPE_LOCK.yaml",
+    ".vibe/STATE.yaml",
+    ".vibe/TASK_DAG.yaml",
+    "scripts/training_manifest.py",
+    "scripts/model_artifact_identity.py",
+    "scripts/model_training_manifest_storage.py",
+    "scripts/mle_trainer.py",
+    "scripts/model_prediction_run_identity.py",
     "scripts/jobs/run_model_prediction.py",
-    "tests/test_scripts/test_derived_play_predictions.py",
-    "tests/test_scripts/test_run_model_prediction.py"
+    "sql/112_model_training_manifest.sql",
+    "tests/test_scripts/test_mle_trainer.py",
+    "tests/test_scripts/test_model_prediction_run_identity.py",
+    "tests/test_scripts/test_run_model_prediction.py",
+    "tests/test_computation/test_prediction_run_postgres.py",
+    "tests/test_sql/test_model_training_manifest_schema.py"
   ],
   "protected_paths": [
     "sql/**",
@@ -16,6 +32,8 @@
     "**/package*.json",
     "**/*lock*"
   ],
-  "approved_protected_paths": [],
-  "notes": "Keep option-row prediction totals unchanged. Count each expected/completed/skipped BF, ZJQ, and BQC model group separately; preserve input-update failure accounting. No schema or migration change, model retraining, external API call, manual production job, or forecast/probability change."
+  "approved_protected_paths": [
+    "sql/112_model_training_manifest.sql"
+  ],
+  "notes": "Only add migration 112 for an append-only table. No historical manifest backfill, destructive/down migration, model algorithm/probability/API change, external API call, or manual production training. Keep production model 73 incomplete because its actual training rows cannot be recovered with certainty."
 }

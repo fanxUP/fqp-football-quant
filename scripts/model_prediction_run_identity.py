@@ -365,6 +365,7 @@ def build_model_artifact_identity(
     parameters: Mapping[str, Any] | None,
     *,
     artifact_root: Path | None = None,
+    training_manifest: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Hash inline parameters or a confined external file without loading it."""
     if not isinstance(parameters, Mapping):
@@ -419,17 +420,34 @@ def build_model_artifact_identity(
             status = "incomplete"
             reason = "training_manifest_identity_missing"
         else:
-            from scripts.model_artifact_identity import verify_artifact_identity
+            from scripts.model_artifact_identity import (
+                training_manifest_sha256 as compute_training_manifest_sha256,
+            )
+            from scripts.model_artifact_identity import (
+                verify_artifact_identity,
+            )
 
             try:
                 verify_artifact_identity(parameters)
-                training_manifest_sha256 = maher_identity["training_manifest_sha256"]
-                training_identity_sha256 = maher_identity["identity_sha256"]
             except TypeError, ValueError:
                 status = "incomplete"
                 reason = "training_manifest_identity_invalid"
-                training_manifest_sha256 = None
-                training_identity_sha256 = None
+            else:
+                training_manifest_sha256 = maher_identity["training_manifest_sha256"]
+                training_identity_sha256 = maher_identity["identity_sha256"]
+                if training_manifest is None:
+                    status = "incomplete"
+                    reason = "training_manifest_record_missing"
+                else:
+                    try:
+                        stored_manifest_sha256 = compute_training_manifest_sha256(training_manifest)
+                    except TypeError, ValueError:
+                        status = "incomplete"
+                        reason = "training_manifest_record_invalid"
+                    else:
+                        if stored_manifest_sha256 != maher_identity["training_manifest_sha256"]:
+                            status = "incomplete"
+                            reason = "training_manifest_record_mismatch"
     identity = {
         "model_version_id": int(model_version_id),
         "model_name": model_name,

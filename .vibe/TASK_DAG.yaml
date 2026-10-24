@@ -1,6 +1,6 @@
 {
   "schema_version": 4,
-  "current_task": "P106-DERIVED-OUTPUT-GROUP-COUNTS",
+  "current_task": "P106-MANIFEST-PERSISTENCE",
   "tasks": {
     "P106-DERIVED-OUTPUT-GROUP-COUNTS": {
       "title": "Count persisted primary and derived prediction groups consistently",
@@ -19,6 +19,34 @@
         "Every expected but uncompleted derived group has a reasoned skip record, including market validation failures and input-update interruptions.",
         "Focused local regression and configured GitHub CI pass; an independent read-only review finds no blocker or major issue.",
         "A green PR is ready for the existing production release process; production P106 acceptance is recorded separately after deployment and the next natural scheduled run."
+      ]
+    },
+    "P106-MANIFEST-PERSISTENCE": {
+      "title": "Persist and verify full Maher training manifests",
+      "acceptance_id": "A106-05",
+      "depends_on": [],
+      "kind": "correctness_and_auditability",
+      "status": "DONE",
+      "files": [
+        "scripts/training_manifest.py",
+        "scripts/model_artifact_identity.py",
+        "scripts/model_training_manifest_storage.py",
+        "scripts/mle_trainer.py",
+        "scripts/model_prediction_run_identity.py",
+        "scripts/jobs/run_model_prediction.py",
+        "sql/112_model_training_manifest.sql",
+        "tests/test_scripts/test_mle_trainer.py",
+        "tests/test_scripts/test_model_prediction_run_identity.py",
+        "tests/test_scripts/test_run_model_prediction.py",
+        "tests/test_computation/test_prediction_run_postgres.py",
+        "tests/test_sql/test_model_training_manifest_schema.py"
+      ],
+      "definition_of_done": [
+        "Every new Maher model version stores the complete canonical training manifest atomically with model activation; old versions are not backfilled.",
+        "The database and application can verify canonical bytes, full-content SHA-256, training-manifest SHA-256, array counts, and model-version binding.",
+        "Prediction provenance is complete only when a valid stored manifest is present; missing or invalid evidence remains incomplete without blocking ordinary predictions.",
+        "Fixed-sample and isolated PostgreSQL tests, migration 112 through the production migration runner on a copy of the already-migrated schema, static checks, scope/budget, independent review, and exact-head CI pass.",
+        "Production rollout has verified recovery material; no manual training. Natural training and its later prediction verify the end-to-end record before acceptance."
       ]
     }
   }

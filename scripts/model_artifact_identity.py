@@ -65,7 +65,8 @@ def _is_sha256(value: Any) -> bool:
     return isinstance(value, str) and _SHA256_RE.fullmatch(value) is not None
 
 
-def _manifest_sha256(training_manifest: Mapping[str, Any]) -> str:
+def training_manifest_sha256(training_manifest: Mapping[str, Any]) -> str:
+    """Recompute the training identity digest from its hash-covered fields."""
     fields = (
         "version",
         "selection_version",
@@ -121,7 +122,7 @@ def attach_artifact_identity(
         raise ValueError(f"reserved parameter key is not allowed: {IDENTITY_KEY}")
     if not isinstance(training_manifest, Mapping):
         raise ValueError("training manifest is missing or invalid")
-    manifest_sha256 = _manifest_sha256(training_manifest)
+    manifest_sha256 = training_manifest_sha256(training_manifest)
     selection_version = training_manifest.get("selection_version")
     if not isinstance(selection_version, str) or not selection_version:
         raise ValueError("training manifest selection version is missing")
