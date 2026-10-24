@@ -7,7 +7,7 @@
       "acceptance_id": "A106-OUTPUT-GROUP-COUNTS",
       "depends_on": [],
       "kind": "correctness_hotfix",
-      "status": "IN_PROGRESS",
+      "status": "PASS",
       "files": [
         "scripts/derived_play_predictions.py",
         "scripts/jobs/run_model_prediction.py",

@@ -4,8 +4,9 @@
     "command_timeout_seconds": 900
   },
   "commands": {
-    "test": "\"${FQP_TEST_PYTHON:-python3.14}\" -m pytest -q tests/test_jobs/test_run_scheduler.py",
-    "lint": "\"${FQP_TEST_RUFF:-ruff}\" check scripts/weather_schedule.py scripts/jobs/run_scheduler.py apps/backend/src/services/pipeline_status.py tests/test_jobs/test_run_scheduler.py"
+    "test": "/Volumes/Nas/FQP/code/.venv/bin/python -m pytest -q tests/test_scripts/test_derived_play_predictions.py tests/test_scripts/test_run_model_prediction.py",
+    "lint": "/Volumes/Nas/FQP/code/.venv/bin/ruff check scripts/derived_play_predictions.py scripts/jobs/run_model_prediction.py tests/test_scripts/test_derived_play_predictions.py tests/test_scripts/test_run_model_prediction.py",
+    "typecheck": "/Volumes/Nas/FQP/code/.venv/bin/mypy scripts/jobs/run_model_prediction.py scripts/derived_play_predictions.py --explicit-package-bases"
   },
   "paths": {
     "dependency_files": [

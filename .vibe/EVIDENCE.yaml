@@ -171,16 +171,14 @@
       "status": "PASS",
       "review_mode": "independent read-only",
       "findings": [],
-      "summary": "复审确认完整 official_odds 在写入前登记全部派生组；首组输入更新中断后 7 个 BF/BQC/ZJQ 组均进入 expected/skipped。真实 producer 回归覆盖此路径；无 blocker 或 major。",
+      "summary": "复审确认完整 official_odds 在写入前登记全部派生组；首组输入更新中断后 7 个 BF/BQC/ZJQ 组均进入 expected/skipped。真实 producer 回归覆盖此路径；没有阻塞合并的问题。",
       "reviewed_at": "2026-10-24T15:05:52.065978+08:00"
     }
   },
   "quality_gate": {
-    "status": "IN_PROGRESS",
-    "checked_at": "2026-10-24T15:05:52.065978+08:00",
-    "failures": [
-      "A106 PR, fresh CI, merge, and production deployment are pending."
-    ]
+    "status": "READY_TO_MERGE",
+    "checked_at": "2026-10-24T15:15:23.092304+08:00",
+    "failures": []
   },
   "security": {
     "status": "PASS",
@@ -195,15 +193,15 @@
     "summary": "本轮不改数据库 schema、SQL migration、ORM 契约或索引；只调整运行汇总和派生组计数。"
   },
   "external_ci": {
-    "status": "pending",
-    "pr_number": 35,
-    "url": "https://github.com/fanxUP/fqp-football-quant/pull/35",
-    "head_sha": "4021033193166dbb581dedad1a737b0d518ced78",
-    "required_checks": [
-      "test",
-      "lint-and-typecheck"
-    ],
-    "summary": "PR #35 opened; waiting for live checks on the current head."
+    "status": "passed",
+    "verified_at": "2026-10-24T15:14:49.674969+08:00",
+    "head_sha": "95d3d53b133a5203634329faad401665601a654c",
+    "run_id": "40072861527",
+    "checks": {
+      "test": "passed",
+      "lint-and-typecheck": "passed"
+    },
+    "summary": "PR #35 上 test 与 lint-and-typecheck 已完成成功；V4 preflight 还会核验最终 PR head 的实时检查。"
   },
   "upstream_evidence": {
     "P104-SALE-STATUS-CORRECTION": {

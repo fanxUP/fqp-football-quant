@@ -1,10 +1,10 @@
 {
-  "state": "REVIEWING",
+  "state": "READY_TO_MERGE",
   "last_transition": {
-    "from": "VERIFYING",
-    "to": "REVIEWING",
-    "at": "2026-10-24T15:05:25.874302+08:00",
-    "reason": "A106 focused test and static evidence recorded; scope, budget, and independent code review passed."
+    "from": "REVIEWING",
+    "to": "READY_TO_MERGE",
+    "at": "2026-10-24T15:15:26.571963+08:00",
+    "reason": "A106 focused regression, static checks, independent review, exact-head CI evidence, scope/budget and V4 merge gate passed; final metadata head will be rechecked live before merge."
   },
   "blocked_reason": null
 }
