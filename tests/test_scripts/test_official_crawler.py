@@ -1,6 +1,8 @@
 from datetime import UTC, datetime
 from unittest.mock import ANY, MagicMock, patch
 
+import pytest
+
 from scripts.official_crawler import (
     crawl_official_odds_snapshot,
     crawl_official_results,
@@ -11,6 +13,69 @@ from scripts.official_crawler import (
     parse_results_from_response,
     parse_traditional_lottery_response,
 )
+
+
+def _cutoff_match(*pools, kickoff_time="01:00:00"):
+    sub = {
+        "matchId": 2042183,
+        "matchNumStr": "周六001",
+        "matchDate": "2026-10-25",
+        "matchTime": kickoff_time,
+        "homeTeamAllName": "主队",
+        "awayTeamAllName": "客队",
+        "sellStatus": 1,
+        "poolList": list(pools),
+        "oddsList": [{"poolCode": p["poolCode"], "h": 2, "d": 3, "a": 4} for p in pools],
+    }
+    raw = {"value": {"matchInfoList": [{"subMatchList": [sub]}]}}
+    return parse_matches_from_response(raw, "2026-10-24")[0]
+
+
+@pytest.mark.parametrize("closing_time", ["23:00", "23:00:00"])
+def test_explicit_official_pool_cutoff_uses_its_own_calendar_date(closing_time):
+    match = _cutoff_match(
+        {"poolCode": "HAD", "poolCloseDate": "2026-10-24", "poolCloseTime": closing_time}
+    )
+    assert match["sale_stop_time"] == "2026-10-24T23:00:00"
+    assert match["_sale_stop_time_present"] is True
+    assert match["raw_json"]["poolList"][0]["poolCloseTime"] == closing_time
+
+
+@pytest.mark.parametrize(
+    "closing",
+    [
+        {},
+        {"poolCloseDate": None, "poolCloseTime": None},
+        {"poolCloseDate": "", "poolCloseTime": ""},
+        {"poolCloseDate": "2026-10-24"},
+        {"poolCloseDate": "2026-02-30", "poolCloseTime": "23:00"},
+        {"poolCloseDate": "2026-10-24", "poolCloseTime": "25:00"},
+        {"poolCloseDate": True, "poolCloseTime": "23:00"},
+        {"poolCloseDate": "20261024", "poolCloseTime": "230000"},
+        {"updateDate": "2026-10-24", "updateTime": "23:00"},
+        {"poolCloseDate": "2026-10-25", "poolCloseTime": "02:00"},
+    ],
+)
+def test_unknown_or_invalid_official_cutoff_is_never_inferred(closing):
+    match = _cutoff_match({"poolCode": "HAD", **closing})
+    assert match["sale_stop_time"] is None
+
+
+def test_different_or_partial_market_deadlines_do_not_become_an_exact_match_deadline():
+    pool = {"poolCode": "HAD", "poolCloseDate": "2026-10-24", "poolCloseTime": "23:00"}
+    for other in (
+        {"poolCode": "HHAD", "poolCloseDate": "2026-10-24", "poolCloseTime": "22:00"},
+        {"poolCode": "HHAD", "poolCloseDate": None, "poolCloseTime": None},
+    ):
+        assert _cutoff_match(pool, other)["sale_stop_time"] is None
+    assert _cutoff_match(pool, {**pool, "poolCode": "HHAD"})["sale_stop_time"] == (
+        "2026-10-24T23:00:00"
+    )
+
+
+def test_unexpected_kickoff_timezone_leaves_cutoff_unknown_without_aborting_collection():
+    pool = {"poolCode": "HAD", "poolCloseDate": "2026-10-24", "poolCloseTime": "23:00"}
+    assert _cutoff_match(pool, kickoff_time="01:00:00+08:00")["sale_stop_time"] is None
 
 
 def test_traditional_lottery_sale_status_uses_shanghai_business_time():

@@ -29,6 +29,8 @@ from scripts.prediction_input_updates import (
     complete_input_update,
 )
 
+MAHER_SHADOW_CONSUMER = "observed-maher-shadow/spf/v2"
+
 
 def _current(conn: Any, match_id: int, play_type: str) -> tuple[datetime, dict, int, datetime]:
     """One READ COMMITTED statement observes head, official state and DB time."""
@@ -197,6 +199,8 @@ def complete_prediction_input_revision(
             conn, batch_id=batch_id, context=context, profiles=profiles
         )
         expiry = _expiry(conn, batch, max_age_seconds)
+        if current_claim.consumer_key == MAHER_SHADOW_CONSUMER:
+            decision["restrictions"].append("shadow_only")
         reasons = list(decision["restrictions"])
         if not matches:
             reasons.append("batch_official_context_mismatch")
@@ -285,12 +289,12 @@ def load_prediction_input_revision(conn: Any, revision_id: int) -> dict | None:
     context = _context(match_id, play, at, state)
     if at >= context.kickoff_at:
         reasons.append("kickoff_reached")
-    if (
-        context.sale_stop_at is None
-        or at >= context.sale_stop_at
-        or context.sale_status != "selling"
+    if context.sale_status != "selling" or (
+        context.sale_stop_at is not None and at >= context.sale_stop_at
     ):
         reasons.append("sale_closed")
+    if context.sale_stop_at is None:
+        reasons.append("sale_deadline_unknown")
     reasons = list(dict.fromkeys(reasons))
     return dict(
         id=revision_id,
@@ -313,16 +317,19 @@ def load_prediction_input_revision(conn: Any, revision_id: int) -> dict | None:
 _IDENTITY_RECHECK_SECONDS = 60
 
 
-def _blocked_outcome(context: PredictionContext) -> tuple[str, list[str]] | None:
+def _blocked_outcome(
+    context: PredictionContext, *, consumer_key: str | None = None
+) -> tuple[str, list[str]] | None:
     reasons = []
     if context.decision_at >= context.kickoff_at:
         reasons.append("kickoff_reached")
-    if (
-        context.sale_status != "selling"
-        or context.sale_stop_at is None
-        or context.decision_at >= context.sale_stop_at
-    ):
-        reasons.append("sale_closed")
+    if consumer_key != MAHER_SHADOW_CONSUMER:
+        if context.sale_status != "selling" or (
+            context.sale_stop_at is not None and context.decision_at >= context.sale_stop_at
+        ):
+            reasons.append("sale_closed")
+        if context.sale_stop_at is None:
+            reasons.append("sale_deadline_unknown")
     if context.match_status.lower() not in ("scheduled", "selling", "not_started"):
         reasons.append("match_not_scheduled")
     if reasons:
@@ -346,7 +353,10 @@ def complete_blocked_prediction_input(
 
     def publish(conn: Any, current_claim: InputUpdateClaim) -> dict:
         at, state, _, _ = _current(conn, current_claim.match_id, play_type)
-        blocked = _blocked_outcome(_context(current_claim.match_id, play_type, at, state))
+        blocked = _blocked_outcome(
+            _context(current_claim.match_id, play_type, at, state),
+            consumer_key=current_claim.consumer_key,
+        )
         if blocked is None:
             raise InputUpdateSuperseded("match is buildable; capture a new cutoff")
         outcome, reasons = blocked
@@ -388,10 +398,10 @@ def claim_prediction_input_revisions(
                 SELECT d.match_id,d.input_version FROM prediction_input_dirty_matches d
                 JOIN official_matches m ON m.id=d.match_id
                 WHERE (%(match)s::bigint IS NULL OR d.match_id=%(match)s)
-                    AND m.sale_status='selling'
                     AND lower(COALESCE(m.match_status,'')) IN ('scheduled','selling','not_started')
                     AND m.kickoff_time>timezone('Asia/Shanghai',clock_timestamp())
-                    AND m.sale_stop_time>timezone('Asia/Shanghai',clock_timestamp())
+                    AND (%(research)s OR (m.sale_status='selling'
+                        AND m.sale_stop_time>timezone('Asia/Shanghai',clock_timestamp())))
                     AND (EXISTS (SELECT 1 FROM prediction_input_revisions r
                         WHERE r.match_id=d.match_id AND r.input_version=d.input_version
                         AND r.consumer_key=%(consumer)s AND r.valid_until<=clock_timestamp())
@@ -405,7 +415,11 @@ def claim_prediction_input_revisions(
                 changed_at=clock_timestamp() FROM due WHERE d.match_id=due.match_id
                 AND d.input_version=due.input_version""",
             dict(
-                consumer=consumer_key, limit=limit, match=match_id, retry=_IDENTITY_RECHECK_SECONDS
+                consumer=consumer_key,
+                limit=limit,
+                match=match_id,
+                retry=_IDENTITY_RECHECK_SECONDS,
+                research=consumer_key == MAHER_SHADOW_CONSUMER,
             ),
         )
     return claim_input_updates(

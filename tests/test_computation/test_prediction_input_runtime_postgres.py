@@ -1,5 +1,6 @@
 """Existing-task consumer, real isolated PG and synthetic evidence only."""
 
+from datetime import timedelta
 from unittest.mock import patch
 
 import psycopg2
@@ -45,7 +46,7 @@ def shadow_receipt(pg, match):
     rows = query(
         pg,
         "SELECT result_refs FROM prediction_input_consumptions "
-        "WHERE match_id=%s AND consumer_key=%s",
+        "WHERE match_id=%s AND consumer_key=%s ORDER BY input_version",
         (match["id"], runtime.MAHER_SHADOW_CONSUMER),
     )
     return rows[0][0] if rows else None
@@ -301,6 +302,8 @@ def test_runtime_retains_maher_shadow_from_exact_batch_without_official_predicti
     assert revision["feature_batch_id"] == shadow["feature_batch_id"]
     assert revision["observation_cutoff_id"] == shadow["observation_cutoff_id"]
     assert not revision["recommendation_eligible"]
+    assert revision["research_only"]
+    assert "shadow_only" in revision["invalidation_reasons"]
     assert (
         query(pg, "SELECT count(*) FROM model_predictions WHERE match_id=%s", (match["id"],))[0][0]
         == before_predictions
@@ -317,7 +320,7 @@ def test_runtime_retains_maher_shadow_from_exact_batch_without_official_predicti
         "sale_stop_time=timezone('Asia/Shanghai',clock_timestamp())",
     ],
 )
-def test_non_actionable_records_terminal_receipt_without_fake_batch(pg, match, ready, change):
+def test_non_actionable_readiness_records_receipts_without_fake_batches(pg, match, ready, change):
     query(pg, "UPDATE official_matches SET " + change + " WHERE id=%s", (match["id"],))
     before = query(pg, "SELECT count(*) FROM feature_batches WHERE match_id=%s", (match["id"],))
     result = drain(pg, match)
@@ -326,11 +329,209 @@ def test_non_actionable_records_terminal_receipt_without_fake_batch(pg, match, r
         assert refs["outcome"] == "not_actionable" and refs["research_only"]
         assert refs["recommendation_eligible"] is False
         assert "input_revision_id" not in refs and "feature_batch_id" not in refs
-    assert (
-        query(pg, "SELECT count(*) FROM feature_batches WHERE match_id=%s", (match["id"],))
-        == before
-    )
+    # Only the separate pre-kickoff research consumer may build a batch here.
+    after = query(pg, "SELECT count(*) FROM feature_batches WHERE match_id=%s", (match["id"],))
+    assert after[0][0] == before[0][0] + result["shadow_completed"]
     assert drain(pg, match)["claimed"] == 0
+
+
+@pytest.mark.parametrize(
+    "change,restriction",
+    [
+        ("sale_stop_time=NULL", "sale_deadline_unknown"),
+        ("sale_stop_time=timezone('Asia/Shanghai',clock_timestamp())", "sale_closed"),
+        ("sale_status='closed'", "sale_closed"),
+        ("sale_status='paused'", "sale_closed"),
+    ],
+)
+def test_sale_restrictions_block_execution_but_allow_prematch_shadow_research(
+    pg, match, ready, change, restriction
+):
+    query(pg, "UPDATE official_matches SET " + change + " WHERE id=%s", (match["id"],))
+    parameters = _trained_maher_parameters(match["home_team_id"], match["away_team_id"])
+    with patch.object(runtime, "_active_maher_model", return_value=(901, parameters, None)):
+        result = drain(pg, match)
+    assert result["blocked"] == 2 and result["completed"] == 0
+    assert result["shadow_completed"] == 1 and result["shadow_blocked"] == 0
+    assert result["shadow_failed"] == 0
+    for _, receipt in receipts(pg, match):
+        assert restriction in receipt["reasons"]
+        if restriction == "sale_deadline_unknown":
+            assert "sale_closed" not in receipt["reasons"]
+    refs = shadow_receipt(pg, match)
+    assert refs["maher_shadow"]["status"] == "computed_shadow"
+    revision = revisions.load_prediction_input_revision(pg, refs["input_revision_id"])
+    assert revision["research_only"] and not revision["recommendation_eligible"]
+    assert restriction in revision["invalidation_reasons"]
+    assert "shadow_only" in revision["invalidation_reasons"]
+    assert query(
+        pg, "SELECT count(*) FROM model_predictions WHERE match_id=%s", (match["id"],)
+    ) == [(0,)]
+    assert drain(pg, match)["shadow_claimed"] == 0
+
+
+@pytest.mark.parametrize(
+    "change,reason",
+    [
+        ("match_status='cancelled'", "match_not_scheduled"),
+        (
+            "kickoff_time=timezone('Asia/Shanghai',clock_timestamp())-interval '1 second'",
+            "kickoff_reached",
+        ),
+    ],
+)
+def test_shadow_research_still_blocks_cancelled_or_started_matches(
+    pg, match, ready, change, reason
+):
+    query(pg, "UPDATE official_matches SET " + change + " WHERE id=%s", (match["id"],))
+    with patch.object(runtime, "_active_maher_model") as model:
+        result = drain(pg, match)
+    assert result["shadow_blocked"] == 1 and result["shadow_completed"] == 0
+    assert reason in shadow_receipt(pg, match)["reasons"]
+    model.assert_not_called()
+
+
+def test_expired_shadow_research_refreshes_even_without_a_sale_deadline(pg, match, ready):
+    query(pg, "UPDATE official_matches SET sale_stop_time=NULL WHERE id=%s", (match["id"],))
+    assert drain(pg, match)["shadow_completed"] == 1
+    first = shadow_receipt(pg, match)
+    with patch.object(revisions, "_expiry", return_value=ready["cutoff"].as_of):
+        # Publish another observed version, with an already expired research revision.
+        prior.pipeline.weather(pg, match, 25.0, effective_at=ready["kickoff"])
+        assert drain(pg, match)["shadow_completed"] == 1
+    assert drain(pg, match)["shadow_completed"] == 1
+    assert shadow_receipt(pg, match) == first  # Existing receipts remain append-only.
+
+
+def test_old_shadow_blocked_receipt_does_not_suppress_the_fixed_consumer(pg, match, ready):
+    query(pg, "UPDATE official_matches SET sale_stop_time=NULL WHERE id=%s", (match["id"],))
+    with patch.object(runtime, "MAHER_SHADOW_CONSUMER", "observed-maher-shadow/spf/v1"):
+        assert drain(pg, match)["shadow_blocked"] == 1
+        old = shadow_receipt(pg, match)
+    assert runtime.MAHER_SHADOW_CONSUMER == "observed-maher-shadow/spf/v2"
+    assert drain(pg, match)["shadow_completed"] == 1
+    with patch.object(runtime, "MAHER_SHADOW_CONSUMER", "observed-maher-shadow/spf/v1"):
+        assert shadow_receipt(pg, match) == old
+
+
+def test_shadow_consumer_cannot_promote_even_a_live_input_profile(pg, match, ready):
+    pg.commit()
+    claim = revisions.claim_prediction_input_revisions(
+        pg, consumer_key=runtime.MAHER_SHADOW_CONSUMER, match_id=match["id"]
+    )[0]
+    pg.commit()
+    refs = revisions.complete_prediction_input_revision(
+        pg, claim, batch_id=ready["batch_id"], play_type="spf", profiles=ready["profiles"]
+    )["result_refs"]
+    pg.commit()
+    revision = revisions.load_prediction_input_revision(pg, refs["input_revision_id"])
+    assert revision["decision"]["model_independent"]
+    assert revision["research_only"] and not revision["recommendation_eligible"]
+    assert "shadow_only" in revision["invalidation_reasons"]
+
+
+def test_unknown_cutoff_does_not_turn_missing_weather_into_fabricated_shadow_probabilities(
+    pg, match, ready
+):
+    from scripts.data_contracts import FactStatus
+
+    query(pg, "UPDATE official_matches SET sale_stop_time=NULL WHERE id=%s", (match["id"],))
+    prior.pipeline.weather(pg, match, fact_status=FactStatus.UNKNOWN, effective_at=ready["kickoff"])
+    parameters = _trained_maher_parameters(match["home_team_id"], match["away_team_id"])
+    with patch.object(runtime, "_active_maher_model", return_value=(901, parameters, None)):
+        assert drain(pg, match)["shadow_completed"] == 1
+    shadow = shadow_receipt(pg, match)["maher_shadow"]
+    assert shadow["status"] == "observation_unavailable"
+    assert shadow["probabilities"] is None
+
+
+def _calculator_deadline(pg, match):
+    row = query(
+        pg,
+        "SELECT source_match_id,business_date::text,official_match_code,kickoff_time,"
+        "home_team_name,away_team_name FROM official_matches WHERE id=%s",
+        (match["id"],),
+    )[0]
+    deadline = (row[3] - timedelta(minutes=15)).replace(microsecond=0)
+    return dict(
+        business_date=row[1],
+        official_match_code=row[2],
+        kickoff_time=row[3].isoformat(),
+        home_team_name=row[4],
+        away_team_name=row[5],
+        source_url="https://webapi.sporttery.cn/gateway/uniform/football/getMatchCalculatorV1.qry",
+        _sale_stop_time_present=True,
+        sale_stop_time=deadline.isoformat(),
+        raw_json={
+            "matchId": row[0],
+            "poolList": [
+                {
+                    "poolCode": "HAD",
+                    "poolCloseDate": deadline.date().isoformat(),
+                    "poolCloseTime": deadline.time().isoformat(),
+                }
+            ],
+        },
+    )
+
+
+def test_calculator_cutoff_storage_is_bound_auditable_revocable_and_transactional(pg, match, ready):
+    from scripts.official_storage import store_match_sale_stop_time
+
+    source = _calculator_deadline(pg, match)
+    original = query(pg, "SELECT sale_stop_time FROM official_matches WHERE id=%s", (match["id"],))
+    for changes in (
+        {"raw_json": {"matchId": "wrong-source"}},
+        {"kickoff_time": "2020-01-01T00:00:00"},
+        {"official_match_code": "周六999"},
+        {"home_team_name": "不同主队"},
+    ):
+        assert store_match_sale_stop_time(pg, match["id"], {**source, **changes}) == 0
+        assert (
+            query(pg, "SELECT sale_stop_time FROM official_matches WHERE id=%s", (match["id"],))
+            == original
+        )
+    pg.commit()
+    assert store_match_sale_stop_time(pg, match["id"], source) == 1
+    pg.rollback()
+    assert (
+        query(pg, "SELECT sale_stop_time FROM official_matches WHERE id=%s", (match["id"],))
+        == original
+    )
+    assert store_match_sale_stop_time(pg, match["id"], source) == 1
+    pg.commit()
+    row = query(
+        pg,
+        "SELECT sale_stop_time::text,raw_json,source_url FROM official_matches WHERE id=%s",
+        (match["id"],),
+    )[0]
+    assert row == (
+        source["sale_stop_time"].replace("T", " "),
+        source["raw_json"],
+        source["source_url"],
+    )
+    version = query(
+        pg,
+        "SELECT input_version FROM prediction_input_dirty_matches WHERE match_id=%s",
+        (match["id"],),
+    )
+    assert store_match_sale_stop_time(pg, match["id"], source) == 0
+    pg.commit()
+    assert (
+        query(
+            pg,
+            "SELECT input_version FROM prediction_input_dirty_matches WHERE match_id=%s",
+            (match["id"],),
+        )
+        == version
+    )
+    source.update(sale_stop_time=None)
+    source["raw_json"]["poolList"][0].update(poolCloseDate=None, poolCloseTime=None)
+    assert store_match_sale_stop_time(pg, match["id"], source) == 1
+    pg.commit()
+    assert query(pg, "SELECT sale_stop_time FROM official_matches WHERE id=%s", (match["id"],)) == [
+        (None,)
+    ]
 
 
 def test_missing_identity_is_acknowledged_then_bounded_refresh_rechecks(pg, match, ready):
@@ -338,6 +539,8 @@ def test_missing_identity_is_acknowledged_then_bounded_refresh_rechecks(pg, matc
     result = drain(pg, match)
     assert result["blocked"] == 2
     assert all(refs["outcome"] == "awaiting_verification" for _, refs in receipts(pg, match))
+    assert result["shadow_blocked"] == 1
+    assert shadow_receipt(pg, match)["outcome"] == "awaiting_verification"
     assert drain(pg, match)["claimed"] == 0
     name = query(pg, "SELECT home_team_name FROM official_matches WHERE id=%s", (match["id"],))[0][
         0
