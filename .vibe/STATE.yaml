@@ -1,10 +1,10 @@
 {
-  "state": "REVIEWING",
+  "state": "READY_TO_MERGE",
   "last_transition": {
-    "from": "VERIFYING",
-    "to": "REVIEWING",
-    "at": "2026-10-24T18:58:07.633936+08:00",
-    "reason": "Local and migration evidence is recorded; independent read-only review passed with no blocker or major findings."
+    "from": "REVIEWING",
+    "to": "READY_TO_MERGE",
+    "at": "2026-10-24T19:07:15.374046+08:00",
+    "reason": "V4 quality gate passed; final local evidence, independent review, migration rehearsal, and exact submitted SHA CI are green."
   },
   "blocked_reason": null
 }
