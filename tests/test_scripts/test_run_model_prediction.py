@@ -60,6 +60,26 @@ def test_fair_odds_omits_values_outside_database_precision() -> None:
     assert _safe_fair_odds(0.0000009) is None
 
 
+@pytest.mark.parametrize(
+    ("probability", "expected"),
+    [
+        (1.0, 1.0),
+        (1.0 / 999_999.9999, 999_999.9999),
+        (0.000001000001, 999_999.0),
+        (0.000001, None),
+        (5e-324, None),
+        (0.0, None),
+        (-0.1, None),
+        (float("nan"), None),
+        (float("inf"), None),
+    ],
+)
+def test_fair_odds_preserves_database_boundary_and_omits_nonfinite_values(
+    probability: float, expected: float | None
+) -> None:
+    assert _safe_fair_odds(probability) == expected
+
+
 def test_logistic_shadow_requires_a_verified_profile_before_predicting() -> None:
     assert (
         _load_logistic_shadow_probabilities(
