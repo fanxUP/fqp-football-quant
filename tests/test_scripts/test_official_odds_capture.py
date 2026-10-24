@@ -71,6 +71,8 @@ def test_due_collector_fetches_once_and_records_complete_offered_play():
         "business_date": "2026-07-14",
         "raw_json": {"matchNumStr": "周二201"},
         "_markets": [{"play_type": "spf", "is_open": True}],
+        "_sale_stop_time_present": True,
+        "sale_stop_time": "2026-07-14T19:00:00",
     }
     snapshots = [
         {"play_type": "spf", "option_code": code, "option_name": name, "sp_value": 2.0}
@@ -93,6 +95,7 @@ def test_due_collector_fetches_once_and_records_complete_offered_play():
             "scripts.official_odds_capture.parse_odds_snapshots_from_match", return_value=snapshots
         ),
         patch("scripts.official_odds_capture.store_markets"),
+        patch("scripts.official_odds_capture.store_match_sale_stop_time") as store_cutoff,
         patch(
             "scripts.official_odds_capture.store_odds_snapshots",
             return_value={"inserted": 3, "errors": []},
@@ -112,6 +115,7 @@ def test_due_collector_fetches_once_and_records_complete_offered_play():
         "snapshots_inserted": 3,
     }
     client.get_uniform_match_calculator.assert_called_once_with()
+    store_cutoff.assert_called_once_with(connection, candidate.match_id, source_match)
     store_odds.assert_called_once()
     stored_snapshots = store_odds.call_args.kwargs["snapshots"]
     assert all(

@@ -11,6 +11,7 @@ Same psycopg2 pattern as official_storage.py and feature_storage.py.
 from __future__ import annotations
 
 import json
+import math
 from collections.abc import Mapping
 from typing import Any
 
@@ -18,6 +19,19 @@ from scripts.agents.human_review_gate import assert_recommendation_publishable
 from scripts.business_time import business_now
 
 MAX_SINGLE_TICKET_MULTIPLE = 50
+# model_predictions.fair_odds is NUMERIC(10,4). Very small valid
+# probabilities still belong in history even when their reciprocal cannot fit.
+MAX_STORABLE_FAIR_ODDS = 999_999.9999
+
+
+def safe_fair_odds(model_probability: float) -> float | None:
+    """Return a representable fair odd without changing the model probability."""
+    if not math.isfinite(model_probability) or model_probability <= 0:
+        return None
+    fair_odds = 1.0 / model_probability
+    if not math.isfinite(fair_odds) or fair_odds > MAX_STORABLE_FAIR_ODDS:
+        return None
+    return round(fair_odds, 4)
 
 
 def _now() -> str:

@@ -56,6 +56,47 @@ def _event_season_targets(conn: Any) -> dict[str, tuple[date, date]]:
 # ---------------------------------------------------------------------------
 
 
+def store_match_sale_stop_time(conn: Any, match_id: int, match: dict) -> int:
+    """Retain an explicit calculator cutoff and its raw evidence for the exact fixture.
+
+    Empty/malformed explicit fields revoke an earlier deadline. Absent fields
+    are no new evidence. The caller owns the existing storage commit boundaries;
+    this helper does not commit or promise atomicity with the final capture receipt.
+    """
+    if not match.get("_sale_stop_time_present"):
+        return 0
+    raw = match.get("raw_json") or {}
+    source_id = str(raw.get("matchId") or "").strip()
+    if not source_id or not match.get("kickoff_time"):
+        return 0
+    with conn.cursor() as cur:
+        cur.execute(
+            """UPDATE official_matches SET sale_stop_time=%(deadline)s,
+                source_url=%(source_url)s,raw_json=%(raw)s::jsonb,raw_hash=%(hash)s,updated_at=now()
+                WHERE id=%(id)s AND source_match_id=%(source_id)s
+                  AND business_date=%(date)s AND official_match_code=%(code)s
+                  AND kickoff_time=%(kickoff)s
+                  AND home_team_name=%(home)s AND away_team_name=%(away)s
+                  AND (sale_stop_time IS DISTINCT FROM %(deadline)s::timestamp
+                    OR source_url IS DISTINCT FROM %(source_url)s
+                    OR raw_json IS DISTINCT FROM %(raw)s::jsonb)""",
+            dict(
+                id=match_id,
+                source_id=source_id,
+                date=match["business_date"],
+                code=match["official_match_code"],
+                kickoff=match["kickoff_time"],
+                home=match["home_team_name"],
+                away=match["away_team_name"],
+                deadline=match.get("sale_stop_time"),
+                source_url=match["source_url"],
+                raw=json.dumps(raw, ensure_ascii=False),
+                hash=_hash_raw(raw),
+            ),
+        )
+        return max(0, int(cur.rowcount))
+
+
 def store_matches(conn: Any, matches: list[dict]) -> dict[str, Any]:
     """Insert or update matches in official_matches.
 

@@ -17,6 +17,7 @@ from scripts.observation_storage import capture_observation_cutoff
 from scripts.observed_feature_pipeline import build_observed_feature_batch
 from scripts.observed_maher_shadow import build_observed_maher_shadow
 from scripts.prediction_input_revisions import (
+    MAHER_SHADOW_CONSUMER,
     _blocked_outcome,
     _context,
     _current,
@@ -33,7 +34,6 @@ from scripts.prediction_input_updates import (
 )
 
 CONSUMERS = {play: f"observed-readiness/{play}/v1" for play in ("spf", "rqspf")}
-MAHER_SHADOW_CONSUMER = "observed-maher-shadow/spf/v1"
 _SHADOW_FIELDS = (
     "temperature_2m",
     "home_lineup_confirmed",
@@ -204,7 +204,7 @@ def drain_prediction_input_updates(
                 _bounded_transaction(conn)
                 at, state, _, _ = _current(conn, claim.match_id, play)
                 context = _context(claim.match_id, play, at, state)
-                if _blocked_outcome(context) is not None:
+                if _blocked_outcome(context, consumer_key=claim.consumer_key) is not None:
                     complete_blocked_prediction_input(conn, claim, play_type=play)
                     conn.commit()
                     result["blocked"] += 1
@@ -276,7 +276,7 @@ def drain_prediction_input_updates(
             _bounded_transaction(conn)
             at, state, _, _ = _current(conn, claim.match_id, "spf")
             context = _context(claim.match_id, "spf", at, state)
-            if _blocked_outcome(context) is not None:
+            if _blocked_outcome(context, consumer_key=claim.consumer_key) is not None:
                 complete_blocked_prediction_input(conn, claim, play_type="spf")
                 conn.commit()
                 result["shadow_blocked"] += 1

@@ -71,6 +71,7 @@ from scripts.model_signal_policy import (
     disagreement_diagnostic,
     supports_market,
 )
+from scripts.model_storage import safe_fair_odds as _safe_fair_odds
 from scripts.model_storage import store_committee_vote, store_model_prediction
 from scripts.naive_bayes_shadow_model import (
     load_probabilities as load_naive_bayes_shadow_probabilities,
@@ -144,24 +145,9 @@ MIN_GLICKO2_MATCHES = 8
 MAX_GLICKO2_DEVIATION = 160.0
 MIN_BIVARIATE_TRAINING_MATCHES = 100
 MIN_NEGATIVE_BINOMIAL_TRAINING_MATCHES = 100
-# model_predictions.fair_odds is NUMERIC(10,4), whose largest valid value is
-# 999999.9999. Keep a pathological near-zero probability from aborting a full
-# scheduled prediction batch.
-MAX_STORABLE_FAIR_ODDS = 999_999.9999
-
 # Option code mapping: odds_conversion uses "3"/"1"/"0", snapshots use "h"/"d"/"a"
 OPTION_MAP = {"h": "3", "d": "1", "a": "0"}
 OPTION_REVERSE = {"3": "h", "1": "d", "0": "a"}
-
-
-def _safe_fair_odds(model_probability: float) -> float | None:
-    """Return a database-safe fair odd, or omit an unrepresentable value."""
-    if not math.isfinite(model_probability) or model_probability <= 0:
-        return None
-    fair_odds = 1.0 / model_probability
-    if not math.isfinite(fair_odds) or fair_odds > MAX_STORABLE_FAIR_ODDS:
-        return None
-    return round(fair_odds, 4)
 
 
 def _load_trained_bivariate_shared_component(

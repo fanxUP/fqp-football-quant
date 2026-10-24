@@ -10,7 +10,7 @@ from scripts.market_metric_validation import (
 )
 from scripts.model_prediction_run_storage import store_prediction_group
 from scripts.model_signal_policy import MODEL_MARKETS, disagreement_diagnostic, supports_market
-from scripts.model_storage import store_model_prediction
+from scripts.model_storage import safe_fair_odds, store_model_prediction
 from scripts.odds_conversion import normalize_probabilities
 from scripts.poisson_model import derive_total_goals
 from scripts.prediction_input_fence import PredictionInputFence
@@ -195,7 +195,6 @@ def store_derived_play_predictions(
                 stored_model_probability = round(model_probability, 6)
                 stored_market_probability = round(market_probability, 6)
                 stored_break_even = round(metric.break_even_probability, 6)
-                fair_odds = 1.0 / model_probability if model_probability > 0 else None
                 prediction = {
                     **({"input_fence": input_fence} if input_fence is not None else {}),
                     "match_id": match_id,
@@ -212,7 +211,7 @@ def store_derived_play_predictions(
                     "probability_upper_bound": None,
                     "uncertainty_score": disagreement,
                     "adjusted_probability": round(model_probability, 6),
-                    "fair_odds": round(fair_odds, 4) if fair_odds else None,
+                    "fair_odds": safe_fair_odds(model_probability),
                     "ev": round(stored_model_probability * sp_value - 1.0, 6),
                     "break_even_probability": stored_break_even,
                     "market_edge": round(stored_model_probability - stored_market_probability, 6),

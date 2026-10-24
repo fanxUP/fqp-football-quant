@@ -1,8 +1,52 @@
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from scripts.derived_play_predictions import store_derived_play_predictions
 from scripts.poisson_model import score_matrix
 from scripts.prediction_input_fence import PredictionInputFence
+
+
+@pytest.mark.parametrize(
+    ("play_type", "common_option", "rare_option"),
+    [("bf", "0:0", "0:5"), ("zjq", "0", "7")],
+)
+def test_rare_derived_outcomes_keep_history_without_overflowing_fair_odds(
+    play_type, common_option, rare_option
+):
+    conn = MagicMock()
+    cursor = conn.cursor.return_value.__enter__.return_value
+    cursor.fetchall.return_value = [
+        (101, play_type, common_option, 1.5, "2026-10-24T12:14:00"),
+        (102, play_type, rare_option, 1.8, "2026-10-24T12:14:00"),
+    ]
+    matrix = score_matrix(0.05, 0.05)
+    with patch("scripts.derived_play_predictions.store_model_prediction") as store:
+        count = store_derived_play_predictions(
+            conn=conn,
+            match_id=9,
+            active_models={"market_baseline": 1, "maher_poisson": 2, "dixon_coles": 3},
+            raw_poisson_matrix=matrix,
+            poisson_matrix=matrix,
+            raw_dc_matrix=matrix,
+            dc_matrix=matrix,
+            raw_lambdas=(0.05, 0.05),
+            adjusted_lambdas=(0.05, 0.05),
+            feature_snapshot_id=88,
+            predict_time="2026-10-24T12:15:00",
+        )
+    rows = [call.args[1] for call in store.call_args_list]
+    assert count == 6
+    assert len(rows) == 6
+    rare = [r for r in rows if r["option_code"] == rare_option and r["model_version_id"] != 1]
+    assert len(rare) == 2
+    for row in rare:
+        assert row["fair_odds"] is None
+        assert row["model_probability"] == 0.0
+        assert row["ev"] == -1.0
+        assert row["validation_status"] == "valid"
+        assert row["odds_snapshot_id"] == 102
+    assert all(r["fair_odds"] > 0 for r in rows if r not in rare)
 
 
 def test_derived_history_stores_every_official_option_for_each_capable_model():

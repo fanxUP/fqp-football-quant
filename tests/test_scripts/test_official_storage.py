@@ -1,6 +1,18 @@
 from unittest.mock import MagicMock
 
-from scripts.official_storage import store_matches, store_pool_issue_matches, store_results
+from scripts.official_storage import (
+    store_match_sale_stop_time,
+    store_matches,
+    store_pool_issue_matches,
+    store_results,
+)
+
+
+def test_absent_cutoff_fields_never_trigger_an_unbound_fixture_update():
+    conn = MagicMock()
+    for match in ({}, {"_sale_stop_time_present": False}, {"_sale_stop_time_present": True}):
+        assert store_match_sale_stop_time(conn, 7, match) == 0
+    conn.cursor.assert_not_called()
 
 
 def test_store_matches_rejects_rows_without_canonical_official_identity():
