@@ -197,10 +197,25 @@ def test_maher_artifact_identity_verifies_complete_metadata() -> None:
     manifest["sha256"] = content_sha256(manifest)
     parameters = attach_artifact_identity({"home_rates": {"1": 1.1}}, manifest)
 
-    identity = build_model_artifact_identity(12, "maher_poisson", parameters)
+    missing = build_model_artifact_identity(12, "maher_poisson", parameters)
+    identity = build_model_artifact_identity(
+        12, "maher_poisson", parameters, training_manifest=manifest
+    )
 
+    assert missing["provenance_status"] == "incomplete"
+    assert missing["reason"] == "training_manifest_record_missing"
     assert identity["provenance_status"] == "complete"
     assert identity["reason"] is None
+
+    changed_manifest = {**manifest, "included": [{"match_id": 101}]}
+    changed_manifest["sha256"] = content_sha256(
+        {key: value for key, value in changed_manifest.items() if key != "sha256"}
+    )
+    mismatch = build_model_artifact_identity(
+        12, "maher_poisson", parameters, training_manifest=changed_manifest
+    )
+    assert mismatch["provenance_status"] == "incomplete"
+    assert mismatch["reason"] == "training_manifest_record_mismatch"
 
 
 def test_external_maher_artifact_still_requires_verified_training_metadata(tmp_path) -> None:

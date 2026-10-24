@@ -141,10 +141,14 @@ def isolated_database(request):
             )"""
         )
 
-    migration_path = Path(__file__).resolve().parents[2] / "sql/111_prediction_run_identity.sql"
-    migration = migration_path.read_text(encoding="utf-8")
     with connection.cursor() as cursor:
-        cursor.execute(migration)
+        migrations_dir = Path(__file__).resolve().parents[2] / "sql"
+        cursor.execute(
+            (migrations_dir / "111_prediction_run_identity.sql").read_text(encoding="utf-8")
+        )
+        cursor.execute(
+            (migrations_dir / "112_model_training_manifest.sql").read_text(encoding="utf-8")
+        )
 
     connection.autocommit = False
     yield connection, schema_name
@@ -1986,3 +1990,297 @@ def test_z_down_migration_removes_only_p106_objects(isolated_database):
         run_table, legacy_table = cursor.fetchone()
     assert run_table is None
     assert legacy_table is not None
+
+
+def test_model_training_manifest_is_recomputable_and_append_only(isolated_database):
+    from datetime import datetime
+
+    from scripts.model_training_manifest_storage import (
+        load_training_manifest,
+        persist_training_manifest,
+    )
+    from scripts.training_manifest import CandidateMatch, build_training_dataset
+
+    conn, _schema_name = isolated_database
+    dataset = build_training_dataset(
+        [
+            CandidateMatch(
+                match_id=101,
+                result_id=201,
+                kickoff_at=datetime(2025, 1, 1),
+                home_team_id=1,
+                away_team_id=2,
+                home_goals=2,
+                away_goals=1,
+                match_status="settled",
+                official_publish_time=datetime(2025, 1, 1, 20),
+            ),
+            CandidateMatch(
+                match_id=102,
+                result_id=202,
+                kickoff_at=datetime(2025, 1, 2),
+                home_team_id=2,
+                away_team_id=1,
+                home_goals=0,
+                away_goals=0,
+                match_status="settled",
+                official_publish_time=datetime(2025, 1, 2, 20),
+            ),
+        ],
+        min_matches=1,
+    )
+    with conn.cursor() as cur:
+        cur.execute("INSERT INTO model_versions(model_name) VALUES ('maher_poisson') RETURNING id")
+        model_version_id = cur.fetchone()[0]
+
+    persist_training_manifest(conn, model_version_id, dataset.manifest.to_dict())
+    conn.commit()
+
+    assert load_training_manifest(conn, model_version_id) == dataset.manifest.to_dict()
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT included_count, excluded_count, training_manifest_sha256, "
+            "encode(pg_catalog.sha256(manifest_canonical), 'hex') "
+            "FROM model_training_manifests WHERE model_version_id=%s",
+            (model_version_id,),
+        )
+        included_count, excluded_count, manifest_sha256, content_sha256 = cur.fetchone()
+    assert included_count == 2
+    assert excluded_count == 0
+    assert manifest_sha256 == dataset.manifest.sha256
+    assert content_sha256
+
+    with conn.cursor() as cur, pytest.raises(RaiseException, match="immutable"):
+        cur.execute(
+            "UPDATE model_training_manifests SET manifest_json='{}'::jsonb "
+            "WHERE model_version_id=%s",
+            (model_version_id,),
+        )
+    conn.rollback()
+    with conn.cursor() as cur, pytest.raises(RaiseException, match="immutable"):
+        cur.execute(
+            "DELETE FROM model_training_manifests WHERE model_version_id=%s",
+            (model_version_id,),
+        )
+    conn.rollback()
+
+
+def test_model_training_manifest_preserves_old_versions_without_backfill(isolated_database):
+    conn, _schema_name = isolated_database
+    with conn.cursor() as cur:
+        cur.execute("INSERT INTO model_versions(model_name) VALUES ('maher_poisson') RETURNING id")
+        old_model_version_id = cur.fetchone()[0]
+        cur.execute(
+            "SELECT COUNT(*) FROM model_training_manifests WHERE model_version_id=%s",
+            (old_model_version_id,),
+        )
+        assert cur.fetchone()[0] == 0
+
+
+def _sample_persisted_training_manifest():
+    from datetime import datetime
+
+    from scripts.training_manifest import CandidateMatch, build_training_dataset
+
+    dataset = build_training_dataset(
+        [
+            CandidateMatch(
+                match_id=301,
+                result_id=401,
+                kickoff_at=datetime(2025, 3, 1),
+                home_team_id=1,
+                away_team_id=2,
+                home_goals=1,
+                away_goals=0,
+                match_status="settled",
+                official_publish_time=datetime(2025, 3, 1, 20),
+            )
+        ],
+        min_matches=1,
+    )
+    return dataset.manifest.to_dict()
+
+
+def test_model_training_manifest_loader_rejects_noncanonical_persisted_bytes(isolated_database):
+    from psycopg2 import Binary
+
+    from scripts.model_training_manifest_storage import (
+        load_training_manifest,
+        persist_training_manifest,
+    )
+
+    conn, _schema_name = isolated_database
+    manifest = _sample_persisted_training_manifest()
+    with conn.cursor() as cur:
+        cur.execute("INSERT INTO model_versions(model_name) VALUES ('maher_poisson') RETURNING id")
+        model_version_id = cur.fetchone()[0]
+    persist_training_manifest(conn, model_version_id, manifest)
+    conn.commit()
+
+    trailing_space = Binary(b" ")
+    with conn.cursor() as cur:
+        cur.execute(
+            "ALTER TABLE model_training_manifests "
+            "DISABLE TRIGGER trg_model_training_manifest_immutable"
+        )
+        cur.execute(
+            """UPDATE model_training_manifests
+               SET manifest_canonical = manifest_canonical || %s,
+                   content_sha256 = encode(
+                       pg_catalog.sha256(manifest_canonical || %s), 'hex'
+                   )
+               WHERE model_version_id = %s""",
+            (trailing_space, trailing_space, model_version_id),
+        )
+        cur.execute(
+            "ALTER TABLE model_training_manifests "
+            "ENABLE TRIGGER trg_model_training_manifest_immutable"
+        )
+    conn.commit()
+
+    with pytest.raises(ValueError, match="identity fields do not match content"):
+        load_training_manifest(conn, model_version_id)
+
+
+def test_model_training_manifest_fqp_role_can_insert_and_select_but_not_mutate(
+    isolated_database,
+):
+    from psycopg2 import sql
+    from psycopg2.errors import InsufficientPrivilege
+
+    from scripts.model_training_manifest_storage import (
+        load_training_manifest,
+        persist_training_manifest,
+    )
+
+    conn, schema_name = isolated_database
+    manifest = _sample_persisted_training_manifest()
+    with conn.cursor() as cur:
+        cur.execute("INSERT INTO model_versions(model_name) VALUES ('maher_poisson') RETURNING id")
+        model_version_id = cur.fetchone()[0]
+        cur.execute(sql.SQL("GRANT USAGE ON SCHEMA {} TO fqp").format(sql.Identifier(schema_name)))
+        cur.execute("SET LOCAL ROLE fqp")
+        cur.execute(sql.SQL("SET LOCAL search_path TO {}").format(sql.Identifier(schema_name)))
+
+    persist_training_manifest(conn, model_version_id, manifest)
+    assert load_training_manifest(conn, model_version_id) == manifest
+    conn.commit()
+
+    with conn.cursor() as cur:
+        cur.execute("SET LOCAL ROLE fqp")
+        cur.execute(sql.SQL("SET LOCAL search_path TO {}").format(sql.Identifier(schema_name)))
+        with pytest.raises(InsufficientPrivilege, match="permission denied"):
+            cur.execute(
+                "UPDATE model_training_manifests SET included_count=0 WHERE model_version_id=%s",
+                (model_version_id,),
+            )
+    conn.rollback()
+
+    with conn.cursor() as cur:
+        cur.execute("SET LOCAL ROLE fqp")
+        cur.execute(sql.SQL("SET LOCAL search_path TO {}").format(sql.Identifier(schema_name)))
+        with pytest.raises(InsufficientPrivilege, match="permission denied"):
+            cur.execute(
+                "DELETE FROM model_training_manifests WHERE model_version_id=%s",
+                (model_version_id,),
+            )
+    conn.rollback()
+
+
+def test_mle_manifest_failure_rolls_back_old_model_deactivation(isolated_database):
+    from contextlib import nullcontext
+    from datetime import date, datetime
+    from unittest.mock import patch
+
+    from scripts.mle_trainer import run
+    from scripts.training_manifest import CandidateMatch, build_training_dataset
+
+    conn, _schema_name = isolated_database
+    with conn.cursor() as cur:
+        cur.execute(
+            """ALTER TABLE model_versions
+                   ADD COLUMN model_type VARCHAR(64),
+                   ADD COLUMN version VARCHAR(64),
+                   ADD COLUMN training_start_date DATE,
+                   ADD COLUMN training_end_date DATE,
+                   ADD COLUMN parameters_json JSONB,
+                   ADD COLUMN description TEXT,
+                   ADD COLUMN is_active BOOLEAN DEFAULT false,
+                   ADD COLUMN created_at TIMESTAMPTZ DEFAULT now()"""
+        )
+        cur.execute(
+            """INSERT INTO model_versions(model_name, is_active)
+               VALUES ('maher_poisson', true), ('dixon_coles', true)"""
+        )
+        cur.execute(
+            """CREATE FUNCTION reject_training_manifest_for_test()
+               RETURNS TRIGGER LANGUAGE plpgsql AS $$
+               BEGIN RAISE EXCEPTION 'test manifest insert failure'; END;
+               $$"""
+        )
+        cur.execute(
+            """CREATE TRIGGER reject_training_manifest_for_test
+               BEFORE INSERT ON model_training_manifests
+               FOR EACH ROW EXECUTE FUNCTION reject_training_manifest_for_test()"""
+        )
+    conn.commit()
+
+    dataset = build_training_dataset(
+        [
+            CandidateMatch(
+                match_id=101,
+                result_id=201,
+                kickoff_at=datetime(2025, 1, 1),
+                home_team_id=1,
+                away_team_id=2,
+                home_goals=2,
+                away_goals=1,
+                match_status="settled",
+                official_publish_time=datetime(2025, 1, 1, 20),
+            ),
+            CandidateMatch(
+                match_id=102,
+                result_id=202,
+                kickoff_at=datetime(2025, 1, 2),
+                home_team_id=2,
+                away_team_id=1,
+                home_goals=0,
+                away_goals=0,
+                match_status="settled",
+                official_publish_time=datetime(2025, 1, 2, 20),
+            ),
+        ],
+        min_matches=1,
+    )
+    trained = {
+        "maher_poisson": {
+            "attack": {1: 0.1, 2: -0.1},
+            "defense": {1: -0.1, 2: 0.1},
+            "home_advantage": 0.2,
+            "league_intercept": 0.4,
+            "n_matches": 2,
+            "n_teams": 2,
+            "nll": 1.0,
+            "converged": True,
+            "training_start_date": date(2025, 1, 1),
+            "training_end_date": date(2025, 1, 2),
+            "training_manifest": dataset.manifest.to_dict(),
+        },
+        "dixon_coles_rho": {"rho": -0.08, "nll": 1.0, "n_low_score_matches": 2},
+    }
+
+    with (
+        patch("apps.backend.src.db.get_db", return_value=nullcontext(conn)),
+        patch("scripts.mle_trainer.fit_all_models", return_value=trained),
+        pytest.raises(RaiseException, match="test manifest insert failure"),
+    ):
+        run()
+    conn.rollback()
+
+    with conn.cursor() as cur:
+        cur.execute("SELECT model_name, is_active FROM model_versions ORDER BY model_name")
+        model_rows = cur.fetchall()
+        cur.execute("SELECT count(*) FROM model_training_manifests")
+        manifest_count = cur.fetchone()[0]
+    assert model_rows == [("dixon_coles", True), ("maher_poisson", True)]
+    assert manifest_count == 0

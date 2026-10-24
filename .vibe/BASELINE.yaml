@@ -1,7 +1,7 @@
 {
-  "git_revision": "0cc569321205a29a984329cdc9639e4643b11071",
-  "branch": "codex/p106-output-counts-20261024",
-  "dirty": false,
-  "captured_at": "2026-10-24T14:52:00+08:00",
+  "git_revision": "14c1b67450d7475b38b71d8ad4ba2ab5c6c8a69e",
+  "branch": "codex/p106-training-manifest-persistence-20261024",
+  "dirty": true,
+  "captured_at": "2026-10-24T18:34:13.677929+08:00",
   "checks": {}
 }

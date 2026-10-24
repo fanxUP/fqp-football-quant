@@ -3,8 +3,8 @@
   "last_transition": {
     "from": "REVIEWING",
     "to": "READY_TO_MERGE",
-    "at": "2026-10-24T15:15:26.571963+08:00",
-    "reason": "A106 focused regression, static checks, independent review, exact-head CI evidence, scope/budget and V4 merge gate passed; final metadata head will be rechecked live before merge."
+    "at": "2026-10-24T19:07:15.374046+08:00",
+    "reason": "V4 quality gate passed; final local evidence, independent review, migration rehearsal, and exact submitted SHA CI are green."
   },
   "blocked_reason": null
 }

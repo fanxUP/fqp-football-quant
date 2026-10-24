@@ -1252,3 +1252,32 @@ def test_superseded_spf_counts_later_derived_markets_after_first_write_fails():
     assert len(derived_skips) == 7
     assert {item["reason"] for item in derived_skips} == {"input_update_unavailable"}
     assert sum(item["play_type"] == "bqc" for item in derived_skips) == 1
+
+
+def test_prediction_run_loads_training_manifest_for_maher_provenance():
+    conn = MagicMock()
+    cursor = conn.cursor.return_value.__enter__.return_value
+    parameters = {"home_advantage": 0.2, "_artifact_identity": {"schema_version": 1}}
+    cursor.fetchall.side_effect = [[(73, "maher_poisson", parameters)], []]
+    cursor.fetchone.return_value = None
+    db_context = MagicMock()
+    db_context.__enter__.return_value = conn
+    manifest = {"sha256": "a" * 64}
+
+    with (
+        patch("scripts.jobs.run_model_prediction.get_db", return_value=db_context),
+        patch(
+            "scripts.model_training_manifest_storage.load_training_manifest",
+            return_value=manifest,
+        ) as load_manifest,
+        patch(
+            "scripts.jobs.run_model_prediction.build_model_artifact_identity",
+            return_value={"provenance_status": "incomplete"},
+        ) as build_identity,
+        patch("scripts.jobs.run_model_prediction.update_prediction_run_manifest"),
+    ):
+        result = _run_impl(prediction_run_id="00000000-0000-0000-0000-000000000001")
+
+    load_manifest.assert_called_once_with(conn, 73)
+    assert build_identity.call_args.kwargs["training_manifest"] == manifest
+    assert result["completion_reason"] == "no_matches"

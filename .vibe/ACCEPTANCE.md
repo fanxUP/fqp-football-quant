@@ -1,4 +1,6 @@
-# P121 验收
+# 项目验收记录
+
+当前工作项：`P106-MANIFEST-PERSISTENCE`，验收 ID 为 A106-05。历史子项记录保留在下方。
 
 ## A121 — Maher-Poisson SPF 观测影子接入
 
@@ -33,3 +35,14 @@
 - PR #35 的 `test` 与 `lint-and-typecheck` 在 head `95d3d53b133a5203634329faad401665601a654c` 上通过；记录门禁状态后生成的新 head 仍须重新通过实时 CI。
 - 最终 V4 PR preflight、合并、服务器发布及发布后的自然调度验收待完成。
 - 本子项通过不代表 P106 完整验收；真实生产接受仍需观察部署后的自然调度任务及其 run/manifest/读路径。
+
+## A106-05 — Maher 训练清单持久化与 run 绑定
+
+- 新 Maher 版本的训练 manifest 与拟合输入同源，并在同一数据库事务持久化；失败回滚不会停用旧活动版本或留下半成品版本。
+- JSONB 与 canonical bytes 一致；完整内容摘要、清单规则摘要、数组计数及模型 artifact identity 可重算且彼此匹配。
+- 数据库和应用拒绝更新/删除清单；`fqp` 仅有 SELECT/INSERT 权限；每个模型版本最多一份清单。
+- 新 prediction run 仅在对应清单读回并验证后才将 Maher provenance 标为 complete；旧版本、缺失清单和损坏内容标为 incomplete，普通预测仍可继续。
+- 不回填版本 73 或其他历史工件，不改变样本选择、概率、模型算法、公开 API、推荐、票务或外部 API 行为。
+- 固定样本、隔离 PostgreSQL、迁移 112 在已迁移 schema 副本上的生产迁移器演练、静态检查、scope/budget、独立审查和精确提交 CI 通过。
+- 生产部署具备恢复材料与迁移证据后，等待 2026-10-26 02:00 的自然 MLE 训练和后续自然 prediction run 核验；不手动触发训练。
+- 该切片通过不表示完整 P106 的其他模型评价、前瞻效果或路线工作全部通过。
