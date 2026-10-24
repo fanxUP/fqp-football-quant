@@ -131,6 +131,55 @@ def _odds_by_pool(match_raw: dict[str, Any]) -> dict[str, dict[str, Any]]:
     return odds_by_pool
 
 
+def _official_sale_stop_time(
+    match_raw: dict[str, Any], kickoff: str | None
+) -> tuple[str | None, bool]:
+    """Accept only explicit, consistent closing timestamps for every offered pool.
+
+    The match-level column cannot express different market deadlines. Never
+    infer it from kickoff, updateTime, businessDate or daily opening hours.
+    Sporttery dates/times use the same Shanghai wall clock as kickoff_time.
+    """
+    nodes = list(match_raw.get("poolList") or []) + list(match_raw.get("oddsList") or [])
+    nodes += [
+        {**node, "poolCode": code}
+        for code, name in _DIRECT_ODDS_NODES.items()
+        if isinstance(node := match_raw.get(name), dict) and node
+    ]
+    pools: dict[str, list[dict[str, Any]]] = {}
+    present = False
+    for node in nodes:
+        if not isinstance(node, dict) or node.get("poolCode") not in POOL_CODE_MAP:
+            continue
+        pools.setdefault(node["poolCode"], [])
+        if "poolCloseDate" in node or "poolCloseTime" in node:
+            present = True
+            pools[node["poolCode"]].append(node)
+    if not pools or not kickoff:
+        return None, present
+    deadlines = set()
+    for rows in pools.values():
+        if not rows:
+            return None, present
+        for row in rows:
+            day, clock = row.get("poolCloseDate"), row.get("poolCloseTime")
+            if (
+                not isinstance(day, str)
+                or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", day)
+                or not isinstance(clock, str)
+                or not re.fullmatch(r"\d{2}:\d{2}(?::\d{2})?", clock)
+            ):
+                return None, present
+            try:
+                deadline = datetime.fromisoformat(f"{day}T{clock}")
+                if deadline > datetime.fromisoformat(kickoff):
+                    return None, present
+            except TypeError, ValueError:
+                return None, present
+            deadlines.add(deadline.isoformat(timespec="seconds"))
+    return (deadlines.pop() if len(deadlines) == 1 else None), present
+
+
 def parse_matches_from_response(
     raw: dict[str, Any],
     business_date: str,
@@ -228,6 +277,7 @@ def parse_matches_from_response(
                 else "getMatchListV1.qry"
             )
 
+            sale_stop_time, sale_stop_time_present = _official_sale_stop_time(sub, kickoff)
             matches.append(
                 {
                     "sport_type": "football",
@@ -237,7 +287,8 @@ def parse_matches_from_response(
                     "home_team_name": home_name,
                     "away_team_name": away_name,
                     "kickoff_time": kickoff,
-                    "sale_stop_time": None,  # sporttery API doesn't expose this directly
+                    "sale_stop_time": sale_stop_time,
+                    "_sale_stop_time_present": sale_stop_time_present,
                     "sale_status": sale_status,
                     "match_status": "scheduled",
                     "source_url": f"https://webapi.sporttery.cn/gateway/uniform/football/{source_endpoint}",

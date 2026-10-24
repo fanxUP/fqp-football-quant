@@ -18,7 +18,13 @@ from scripts.official_crawler import (
     parse_matches_from_response,
     parse_odds_snapshots_from_match,
 )
-from scripts.official_storage import log_crawl, store_markets, store_odds_snapshots, update_health
+from scripts.official_storage import (
+    log_crawl,
+    store_markets,
+    store_match_sale_stop_time,
+    store_odds_snapshots,
+    update_health,
+)
 from scripts.sporttery_client import SportteryClient
 
 
@@ -240,6 +246,7 @@ def collect_due_official_odds(now: datetime | None = None) -> dict[str, Any]:
                 )
                 inserted = 0
                 if source_match:
+                    store_match_sale_stop_time(conn, candidate.match_id, source_match)
                     store_markets(conn, candidate.match_id, source_match.get("_markets", []))
                 if snapshots:
                     result = store_odds_snapshots(
