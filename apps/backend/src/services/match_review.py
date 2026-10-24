@@ -43,7 +43,7 @@ def build_match_review_cards(conn: Any, review_date: str) -> list[dict[str, Any]
             """SELECT DISTINCT ON (mp.match_id, mv.model_name, mp.play_type, mp.option_code)
                       mp.match_id, mv.model_name, mp.play_type, mp.option_code, mp.model_probability,
                       mp.market_probability, mp.ev, mp.confidence_score, mp.predict_time
-               FROM model_predictions mp
+               FROM model_prediction_latest_rows mp
                JOIN model_versions mv ON mv.id = mp.model_version_id
                JOIN official_matches m ON m.id = mp.match_id
                WHERE mp.match_id = ANY(%s) AND mp.validation_status = 'valid'

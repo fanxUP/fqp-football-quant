@@ -415,7 +415,7 @@ def run(dry_run: bool = False) -> dict[str, Any]:
                     WHEN r.full_home_goals = r.full_away_goals THEN '1'
                     ELSE '0'
                 END AS actual_result
-            FROM model_predictions mp
+            FROM model_prediction_latest_rows mp
             JOIN model_versions mv ON mv.id = mp.model_version_id
             JOIN official_results r ON r.match_id = mp.match_id
             JOIN official_matches m ON m.id = mp.match_id

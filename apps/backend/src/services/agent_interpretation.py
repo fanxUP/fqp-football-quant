@@ -69,7 +69,7 @@ def build_pre_match_source(
             """SELECT DISTINCT ON (mv.model_name, mp.play_type, mp.option_code)
                       mv.model_name, mp.play_type, mp.option_code, mp.model_probability,
                       mp.market_probability, mp.fair_odds, mp.ev, mp.confidence_score, mp.predict_time
-               FROM model_predictions mp JOIN model_versions mv ON mv.id = mp.model_version_id
+               FROM model_prediction_latest_rows mp JOIN model_versions mv ON mv.id = mp.model_version_id
                WHERE mp.match_id = %s AND mp.validation_status = 'valid' AND mp.predict_time < %s
                ORDER BY mv.model_name, mp.play_type, mp.option_code, mp.predict_time DESC, mp.id DESC""",
             (match_id, match[5]),

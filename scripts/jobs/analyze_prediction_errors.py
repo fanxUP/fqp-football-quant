@@ -39,7 +39,7 @@ def run(dry_run: bool = False) -> dict[str, Any]:
                         mp.predict_time,
                         r.spf_result, r.full_home_goals, r.full_away_goals,
                         mv.model_name
-                    FROM model_predictions mp
+                    FROM model_prediction_latest_rows mp
                     JOIN official_matches m ON m.id = mp.match_id
                     JOIN official_results r ON r.match_id = mp.match_id
                     JOIN model_versions mv ON mv.id = mp.model_version_id

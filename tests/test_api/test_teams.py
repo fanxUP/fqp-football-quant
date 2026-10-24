@@ -195,7 +195,7 @@ def test_match_detail_uses_latest_prematch_features_and_all_option_predictions(c
     assert response.status_code == 200
     queries = [" ".join(call.args[0].split()) for call in cur.execute.call_args_list]
     feature_query = next(q for q in queries if "FROM match_feature_snapshots" in q)
-    prediction_query = next(q for q in queries if "FROM model_predictions mp" in q)
+    prediction_query = next(q for q in queries if "FROM model_prediction_latest_rows mp" in q)
     assert "snapshot_time <" in feature_query
     assert "mp.predict_time <" in prediction_query
     assert "mp.validation_status = 'valid'" in prediction_query

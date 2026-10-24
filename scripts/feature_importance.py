@@ -849,7 +849,7 @@ def get_condition_performance(
                     COUNT(*) AS n,
                     ROUND(AVG(mem.brier_score)::numeric, 4) AS avg_brier
                 FROM latest_metrics mem
-                JOIN model_predictions mp_home ON mp_home.match_id = mem.match_id
+                JOIN model_prediction_latest_rows mp_home ON mp_home.match_id = mem.match_id
                     AND mp_home.model_version_id = mem.model_version_id
                     AND mp_home.play_type = mem.play_type
                     AND mp_home.option_code = '3'
@@ -878,7 +878,7 @@ def get_condition_performance(
                     COUNT(*) AS n,
                     ROUND(AVG(mem.brier_score)::numeric, 4) AS avg_brier
                 FROM latest_metrics mem
-                JOIN model_predictions mp_home ON mp_home.match_id = mem.match_id
+                JOIN model_prediction_latest_rows mp_home ON mp_home.match_id = mem.match_id
                     AND mp_home.model_version_id = mem.model_version_id
                     AND mp_home.play_type = mem.play_type
                     AND mp_home.option_code = '3'

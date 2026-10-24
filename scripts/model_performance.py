@@ -45,7 +45,7 @@ _PERFORMANCE_HISTORY_SQL = """
             m.total_goals_result,
             m.score_result,
             m.half_full_result
-        FROM model_predictions source_mp
+        FROM model_prediction_latest_rows source_mp
         JOIN model_versions mv ON mv.id = source_mp.model_version_id
         JOIN settled_matches m ON m.match_id = source_mp.match_id
         WHERE source_mp.model_probability IS NOT NULL

@@ -149,7 +149,7 @@ def _prediction_evidence(conn: Any, event: dict[str, Any]) -> dict[str, Any] | N
                    prediction.model_probability, prediction.market_probability,
                    prediction.ev, prediction.validation_status,
                    version.model_name, version.version
-            FROM model_predictions prediction
+            FROM model_prediction_latest_rows prediction
             JOIN model_versions version ON version.id = prediction.model_version_id
             WHERE prediction.match_id = %s
               AND prediction.play_type = %s

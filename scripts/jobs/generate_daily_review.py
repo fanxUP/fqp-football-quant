@@ -117,7 +117,7 @@ def _run_impl(review_date: str | None = None, dry_run: bool = False) -> dict[str
             cur.execute(
                 """
                 SELECT COUNT(DISTINCT mp.match_id)
-                FROM model_predictions mp
+                FROM model_prediction_latest_rows mp
                 JOIN official_matches m ON m.id = mp.match_id
                 WHERE m.business_date = %s
                   AND mp.predict_time < m.kickoff_time

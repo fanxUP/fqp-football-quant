@@ -324,7 +324,14 @@ def test_legacy_signal_falls_back_without_committee_vote_or_artifact_load(monkey
         prediction, "capture_prediction_input_fence", lambda *_args: PredictionInputFence(101, None)
     )
     cursor = conn.cursor.return_value.__enter__.return_value
-    cursor.fetchall.side_effect = [[(11, "h", 2.1), (12, "d", 3.2), (13, "a", 3.6)], []]
+    cursor.fetchall.side_effect = [
+        [
+            (11, "h", 2.1, "2026-10-17T09:00:00"),
+            (12, "d", 3.2, "2026-10-17T09:00:00"),
+            (13, "a", 3.6, "2026-10-17T09:00:00"),
+        ],
+        [],
+    ]
     monkeypatch.setattr(
         prediction, "_latest_feature_snapshot", lambda *_args, **_kwargs: snapshot()
     )

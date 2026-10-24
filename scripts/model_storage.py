@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import math
+from collections.abc import Mapping
 from typing import Any
 
 from scripts.agents.human_review_gate import assert_recommendation_publishable
@@ -75,21 +76,37 @@ def _validate_prediction_payload(pred: dict) -> None:
 # ---------------------------------------------------------------------------
 
 
-def store_model_prediction(conn: Any, pred: dict) -> int | None:
-    """Insert a single model prediction row. Returns the new id."""
+def store_model_prediction(
+    conn: Any,
+    pred: dict,
+    *,
+    commit: bool = True,
+    bound_input_fence: Mapping[str, Any] | None = None,
+) -> int | None:
+    """Insert a prediction row; callers may defer commit for a full output group."""
     _validate_prediction_payload(pred)
     reason = dict(pred.get("uncertainty_reason") or {})
-    if "input_fence" in reason:
-        raise ValueError("input_fence is reserved for the internal pre-computation token")
     if "input_fence" in pred:
-        from scripts.prediction_input_fence import bind_prediction_input_fence
+        token = pred["input_fence"]
+        if bound_input_fence is None:
+            from scripts.prediction_input_fence import bind_prediction_input_fence
 
-        reason["input_fence"] = bind_prediction_input_fence(
-            conn,
-            pred["match_id"],
-            pred["input_fence"],
-            odds_snapshot_id=pred.get("odds_snapshot_id"),
-        )
+            bound_input_fence = bind_prediction_input_fence(
+                conn,
+                pred["match_id"],
+                token,
+                odds_snapshot_id=pred.get("odds_snapshot_id"),
+            )
+        else:
+            if not isinstance(bound_input_fence, Mapping) or bound_input_fence != token.payload():
+                raise ValueError("bound prediction input fence does not match its internal token")
+        if "input_fence" in reason and reason["input_fence"] != dict(bound_input_fence):
+            raise ValueError("prediction input fence evidence differs from its bound token")
+        reason["input_fence"] = dict(bound_input_fence)
+    elif bound_input_fence is not None:
+        raise ValueError("bound prediction input fence requires its internal token")
+    elif "input_fence" in reason:
+        raise ValueError("input_fence is reserved for the internal pre-computation token")
     sql = """
         INSERT INTO model_predictions (
             match_id, model_version_id, odds_snapshot_id, feature_snapshot_id, predict_time,
@@ -150,7 +167,8 @@ def store_model_prediction(conn: Any, pred: dict) -> int | None:
             },
         )
         row = cur.fetchone()
-    conn.commit()
+    if commit:
+        conn.commit()
     return row[0] if row else None
 
 

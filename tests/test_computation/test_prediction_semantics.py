@@ -156,7 +156,11 @@ def predict(
         lambda *_args: PredictionInputFence(101, None),
     )
     cursor = conn.cursor.return_value.__enter__.return_value
-    cursor.fetchall.return_value = [(11, "h", 2), (12, "d", 3), (13, "a", 4)]
+    cursor.fetchall.return_value = [
+        (11, "h", 2, "2026-10-17T09:00:00"),
+        (12, "d", 3, "2026-10-17T09:00:00"),
+        (13, "a", 4, "2026-10-17T09:00:00"),
+    ]
     cursor.fetchone.return_value = None if handicap is None else (handicap,)
     monkeypatch.setattr(prediction, "_latest_feature_snapshot", lambda *a, **k: {"id": 88})
     monkeypatch.setattr(prediction, "store_derived_play_predictions", lambda **k: 0)
