@@ -3,6 +3,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from scripts.derived_play_predictions import store_derived_play_predictions
+from scripts.market_metric_validation import MarketMetricValidationError
 from scripts.poisson_model import score_matrix
 from scripts.prediction_input_fence import PredictionInputFence
 
@@ -116,6 +117,125 @@ def test_derived_history_stores_every_official_option_for_each_capable_model():
         for row in stored
         if row["model_version_id"] in {2, 3}
     )
+
+
+def test_prediction_run_counts_derived_groups_separately_from_option_rows():
+    conn = MagicMock()
+    cursor = conn.cursor.return_value.__enter__.return_value
+    cursor.fetchall.return_value = [
+        (101, "zjq", "0", 1.5, "2026-07-16T13:00:00"),
+        (102, "zjq", "7", 1.8, "2026-07-16T13:00:00"),
+        (201, "bf", "1:0", 1.5, "2026-07-16T13:00:00"),
+        (202, "bf", "other_h", 1.8, "2026-07-16T13:00:00"),
+        (301, "bqc", "33", 1.5, "2026-07-16T13:00:00"),
+        (302, "bqc", "10", 1.8, "2026-07-16T13:00:00"),
+    ]
+    matrix = score_matrix(1.3, 1.1)
+    counts = {}
+
+    with patch("scripts.derived_play_predictions.store_prediction_group") as store:
+        option_rows = store_derived_play_predictions(
+            conn=conn,
+            match_id=9,
+            active_models={"market_baseline": 1, "maher_poisson": 2, "dixon_coles": 3},
+            raw_poisson_matrix=matrix,
+            poisson_matrix=matrix,
+            raw_dc_matrix=matrix,
+            dc_matrix=matrix,
+            raw_lambdas=(1.3, 1.1),
+            adjusted_lambdas=(1.3, 1.1),
+            feature_snapshot_id=88,
+            predict_time="2026-07-16T14:00:00",
+            prediction_run_id="run-id",
+            output_group_counts=counts,
+        )
+
+    assert option_rows == 14
+    assert store.call_count == 7
+    assert counts["derived"] == {
+        "expected": 7,
+        "completed": 7,
+        "expected_models": [
+            ("market_baseline", 1, "zjq"),
+            ("maher_poisson", 2, "zjq"),
+            ("dixon_coles", 3, "zjq"),
+            ("market_baseline", 1, "bf"),
+            ("maher_poisson", 2, "bf"),
+            ("dixon_coles", 3, "bf"),
+            ("market_baseline", 1, "bqc"),
+        ],
+        "completed_groups": [
+            ("market_baseline", 1, "zjq"),
+            ("maher_poisson", 2, "zjq"),
+            ("dixon_coles", 3, "zjq"),
+            ("market_baseline", 1, "bf"),
+            ("maher_poisson", 2, "bf"),
+            ("dixon_coles", 3, "bf"),
+            ("market_baseline", 1, "bqc"),
+        ],
+        "skipped": [],
+    }
+
+
+def test_prediction_run_records_derived_groups_skipped_by_market_validation():
+    conn = MagicMock()
+    cursor = conn.cursor.return_value.__enter__.return_value
+    cursor.fetchall.return_value = [
+        (101, "zjq", "0", 1.5, "2026-07-16T13:00:00"),
+        (102, "zjq", "7", 1.8, "2026-07-16T13:00:00"),
+    ]
+    matrix = score_matrix(1.3, 1.1)
+    counts = {}
+
+    with (
+        patch(
+            "scripts.derived_play_predictions.validate_market",
+            side_effect=MarketMetricValidationError("invalid fixed market"),
+        ),
+        patch("scripts.derived_play_predictions.store_prediction_group") as store,
+    ):
+        store_derived_play_predictions(
+            conn=conn,
+            match_id=9,
+            active_models={"market_baseline": 1, "maher_poisson": 2, "dixon_coles": 3},
+            raw_poisson_matrix=matrix,
+            poisson_matrix=matrix,
+            raw_dc_matrix=matrix,
+            dc_matrix=matrix,
+            raw_lambdas=(1.3, 1.1),
+            adjusted_lambdas=(1.3, 1.1),
+            feature_snapshot_id=88,
+            predict_time="2026-07-16T14:00:00",
+            prediction_run_id="run-id",
+            output_group_counts=counts,
+        )
+
+    assert counts["derived"]["expected"] == 3
+    assert counts["derived"]["completed"] == 0
+    assert counts["derived"]["skipped"] == [
+        {
+            "match_id": 9,
+            "model_version_id": 1,
+            "model_name": "market_baseline",
+            "play_type": "zjq",
+            "reason": "market_validation_failed",
+        },
+        {
+            "match_id": 9,
+            "model_version_id": 2,
+            "model_name": "maher_poisson",
+            "play_type": "zjq",
+            "reason": "market_validation_failed",
+        },
+        {
+            "match_id": 9,
+            "model_version_id": 3,
+            "model_name": "dixon_coles",
+            "play_type": "zjq",
+            "reason": "market_validation_failed",
+        },
+    ]
+    store.assert_not_called()
 
 
 def test_derived_history_does_nothing_without_official_odds():

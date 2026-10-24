@@ -3,8 +3,8 @@
   "last_transition": {
     "from": "REVIEWING",
     "to": "READY_TO_MERGE",
-    "at": "2026-10-23T03:34:23.942546+08:00",
-    "reason": "P105-WEATHER local subtask acceptance, independent review, current-tree evidence, scope, budget, and regression gate pass; this records readiness only and does not merge or deploy."
+    "at": "2026-10-24T15:15:26.571963+08:00",
+    "reason": "A106 focused regression, static checks, independent review, exact-head CI evidence, scope/budget and V4 merge gate passed; final metadata head will be rechecked live before merge."
   },
   "blocked_reason": null
 }

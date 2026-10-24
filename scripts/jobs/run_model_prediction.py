@@ -687,23 +687,64 @@ def _run_impl(
                             for model_name, model_version_id in active_models.items()
                             if supports_market(model_name, play_type, None)
                         ]
-                    output_groups_expected += len(skipped_models)
-                    output_group_skips.extend(
-                        {
-                            "match_id": int(mid),
-                            "model_version_id": int(model_version_id),
-                            "model_name": model_name,
-                            "play_type": str(play_type),
-                            "reason": "input_update_unavailable",
-                        }
+                    derived_counts = output_group_counts.get("derived", {})
+                    expected_groups = [
+                        (str(play_type), str(model_name), int(model_version_id))
                         for model_name, model_version_id in skipped_models
+                    ]
+                    expected_groups.extend(
+                        (str(derived_play_type), str(model_name), int(model_version_id))
+                        for model_name, model_version_id, derived_play_type in derived_counts.get(
+                            "expected_models", []
+                        )
                     )
+                    completed_groups = {
+                        (str(play_type), int(model_version_id))
+                        for model_version_id in output_group_counts.get(
+                            "completed_model_version_ids", []
+                        )
+                    }
+                    completed_groups.update(
+                        (str(derived_play_type), int(model_version_id))
+                        for _model_name, model_version_id, derived_play_type in derived_counts.get(
+                            "completed_groups", []
+                        )
+                    )
+                    existing_skips = output_group_counts.get("skipped", []) + derived_counts.get(
+                        "skipped", []
+                    )
+                    skips_by_key = {
+                        (str(item["play_type"]), int(item["model_version_id"])): item
+                        for item in existing_skips
+                    }
+                    output_groups_expected += len(expected_groups)
+                    output_groups_completed += len(completed_groups)
+                    for expected_play_type, model_name, model_version_id in expected_groups:
+                        key = (expected_play_type, model_version_id)
+                        if key in completed_groups:
+                            continue
+                        output_group_skips.append(
+                            skips_by_key.get(
+                                key,
+                                {
+                                    "match_id": int(mid),
+                                    "model_version_id": model_version_id,
+                                    "model_name": model_name,
+                                    "play_type": expected_play_type,
+                                    "reason": "input_update_unavailable",
+                                },
+                            )
+                        )
                     continue
                 total_predictions += p
                 total_votes += v
                 output_groups_expected += output_group_counts.get("expected", 0)
                 output_groups_completed += output_group_counts.get("completed", 0)
                 output_group_skips.extend(output_group_counts.get("skipped", []))
+                derived_counts = output_group_counts.get("derived", {})
+                output_groups_expected += derived_counts.get("expected", 0)
+                output_groups_completed += derived_counts.get("completed", 0)
+                output_group_skips.extend(derived_counts.get("skipped", []))
 
     output_group_skips.sort(
         key=lambda item: (
@@ -1108,6 +1149,7 @@ def _predict_match_play_type(
             },
             prediction_run_id=str(prediction_run_id) if prediction_run_id is not None else None,
             model_artifact_identities=model_artifact_identities,
+            output_group_counts=output_group_counts,
         )
 
     # 5. Elo model. Cold-start ratings are placeholders and must not become

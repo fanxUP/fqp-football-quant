@@ -593,6 +593,42 @@ def test_run_impl_aggregates_missing_prediction_group_counts():
     ]
 
 
+def test_run_impl_aggregates_primary_and_derived_prediction_groups():
+    conn = MagicMock()
+    cursor = conn.cursor.return_value.__enter__.return_value
+    cursor.fetchall.side_effect = [
+        [(1, "market_baseline", {})],
+        [(101, "主队", "客队")],
+        [(101, "spf")],
+    ]
+    cursor.fetchone.return_value = None
+    db_context = MagicMock()
+    db_context.__enter__.return_value = conn
+
+    def record_groups(*_args, output_group_counts, **_kwargs):
+        output_group_counts.update(
+            expected=2,
+            completed=2,
+            skipped=[],
+            derived={"expected": 7, "completed": 7, "skipped": []},
+        )
+        return 14, 0
+
+    with (
+        patch("scripts.jobs.run_model_prediction.get_db", return_value=db_context),
+        patch(
+            "scripts.jobs.run_model_prediction._predict_match_play_type",
+            side_effect=record_groups,
+        ),
+    ):
+        result = _run_impl()
+
+    assert result["output_groups_expected"] == 9
+    assert result["output_groups_completed"] == 9
+    assert result["output_groups_skipped"] == 0
+    assert result["completion_reason"] == "predictions_completed"
+
+
 def test_prediction_without_odds_records_each_expected_group_as_skipped():
     conn = MagicMock()
     conn.cursor.return_value.__enter__.return_value.fetchall.return_value = []
@@ -1132,3 +1168,87 @@ def test_superseded_rqspf_without_handicap_uses_recorded_expected_models():
             "reason": "input_update_unavailable",
         }
     ]
+
+
+def test_superseded_spf_counts_later_derived_markets_after_first_write_fails():
+    from scripts.derived_play_predictions import store_derived_play_predictions
+    from scripts.market_metric_validation import OptionMetrics
+    from scripts.poisson_model import score_matrix
+    from scripts.prediction_input_updates import InputUpdateSuperseded
+
+    conn = MagicMock()
+    cursor = conn.cursor.return_value.__enter__.return_value
+    cursor.fetchall.side_effect = [
+        [
+            (1, "market_baseline", {}),
+            (2, "maher_poisson", {}),
+            (3, "dixon_coles", {}),
+        ],
+        [(101, "主队", "客队")],
+        [(101, "spf")],
+        [
+            (201, "bf", "1:0", 1.5, "2026-10-24T14:00:00"),
+            (202, "bf", "other_h", 1.8, "2026-10-24T14:00:00"),
+            (301, "bqc", "33", 1.5, "2026-10-24T14:00:00"),
+            (302, "bqc", "10", 1.8, "2026-10-24T14:00:00"),
+            (101, "zjq", "0", 1.5, "2026-10-24T14:00:00"),
+            (102, "zjq", "7", 1.8, "2026-10-24T14:00:00"),
+        ],
+    ]
+    cursor.fetchone.return_value = None
+
+    matrix = score_matrix(1.3, 1.1)
+
+    def interrupt_first_derived_group(*args, output_group_counts, **kwargs):
+        return store_derived_play_predictions(
+            conn=args[0],
+            match_id=args[1],
+            active_models=args[5],
+            raw_poisson_matrix=matrix,
+            poisson_matrix=matrix,
+            raw_dc_matrix=matrix,
+            dc_matrix=matrix,
+            raw_lambdas=(1.3, 1.1),
+            adjusted_lambdas=(1.3, 1.1),
+            feature_snapshot_id=88,
+            predict_time=args[8],
+            prediction_run_id=kwargs["prediction_run_id"],
+            model_artifact_identities=kwargs["model_artifact_identities"],
+            output_group_counts=output_group_counts,
+        )
+
+    with (
+        patch("scripts.jobs.run_model_prediction.get_db") as db,
+        patch(
+            "scripts.jobs.run_model_prediction.build_model_artifact_identity",
+            return_value={"provenance_status": "incomplete"},
+        ),
+        patch("scripts.jobs.run_model_prediction.update_prediction_run_manifest"),
+        patch(
+            "scripts.jobs.run_model_prediction._predict_match_play_type",
+            side_effect=interrupt_first_derived_group,
+        ),
+        patch(
+            "scripts.derived_play_predictions.validate_market",
+            side_effect=lambda *, odds_by_option, **_kwargs: {
+                option: OptionMetrics(0.5, 0.0, 0.0, -0.25) for option in odds_by_option
+            },
+        ),
+        patch(
+            "scripts.derived_play_predictions.store_prediction_group",
+            side_effect=InputUpdateSuperseded("changed"),
+        ) as store_group,
+    ):
+        db.return_value.__enter__.return_value = conn
+        result = _run_impl(prediction_run_id="00000000-0000-0000-0000-000000000001")
+
+    assert store_group.call_count == 1
+    assert result["output_groups_expected"] == 10
+    assert result["output_groups_completed"] == 0
+    assert result["output_groups_skipped"] == 10
+    derived_skips = [
+        item for item in result["output_group_skips"] if item["play_type"] in {"bf", "bqc", "zjq"}
+    ]
+    assert len(derived_skips) == 7
+    assert {item["reason"] for item in derived_skips} == {"input_update_unavailable"}
+    assert sum(item["play_type"] == "bqc" for item in derived_skips) == 1

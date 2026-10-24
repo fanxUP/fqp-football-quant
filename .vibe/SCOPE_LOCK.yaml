@@ -1,12 +1,12 @@
 {
   "schema_version": 4,
-  "task_id": "P106-PROVENANCE-PROPAGATION-HOTFIX",
-  "objective": "Preserve scheduled predictions when a model manifest is incomplete by ensuring group provenance never overstates its parent run provenance.",
+  "task_id": "P106-DERIVED-OUTPUT-GROUP-COUNTS",
+  "objective": "Count derived prediction groups in the run output summary so finalization compares the summary with persisted group rows, not option-row counts.",
   "allowed_paths": [
-    ".vibe/CHANGE_BUDGET.yaml",
-    ".vibe/SCOPE_LOCK.yaml",
-    "scripts/model_prediction_run_storage.py",
-    "tests/test_computation/test_prediction_run_postgres.py"
+    "scripts/derived_play_predictions.py",
+    "scripts/jobs/run_model_prediction.py",
+    "tests/test_scripts/test_derived_play_predictions.py",
+    "tests/test_scripts/test_run_model_prediction.py"
   ],
   "protected_paths": [
     "sql/**",
@@ -17,5 +17,5 @@
     "**/*lock*"
   ],
   "approved_protected_paths": [],
-  "notes": "Do not fabricate the missing Maher training manifest identity for active model version 73. Preserve the parent run's incomplete provenance, downgrade only the output group's provenance when the run is incomplete, keep its prediction vector intact, and verify this behavior in fixed-sample plus isolated PostgreSQL regression. No SQL migration, model retraining, external API, production database write, dependency or public API change."
+  "notes": "Keep option-row prediction totals unchanged. Count each expected/completed/skipped BF, ZJQ, and BQC model group separately; preserve input-update failure accounting. No schema or migration change, model retraining, external API call, manual production job, or forecast/probability change."
 }

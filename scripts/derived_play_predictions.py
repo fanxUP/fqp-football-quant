@@ -121,12 +121,32 @@ def store_derived_play_predictions(
     input_fence: PredictionInputFence | None = None,
     prediction_run_id: str | None = None,
     model_artifact_identities: dict[str, dict[str, Any]] | None = None,
+    output_group_counts: dict[str, Any] | None = None,
 ) -> int:
     """Store unfiltered model history for every open official derived option."""
     official_odds = _latest_official_odds(conn, match_id, predict_time)
     model_independence = model_independence or {}
     rollout_modes = rollout_modes or {}
     model_artifact_identities = model_artifact_identities or {}
+    derived_counts: dict[str, Any] | None = None
+    if prediction_run_id is not None and output_group_counts is not None:
+        derived_counts = {
+            "expected": 0,
+            "completed": 0,
+            "expected_models": [],
+            "completed_groups": [],
+            "skipped": [],
+        }
+        output_group_counts["derived"] = derived_counts
+        for play_type, _option_odds in official_odds.items():
+            for model_name in MODEL_MARKETS:
+                model_version_id = active_models.get(model_name)
+                if model_version_id is None or not supports_market(model_name, play_type):
+                    continue
+                derived_counts["expected"] += 1
+                derived_counts["expected_models"].append(
+                    (model_name, int(model_version_id), play_type)
+                )
     stored = 0
 
     for play_type, option_odds in official_odds.items():
@@ -170,6 +190,16 @@ def store_derived_play_predictions(
                     snapshot_ids=snapshot_ids,
                 )
             except MarketMetricValidationError:
+                if derived_counts is not None and model_name in active_models:
+                    derived_counts["skipped"].append(
+                        {
+                            "match_id": int(match_id),
+                            "model_version_id": int(active_models[model_name]),
+                            "model_name": model_name,
+                            "play_type": str(play_type),
+                            "reason": "market_validation_failed",
+                        }
+                    )
                 continue
 
         for model_name in capabilities:
@@ -283,6 +313,26 @@ def store_derived_play_predictions(
                     },
                     predictions=group_predictions,
                 )
+                if derived_counts is not None:
+                    derived_counts["completed"] += 1
+                    derived_counts["completed_groups"].append(
+                        (model_name, int(model_version_id), play_type)
+                    )
+            elif derived_counts is not None and model_version_id is not None:
+                if not any(
+                    item["play_type"] == str(play_type)
+                    and item["model_version_id"] == int(model_version_id)
+                    for item in derived_counts["skipped"]
+                ):
+                    derived_counts["skipped"].append(
+                        {
+                            "match_id": int(match_id),
+                            "model_version_id": int(model_version_id),
+                            "model_name": model_name,
+                            "play_type": str(play_type),
+                            "reason": "model_output_not_published",
+                        }
+                    )
             stored += (
                 len(group_predictions) if prediction_run_id is not None else len(official_options)
             )
