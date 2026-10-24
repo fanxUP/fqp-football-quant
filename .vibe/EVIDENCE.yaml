@@ -196,7 +196,14 @@
   },
   "external_ci": {
     "status": "pending",
-    "summary": "A106 PR 尚未创建；将只采信新 PR 当前 head 的 test 与 lint-and-typecheck 实时检查。"
+    "pr_number": 35,
+    "url": "https://github.com/fanxUP/fqp-football-quant/pull/35",
+    "head_sha": "4021033193166dbb581dedad1a737b0d518ced78",
+    "required_checks": [
+      "test",
+      "lint-and-typecheck"
+    ],
+    "summary": "PR #35 opened; waiting for live checks on the current head."
   },
   "upstream_evidence": {
     "P104-SALE-STATUS-CORRECTION": {

@@ -26,7 +26,7 @@
   "quality_gate": {
     "engine_path": "/Users/estefan-macworkstation/.remote-vibe-coding/engine/vibe.py",
     "repository": "fanxUP/fqp-football-quant",
-    "pull_request": 30,
+    "pull_request": 35,
     "required_checks": [
       "test",
       "lint-and-typecheck"
