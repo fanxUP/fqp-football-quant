@@ -1,22 +1,21 @@
 {
   "schema_version": 4,
-  "task_id": "P105-WEATHER",
-  "objective": "Refresh P104 weather observations on a bounded four-hour cadence while preserving six-hour freshness semantics and the current per-run match cap.",
+  "task_id": "P106-PROVENANCE-PROPAGATION-HOTFIX",
+  "objective": "Preserve scheduled predictions when a model manifest is incomplete by ensuring group provenance never overstates its parent run provenance.",
   "allowed_paths": [
-    "scripts/weather_schedule.py",
-    "scripts/jobs/collect_weather.py",
-    "scripts/jobs/run_scheduler.py",
-    "apps/backend/src/services/pipeline_status.py",
-    "tests/test_jobs/test_run_scheduler.py"
+    ".vibe/CHANGE_BUDGET.yaml",
+    ".vibe/SCOPE_LOCK.yaml",
+    "scripts/model_prediction_run_storage.py",
+    "tests/test_computation/test_prediction_run_postgres.py"
   ],
   "protected_paths": [
+    "sql/**",
     "**/migrations/**",
-    "**/*.sql",
     "**/requirements*.txt",
     "**/pyproject.toml",
     "**/package*.json",
     "**/*lock*"
   ],
   "approved_protected_paths": [],
-  "notes": "Pin the weather cron trigger to Asia/Shanghai, derive the operations label from shared cadence constants, and update the collector module note. The collector runtime, model input, database schema, source calls, production consumer, and release target do not change."
+  "notes": "Do not fabricate the missing Maher training manifest identity for active model version 73. Preserve the parent run's incomplete provenance, downgrade only the output group's provenance when the run is incomplete, keep its prediction vector intact, and verify this behavior in fixed-sample plus isolated PostgreSQL regression. No SQL migration, model retraining, external API, production database write, dependency or public API change."
 }

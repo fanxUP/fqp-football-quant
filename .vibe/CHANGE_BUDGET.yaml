@@ -1,8 +1,8 @@
 {
   "schema_version": 4,
-  "task_id": "P105-WEATHER",
-  "max_files_changed": 5,
-  "max_new_files": 1,
+  "task_id": "P106-PROVENANCE-PROPAGATION-HOTFIX",
+  "max_files_changed": 4,
+  "max_new_files": 0,
   "max_new_dependencies": 0,
   "max_schema_migrations": 0,
   "max_public_api_changes": 0,

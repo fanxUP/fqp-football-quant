@@ -411,6 +411,18 @@ def store_prediction_group(
 ) -> uuid.UUID:
     group_id = uuid.uuid4()
     try:
+        normalized_metadata = dict(metadata)
+        if normalized_metadata.get("provenance_status") == "complete":
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT provenance_status FROM model_prediction_runs WHERE id=%s",
+                    (str(_uuid(run_id)),),
+                )
+                parent = cur.fetchone()
+            if parent is not None and parent[0] != "complete":
+                # A group cannot claim complete lineage when the parent run
+                # manifest records any missing source or artifact identity.
+                normalized_metadata["provenance_status"] = "incomplete"
         normalized_predictions: list[dict[str, Any]] = []
         bound_input_fences: dict[str, dict[str, Any]] = {}
         for prediction in predictions:
@@ -435,7 +447,7 @@ def store_prediction_group(
                 bound_input_fences[str(normalized.get("option_code", ""))] = bound
             normalized_predictions.append(normalized)
         payload = build_prediction_group_payload(
-            run_id=run_id, metadata=metadata, predictions=normalized_predictions
+            run_id=run_id, metadata=normalized_metadata, predictions=normalized_predictions
         )
         with conn.cursor() as cur:
             cur.execute(
