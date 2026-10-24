@@ -1377,6 +1377,127 @@ def test_prediction_group_publication_checks_all_manifest_fields(
     conn.rollback()
 
 
+def test_complete_artifact_group_inherits_incomplete_parent_provenance(isolated_database):
+    from scripts.model_prediction_run_identity import content_sha256
+    from scripts.model_prediction_run_loader import load_latest_prediction_group
+    from scripts.model_prediction_run_storage import (
+        create_prediction_run,
+        finalize_prediction_run,
+        store_prediction_group,
+    )
+
+    conn, _schema_name = isolated_database
+    with conn.cursor() as cursor:
+        cursor.execute("INSERT INTO ai_job_runs DEFAULT VALUES RETURNING id")
+        job_id = cursor.fetchone()[0]
+        cursor.execute(
+            "INSERT INTO model_versions (model_name) VALUES ('maher_poisson') RETURNING id"
+        )
+        incomplete_model_id = cursor.fetchone()[0]
+        cursor.execute(
+            "INSERT INTO model_versions (model_name) VALUES ('market_baseline') RETURNING id"
+        )
+        complete_model_id = cursor.fetchone()[0]
+        cursor.execute("INSERT INTO official_matches DEFAULT VALUES RETURNING id")
+        match_id = cursor.fetchone()[0]
+
+    incomplete_model_identity = {
+        "model_version_id": incomplete_model_id,
+        "model_name": "maher_poisson",
+        "provenance_status": "incomplete",
+        "parameters_sha256": "1" * 64,
+        "artifact": None,
+        "reason": "training_manifest_identity_missing",
+    }
+    complete_model_identity = {
+        "model_version_id": complete_model_id,
+        "model_name": "market_baseline",
+        "provenance_status": "complete",
+        "parameters_sha256": "2" * 64,
+        "artifact": {
+            "kind": "inline_parameters",
+            "format": "application/json",
+            "size_bytes": 2,
+            "sha256": "2" * 64,
+        },
+        "reason": None,
+    }
+    run_id = uuid.uuid4()
+    create_prediction_run(
+        conn,
+        run_id=run_id,
+        ai_job_run_id=job_id,
+        release_id="test-incomplete-parent-provenance",
+        code_fingerprint={"files": {}, "sha256": content_sha256({})},
+        model_manifest=[incomplete_model_identity, complete_model_identity],
+        input_manifest={"match_ids": [match_id]},
+        provenance_status="incomplete",
+    )
+    predictions = [
+        {
+            "match_id": match_id,
+            "model_version_id": complete_model_id,
+            "odds_snapshot_id": 30 + index,
+            "feature_snapshot_id": 77,
+            "predict_time": "2026-10-23T10:00:00",
+            "play_type": "spf",
+            "option_code": option,
+            "raw_model_probability": probability,
+            "model_probability": probability,
+            "market_probability": probability,
+            "break_even_probability": probability,
+            "market_edge": 0.0,
+            "breakeven_edge": 0.0,
+            "ev": 0.0,
+            "validation_status": "valid",
+            "validation_errors": [],
+            "calculation_version": "incomplete-parent-provenance-test",
+        }
+        for index, (option, probability) in enumerate((("3", 0.5), ("1", 0.25), ("0", 0.25)))
+    ]
+
+    store_prediction_group(
+        conn,
+        run_id=run_id,
+        metadata={
+            "match_id": match_id,
+            "model_version_id": complete_model_id,
+            "play_type": "spf",
+            "market_variant": "",
+            "predict_time": "2026-10-23T10:00:00",
+            "expected_options": ["3", "1", "0"],
+            "odds_snapshot_ids": {"3": 30, "1": 31, "0": 32},
+            "artifact_identity": complete_model_identity,
+            "provenance_status": "complete",
+        },
+        predictions=predictions,
+    )
+    finalize_prediction_run(
+        conn,
+        run_id=run_id,
+        run_status="completed",
+        output_summary={
+            "expected_groups": 1,
+            "completed_groups": 1,
+            "skipped_groups": 0,
+            "missing_groups": [],
+            "input_updates_skipped": 0,
+            "completion_reason": "predictions_completed",
+        },
+    )
+
+    loaded = load_latest_prediction_group(
+        conn,
+        match_id=match_id,
+        model_version_id=complete_model_id,
+        play_type="spf",
+    )
+    assert loaded["status"] == "complete", loaded
+    assert loaded["provenance_status"] == "incomplete"
+    assert loaded["run_provenance_status"] == "incomplete"
+    assert len(loaded["options"]) == 3
+
+
 def test_prediction_group_artifact_must_match_parent_run_manifest(isolated_database):
     from scripts.model_prediction_run_storage import (
         create_prediction_run,
