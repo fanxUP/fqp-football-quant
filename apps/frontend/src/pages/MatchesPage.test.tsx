@@ -7,6 +7,8 @@ vi.mock('../core/apiClient', () => ({ api: { matches: { active } } }));
 vi.mock('../features/command-center/MatchEvidence', () => ({
   default: ({ match }: { match: { match_id: number } }) => <aside aria-label="所选赛事分析">所选赛事 #{match.match_id}</aside>,
 }));
+vi.mock('../features/command-center/SceneViewport', () => ({ default: ({ children }: { children: (active: boolean, fail: () => void) => React.ReactNode }) => <div>{children(true, () => {})}</div> }));
+vi.mock('../features/command-center/PitchScene', () => ({ default: ({ onSelect }: { onSelect: (id: number) => void }) => <button onClick={() => onSelect(12)}>场景选择比赛12</button> }));
 const matches = [
   { match_id: 11, league_name: '中超', home_team_name: '上海海港', away_team_name: '北京国安', kickoff_time: '2026-07-12T19:35:00', match_status: 'awaiting_result', match_num_str: '周日001' },
   { match_id: 12, league_name: '中超', home_team_name: '成都蓉城', away_team_name: '山东泰山', kickoff_time: '2026-07-12T20:00:00', match_status: 'Selling', match_num_str: '周日002' },
@@ -15,7 +17,7 @@ const matches = [
 async function loaded() { await screen.findByText('上海海港'); }
 
 describe('MatchesPage', () => {
-  beforeEach(() => { active.mockReset(); active.mockResolvedValue({ total: 3, matches }); });
+  beforeEach(() => { window.history.replaceState(null, '', '#/matches'); active.mockReset(); active.mockResolvedValue({ total: 3, matches }); });
   afterEach(() => { vi.useRealTimers(); vi.clearAllMocks(); });
 
   it('lists every unfinished official match including awaiting results', async () => {
@@ -124,6 +126,74 @@ describe('MatchesPage', () => {
     render(<MatchesPage />); await loaded();
     expect(screen.getAllByRole('button', { name: /查看分析 / })[0]).toHaveAccessibleName(/周日002/);
     expect(screen.getByText('—')).toBeInTheDocument();
+  });
+
+  it('locates a linked match beyond the first page', async () => {
+    window.history.replaceState(null, '', '#/matches?match_id=51');
+    active.mockResolvedValue({ total: 51, matches: Array.from({ length: 51 }, (_, index) => ({ ...matches[0], match_id: index + 1, match_num_str: `测试${index + 1}` })) });
+    render(<MatchesPage />);
+    expect(await screen.findByText('第 2 / 2 页')).toBeInTheDocument();
+    expect(screen.getByLabelText('所选赛事分析')).toHaveTextContent('#51');
+  });
+
+  it('does not substitute the first match when a linked ID is unavailable', async () => {
+    window.history.replaceState(null, '', '#/matches?match_id=999'); render(<MatchesPage />); await loaded();
+    expect(screen.getByText(/当前未结束列表中未找到比赛 #999/)).toBeInTheDocument();
+    expect(screen.queryByLabelText('所选赛事分析')).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '查看指定比赛详情' })).toHaveAttribute('href', '#/matches/999');
+  });
+
+  it('reveals a linked match hidden by filters only after the user clears them', async () => {
+    window.history.replaceState(null, '', '#/matches?match_id=12&league=英超'); render(<MatchesPage />);
+    expect(await screen.findByText(/指定比赛被当前筛选隐藏/)).toBeInTheDocument();
+    expect(screen.queryByLabelText('所选赛事分析')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '清除筛选查看该比赛' }));
+    expect(screen.getByLabelText('所选赛事分析')).toHaveTextContent('#12');
+  });
+
+  it('serializes filters and selection and restores them after remounting', async () => {
+    const view = render(<MatchesPage />); await loaded();
+    fireEvent.change(screen.getByLabelText('联赛'), { target: { value: '中超' } });
+    fireEvent.change(screen.getByLabelText('开球排序'), { target: { value: 'desc' } });
+    fireEvent.click(screen.getByRole('button', { name: /查看分析 周日002/ }));
+    const params = new URLSearchParams(window.location.hash.split('?')[1]);
+    expect(params.get('league')).toBe('中超'); expect(params.get('sort')).toBe('desc'); expect(params.get('match_id')).toBe('12');
+    view.unmount(); render(<MatchesPage />); await screen.findByLabelText('所选赛事分析');
+    expect(screen.getByLabelText('联赛')).toHaveValue('中超');
+    expect(screen.getByLabelText('所选赛事分析')).toHaveTextContent('#12');
+  });
+
+  it('handles a same-route hash change and browser history restoration', async () => {
+    render(<MatchesPage />); await loaded();
+    act(() => { window.history.replaceState(null, '', '#/matches?match_id=13&sort=desc'); window.dispatchEvent(new HashChangeEvent('hashchange')); });
+    expect(screen.getByLabelText('所选赛事分析')).toHaveTextContent('#13');
+    act(() => { window.history.replaceState(null, '', '#/matches?match_id=12'); window.dispatchEvent(new HashChangeEvent('hashchange')); });
+    expect(screen.getByLabelText('所选赛事分析')).toHaveTextContent('#12');
+  });
+
+  it('reports invalid link parameters and uses safe defaults', async () => {
+    window.history.replaceState(null, '', '#/matches?match_id=1e3&page=-2&sort=unsafe'); render(<MatchesPage />); await loaded();
+    expect(screen.getByText(/链接参数无效/)).toBeInTheDocument();
+    expect(screen.getByText('第 1 / 1 页')).toBeInTheDocument();
+    expect(screen.getByLabelText('开球排序')).toHaveValue('asc');
+  });
+
+  it('retains an invalid-parameter warning while correcting an out-of-range page', async () => {
+    window.history.replaceState(null, '', '#/matches?page=999&sort=unsafe'); render(<MatchesPage />); await loaded();
+    expect(screen.getByText(/链接参数无效/)).toBeInTheDocument();
+    expect(screen.getByText('第 1 / 1 页')).toBeInTheDocument();
+  });
+
+  it('opens 3D explicitly, shares selection and does not refetch the active list', async () => {
+    render(<MatchesPage />); await loaded();
+    expect(screen.queryByRole('button', { name: '场景选择比赛12' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '打开 3D 选赛' }));
+    fireEvent.click(await screen.findByRole('button', { name: '场景选择比赛12' }));
+    expect(screen.getByLabelText('所选赛事分析')).toHaveTextContent('#12');
+    expect(active).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole('button', { name: '关闭 3D 选赛' }));
+    expect(screen.queryByRole('button', { name: '场景选择比赛12' })).not.toBeInTheDocument();
+    expect(screen.getByLabelText('所选赛事分析')).toHaveTextContent('#12');
   });
 
 });

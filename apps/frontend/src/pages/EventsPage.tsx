@@ -137,7 +137,7 @@ export default function EventsPage() {
 
   return (
     <div>
-      <PageHeader title="赛事中心" subtitle={`${events.length} 个联赛 · ${totalMatches} 场比赛 · 仅展示有官方体彩编号的中国竞彩网比赛`} />
+      <PageHeader title="赛事中心" subtitle={`联赛赛程与赛果 · ${events.length} 个联赛 · ${totalMatches} 场比赛 · 仅展示有官方体彩编号的中国竞彩网比赛`} />
 
       <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-start' }}>
         {/* ── Left: league nav ── */}

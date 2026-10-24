@@ -13,10 +13,10 @@ class SceneBoundary extends Component<{ children: ReactNode; fallback: ReactNode
   static getDerivedStateFromError() { return { failed: true }; }
   render() { return this.state.failed ? this.props.fallback : this.props.children; }
 }
-function initialEnabled() { try { return localStorage.getItem('fqp.scene.enabled') !== 'false'; } catch { return true; } }
-export default function SceneViewport({ children, fallback, subject = '赛事与证据' }: { subject?: string; children: (active: boolean, onFailure: () => void) => ReactNode; fallback: ReactNode }) {
+function initialEnabled(key: string | null) { try { return key === null || localStorage.getItem(key) !== 'false'; } catch { return true; } }
+export default function SceneViewport({ children, fallback, subject = '赛事与证据', storageKey = 'fqp.scene.enabled' }: { subject?: string; storageKey?: string | null; children: (active: boolean, onFailure: () => void) => ReactNode; fallback: ReactNode }) {
   const host = useRef<HTMLDivElement>(null);
-  const [enabled, setEnabled] = useState(initialEnabled);
+  const [enabled, setEnabled] = useState(() => initialEnabled(storageKey));
   const [supported, setSupported] = useState<boolean | null>(null);
   const [visible, setVisible] = useState(false);
   const [pageVisible, setPageVisible] = useState(document.visibilityState !== 'hidden');
@@ -36,7 +36,7 @@ export default function SceneViewport({ children, fallback, subject = '赛事与
   }, []);
   useEffect(() => { if (enabled && supported && visible && pageVisible) setLoaded(true); }, [enabled, supported, visible, pageVisible]);
   const toggle = () => {
-    setEnabled(previous => { const next = !previous; try { localStorage.setItem('fqp.scene.enabled', String(next)); } catch { /* Storage is optional. */ } return next; });
+    setEnabled(previous => { const next = !previous; try { if (storageKey !== null) localStorage.setItem(storageKey, String(next)); } catch { /* Storage is optional. */ } return next; });
   };
   const retry = () => { setFailed(false); setLoaded(false); setSupported(null); setAttempt(value => value + 1); };
   const fallbackContent = <div className="cc-scene-fallback">{fallback}<p role="status">{!enabled ? `已关闭 3D，二维${subject}可继续使用` : failed ? '3D 连接已中断，已切换二维视图' : supported === false ? '浏览器无法使用 WebGL 2，已切换二维视图' : '场景将在可见时加载'}</p><button type="button" onClick={retry}>重试 3D</button></div>;

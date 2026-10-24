@@ -33,4 +33,15 @@ describe('3D capability and failure isolation', () => {
     act(() => observeCallback([{ isIntersecting: true } as IntersectionObserverEntry], {} as IntersectionObserver));
     await waitFor(() => expect(child).toHaveBeenCalled());
   });
+
+  it('isolates an explicitly opened match scene from the global Agent setting', async () => {
+    localStorage.setItem('fqp.scene.enabled', 'false');
+    vi.stubGlobal('WebGL2RenderingContext', class {});
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({ getExtension: () => null } as unknown as WebGL2RenderingContext);
+    render(<SceneViewport storageKey={null} fallback={<div>二维列表</div>}>{() => <div>比赛场景已打开</div>}</SceneViewport>);
+    expect(await screen.findByText('比赛场景已打开')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '关闭 3D' }));
+    expect(localStorage.getItem('fqp.scene.enabled')).toBe('false');
+    expect(screen.queryByText('比赛场景已打开')).not.toBeInTheDocument();
+  });
 });

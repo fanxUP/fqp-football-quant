@@ -22,7 +22,7 @@ const api = vi.hoisted(() => ({
 
 vi.mock('../core/apiClient', () => ({ api }));
 vi.mock('../features/command-center/useReducedMotion', () => ({ default: () => true }));
-vi.mock('../features/command-center/CommandCenter', () => ({ default: () => <div /> }));
+vi.mock('../features/command-center/MatchOverview', () => ({ default: () => <div /> }));
 vi.mock('../shared/components/ChartCard', () => ({ default: () => <div /> }));
 vi.mock('../visualization', () => ({
   RoiLineChart: () => <div data-testid="roi-chart" />,

@@ -4,7 +4,7 @@ import ExecutionCenter from './ExecutionCenter';
 import CommandWorkspace from './CommandWorkspace';
 const api = vi.hoisted(() => ({ executions: { overview: vi.fn(), detail: vi.fn() }, modelProviders: { bindings: vi.fn() } }));
 vi.mock('../../core/apiClient', () => ({ api }));
-vi.mock('./CommandCenter', () => ({ default: () => <div>赛事场景测试入口</div> }));
+vi.mock('./MatchOverview', () => ({ default: () => <div>比赛概览测试入口</div> }));
 vi.mock('./SceneViewport', () => ({ default: () => <div>二维场景回退</div> }));
 const job = { id: 9, job_code: 'prediction', job_name: '预测任务', owner_agent: 'model_agent', status: 'running', started_at: '2026-10-08T00:00:00Z', finished_at: null, duration_ms: null, retry_count: 0 };
 const snapshot = () => ({ agents: [{ id: 1, agent_name: 'model_agent', agent_type: 'model', is_active: true }], jobs: [job, { ...job, id: 10, job_name: '采集任务', job_code: 'collection' }], tasks: [], scheduler: { running: false, heartbeat_at: null }, observed_at: new Date().toISOString(), limit: 100, task_limit: 50 });
@@ -74,11 +74,11 @@ describe('Agent execution desk', () => {
 
   it('unmounts the prior mode when switching the workspace', async () => {
     render(<CommandWorkspace />);
-    expect(screen.getByText('赛事场景测试入口')).toBeInTheDocument();
+    expect(screen.getByText('比赛概览测试入口')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Agent 与管线' }));
     await screen.findByRole('heading', { name: 'Agent 状态网络' });
-    expect(screen.queryByText('赛事场景测试入口')).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: '赛事指挥台' }));
+    expect(screen.queryByText('比赛概览测试入口')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '比赛概览' }));
     expect(screen.queryByRole('heading', { name: 'Agent 状态网络' })).not.toBeInTheDocument();
   });
 

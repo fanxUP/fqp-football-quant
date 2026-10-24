@@ -67,6 +67,7 @@
 - **数据与预测输入**：[data-contracts](data-contracts.md)、[feature-pipeline](feature-pipeline.md)、[observations](observations.md)、[prediction-input-modes](prediction-input-modes.md)、[prediction-input-updates](prediction-input-updates.md)、[prediction-input-revisions](prediction-input-revisions.md)、[prediction-input-runtime-readiness](prediction-input-runtime-readiness.md)。
 - **来源与模型中心**：[request-governance](request-governance.md)、[pi-model-center](pi-model-center.md)、[news-intelligence](news-intelligence/spec.md)、[news-intelligence integration map](news-intelligence/integration-map.md)。
 - **页面和情报模块**：[command-center v1](command-center-v1.md)、[command-center v2](command-center-v2.md)、[match-center v3a](match-center-v3a.md)、[prediction odds v3b](prediction-odds-v3b.md)、[betting/backtest v3c](betting-backtest-reviews-v3c.md)、[news reports v3d](news-reports-v3d.md)、[tactics evidence v3e](tactics-evidence-v3e.md)、[tactics schematic v3f](tactics-schematic-v3f.md)、[upset intelligence](upset-intelligence/ARCHITECTURE.md)。
+- **页面职责整合与实施**：[比赛中心与首页赛事雷达整合](match-center-consolidation.md)（2026-10-25 本地实施与验证完成，单独提交至 `main`，尚未推送部署）。
 - **可靠性与身份**：[可靠性改进记录](project-reliability-improvements.md)、[登录模块设计](67_登录模块设计.md)。
 
 专题版本号表示方案/交付批次，不保证这些页面或能力在当前版本仍保持相同实现；核对时以代码和实际运行结果为准。
