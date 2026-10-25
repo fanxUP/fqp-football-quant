@@ -63,8 +63,12 @@ def test_prediction_research_uses_exact_foreign_keys(client, query):
         "CASE mp.option_code",
     ]:
         assert fragment in sql
-    assert "WITH recent AS MATERIALIZED" in sql
-    assert "LIMIT %s" in sql.split("FROM recent mp")[0]
+    assert "recent AS MATERIALIZED" in sql
+    assert "LIMIT %(limit)s" in sql.split("FROM recent mp")[0]
+    assert cur.execute.call_args_list[0].args[1] == {
+        "match_id": 101 if query else None,
+        "limit": 200 if query else 20,
+    }
     assert "mp.play_type IN ('spf', 'rqspf')" in sql
     assert "parameters_json" not in sql
     assert "raw_feature_refs" not in sql
@@ -140,7 +144,8 @@ def test_records_only_read_skips_full_aggregate(client, path):
     assert response.status_code == 200
     assert response.json() == {"predictions": [], "total": None, "summary": None}
     assert cur.execute.call_count == 1
-    assert "WITH recent AS MATERIALIZED" in cur.execute.call_args.args[0]
+    assert "recent AS MATERIALIZED" in cur.execute.call_args.args[0]
+    assert cur.execute.call_args.args[1] == {"match_id": None, "limit": 200}
     cur.fetchone.assert_not_called()
 
 

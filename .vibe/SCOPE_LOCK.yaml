@@ -35,7 +35,8 @@
     "apps/frontend/src/pages/DashboardPage.test.tsx",
     "apps/backend/src/services/pipeline_status.py",
     "scripts/feature_batch_storage.py",
-    "tests/test_computation/test_feature_batch_postgres.py"
+    "tests/test_computation/test_feature_batch_postgres.py",
+    "tests/test_api/test_prediction_research.py"
   ],
   "protected_paths": [
     "sql/**",
