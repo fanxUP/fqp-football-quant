@@ -173,7 +173,9 @@ class TestPredictionsEndpoint:
         mock_cur.fetchone.return_value = (4187, 1632, 0.714, 19, datetime(2025, 1, 1, 10, 0, 0))
 
         with patch("apps.backend.src.routers.predictions.get_db", return_value=mock_conn):
-            response = client.get("/api/predictions?limit=1&include_summary=false&summary_only=true")
+            response = client.get(
+                "/api/predictions?limit=1&include_summary=false&summary_only=true"
+            )
 
         assert response.status_code == 200
         data = response.json()
