@@ -11,7 +11,7 @@ from __future__ import annotations
 import os
 import time
 from collections.abc import Callable
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from datetime import time as clock_time
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -363,6 +363,20 @@ def main() -> None:
             minutes=30,
             next_run_time=_business_now(timezone_name),
             id="refresh_model_performance_history",
+        )
+
+        # Count history off the request path after the normal prediction windows.
+        # The producer owns structured audit output and its cross-process lock.
+        scheduler.add_job(
+            lambda: __import__(
+                "scripts.prediction_statistics", fromlist=["refresh_prediction_count"]
+            ).refresh_prediction_count(),
+            "cron",
+            minute="22,52",
+            next_run_time=_business_now(timezone_name) + timedelta(minutes=2),
+            max_instances=1,
+            coalesce=True,
+            id="refresh_prediction_count",
         )
 
         # ----- Stage 2: official data jobs -----

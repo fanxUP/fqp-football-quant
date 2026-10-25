@@ -11,11 +11,13 @@
 
 from __future__ import annotations
 
+import math
 from pathlib import Path
 from typing import Any
 
 import yaml
 
+from scripts.feature_schema import numeric_feature_value
 from scripts.feature_storage import (
     get_injuries_for_match,
     get_injury_observation_for_match,
@@ -36,41 +38,35 @@ def _load_weights() -> dict[str, Any]:
     return _weights
 
 
-def _status_to_weight(status: str) -> float:
+def _status_to_weight(status: str) -> float | None:
     config = _load_weights()
     status_map = config.get("availability_status", {})
-    return float(status_map.get(status, 0.3))
+    if status == "unknown" or status not in status_map:
+        return None
+    value = numeric_feature_value(status_map[status])
+    return value if math.isfinite(value) and 0 <= value <= 1 else None
 
 
-def compute_absence_impact(player_status: dict[str, Any]) -> float:
-    """Compute absence impact for a single player. (Preserves original skeleton signature.)"""
+def compute_absence_impact(player_status: dict[str, Any]) -> float | None:
+    """Retain the existing heuristic only when its inputs are all known."""
     if player_status.get("availability_status") == "available":
         return 0.0
+    if _status_to_weight(player_status.get("availability_status", "unknown")) is None:
+        return None
     weights = _load_weights().get("absence_impact_weights", {})
     score = 0.0
-    score += (
-        float(player_status.get("recent_minutes_share") or 0)
-        * 100
-        * float(weights.get("recent_minutes_share", 0.30))
-    )
-    score += (
-        float(player_status.get("team_market_value_share") or 0)
-        * 100
-        * float(weights.get("team_market_value_share", 0.25))
-    )
-    score += (
-        float(player_status.get("position_importance_score") or 0.5)
-        * 100
-        * float(weights.get("position_importance_score", 0.20))
-    )
-    score += float(player_status.get("key_player_score") or 0) * float(
-        weights.get("key_player_score", 0.15)
-    )
-    score += (
-        float(player_status.get("replacement_difficulty") or 0.5)
-        * 100
-        * float(weights.get("replacement_difficulty", 0.10))
-    )
+    for field, default_weight in (
+        ("recent_minutes_share", 0.30),
+        ("team_market_value_share", 0.25),
+        ("position_importance_score", 0.20),
+        ("key_player_score", 0.15),
+        ("replacement_difficulty", 0.10),
+    ):
+        value = numeric_feature_value(player_status.get(field))
+        upper = 100 if field == "key_player_score" else 1
+        if not math.isfinite(value) or not 0 <= value <= upper:
+            return None
+        score += value / upper * 100 * float(weights.get(field, default_weight))
     if player_status.get("is_suspended"):
         score += 5
     return max(0.0, min(100.0, score))
@@ -91,13 +87,17 @@ def compute_team_absence_impact(injuries: list[dict]) -> dict[str, Any]:
     for inj in injuries:
         status = inj.get("availability_status", "unknown")
         status_w = _status_to_weight(status)
+        if status_w is None:
+            return {"total_impact_score": None, "key_absence_count": None}
         if status_w == 0:
             continue
 
-        if inj.get("absence_impact_score") is not None:
-            impact = float(inj["absence_impact_score"]) * status_w
-        else:
-            impact = compute_absence_impact(inj) * status_w
+        # Legacy stored scores were position-based placeholders. Requiring the
+        # actual components prevents those rows from becoming new evidence.
+        raw_impact = compute_absence_impact(inj)
+        if raw_impact is None:
+            return {"total_impact_score": None, "key_absence_count": None}
+        impact = raw_impact * status_w
 
         total += impact
         if impact > 30:
@@ -119,10 +119,10 @@ def build_injury_features(
 
     Returns dict with fields for match_feature_snapshots assembly.
     """
-    home_impact = 0.0
-    away_impact = 0.0
-    home_key = 0
-    away_key = 0
+    home_impact = None
+    away_impact = None
+    home_key = None
+    away_key = None
     home_injuries: list[dict] = []
     away_injuries: list[dict] = []
     home_observation = None
@@ -136,6 +136,7 @@ def build_injury_features(
             home_impact = result["total_impact_score"]
             home_key = result["key_absence_count"]
         except Exception as e:
+            home_observation = None
             print(f"[injury] error home team {home_team_id}: {e}")
 
     if away_team_id:
@@ -146,6 +147,7 @@ def build_injury_features(
             away_impact = result["total_impact_score"]
             away_key = result["key_absence_count"]
         except Exception as e:
+            away_observation = None
             print(f"[injury] error away team {away_team_id}: {e}")
 
     covered_team_count = int(home_observation is not None) + int(away_observation is not None)
@@ -154,7 +156,10 @@ def build_injury_features(
         "away_absence_impact_score": away_impact if away_observation is not None else None,
         "absence_impact_diff": (
             round(home_impact - away_impact, 4)
-            if home_observation is not None and away_observation is not None
+            if home_observation is not None
+            and away_observation is not None
+            and home_impact is not None
+            and away_impact is not None
             else None
         ),
         "home_key_absence_count": home_key if home_observation is not None else None,

@@ -73,7 +73,12 @@ MARKET_BASELINE_BRIER_CTES = """
             source_mp.match_id,
             source_mp.option_code,
             source_mp.model_probability
-        FROM model_prediction_latest_rows source_mp
+        FROM (
+            -- Only these matches can be paired with an evaluated model.
+            -- Bind them before the view ranks legacy prediction history.
+            SELECT latest.* FROM model_prediction_latest_rows latest
+            WHERE latest.match_id = ANY(ARRAY(SELECT match_id FROM latest_metrics))
+        ) source_mp
         JOIN model_versions source_mv ON source_mv.id = source_mp.model_version_id
         JOIN official_matches source_match ON source_match.id = source_mp.match_id
         JOIN official_results source_result ON source_result.match_id = source_mp.match_id

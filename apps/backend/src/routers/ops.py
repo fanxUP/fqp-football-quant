@@ -156,11 +156,21 @@ def get_contamination_audit(days: int = Query(30)):
         issues = get_recent_contamination_issues(conn, limit=50)
 
     return {
-        "status": "ok" if stats["has_data"] else "no_data",
+        "status": (
+            "no_data"
+            if not stats["has_data"]
+            else "ok"
+            if stats.get("checks_complete", False)
+            else "incomplete"
+        ),
         "period_days": days,
         "stats": stats,
         "issues": issues,
-        "passes_stage8": bool(stats["has_data"] and stats["contamination_found"] == 0),
+        "passes_stage8": bool(
+            stats["has_data"]
+            and stats.get("checks_complete", False)
+            and stats["contamination_found"] == 0
+        ),
     }
 
 

@@ -1031,7 +1031,12 @@ export const api = {
   // Dashboard (data visualization)
   dashboard: {
     predictionCount: () =>
-      request<{ total: number }>('/api/dashboard/prediction-count'),
+      request<{
+        total: number | null;
+        status: 'ok' | 'stale' | 'pending' | 'unavailable' | 'refresh_failed';
+        data_as_of: string | null;
+        last_success_at: string | null;
+      }>('/api/dashboard/prediction-count'),
 
     today: () =>
       request<import('./types').DashboardResponse<never>>('/api/dashboard/today'),

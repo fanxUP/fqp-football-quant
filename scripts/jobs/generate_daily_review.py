@@ -116,10 +116,14 @@ def _run_impl(review_date: str | None = None, dry_run: bool = False) -> dict[str
         with conn.cursor() as cur:
             cur.execute(
                 """
+                WITH review_matches AS MATERIALIZED (
+                    SELECT id, kickoff_time FROM official_matches WHERE business_date = %s
+                )
                 SELECT COUNT(DISTINCT mp.match_id)
                 FROM model_prediction_latest_rows mp
-                JOIN official_matches m ON m.id = mp.match_id
-                WHERE m.business_date = %s
+                JOIN review_matches m ON m.id = mp.match_id
+                -- Bind the date's match IDs before ranking legacy history.
+                WHERE mp.match_id = ANY(ARRAY(SELECT id FROM review_matches))
                   AND mp.predict_time < m.kickoff_time
                   AND mp.validation_status = 'valid'
                 """,

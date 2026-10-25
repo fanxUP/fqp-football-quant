@@ -61,6 +61,38 @@ def latest(pg, match_id, **overrides):
     return load_latest_feature_batch(pg, **args)
 
 
+def test_retained_v2_batch_remains_readable_without_becoming_current(pg, match_id, monkeypatch):
+    from scripts import feature_batch_storage
+
+    write(pg, match_id)
+    pg.commit()
+    cutoff = freeze(pg, match_id)
+    # Model a real pre-upgrade publication using its original validation contract.
+    with monkeypatch.context() as old_code:
+        old_code.setattr(feature_batch_storage, "FEATURE_SCHEMA_VERSION", "observed-form/v2")
+        batch = store(pg, match_id, cutoff, feature_schema_version="observed-form/v2")
+    pg.commit()
+    with pg.cursor() as cur:
+        cur.execute("SELECT content_hash,fields_hash FROM feature_batches WHERE id=%s", (batch,))
+        original_hashes = cur.fetchone()
+    loaded = load_feature_batch(pg, batch)
+    assert loaded["feature_schema_version"] == "observed-form/v2"
+    assert loaded["features"] == values()
+    assert loaded["content_hash"] == original_hashes[0]
+    assert latest(pg, match_id)["batch"] is None
+    with pytest.raises(ValueError):
+        store(pg, match_id, cutoff, feature_schema_version="observed-form/v2")
+    with pytest.raises(ValueError):
+        latest(pg, match_id, feature_schema_version="observed-form/v2")
+    with pg.cursor() as cur:
+        cur.execute("SELECT content_hash,fields_hash FROM feature_batches WHERE id=%s", (batch,))
+        assert cur.fetchone() == original_hashes
+    current = store(pg, match_id, cutoff)
+    pg.commit()
+    assert latest(pg, match_id)["batch"]["id"] == current
+    assert load_feature_batch(pg, batch)["content_hash"] == original_hashes[0]
+
+
 def test_complete_header_and_values_become_visible_together(pg, connect, match_id):
     ref = write(pg, match_id)
     pg.commit()

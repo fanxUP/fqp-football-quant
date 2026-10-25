@@ -50,6 +50,22 @@ def test_news_jobs_use_staggered_conservative_intervals() -> None:
     assert "FQP_NEWS_COLLECTION_ENABLED" in source
 
 
+def test_history_count_is_monitored_and_scheduled_outside_requests():
+    source = Path("scripts/jobs/run_scheduler.py").read_text()
+    job_source = source[
+        source.index("# Count history off the request path") : source.index(
+            "# ----- Stage 2: official data jobs"
+        )
+    ]
+    assert 'id="refresh_prediction_count"' in job_source
+    assert 'minute="22,52"' in job_source
+    assert "timedelta(minutes=2)" in job_source
+    assert "max_instances=1" in job_source
+    assert "coalesce=True" in job_source
+    assert "_audited_job" not in job_source  # producer owns structured audit output
+    assert JOB_DEFINITIONS["refresh_prediction_count"].max_age == timedelta(minutes=45)
+
+
 def test_self_tracked_job_is_not_wrapped_again():
     def job():
         return "tracked"

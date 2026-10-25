@@ -81,7 +81,6 @@ def _process_lineup(
         start_xi = team_data.get("startXI") or []
         substitutes = team_data.get("substitutes") or []
         player_records: list[dict[str, Any]] = []
-        key_count = 0
 
         for entry in start_xi:
             player_info = entry.get("player") or {}
@@ -99,11 +98,9 @@ def _process_lineup(
                     "tactical_role": "",
                     "market_value": None,
                     "recent_minutes": None,
-                    "key_player_score": 50.0 if position in ("G", "D", "M", "F") else 30.0,
+                    "key_player_score": None,
                 }
             )
-            if position in ("G", "D"):
-                key_count += 1
 
         for entry in substitutes:
             player_info = entry.get("player") or {}
@@ -120,7 +117,7 @@ def _process_lineup(
                     "tactical_role": "",
                     "market_value": None,
                     "recent_minutes": None,
-                    "key_player_score": 20.0,
+                    "key_player_score": None,
                 }
             )
 
@@ -134,19 +131,19 @@ def _process_lineup(
                 "source_name": "api-football",
                 "source_confidence": 0.95,
                 "formation": formation,
-                "formation_changed": False,
-                "goalkeeper_changed": False,
-                "center_back_pair_changed": False,
+                "formation_changed": None,
+                "goalkeeper_changed": None,
+                "center_back_pair_changed": None,
                 "starting_11_market_value": None,
                 "starting_11_avg_age": None,
                 "starting_11_recent_minutes": None,
-                "starting_11_key_player_count": key_count,
+                "starting_11_key_player_count": None,
                 "bench_market_value": None,
-                "bench_strength_score": 50.0,
-                "lineup_strength_score": 50.0,
-                "rotation_risk_score": 5.0,
-                "lineup_uncertainty_score": 5.0,
-                "raw_json": team_data,
+                "bench_strength_score": None,
+                "lineup_strength_score": None,
+                "rotation_risk_score": None,
+                "lineup_uncertainty_score": None,
+                "raw_json": dict(team_data, derived_fields_version="source-players/v2"),
             },
             player_records,
             api_fixture_id=api_fixture_id,

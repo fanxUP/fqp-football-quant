@@ -5,6 +5,8 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from apps.backend.src.services.pipeline_status import (
     _is_stale,
     active_job_definitions,
@@ -483,6 +485,36 @@ class TestOpsPipeline:
 
 
 class TestOpsAuditGates:
+    @pytest.mark.parametrize(
+        "complete, finding_count, expected_status, passes",
+        [(False, 0, "incomplete", False), (True, 0, "ok", True), (True, 2, "ok", False)],
+    )
+    def test_contamination_gate_requires_completed_checks_and_no_findings(
+        self, client, complete, finding_count, expected_status, passes
+    ):
+        mock_conn, _ = _mock_db_conn()
+        with (
+            patch("apps.backend.src.routers.ops.get_db", return_value=mock_conn),
+            patch(
+                "apps.backend.src.routers.ops.get_contamination_stats",
+                return_value={
+                    "total_checks": 6,
+                    "contamination_found": finding_count,
+                    "critical_found": 0,
+                    "has_data": True,
+                    "checks_complete": complete,
+                    "failed_checks": 0 if complete else 1,
+                    "incomplete_checks": 0 if complete else 1,
+                },
+            ),
+            patch("apps.backend.src.routers.ops.get_recent_contamination_issues", return_value=[]),
+        ):
+            response = client.get("/api/ops/contamination-audit")
+
+        assert response.status_code == 200
+        assert response.json()["status"] == expected_status
+        assert response.json()["passes_stage8"] is passes
+
     def test_evidence_chain_does_not_pass_without_audited_samples(self, client):
         mock_conn, _ = _mock_db_conn()
         with (

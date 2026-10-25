@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 import numpy as np
 
+from scripts.business_time import business_now_naive
 from scripts.feature_schema import (
     COMPATIBLE_SNAPSHOT_VERSIONS,
     FEATURE_COLUMNS,
@@ -43,9 +45,23 @@ def load_prediction_input_revision(conn: Any, revision_id: int) -> dict | None:
 
 def load_settled_pre_kickoff_dataset(
     conn: Any,
+    *,
+    cutoff_at: datetime | None = None,
+    max_matches: int = 5000,
 ) -> tuple[np.ndarray, np.ndarray, list[str]] | None:
-    """Load chronological, official and strictly pre-kickoff feature rows only."""
+    """Select the latest eligible matches, then return them chronologically.
+
+    The cutoff is a naive business-local timestamp, matching the legacy SQL
+    columns. Unknown result publication times cannot establish label readiness.
+    This selects retained snapshots; it does not reconstruct historical facts.
+    """
+    if type(max_matches) is not int or not 1 <= max_matches <= 5000:
+        raise ValueError("max_matches must be an integer between 1 and 5000")
+    cutoff = business_now_naive() if cutoff_at is None else cutoff_at
+    if not isinstance(cutoff, datetime) or cutoff.tzinfo is not None:
+        raise ValueError("cutoff_at must be a timezone-naive business datetime")
     columns = ", ".join(f"fs.{column}" for column in FEATURE_COLUMNS)
+    output_columns = ", ".join(FEATURE_COLUMNS)
     with conn.cursor() as cur:
         cur.execute(
             f"""
@@ -56,8 +72,8 @@ def load_settled_pre_kickoff_dataset(
                 WHERE fs.snapshot_time < m.kickoff_time
                   AND fs.feature_version IN %(feature_versions)s
                 ORDER BY fs.match_id, fs.snapshot_time DESC, fs.id DESC
-            )
-            SELECT m.kickoff_time, {columns},
+            ), recent_matches AS (
+            SELECT m.id AS match_id, m.kickoff_time, {columns},
                    CASE
                        WHEN r.full_home_goals > r.full_away_goals THEN 2
                        WHEN r.full_home_goals = r.full_away_goals THEN 1
@@ -67,10 +83,22 @@ def load_settled_pre_kickoff_dataset(
             JOIN official_matches m ON m.id = fs.match_id
             JOIN official_results r ON r.match_id = fs.match_id
             WHERE r.result_status IN ('final', 'confirmed')
-            ORDER BY m.kickoff_time ASC, fs.match_id ASC
-            LIMIT 5000
+              AND r.full_home_goals IS NOT NULL AND r.full_home_goals >= 0
+              AND r.full_away_goals IS NOT NULL AND r.full_away_goals >= 0
+              AND m.kickoff_time < %(cutoff_at)s
+              AND r.official_publish_time < %(cutoff_at)s
+            ORDER BY m.kickoff_time DESC, fs.match_id DESC
+            LIMIT %(max_matches)s
+            )
+            SELECT kickoff_time, {output_columns}, label
+            FROM recent_matches
+            ORDER BY kickoff_time ASC, match_id ASC
             """,
-            {"feature_versions": COMPATIBLE_SNAPSHOT_VERSIONS},
+            {
+                "feature_versions": COMPATIBLE_SNAPSHOT_VERSIONS,
+                "cutoff_at": cutoff,
+                "max_matches": max_matches,
+            },
         )
         rows = cur.fetchall()
     if not rows:

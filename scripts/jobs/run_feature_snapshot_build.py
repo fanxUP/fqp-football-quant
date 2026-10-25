@@ -26,7 +26,11 @@ from scripts.feature_quality import (
 from scripts.feature_quality import (
     snapshot_job_result as _snapshot_job_result,
 )
-from scripts.feature_schema import CURRENT_SNAPSHOT_VERSION, FEATURE_SCHEMA_VERSION
+from scripts.feature_schema import (
+    CURRENT_SNAPSHOT_VERSION,
+    FEATURE_SCHEMA_VERSION,
+    numeric_feature_value,
+)
 from scripts.feature_storage import (
     get_weather_for_match,
     store_match_feature_snapshot,
@@ -309,12 +313,22 @@ def _run_impl(match_id: int | None = None, dry_run: bool = False) -> dict[str, A
                 lineup = {}
                 has_lineup = False
                 lineup_coverage = 0.0
+                rotation_coverage = 0.0
                 try:
                     from scripts.features.build_lineup_strength import build_lineup_features
 
                     lineup = build_lineup_features(conn, mid, home_id, away_id)
                     has_lineup = lineup.get("has_lineup_data", False)
                     lineup_coverage = float(lineup.get("covered_team_count", 0)) / 2
+                    rotation_coverage = (
+                        sum(
+                            0
+                            <= numeric_feature_value(lineup.get(f"{side}_rotation_risk_score"))
+                            <= 100
+                            for side in ("home", "away")
+                        )
+                        / 2
+                    )
                 except Exception as e:
                     conn.rollback()
                     print(f"[snapshot] lineup error match {mid}: {e}")
@@ -452,7 +466,7 @@ def _run_impl(match_id: int | None = None, dry_run: bool = False) -> dict[str, A
                     "team_profile": has_profile,
                     "lineup": has_lineup,
                     "injury": has_injury,
-                    "rotation": has_lineup,  # rotation comes from lineup analysis
+                    "rotation": rotation_coverage == 1,
                     "travel": has_travel,
                     "weather": has_weather,
                     "motivation": has_motivation,
@@ -464,7 +478,7 @@ def _run_impl(match_id: int | None = None, dry_run: bool = False) -> dict[str, A
                     "team_profile": profile_team_count / 2,
                     "lineup": lineup_coverage,
                     "injury": injury_coverage,
-                    "rotation": lineup_coverage,
+                    "rotation": rotation_coverage,
                     "travel": float(has_travel),
                     "weather": float(has_weather),
                     "motivation": motivation_coverage,

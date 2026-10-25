@@ -15,6 +15,7 @@ from __future__ import annotations
 import math
 from typing import Any
 
+from scripts.feature_schema import numeric_feature_value
 from scripts.feature_storage import get_lineup_for_match
 
 WEIGHTS: dict[str, float] = {
@@ -27,37 +28,50 @@ WEIGHTS: dict[str, float] = {
 }
 
 
-def value_score(total_value: float, league_reference_value: float) -> float:
+def value_score(total_value: float | None, league_reference_value: float | None) -> float | None:
     """Log-scale market value → 0-100 score."""
-    if league_reference_value <= 0:
-        return 50.0
-    ratio = math.log(total_value + 1) / math.log(league_reference_value + 1)
+    total = numeric_feature_value(total_value)
+    reference = numeric_feature_value(league_reference_value)
+    if not math.isfinite(total) or total < 0 or not math.isfinite(reference) or reference <= 0:
+        return None
+    ratio = math.log1p(total) / math.log1p(reference)
     return max(0.0, min(100.0, ratio * 70))
 
 
 def compute_lineup_strength(
-    lineup: dict[str, Any], league_reference_value: float = 100_000_000
-) -> float:
-    """6-factor weighted lineup strength score (preserves original skeleton signature)."""
+    lineup: dict[str, Any], league_reference_value: float | None = None
+) -> float | None:
+    """Compute the existing heuristic only with all six known components."""
+    market_score = value_score(lineup.get("starting_11_market_value"), league_reference_value)
+    if market_score is None:
+        return None
     components = {
-        "starting_11_market_value_score": value_score(
-            float(lineup.get("starting_11_market_value") or 0), league_reference_value
-        ),
-        "recent_minutes_stability": float(lineup.get("recent_minutes_stability") or 50),
-        "key_player_integrity": float(lineup.get("key_player_integrity") or 50),
-        "positional_completeness": float(lineup.get("positional_completeness") or 50),
-        "formation_stability": float(lineup.get("formation_stability") or 50),
-        "bench_strength": float(lineup.get("bench_strength_score") or 50),
+        "starting_11_market_value_score": market_score,
+        "recent_minutes_stability": numeric_feature_value(lineup.get("recent_minutes_stability")),
+        "key_player_integrity": numeric_feature_value(lineup.get("key_player_integrity")),
+        "positional_completeness": numeric_feature_value(lineup.get("positional_completeness")),
+        "formation_stability": numeric_feature_value(lineup.get("formation_stability")),
+        "bench_strength": numeric_feature_value(lineup.get("bench_strength_score")),
     }
+    if any(not math.isfinite(value) or not 0 <= value <= 100 for value in components.values()):
+        return None
     return sum(components[k] * WEIGHTS[k] for k in WEIGHTS)
 
 
-def compute_rotation_risk(lineup: dict[str, Any]) -> float:
+def compute_rotation_risk(lineup: dict[str, Any]) -> float | None:
     """Compute rotation risk from lineup changes.
 
     Higher score = more rotation = more uncertainty.
     Factors: formation change, GK change, CB pair change, lineup uncertainty.
     """
+    changes = ("formation_changed", "goalkeeper_changed", "center_back_pair_changed")
+    uncertainty = numeric_feature_value(lineup.get("lineup_uncertainty_score"))
+    if (
+        any(type(lineup.get(field)) is not bool for field in changes)
+        or not math.isfinite(uncertainty)
+        or not 0 <= uncertainty <= 100
+    ):
+        return None
     risk = 0.0
     if lineup.get("formation_changed"):
         risk += 25
@@ -65,7 +79,7 @@ def compute_rotation_risk(lineup: dict[str, Any]) -> float:
         risk += 20
     if lineup.get("center_back_pair_changed"):
         risk += 30
-    risk += float(lineup.get("lineup_uncertainty_score") or 0) * 0.25
+    risk += uncertainty * 0.25
     return max(0.0, min(100.0, risk))
 
 
@@ -92,9 +106,11 @@ def build_lineup_features(
         try:
             home_lineup = get_lineup_for_match(conn, match_id, home_team_id)
             if home_lineup:
-                home_strength = round(compute_lineup_strength(home_lineup), 4)
+                strength = compute_lineup_strength(home_lineup)
+                home_strength = round(strength, 4) if strength is not None else None
                 home_value = home_lineup.get("starting_11_market_value")
-                home_rotation = round(compute_rotation_risk(home_lineup), 4)
+                rotation = compute_rotation_risk(home_lineup)
+                home_rotation = round(rotation, 4) if rotation is not None else None
         except Exception as e:
             print(f"[lineup] error home team {home_team_id}: {e}")
 
@@ -102,9 +118,11 @@ def build_lineup_features(
         try:
             away_lineup = get_lineup_for_match(conn, match_id, away_team_id)
             if away_lineup:
-                away_strength = round(compute_lineup_strength(away_lineup), 4)
+                strength = compute_lineup_strength(away_lineup)
+                away_strength = round(strength, 4) if strength is not None else None
                 away_value = away_lineup.get("starting_11_market_value")
-                away_rotation = round(compute_rotation_risk(away_lineup), 4)
+                rotation = compute_rotation_risk(away_lineup)
+                away_rotation = round(rotation, 4) if rotation is not None else None
         except Exception as e:
             print(f"[lineup] error away team {away_team_id}: {e}")
 

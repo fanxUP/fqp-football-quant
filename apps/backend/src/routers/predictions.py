@@ -12,6 +12,7 @@ from scripts.calibration_review import (
     review_calibration_profile,
     review_calibration_trend,
 )
+from scripts.prediction_statistics import latest_prediction_ctes
 from scripts.sporttery_sales import get_sporttery_sales_window
 
 router = APIRouter(tags=["predictions"])
@@ -298,19 +299,105 @@ def list_predictions(
     summary_row = None
     with get_db() as conn:
         with conn.cursor() as cur:
-            match_clause = "AND mp.match_id = %s" if match_id is not None else ""
-            params = (match_id, limit) if match_id is not None else (limit,)
+            match_clause = "AND mp.match_id = %(match_id)s" if match_id is not None else ""
+            group_match_clause = "AND g.match_id = %(match_id)s" if match_id is not None else ""
+            fallback_match_clause = (
+                "AND latest.match_id = %(match_id)s" if match_id is not None else ""
+            )
+            params = {"match_id": match_id, "limit": limit}
+            # Complete groups have precedence over all legacy rows for the same
+            # match/model/play. Once there are N eligible grouped rows, legacy
+            # rows older than their minimum time cannot enter the first N.
+            # Keep the boundary inclusive for EV/id ties; if there are fewer
+            # groups, fall back to the existing view. A correlated newer-row
+            # check over the entire legacy archive would be more expensive
+            # than its original global ranking.
             cur.execute(
                 f"""
-                WITH recent AS MATERIALIZED (
-                    SELECT mp.* FROM model_prediction_latest_rows mp
+                WITH latest_groups AS MATERIALIZED (
+                    SELECT DISTINCT ON (g.match_id, mv.model_name, g.play_type)
+                        g.id AS group_id, g.match_id, mv.model_name, g.play_type
+                    FROM model_prediction_groups g
+                    JOIN model_prediction_runs r ON r.id = g.run_id
+                    JOIN model_versions mv ON mv.id = g.model_version_id
+                    WHERE g.group_status = 'complete'
+                      AND r.run_status IN ('completed', 'partial')
+                      {group_match_clause}
+                    ORDER BY g.match_id, mv.model_name, g.play_type,
+                             g.predict_time DESC, g.created_at DESC, g.id DESC
+                ), grouped_recent AS MATERIALIZED (
+                    SELECT mp.* FROM latest_groups g
+                    JOIN model_prediction_group_options mapped ON mapped.group_id = g.group_id
+                    JOIN LATERAL (
+                        SELECT p.* FROM model_predictions p
+                        WHERE p.id = mapped.prediction_id OFFSET 0
+                    ) mp ON true
+                    JOIN official_matches m ON m.id = mp.match_id
+                    WHERE mp.validation_status = 'valid'
+                      AND mp.predict_time < m.kickoff_time
+                    ORDER BY mp.predict_time DESC, mp.ev DESC, mp.id DESC
+                    LIMIT %(limit)s
+                ), legacy_floor AS (
+                    SELECT CASE WHEN COUNT(*) = %(limit)s THEN MIN(predict_time)
+                                ELSE '-infinity'::timestamp END AS since
+                    FROM grouped_recent
+                ), legacy_bounded AS MATERIALIZED (
+                    SELECT mp.* FROM model_predictions mp
+                    JOIN legacy_floor floor ON mp.predict_time >= floor.since
                     JOIN model_versions mv ON mv.id = mp.model_version_id
                     JOIN official_matches m ON m.id = mp.match_id
                     WHERE mp.validation_status = 'valid'
                       AND mp.predict_time < m.kickoff_time
+                      AND floor.since <> '-infinity'::timestamp
                       {match_clause}
-                    ORDER BY mp.predict_time DESC, mp.ev DESC
-                    LIMIT %s
+                      AND NOT EXISTS (
+                          SELECT 1 FROM model_prediction_group_options mapped
+                          WHERE mapped.prediction_id = mp.id
+                      )
+                      AND NOT EXISTS (
+                          SELECT 1 FROM latest_groups g
+                          WHERE g.match_id = mp.match_id AND g.model_name = mv.model_name
+                            AND g.play_type = mp.play_type
+                      )
+                      AND NOT EXISTS (
+                          SELECT 1 FROM model_predictions newer
+                          JOIN model_versions newer_mv ON newer_mv.id = newer.model_version_id
+                          WHERE newer.match_id = mp.match_id
+                            AND newer.play_type = mp.play_type
+                            AND newer.option_code = mp.option_code
+                            AND newer_mv.model_name = mv.model_name
+                            AND (newer.predict_time, newer.id) > (mp.predict_time, mp.id)
+                            AND NOT EXISTS (
+                                SELECT 1 FROM model_prediction_group_options newer_map
+                                WHERE newer_map.prediction_id = newer.id
+                            )
+                      )
+                    ORDER BY mp.predict_time DESC, mp.ev DESC, mp.id DESC
+                    LIMIT %(limit)s
+                ), legacy_fallback AS MATERIALIZED (
+                    SELECT original.* FROM legacy_floor floor
+                    CROSS JOIN LATERAL (
+                        SELECT latest.id FROM model_prediction_latest_rows latest
+                        JOIN official_matches m ON m.id = latest.match_id
+                        WHERE floor.since = '-infinity'::timestamp
+                          AND latest.prediction_group_id IS NULL
+                          AND latest.validation_status = 'valid'
+                          AND latest.predict_time < m.kickoff_time
+                          {fallback_match_clause}
+                        ORDER BY latest.predict_time DESC, latest.ev DESC, latest.id DESC
+                        LIMIT %(limit)s
+                    ) fallback
+                    JOIN model_predictions original ON original.id = fallback.id
+                ), recent AS MATERIALIZED (
+                    SELECT * FROM (
+                        SELECT * FROM grouped_recent
+                        UNION ALL
+                        SELECT * FROM legacy_bounded
+                        UNION ALL
+                        SELECT * FROM legacy_fallback
+                    ) candidates
+                    ORDER BY predict_time DESC, ev DESC, id DESC
+                    LIMIT %(limit)s
                 )
                 SELECT mp.id, mp.match_id, mp.predict_time,
                    mv.model_name, mp.play_type, mp.option_code,
@@ -384,34 +471,37 @@ def list_predictions(
                      WHEN '3' THEN 'h' WHEN '1' THEN 'd' WHEN '0' THEN 'a'
                      ELSE mp.option_code END ELSE mp.option_code END
                  AND od.snapshot_time <= mp.predict_time
-                ORDER BY mp.predict_time DESC, mp.ev DESC
+                ORDER BY mp.predict_time DESC, mp.ev DESC, mp.id DESC
                 """,
                 params,
             )
             rows = cur.fetchall()
             if include_summary:
-                aggregate_where = """
-                    mp.validation_status = 'valid'
-                    AND mp.predict_time < m.kickoff_time
-                """
-                aggregate_params: tuple[int, ...] = ()
-                if match_id:
-                    aggregate_where += " AND mp.match_id = %s"
-                    aggregate_params = (match_id,)
+                latest_ctes = latest_prediction_ctes(filter_match=match_id is not None)
                 cur.execute(
                     f"""
+                    WITH RECURSIVE {latest_ctes}, latest_ids AS (
+                        SELECT mapped.prediction_id AS id FROM latest_groups g
+                        JOIN model_prediction_group_options mapped ON mapped.group_id = g.group_id
+                        UNION ALL
+                        SELECT id FROM legacy_latest
+                    )
                     SELECT
                         COUNT(*) AS total,
                         COUNT(*) FILTER (WHERE mp.ev > 0) AS positive_ev_count,
                         AVG(mp.confidence_score) AS avg_confidence,
                         COUNT(DISTINCT mv.model_name) AS model_count,
                         MAX(mp.predict_time) AS latest_predict_time
-                    FROM model_prediction_latest_rows mp
+                    FROM latest_ids latest
+                    JOIN LATERAL (
+                        SELECT p.* FROM model_predictions p WHERE p.id = latest.id OFFSET 0
+                    ) mp ON true
                     JOIN model_versions mv ON mv.id = mp.model_version_id
                     JOIN official_matches m ON m.id = mp.match_id
-                    WHERE {aggregate_where}
+                    WHERE mp.validation_status = 'valid'
+                      AND mp.predict_time < m.kickoff_time
                     """,
-                    aggregate_params,
+                    params,
                 )
                 summary_row = cur.fetchone()
     summary = (
@@ -533,6 +623,14 @@ def get_prediction_model_overview():
                     FROM probability_calibration_profiles
                     WHERE is_active = true
                     ORDER BY model_name, play_type, created_at DESC, id DESC
+                ), prediction_stats AS MATERIALIZED (
+                    SELECT mp.model_version_id,
+                           COUNT(DISTINCT mp.match_id) AS valid_prediction_match_count,
+                           MAX(mp.predict_time) AS latest_prediction_at
+                    FROM model_prediction_latest_rows mp
+                    JOIN current_versions cv ON cv.id = mp.model_version_id
+                    WHERE mp.validation_status = 'valid'
+                    GROUP BY mp.model_version_id
                 )
                 SELECT cv.model_name, cv.id, cv.version, cv.is_active,
                        cv.training_start_date, cv.training_end_date, cv.created_at,
@@ -541,13 +639,7 @@ def get_prediction_model_overview():
                        cp.method_name, cp.sample_count, cp.log_loss_before,
                        cp.log_loss_after, cp.temperature, cp.training_end_date
                 FROM current_versions cv
-                LEFT JOIN LATERAL (
-                    SELECT COUNT(DISTINCT mp.match_id) AS valid_prediction_match_count,
-                           MAX(mp.predict_time) AS latest_prediction_at
-                    FROM model_prediction_latest_rows mp
-                    WHERE mp.model_version_id = cv.id
-                      AND mp.validation_status = 'valid'
-                ) prediction_stats ON true
+                LEFT JOIN prediction_stats ON prediction_stats.model_version_id = cv.id
                 LEFT JOIN current_calibrations cp
                   ON cp.model_name = cv.model_name AND cp.play_type = 'spf'
                 """,

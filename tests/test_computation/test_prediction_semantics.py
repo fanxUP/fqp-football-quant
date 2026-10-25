@@ -13,8 +13,8 @@ from scripts.jobs import run_feature_snapshot_build as build
 from scripts.jobs import run_model_prediction as prediction
 from scripts.prediction_input_fence import PredictionInputFence
 
-CURRENT_SNAPSHOT = "v4_observed_form"
-CURRENT_SCHEMA = "observed-form/v2"
+CURRENT_SNAPSHOT = "v5_player_facts"
+CURRENT_SCHEMA = "observed-form/v3"
 LEGACY_SCHEMA = "legacy-enriched/v1"
 
 
@@ -93,6 +93,9 @@ def test_missing_form_remains_missing_without_stopping_optional_data_pipeline():
         (CURRENT_SCHEMA, CURRENT_SNAPSHOT, True),
         (LEGACY_SCHEMA, "v3_upset_risk", True),
         (LEGACY_SCHEMA, CURRENT_SNAPSHOT, False),
+        ("observed-form/v2", "v4_observed_form", True),
+        ("observed-form/v2", CURRENT_SNAPSHOT, False),
+        (CURRENT_SCHEMA, "v4_observed_form", False),
         (CURRENT_SCHEMA, "v3_upset_risk", False),
         ("unknown", CURRENT_SNAPSHOT, False),
     ],

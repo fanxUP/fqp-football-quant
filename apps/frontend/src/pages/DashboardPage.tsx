@@ -37,6 +37,8 @@ function CountUp({ value, duration = 600 }: { value: number | null; duration?: n
 interface DashboardData {
   teamCount: number | null;
   predictionCount: number | null;
+  predictionCountStatus: 'ok' | 'stale' | 'pending' | 'unavailable' | 'refresh_failed' | null;
+  predictionCountAsOf: string | null;
   activeTicketCount: number | null;
   ticketLedgerCount: number | null;
   latestReview: string | null;
@@ -51,6 +53,8 @@ export default function DashboardPage() {
   const [data, setData] = useState<DashboardData>({
     teamCount: null,
     predictionCount: null,
+    predictionCountStatus: null,
+    predictionCountAsOf: null,
     activeTicketCount: null,
     ticketLedgerCount: null,
     latestReview: null,
@@ -97,10 +101,14 @@ export default function DashboardPage() {
           }
         });
 
-    // Publish each completed card immediately; history counts can take longer.
+    // Publish each completed card independently of the charts.
     const stats = Promise.all([
       settle('teams', api.teams(), (t) => update({ teamCount: t.total })),
-      settle('predictions', api.dashboard.predictionCount(), (p) => update({ predictionCount: p.total })),
+      settle('predictions', api.dashboard.predictionCount(), (p) => update({
+        predictionCount: p.total,
+        predictionCountStatus: p.status,
+        predictionCountAsOf: p.data_as_of,
+      })),
       settle('tickets', api.tickets({ status: 'generated', limit: 50 }), (t) => update({ activeTicketCount: t.total })),
       settle('bettingTickets', api.betting.tickets({ limit: 1 }), (t) => update({ ticketLedgerCount: t.total })),
       settle('reviews', api.reviews.daily(30), (r) => {
@@ -130,19 +138,31 @@ export default function DashboardPage() {
   }, []);
 
   const refreshLive = useCallback(async () => {
-    const [ledger, roi, reviews] = await Promise.all([
+    const [ledger, roi, reviews, predictionCount] = await Promise.all([
       api.betting.tickets({ limit: 1 }).catch(() => null),
       api.dashboard.roiDaily({ days: 30 }).catch(() => null),
       api.reviews.daily(30).catch(() => null),
+      api.dashboard.predictionCount().catch(() => null),
     ]);
     if (!isMounted.current) return;
 
-    setData((prev) => ({
-      ...prev,
-      ticketLedgerCount: ledger?.total ?? prev.ticketLedgerCount,
-      latestReview: reviews?.reviews[0]?.review_date ?? prev.latestReview,
-      errors: Object.fromEntries(Object.entries(prev.errors).filter(([key]) => key !== 'roiDaily' || !roi?.data?.series)),
-    }));
+    setData((prev) => {
+      const errors = { ...prev.errors };
+      if (roi?.data?.series) delete errors.roiDaily;
+      if (predictionCount) delete errors.predictions;
+      else errors.predictions = '累计统计刷新失败';
+      return {
+        ...prev,
+        ticketLedgerCount: ledger?.total ?? prev.ticketLedgerCount,
+        latestReview: reviews?.reviews[0]?.review_date ?? prev.latestReview,
+        ...(predictionCount ? {
+          predictionCount: predictionCount.total,
+          predictionCountStatus: predictionCount.status,
+          predictionCountAsOf: predictionCount.data_as_of,
+        } : {}),
+        errors,
+      };
+    });
     if (roi?.data?.series) setRoiDaily(roi.data.series as DashboardRoiDailyItem[]);
     if (reviews?.reviews) setDailyReviews(reviews.reviews);
   }, []);
@@ -158,6 +178,13 @@ export default function DashboardPage() {
     };
   }, [load]);
   useBackgroundRefresh(refreshLive);
+
+  const predictionCountMessage = data.errors.predictions || data.predictionCountStatus === 'refresh_failed' ? '累计统计刷新失败'
+    : data.predictionCountStatus === 'pending' ? '累计统计尚未生成'
+    : data.predictionCountStatus === 'unavailable' ? '累计统计暂不可用'
+    : data.predictionCountStatus === 'stale' ? '统计已过期，等待刷新'
+    : data.predictionCount === null ? '数据未获取'
+    : data.predictionCount > 0 ? '条有效赛前历史预测' : '暂无有效赛前历史预测';
 
   // ---- Chart options ----
 
@@ -288,8 +315,13 @@ export default function DashboardPage() {
           <div className="fqp-stat-card" style={{ padding: 0 }}>
             <div className="fqp-stat-value"><CountUp value={data.predictionCount} /></div>
             <div className="fqp-stat-sub">
-              {data.predictionCount === null ? '数据未获取' : data.predictionCount > 0 ? '条预测结果' : '等待模型计算'}
+              {predictionCountMessage}
             </div>
+            {data.predictionCountAsOf && <div className="fqp-stat-sub">
+              <time dateTime={data.predictionCountAsOf}>
+                北京时间截至 {new Date(data.predictionCountAsOf).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false })}
+              </time>
+            </div>}
           </div>
         </Card>
 
@@ -507,10 +539,11 @@ export default function DashboardPage() {
               },
               {
                 label: '模型预测',
-                ok: (data.predictionCount ?? 0) > 0,
+                ok: (data.predictionCount ?? 0) > 0 && data.predictionCountStatus === 'ok' && !data.errors.predictions,
                 detail: data.predictionCount === null
                   ? data.errors.predictions ? '预测总数读取失败' : '预测总数尚未获取'
-                  : data.predictionCount > 0 ? `${data.predictionCount} 条` : '等待模型计算',
+                  : data.predictionCountStatus === 'ok' && !data.errors.predictions
+                    ? `${data.predictionCount} 条（统计快照）` : predictionCountMessage,
               },
               {
                 label: '推荐引擎',

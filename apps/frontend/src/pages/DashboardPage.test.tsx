@@ -161,8 +161,44 @@ describe('DashboardPage', () => {
 
   it('accepts an empty exact count as zero', async () => {
     render(<LiveStatusProvider><DashboardPage /></LiveStatusProvider>);
-    await waitFor(() => expect(stat('模型预测').getByText('等待模型计算')).toBeInTheDocument());
+    await waitFor(() => expect(stat('模型预测').getByText('暂无有效赛前历史预测')).toBeInTheDocument());
     expect(stat('模型预测').getByText('0')).toBeInTheDocument();
+  });
+
+  it('marks an old count and exposes its actual snapshot time', async () => {
+    api.dashboard.predictionCount.mockResolvedValueOnce({
+      total: 1234, status: 'stale', data_as_of: '2026-10-25T07:00:00+00:00',
+      last_success_at: '2026-10-25T07:00:20+00:00',
+    });
+    render(<LiveStatusProvider><DashboardPage /></LiveStatusProvider>);
+    await waitFor(() => expect(stat('模型预测').getByText(/统计已过期/)).toBeInTheDocument());
+    expect(stat('模型预测').getByText('1,234')).toBeInTheDocument();
+    expect(stat('模型预测').getByText(/截至/)).toHaveAttribute('dateTime', '2026-10-25T07:00:00+00:00');
+  });
+
+  it('keeps the first snapshot unknown and picks it up on the existing refresh', async () => {
+    vi.useFakeTimers();
+    api.dashboard.predictionCount.mockResolvedValueOnce({ total: null, status: 'pending', data_as_of: null, last_success_at: null });
+    api.dashboard.predictionCount.mockResolvedValue({ total: 42, status: 'ok', data_as_of: '2026-10-25T07:30:00+00:00', last_success_at: '2026-10-25T07:30:20+00:00' });
+    render(<LiveStatusProvider><DashboardPage /></LiveStatusProvider>);
+    await act(async () => { await vi.advanceTimersByTimeAsync(800); });
+    expect(stat('模型预测').getByText('累计统计尚未生成')).toBeInTheDocument();
+    expect(stat('模型预测').getByText('—')).toBeInTheDocument();
+    await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
+    expect(stat('模型预测').getByText('42')).toBeInTheDocument();
+    expect(stat('模型预测').queryByText('累计统计尚未生成')).not.toBeInTheDocument();
+  });
+
+  it('marks a refresh failure without presenting the previous count as current', async () => {
+    vi.useFakeTimers();
+    api.dashboard.predictionCount.mockResolvedValue({ total: 42, status: 'ok', data_as_of: '2026-10-25T07:30:00+00:00', last_success_at: '2026-10-25T07:30:20+00:00' });
+    render(<LiveStatusProvider><DashboardPage /></LiveStatusProvider>);
+    await act(async () => { await vi.advanceTimersByTimeAsync(800); });
+    api.dashboard.predictionCount.mockRejectedValueOnce(new Error('count unavailable'));
+    await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
+    expect(stat('模型预测').getByText(/刷新失败/)).toBeInTheDocument();
+    expect(stat('模型预测').getByText('42')).toBeInTheDocument();
+    expect(stat('模型预测').getByText(/截至/)).toBeInTheDocument();
   });
 
   it('ignores pending results after unmount', async () => {

@@ -26,13 +26,23 @@ _BUILDER = re.compile(r"[a-z0-9][a-z0-9_./-]{0,63}\Z")
 MAX_BATCH_BYTES = 262144
 
 
-def _contract(builder_version: str, required_fields: Any, feature_schema_version: str) -> str:
+def _contract(
+    builder_version: str,
+    required_fields: Any,
+    feature_schema_version: str,
+    *,
+    retained: bool = False,
+) -> str:
     if not isinstance(builder_version, str) or not _BUILDER.fullmatch(builder_version):
         raise ValueError("builder requires an explicit bounded version")
-    if feature_schema_version != FEATURE_SCHEMA_VERSION or not valid_feature_columns(
-        required_fields
-    ):
-        raise ValueError("batch requires the current P102 schema and unique ordered fields")
+    # v2 and v3 retain the same ordered numeric fields. Exact historical reads
+    # must validate their original schema/hash; new writes and latest lookup
+    # still require the current schema and never upgrade old facts implicitly.
+    supported = (
+        (FEATURE_SCHEMA_VERSION, "observed-form/v2") if retained else (FEATURE_SCHEMA_VERSION,)
+    )
+    if feature_schema_version not in supported or not valid_feature_columns(required_fields):
+        raise ValueError("batch requires a supported P102 schema and unique ordered fields")
     return hashlib.sha256(_canonical(list(required_fields), MAX_BATCH_BYTES).encode()).hexdigest()
 
 
@@ -46,8 +56,9 @@ def _validate(
     features: dict,
     status: str,
     feature_schema_version: str,
+    retained: bool = False,
 ) -> tuple[dict, list[dict | None]]:
-    _contract(builder_version, required_fields, feature_schema_version)
+    _contract(builder_version, required_fields, feature_schema_version, retained=retained)
     if type(match_id) is not int or match_id <= 0:
         raise ValueError("batch requires a canonical match")
     if not isinstance(features, dict) or status not in {"running", "partial", "complete"}:
@@ -208,10 +219,11 @@ def load_feature_batch(conn: Any, batch_id: int) -> dict | None:
         features=features,
         status=status,
         feature_schema_version=schema,
+        retained=True,
     )
     if (
         cutoff.as_of != at
-        or fields_hash != _contract(builder, fields, schema)
+        or fields_hash != _contract(builder, fields, schema, retained=True)
         or hashlib.sha256(_canonical(payload, MAX_BATCH_BYTES).encode()).hexdigest() != checksum
     ):
         raise ValueError("feature batch content hash/contract mismatch")

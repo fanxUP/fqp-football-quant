@@ -20,15 +20,15 @@ from typing import Any
 
 from apps.backend.src.db import get_db
 from scripts.agents.task_queue import finish_tracked_job, start_tracked_job
-from scripts.business_time import utc_now_iso
+from scripts.business_time import utc_now_naive
 from scripts.ops_storage import store_contamination_audit
 
 
 def _now(value: datetime | None = None) -> str:
-    return utc_now_iso(value)
+    return utc_now_naive(value).isoformat()
 
 
-def _resolve_previous_findings(conn: Any, check_type: str) -> None:
+def _resolve_previous_findings(conn: Any, check_type: str, *, commit: bool = True) -> None:
     """Close the prior audit state before writing the current check result."""
     with conn.cursor() as cur:
         cur.execute(
@@ -38,7 +38,8 @@ def _resolve_previous_findings(conn: Any, check_type: str) -> None:
                WHERE check_type = %s AND contamination_detected = true AND NOT resolved""",
             (check_type,),
         )
-    conn.commit()
+    if commit:
+        conn.commit()
 
 
 def _check_lineup_temporal_integrity(conn: Any) -> list[dict]:
@@ -396,61 +397,73 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
             ("error_analysis_scope", _check_error_analysis_scope),
         ]
 
+        check_results = []
         for check_name, check_fn in checks:
+            with conn.cursor() as cur:
+                cur.execute("SAVEPOINT contamination_check")
+            outcome: dict[str, Any]
             try:
                 findings = check_fn(conn)
+            except Exception as exc:
+                with conn.cursor() as cur:
+                    cur.execute("ROLLBACK TO SAVEPOINT contamination_check")
+                findings = []
+                outcome = {
+                    "check_status": "failed",
+                    "error_type": type(exc).__name__,
+                    "error": str(exc)[:1000],
+                }
+            else:
+                outcome = {"check_status": "passed", "finding_count": len(findings)}
                 all_findings.extend(findings)
-            except Exception as e:
-                print(f"[contamination_audit] {check_name} check error: {e}")
+            finally:
+                with conn.cursor() as cur:
+                    cur.execute("RELEASE SAVEPOINT contamination_check")
 
-        # Store findings
-        if not dry_run:
-            for check_name, _ in checks:
-                _resolve_previous_findings(conn, check_name)
-            for f in all_findings:
-                store_contamination_audit(
-                    conn,
-                    {
-                        "audit_time": audit_time,
-                        "check_type": f["check_type"],
-                        "match_id": f.get("match_id"),
-                        "severity": f.get("severity", "info"),
-                        "contamination_detected": f.get("contamination_detected", False),
-                        "detail": f.get("detail"),
-                        "evidence": f.get("evidence", {}),
-                    },
-                )
-
-        # Also record clean checks
-        checked_types = set(f["check_type"] for f in all_findings)
-        all_types = {
-            "pre_match_lineup",
-            "post_match_odds",
-            "result_leak",
-            "feature_leak",
-            "post_match_prediction",
-            "error_analysis_scope",
-        }
-        for ct in all_types - checked_types:
+            check_results.append({"check_type": check_name, **outcome})
             if not dry_run:
+                if outcome["check_status"] == "passed":
+                    # Resolve and replace this check's state atomically. An
+                    # unavailable check must preserve its previous findings.
+                    _resolve_previous_findings(conn, check_name, commit=False)
+                    for finding in findings:
+                        store_contamination_audit(
+                            conn, {"audit_time": audit_time, **finding}, commit=False
+                        )
+                detail = (
+                    f"{check_name}: check failed; result unknown"
+                    if outcome["check_status"] == "failed"
+                    else f"{check_name}: {len(findings)} issues found"
+                    if findings
+                    else f"{check_name}: no issues found"
+                )
+                # Every check gets a completion record, including checks with
+                # findings. False means no finding asserted by this summary,
+                # not that a failed check has established clean data.
                 store_contamination_audit(
                     conn,
                     {
                         "audit_time": audit_time,
-                        "check_type": ct,
+                        "check_type": check_name,
                         "match_id": None,
                         "severity": "info",
                         "contamination_detected": False,
-                        "detail": f"{ct}: no issues found",
-                        "evidence": {},
+                        "detail": detail,
+                        "evidence": outcome,
                     },
+                    commit=False,
                 )
+                conn.commit()
 
     critical_count = sum(1 for f in all_findings if f.get("severity") == "critical")
     warning_count = sum(1 for f in all_findings if f.get("severity") == "warning")
+    failed_checks = sum(item["check_status"] == "failed" for item in check_results)
 
     return {
-        "status": "ok" if not dry_run else "dry_run",
+        "status": "dry_run" if dry_run else "failed" if failed_checks else "ok",
+        "checks_complete": failed_checks == 0,
+        "failed_checks": failed_checks,
+        "check_results": check_results,
         "total_findings": len(all_findings),
         "critical": critical_count,
         "warning": warning_count,
@@ -468,7 +481,14 @@ def run(dry_run: bool = False) -> dict[str, Any]:
     run_id = start_tracked_job("data_contamination_audit", "qa_agent", {"dry_run": dry_run})
     try:
         result = _run_impl(dry_run=dry_run)
-        finish_tracked_job(run_id, result.get("status", "completed"), {"result": result})
+        finish_tracked_job(
+            run_id,
+            result.get("status", "completed"),
+            {"result": result},
+            error=f"{result['failed_checks']} contamination checks failed"
+            if result["failed_checks"]
+            else None,
+        )
         return result
     except Exception as exc:
         finish_tracked_job(run_id, "failed", error=str(exc))

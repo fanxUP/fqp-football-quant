@@ -10,12 +10,13 @@ import math
 from typing import Any
 
 # Never reorder or reinterpret these fields under the same schema version.
-FEATURE_SCHEMA_VERSION = "observed-form/v2"
+FEATURE_SCHEMA_VERSION = "observed-form/v3"
 FEATURE_INPUT_POLICY = "snapshot-columns/v1"
-CURRENT_SNAPSHOT_VERSION = "v4_observed_form"
+CURRENT_SNAPSHOT_VERSION = "v5_player_facts"
 COMPATIBLE_SNAPSHOT_VERSIONS = (CURRENT_SNAPSHOT_VERSION,)
 SNAPSHOT_VERSIONS_BY_SCHEMA = {
     "legacy-enriched/v1": ("v1_basic", "v2_enriched", "v3_upset_risk"),
+    "observed-form/v2": ("v4_observed_form",),
     FEATURE_SCHEMA_VERSION: COMPATIBLE_SNAPSHOT_VERSIONS,
 }
 

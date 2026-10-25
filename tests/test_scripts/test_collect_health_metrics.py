@@ -3,6 +3,8 @@
 from datetime import UTC, date, datetime
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from scripts.jobs.collect_health_metrics import (
     _check_system_services,
     _compute_odds_missing_rate,
@@ -134,7 +136,8 @@ def test_odds_missing_rate_only_counts_upcoming_selling_matches(mock_conn):
     }
 
 
-def test_health_notes_report_noncritical_unresolved_contamination():
+@pytest.mark.parametrize("finding_count, complete", [(2, True), (0, False), (0, True)])
+def test_health_notes_report_noncritical_unresolved_contamination(finding_count, complete):
     conn = MagicMock()
     db_context = MagicMock()
     db_context.__enter__.return_value = conn
@@ -183,10 +186,12 @@ def test_health_notes_report_noncritical_unresolved_contamination():
         patch(
             "scripts.jobs.collect_health_metrics.get_contamination_stats",
             return_value={
-                "contamination_found": 2,
+                "contamination_found": finding_count,
                 "critical_found": 0,
                 "total_checks": 4,
                 "has_data": True,
+                "checks_complete": complete,
+                "incomplete_checks": 0 if complete else 1,
             },
         ),
         patch("scripts.jobs.collect_health_metrics._compute_uptime_days", return_value=1),
@@ -203,8 +208,17 @@ def test_health_notes_report_noncritical_unresolved_contamination():
     ):
         result = run(dry_run=True)
 
+    if complete and finding_count == 0:
+        assert result["overall_health"] == "healthy"
+        assert result["metrics"]["data_contamination_count"] == 0
+        return
     assert result["overall_health"] == "degraded"
-    assert "数据污染 2 条待处理" in result["notes"]
+    if complete:
+        assert "数据污染 2 条待处理" in result["notes"]
+    else:
+        assert "污染审计未完成" in result["notes"]
+        assert "数据污染 0 条待处理" not in result["notes"]
+        assert result["metrics"]["data_contamination_count"] is None
 
 
 def test_uptime_counts_consecutive_snapshot_dates_without_same_day_inflation(mock_conn):

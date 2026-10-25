@@ -39,7 +39,12 @@ def generate_shadow_predictions(conn: Any) -> int:
                        prediction.option_code, prediction.model_probability,
                        prediction.predict_time, feature.snapshot_id,
                        feature.home_net_impact, feature.away_net_impact
-                FROM model_prediction_latest_rows prediction
+                FROM (
+                    -- Only matches with eligible news features can contribute.
+                    -- Apply that bound before the view ranks legacy history.
+                    SELECT latest.* FROM model_prediction_latest_rows latest
+                    WHERE latest.match_id = ANY(ARRAY(SELECT match_id FROM latest_feature))
+                ) prediction
                 JOIN model_versions model ON model.id = prediction.model_version_id
                 JOIN latest_feature feature ON feature.match_id = prediction.match_id
                 WHERE prediction.play_type = 'spf'

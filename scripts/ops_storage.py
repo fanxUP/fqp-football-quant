@@ -454,7 +454,17 @@ def get_broken_chains(conn: Any, limit: int = 50) -> list[dict]:
 # ---------------------------------------------------------------------------
 
 
-def store_contamination_audit(conn: Any, audit: dict) -> int:
+CONTAMINATION_CHECK_TYPES = (
+    "pre_match_lineup",
+    "post_match_odds",
+    "result_leak",
+    "feature_leak",
+    "post_match_prediction",
+    "error_analysis_scope",
+)
+
+
+def store_contamination_audit(conn: Any, audit: dict, *, commit: bool = True) -> int:
     """Insert a data contamination audit entry. Returns the audit id."""
     with conn.cursor() as cur:
         cur.execute(
@@ -481,7 +491,8 @@ def store_contamination_audit(conn: Any, audit: dict) -> int:
             },
         )
         audit_id = cur.fetchone()[0]
-    conn.commit()
+    if commit:
+        conn.commit()
     return audit_id
 
 
@@ -490,22 +501,51 @@ def get_contamination_stats(conn: Any, days: int = 30) -> dict:
     with conn.cursor() as cur:
         cur.execute(
             """
-            WITH latest_checks AS (
+            WITH audit_rows AS MATERIALIZED (
+                SELECT * FROM data_contamination_audit_logs
+                WHERE audit_time >= CURRENT_DATE - %s * INTERVAL '1 day'
+                  AND check_type = ANY(%s)
+            ), latest_checks AS (
                 SELECT DISTINCT ON (check_type, COALESCE(match_id, -1))
                        contamination_detected, severity, resolved
-                FROM data_contamination_audit_logs
-                WHERE audit_time >= CURRENT_DATE - INTERVAL '%s days'
+                FROM audit_rows
                 ORDER BY check_type, COALESCE(match_id, -1), audit_time DESC, id DESC
+            ), latest_time AS (
+                SELECT MAX(audit_time) AS audit_time FROM audit_rows
+            ), check_states AS (
+                SELECT DISTINCT ON (check_type) check_type, audit_time, evidence
+                FROM audit_rows
+                ORDER BY check_type, audit_time DESC, id DESC
             )
             SELECT
                 COUNT(*) AS total_checks,
                 SUM(CASE WHEN contamination_detected AND NOT resolved THEN 1 ELSE 0 END)
                     AS contamination_found,
                 SUM(CASE WHEN severity = 'critical' AND contamination_detected AND NOT resolved
-                         THEN 1 ELSE 0 END) AS critical_found
+                         THEN 1 ELSE 0 END) AS critical_found,
+                (SELECT COUNT(*) FROM check_states
+                 WHERE evidence->>'check_status' = 'failed'
+                   AND audit_time = (SELECT audit_time FROM latest_time)) AS failed_checks,
+                %s - (SELECT COUNT(*) FROM check_states
+                      WHERE evidence->>'check_status' = 'passed'
+                        AND audit_time = (SELECT audit_time FROM latest_time)
+                        AND audit_time >= timezone('UTC', NOW()) - INTERVAL '30 hours'
+                     ) AS incomplete_checks,
+                (SELECT audit_time FROM latest_time) AS latest_audit_time,
+                (SELECT MAX(audit_time) FROM (
+                    SELECT audit_time FROM audit_rows
+                    WHERE match_id IS NULL AND evidence->>'check_status' = 'passed'
+                    GROUP BY audit_time
+                    HAVING COUNT(DISTINCT check_type) = %s
+                ) completed_audits) AS last_successful_audit_time
             FROM latest_checks
             """,
-            (days,),
+            (
+                days,
+                list(CONTAMINATION_CHECK_TYPES),
+                len(CONTAMINATION_CHECK_TYPES),
+                len(CONTAMINATION_CHECK_TYPES),
+            ),
         )
         row = cur.fetchone()
     total = row[0] or 0
@@ -514,6 +554,11 @@ def get_contamination_stats(conn: Any, days: int = 30) -> dict:
         "contamination_found": row[1] or 0,
         "critical_found": row[2] or 0,
         "has_data": total > 0,
+        "failed_checks": int(row[3] or 0),
+        "incomplete_checks": int(row[4]),
+        "checks_complete": int(row[4]) == 0,
+        "latest_audit_time": row[5].isoformat() if row[5] is not None else None,
+        "last_successful_audit_time": row[6].isoformat() if row[6] is not None else None,
     }
 
 

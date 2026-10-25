@@ -267,7 +267,9 @@ def run(dry_run: bool = False) -> dict[str, Any]:
             and evidence["completeness_rate"] >= 1.0
         )
         contamination_ok = bool(
-            contamination["has_data"] and contamination["contamination_found"] == 0
+            contamination["has_data"]
+            and contamination.get("checks_complete", False)
+            and contamination["contamination_found"] == 0
         )
 
         services_ok = all(services.values())
@@ -323,12 +325,23 @@ def run(dry_run: bool = False) -> dict[str, Any]:
                     notes_parts.append("证据链暂无审计样本")
             if not contamination_ok and not contamination["has_data"]:
                 notes_parts.append("污染审计暂无样本")
-            elif not contamination_ok:
+            elif contamination["contamination_found"] > 0:
                 notes_parts.append(f"数据污染 {contamination['contamination_found']} 条待处理")
             notes = "; ".join(notes_parts) if notes_parts else "Some metrics below target."
 
+        if contamination["has_data"] and not contamination.get("checks_complete", False):
+            notes += "; 污染审计未完成，不能判定全部数据正常"
+
         contamination_count = (
-            contamination["contamination_found"] if contamination["has_data"] else None
+            contamination["contamination_found"]
+            if (
+                contamination["has_data"]
+                and (
+                    contamination.get("checks_complete", False)
+                    or contamination["contamination_found"] > 0
+                )
+            )
+            else None
         )
 
         # Assemble snapshot

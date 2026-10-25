@@ -14,6 +14,7 @@ from fastapi import APIRouter, HTTPException, Query
 from apps.backend.src.db import get_db
 from apps.backend.src.services.odds_movement import list_odds_movements
 from scripts.business_time import business_now
+from scripts.prediction_statistics import get_prediction_count_snapshot
 
 router = APIRouter(tags=["dashboard"])
 
@@ -37,23 +38,13 @@ def _empty(title: str, reason: str = "暂无数据") -> dict:
 
 
 # ---------------------------------------------------------------------------
-# GET /api/dashboard/prediction-count — exact homepage count without details
+# GET /api/dashboard/prediction-count — exact history count with snapshot freshness
 # ---------------------------------------------------------------------------
 @router.get("/api/dashboard/prediction-count")
-def get_prediction_count() -> dict[str, int]:
-    """Count the same eligible rows as the default prediction summary."""
+def get_prediction_count() -> dict:
+    """Read the scheduled exact history count without scanning predictions."""
     with get_db() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                """SELECT COUNT(*)
-                   FROM model_predictions mp
-                   JOIN model_versions mv ON mv.id = mp.model_version_id
-                   JOIN official_matches m ON m.id = mp.match_id
-                   WHERE mp.validation_status = 'valid'
-                     AND mp.predict_time < m.kickoff_time"""
-            )
-            row = cur.fetchone()
-    return {"total": int(row[0])}
+        return get_prediction_count_snapshot(conn)
 
 
 # ---------------------------------------------------------------------------

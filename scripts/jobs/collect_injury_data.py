@@ -31,28 +31,6 @@ from scripts.player_observations import (
     store_injury_observations,
 )
 
-POSITION_IMPORTANCE = {
-    "GK": 0.95,
-    "Goalkeeper": 0.95,
-    "CB": 0.85,
-    "Defender": 0.75,
-    "DM": 0.82,
-    "CM": 0.70,
-    "AM": 0.76,
-    "ST": 0.82,
-    "Attacker": 0.78,
-    "FB": 0.62,
-    "W": 0.58,
-    "SUB": 0.30,
-}
-
-
-def _position_importance(api_position: str) -> float:
-    for key, value in POSITION_IMPORTANCE.items():
-        if key.lower() in (api_position or "").lower():
-            return value
-    return 0.50
-
 
 def _extract_injury_fields(injury: dict[str, Any]) -> tuple[str, str, str]:
     """兼容当前 fixture 响应和旧 league 响应的伤停字段。"""
@@ -118,7 +96,6 @@ def _process_fixture_injuries(
             if not player_id:
                 raise ValueError("injury player identity unresolved")
             status, injury_type, reason = _extract_injury_fields(injury)
-            importance = _position_importance(str(injury["player"].get("position") or ""))
             players.append(
                 dict(
                     player_id=player_id,
@@ -133,16 +110,16 @@ def _process_fixture_injuries(
                     suspension_reason=reason if status == "suspended" else "",
                     source_name="api-football",
                     source_confidence=0.90,
-                    recent_minutes_share=0.0,
-                    team_market_value_share=0.0,
-                    position_importance_score=importance,
-                    replacement_quality_score=0.5,
-                    absence_impact_score=importance * 85.0,
+                    recent_minutes_share=None,
+                    team_market_value_share=None,
+                    position_importance_score=None,
+                    replacement_quality_score=None,
+                    absence_impact_score=None,
                     raw_json=dict(
                         injury,
                         official_match_id=match["id"],
                         api_fixture_id=api_fixture_id,
-                        derived_fields_version="legacy-injury-heuristics/v1",
+                        derived_fields_version="source-players/v2",
                     ),
                 )
             )
@@ -157,14 +134,12 @@ def _process_fixture_injuries(
                     injured_players_count=counts["injured"],
                     suspended_players_count=counts["suspended"],
                     doubtful_players_count=counts["doubtful"],
-                    key_absence_count=0,
-                    squad_health_score=max(
-                        0.0, 100.0 - counts["injured"] * 8.0 - counts["suspended"] * 10.0
-                    ),
+                    key_absence_count=None,
+                    squad_health_score=None,
                     data_confidence=0.90,
                     raw_json=dict(
                         source_result_count=len(injuries),
-                        derived_fields_version="legacy-injury-heuristics/v1",
+                        derived_fields_version="source-players/v2",
                     ),
                 )
             )

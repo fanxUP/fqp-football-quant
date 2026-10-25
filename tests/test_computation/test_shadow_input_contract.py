@@ -278,7 +278,9 @@ def test_dataset_restricts_semantics_and_preserves_nan_zero_false():
     features, labels, dates = prematch_feature_dataset.load_settled_pre_kickoff_dataset(conn)
     query, params = cursor.execute.call_args.args
     assert "fs.feature_version IN %(feature_versions)s" in query
-    assert params == {"feature_versions": COMPATIBLE_SNAPSHOT_VERSIONS}
+    assert params["feature_versions"] == COMPATIBLE_SNAPSHOT_VERSIONS
+    assert params["max_matches"] == 5000
+    assert params["cutoff_at"].tzinfo is None
     assert features.shape == (1, 55)
     assert features[0, 0] == features[0, 1] == 0
     assert np.isnan(features[0, 2:]).all()

@@ -22,6 +22,12 @@ class JobDefinition:
 
 
 JOB_DEFINITIONS: dict[str, JobDefinition] = {
+    "refresh_prediction_count": JobDefinition(
+        "有效赛前历史预测累计统计",
+        "每30分钟（:22/:52，启动后2分钟首跑）",
+        "model",
+        max_age=timedelta(minutes=45),
+    ),
     "reconcile_event_seasons": JobDefinition(
         "赛事中心赛季校准", "每日 00:05", "official", max_age=timedelta(hours=30)
     ),

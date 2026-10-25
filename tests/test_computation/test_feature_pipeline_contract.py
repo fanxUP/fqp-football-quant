@@ -216,7 +216,14 @@ def test_model_uses_only_its_declared_subset_in_saved_order_after_full_read():
     assert np.isnan(values[3])
 
 
-def test_actual_build_task_passes_enrichment_fields_through_storage_and_reader():
+@pytest.mark.parametrize(
+    "rotation_scores, rotation_coverage",
+    [((None, None), 0.0), ((0, None), 0.5), ((0, 0), 1.0)],
+)
+def test_actual_build_task_passes_enrichment_fields_through_storage_and_reader(
+    rotation_scores,
+    rotation_coverage,
+):
     """Mock source builders, then run real assembly, INSERT and common readback."""
     conn, cursor = _connection()
     cursor.fetchall.return_value = [(101,)]
@@ -225,6 +232,16 @@ def test_actual_build_task_passes_enrichment_fields_through_storage_and_reader()
         (88,),
     ]
     snapshot = _snapshot()
+    home_rotation, away_rotation = rotation_scores
+    snapshot.update(
+        home_rotation_risk_score=home_rotation,
+        away_rotation_risk_score=away_rotation,
+        rotation_risk_diff=(
+            home_rotation - away_rotation
+            if home_rotation is not None and away_rotation is not None
+            else None
+        ),
+    )
     columns = feature_importance.FEATURE_COLUMNS
 
     def subset(*names):
@@ -319,7 +336,8 @@ def test_actual_build_task_passes_enrichment_fields_through_storage_and_reader()
     assert parameters["wind_speed_10m"] is None
     parameters = {**parameters, "raw_feature_refs": json.loads(parameters["raw_feature_refs"])}
     loaded, _, _ = _read_fixture(parameters)
-    assert loaded["data_completeness_score"] == 80
+    assert loaded["data_completeness_score"] == 75 + (5 if rotation_coverage == 1 else 0)
+    assert result["dimension_rates"]["rotation"] == rotation_coverage
     assert loaded["raw_feature_refs"]["dimension_coverage"]["lineup"] == 1
     assert loaded["home_lineup_confirmed"] is False
     assert loaded["precipitation"] == 0
