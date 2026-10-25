@@ -15,12 +15,12 @@ describe('api client GET request coalescing', () => {
     expect(fetchMock.mock.calls[0][0]).toBe('/api/dashboard/prediction-count');
   });
 
-  it('records-only prediction requests preserve false and remain separate from full statistics', async () => {
+  it('prediction summary requests use summary-only mode without fetching recent rows', async () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({ predictions: [], total: null, summary: null }) });
     vi.stubGlobal('fetch', fetchMock);
     await api.predictions({ limit: 200, include_summary: false });
-    await api.predictions({ limit: 1 });
-    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual(['/api/predictions?limit=200&include_summary=false', '/api/predictions?limit=1']);
+    await api.predictions({ summary_only: true });
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual(['/api/predictions?limit=200&include_summary=false', '/api/predictions?summary_only=true']);
   });
 
   it('shares an in-flight GET request and allows a fresh request after completion', async () => {

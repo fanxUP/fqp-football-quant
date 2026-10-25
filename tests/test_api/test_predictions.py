@@ -165,6 +165,30 @@ class TestPredictionsEndpoint:
         assert "mp.predict_time < m.kickoff_time" in sql
         assert "mp.validation_status = 'valid'" in sql
 
+    def test_summary_only_skips_recent_list_query(self, client):
+        mock_conn = MagicMock()
+        mock_cur = MagicMock()
+        mock_conn.__enter__.return_value = mock_conn
+        mock_conn.cursor.return_value.__enter__.return_value = mock_cur
+        mock_cur.fetchone.return_value = (4187, 1632, 0.714, 19, datetime(2025, 1, 1, 10, 0, 0))
+
+        with patch("apps.backend.src.routers.predictions.get_db", return_value=mock_conn):
+            response = client.get("/api/predictions?limit=1&include_summary=false&summary_only=true")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["predictions"] == []
+        assert data["total"] == 4187
+        assert data["summary"]["positive_ev_count"] == 1632
+        assert mock_cur.execute.call_args_list[0].args == ("SET LOCAL jit = off",)
+        assert len(mock_cur.execute.call_args_list) == 2
+        assert "COUNT(*) AS total" in mock_cur.execute.call_args_list[1].args[0]
+        assert (
+            "SELECT mp.id, mp.match_id, mp.predict_time"
+            not in mock_cur.execute.call_args_list[1].args[0]
+        )
+        mock_cur.fetchall.assert_not_called()
+
     def test_returns_predictions_with_expected_fields(self, client):
         # Columns: id, match_id, predict_time, model_name, play_type, option_code,
         #          raw_model_probability, model_probability, market_probability, fair_odds, ev, confidence_score,

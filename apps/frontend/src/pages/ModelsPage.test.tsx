@@ -192,7 +192,7 @@ describe('ModelsPage', () => {
     expect(within(overview).queryByText('0')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '加载全量预测统计' }));
     await screen.findByText('4187');
-    expect(apiMocks.predictions).toHaveBeenLastCalledWith({ limit: 1 });
+    expect(apiMocks.predictions).toHaveBeenLastCalledWith({ summary_only: true });
   });
 
   it('全量统计失败不挡住研究记录，重试空统计保留真实零', async () => {
@@ -240,7 +240,7 @@ describe('ModelsPage', () => {
     const button = screen.getByRole('button', { name: '加载全量预测统计' });
     fireEvent.click(button); fireEvent.click(button);
     expect(button).toBeDisabled();
-    expect(apiMocks.predictions.mock.calls.filter(([params]) => params.limit === 1)).toHaveLength(1);
+    expect(apiMocks.predictions.mock.calls.filter(([params]) => params.summary_only === true)).toHaveLength(1);
     fireEvent.click(screen.getByRole('button', { name: '刷新预测记录' }));
     await waitFor(() => expect(apiMocks.predictions).toHaveBeenLastCalledWith({ limit: 200, include_summary: false }));
     complete({ predictions: [], total: 0, summary: { total: 0, positive_ev_count: 0, model_count: 0, avg_confidence: 0, latest_predict_time: null } });

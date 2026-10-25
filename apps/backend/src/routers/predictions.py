@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import APIRouter, Query
 
 from apps.backend.src.db import get_db
@@ -288,15 +290,62 @@ def predict_models_for_date(date: str, dry_run: bool = Query(True)):
     return result
 
 
+def _read_prediction_summary(
+    cur: Any, latest_ctes: str, params: dict[str, Any]
+) -> dict[str, Any] | None:
+    cur.execute(
+        f"""
+        WITH RECURSIVE {latest_ctes}, latest_ids AS (
+            SELECT mapped.prediction_id AS id FROM latest_groups g
+            JOIN model_prediction_group_options mapped ON mapped.group_id = g.group_id
+            UNION ALL
+            SELECT id FROM legacy_latest
+        )
+        SELECT
+            COUNT(*) AS total,
+            COUNT(*) FILTER (WHERE mp.ev > 0) AS positive_ev_count,
+            AVG(mp.confidence_score) AS avg_confidence,
+            COUNT(DISTINCT mv.model_name) AS model_count,
+            MAX(mp.predict_time) AS latest_predict_time
+        FROM latest_ids latest
+        JOIN LATERAL (
+            SELECT p.* FROM model_predictions p WHERE p.id = latest.id OFFSET 0
+        ) mp ON true
+        JOIN model_versions mv ON mv.id = mp.model_version_id
+        JOIN official_matches m ON m.id = mp.match_id
+        WHERE mp.validation_status = 'valid'
+          AND mp.predict_time < m.kickoff_time
+        """,
+        params,
+    )
+    row = cur.fetchone()
+    if row is None:
+        return None
+    return {
+        "total": int(row[0] or 0),
+        "positive_ev_count": int(row[1] or 0),
+        "avg_confidence": float(row[2]) if row[2] is not None else None,
+        "model_count": int(row[3] or 0),
+        "latest_predict_time": (
+            row[4].isoformat()
+            if row[4] is not None and hasattr(row[4], "isoformat")
+            else str(row[4])
+            if row[4] is not None
+            else None
+        ),
+    }
+
+
 @router.get("/api/models/predictions")
 @router.get("/api/predictions")
 def list_predictions(
     match_id: int | None = Query(None, ge=1),
     limit: int = Query(20, ge=1, le=500),
     include_summary: bool = True,
+    summary_only: bool = False,
 ):
-    """List recent model predictions, optionally filtered by match."""
-    summary_row = None
+    """List recent predictions or return only the full-scope summary."""
+    summary = None
     with get_db() as conn:
         with conn.cursor() as cur:
             # JIT compilation dominates these index-seek plans at real catalog
@@ -305,6 +354,13 @@ def list_predictions(
             cur.execute("SET LOCAL jit = off")
             latest_ctes = latest_prediction_ctes(filter_match=match_id is not None)
             params = {"match_id": match_id, "limit": limit}
+            if summary_only:
+                summary = _read_prediction_summary(cur, latest_ctes, params)
+                return {
+                    "predictions": [],
+                    "total": summary["total"] if summary is not None else None,
+                    "summary": summary,
+                }
             cur.execute(
                 f"""
                 WITH RECURSIVE {latest_ctes}, latest_ids AS (
@@ -402,49 +458,7 @@ def list_predictions(
             )
             rows = cur.fetchall()
             if include_summary:
-                cur.execute(
-                    f"""
-                    WITH RECURSIVE {latest_ctes}, latest_ids AS (
-                        SELECT mapped.prediction_id AS id FROM latest_groups g
-                        JOIN model_prediction_group_options mapped ON mapped.group_id = g.group_id
-                        UNION ALL
-                        SELECT id FROM legacy_latest
-                    )
-                    SELECT
-                        COUNT(*) AS total,
-                        COUNT(*) FILTER (WHERE mp.ev > 0) AS positive_ev_count,
-                        AVG(mp.confidence_score) AS avg_confidence,
-                        COUNT(DISTINCT mv.model_name) AS model_count,
-                        MAX(mp.predict_time) AS latest_predict_time
-                    FROM latest_ids latest
-                    JOIN LATERAL (
-                        SELECT p.* FROM model_predictions p WHERE p.id = latest.id OFFSET 0
-                    ) mp ON true
-                    JOIN model_versions mv ON mv.id = mp.model_version_id
-                    JOIN official_matches m ON m.id = mp.match_id
-                    WHERE mp.validation_status = 'valid'
-                      AND mp.predict_time < m.kickoff_time
-                    """,
-                    params,
-                )
-                summary_row = cur.fetchone()
-    summary = (
-        {
-            "total": int(summary_row[0] or 0),
-            "positive_ev_count": int(summary_row[1] or 0),
-            "avg_confidence": float(summary_row[2]) if summary_row[2] is not None else None,
-            "model_count": int(summary_row[3] or 0),
-            "latest_predict_time": (
-                summary_row[4].isoformat()
-                if summary_row[4] is not None and hasattr(summary_row[4], "isoformat")
-                else str(summary_row[4])
-                if summary_row[4] is not None
-                else None
-            ),
-        }
-        if summary_row is not None
-        else None
-    )
+                summary = _read_prediction_summary(cur, latest_ctes, params)
     return {
         "predictions": [
             {

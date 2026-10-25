@@ -36,7 +36,11 @@
     "apps/backend/src/services/pipeline_status.py",
     "scripts/feature_batch_storage.py",
     "tests/test_computation/test_feature_batch_postgres.py",
-    "tests/test_api/test_prediction_research.py"
+    "tests/test_api/test_prediction_research.py",
+    "apps/frontend/src/pages/ModelsPage.tsx",
+    "apps/frontend/src/pages/ModelsPage.test.tsx",
+    "apps/frontend/src/core/apiClient.test.ts",
+    "api/openapi.yaml"
   ],
   "protected_paths": [
     "sql/**",
@@ -49,5 +53,5 @@
   "approved_protected_paths": [
     "sql/113_prediction_read_paths.sql"
   ],
-  "notes": "Preserve the 16 pre-existing dirty paths recorded in plans/project-audit-20261025/fixes/baseline.json; they are excluded from this repair scope but included in the total change budget. Existing P106 state/evidence files describe the previous task and are not release evidence for this repair. No new branch/worktree, dependency, supplier request, production migration, push or deployment in this local repair batch. Never rewrite applied migrations or fabricate completed business checks. Release authorization on 2026-10-25 supersedes local-only scope for this verified candidate; read compatibility fix is limited to the two added paths. P106 legacy workflow files remain historical and do not certify this release."
+  "notes": "Preserve the 16 pre-existing dirty paths recorded in plans/project-audit-20261025/fixes/baseline.json; they are excluded from this repair scope but included in the total change budget. Existing P106 state/evidence files describe the previous task and are not release evidence for this repair. No new branch/worktree, dependency, supplier request, production migration, push or deployment in this local repair batch. Never rewrite applied migrations or fabricate completed business checks. Release authorization on 2026-10-25 supersedes local-only scope for this verified candidate; read compatibility fix is limited to the two added paths. P106 legacy workflow files remain historical and do not certify this release. 2026-10-25 release latency follow-up authorizes the additive summary_only parameter and ModelsPage/API client/OpenAPI wiring plus focused regressions; no new files, migration, or dependency."
 }

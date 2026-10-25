@@ -412,7 +412,7 @@ def test_scoped_jobs_do_not_rank_unrelated_prediction_history(
 
 
 @pytest.mark.parametrize("archive_snapshots", [100, 1000])
-@pytest.mark.parametrize("read_kind", ["recent", "summary"])
+@pytest.mark.parametrize("read_kind", ["recent", "summary", "summary_only"])
 def test_recent_predictions_preserve_latest_semantics_without_ranking_archive(
     isolated_database, monkeypatch, archive_snapshots, read_kind
 ):
@@ -641,13 +641,22 @@ def test_recent_predictions_preserve_latest_semantics_without_ranking_archive(
             ),
             flush=True,
         )
+        captured_cursor.execute.reset_mock()
         router.list_predictions(
-            match_id=match_id, limit=limit, include_summary=read_kind == "summary"
+            match_id=match_id,
+            limit=limit,
+            include_summary=read_kind == "summary",
+            summary_only=read_kind == "summary_only",
         )
+        if read_kind == "summary_only":
+            assert len(captured_cursor.execute.call_args_list) == 2
+            assert "COUNT(*) AS total" in captured_cursor.execute.call_args_list[1].args[0]
         query, params = captured_cursor.execute.call_args.args
         with conn.cursor() as cursor:
             cursor.execute(query, params)
-            actual = cursor.fetchall()
+            actual = (
+                cursor.fetchone() if read_kind in ("summary", "summary_only") else cursor.fetchall()
+            )
             cursor.execute(
                 """SELECT mp.id, mp.predict_time, mp.ev, mp.confidence_score, mv.model_name
                 FROM model_prediction_latest_rows mp
@@ -659,7 +668,7 @@ def test_recent_predictions_preserve_latest_semantics_without_ranking_archive(
                 (match_id, match_id),
             )
             eligible = cursor.fetchall()
-            if read_kind == "summary":
+            if read_kind in ("summary", "summary_only"):
                 confidence = [row[3] for row in eligible if row[3] is not None]
                 expected = (
                     len(eligible),
@@ -668,13 +677,12 @@ def test_recent_predictions_preserve_latest_semantics_without_ranking_archive(
                     len({row[4] for row in eligible}),
                     max((row[1] for row in eligible), default=None),
                 )
-                assert len(actual) == 1
-                assert actual[0][:2] == expected[:2]
+                assert actual[:2] == expected[:2]
                 if confidence:
-                    assert actual[0][2] == pytest.approx(expected[2])
+                    assert actual[2] == pytest.approx(expected[2])
                 else:
-                    assert actual[0][2] is None
-                assert actual[0][3:] == expected[3:]
+                    assert actual[2] is None
+                assert actual[3:] == expected[3:]
             else:
                 assert len(actual) == min(len(eligible), limit)
                 assert [row[0] for row in actual] == [row[0] for row in eligible[:limit]]
@@ -717,7 +725,8 @@ def test_recent_predictions_preserve_latest_semantics_without_ranking_archive(
             for _ in range(30):
                 started = time.perf_counter()
                 cursor.execute(benchmark_query, benchmark_params)
-                assert len(cursor.fetchall()) == (1 if read_kind == "summary" else 200)
+                expected_rows = 1 if read_kind in ("summary", "summary_only") else 200
+                assert len(cursor.fetchall()) == expected_rows
                 samples_ms.append((time.perf_counter() - started) * 1000)
         ordered = sorted(samples_ms)
         print(

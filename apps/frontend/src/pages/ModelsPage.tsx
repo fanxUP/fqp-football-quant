@@ -55,7 +55,7 @@ export default function ModelsPage() {
     if (summaryPending.current) return;
     summaryPending.current = true;
     setSummaryLoading(true); setSummaryError(null);
-    api.predictions({ limit: 1 }).then((response) => {
+    api.predictions({ summary_only: true }).then((response) => {
       const value = response.summary;
       if (!value || [value.total, value.positive_ev_count, value.model_count].some(count => !Number.isSafeInteger(count) || count < 0)
         || response.total !== value.total || value.positive_ev_count > value.total || value.model_count > value.total

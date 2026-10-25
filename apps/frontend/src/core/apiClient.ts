@@ -691,9 +691,9 @@ export const api = {
     ),
 
   // Predictions
-  predictions: (params?: { match_id?: number; limit?: number; include_summary?: boolean }) =>
+  predictions: (params?: { match_id?: number; limit?: number; include_summary?: boolean; summary_only?: boolean }) =>
     request<{ predictions: Prediction[]; total: number | null; summary: import('./types').PredictionSummary | null }>(
-      `/api/predictions${qs({ match_id: params?.match_id, limit: params?.limit ?? 50, include_summary: params?.include_summary === undefined ? undefined : String(params.include_summary) })}`,
+      `/api/predictions${qs({ match_id: params?.match_id, limit: params?.summary_only ? undefined : (params?.limit ?? 50), include_summary: params?.include_summary === undefined ? undefined : String(params.include_summary), summary_only: params?.summary_only === undefined ? undefined : String(params.summary_only) })}`,
     ),
 
   modelOverview: () =>
