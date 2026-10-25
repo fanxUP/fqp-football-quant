@@ -14,13 +14,7 @@ MAX_AGE = timedelta(minutes=45)
 
 
 def latest_prediction_ctes(*, filter_match: bool) -> str:
-    """CTEs matching migration 111, with index seeks over legacy identities.
-
-    Prefix with WITH RECURSIVE. Keys are non-null in the prediction schema;
-    migration 113 supplies their ordered index. Taking the newest unmapped row
-    per version before comparing same-name versions is equivalent to ranking
-    all unmapped rows. Validity and kickoff filters must remain outside.
-    """
+    """Seek legacy match/version/play keys before enumerating uncovered options."""
     group_match = "AND g.match_id = %(match_id)s" if filter_match else ""
     key_match = "WHERE p.match_id = %(match_id)s" if filter_match else ""
     next_match = "AND p.match_id = %(match_id)s" if filter_match else ""
@@ -38,22 +32,19 @@ def latest_prediction_ctes(*, filter_match: bool) -> str:
                      g.predict_time DESC, g.created_at DESC, g.id DESC
         ), legacy_keys AS (
             (
-                SELECT p.match_id, p.model_version_id, p.play_type, p.option_code
+                SELECT p.match_id, p.model_version_id, p.play_type
                 FROM model_predictions p {key_match}
-                ORDER BY p.match_id, p.model_version_id, p.play_type, p.option_code
-                LIMIT 1
+                ORDER BY p.match_id, p.model_version_id, p.play_type LIMIT 1
             )
             UNION ALL
             SELECT next_key.* FROM legacy_keys previous
             CROSS JOIN LATERAL (
-                SELECT p.match_id, p.model_version_id, p.play_type, p.option_code
+                SELECT p.match_id, p.model_version_id, p.play_type
                 FROM model_predictions p
-                WHERE (p.match_id, p.model_version_id, p.play_type, p.option_code)
-                    > (previous.match_id, previous.model_version_id,
-                       previous.play_type, previous.option_code)
+                WHERE (p.match_id, p.model_version_id, p.play_type)
+                    > (previous.match_id, previous.model_version_id, previous.play_type)
                   {next_match}
-                ORDER BY p.match_id, p.model_version_id, p.play_type, p.option_code
-                LIMIT 1
+                ORDER BY p.match_id, p.model_version_id, p.play_type LIMIT 1
             ) next_key
         ), eligible_legacy_keys AS MATERIALIZED (
             SELECT keys.*, mv.model_name FROM legacy_keys keys
@@ -67,15 +58,38 @@ def latest_prediction_ctes(*, filter_match: bool) -> str:
         ), legacy_by_version AS (
             SELECT p.*, keys.model_name FROM eligible_legacy_keys keys
             CROSS JOIN LATERAL (
-                SELECT p.* FROM model_predictions p
-                WHERE p.match_id = keys.match_id
-                  AND p.model_version_id = keys.model_version_id
-                  AND p.play_type = keys.play_type AND p.option_code = keys.option_code
-                  AND NOT EXISTS (
-                      SELECT 1 FROM model_prediction_group_options mapped
-                      WHERE mapped.prediction_id = p.id
-                  )
-                ORDER BY p.predict_time DESC, p.id DESC LIMIT 1
+                WITH RECURSIVE option_keys AS (
+                    (
+                        SELECT p.option_code FROM model_predictions p
+                        WHERE p.match_id = keys.match_id
+                          AND p.model_version_id = keys.model_version_id
+                          AND p.play_type = keys.play_type
+                        ORDER BY p.option_code LIMIT 1
+                    )
+                    UNION ALL
+                    SELECT next_option.* FROM option_keys previous_option
+                    CROSS JOIN LATERAL (
+                        SELECT p.option_code FROM model_predictions p
+                        WHERE p.match_id = keys.match_id
+                          AND p.model_version_id = keys.model_version_id
+                          AND p.play_type = keys.play_type
+                          AND p.option_code > previous_option.option_code
+                        ORDER BY p.option_code LIMIT 1
+                    ) next_option
+                )
+                SELECT p.* FROM option_keys option_key
+                CROSS JOIN LATERAL (
+                    SELECT p.* FROM model_predictions p
+                    WHERE p.match_id = keys.match_id
+                      AND p.model_version_id = keys.model_version_id
+                      AND p.play_type = keys.play_type
+                      AND p.option_code = option_key.option_code
+                      AND NOT EXISTS (
+                          SELECT 1 FROM model_prediction_group_options mapped
+                          WHERE mapped.prediction_id = p.id
+                      )
+                    ORDER BY p.predict_time DESC, p.id DESC LIMIT 1
+                ) p
             ) p
         ), legacy_latest AS (
             SELECT DISTINCT ON (match_id, model_name, play_type, option_code) *

@@ -299,104 +299,29 @@ def list_predictions(
     summary_row = None
     with get_db() as conn:
         with conn.cursor() as cur:
-            match_clause = "AND mp.match_id = %(match_id)s" if match_id is not None else ""
-            group_match_clause = "AND g.match_id = %(match_id)s" if match_id is not None else ""
-            fallback_match_clause = (
-                "AND latest.match_id = %(match_id)s" if match_id is not None else ""
-            )
+            # JIT compilation dominates these index-seek plans at real catalog
+            # sizes. Limit the setting to this read transaction; pooled sessions
+            # return to their normal settings on commit/rollback.
+            cur.execute("SET LOCAL jit = off")
+            latest_ctes = latest_prediction_ctes(filter_match=match_id is not None)
             params = {"match_id": match_id, "limit": limit}
-            # Complete groups have precedence over all legacy rows for the same
-            # match/model/play. Once there are N eligible grouped rows, legacy
-            # rows older than their minimum time cannot enter the first N.
-            # Keep the boundary inclusive for EV/id ties; if there are fewer
-            # groups, fall back to the existing view. A correlated newer-row
-            # check over the entire legacy archive would be more expensive
-            # than its original global ranking.
             cur.execute(
                 f"""
-                WITH latest_groups AS MATERIALIZED (
-                    SELECT DISTINCT ON (g.match_id, mv.model_name, g.play_type)
-                        g.id AS group_id, g.match_id, mv.model_name, g.play_type
-                    FROM model_prediction_groups g
-                    JOIN model_prediction_runs r ON r.id = g.run_id
-                    JOIN model_versions mv ON mv.id = g.model_version_id
-                    WHERE g.group_status = 'complete'
-                      AND r.run_status IN ('completed', 'partial')
-                      {group_match_clause}
-                    ORDER BY g.match_id, mv.model_name, g.play_type,
-                             g.predict_time DESC, g.created_at DESC, g.id DESC
-                ), grouped_recent AS MATERIALIZED (
-                    SELECT mp.* FROM latest_groups g
+                WITH RECURSIVE {latest_ctes}, latest_ids AS (
+                    SELECT mapped.prediction_id AS id FROM latest_groups g
                     JOIN model_prediction_group_options mapped ON mapped.group_id = g.group_id
+                    UNION ALL
+                    SELECT id FROM legacy_latest
+                ), recent AS MATERIALIZED (
+                    SELECT mp.* FROM latest_ids latest
                     JOIN LATERAL (
-                        SELECT p.* FROM model_predictions p
-                        WHERE p.id = mapped.prediction_id OFFSET 0
+                        SELECT p.* FROM model_predictions p WHERE p.id = latest.id OFFSET 0
                     ) mp ON true
-                    JOIN official_matches m ON m.id = mp.match_id
-                    WHERE mp.validation_status = 'valid'
-                      AND mp.predict_time < m.kickoff_time
-                    ORDER BY mp.predict_time DESC, mp.ev DESC, mp.id DESC
-                    LIMIT %(limit)s
-                ), legacy_floor AS (
-                    SELECT CASE WHEN COUNT(*) = %(limit)s THEN MIN(predict_time)
-                                ELSE '-infinity'::timestamp END AS since
-                    FROM grouped_recent
-                ), legacy_bounded AS MATERIALIZED (
-                    SELECT mp.* FROM model_predictions mp
-                    JOIN legacy_floor floor ON mp.predict_time >= floor.since
                     JOIN model_versions mv ON mv.id = mp.model_version_id
                     JOIN official_matches m ON m.id = mp.match_id
                     WHERE mp.validation_status = 'valid'
                       AND mp.predict_time < m.kickoff_time
-                      AND floor.since <> '-infinity'::timestamp
-                      {match_clause}
-                      AND NOT EXISTS (
-                          SELECT 1 FROM model_prediction_group_options mapped
-                          WHERE mapped.prediction_id = mp.id
-                      )
-                      AND NOT EXISTS (
-                          SELECT 1 FROM latest_groups g
-                          WHERE g.match_id = mp.match_id AND g.model_name = mv.model_name
-                            AND g.play_type = mp.play_type
-                      )
-                      AND NOT EXISTS (
-                          SELECT 1 FROM model_predictions newer
-                          JOIN model_versions newer_mv ON newer_mv.id = newer.model_version_id
-                          WHERE newer.match_id = mp.match_id
-                            AND newer.play_type = mp.play_type
-                            AND newer.option_code = mp.option_code
-                            AND newer_mv.model_name = mv.model_name
-                            AND (newer.predict_time, newer.id) > (mp.predict_time, mp.id)
-                            AND NOT EXISTS (
-                                SELECT 1 FROM model_prediction_group_options newer_map
-                                WHERE newer_map.prediction_id = newer.id
-                            )
-                      )
                     ORDER BY mp.predict_time DESC, mp.ev DESC, mp.id DESC
-                    LIMIT %(limit)s
-                ), legacy_fallback AS MATERIALIZED (
-                    SELECT original.* FROM legacy_floor floor
-                    CROSS JOIN LATERAL (
-                        SELECT latest.id FROM model_prediction_latest_rows latest
-                        JOIN official_matches m ON m.id = latest.match_id
-                        WHERE floor.since = '-infinity'::timestamp
-                          AND latest.prediction_group_id IS NULL
-                          AND latest.validation_status = 'valid'
-                          AND latest.predict_time < m.kickoff_time
-                          {fallback_match_clause}
-                        ORDER BY latest.predict_time DESC, latest.ev DESC, latest.id DESC
-                        LIMIT %(limit)s
-                    ) fallback
-                    JOIN model_predictions original ON original.id = fallback.id
-                ), recent AS MATERIALIZED (
-                    SELECT * FROM (
-                        SELECT * FROM grouped_recent
-                        UNION ALL
-                        SELECT * FROM legacy_bounded
-                        UNION ALL
-                        SELECT * FROM legacy_fallback
-                    ) candidates
-                    ORDER BY predict_time DESC, ev DESC, id DESC
                     LIMIT %(limit)s
                 )
                 SELECT mp.id, mp.match_id, mp.predict_time,
@@ -477,7 +402,6 @@ def list_predictions(
             )
             rows = cur.fetchall()
             if include_summary:
-                latest_ctes = latest_prediction_ctes(filter_match=match_id is not None)
                 cur.execute(
                     f"""
                     WITH RECURSIVE {latest_ctes}, latest_ids AS (

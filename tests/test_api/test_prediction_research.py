@@ -51,7 +51,8 @@ def test_prediction_research_uses_exact_foreign_keys(client, query):
     assert evidence["feature_categories"] == ["rest"]
     assert evidence["odds_snapshot_id"] == 91
     assert result.json()["predictions"][0]["model_probability"] == 0
-    sql = cur.execute.call_args_list[0].args[0]
+    assert cur.execute.call_args_list[0].args == ("SET LOCAL jit = off",)
+    sql = cur.execute.call_args_list[1].args[0]
     for fragment in [
         "fs.id = mp.feature_snapshot_id",
         "fs.match_id = mp.match_id",
@@ -65,7 +66,7 @@ def test_prediction_research_uses_exact_foreign_keys(client, query):
         assert fragment in sql
     assert "recent AS MATERIALIZED" in sql
     assert "LIMIT %(limit)s" in sql.split("FROM recent mp")[0]
-    assert cur.execute.call_args_list[0].args[1] == {
+    assert cur.execute.call_args_list[1].args[1] == {
         "match_id": 101 if query else None,
         "limit": 200 if query else 20,
     }
@@ -143,7 +144,8 @@ def test_records_only_read_skips_full_aggregate(client, path):
         response = client.get(path + "?limit=200&include_summary=false")
     assert response.status_code == 200
     assert response.json() == {"predictions": [], "total": None, "summary": None}
-    assert cur.execute.call_count == 1
+    assert cur.execute.call_count == 2
+    assert cur.execute.call_args_list[0].args == ("SET LOCAL jit = off",)
     assert "recent AS MATERIALIZED" in cur.execute.call_args.args[0]
     assert cur.execute.call_args.args[1] == {"match_id": None, "limit": 200}
     cur.fetchone.assert_not_called()

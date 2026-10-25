@@ -429,14 +429,19 @@ def test_recent_predictions_preserve_latest_semantics_without_ranking_archive(
     conn, schema = isolated_database
     with conn.cursor() as cursor:
         cursor.execute("SET statement_timeout = '15s'")
+        cursor.execute("SHOW jit")
+        original_jit = cursor.fetchone()[0]
     capture = MagicMock()
     captured_cursor = capture.cursor.return_value.__enter__.return_value
     captured_cursor.fetchall.return_value = []
     captured_cursor.fetchone.return_value = (0, 0, None, 0, None)
     monkeypatch.setattr(router, "get_db", lambda: nullcontext(capture))
     router.list_predictions(match_id=None, limit=200, include_summary=True)
+    read_setting = captured_cursor.execute.call_args_list[0].args
+    assert read_setting == ("SET LOCAL jit = off",)
     summary_query, summary_params = captured_cursor.execute.call_args.args
     with conn.cursor() as cursor:
+        cursor.execute(*read_setting)
         cursor.execute(summary_query, summary_params)
         assert cursor.fetchone() == (0, 0, None, 0, None)
     router.list_predictions(match_id=None, limit=200, include_summary=False)
@@ -556,8 +561,7 @@ def test_recent_predictions_preserve_latest_semantics_without_ranking_archive(
     publish([3], version_id=2)
     publish([4], play_type="rqspf")
     publish([103], terminal=False, timestamp="2026-10-25T14:00:00")
-    if read_kind == "summary":
-        publish([109], terminal=False)
+    publish([109], terminal=False)
     with conn.cursor() as cursor:
         # Same-name model versions compete by time/id. Invalid and post-kickoff
         # latest rows must hide older valid pre-match rows, never resurrect them.
@@ -573,51 +577,45 @@ def test_recent_predictions_preserve_latest_semantics_without_ranking_archive(
             (104,1,'2026-10-25 12:00','spf','3',0.5,0.1,'valid'),
             (104,2,'2026-10-26 19:00','spf','3',0.5,0.1,'valid'),
             (105,1,'2026-10-25 10:00','spf','3',0.5,0.2,'valid')""")
-        if read_kind == "summary":
-            cursor.execute("""INSERT INTO model_predictions (
-                match_id, model_version_id, predict_time, play_type, option_code,
-                model_probability, ev, validation_status) VALUES
-            (106,1,'2026-10-25 10:00','spf','3',0.5,0.2,'valid'),
-            (106,2,'2026-10-25 11:00','spf','3',0.5,0.2,NULL),
-            (107,1,'2026-10-25 10:00','spf','3',0.5,0.2,'valid'),
-            (107,2,'2026-10-26 18:00','spf','3',0.5,0.2,'valid'),
-            (108,1,'2026-10-25 10:00','custom','edge',0.5,-0.2,'valid'),
-            (108,2,'2026-10-25 10:00','custom','edge',0.6,0,'valid'),
-            (9999,1,'2026-10-25 10:00','spf','3',0.5,0.2,'valid'),
-            (108,9999,'2026-10-25 10:00','spf','3',0.5,0.2,'valid')""")
+        cursor.execute("""INSERT INTO model_predictions (
+            match_id, model_version_id, predict_time, play_type, option_code,
+            model_probability, ev, validation_status) VALUES
+        (106,1,'2026-10-25 10:00','spf','3',0.5,0.2,'valid'),
+        (106,2,'2026-10-25 11:00','spf','3',0.5,0.2,NULL),
+        (107,1,'2026-10-25 10:00','spf','3',0.5,0.2,'valid'),
+        (107,2,'2026-10-26 18:00','spf','3',0.5,0.2,'valid'),
+        (108,1,'2026-10-25 10:00','custom','edge',0.5,-0.2,'valid'),
+        (108,2,'2026-10-25 10:00','custom','edge',0.6,0,'valid'),
+        (9999,1,'2026-10-25 10:00','spf','3',0.5,0.2,'valid'),
+        (108,9999,'2026-10-25 10:00','spf','3',0.5,0.2,'valid')""")
         cursor.execute("""UPDATE model_predictions SET confidence_score =
             CASE WHEN match_id = 102 THEN 0 WHEN match_id = 105 THEN 0.8 ELSE NULL END
             WHERE match_id IN (102,105,108)""")
-        if read_kind == "summary":
-            # Build the real migration on populated data, then replay it to check
-            # idempotence. This is a bounded fixture, not production build timing.
-            migration = (
-                Path(__file__).resolve().parents[2] / "sql/113_prediction_read_paths.sql"
-            ).read_text()
-            started = time.perf_counter()
-            cursor.execute(migration)
-            build_ms = (time.perf_counter() - started) * 1000
-            cursor.execute(migration)
-            cursor.execute("""SELECT i.indisvalid, pg_relation_size(i.indexrelid)
-                FROM pg_index i JOIN pg_class c ON c.oid=i.indexrelid
-                WHERE c.relname='idx_predictions_identity_latest'
-                  AND c.relnamespace=current_schema()::regnamespace""")
-            valid, index_bytes = cursor.fetchone()
-            assert valid
-            print(json.dumps({"identity_index_build_ms": build_ms, "index_bytes": index_bytes}))
-            cursor.execute(
-                sql.SQL("GRANT USAGE ON SCHEMA {} TO fqp").format(sql.Identifier(schema))
-            )
-            cursor.execute(
-                sql.SQL("GRANT SELECT ON ALL TABLES IN SCHEMA {} TO fqp").format(
-                    sql.Identifier(schema)
-                )
-            )
+        # Build the real migration on populated data, then replay it to check
+        # idempotence. This is a bounded fixture, not production build timing.
+        migration = (
+            Path(__file__).resolve().parents[2] / "sql/113_prediction_read_paths.sql"
+        ).read_text()
+        started = time.perf_counter()
+        cursor.execute(migration)
+        build_ms = (time.perf_counter() - started) * 1000
+        cursor.execute(migration)
+        cursor.execute("""SELECT i.indisvalid, pg_relation_size(i.indexrelid)
+            FROM pg_index i JOIN pg_class c ON c.oid=i.indexrelid
+            WHERE c.relname='idx_predictions_identity_latest'
+              AND c.relnamespace=current_schema()::regnamespace""")
+        valid, index_bytes = cursor.fetchone()
+        assert valid
+        print(json.dumps({"identity_index_build_ms": build_ms, "index_bytes": index_bytes}))
+        cursor.execute(sql.SQL("GRANT USAGE ON SCHEMA {} TO fqp").format(sql.Identifier(schema)))
+        cursor.execute(
+            sql.SQL("GRANT SELECT ON ALL TABLES IN SCHEMA {} TO fqp").format(sql.Identifier(schema))
+        )
         cursor.execute("ANALYZE")
     conn.commit()
-    if read_kind == "summary":
-        with conn.cursor() as cursor:
-            cursor.execute("SET LOCAL ROLE fqp")
+    with conn.cursor() as cursor:
+        cursor.execute(*read_setting)
+        cursor.execute("SET LOCAL ROLE fqp")
 
     for match_id, limit in (
         (None, 200),
@@ -698,6 +696,7 @@ def test_recent_predictions_preserve_latest_semantics_without_ranking_archive(
             ) * node["Actual Loops"]
         return count + sum(prediction_rows_examined(child) for child in node.get("Plans", []))
 
+    assert "JIT" not in plan
     examined = prediction_rows_examined(plan["Plan"])
     print(
         json.dumps(
@@ -736,6 +735,14 @@ def test_recent_predictions_preserve_latest_semantics_without_ranking_archive(
                 }
             )
         )
+
+    with conn.cursor() as cursor:
+        cursor.execute("SHOW jit")
+        assert cursor.fetchone()[0] == "off"
+    conn.rollback()
+    with conn.cursor() as cursor:
+        cursor.execute("SHOW jit")
+        assert cursor.fetchone()[0] == original_jit
 
 
 @pytest.mark.parametrize("archive_snapshots", [100, 1000])
