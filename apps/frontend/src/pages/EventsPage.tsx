@@ -11,11 +11,24 @@ import EmptyState from '../shared/components/EmptyState';
 import MatchDetailDrawer from '../shared/components/MatchDetailDrawer';
 import TeamName from '../shared/components/TeamName';
 import { statusLabel } from '../shared/constants';
+import LeagueCenter from '../features/league-center/LeagueCenter';
+import { useEventCenterState } from '../features/league-center/state';
 
 const LEAGUE_COLORS = ['#ef4444', '#f59e0b', '#22c55e', '#3b82f6', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316', '#84cc16', '#14b8a6'];
 const PAGE_SIZE = 50;
 
 export default function EventsPage() {
+  const [state, update] = useEventCenterState();
+  return <div>
+    <nav className="events-view-switch" aria-label="赛事中心视图">
+      <button type="button" aria-pressed={state.view === 'official'} onClick={() => update({ view: 'official' })}>竞彩比赛</button>
+      <button type="button" aria-pressed={state.view === 'league'} onClick={() => update({ view: 'league' })}>联赛资料</button>
+    </nav>
+    {state.view === 'league' ? <LeagueCenter state={state} onChange={update} /> : <OfficialEvents />}
+  </div>;
+}
+
+function OfficialEvents() {
   const [matches, setMatches] = useState<EventCatalogMatch[]>([]);
   const [events, setEvents] = useState<EventSummary[]>([]);
   const [total, setTotal] = useState(0);

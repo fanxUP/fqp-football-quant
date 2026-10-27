@@ -1,5 +1,5 @@
-import { render, screen, waitFor } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import EventsPage from './EventsPage';
 
 const { catalog, list } = vi.hoisted(() => ({ catalog: vi.fn(), list: vi.fn() }));
@@ -27,6 +27,10 @@ vi.mock('../core/apiClient', () => ({
 }));
 
 describe('EventsPage', () => {
+  beforeEach(() => {
+    window.history.replaceState(null, '', '#/events');
+    vi.clearAllMocks();
+  });
   it('shows only Sporttery matches with official display codes', async () => {
     render(<EventsPage />);
 
@@ -36,5 +40,35 @@ describe('EventsPage', () => {
     expect(screen.getByText('体彩官方')).toBeInTheDocument();
     expect(screen.getByText('阿森纳')).toBeInTheDocument();
     expect(screen.queryByText('无体彩编号')).not.toBeInTheDocument();
+  });
+
+  it('opens the league area without fetching official matches or fictional standings', async () => {
+    window.history.replaceState(null, '', '#/events?view=league');
+    render(<EventsPage />);
+    expect(await screen.findByText('联赛数据待接入')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '联赛资料' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('combobox', { name: '赛季' })).toBeDisabled();
+    expect(catalog).not.toHaveBeenCalled();
+    expect(list).not.toHaveBeenCalled();
+    expect(screen.queryByText('阿森纳')).not.toBeInTheDocument();
+    expect(screen.getByText('球员与阵容事实')).toBeInTheDocument();
+  });
+
+  it('switches views and restores the same-route league link on browser navigation', async () => {
+    render(<EventsPage />);
+    await screen.findByText('阿森纳');
+    fireEvent.click(screen.getByRole('button', { name: '联赛资料' }));
+    await screen.findByText('联赛数据待接入');
+    expect(window.location.hash).toContain('view=league');
+    fireEvent.click(screen.getByRole('button', { name: '赛程赛果' }));
+    expect(window.location.hash).toContain('tab=fixtures');
+    act(() => {
+      window.history.replaceState(null, '', '#/events?view=league&tab=teams');
+      window.dispatchEvent(new HashChangeEvent('hashchange'));
+    });
+    expect(screen.getByRole('button', { name: '球队' })).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(screen.getByRole('button', { name: '竞彩比赛' }));
+    await screen.findByText('阿森纳');
+    expect(screen.getByText('体彩官方')).toBeInTheDocument();
   });
 });
