@@ -1,7 +1,7 @@
 {
-  "git_revision": "3172b90636ffea2715dd960db71b7a6482495772",
+  "git_revision": "ef437d4f8a409a91dc04e3ce01e114738b108ad9",
   "branch": "main",
-  "dirty": true,
-  "captured_at": "2026-10-27T16:16:56.835799+08:00",
+  "dirty": false,
+  "captured_at": "2026-10-27T09:35:49.470173+00:00",
   "checks": {}
 }

@@ -1,353 +1,559 @@
-"""传统足彩 14场/任九 API 端点 (Phase 10)."""
+"""Official traditional-lottery analysis and explicit immutable research plans."""
 
 from __future__ import annotations
 
+from collections import defaultdict
 from functools import lru_cache
-from typing import Any, Optional
+from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
+from psycopg2.extras import Json
+from pydantic import BaseModel, ConfigDict, Field, StrictInt
 
 from apps.backend.src.db import get_db
+from scripts.business_time import business_now
+from scripts.market_metric_validation import spf_probability_vector
+from scripts.model_prediction_run_identity import content_sha256
+from scripts.model_prediction_run_loader import load_pool_prediction_groups
 from scripts.pool_combination_optimizer import (
     PoolMatch,
     analyze_pool,
     pool_analysis_to_dict,
+    validate_budget,
 )
-from scripts.prediction_statistics import latest_prediction_ctes
+from scripts.pool_issue_state import pool_time, sale_window
 
 router = APIRouter(tags=["pool"])
 
 
-def _read_pool_model_consensus(cur: Any, match_ids: list[int]) -> dict[int, tuple]:
-    """Read consensus only for the official matches in a candidate issue."""
-    if not match_ids:
-        return {}
-    latest_ctes = latest_prediction_ctes(filter_match=False, filter_match_ids=True)
-    cur.execute(
-        f"""WITH RECURSIVE {latest_ctes}, latest_ids AS (
-            SELECT mapped.prediction_id AS id FROM latest_groups g
-            JOIN model_prediction_group_options mapped ON mapped.group_id = g.group_id
-            UNION ALL
-            SELECT id FROM legacy_latest
-        ), latest_model_options AS (
-            SELECT DISTINCT ON (mp.match_id, mp.model_version_id, mp.option_code)
-                   mp.match_id, mp.model_version_id, mp.option_code, mp.model_probability
-            FROM latest_ids latest
-            JOIN LATERAL (
-                SELECT p.* FROM model_predictions p WHERE p.id = latest.id OFFSET 0
-            ) mp ON true
-            JOIN model_versions mv ON mv.id = mp.model_version_id
-            JOIN official_matches m ON m.id = mp.match_id
-            WHERE mp.match_id = ANY(%(match_ids)s::bigint[])
-              AND mp.play_type = 'spf'
-              AND mp.predict_time < m.kickoff_time
-              AND mp.validation_status = 'valid'
-              AND COALESCE((mp.uncertainty_reason->>'model_independent')::boolean, false) = true
-              AND mv.is_active = true
-              AND mp.model_probability IS NOT NULL
-            ORDER BY mp.match_id, mp.model_version_id, mp.option_code,
-                     mp.predict_time DESC, mp.id DESC
+def _read_pool_model_consensus(conn: Any, cutoffs: dict, *, historical: bool) -> dict[int, dict]:
+    groups = load_pool_prediction_groups(conn, cutoffs=cutoffs, historical=historical)
+    by_match: dict[int, list] = defaultdict(list)
+    rejected: dict[int, list] = defaultdict(list)
+    for g in groups:
+        vector = spf_probability_vector(g["probability_vector"])
+        if (
+            g["status"] != "complete"
+            or not g["eligible"]
+            or vector is None
+            or g["provenance_status"] != "complete"
+            or g["run_provenance_status"] != "complete"
+        ):
+            rejected[g["match_id"]].append(
+                {
+                    "model_name": g["model_name"],
+                    "status": g["status"],
+                    "group_id": str(g["group_id"]),
+                    "reason": "完整性、独立模型用途或来源证据未通过",
+                }
+            )
+            continue
+        by_match[g["match_id"]].append((g, vector))
+    result = {}
+    for mid in set(by_match) | set(rejected):
+        valid = by_match[mid]
+        result[mid] = {
+            "vector": {o: sum(v[o] for _, v in valid) / len(valid) for o in "310"}
+            if valid
+            else None,
+            "model_count": len(valid),
+            "disagreement": max(
+                max(v[o] for _, v in valid) - min(v[o] for _, v in valid) for o in "310"
+            )
+            if len(valid) > 1
+            else None,
+            "models": [
+                {
+                    "model_name": g["model_name"],
+                    "model_version_id": g["model_version_id"],
+                    "group_id": str(g["group_id"]),
+                    "run_id": str(g["run_id"]),
+                    "predict_time": dt.isoformat()
+                    if (dt := pool_time(g["predict_time"]))
+                    else None,
+                    "output_sha256": g["output_sha256"],
+                    "raw_vector": v,
+                    "manifest_hashes": g["manifest_hashes"],
+                }
+                for g, v in valid
+            ],
+            "rejected": rejected[mid],
+        }
+    return result
+
+
+def _issue_headers(conn, issue_id=None):
+    with conn.cursor() as cur:
+        cur.execute(
+            """SELECT id,issue_no,game_type,total_matches,raw_json,raw_hash,source_game_type,
+                   (SELECT count(*) FROM football_pool_issue_matches im WHERE im.issue_id=football_pool_issues.id)
+            FROM football_pool_issues WHERE game_type IN ('t14c','r9')
+              AND (%s IS NULL OR id::text=%s OR issue_no=%s
+                   OR issue_no=(SELECT issue_no FROM football_pool_issues WHERE id::text=%s))
+            ORDER BY updated_at DESC,id DESC LIMIT 100""",
+            (issue_id, issue_id, issue_id, issue_id),
         )
-        SELECT match_id,
-               AVG(model_probability) FILTER (WHERE option_code = '3'),
-               AVG(model_probability) FILTER (WHERE option_code = '1'),
-               AVG(model_probability) FILTER (WHERE option_code = '0')
-        FROM latest_model_options
-        GROUP BY match_id
-        HAVING COUNT(DISTINCT model_version_id) > 0""",
-        {"match_ids": sorted(set(match_ids))},
+        return [
+            dict(
+                zip(
+                    (
+                        "id",
+                        "issue_no",
+                        "game_type",
+                        "total_matches",
+                        "raw_json",
+                        "raw_hash",
+                        "source_game_type",
+                        "stored_matches",
+                    ),
+                    r,
+                    strict=True,
+                ),
+                fixtures=[],
+            )
+            for r in cur.fetchall()
+        ]
+
+
+def _choose_issue(issues, issue_id, now):
+    candidates = [i for i in issues if i["game_type"] == "t14c"]
+    if not candidates:
+        return None
+    if issue_id is not None:
+        requested = next((i for i in issues if str(i["id"]) == issue_id), None)
+        issue_no = requested["issue_no"] if requested else issue_id
+        return next((i for i in candidates if i["issue_no"] == issue_no), None)
+    return max(
+        candidates,
+        key=lambda i: (sale_window(i["raw_json"] or {}, now=now)["state"] == "selling", i["id"]),
     )
-    return {int(row[0]): tuple(row[1:]) for row in cur.fetchall()}
+
+
+def _catalogue(conn, issue_id=None, now=None):
+    issues = _issue_headers(conn, issue_id)
+    selected = _choose_issue(issues, issue_id, now or business_now())
+    if selected is None:
+        return issues
+    # Resolve only the selected period's fixtures, never every historical issue.
+    by_id = {i["id"]: i for i in issues if i["issue_no"] == selected["issue_no"]}
+    with conn.cursor() as cur:
+        cur.execute(
+            """SELECT im.issue_id,im.match_order,im.home_team_name,im.away_team_name,
+                    im.league_name,im.kickoff_time,resolved.match_id
+            FROM football_pool_issue_matches im
+            LEFT JOIN LATERAL (
+                SELECT CASE WHEN count(*)=1 THEN min(m.id) END AS match_id
+                FROM official_matches m
+                WHERE m.home_team_name=im.home_team_name AND m.away_team_name=im.away_team_name
+                  AND m.kickoff_time=im.kickoff_time
+                  AND (im.match_id IS NULL OR m.id=im.match_id)
+            ) resolved ON true
+            WHERE im.issue_id=ANY(%s::bigint[]) ORDER BY im.issue_id,im.match_order""",
+            (list(by_id),),
+        )
+        for r in cur.fetchall():
+            by_id[r[0]]["fixtures"].append(
+                {
+                    "match_order": r[1],
+                    "match_id": r[6],
+                    "home_team": r[2] or "",
+                    "away_team": r[3] or "",
+                    "league": r[4] or "",
+                    "match_date": pool_time(r[5]).isoformat() if pool_time(r[5]) else "",
+                }
+            )
+    return issues
+
+
+def _fixture_signature(issue):
+    return [
+        (m["match_order"], m["home_team"], m["away_team"], m["match_date"])
+        for m in issue["fixtures"]
+    ]
+
+
+def _complete_catalogue(issue):
+    fixtures = issue["fixtures"]
+    ids = [m["match_id"] for m in fixtures]
+    return (
+        issue["total_matches"] == 14
+        and [m["match_order"] for m in fixtures] == list(range(1, 15))
+        and None not in ids
+        and len(set(ids)) == 14
+        and all(m["match_date"] for m in fixtures)
+    )
+
+
+def _game_analysis(conn, issue, *, now, budget, strategy, pins, excludes):
+    window = sale_window(issue["raw_json"] or {}, now=now)
+    stop = pool_time(window["sale_stop"])
+    # Unknown/conflicting deadlines permit bounded research, never a current plan.
+    boundary = min(now, stop) if stop else now
+    cutoffs = {
+        m["match_id"]: min(boundary, pool_time(m["match_date"]))
+        for m in issue["fixtures"]
+        if m["match_id"] is not None and pool_time(m["match_date"])
+    }
+    historical = window["state"] != "selling"
+    consensus = _read_pool_model_consensus(conn, cutoffs, historical=historical)
+    matches = []
+    for fixture in issue["fixtures"]:
+        evidence = consensus.get(fixture["match_id"], {})
+        vector = evidence.get("vector") or {}
+        matches.append(
+            PoolMatch(
+                **fixture,
+                prob_home=vector.get("3"),
+                prob_draw=vector.get("1"),
+                prob_away=vector.get("0"),
+                evidence=evidence,
+                missing_reason="比赛身份未唯一核实" if fixture["match_id"] is None else None,
+            )
+        )
+    try:
+        result = pool_analysis_to_dict(
+            analyze_pool(
+                matches,
+                budget=budget,
+                strategy=strategy,
+                period_id=f"{issue['issue_no']}-{issue['game_type']}",
+                pinned_orders=pins,
+                excluded_orders=excludes,
+            )
+        )
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    catalogue_ok = (
+        _complete_catalogue(issue) and issue.get("source_game_type") == issue["game_type"]
+    )
+    if issue.get("source_game_type") != issue["game_type"]:
+        result["warnings"].append(
+            "旧记录的玩法来源尚未重新核实，需官方采集按玩法更新后再生成方案。"
+        )
+    if not catalogue_ok:
+        result["sf14_status"] = result["rx9_status"] = "identity_pending"
+    elif window["state"] in {"unknown", "conflict", "suspended", "not_started"}:
+        result["sf14_status"] = result["rx9_status"] = (
+            "cutoff_pending" if window["state"] == "unknown" else window["state"]
+        )
+    result["issue_state"] = window["state"]
+    result["issue"] = {k: issue[k] for k in ["id", "issue_no", "game_type"]}
+    result["issue"].update(
+        status=window["state"],
+        sale_stop=window["sale_stop"],
+        sale_start=window["sale_start"],
+        sale_stop_source=window["sale_stop_source"],
+        source="sporttery",
+        raw_hash=issue["raw_hash"],
+    )
+    result["data_as_of"] = boundary.isoformat()
+    result["analysis_mode"] = (
+        "current"
+        if window["state"] == "selling"
+        else ("historical" if window["state"] == "closed" else "research")
+    )
+    result["warnings"].append(
+        "未提供的天气、伤停、阵容和市场证据均为未知，不由彩池额外阻断合法模型。"
+    )
+    if historical:
+        result["warnings"].append(
+            "历史重建参考：按当时可用预测组恢复，不等同当时保存的原始方案；模型集合按留存组重建。"
+        )
+    if not catalogue_ok or window["state"] not in {"selling", "closed"}:
+        # The table still exposes research vectors, but no actionable portfolio.
+        result["full_combinations"] = {"count": 0, "total_cost": 0, "combinations": []}
+        result["rx9"].update(combinations_count=0, total_cost=0, combinations=[])
+        result["probabilities"] = dict.fromkeys(result["probabilities"])
+    return result
+
+
+def _analysis(conn, *, budget, strategy, issue_id, pins, excludes):
+    now = business_now()
+    issues = _catalogue(conn, issue_id, now)
+    full_issues = [i for i in issues if i["game_type"] == "t14c"]
+    if not full_issues:
+        return {
+            "schema_version": "football-pool/v2",
+            "issue": None,
+            "issue_state": "missing_issue",
+            "sf14_status": "missing_issue",
+            "rx9_status": "missing_issue",
+            "matches": [],
+            "missing_inputs": [{"reason": "暂无已采集的体彩官方14场彩池"}],
+            "warnings": [],
+        }
+    selected = _choose_issue(issues, issue_id, now)
+    if selected is None:
+        raise HTTPException(404, "未找到指定14场期次")
+    result = _game_analysis(
+        conn, selected, now=now, budget=budget, strategy=strategy, pins=[], excludes=[]
+    )
+    rx_issue = next(
+        (i for i in issues if i["game_type"] == "r9" and i["issue_no"] == selected["issue_no"]),
+        None,
+    )
+    if rx_issue and _fixture_signature(rx_issue) == _fixture_signature(selected):
+        nine = _game_analysis(
+            conn, rx_issue, now=now, budget=budget, strategy=strategy, pins=pins, excludes=excludes
+        )
+        result["rx9"], result["rx9_status"] = nine["rx9"], nine["rx9_status"]
+        result["rx9"]["issue"] = nine["issue"]
+        result["rx9"]["data_as_of"] = nine["data_as_of"]
+        result["rx9"]["missing_inputs"] = nine["missing_inputs"]
+        result["rx9"]["candidate_matches"] = nine["matches"]
+        result["probabilities"]["rx9_prob"] = nine["probabilities"]["rx9_prob"]
+        result["warnings"] = list(dict.fromkeys(result["warnings"] + nine["warnings"]))
+    else:
+        result["rx9_status"] = "issue_pending" if rx_issue is None else "identity_pending"
+        result["rx9"].update(
+            selected_matches=[],
+            combinations_count=0,
+            total_cost=0,
+            combinations=[],
+            missing_inputs=[],
+        )
+        result["probabilities"]["rx9_prob"] = None
+        result["warnings"].append(
+            "任九须有独立官方期次及一致的14场对阵证据，不能复制14场截止时间。"
+        )
+    result["parameters"].update(
+        issue_id=str(selected["id"]), pinned_orders=pins, excluded_orders=excludes
+    )
+    # Stable evidence identity excludes wall-clock display fields; unchanged
+    # groups, issue evidence, parameters and engine yield the same hash.
+    identity = {
+        k: result[k]
+        for k in [
+            "schema_version",
+            "calculation_version",
+            "parameters",
+            "issue",
+            "matches",
+            "rx9",
+            "sf14_status",
+            "rx9_status",
+        ]
+    }
+    identity["rx9"] = {k: v for k, v in result["rx9"].items() if k != "data_as_of"}
+    result["input_hash"] = content_sha256(identity)
+    return result
+
+
+def _start_snapshot(conn, *, read_only=True):
+    conn.rollback()
+    with conn.cursor() as cur:
+        cur.execute(
+            "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ "
+            + ("READ ONLY" if read_only else "READ WRITE")
+        )
+        cur.execute("SET LOCAL jit = off")
+
+
+def _orders(value: str | None) -> list[int]:
+    try:
+        orders = [] if not value else [int(x) for x in value.split(",")]
+        if len(set(orders)) != len(orders) or any(not 1 <= n <= 14 for n in orders):
+            raise ValueError()
+        return sorted(orders)
+    except ValueError as exc:
+        raise HTTPException(400, "场序须为1至14且不重复，以逗号分隔") from exc
 
 
 @router.get("/api/pool/analyze")
 def run_pool_analysis(
-    budget: int = Query(256, description="预算（元）"),
-    strategy: str = Query("balanced", description="策略：conservative | balanced | aggressive"),
-    seed_match_id: Optional[int] = Query(  # noqa: UP045
-        None, description="指定基准比赛ID（可选，用于筛选同期比赛）"
-    ),
-    issue_id: Optional[str] = Query(  # noqa: UP045
-        None, description="指定官方期号或本地期次ID"
-    ),
+    budget: int = Query(256, ge=2, le=10000),
+    strategy: str = "balanced",
+    issue_id: str | None = None,
+    pinned_orders: str | None = None,
+    excluded_orders: str | None = None,
 ):
-    """对体彩官方当前胜负彩14场运行完整分析。
-
-    只从已采集的官方彩池期号读取比赛，再关联本地模型预测。禁止把
-    竞彩足球在售比赛拼成传统足彩14场。
-
-    运行：
-    1. 冷门指数计算
-    2. 胆/拖/防守分类
-    3. 胆拖组合优化
-    4. 蒙特卡洛模拟（命中14/13/任九概率）
-    5. 任九选项
-
-    返回完整分析报告。
-    """
-    if strategy not in ("conservative", "balanced", "aggressive"):
-        raise HTTPException(400, "strategy must be conservative | balanced | aggressive")
-
+    try:
+        validate_budget(budget)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    if strategy not in {"conservative", "balanced", "aggressive"}:
+        raise HTTPException(400, "未知组合策略")
+    pins, excludes = _orders(pinned_orders), _orders(excluded_orders)
+    if len(pins) > 9 or set(pins) & set(excludes):
+        raise HTTPException(400, "固定场次最多9场，不能同时排除")
     with get_db() as conn:
-        # get_db's connection health probe starts a transaction. Start this
-        # multi-query read with one consistent issue/prediction snapshot.
-        conn.rollback()
-        with conn.cursor() as cur:
-            cur.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
-            cur.execute("SET LOCAL jit = off")
-            # 官方胜负彩彩池是唯一的14场来源。
-            cur.execute(
-                """
-                SELECT i.id, i.issue_no, i.game_type, i.total_matches,
-                       i.official_status, i.sale_stop_time::text,
-                       im.match_order, im.match_id,
-                       COALESCE(im.home_team_name, m.home_team_name) AS home_team,
-                       COALESCE(im.away_team_name, m.away_team_name) AS away_team,
-                       COALESCE(im.league_name, m.league_name) AS league,
-                       COALESCE(im.kickoff_time, m.kickoff_time)::text AS match_date,
-                       m.id AS official_match_id
-                FROM football_pool_issues i
-                JOIN football_pool_issue_matches im ON im.issue_id = i.id
-                LEFT JOIN official_matches m
-                  ON m.id = im.match_id
-                  OR (m.home_team_name = im.home_team_name
-                      AND m.away_team_name = im.away_team_name
-                      AND m.kickoff_time::date = im.kickoff_time::date)
-                WHERE i.game_type = 't14c'
-                  AND (%s IS NULL OR i.id::text = %s OR i.issue_no = %s)
-                ORDER BY CASE WHEN i.official_status = 'selling' THEN 0 ELSE 1 END,
-                         i.sale_stop_time DESC NULLS LAST, i.updated_at DESC,
-                         im.match_order
-                """,
-                (issue_id, issue_id, issue_id),
-            )
-            rows = cur.fetchall()
-
-            if not rows:
-                raise HTTPException(404, "暂无已采集的体彩官方14场彩池")
-
-            issues: dict[int, list[tuple]] = {}
-            for row in rows:
-                issues.setdefault(int(row[0]), []).append(row)
-
-            def ready_count(issue_rows: list[tuple]) -> int:
-                return sum(
-                    row[12] is not None and all(row[idx] is not None for idx in (14, 15, 16))
-                    for row in issue_rows
-                )
-
-            ordered_issues = list(issues.values())
-            first_issue = ordered_issues[0]
-            first_is_current = first_issue[0][4] == "selling"
-
-            def with_consensus(issue_rows: list[tuple]) -> list[tuple]:
-                consensus = _read_pool_model_consensus(
-                    cur, [int(row[12]) for row in issue_rows if row[12] is not None]
-                )
-                return [
-                    (*row, "模型共识", *consensus[row[12]])
-                    if row[12] in consensus
-                    else (*row, None, None, None, None)
-                    for row in issue_rows
-                ]
-
-            matches: list[tuple]
-            if first_is_current or issue_id is not None:
-                matches = with_consensus(first_issue)
-            else:
-                selected = None
-                first_with_consensus = None
-                for issue_rows in ordered_issues:
-                    if issue_rows[0][3] != 14 or len(issue_rows) != 14:
-                        continue
-                    candidate = with_consensus(issue_rows)
-                    if issue_rows is first_issue:
-                        first_with_consensus = candidate
-                    if ready_count(candidate) == 14:
-                        selected = candidate
-                        break
-                matches = selected or first_with_consensus or with_consensus(first_issue)
-
-            issue_no = matches[0][1]
-            if matches[0][3] != 14 or len(matches) != 14:
-                raise HTTPException(
-                    409,
-                    f"官方14场彩池数据不完整：期号 {issue_no}，应为14场，当前 {len(matches)}场",
-                )
-            predicted_count = ready_count(matches)
-            if predicted_count < 14:
-                issue_status = str(matches[0][4] or "unknown")
-                if issue_status != "selling":
-                    raise HTTPException(
-                        409,
-                        f"期号 {issue_no} 已停售；停售前仅有 {predicted_count}/14 场具备可审计模型证据，"
-                        "系统不会使用停售后的数据追补推荐",
-                    )
-                raise HTTPException(
-                    409,
-                    f"期号 {issue_no} 已完成 {predicted_count}/14 场模型预测，待补齐 {14 - predicted_count} 场后生成组合",
-                )
-
-            if len(matches) < 14:
-                raise HTTPException(
-                    400,
-                    f"当前只有 {len(matches)} 场官方比赛，需要14场",
-                )
-
-            # 对每场官方比赛使用各活跃模型最新赛前概率的共识均值。
-            pool_matches = []
-            for row in matches:
-                pool_match = PoolMatch(
-                    match_id=row[12] or row[7] or row[6],
-                    home_team=row[8],
-                    away_team=row[9],
-                    league=row[10] or "",
-                    match_date=str(row[11]) if row[11] else "",
-                    prob_home=float(row[14] or 0),
-                    prob_draw=float(row[15] or 0),
-                    prob_away=float(row[16] or 0),
-                    data_quality=1.0,
-                )
-                pool_matches.append(pool_match)
-
-    # 运行分析
-    analysis = analyze_pool(
-        pool_matches,
-        budget=budget,
-        strategy=strategy,
-        period_id=f"{issue_no}-t14c",
-    )
-
-    result = pool_analysis_to_dict(analysis)
-    issue_status = str(matches[0][4] or "unknown")
-    result["analysis_mode"] = "current" if issue_status == "selling" else "historical"
-    result["issue"] = {
-        "id": matches[0][0],
-        "issue_no": issue_no,
-        "status": issue_status,
-        "sale_stop": matches[0][5],
-        "source": "sporttery",
-    }
-    return result
-
-
-@lru_cache(maxsize=1)
-def _build_pool_sample() -> dict:
-    """Build the deterministic demonstration pool once per process."""
-    import random
-
-    rng = random.Random(42)
-
-    sample_teams = [
-        ("曼联", "利物浦", "英超"),
-        ("阿森纳", "切尔西", "英超"),
-        ("曼城", "热刺", "英超"),
-        ("纽卡斯尔", "阿斯顿维拉", "英超"),
-        ("布莱顿", "狼队", "英超"),
-        ("富勒姆", "伯恩茅斯", "英超"),
-        ("巴萨", "皇马", "西甲"),
-        ("马竞", "塞维利亚", "西甲"),
-        ("瓦伦西亚", "比利亚雷亚尔", "西甲"),
-        ("国际米兰", "AC米兰", "意甲"),
-        ("尤文图斯", "罗马", "意甲"),
-        ("那不勒斯", "拉齐奥", "意甲"),
-        ("拜仁", "多特蒙德", "德甲"),
-        ("莱比锡", "勒沃库森", "德甲"),
-    ]
-
-    matches = []
-    for i, (home, away, league) in enumerate(sample_teams):
-        # 生成合理的概率
-        p_home = rng.uniform(0.25, 0.55)
-        p_draw = rng.uniform(0.18, 0.35)
-        p_away = 1.0 - p_home - p_draw
-
-        is_derby = i in (0, 9)  # 曼联vs利物浦, 国米vs米兰
-        is_top = i in (2, 6)  # 曼城vs热刺, 巴萨vs皇马
-
-        m = PoolMatch(
-            match_id=i + 1,
-            home_team=home,
-            away_team=away,
-            league=league,
-            match_date="2026-07-03",
-            prob_home=round(p_home, 4),
-            prob_draw=round(p_draw, 4),
-            prob_away=round(p_away, 4),
-            market_odds_home=round(1.0 / p_home * 0.92, 2) if p_home > 0 else None,
-            market_odds_draw=round(1.0 / p_draw * 0.92, 2) if p_draw > 0 else None,
-            market_odds_away=round(1.0 / p_away * 0.92, 2) if p_away > 0 else None,
-            uncertainty=round(rng.uniform(0.2, 0.7), 4),
-            data_quality=round(rng.uniform(0.5, 1.0), 4),
-            is_derby=is_derby,
-            is_top_clash=is_top,
+        _start_snapshot(conn)
+        return _analysis(
+            conn, budget=budget, strategy=strategy, issue_id=issue_id, pins=pins, excludes=excludes
         )
-        matches.append(m)
-
-    analysis = analyze_pool(
-        matches,
-        budget=256,
-        strategy="balanced",
-        n_mc_simulations=1_000,
-        period_id="sample-2026-07-03",
-    )
-
-    return pool_analysis_to_dict(analysis)
-
-
-@router.get("/api/pool/sample")
-def get_pool_sample():
-    """返回固定种子的14场演示分析结果；使用合成数据，不访问数据库。"""
-    return _build_pool_sample()
 
 
 @router.get("/api/pool/issues")
 def list_pool_issues():
-    """List real official pool issues stored by the Sporttery collector."""
     with get_db() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT i.id, i.issue_no, i.game_type, i.official_status,
-                       i.total_matches, i.sale_start_time, i.sale_stop_time,
-                       COUNT(im.id) AS stored_matches
-                FROM football_pool_issues i
-                LEFT JOIN football_pool_issue_matches im ON im.issue_id = i.id
-                GROUP BY i.id
-                ORDER BY i.sale_stop_time DESC NULLS LAST, i.updated_at DESC
-                """
-            )
-            rows = cur.fetchall()
-
-    issues = [
+        _start_snapshot(conn)
+        issues = _issue_headers(conn)
+    result = [
         {
-            "id": row[0],
-            "issue_no": row[1],
-            "game_type": row[2],
-            "status": row[3],
-            "total_matches": row[4],
-            "stored_matches": row[7],
-            "sale_start": row[5].isoformat() if row[5] else None,
-            "sale_stop": row[6].isoformat() if row[6] else None,
-            "source": "sporttery",
+            **{k: i[k] for k in ["id", "issue_no", "game_type", "total_matches", "stored_matches"]},
+            **sale_window(i["raw_json"] or {}),
         }
-        for row in rows
+        for i in issues
     ]
-    return {"issues": issues, "total": len(issues)}
+    return {"issues": result, "total": len(result)}
+
+
+@lru_cache(maxsize=1)
+def _build_pool_sample():
+    matches = [
+        PoolMatch(
+            match_id=i + 1,
+            match_order=i + 1,
+            home_team=f"示例主队{i + 1}",
+            away_team=f"示例客队{i + 1}",
+            prob_home=0.4,
+            prob_draw=0.35,
+            prob_away=0.25,
+        )
+        for i in range(14)
+    ]
+    result = pool_analysis_to_dict(analyze_pool(matches, period_id="synthetic-example"))
+    result["synthetic"] = True
+    return result
+
+
+@router.get("/api/pool/sample")
+def get_pool_sample():
+    return _build_pool_sample()
 
 
 @router.post("/api/pool/issues/{issue_id}/generate-combinations")
 def generate_pool_issue_combinations(
-    issue_id: str,
-    budget: int = Query(256, description="预算（元）"),
-    strategy: str = Query("balanced", description="策略：conservative | balanced | aggressive"),
+    issue_id: str, budget: int = Query(256, ge=2, le=10000), strategy: str = "balanced"
 ):
-    """Compatibility wrapper around the current pool analyzer."""
-    result = run_pool_analysis(
-        budget=budget,
-        strategy=strategy,
-        seed_match_id=None,
-        issue_id=issue_id,
-    )
-    result["issue_id"] = issue_id
-    return result
+    return run_pool_analysis(budget=budget, strategy=strategy, issue_id=issue_id)
+
+
+def _snapshot_digest(snapshot):
+    canonical = {
+        k: v
+        for k, v in snapshot.items()
+        if k not in {"snapshot_hash", "generated_at", "data_as_of"}
+    }
+    canonical["rx9"] = {k: v for k, v in snapshot["rx9"].items() if k != "data_as_of"}
+    return content_sha256(canonical)
+
+
+class SavePoolPlan(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    issue_id: str
+    budget: StrictInt = Field(ge=2, le=10000)
+    strategy: str
+    pinned_orders: list[StrictInt] = Field(default_factory=list, max_length=9)
+    excluded_orders: list[StrictInt] = Field(default_factory=list, max_length=14)
+    input_hash: str = Field(pattern=r"^[a-f0-9]{64}$")
+
+
+@router.post("/api/pool/plans")
+def save_pool_plan(body: SavePoolPlan):
+    # Recompute server-side from canonical evidence. Never trust client tickets,
+    # probabilities or costs, and never create betting/ledger transactions.
+    for values in [body.pinned_orders, body.excluded_orders]:
+        _orders(",".join(map(str, values)))
+    if set(body.pinned_orders) & set(body.excluded_orders):
+        raise HTTPException(400, "固定场次不能同时排除")
+    try:
+        validate_budget(body.budget)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    if body.strategy not in {"conservative", "balanced", "aggressive"}:
+        raise HTTPException(400, "未知组合策略")
+    with get_db() as conn:
+        # READ COMMITTED INSERT handles concurrent idempotent saves. Analysis is
+        # captured in a repeatable snapshot first; insert does not reread inputs.
+        _start_snapshot(conn)
+        snapshot = _analysis(
+            conn,
+            budget=body.budget,
+            strategy=body.strategy,
+            issue_id=body.issue_id,
+            pins=body.pinned_orders,
+            excludes=body.excluded_orders,
+        )
+        if snapshot.get("input_hash") != body.input_hash:
+            raise HTTPException(409, "来源或参数已变化，请刷新后保存")
+        if not snapshot["full_combinations"]["count"] and not snapshot["rx9"]["combinations_count"]:
+            raise HTTPException(409, "当前没有可保存的完整方案")
+        snapshot["snapshot_hash"] = _snapshot_digest(snapshot)
+        conn.rollback()
+        with conn.cursor() as cur:
+            cur.execute(
+                """INSERT INTO football_pool_combinations
+                (issue_id,strategy_name,combination_type,total_units,total_cost,
+                 estimated_hit_14_prob,estimated_hit_13_prob,combination_json)
+                VALUES (%s,%s,'research-comparison',%s,%s,%s,%s,%s)
+                ON CONFLICT ((combination_json->>'snapshot_hash'))
+                    WHERE combination_json->>'schema_version'='football-pool/v2' DO NOTHING
+                RETURNING id""",
+                (
+                    snapshot["issue"]["id"],
+                    body.strategy,
+                    snapshot["full_combinations"]["count"] or snapshot["rx9"]["combinations_count"],
+                    snapshot["full_combinations"]["total_cost"]
+                    or snapshot["rx9"].get("total_cost", 0),
+                    snapshot["probabilities"]["hit14_prob"],
+                    snapshot["probabilities"]["hit13_or_more_prob"],
+                    Json(snapshot),
+                ),
+            )
+            row = cur.fetchone()
+            if row is None:
+                cur.execute(
+                    "SELECT id FROM football_pool_combinations WHERE combination_json->>'snapshot_hash'=%s AND combination_json->>'schema_version'='football-pool/v2'",
+                    (snapshot["snapshot_hash"],),
+                )
+                row = cur.fetchone()
+        conn.commit()
+    return {"id": row[0], "snapshot_hash": snapshot["snapshot_hash"]}
+
+
+@router.get("/api/pool/plans")
+def list_pool_plans():
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""SELECT id,combination_json->'issue',combination_json->'parameters',created_at
+                FROM football_pool_combinations WHERE combination_json->>'schema_version'='football-pool/v2'
+                ORDER BY id DESC LIMIT 50""")
+            rows = cur.fetchall()
+    return {
+        "plans": [
+            {"id": r[0], "issue": r[1], "parameters": r[2], "created_at": r[3].isoformat()}
+            for r in rows
+        ]
+    }
+
+
+@router.get("/api/pool/plans/{plan_id}")
+def read_pool_plan(plan_id: int):
+    with get_db() as conn:
+        _start_snapshot(conn)
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT combination_json FROM football_pool_combinations WHERE id=%s AND combination_json->>'schema_version'='football-pool/v2'",
+                (plan_id,),
+            )
+            row = cur.fetchone()
+        if row is None:
+            raise HTTPException(404, "方案不存在")
+        snapshot = row[0]
+        if snapshot.get("snapshot_hash") != _snapshot_digest(snapshot):
+            raise HTTPException(409, "保存快照完整性校验失败")
+        params = snapshot["parameters"]
+        current = _analysis(
+            conn,
+            budget=params["budget"],
+            strategy=params["strategy"],
+            issue_id=params["issue_id"],
+            pins=params["pinned_orders"],
+            excludes=params["excluded_orders"],
+        )
+    return {
+        "id": plan_id,
+        "stale": current.get("input_hash") != snapshot["input_hash"],
+        "snapshot": snapshot,
+    }

@@ -148,8 +148,8 @@ def test_pool_match_storage_resolves_exact_official_match_identity():
     assert inserted == 1
     query = " ".join(cursor.execute.call_args.args[0].split())
     params = cursor.execute.call_args.args[1]
-    assert "SELECT official.id FROM official_matches official" in query
-    assert "official.kickoff_time::date = %s::timestamp::date" in query
+    assert "CASE WHEN count(*)=1 THEN min(official.id) END" in query
+    assert "official.kickoff_time=%s::timestamp" in query
     assert query.count("%s") == len(params)
-    assert params[3:6] == ("萨巴赫", "库奥皮奥", "2026-07-22T00:00:00")
-    conn.commit.assert_called_once()
+    assert params[2:5] == ("萨巴赫", "库奥皮奥", "2026-07-22T00:00:00")
+    conn.commit.assert_not_called()

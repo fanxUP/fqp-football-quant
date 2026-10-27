@@ -666,62 +666,78 @@ export interface EquityPoint {
 // ---- Phase 10: Pool Lottery ----
 
 export interface PoolMatchInfo {
-  index: number;
   match_id: number | null;
+  match_order: number;
   home_team: string;
   away_team: string;
   league: string;
   match_date: string;
-  prob_home: number;
-  prob_draw: number;
-  prob_away: number;
-  max_prob_option: string;
-  max_prob: number;
-  cold_gate_index: number;
-  uncertainty: number;
-  data_quality: number;
-  classification: 'dan' | 'tuo' | 'defense' | 'normal';
-  entropy: number;
+  prob_home: number | null;
+  prob_draw: number | null;
+  prob_away: number | null;
+  available: boolean;
+  max_prob_option: string | null;
+  max_prob: number | null;
+  entropy: number | null;
+  data_quality: number | null;
+  classification: string;
+  evidence: { model_count?: number; disagreement?: number | null; models?: unknown[] };
 }
-
+export interface PoolIssue {
+  id: number;
+  issue_no: string;
+  game_type: string;
+  status?: string;
+  state?: string;
+  sale_stop: string | null;
+}
+export interface PoolParameters {
+  budget: number;
+  strategy: string;
+  issue_id?: string;
+  pinned_orders?: number[];
+  excluded_orders?: number[];
+}
+export interface PoolTicket {
+  selections: string[];
+  all_correct_prob: number;
+  expected_hits: number;
+}
 export interface PoolAnalysis {
-  period_id: string;
-  analysis_mode: 'current' | 'historical';
-  issue: {
-    id: number;
-    issue_no: string;
-    status: string;
-    sale_stop: string | null;
-    source: 'sporttery';
-  };
+  schema_version: string;
+  issue: PoolIssue | null;
+  issue_state: string;
+  analysis_mode?: 'current' | 'historical' | 'research';
+  period_id?: string;
+  sf14_status: string;
+  rx9_status: string;
+  input_hash?: string;
+  parameters?: PoolParameters;
+  data_as_of?: string;
+  probability_method?: string;
+  assumptions?: string[];
   matches: PoolMatchInfo[];
-  classification: {
-    dan: string[];
-    tuo: string[];
-    defense: string[];
-  };
-  full_combinations: {
-    count: number;
-    total_cost: number;
-    combinations: {
-      selections: string[];
-      estimated_hit_prob: number;
-      cold_gate_coverage: number;
-    }[];
-  };
-  rx9: {
-    selected_matches: string[];
+  missing_inputs: { match_order?: number; match_id?: number | null; reason: string }[];
+  full_combinations?: { count: number; total_cost: number; combinations: PoolTicket[] };
+  rx9?: {
+    selected_matches: PoolMatchInfo[];
+    candidate_matches?: PoolMatchInfo[];
     combinations_count: number;
     total_cost: number;
+    combinations: PoolTicket[];
+    issue?: PoolIssue;
+    data_as_of?: string;
+    missing_inputs?: { match_order?: number; reason: string }[];
   };
-  monte_carlo: {
-    hit14_prob: number;
-    hit13_prob: number;
-    rx9_prob: number;
-    simulations: number;
-  };
+  probabilities?: { hit14_prob: number | null; hit13_or_more_prob: number | null; rx9_prob: number | null };
   warnings: string[];
-  generated_at: string;
+  generated_at?: string;
+}
+export interface SavedPoolPlan {
+  id: number;
+  issue: PoolIssue;
+  parameters: PoolParameters;
+  created_at: string;
 }
 
 // ---- Batch 5: Analysis ----

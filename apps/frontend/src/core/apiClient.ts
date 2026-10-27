@@ -983,13 +983,17 @@ export const api = {
 
   // Pool lottery (Phase 10)
   pool: {
-    analyze: (params?: { budget?: number; strategy?: string }) =>
-      request<import('./types').PoolAnalysis>(
-        `/api/pool/analyze${qs({ budget: params?.budget, strategy: params?.strategy })}`,
-      ),
-
-    sample: () =>
-      request<Record<string, unknown>>('/api/pool/sample'),
+    analyze: (params?: import('./types').PoolParameters) =>
+      request<import('./types').PoolAnalysis>(`/api/pool/analyze${qs({
+        budget: params?.budget, strategy: params?.strategy, issue_id: params?.issue_id,
+        pinned_orders: params?.pinned_orders?.join(','), excluded_orders: params?.excluded_orders?.join(','),
+      })}`),
+    issues: () => request<{ issues: import('./types').PoolIssue[] }>('/api/pool/issues'),
+    save: (params: import('./types').PoolParameters & { input_hash: string; issue_id: string }) =>
+      request<{ id: number; snapshot_hash: string }>('/api/pool/plans', { method: 'POST', body: JSON.stringify(params) }),
+    plans: () => request<{ plans: import('./types').SavedPoolPlan[] }>('/api/pool/plans'),
+    plan: (id: number) => request<{ id: number; stale: boolean; snapshot: import('./types').PoolAnalysis }>(`/api/pool/plans/${id}`),
+    sample: () => request<Record<string, unknown>>('/api/pool/sample'),
   },
 
   // Competition (Agent vs User)

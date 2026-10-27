@@ -1,31 +1,39 @@
 {
   "schema_version": 4,
-  "task_id": "LEAGUE-CENTER-UI",
-  "objective": "Integrate league overview, standings, paginated fixtures and team subview into EventsPage; user explicitly defers real data integration.",
+  "task_id": "FOOTBALL-POOL-CORRECTION",
+  "objective": "Implement all four batches of the approved football pool correction plan; local verification is complete. Follow-up direct commit/push to main and release to 100.121.47.26 are authorized, subject to the existing production migration gate.",
   "allowed_paths": [
     ".vibe/SCOPE_LOCK.yaml",
     ".vibe/CHANGE_BUDGET.yaml",
     ".vibe/BASELINE.yaml",
-    "apps/frontend/src/pages/EventsPage.tsx",
-    "apps/frontend/src/pages/EventsPage.test.tsx",
-    "apps/frontend/src/features/league-center/types.ts",
-    "apps/frontend/src/features/league-center/dataSource.ts",
-    "apps/frontend/src/features/league-center/state.ts",
-    "apps/frontend/src/features/league-center/state.test.ts",
-    "apps/frontend/src/features/league-center/LeagueCenter.tsx",
-    "apps/frontend/src/features/league-center/LeagueCenter.css",
-    "apps/frontend/src/features/league-center/LeagueCenter.test.tsx",
-    "docs/league-center.md",
-    "docs/README.md"
+    "scripts/pool_combination_optimizer.py",
+    "scripts/pool_issue_state.py",
+    "scripts/model_prediction_run_loader.py",
+    "scripts/official_crawler.py",
+    "scripts/official_storage.py",
+    "apps/backend/src/routers/pool.py",
+    "apps/frontend/src/pages/PoolPage.tsx",
+    "apps/frontend/src/pages/PoolPage.test.tsx",
+    "apps/frontend/src/core/types.ts",
+    "apps/frontend/src/core/apiClient.ts",
+    "sql/117_pool_identity_and_snapshots.sql",
+    "tests/test_scripts/test_pool_combination_optimizer.py",
+    "tests/test_scripts/test_pool_issue_state.py",
+    "tests/test_scripts/test_model_prediction_run_loader.py",
+    "tests/test_scripts/test_official_crawler.py",
+    "tests/test_scripts/test_official_storage.py",
+    "tests/test_api/test_pool_router.py",
+    "tests/test_computation/test_pool_postgres.py",
+    "tests/test_computation/test_prediction_run_postgres.py",
+    "docs/football-pool.md"
   ],
   "protected_paths": [
     "sql/**",
-    "**/migrations/**",
-    "**/requirements*.txt",
-    "**/pyproject.toml",
     "**/package*.json",
     "**/*lock*"
   ],
-  "approved_protected_paths": [],
-  "notes": "New task based on clean main 3172b90636ffea2715dd960db71b7a6482495772. Previous released audit scope/budget archived outside Git in plans/league-center-integration-20261027. Only frontend UI, typed read boundary, fixed test fixtures and documentation. Runtime disconnected source returns empty state, never fictional data. No suppliers, DB, external HTTP, production, commits, push, deployment, branch/worktree or workflow-state migration."
+  "approved_protected_paths": [
+    "sql/117_pool_identity_and_snapshots.sql"
+  ],
+  "notes": "User authorized implementation and local verification, then explicitly authorized commit/push/deploy. Existing main only; no branches/worktrees, suppliers, new dependencies or second ledger. Production migration still requires the repository release evidence; preserve all prior controls outside Git."
 }

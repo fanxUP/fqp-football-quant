@@ -18,7 +18,7 @@ from datetime import datetime
 from typing import Any
 
 from apps.backend.src.db import get_db
-from scripts.business_time import business_now, business_today
+from scripts.business_time import business_today
 from scripts.official_storage import (
     log_crawl,
     record_official_collection_status,
@@ -36,6 +36,7 @@ from scripts.play_type_registry import (
 from scripts.play_type_registry import (
     SPORTTERY_POOL_MAP as POOL_CODE_MAP,
 )
+from scripts.pool_issue_state import pool_time, sale_window
 from scripts.result_status import is_void_official_result
 from scripts.sporttery_client import SportteryClient
 
@@ -1142,7 +1143,7 @@ def parse_traditional_lottery_response(
             matches.append(
                 {
                     "match_order": i + 1,
-                    "match_id": m.get("infohubMatchId") or m.get("matchId"),
+                    "source_match_id": str(m.get("infohubMatchId") or m.get("matchId") or ""),
                     "league_name": m.get("matchName", ""),
                     "home_team_name": m.get("masterTeamAllName")
                     or m.get("masterTeamName")
@@ -1150,7 +1151,9 @@ def parse_traditional_lottery_response(
                     "away_team_name": m.get("guestTeamAllName")
                     or m.get("guestTeamName")
                     or m.get("awayTeam", ""),
-                    "kickoff_time": m.get("startTime", ""),
+                    "kickoff_time": (
+                        kickoff.isoformat() if (kickoff := pool_time(m.get("startTime"))) else None
+                    ),
                     "home_win_prob": m.get("homeWinProb"),
                     "draw_prob": m.get("drawProb"),
                     "away_win_prob": m.get("awayWinProb"),
@@ -1161,31 +1164,10 @@ def parse_traditional_lottery_response(
                 }
             )
 
-        sale_start = section.get("saleStartTime") or section.get("lotterySaleBeginTime")
-        sale_stop = (
-            section.get("saleEndTime")
-            or section.get("lotterySaleEndtime")
-            or section.get("lotterySaleEndTime")
-            or section.get("estimateDrawTime")
-        )
-        on_sale = section.get("onSale")
-        if on_sale in (0, 1, True, False):
-            official_status = "selling" if on_sale == 1 or on_sale is True else "closed"
-        else:
-            # Some current Sporttery responses omit onSale while still
-            # returning the official stop time. Do not treat a missing field
-            # as closed when the official sale window has not ended.
-            official_status = "closed"
-            if sale_stop:
-                try:
-                    stop_text = str(sale_stop).replace("Z", "+00:00")
-                    stop_dt = datetime.fromisoformat(stop_text)
-                    if stop_dt.tzinfo is not None:
-                        stop_dt = stop_dt.astimezone(business_now(now).tzinfo).replace(tzinfo=None)
-                    current = business_now(now).replace(tzinfo=None)
-                    official_status = "selling" if stop_dt > current else "closed"
-                except ValueError:
-                    pass
+        window = sale_window(section, now=now)
+        sale_start = window["sale_start"]
+        sale_stop = window["sale_stop"]
+        official_status = window["state"]
 
         results.append(
             {

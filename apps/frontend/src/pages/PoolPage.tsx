@@ -1,658 +1,167 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api } from '../core/apiClient';
-import { ApiError, type PoolAnalysis } from '../core/types';
+import { ApiError, type PoolAnalysis, type PoolIssue, type PoolParameters, type SavedPoolPlan } from '../core/types';
 import Card from '../shared/components/Card';
-import StatusBadge from '../shared/components/StatusBadge';
-import LoadingSpinner from '../shared/components/LoadingSpinner';
-import ErrorState from '../shared/components/ErrorState';
 import PageHeader from '../shared/components/PageHeader';
-import TeamName from '../shared/components/TeamName';
 
-// Count-up animation hook
-function useCountUp(target: number, duration = 800) {
-  const [val, setVal] = useState(0);
-  const prevTarget = useRef(target);
-  useEffect(() => {
-    prevTarget.current = target;
-    let rafId: number;
-    const start = performance.now();
-    const animate = (now: number) => {
-      const t = Math.min((now - start) / duration, 1);
-      const eased = 1 - Math.pow(1 - t, 3);
-      setVal(target * eased);
-      if (t < 1) rafId = requestAnimationFrame(animate);
-    };
-    rafId = requestAnimationFrame(animate);
-    return () => cancelAnimationFrame(rafId);
-  }, [target, duration]);
-  return val;
-}
-
-const CLASS_LABELS: Record<string, string> = {
-  dan: '胆',
-  tuo: '拖',
-  defense: '防守',
-  normal: '普通',
+const STATUS: Record<string, string> = {
+  ready: '可生成', missing_predictions: '预测未齐', identity_pending: '比赛身份待核实',
+  cutoff_pending: '停售时间待核实', issue_pending: '独立官方期次待采集', missing_issue: '官方期次待采集',
+  suspended: '销售暂停', not_started: '尚未开售', conflict: '销售证据冲突',
 };
-
-const CLASS_COLORS: Record<string, string> = {
-  dan: 'var(--fqp-success)',
-  tuo: 'var(--fqp-text-muted)',
-  defense: 'var(--fqp-warning)',
-  normal: 'var(--fqp-text-muted)',
-};
+const STRATEGY_LABEL: Record<string, string> = { conservative: '单选', balanced: '重点覆盖', aggressive: '扩大覆盖' };
+const controlStyle = { minHeight: 44, maxWidth: '100%', marginTop: 6 };
+const fieldStyle = { flex: '1 1 180px', maxWidth: 280 };
+const stateLabel: Record<string, string> = { selling: '在售', closed: '已停售', unknown: '截止待核实', conflict: '销售证据冲突', suspended: '销售暂停', not_started: '未开售' };
+const probability = (p: number | null | undefined) => p == null ? '未知' : p === 0 ? '0%' : `${(p * 100).toPrecision(4)}%`;
+const message = (e: unknown) => e instanceof ApiError || e instanceof Error ? e.message : '请求失败';
+const controlsStyle = { display: 'flex', flexWrap: 'wrap' as const, gap: 16, alignItems: 'end' };
 
 export default function PoolPage() {
   const [analysis, setAnalysis] = useState<PoolAnalysis | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [issues, setIssues] = useState<PoolIssue[]>([]);
+  const [plans, setPlans] = useState<SavedPoolPlan[]>([]);
   const [budget, setBudget] = useState(256);
-  const [strategy, setStrategy] = useState<'balanced' | 'conservative' | 'aggressive'>('balanced');
-  const [activeTab, setActiveTab] = useState<'14场' | '任九' | '分析'>('14场');
+  const [strategy, setStrategy] = useState('balanced');
+  const [issueId, setIssueId] = useState('');
+  const [pins, setPins] = useState<number[]>([]);
+  const [excludes, setExcludes] = useState<number[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState('');
+  const [tab, setTab] = useState<'sf14' | 'rx9'>('sf14');
+  const [savedView, setSavedView] = useState<{ id: number; stale: boolean } | null>(null);
+  const sequence = useRef(0);
+  const parameters = (): PoolParameters => ({ budget, strategy, issue_id: issueId || undefined, pinned_orders: pins, excluded_orders: excludes });
+  const params = analysis?.parameters;
+  const dirty = !!analysis && !savedView && !!params && (params.budget !== budget || params.strategy !== strategy
+    || (!!issueId && params.issue_id !== issueId) || JSON.stringify(params.pinned_orders ?? []) !== JSON.stringify(pins)
+    || JSON.stringify(params.excluded_orders ?? []) !== JSON.stringify(excludes));
+  const stale = dirty || !!savedView?.stale || !!error;
 
-  const isDataPending = error !== null && (error.includes('模型预测') || error.includes('官方14场彩池'));
-  const dataPendingMessage = error?.includes('模型预测')
-    ? `${error}。官方赔率和预测数据齐全后会自动生成方案。`
-    : '官方彩池已经更新，正在等待完整赔率和预测数据。数据齐全后会自动生成方案。';
-
-  const loadAnalysis = async () => {
-    setLoading(true);
-    setError(null);
+  async function load(p: PoolParameters) {
+    const id = ++sequence.current;
+    setLoading(true); setError(null); setNotice('');
     try {
-      const data = await api.pool.analyze({ budget, strategy });
-      setAnalysis(data);
+      const result = await api.pool.analyze(p);
+      if (id === sequence.current) { setAnalysis(result); setSavedView(null); }
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : '加载失败');
-    } finally {
-      setLoading(false);
-    }
-  };
-
+      if (id === sequence.current) setError(message(e));
+    } finally { if (id === sequence.current) setLoading(false); }
+  }
   useEffect(() => {
-    loadAnalysis();
+    void load({ budget: 256, strategy: 'balanced', pinned_orders: [], excluded_orders: [] });
+    void api.pool.issues().then(r => setIssues(r.issues.filter(i => i.game_type === 't14c'))).catch(e => setNotice(`期次列表加载失败：${message(e)}`));
+    void api.pool.plans().then(r => setPlans(r.plans)).catch(e => setNotice(`保存列表加载失败：${message(e)}`));
+    return () => { sequence.current++; };
   }, []);
 
-  const formatPct = (v: number) => (v * 100).toFixed(2) + '%';
-  const formatProb = (v: number) => (v * 100).toFixed(1) + '%';
+  async function save() {
+    if (!analysis?.input_hash || !params?.issue_id) return;
+    setBusy(true); setNotice('');
+    try {
+      const saved = await api.pool.save({ ...params, issue_id: params.issue_id, input_hash: analysis.input_hash });
+      setNotice(`方案 #${saved.id} 已保存，仅作研究记录，未创建票据或扣款。`);
+      const r = await api.pool.plans(); setPlans(r.plans);
+    } catch (e) { setNotice(`保存失败：${message(e)}`); }
+    finally { setBusy(false); }
+  }
+  async function openPlan(id: number) {
+    const requestId = ++sequence.current;
+    setBusy(true); setError(null); setLoading(false);
+    try {
+      const r = await api.pool.plan(id);
+      if (requestId === sequence.current) { setAnalysis(r.snapshot); setSavedView({ id, stale: r.stale }); setNotice(''); }
+    } catch (e) { if (requestId === sequence.current) setNotice(`读取失败：${message(e)}`); }
+    finally { if (requestId === sequence.current) setBusy(false); }
+  }
+  function exportPlan() {
+    if (!analysis) return;
+    const url = URL.createObjectURL(new Blob([JSON.stringify({ saved_plan: savedView, snapshot: analysis }, null, 2)], { type: 'application/json' }));
+    const link = document.createElement('a'); link.href = url; link.download = `pool-${analysis.issue?.issue_no ?? 'unknown'}-${analysis.input_hash?.slice(0, 12) ?? 'research'}.json`;
+    link.click(); URL.revokeObjectURL(url);
+  }
+  const portfolio = tab === 'sf14' ? analysis?.full_combinations : analysis?.rx9 && {
+    count: analysis.rx9.combinations_count, total_cost: analysis.rx9.total_cost, combinations: analysis.rx9.combinations,
+  };
+  const shownMatches = tab === 'rx9' && analysis?.rx9?.selected_matches.length ? analysis.rx9.selected_matches : analysis?.matches ?? [];
+  const status = tab === 'sf14' ? analysis?.sf14_status : analysis?.rx9_status;
+  const hasPlan = !!analysis?.full_combinations?.count || !!analysis?.rx9?.combinations_count;
 
-  // Count-up animated values
-  const hit14Count = useCountUp(analysis ? analysis.monte_carlo.hit14_prob * 100 : 0, 1000);
-  const hit13Count = useCountUp(analysis ? analysis.monte_carlo.hit13_prob * 100 : 0, 900);
-  const rx9Count = useCountUp(analysis ? analysis.monte_carlo.rx9_prob * 100 : 0, 900);
-  const comboCost = useCountUp(analysis ? analysis.full_combinations.total_cost : 0, 800);
-  const simCount = useCountUp(analysis ? analysis.monte_carlo.simulations : 0, 600);
-
-  return (
-    <div>
-      <PageHeader
-        title="传统足彩 14场/任九"
-        lastUpdated={loading ? '加载中…' : analysis?.generated_at || '暂无可用分析'}
-      />
-
-      {/* Controls */}
-      <Card style={{ marginBottom: '20px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <label style={{ fontSize: '13px', color: 'var(--fqp-text-muted)' }}>策略</label>
-            <select
-              value={strategy}
-              onChange={(e) => setStrategy(e.target.value as typeof strategy)}
-              style={{
-                padding: '6px 12px',
-                background: 'var(--fqp-panel)',
-                color: 'var(--fqp-text)',
-                border: '1px solid var(--fqp-border)',
-                borderRadius: '4px',
-                fontSize: '13px',
-              }}
-            >
-              <option value="conservative">保守</option>
-              <option value="balanced">均衡</option>
-              <option value="aggressive">激进</option>
-            </select>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <label style={{ fontSize: '13px', color: 'var(--fqp-text-muted)' }}>预算</label>
-            <input
-              type="number"
-              value={budget}
-              onChange={(e) => setBudget(Number(e.target.value))}
-              min={2}
-              max={10000}
-              step={2}
-              style={{
-                width: '80px',
-                padding: '6px 12px',
-                background: 'var(--fqp-panel)',
-                color: 'var(--fqp-text)',
-                border: '1px solid var(--fqp-border)',
-                borderRadius: '4px',
-                fontSize: '13px',
-              }}
-            />
-            <span style={{ fontSize: '13px', color: 'var(--fqp-text-muted)' }}>元</span>
-          </div>
-          <button
-            onClick={loadAnalysis}
-            disabled={loading}
-            style={{
-              marginLeft: 'auto',
-              padding: '8px 20px',
-              background: 'var(--fqp-accent)',
-              color: '#fff',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: 'pointer',
-              fontSize: '13px',
-              fontWeight: 600,
-            }}
-          >
-            {loading ? '分析中...' : '刷新分析'}
-          </button>
+  return <div className="fqp-page" style={{ display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0 }}>
+    <PageHeader title="传统足彩彩池" subtitle="官方期次、14场与任九研究方案" />
+    <Card title="分析参数">
+      <form onSubmit={e => { e.preventDefault(); if (!Number.isInteger(budget) || budget < 2 || budget > 10000 || budget % 2) { setError('预算须为2至10000元之间的偶数整数'); return; } void load(parameters()); }}>
+        <div style={controlsStyle}>
+          <label style={fieldStyle}>官方14场期次<br /><select className="fqp-select" style={controlStyle} aria-label="官方14场期次" value={issueId} onChange={e => setIssueId(e.target.value)} disabled={busy}>
+            <option value="">当前／最近期次</option>{issues.map(i => <option key={i.id} value={String(i.id)}>{i.issue_no} · {stateLabel[i.state ?? ''] ?? i.state}</option>)}
+          </select></label>
+          <label style={fieldStyle}>每种玩法预算（元）<br /><input className="fqp-input" style={controlStyle} aria-label="每种玩法预算（元）" type="number" min={2} max={10000} step={2} value={budget} onChange={e => setBudget(Number(e.target.value))} disabled={busy} /></label>
+          <label style={fieldStyle}>选项覆盖策略<br /><select className="fqp-select" style={controlStyle} aria-label="选项覆盖策略" value={strategy} onChange={e => setStrategy(e.target.value)} disabled={busy}>
+            <option value="conservative">单选</option><option value="balanced">重点覆盖</option><option value="aggressive">扩大覆盖</option>
+          </select></label>
+          <button style={{ minHeight: 44 }} type="submit" className="fqp-btn fqp-btn-primary" disabled={loading || busy}>{loading ? '正在更新…' : '重新生成'}</button>
+        </div>
+      </form>
+      <p style={{ color: 'var(--fqp-text-muted)' }}>任九支持复式，每场多选后展开为不同单注；两种玩法分别使用预算，并列展示不代表同时购买。</p>
+    </Card>
+    {error && <div role="alert" className="fqp-alert fqp-alert-warning">{error}{analysis && '。更新失败，下面保留的是上一份结果。'}</div>}
+    {notice && <p role="status">{notice}</p>}
+    {analysis && <>
+      <Card title={savedView ? `已保存方案 #${savedView.id}` : analysis.analysis_mode === 'historical' ? '历史期次复盘' : analysis.analysis_mode === 'research' ? '研究参考' : '当前期次分析'}>
+        <p>期号 {analysis.issue?.issue_no ?? '待采集'} · {stateLabel[analysis.issue_state] ?? analysis.issue_state}</p>
+        {analysis.analysis_mode === 'historical' && <p>停售前证据的重建参考，不是当前投注推荐，也不冒充当时原始方案。</p>}
+        <p>本结果预算 {params?.budget ?? '—'} 元／玩法 · 策略 {STRATEGY_LABEL[params?.strategy ?? ''] ?? '—'} · 数据时点 {analysis.data_as_of ?? '未知'}</p>
+        <p>14场停售：{analysis.issue?.sale_stop ?? '未知'}；任九停售：{analysis.rx9?.issue?.sale_stop ?? '未知'}</p>
+        {(stale || loading) && <p role="status" style={{ color: 'var(--fqp-warning)' }}>{loading ? '正在更新；当前仍为上一份结果。' : '此结果已过期或与当前参数不同，请重新生成。'}</p>}
+        <p>14场：{STATUS[analysis.sf14_status] ?? analysis.sf14_status}；任九：{STATUS[analysis.rx9_status] ?? analysis.rx9_status}</p>
+        <div style={controlsStyle}>
+          <button style={{ minHeight: 44 }} className="fqp-btn" onClick={() => void save()} disabled={!hasPlan || stale || loading || busy || !!savedView}>保存完整方案</button>
+          <button style={{ minHeight: 44 }} className="fqp-btn" onClick={exportPlan} disabled={!hasPlan || loading || busy}>导出完整 JSON</button>
         </div>
       </Card>
-
-      {loading && <LoadingSpinner text="正在运行蒙特卡洛模拟..." size="lg" />}
-      {error && isDataPending && (
-        <div
-          role="status"
-          style={{
-            padding: '24px',
-            marginBottom: '20px',
-            background: 'rgba(252, 186, 3, 0.08)',
-            border: '1px solid rgba(252, 186, 3, 0.28)',
-            borderRadius: '8px',
-          }}
-        >
-          <div style={{ fontSize: '16px', fontWeight: 600, color: 'var(--fqp-warning)' }}>
-            推荐方案准备中
-          </div>
-          <div style={{ marginTop: '8px', color: 'var(--fqp-text-muted)', fontSize: '13px', lineHeight: 1.6 }}>
-            {dataPendingMessage}
-          </div>
-          <button className="fqp-btn fqp-btn-secondary" onClick={loadAnalysis} style={{ marginTop: '16px' }}>
-            刷新数据
-          </button>
+      <Card title="比赛与预测证据">
+        <div role="group" aria-label="玩法" style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
+          <button style={{ minHeight: 44 }} className="fqp-btn" aria-pressed={tab === 'sf14'} onClick={() => setTab('sf14')}>14场</button>
+          <button style={{ minHeight: 44 }} className="fqp-btn" aria-pressed={tab === 'rx9'} onClick={() => setTab('rx9')}>任九</button>
         </div>
-      )}
-      {error && !isDataPending && <ErrorState message={error} onRetry={loadAnalysis} />}
-
-      {analysis && !loading && (
-        <>
-          <div
-            role="status"
-            style={{
-              padding: '14px 18px',
-              marginBottom: '20px',
-              background: analysis.analysis_mode === 'historical'
-                ? 'rgba(252, 186, 3, 0.08)'
-                : 'rgba(34, 197, 94, 0.08)',
-              border: `1px solid ${analysis.analysis_mode === 'historical'
-                ? 'rgba(252, 186, 3, 0.3)'
-                : 'rgba(34, 197, 94, 0.3)'}`,
-              borderRadius: '8px',
-            }}
-          >
-            <div
-              style={{
-                fontSize: '15px',
-                fontWeight: 700,
-                color: analysis.analysis_mode === 'historical'
-                  ? 'var(--fqp-warning)'
-                  : 'var(--fqp-success)',
-              }}
-            >
-              {analysis.analysis_mode === 'historical' ? '历史期次复盘' : '当前在售期次'}
-            </div>
-            <div style={{ marginTop: '5px', color: 'var(--fqp-text-muted)', fontSize: '13px', lineHeight: 1.6 }}>
-              {analysis.analysis_mode === 'historical'
-                ? `第 ${analysis.issue.issue_no} 期已停售，本页仅用于检验模型与组合逻辑，不是当前投注推荐。`
-                : `第 ${analysis.issue.issue_no} 期正在销售，方案基于当前官方期次数据生成。`}
-            </div>
-          </div>
-
-          {/* Monte Carlo summary cards — staggered entrance */}
-          <div className="fqp-grid-4" style={{ marginBottom: '20px' }}>
-            <Card title="命中14场概率" entranceDelay={0}>
-              <div className="fqp-stat-card" style={{ padding: 0 }}>
-                <div className="fqp-stat-value" style={{ color: 'var(--fqp-success)' }}>
-                  {hit14Count.toFixed(2)}%
-                </div>
-                <div className="fqp-stat-sub">
-                  {simCount.toLocaleString(undefined, { maximumFractionDigits: 0 })} 次模拟
-                </div>
-              </div>
-            </Card>
-            <Card title="命中13场概率" entranceDelay={80}>
-              <div className="fqp-stat-card" style={{ padding: 0 }}>
-                <div className="fqp-stat-value" style={{ color: 'var(--fqp-accent)' }}>
-                  {hit13Count.toFixed(2)}%
-                </div>
-                <div className="fqp-stat-sub">至少命中13场</div>
-              </div>
-            </Card>
-            <Card title="任九命中概率" entranceDelay={160}>
-              <div className="fqp-stat-card" style={{ padding: 0 }}>
-                <div className="fqp-stat-value" style={{ color: 'var(--fqp-accent)' }}>
-                  {rx9Count.toFixed(2)}%
-                </div>
-                <div className="fqp-stat-sub">9场单选命中</div>
-              </div>
-            </Card>
-            <Card title="组合成本" entranceDelay={240}>
-              <div className="fqp-stat-card" style={{ padding: 0 }}>
-                <div className="fqp-stat-value">
-                  ¥{comboCost.toFixed(0)}
-                </div>
-                <div className="fqp-stat-sub">
-                  {analysis.full_combinations.count} 注 × ¥2
-                </div>
-              </div>
-            </Card>
-          </div>
-
-          {/* Warnings — slide in from top */}
-          {analysis.warnings.length > 0 && (
-            <div style={{ marginBottom: '20px' }}>
-              {analysis.warnings.map((w, i) => (
-                <div
-                  key={i}
-                  style={{
-                    padding: '8px 16px',
-                    background: 'rgba(252, 186, 3, 0.1)',
-                    border: '1px solid rgba(252, 186, 3, 0.3)',
-                    borderRadius: '4px',
-                    fontSize: '13px',
-                    color: 'var(--fqp-warning)',
-                    marginBottom: '4px',
-                    animation: `fqpSlideUpBounce 0.4s ease both`,
-                    animationDelay: `${i * 80}ms`,
-                  }}
-                >
-                  ⚠ {w}
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Tab navigation */}
-          <div style={{ display: 'flex', gap: '4px', marginBottom: '0' }}>
-            {['14场', '任九', '分析'].map((tab) => (
-              <button
-                key={tab}
-                onClick={() => setActiveTab(tab as typeof activeTab)}
-                style={{
-                  padding: '10px 20px',
-                  background: activeTab === tab ? 'var(--fqp-panel)' : 'transparent',
-                  color: activeTab === tab ? 'var(--fqp-text)' : 'var(--fqp-text-muted)',
-                  border: `1px solid ${activeTab === tab ? 'var(--fqp-border)' : 'transparent'}`,
-                  borderBottom: 'none',
-                  borderRadius: '4px 4px 0 0',
-                  cursor: 'pointer',
-                  fontSize: '13px',
-                  fontWeight: activeTab === tab ? 600 : 400,
-                }}
-              >
-                {tab}
-              </button>
-            ))}
-          </div>
-
-          <Card style={activeTab === '14场' ? { borderTopLeftRadius: '0' } : undefined}>
-            {/* Tab content with transition */}
-            <div key={activeTab} className="fqp-anim-fadeIn">
-            {/* 14场 tab */}
-            {activeTab === '14场' && (
-              <>
-                {/* Classification summary */}
-                <div style={{ display: 'flex', gap: '16px', marginBottom: '16px', flexWrap: 'wrap' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span style={{ fontSize: '12px', color: 'var(--fqp-text-muted)' }}>胆</span>
-                    <StatusBadge status="ok" label={`${analysis.classification.dan.length} 场`} dot />
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span style={{ fontSize: '12px', color: 'var(--fqp-text-muted)' }}>拖</span>
-                    <StatusBadge status="warning" label={`${analysis.classification.tuo.length} 场`} dot />
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span style={{ fontSize: '12px', color: 'var(--fqp-text-muted)' }}>防守</span>
-                    <StatusBadge status="error" label={`${analysis.classification.defense.length} 场`} dot />
-                  </div>
-                </div>
-
-                {/* Match table */}
-                <div className="fqp-data-table" style={{ overflowX: 'auto' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
-                    <thead>
-                      <tr style={{ borderBottom: '1px solid var(--fqp-border)' }}>
-                        <th style={{ padding: '10px 8px', textAlign: 'left', color: 'var(--fqp-text-muted)', fontWeight: 400, fontSize: '11px' }}>#</th>
-                        <th style={{ padding: '10px 8px', textAlign: 'left', color: 'var(--fqp-text-muted)', fontWeight: 400, fontSize: '11px' }}>比赛</th>
-                        <th style={{ padding: '10px 8px', textAlign: 'center', color: 'var(--fqp-text-muted)', fontWeight: 400, fontSize: '11px' }}>联赛</th>
-                        <th style={{ padding: '10px 8px', textAlign: 'center', color: 'var(--fqp-text-muted)', fontWeight: 400, fontSize: '11px' }}>主胜</th>
-                        <th style={{ padding: '10px 8px', textAlign: 'center', color: 'var(--fqp-text-muted)', fontWeight: 400, fontSize: '11px' }}>平局</th>
-                        <th style={{ padding: '10px 8px', textAlign: 'center', color: 'var(--fqp-text-muted)', fontWeight: 400, fontSize: '11px' }}>主负</th>
-                        <th style={{ padding: '10px 8px', textAlign: 'center', color: 'var(--fqp-text-muted)', fontWeight: 400, fontSize: '11px' }}>首选</th>
-                        <th style={{ padding: '10px 8px', textAlign: 'center', color: 'var(--fqp-text-muted)', fontWeight: 400, fontSize: '11px' }}>冷门指数</th>
-                        <th style={{ padding: '10px 8px', textAlign: 'center', color: 'var(--fqp-text-muted)', fontWeight: 400, fontSize: '11px' }}>分类</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {analysis.matches.map((m, i) => (
-                        <tr
-                          key={i}
-                          className="fqp-anim-listItemEnter"
-                          style={{
-                            borderBottom: '1px solid var(--fqp-border-light)',
-                            background: i % 2 === 0 ? 'transparent' : 'var(--fqp-border-light)',
-                            animationDelay: `${i * 40}ms`,
-                          }}
-                        >
-                          <td style={{ padding: '10px 8px', color: 'var(--fqp-text-muted)', fontSize: '12px' }}>
-                            {i + 1}
-                          </td>
-                          <td style={{ padding: '10px 8px' }}>
-                            <TeamName name={m.home_team} style={{ fontWeight: 600 }} />
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '11px', color: 'var(--fqp-text-muted)' }}>
-                              <span className="fqp-versus">VS</span><TeamName name={m.away_team} size={16} />
-                            </div>
-                          </td>
-                          <td style={{ padding: '10px 8px', textAlign: 'center', fontSize: '12px', color: 'var(--fqp-text-muted)' }}>
-                            {m.league}
-                          </td>
-                          <td style={{ padding: '10px 8px', textAlign: 'center' }}>
-                            <span style={{
-                              fontWeight: m.max_prob_option === '3' ? 700 : 400,
-                              color: m.max_prob_option === '3' ? 'var(--fqp-success)' : 'var(--fqp-text)',
-                            }}>
-                              {formatProb(m.prob_home)}
-                            </span>
-                          </td>
-                          <td style={{ padding: '10px 8px', textAlign: 'center' }}>
-                            <span style={{
-                              fontWeight: m.max_prob_option === '1' ? 700 : 400,
-                              color: m.max_prob_option === '1' ? 'var(--fqp-warning)' : 'var(--fqp-text)',
-                            }}>
-                              {formatProb(m.prob_draw)}
-                            </span>
-                          </td>
-                          <td style={{ padding: '10px 8px', textAlign: 'center' }}>
-                            <span style={{
-                              fontWeight: m.max_prob_option === '0' ? 700 : 400,
-                              color: m.max_prob_option === '0' ? 'var(--fqp-red-neon)' : 'var(--fqp-text)',
-                            }}>
-                              {formatProb(m.prob_away)}
-                            </span>
-                          </td>
-                          <td style={{ padding: '10px 8px', textAlign: 'center' }}>
-                            <span style={{
-                              display: 'inline-block',
-                              padding: '2px 8px',
-                              borderRadius: '3px',
-                              background: 'rgba(99,102,241,0.2)',
-                              color: 'var(--fqp-accent)',
-                              fontWeight: 700,
-                              fontSize: '12px',
-                            }}>
-                              {m.max_prob_option}
-                            </span>
-                          </td>
-                          <td style={{ padding: '10px 8px', textAlign: 'center' }}>
-                            <div style={{
-                              display: 'inline-block',
-                              padding: '2px 6px',
-                              borderRadius: '3px',
-                              fontSize: '12px',
-                              color: m.cold_gate_index > 0.4 ? 'var(--fqp-warning)' : 'var(--fqp-text-muted)',
-                              background: m.cold_gate_index > 0.4 ? 'rgba(252,186,3,0.15)' : 'transparent',
-                            }}>
-                              {(m.cold_gate_index * 100).toFixed(1)}%
-                            </div>
-                          </td>
-                          <td style={{ padding: '10px 8px', textAlign: 'center' }}>
-                            <span style={{
-                              display: 'inline-block',
-                              padding: '2px 8px',
-                              borderRadius: '3px',
-                              fontSize: '11px',
-                              fontWeight: 600,
-                              color: CLASS_COLORS[m.classification] || 'var(--fqp-text-muted)',
-                              background: m.classification === 'defense'
-                                ? 'rgba(252,186,3,0.15)'
-                                : m.classification === 'dan'
-                                  ? 'rgba(52,211,153,0.15)'
-                                  : 'transparent',
-                            }}>
-                              {CLASS_LABELS[m.classification] || m.classification}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-
-                {/* Combinations preview */}
-                {analysis.full_combinations.combinations.length > 0 && (
-                  <div style={{ marginTop: '20px' }}>
-                    <h4 style={{ fontSize: '14px', marginBottom: '12px', color: 'var(--fqp-text-muted)' }}>
-                      组合预览（前 {Math.min(analysis.full_combinations.combinations.length, 10)} / {analysis.full_combinations.count} 注）
-                    </h4>
-                    <div className="fqp-data-table" style={{ overflowX: 'auto' }}>
-                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
-                        <thead>
-                          <tr style={{ borderBottom: '1px solid var(--fqp-border)' }}>
-                            <th style={{ padding: '8px', textAlign: 'left', color: 'var(--fqp-text-muted)', fontWeight: 400 }}>#</th>
-                            <th style={{ padding: '8px', textAlign: 'left', color: 'var(--fqp-text-muted)', fontWeight: 400 }}>选项</th>
-                            <th style={{ padding: '8px', textAlign: 'center', color: 'var(--fqp-text-muted)', fontWeight: 400 }}>命中概率</th>
-                            <th style={{ padding: '8px', textAlign: 'center', color: 'var(--fqp-text-muted)', fontWeight: 400 }}>冷门覆盖</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {analysis.full_combinations.combinations.slice(0, 10).map((c, i) => (
-                            <tr key={i} style={{ borderBottom: '1px solid var(--fqp-border-light)' }}>
-                              <td style={{ padding: '8px', color: 'var(--fqp-text-muted)' }}>{i + 1}</td>
-                              <td style={{ padding: '8px', fontFamily: 'monospace', letterSpacing: '4px' }}>
-                                {c.selections.join(' ')}
-                              </td>
-                              <td style={{ padding: '8px', textAlign: 'center', color: 'var(--fqp-accent)' }}>
-                                {formatPct(c.estimated_hit_prob)}
-                              </td>
-                              <td style={{ padding: '8px', textAlign: 'center' }}>
-                                {formatPct(c.cold_gate_coverage)}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
-              </>
-            )}
-
-            {/* 任九 tab */}
-            {activeTab === '任九' && (
-              <>
-                <div style={{ marginBottom: '16px' }}>
-                  <h4 style={{ fontSize: '14px', marginBottom: '8px', color: 'var(--fqp-text)' }}>
-                    任九选场（从14场中自动筛选9场）
-                  </h4>
-                  <p style={{ fontSize: '12px', color: 'var(--fqp-text-muted)' }}>
-                    按数据质量和不确定性排序，排除最不确定的5场
-                  </p>
-                </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '16px' }}>
-                  {analysis.rx9.selected_matches.map((m, i) => (
-                    <span
-                      key={i}
-                      style={{
-                        padding: '6px 12px',
-                        background: 'rgba(99,102,241,0.1)',
-                        border: '1px solid rgba(99,102,241,0.3)',
-                        borderRadius: '4px',
-                        fontSize: '13px',
-                        color: 'var(--fqp-accent)',
-                        animation: `fqpPopIn 0.3s cubic-bezier(0.34,1.56,0.64,1) both`,
-                        animationDelay: `${i * 60}ms`,
-                      }}
-                    >
-                      {i + 1}. {m}
-                    </span>
-                  ))}
-                </div>
-                <div className="fqp-grid-2">
-                  <Card title="任九组合统计">
-                    <div style={{ padding: '8px 0' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                        <span style={{ color: 'var(--fqp-text-muted)', fontSize: '13px' }}>组合注数</span>
-                        <span className="fqp-mono" style={{ fontSize: '13px' }}>{analysis.rx9.combinations_count}</span>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                        <span style={{ color: 'var(--fqp-text-muted)', fontSize: '13px' }}>总成本</span>
-                        <span className="fqp-mono" style={{ fontSize: '13px' }}>¥{analysis.rx9.total_cost}</span>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span style={{ color: 'var(--fqp-text-muted)', fontSize: '13px' }}>命中概率</span>
-                        <span className="fqp-mono" style={{ fontSize: '13px', color: 'var(--fqp-accent)' }}>
-                          {formatPct(analysis.monte_carlo.rx9_prob)}
-                        </span>
-                      </div>
-                    </div>
-                  </Card>
-                  <Card title="任九说明">
-                    <div style={{ fontSize: '13px', color: 'var(--fqp-text-muted)', lineHeight: '1.6' }}>
-                      <p>任选九场是从14场比赛中选出9场进行投注的玩法。</p>
-                      <p>本系统自动排除不确定性最高、数据质量最低的比赛，保留最可靠的9场进行胆拖优化。</p>
-                      <p style={{ marginTop: '8px', color: 'var(--fqp-warning)', fontSize: '12px' }}>
-                        ⚠ 任九不支持复式过关，每场单选一个结果。
-                      </p>
-                    </div>
-                  </Card>
-                </div>
-              </>
-            )}
-
-            {/* 分析 tab */}
-            {activeTab === '分析' && (
-              <>
-                <div className="fqp-grid-2" style={{ marginBottom: '16px' }}>
-                  <Card title="胆拖防守分布">
-                    <div style={{ padding: '8px 0' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-                        <div style={{ flex: 1 }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', marginBottom: '4px' }}>
-                            <span style={{ color: 'var(--fqp-success)' }}>胆 ({analysis.classification.dan.length})</span>
-                          </div>
-                          <div style={{ height: '6px', background: 'var(--fqp-panel)', borderRadius: '3px', overflow: 'hidden' }}>
-                            <div style={{
-                              height: '100%',
-                              width: `${(analysis.classification.dan.length / 14) * 100}%`,
-                              background: 'var(--fqp-success)',
-                              borderRadius: '3px',
-                              transition: 'width 0.8s cubic-bezier(0.34,1.56,0.64,1)',
-                            }} />
-                          </div>
-                        </div>
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-                        <div style={{ flex: 1 }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', marginBottom: '4px' }}>
-                            <span style={{ color: 'var(--fqp-text-muted)' }}>拖 ({analysis.classification.tuo.length})</span>
-                          </div>
-                          <div style={{ height: '6px', background: 'var(--fqp-panel)', borderRadius: '3px', overflow: 'hidden' }}>
-                            <div style={{
-                              height: '100%',
-                              width: `${(analysis.classification.tuo.length / 14) * 100}%`,
-                              background: 'var(--fqp-border)',
-                              borderRadius: '3px',
-                              transition: 'width 0.8s cubic-bezier(0.34,1.56,0.64,1)',
-                            }} />
-                          </div>
-                        </div>
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <div style={{ flex: 1 }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', marginBottom: '4px' }}>
-                            <span style={{ color: 'var(--fqp-warning)' }}>防守 ({analysis.classification.defense.length})</span>
-                          </div>
-                          <div style={{ height: '6px', background: 'var(--fqp-panel)', borderRadius: '3px' }}>
-                            <div style={{
-                              height: '100%',
-                              width: `${(analysis.classification.defense.length / 14) * 100}%`,
-                              background: 'var(--fqp-warning)',
-                              borderRadius: '3px',
-                            }} />
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </Card>
-
-                  <Card title="蒙特卡洛模拟详情">
-                    <div style={{ padding: '8px 0' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                        <span style={{ color: 'var(--fqp-text-muted)', fontSize: '13px' }}>模拟次数</span>
-                        <span className="fqp-mono" style={{ fontSize: '13px' }}>
-                          {analysis.monte_carlo.simulations.toLocaleString()}
-                        </span>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                        <span style={{ color: 'var(--fqp-text-muted)', fontSize: '13px' }}>命中14场概率</span>
-                        <span className="fqp-mono" style={{ fontSize: '13px', color: 'var(--fqp-success)' }}>
-                          {formatPct(analysis.monte_carlo.hit14_prob)}
-                        </span>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                        <span style={{ color: 'var(--fqp-text-muted)', fontSize: '13px' }}>命中13场概率</span>
-                        <span className="fqp-mono" style={{ fontSize: '13px', color: 'var(--fqp-accent)' }}>
-                          {formatPct(analysis.monte_carlo.hit13_prob)}
-                        </span>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span style={{ color: 'var(--fqp-text-muted)', fontSize: '13px' }}>任九命中概率</span>
-                        <span className="fqp-mono" style={{ fontSize: '13px', color: 'var(--fqp-accent)' }}>
-                          {formatPct(analysis.monte_carlo.rx9_prob)}
-                        </span>
-                      </div>
-                    </div>
-                  </Card>
-                </div>
-
-                {/* Dan/Tuo/Defense detail */}
-                <Card title="胆拖防守明细">
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px', fontSize: '13px' }}>
-                    <div>
-                      <h5 style={{ color: 'var(--fqp-success)', marginBottom: '8px', fontSize: '13px' }}>
-                        🎯 胆 ({analysis.classification.dan.length} 场)
-                      </h5>
-                      {analysis.classification.dan.map((m, i) => (
-                        <div key={i} style={{ padding: '4px 0', color: 'var(--fqp-text)' }}>{m}</div>
-                      ))}
-                    </div>
-                    <div>
-                      <h5 style={{ color: 'var(--fqp-text-muted)', marginBottom: '8px', fontSize: '13px' }}>
-                        📋 拖 ({analysis.classification.tuo.length} 场)
-                      </h5>
-                      {analysis.classification.tuo.map((m, i) => (
-                        <div key={i} style={{ padding: '4px 0', color: 'var(--fqp-text)' }}>{m}</div>
-                      ))}
-                    </div>
-                    <div>
-                      <h5 style={{ color: 'var(--fqp-warning)', marginBottom: '8px', fontSize: '13px' }}>
-                        🛡️ 防守 ({analysis.classification.defense.length} 场)
-                      </h5>
-                      {analysis.classification.defense.map((m, i) => (
-                        <div key={i} style={{ padding: '4px 0', color: 'var(--fqp-text)' }}>{m}</div>
-                      ))}
-                    </div>
-                  </div>
-                </Card>
-              </>
-            )}
-            </div>
-          </Card>
-        </>
-      )}
-    </div>
-  );
+        <p>{STATUS[status ?? ''] ?? status}。{tab === 'rx9' && '自动建议按概率集中程度与熵排序，属于启发式选场。固定／排除修改后需重新生成。'}</p>
+        <div style={{ overflowX: 'auto' }}>
+          <table className="fqp-table" style={{ width: '100%' }}>
+            <thead><tr><th>官方场序</th><th>对阵</th><th>胜／平／负</th><th>结果不确定性</th><th>证据</th><th>任九调整</th></tr></thead>
+            <tbody>{(tab === 'rx9' ? analysis.rx9?.candidate_matches ?? analysis.matches : shownMatches).map(m => {
+              const selected = analysis.rx9?.selected_matches.some(s => s.match_order === m.match_order);
+              const source = m;
+              return <tr key={m.match_order}>
+                <td>{m.match_order}{tab === 'rx9' && selected ? ' · 已选' : ''}</td><td>{m.home_team} vs {m.away_team}<br /><small>{m.match_date || '开赛时间未知'}</small></td>
+                <td>{probability(source.prob_home)}／{probability(source.prob_draw)}／{probability(source.prob_away)}</td>
+                <td>{source.entropy == null ? '未知' : `${source.entropy.toFixed(3)} bit`}</td>
+                <td>{source.evidence.model_count ?? 0} 个合格模型；{source.evidence.disagreement == null ? '无法比较模型间分歧' : `最大概率分歧 ${probability(source.evidence.disagreement)}`}<br />阵容／伤停证据：按模型留存记录核实</td>
+                <td><select className="fqp-select" style={controlStyle} aria-label={`第${m.match_order}场任九调整`} value={pins.includes(m.match_order) ? 'pin' : excludes.includes(m.match_order) ? 'exclude' : 'auto'} disabled={loading || busy} onChange={e => {
+                  setSavedView(null); setPins(p => [...p.filter(n => n !== m.match_order), ...(e.target.value === 'pin' ? [m.match_order] : [])].sort((a,b) => a-b));
+                  setExcludes(p => [...p.filter(n => n !== m.match_order), ...(e.target.value === 'exclude' ? [m.match_order] : [])].sort((a,b) => a-b));
+                }}><option value="auto">自动</option><option value="pin">固定选入</option><option value="exclude">排除</option></select></td>
+              </tr>;
+            })}</tbody>
+          </table>
+        </div>
+        {(tab === 'rx9' ? analysis.rx9?.missing_inputs ?? analysis.missing_inputs : analysis.missing_inputs).map((m, i) => <p key={i}>缺口：{m.match_order ? `第${m.match_order}场 ` : ''}{m.reason}</p>)}
+      </Card>
+      <Card title={`${tab === 'sf14' ? '14场' : '任九'}组合`}>
+        <p>完整方案 {portfolio?.count ?? 0} 注 · 实际成本 {portfolio?.total_cost ?? 0} 元</p>
+        <p>至少一注全中理论概率：{probability(tab === 'sf14' ? analysis.probabilities?.hit14_prob : analysis.probabilities?.rx9_prob)}</p>
+        {tab === 'sf14' && <p>至少一注命中13场及以上理论概率：{probability(analysis.probabilities?.hit13_or_more_prob)}</p>}
+        <p>以下仅预览前10注；完整组合与输入证据通过 JSON 导出。</p>
+        <div style={{ overflowX: 'auto' }}><table className="fqp-table" style={{ width: '100%' }}><thead><tr><th>注号</th><th>选项（按官方场序）</th><th>整注全中理论概率</th><th>期望命中场次</th></tr></thead>
+          <tbody>{portfolio?.combinations.slice(0, 10).map((c, i) => <tr key={c.selections.join('')}><td>{i+1}</td><td>{c.selections.join(' · ')}</td><td>{probability(c.all_correct_prob)}</td><td>{c.expected_hits.toFixed(2)} 场</td></tr>)}</tbody>
+        </table></div>
+        {analysis.warnings.map((w, i) => <p key={i} style={{ color: 'var(--fqp-text-muted)' }}>{w}</p>)}
+      </Card>
+    </>}
+    <Card title="已保存方案（最近50份）">
+      {plans.length === 0 && <p>暂无保存记录。保存只保留研究快照，奖金未知，不记作零收益。</p>}
+      {plans.map(p => <p key={p.id}><button style={{ minHeight: 44 }} className="fqp-btn" onClick={() => void openPlan(p.id)} disabled={busy || loading}>查看 #{p.id} · {p.issue.issue_no} · {p.parameters.budget} 元／玩法 · {p.created_at}</button></p>)}
+    </Card>
+  </div>;
 }

@@ -1,16 +1,16 @@
 {
   "schema_version": 4,
-  "task_id": "LEAGUE-CENTER-UI",
-  "max_files_changed": 14,
-  "max_new_files": 8,
+  "task_id": "FOOTBALL-POOL-CORRECTION",
+  "max_files_changed": 23,
+  "max_new_files": 7,
   "max_new_dependencies": 0,
-  "max_schema_migrations": 0,
-  "max_public_api_changes": 0,
-  "declared_public_api_changes": 0,
+  "max_schema_migrations": 1,
+  "max_public_api_changes": 7,
+  "declared_public_api_changes": 7,
   "regression_budget": {
     "new_test_failures": 0,
     "new_lint_errors": 0,
     "new_type_errors": 0
   },
-  "notes": "Pre-edit scope for explicit user request: implement proposal UI first, data later. 13 paths including scope/budget, eight new files; internal typed read boundary only, no public HTTP endpoint or fake IDs. Preserve previous audit history and existing official catalogue behavior. Add the current tracked V4 baseline path: prior BASELINE.yaml referenced obsolete task branch 14c1..., so recapture at clean main 3172 before scoped release checks; this prevents counting already-released post-baseline history. No product, dependency, schema, or public API expansion."
+  "notes": "Four approved batches, forward migration + as-of batch loader + deterministic engine + frontend + explicit plan save/list/read. Follow-up commit/push/deploy is user-authorized; production migration remains subject to the existing release evidence. Count all shared contract changes explicitly: analyze/issues/sample/compat generate plus three plans methods. No additional endpoints beyond approved plan."
 }

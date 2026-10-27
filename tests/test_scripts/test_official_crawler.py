@@ -110,8 +110,8 @@ def test_traditional_lottery_reads_official_sale_window_field_names():
 
     pools = parse_traditional_lottery_response(raw, now=now)
 
-    assert pools[0]["sale_start"] == "2026-07-18 20:00:00"
-    assert pools[0]["sale_stop"] == "2026-07-19 22:00:00"
+    assert pools[0]["sale_start"] == "2026-07-18T20:00:00+08:00"
+    assert pools[0]["sale_stop"] == "2026-07-19T22:00:00+08:00"
     assert pools[0]["official_status"] == "selling"
 
 

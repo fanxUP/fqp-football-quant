@@ -660,11 +660,12 @@ def store_pool_issue(
         cur.execute(
             """
             INSERT INTO football_pool_issues
-                (issue_no, game_type, sale_start_time, sale_stop_time,
+                (issue_no, game_type, source_game_type, sale_start_time, sale_stop_time,
                  total_matches, official_status, raw_hash, raw_json,
                  created_at, updated_at)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s::jsonb, %s,%s)
-            ON CONFLICT (issue_no) DO UPDATE SET
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb, %s,%s)
+            ON CONFLICT (game_type, issue_no) DO UPDATE SET
+                source_game_type = EXCLUDED.source_game_type,
                 sale_start_time = EXCLUDED.sale_start_time,
                 sale_stop_time = EXCLUDED.sale_stop_time,
                 total_matches = EXCLUDED.total_matches,
@@ -676,6 +677,7 @@ def store_pool_issue(
             """,
             (
                 issue_no,
+                game_type,
                 game_type,
                 sale_start,
                 sale_stop,
@@ -704,67 +706,52 @@ def store_pool_issue_matches(
       upset_score, public_heat_home, public_heat_draw, public_heat_away
     """
     inserted = 0
-    for m in matches:
-        try:
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    INSERT INTO football_pool_issue_matches
-                        (issue_id, match_order, match_id, league_name,
-                         home_team_name, away_team_name, kickoff_time,
-                         home_win_prob, draw_prob, away_win_prob,
-                         upset_score, public_heat_home, public_heat_draw,
-                         public_heat_away, created_at)
-                    VALUES (
-                        %s,%s,
-                        COALESCE(
-                            %s,
-                            (
-                                SELECT official.id
-                                FROM official_matches official
-                                WHERE official.home_team_name = %s
-                                  AND official.away_team_name = %s
-                                  AND official.kickoff_time::date = %s::timestamp::date
-                                ORDER BY official.id DESC
-                                LIMIT 1
-                            )
-                        ),
-                        %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,now()
-                    )
-                    ON CONFLICT (issue_id, match_order) DO UPDATE SET
-                        match_id = EXCLUDED.match_id,
-                        league_name = EXCLUDED.league_name,
-                        home_team_name = EXCLUDED.home_team_name,
-                        away_team_name = EXCLUDED.away_team_name,
-                        kickoff_time = EXCLUDED.kickoff_time,
-                        home_win_prob = EXCLUDED.home_win_prob,
-                        draw_prob = EXCLUDED.draw_prob,
-                        away_win_prob = EXCLUDED.away_win_prob,
-                        upset_score = EXCLUDED.upset_score
-                    """,
-                    (
-                        issue_id,
-                        m.get("match_order"),
-                        m.get("match_id"),
-                        m.get("home_team_name"),
-                        m.get("away_team_name"),
-                        m.get("kickoff_time"),
-                        m.get("league_name"),
-                        m.get("home_team_name"),
-                        m.get("away_team_name"),
-                        m.get("kickoff_time"),
-                        m.get("home_win_prob"),
-                        m.get("draw_prob"),
-                        m.get("away_win_prob"),
-                        m.get("upset_score"),
-                        m.get("public_heat_home"),
-                        m.get("public_heat_draw"),
-                        m.get("public_heat_away"),
-                    ),
-                )
-                inserted += 1
-        except Exception as e:
-            print(f"[store_pool_issue_matches] error match_order={m.get('match_order')}: {e}")
-            continue
-    conn.commit()
+    with conn.cursor() as cur:
+        for m in matches:
+            # Supplier IDs never enter the local FK namespace. Exact unique
+            # identity only; ambiguous/unmapped fixtures remain visible.
+            cur.execute(
+                """INSERT INTO football_pool_issue_matches
+                    (issue_id, match_order, match_id, source_match_id, league_name,
+                     home_team_name, away_team_name, kickoff_time,
+                     home_win_prob, draw_prob, away_win_prob, upset_score,
+                     public_heat_home, public_heat_draw, public_heat_away)
+                VALUES (%s,%s,
+                    (SELECT CASE WHEN count(*)=1 THEN min(official.id) END
+                     FROM official_matches official
+                     WHERE official.home_team_name=%s AND official.away_team_name=%s
+                       AND official.kickoff_time=%s::timestamp),
+                    %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                ON CONFLICT (issue_id, match_order) DO UPDATE SET
+                    match_id=EXCLUDED.match_id, source_match_id=EXCLUDED.source_match_id,
+                    league_name=EXCLUDED.league_name,
+                    home_team_name=EXCLUDED.home_team_name, away_team_name=EXCLUDED.away_team_name,
+                    kickoff_time=EXCLUDED.kickoff_time,
+                    home_win_prob=EXCLUDED.home_win_prob, draw_prob=EXCLUDED.draw_prob,
+                    away_win_prob=EXCLUDED.away_win_prob, upset_score=EXCLUDED.upset_score,
+                    public_heat_home=EXCLUDED.public_heat_home,
+                    public_heat_draw=EXCLUDED.public_heat_draw, public_heat_away=EXCLUDED.public_heat_away""",
+                (
+                    issue_id,
+                    m.get("match_order"),
+                    m.get("home_team_name"),
+                    m.get("away_team_name"),
+                    m.get("kickoff_time"),
+                    m.get("source_match_id"),
+                    m.get("league_name"),
+                    m.get("home_team_name"),
+                    m.get("away_team_name"),
+                    m.get("kickoff_time"),
+                    m.get("home_win_prob"),
+                    m.get("draw_prob"),
+                    m.get("away_win_prob"),
+                    m.get("upset_score"),
+                    m.get("public_heat_home"),
+                    m.get("public_heat_draw"),
+                    m.get("public_heat_away"),
+                ),
+            )
+            inserted += 1
+    # The caller owns the issue+fixtures transaction. Do not swallow SQL errors
+    # or commit a partial official catalogue.
     return inserted
