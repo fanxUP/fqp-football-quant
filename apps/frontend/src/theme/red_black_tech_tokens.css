@@ -1,65 +1,4 @@
-/* ===================================================================
-   FQP Red-Black Tech Theme — Design Tokens & Utility Classes
-   =================================================================== */
-
-/* ---- Design Tokens ---- */
-:root {
-  --fqp-bg: #050507;
-  --fqp-panel: #0B0D12;
-  --fqp-panel-2: #11151D;
-  --fqp-red: #E50914;
-  --fqp-red-neon: #FF2A3D;
-  --fqp-red-dark: #7A0B12;
-  --fqp-border: #27272A;
-  --fqp-text: #FAFAFC;
-  --fqp-text-muted: #B8B8C0;
-  --fqp-success: #17C964;
-  --fqp-warning: #F5A524;
-  --fqp-info: #3B82F6;
-  --fqp-panel-overlay: rgba(24,24,27,0.5);
-  --fqp-border-light: rgba(39,39,42,0.3);
-  --fqp-hover-bg: rgba(255,255,255,0.06);
-  --fqp-hover-subtle: rgba(255,255,255,0.03);
-  --fqp-bg-glass: rgba(255,255,255,0.02);
-  --fqp-border-subtle: rgba(255,255,255,0.04);
-  --fqp-border-medium: rgba(255,255,255,0.08);
-  --fqp-radius-card: 16px;
-  --fqp-radius-sm: 8px;
-  --fqp-radius-xs: 4px;
-  --fqp-shadow-red: 0 0 32px rgba(229, 9, 20, 0.12);
-  --fqp-glow-red: 0 0 18px rgba(255, 42, 61, 0.45);
-  --fqp-font-mono: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
-}
-
-/* ---- Light theme overrides ---- */
-[data-theme='light'] {
-  --fqp-bg: #F8F9FA;
-  --fqp-panel: #FFFFFF;
-  --fqp-panel-2: #F0F1F3;
-  --fqp-red: #D4000F;
-  --fqp-red-neon: #E50914;
-  --fqp-red-dark: #B8000C;
-  --fqp-border: #E5E7EB;
-  --fqp-text: #111827;
-  --fqp-text-muted: #6B7280;
-  --fqp-success: #0D9488;
-  --fqp-warning: #D97706;
-  --fqp-info: #2563EB;
-  --fqp-panel-overlay: rgba(0,0,0,0.04);
-  --fqp-border-light: rgba(0,0,0,0.08);
-  --fqp-hover-bg: rgba(0,0,0,0.04);
-  --fqp-hover-subtle: rgba(0,0,0,0.02);
-  --fqp-bg-glass: rgba(0,0,0,0.02);
-  --fqp-border-subtle: rgba(0,0,0,0.04);
-  --fqp-border-medium: rgba(0,0,0,0.08);
-  --fqp-shadow-red: 0 0 24px rgba(212, 0, 15, 0.06);
-  --fqp-glow-red: 0 0 12px rgba(229, 9, 20, 0.25);
-}
-
-[data-theme='light'] body {
-  background: radial-gradient(circle at top left, rgba(212, 0, 15, 0.04), transparent 30%),
-    var(--fqp-bg);
-}
+/* FQP shared components; active palette and layout tokens live in theme/themes and theme/tokens. */
 
 /* ---- Reduced motion ---- */
 @media (prefers-reduced-motion: reduce) {
@@ -68,7 +7,7 @@
   *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
+    transition: none !important;
   }
 }
 
@@ -87,8 +26,7 @@ body {
   font-size: 16px;
   font-weight: 500;
   line-height: 1.6;
-  background: radial-gradient(circle at top left, rgba(229, 9, 20, 0.18), transparent 30%),
-    var(--fqp-bg);
+  background: var(--fqp-bg);
   color: var(--fqp-text);
   -webkit-font-smoothing: antialiased;
 }
@@ -241,29 +179,29 @@ body {
   letter-spacing: 0.3px;
 }
 .fqp-badge-ok {
-  background: rgba(23, 201, 100, 0.12);
+  background: color-mix(in srgb, var(--fqp-success) 8%, var(--fqp-panel));
   color: var(--fqp-success);
-  border: 1px solid rgba(23, 201, 100, 0.3);
+  border: 1px solid color-mix(in srgb, var(--fqp-success) 32%, var(--fqp-border));
 }
 .fqp-badge-warning {
-  background: rgba(245, 165, 36, 0.12);
+  background: color-mix(in srgb, var(--fqp-warning) 8%, var(--fqp-panel));
   color: var(--fqp-warning);
-  border: 1px solid rgba(245, 165, 36, 0.3);
+  border: 1px solid color-mix(in srgb, var(--fqp-warning) 32%, var(--fqp-border));
 }
 .fqp-badge-error {
-  background: rgba(255, 42, 61, 0.12);
-  color: var(--fqp-red-neon);
-  border: 1px solid rgba(255, 42, 61, 0.3);
+  background: color-mix(in srgb, var(--fqp-danger) 8%, var(--fqp-panel));
+  color: var(--fqp-danger);
+  border: 1px solid color-mix(in srgb, var(--fqp-danger) 32%, var(--fqp-border));
 }
 .fqp-badge-info {
-  background: rgba(59, 130, 246, 0.12);
+  background: color-mix(in srgb, var(--fqp-info) 8%, var(--fqp-panel));
   color: var(--fqp-info);
-  border: 1px solid rgba(59, 130, 246, 0.3);
+  border: 1px solid color-mix(in srgb, var(--fqp-info) 32%, var(--fqp-border));
 }
 .fqp-badge-disabled {
-  background: rgba(161, 161, 170, 0.08);
+  background: color-mix(in srgb, var(--fqp-text-muted) 8%, var(--fqp-panel));
   color: var(--fqp-text-muted);
-  border: 1px solid rgba(161, 161, 170, 0.2);
+  border: 1px solid color-mix(in srgb, var(--fqp-text-muted) 32%, var(--fqp-border));
 }
 
 /* ---- Status dot ---- */
@@ -276,23 +214,18 @@ body {
 }
 .fqp-status-dot-ok {
   background: var(--fqp-success);
-  box-shadow: 0 0 6px rgba(23, 201, 100, 0.5);
 }
 .fqp-status-dot-warning {
   background: var(--fqp-warning);
-  box-shadow: 0 0 6px rgba(245, 165, 36, 0.5);
 }
 .fqp-status-dot-error {
-  background: var(--fqp-red-neon);
-  box-shadow: 0 0 6px rgba(255, 42, 61, 0.5);
+  background: var(--fqp-danger);
 }
 .fqp-status-dot-info {
   background: var(--fqp-info);
-  box-shadow: 0 0 6px rgba(59, 130, 246, 0.5);
 }
 .fqp-status-dot-disabled {
   background: var(--fqp-text-muted);
-  box-shadow: 0 0 4px rgba(161, 161, 170, 0.35);
 }
 
 /* ---- Danger pulse animation ---- */
@@ -519,10 +452,11 @@ body {
 .fqp-modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: var(--fqp-scrim);
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: center;
+  padding: 16px;
   z-index: 1000;
   backdrop-filter: blur(4px);
   animation: fqpFadeIn 0.2s ease both;
@@ -535,8 +469,8 @@ body {
   border: 1px solid var(--fqp-border);
   border-radius: var(--fqp-radius-card);
   box-shadow: 0 0 40px rgba(0, 0, 0, 0.6);
-  min-width: 400px;
-  max-width: 90vw;
+  min-width: min(400px, calc(100vw - 32px));
+  max-width: calc(100vw - 32px);
   max-height: 85vh;
   overflow-y: auto;
   animation: fqpModalIn 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) both;
@@ -1825,215 +1759,38 @@ body {
   animation: fqpHighlightFlash 0.8s ease 2;
 }
 
-/* ---- Animation disable via setting ---- */
-[data-animations='disabled'] *,
-[data-animations='disabled'] *::before,
-[data-animations='disabled'] *::after {
-  animation-duration: 0.01ms !important;
-  animation-iteration-count: 1 !important;
-  transition-duration: 0.01ms !important;
-}
-
-/* ---- Login Page ---- */
-.fqp-login-page {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  min-height: 100vh;
-  background: #07111F;
-  padding: 24px 120px 24px 24px;
-  overflow: hidden;
-}
-
-/* Background image */
-.fqp-login-bg {
-  position: absolute;
-  inset: 0;
-  background: url('/login-football-bg.webp') center/cover no-repeat;
-  z-index: 0;
-}
-
-/* Very subtle darken at the very bottom only */
-.fqp-login-bg::after {
-  content: '';
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 30%;
-  background: linear-gradient(0deg, rgba(7,17,31,0.25) 0%, transparent 100%);
-  pointer-events: none;
-}
-
-/* Sun glow */
-.fqp-login-sun {
-  position: absolute;
-  top: 10%;
-  left: 15%;
-  width: 300px;
-  height: 300px;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(255,215,0,0.25) 0%, rgba(255,180,50,0.1) 40%, transparent 70%);
-  z-index: 0;
-  animation: fqp-sun-breathe 8s ease-in-out infinite;
-}
-
-@keyframes fqp-sun-breathe {
-  0%, 100% { transform: scale(1); opacity: 0.6; }
-  50% { transform: scale(1.1); opacity: 1; }
-}
-
-/* Grass overlay */
-.fqp-login-grass {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 25%;
-  background: linear-gradient(0deg, rgba(57,181,74,0.15) 0%, transparent 100%);
-  z-index: 0;
-}
-
-/* Glassmorphism card */
-.fqp-login-card {
-  position: relative;
-  z-index: 1;
-  width: 100%;
-  max-width: 420px;
-  padding: 48px 40px 40px;
-  background: rgba(255, 255, 255, 0.10);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.35);
-  border-radius: 24px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
-  text-align: center;
-  opacity: 0;
-  transform: translateY(30px);
-  transition: opacity 0.8s ease, transform 0.8s ease;
-}
-
-.fqp-login-card.visible {
-  opacity: 1;
-  transform: translateY(0);
-}
-
-/* Login form */
-.fqp-login-form {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-
-.fqp-login-field {
-  width: 100%;
-}
-
-/* Password input with toggle */
-.fqp-login-input-wrap {
-  position: relative;
-  width: 100%;
-}
-
-.fqp-login-input {
-  width: 100%;
-  height: 56px;
-  padding: 0 48px 0 20px;
-  background: rgba(255, 255, 255, 0.12);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 12px;
-  color: #FFFFFF;
-  font-size: 16px;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-  outline: none;
-  transition: border-color 0.2s, box-shadow 0.2s;
-  box-sizing: border-box;
-}
-
-.fqp-login-input::placeholder {
-  color: rgba(255, 255, 255, 0.4);
-}
-
-.fqp-login-input:focus {
-  border-color: rgba(85, 200, 255, 0.5);
-  box-shadow: 0 0 0 2px rgba(85, 200, 255, 0.1);
-}
-
-.fqp-login-input:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.fqp-login-pw-toggle {
-  position: absolute;
-  right: 12px;
-  top: 50%;
-  transform: translateY(-50%);
-  background: none;
-  border: none;
-  font-size: 18px;
-  cursor: pointer;
-  padding: 4px;
-  opacity: 0.5;
-  transition: opacity 0.2s;
-  line-height: 1;
-}
-
-.fqp-login-pw-toggle:hover {
-  opacity: 0.8;
-}
-
-/* Error message */
-.fqp-login-error {
-  color: #ff6b6b;
-  font-size: 14px;
-  margin: -12px 0 0;
-  padding: 8px 12px;
-  background: rgba(255, 107, 107, 0.1);
-  border-radius: 8px;
-}
-
-/* Green gradient login button */
-.fqp-login-button {
-  width: 100%;
-  height: 56px;
-  background: linear-gradient(135deg, #00FF85 0%, #00B86B 100%);
-  color: #07111F;
-  border: none;
-  border-radius: 12px;
-  font-size: 17px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: all 0.2s;
-  letter-spacing: 1px;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-}
-
-.fqp-login-button:hover:not(:disabled) {
-  box-shadow: 0 0 30px rgba(0, 255, 133, 0.4);
-  transform: scale(1.02);
-}
-
-.fqp-login-button:active:not(:disabled) {
-  transform: scale(0.98);
-}
-
-.fqp-login-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-/* Loading screen */
-.fqp-loading-screen {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-height: 100vh;
-  gap: 16px;
-  background: #07111F;
-  color: rgba(255, 255, 255, 0.5);
+/* ---- Login ---- */
+.fqp-login-page { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, 440px); align-items: center; gap: 8vw; min-height: 100dvh; padding: clamp(24px, 6vw, 96px); overflow: hidden; background: var(--fqp-bg); }
+.fqp-login-bg { position: absolute; inset: 0; background: linear-gradient(90deg, var(--fqp-bg) 0%, transparent 80%), url('/login-football-bg.webp') center/cover; opacity: .09; pointer-events: none; }
+.fqp-login-intro { position: relative; max-width: 640px; }
+.fqp-login-wordmark { display: inline-flex; padding: 6px 12px; margin-bottom: 24px; border: 1px solid var(--fqp-border); border-radius: var(--fqp-radius-sm); color: var(--fqp-accent-strong); font-family: var(--fqp-font-mono); font-size: 16px; font-weight: 700; letter-spacing: .16em; }
+.fqp-login-intro h1 { margin: 0 0 18px; font-size: clamp(30px, 3.5vw, 52px); line-height: 1.4; letter-spacing: -.03em; font-weight: 650; }
+.fqp-login-intro p { margin: 0; max-width: 38ch; color: var(--fqp-text-muted); font-size: 16px; line-height: 1.9; }
+.fqp-login-caption { margin-top: 36px; padding-top: 20px; border-top: 1px solid var(--fqp-border); color: var(--fqp-text-muted); font-family: var(--fqp-font-mono); font-size: 11px; letter-spacing: .1em; }
+.fqp-login-card { position: relative; width: 100%; padding: 36px; background: var(--fqp-panel); border: 1px solid var(--fqp-border); border-radius: 20px; box-shadow: var(--fqp-shadow-red); }
+.fqp-login-card h2 { margin: 0; color: var(--fqp-text); font-size: 24px; font-weight: 600; }
+.fqp-login-card > p { margin: 10px 0 28px; color: var(--fqp-text-muted); font-size: 14px; }
+.fqp-login-form { display: grid; gap: 18px; }
+.fqp-login-input-wrap { position: relative; width: 100%; }
+.fqp-login-input { width: 100%; height: 52px; padding: 0 56px 0 14px; background: var(--fqp-bg); border: 1px solid var(--fqp-control-border); border-radius: var(--fqp-radius-sm); color: var(--fqp-text); font: inherit; transition: border-color .16s, box-shadow .16s; }
+.fqp-login-input::placeholder { color: var(--fqp-text-muted); font-size: 14px; }
+.fqp-login-input:focus { outline: 2px solid var(--fqp-accent); outline-offset: 2px; border-color: var(--fqp-accent); }
+.fqp-login-input:disabled { opacity: .5; }
+.fqp-login-pw-toggle { position: absolute; right: 4px; top: 4px; display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--fqp-text-muted); cursor: pointer; }
+.fqp-login-pw-toggle:hover { color: var(--fqp-text); background: var(--fqp-hover-subtle); }
+.fqp-login-error { margin: 0; padding: 10px 12px; border-left: 3px solid var(--fqp-danger); background: color-mix(in srgb, var(--fqp-danger) 8%, var(--fqp-panel)); color: var(--fqp-danger); font-size: 14px; border-radius: 4px; }
+.fqp-login-button { width: 100%; min-height: 52px; border: 1px solid var(--fqp-action); border-radius: var(--fqp-radius-sm); background: var(--fqp-action); color: var(--fqp-on-action); font: inherit; font-weight: 600; cursor: pointer; transition: background-color .16s; }
+.fqp-login-button:hover:not(:disabled) { background: var(--fqp-action-hover); }
+.fqp-login-button:disabled { opacity: .5; cursor: not-allowed; }
+.fqp-loading-screen { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100dvh; gap: 16px; background: var(--fqp-bg); color: var(--fqp-text-muted); }
+@media (max-width: 900px) {
+  .fqp-login-page { grid-template-columns: 1fr; gap: 28px; align-content: center; justify-items: center; padding: 32px 20px; }
+  .fqp-login-intro { width: min(440px, 100%); }
+  .fqp-login-intro h1 { font-size: 28px; }
+  .fqp-login-intro p { font-size: 14px; }
+  .fqp-login-wordmark { margin-bottom: 16px; }
+  .fqp-login-caption { display: none; }
+  .fqp-login-card { max-width: 440px; padding: 28px 24px; }
 }
 
 /* ---- Logout Button ---- */

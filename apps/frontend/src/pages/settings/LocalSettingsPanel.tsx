@@ -13,7 +13,7 @@ export default function LocalSettingsPanel() {
     <section className="local-settings-panel" aria-labelledby="local-settings-title">
       <div className="local-settings-heading">
         <h2 id="local-settings-title">本地业务设置</h2>
-        <p>资金、安全和备份配置与外观设置相互独立。</p>
+        <p>管理资金预算、风控偏好与本地安全配置。</p>
       </div>
       <div className="local-settings-grid">
         <Card title="资金与风控">

@@ -131,7 +131,7 @@ function SeasonContent({ source, seasonId, state, onChange }: { source: LeagueDa
   const data = resource.data;
   const openTeam = (teamId: number) => onChange({ tab: 'teams', teamId, page: 1, roundId: null, status: 'all' });
   return <>
-    <div className="lc-section-heading"><h2>赛季概览{data?.evidence.completeness !== 'complete' ? ' · 已收录样本统计' : ''}</h2>
+    <div className="lc-section-heading"><h2>赛季概览{data && data.evidence.completeness !== 'complete' ? ' · 已收录样本统计' : ''}</h2>
       <button type="button" onClick={resource.refresh} disabled={resource.loading}>刷新联赛资料</button></div>
     <ReadStatus error={resource.error} hasData={!!data} />
     {resource.loading && !data && <div role="status" aria-label="加载赛季资料"><Skeleton variant="card" height={160} /></div>}

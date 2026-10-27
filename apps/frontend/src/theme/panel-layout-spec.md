@@ -1,10 +1,11 @@
-# FQP Panel Layout Spec
+# FQP 界面布局约定
 
-- Grid: 12 columns.
-- Dashboard top bar height: 64px.
-- Left nav width: 240px collapsed 72px.
-- Cards: 16px radius, dark background, red neon hover.
-- Charts: black background, red primary line, gray grid.
-- Critical status: red pulse border.
-- Warning status: yellow tag.
-- Positive status: green tag.
+- 主题只保留黑红 `redline-quant` 和极地 `polar-lab`，通过侧栏底部切换。
+- 系统设置仅管理业务偏好和账户安全；不提供主题、密度、圆角、卡片、数字字体等界面配置。
+- 桌面侧栏 232px，小屏桌面 216px；900px 及以下采用抽屉菜单。
+- 顶部状态栏至少 68px，内容自动换行；主区域桌面边距 32px，手机 16px。
+- 使用 4/8px 间距与语义色，卡片 12px 圆角，控件 8px 圆角，正文字体采用系统字体。
+- 静态卡片不悬浮；页头和表格数据立即可读；可选卡片入场仅短淡入，并尊重系统减少动态效果。
+- 图表使用当前主题的 chart Token；成功、警告和错误使用独立语义色，不能只依赖颜色表达状态。
+- 表格在自身容器横向滚动；手机触控按钮 44px；移动侧栏支持关闭、Escape、焦点约束和关闭后焦点恢复。
+- 具体色板与验证要求见 `docs/47_红黑科技风UI设计系统.md`；颜色源为 `theme/themes/`，布局源为 `theme/tokens/base.css`。

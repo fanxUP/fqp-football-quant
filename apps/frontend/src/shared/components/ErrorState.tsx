@@ -23,7 +23,7 @@ export default function ErrorState({ message, onRetry }: ErrorStateProps) {
       >
         ⚠️
       </div>
-      <div className="fqp-empty-title" style={{ color: 'var(--fqp-red-neon)' }}>
+      <div className="fqp-empty-title" style={{ color: 'var(--fqp-danger)' }}>
         {translate('加载失败')}
       </div>
       <div className="fqp-empty-desc">{translate(message)}</div>

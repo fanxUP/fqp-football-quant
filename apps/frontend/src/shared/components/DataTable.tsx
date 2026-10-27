@@ -1,11 +1,7 @@
-import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import LoadingSpinner from './LoadingSpinner';
 import EmptyState from './EmptyState';
 import { useLanguage } from '../../app/LanguageContext';
-
-const ROW_ENTER_DELAY_STEP_MS = 30;
-const ROW_ENTER_MAX_DELAY_MS = 300;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export interface Column<T = any> {
@@ -38,17 +34,6 @@ export default function DataTable<T = any>({
   selectedRowKey,
 }: DataTableProps<T>) {
   const { translate } = useLanguage();
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => {
-    requestAnimationFrame(() => setMounted(true));
-  }, []);
-
-  // Reset stagger when rows change
-  useEffect(() => {
-    setMounted(false);
-    requestAnimationFrame(() => setMounted(true));
-  }, [rows.length]);
-
   if (loading) {
     return <LoadingSpinner text={translate('加载数据中...')} />;
   }
@@ -58,7 +43,7 @@ export default function DataTable<T = any>({
   }
 
   return (
-    <div style={{ overflowX: 'auto' }}>
+    <div className="fqp-table-scroll" role="region" aria-label={translate("数据表格")} tabIndex={0}>
       <table className="fqp-table">
         <colgroup>
           {columns.map((col) => (
@@ -78,19 +63,12 @@ export default function DataTable<T = any>({
           {rows.map((row, i) => {
             const key = rowKey ? rowKey(row) : i;
             const isSelected = selectedRowKey != null && String(key) === String(selectedRowKey);
-            const entranceDelay = Math.min(i * ROW_ENTER_DELAY_STEP_MS, ROW_ENTER_MAX_DELAY_MS);
             return (
               <tr
                 key={key}
                 className={onRowClick ? 'clickable' : undefined}
                 data-selected={isSelected ? 'true' : undefined}
                 onClick={() => onRowClick?.(row)}
-                style={{
-                  animation: isSelected ? 'none' : undefined,
-                  opacity: mounted ? 1 : 0,
-                  transform: mounted ? 'translateX(0)' : 'translateX(-12px)',
-                  transition: `opacity 0.25s ease ${entranceDelay}ms, transform 0.25s ease ${entranceDelay}ms`,
-                }}
               >
                 {columns.map((col) => {
                   const value = (row as Record<string, unknown>)[col.key];

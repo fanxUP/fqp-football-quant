@@ -28,14 +28,14 @@ export function RenderCounters() {
   return null;
 }
 export function useSceneColors(): Colors {
-  const { appearance } = useTheme();
+  const { theme } = useTheme();
   const read = () => {
     const styles = getComputedStyle(document.documentElement);
     const token = (name: string, fallback: string) => styles.getPropertyValue(name).trim() || fallback;
     return { background: token('--fqp-bg', '#0B0F16'), pitch: token('--fqp-panel-2', '#202837'), stripe: token('--fqp-panel', '#171D27'), line: token('--fqp-text-muted', '#ABB7C9'), accent: token('--fqp-accent', '#F34F62'), neutral: token('--fqp-info', '#548DFC') };
   };
   const [colors, setColors] = useState(read);
-  useLayoutEffect(() => { const frame = requestAnimationFrame(() => setColors(read())); return () => cancelAnimationFrame(frame); }, [appearance]);
+  useLayoutEffect(() => { const frame = requestAnimationFrame(() => setColors(read())); return () => cancelAnimationFrame(frame); }, [theme]);
   return colors;
 }
 export function CameraRig({ view, command, active, onFailure }: { view: View; command: { action: CameraAction; sequence: number }; active: boolean; onFailure: () => void }) {

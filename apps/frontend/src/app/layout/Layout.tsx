@@ -1,4 +1,4 @@
-import { useState, useCallback, type ReactNode } from 'react';
+import { useState, useCallback, useEffect, type ReactNode } from 'react';
 import Sidebar from './Sidebar';
 import { LiveStatusProvider } from '../../features/command-center/LiveStatus';
 import GlobalStatusBar from '../../features/command-center/GlobalStatusBar';
@@ -19,13 +19,25 @@ export default function Layout({ children }: LayoutProps) {
   const openSidebar = useCallback(() => setSidebarOpen(true), []);
   const closeSidebar = useCallback(() => setSidebarOpen(false), []);
 
+  useEffect(() => {
+    if (!sidebarOpen || typeof matchMedia === 'undefined') return;
+    const desktop = matchMedia('(min-width: 901px)');
+    const closeOnDesktop = () => { if (desktop.matches) closeSidebar(); };
+    closeOnDesktop();
+    desktop.addEventListener('change', closeOnDesktop);
+    return () => desktop.removeEventListener('change', closeOnDesktop);
+  }, [closeSidebar, sidebarOpen]);
+
   return (
     <LiveStatusProvider><div className="fqp-layout">
       {/* Hamburger button — mobile only */}
       <button
         className="fqp-hamburger"
         onClick={openSidebar}
+        type="button"
         aria-label={text.openMenu}
+        aria-controls="fqp-navigation"
+        aria-expanded={sidebarOpen}
       >
         <span />
         <span />
@@ -34,12 +46,12 @@ export default function Layout({ children }: LayoutProps) {
 
       {/* Sidebar overlay — mobile only */}
       {sidebarOpen && (
-        <div className="fqp-sidebar-overlay" onClick={closeSidebar} />
+        <button type="button" className="fqp-sidebar-overlay" onClick={closeSidebar} aria-label={language === 'en' ? 'Close menu backdrop' : '关闭菜单遮罩'} tabIndex={-1} />
       )}
 
       <Sidebar isOpen={sidebarOpen} onClose={closeSidebar} />
 
-      <div className="cc-shell">
+      <div className="cc-shell" inert={sidebarOpen}>
       <header className="cc-top-bar">
       <GlobalStatusBar />
       <div className="fqp-top-actions" aria-label={text.accountActions}>

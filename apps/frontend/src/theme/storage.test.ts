@@ -1,42 +1,46 @@
-import { beforeEach, describe, expect, it } from 'vitest';
-import { DEFAULT_APPEARANCE_SETTINGS } from './defaults';
-import { APPEARANCE_STORAGE_KEY, loadAppearanceSettings, saveAppearanceSettings } from './storage';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { loadTheme, saveTheme, THEME_STORAGE_KEY } from './storage';
 
-describe('appearance storage', () => {
+const OLD_APPEARANCE_KEY = 'fqp.appearance.settings';
+
+describe('two-theme storage', () => {
   beforeEach(() => localStorage.clear());
 
-  it('migrates the existing theme and local settings keys', () => {
-    localStorage.setItem('fqp-theme', 'matrix');
-    localStorage.setItem('fqp-settings', JSON.stringify({ animationsEnabled: false, sidebarCollapsed: true }));
-
-    expect(loadAppearanceSettings()).toMatchObject({
-      theme: 'code-matrix',
-      motion: 'off',
-      reduceMotion: true,
-      sidebarMode: 'compact',
-    });
+  it.each(['black-gold-terminal', 'deep-navy', 'matrix', 'cyberpunk', 'anime', 'ink'])('falls back from removed theme %s', (theme) => {
+    localStorage.setItem(OLD_APPEARANCE_KEY, JSON.stringify({ theme, density: 'terminal', sidebarMode: 'icons' }));
+    expect(loadTheme()).toBe('redline-quant');
   });
 
-  it('ignores unknown values while preserving valid fields', () => {
-    localStorage.setItem(APPEARANCE_STORAGE_KEY, JSON.stringify({
-      theme: 'unknown-theme',
-      density: 'terminal',
-      motion: 'hyperdrive',
-      backgroundEffect: false,
-    }));
-
-    expect(loadAppearanceSettings()).toEqual({
-      ...DEFAULT_APPEARANCE_SETTINGS,
-      density: 'terminal',
-      backgroundEffect: false,
-    });
+  it('preserves polar while discarding the old interface preferences', () => {
+    localStorage.setItem(OLD_APPEARANCE_KEY, JSON.stringify({ theme: 'polar-lab', density: 'terminal', motion: 'immersive' }));
+    const theme = loadTheme();
+    expect(theme).toBe('polar-lab');
+    saveTheme(theme);
+    expect(localStorage.getItem(THEME_STORAGE_KEY)).toBe('polar-lab');
+    expect(localStorage.getItem(OLD_APPEARANCE_KEY)).toBeNull();
   });
 
-  it('saves the complete normalized settings object', () => {
-    const settings = { ...DEFAULT_APPEARANCE_SETTINGS, theme: 'deep-navy' as const };
+  it.each([['dark', 'redline-quant'], ['light', 'polar-lab'], ['polar-lab', 'polar-lab']])('migrates legacy shortcut %s', (stored, expected) => {
+    localStorage.setItem(THEME_STORAGE_KEY, stored);
+    expect(loadTheme()).toBe(expected);
+  });
 
-    saveAppearanceSettings(settings);
+  it('does not change business preferences during migration', () => {
+    const business = JSON.stringify({ dailyBudget: 800, disabledModules: ['test'], riskMode: 'balanced' });
+    localStorage.setItem('fqp-settings', business);
+    saveTheme(loadTheme());
+    expect(localStorage.getItem('fqp-settings')).toBe(business);
+  });
 
-    expect(JSON.parse(localStorage.getItem(APPEARANCE_STORAGE_KEY) ?? '{}')).toEqual(settings);
+  it('recovers from malformed old settings', () => {
+    localStorage.setItem(OLD_APPEARANCE_KEY, '{invalid');
+    localStorage.setItem(THEME_STORAGE_KEY, 'polar-lab');
+    expect(loadTheme()).toBe('polar-lab');
+  });
+
+  it('works when browser storage is blocked', () => {
+    const storage = { getItem: vi.fn(() => { throw new Error('blocked'); }), setItem: vi.fn(() => { throw new Error('blocked'); }), removeItem: vi.fn() } as unknown as Storage;
+    expect(loadTheme(storage)).toBe('redline-quant');
+    expect(() => saveTheme('polar-lab', storage)).not.toThrow();
   });
 });

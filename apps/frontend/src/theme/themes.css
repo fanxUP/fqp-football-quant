@@ -1,286 +1,3 @@
-/* ===================================================================
-   FQP Multi-Theme — Matrix / Cyberpunk / Apple / Minimal
-   Applied via [data-theme='...'] on <html>
-   =================================================================== */
-
-/* ---- 黑客帝国 Matrix (green on black) ---- */
-[data-theme='matrix'] {
-  --fqp-bg: #000000;
-  --fqp-panel: #0A0F0A;
-  --fqp-panel-2: #0D150D;
-  --fqp-red: #00FF41;
-  --fqp-red-neon: #00FF41;
-  --fqp-red-dark: #003B0C;
-  --fqp-border: #1A3A1A;
-  --fqp-text: #C8F0C8;
-  --fqp-text-muted: #5B8C5B;
-  --fqp-success: #00CC33;
-  --fqp-warning: #88CC00;
-  --fqp-info: #00AA66;
-  --fqp-panel-overlay: rgba(0,255,65,0.04);
-  --fqp-border-light: rgba(0,255,65,0.08);
-  --fqp-hover-bg: rgba(0,255,65,0.06);
-  --fqp-hover-subtle: rgba(0,255,65,0.03);
-  --fqp-bg-glass: rgba(0,255,65,0.02);
-  --fqp-border-subtle: rgba(0,255,65,0.04);
-  --fqp-border-medium: rgba(0,255,65,0.08);
-  --fqp-shadow-red: 0 0 24px rgba(0,255,65,0.12);
-  --fqp-glow-red: 0 0 18px rgba(0,255,65,0.35);
-  --fqp-accent: #00FF41;
-}
-[data-theme='matrix'] body {
-  background: #000000;
-  color: #C8F0C8;
-}
-[data-theme='matrix'] .fqp-card {
-  border-color: rgba(0,255,65,0.16);
-}
-[data-theme='matrix'] .fqp-card:hover {
-  border-color: rgba(0,255,65,0.48);
-  box-shadow: 0 0 18px rgba(0,255,65,0.35);
-}
-[data-theme='matrix'] .fqp-table tbody tr:hover {
-  background: rgba(0,255,65,0.06);
-}
-[data-theme='matrix'] .fqp-table tbody tr::before {
-  background: #00FF41;
-}
-[data-theme='matrix'] .fqp-table tbody tr[data-selected="true"] {
-  box-shadow: inset 3px 0 0 #00FF41;
-}
-[data-theme='matrix'] .fqp-btn-primary {
-  background: #00CC33;
-  border-color: #00CC33;
-  color: #000;
-}
-[data-theme='matrix'] .fqp-nav-item[data-active="true"],
-[data-theme='matrix'] .fqp-nav-item:hover {
-  color: #00FF41;
-}
-[data-theme='matrix'] .fqp-sidebar-logo {
-  color: #00FF41;
-  text-shadow: 0 0 12px rgba(0,255,65,0.6);
-}
-
-/* ---- 赛博朋克 Cyberpunk (neon purple/yellow on dark) ---- */
-[data-theme='cyberpunk'] {
-  --fqp-bg: #0A0014;
-  --fqp-panel: #120024;
-  --fqp-panel-2: #180030;
-  --fqp-red: #FF00FF;
-  --fqp-red-neon: #FF00FF;
-  --fqp-red-dark: #660066;
-  --fqp-border: #2A1050;
-  --fqp-text: #F0E6FF;
-  --fqp-text-muted: #AA80D0;
-  --fqp-success: #00FFAA;
-  --fqp-warning: #FFD700;
-  --fqp-info: #00CCFF;
-  --fqp-panel-overlay: rgba(255,0,255,0.04);
-  --fqp-border-light: rgba(255,0,255,0.08);
-  --fqp-hover-bg: rgba(255,0,255,0.06);
-  --fqp-hover-subtle: rgba(255,0,255,0.03);
-  --fqp-bg-glass: rgba(255,0,255,0.02);
-  --fqp-border-subtle: rgba(255,0,255,0.04);
-  --fqp-border-medium: rgba(255,0,255,0.08);
-  --fqp-shadow-red: 0 0 24px rgba(255,0,255,0.15);
-  --fqp-glow-red: 0 0 18px rgba(255,0,255,0.45);
-  --fqp-accent: #FF00FF;
-}
-[data-theme='cyberpunk'] body {
-  background: linear-gradient(135deg, #0A0014 0%, #1A0030 50%, #0A0014 100%);
-  color: #F0E6FF;
-}
-[data-theme='cyberpunk'] .fqp-card {
-  border-color: rgba(255,0,255,0.2);
-  background: linear-gradient(180deg, rgba(24,0,48,0.96), rgba(18,0,36,0.98));
-}
-[data-theme='cyberpunk'] .fqp-card:hover {
-  border-color: rgba(255,0,255,0.6);
-  box-shadow: 0 0 24px rgba(255,0,255,0.35);
-}
-[data-theme='cyberpunk'] .fqp-table tbody tr:hover {
-  background: rgba(255,0,255,0.06);
-}
-[data-theme='cyberpunk'] .fqp-table tbody tr::before {
-  background: #FF00FF;
-}
-[data-theme='cyberpunk'] .fqp-table tbody tr[data-selected="true"] {
-  box-shadow: inset 3px 0 0 #FF00FF;
-}
-[data-theme='cyberpunk'] .fqp-btn-primary {
-  background: linear-gradient(135deg, #FF00FF, #AA00FF);
-  border-color: #FF00FF;
-  color: #fff;
-}
-[data-theme='cyberpunk'] .fqp-nav-item[data-active="true"],
-[data-theme='cyberpunk'] .fqp-nav-item:hover {
-  color: #FF00FF;
-}
-[data-theme='cyberpunk'] .fqp-sidebar-logo {
-  color: #FF00FF;
-  text-shadow: 0 0 20px rgba(255,0,255,0.8);
-}
-
-/* ---- 二次元 Anime (sakura pink & sky blue, cute pastel) ---- */
-[data-theme='anime'] {
-  --fqp-bg: #FFF5F7;
-  --fqp-panel: #FFFFFF;
-  --fqp-panel-2: #FFF0F3;
-  --fqp-red: #FF6B8A;
-  --fqp-red-neon: #FF85A2;
-  --fqp-red-dark: #E55070;
-  --fqp-border: #F0D5E0;
-  --fqp-text: #4A3548;
-  --fqp-text-muted: #B08AA0;
-  --fqp-success: #7EC8A4;
-  --fqp-warning: #FFB347;
-  --fqp-info: #78C4E8;
-  --fqp-panel-overlay: rgba(255,107,138,0.04);
-  --fqp-border-light: rgba(255,107,138,0.08);
-  --fqp-hover-bg: rgba(255,107,138,0.06);
-  --fqp-hover-subtle: rgba(255,107,138,0.03);
-  --fqp-bg-glass: rgba(255,255,255,0.85);
-  --fqp-border-subtle: rgba(255,107,138,0.06);
-  --fqp-border-medium: rgba(255,107,138,0.12);
-  --fqp-shadow-red: 0 4px 16px rgba(255,107,138,0.12);
-  --fqp-glow-red: 0 4px 14px rgba(255,133,162,0.25);
-  --fqp-accent: #FF6B8A;
-}
-[data-theme='anime'] body {
-  background: linear-gradient(135deg, #FFF5F7 0%, #F0F4FF 50%, #FFF0F5 100%);
-  color: #4A3548;
-}
-[data-theme='anime'] .fqp-card {
-  background: #FFFFFF;
-  border: 1.5px solid #F8D5E2;
-  border-radius: 18px;
-  box-shadow: 0 3px 16px rgba(255,133,162,0.08);
-}
-[data-theme='anime'] .fqp-card:hover {
-  border-color: #FFB3C8;
-  box-shadow: 0 6px 24px rgba(255,107,138,0.14);
-}
-[data-theme='anime'] .fqp-table th {
-  background: #FFF5F7;
-  border-bottom: 2px solid #F8D5E2;
-}
-[data-theme='anime'] .fqp-table td {
-  border-bottom: 1px solid #FFF0F3;
-}
-[data-theme='anime'] .fqp-table tbody tr:hover {
-  background: rgba(255,133,162,0.05);
-}
-[data-theme='anime'] .fqp-table tbody tr::before {
-  background: #FF6B8A;
-  border-radius: 0 8px 8px 0;
-}
-[data-theme='anime'] .fqp-table tbody tr[data-selected="true"] {
-  background: rgba(255,107,138,0.06);
-  box-shadow: inset 3px 0 0 #FF6B8A;
-}
-[data-theme='anime'] .fqp-btn-primary {
-  background: linear-gradient(135deg, #FF85A2, #FF6B8A);
-  border: none;
-  border-radius: 14px;
-  color: #fff;
-  font-weight: 600;
-}
-[data-theme='anime'] .fqp-nav-item[data-active="true"],
-[data-theme='anime'] .fqp-nav-item:hover {
-  color: #FF6B8A;
-}
-[data-theme='anime'] .fqp-sidebar-logo {
-  color: #FF6B8A;
-  text-shadow: 0 2px 8px rgba(255,107,138,0.2);
-}
-[data-theme='anime'] .fqp-sidebar {
-  background: #FFFBFC;
-  border-right: 1px solid #F8D5E2;
-}
-
-/* ---- 水墨风格 Ink (black ink on rice paper, oriental elegance) ---- */
-[data-theme='ink'] {
-  --fqp-bg: #F5F0E8;
-  --fqp-panel: #FAF7F2;
-  --fqp-panel-2: #EFEAE0;
-  --fqp-red: #2C2C2C;
-  --fqp-red-neon: #3A3A3A;
-  --fqp-red-dark: #1A1A1A;
-  --fqp-border: #D5CFC6;
-  --fqp-text: #2C241A;
-  --fqp-text-muted: #9B9186;
-  --fqp-success: #5B7A5C;
-  --fqp-warning: #8B7355;
-  --fqp-info: #4A6572;
-  --fqp-panel-overlay: rgba(44,36,26,0.03);
-  --fqp-border-light: rgba(44,36,26,0.06);
-  --fqp-hover-bg: rgba(44,36,26,0.04);
-  --fqp-hover-subtle: rgba(44,36,26,0.02);
-  --fqp-bg-glass: rgba(250,247,242,0.9);
-  --fqp-border-subtle: rgba(44,36,26,0.04);
-  --fqp-border-medium: rgba(44,36,26,0.08);
-  --fqp-shadow-red: 0 2px 12px rgba(44,36,26,0.08);
-  --fqp-glow-red: 0 2px 10px rgba(44,36,26,0.12);
-  --fqp-accent: #2C2C2C;
-}
-[data-theme='ink'] body {
-  background: #F5F0E8;
-  color: #2C241A;
-}
-[data-theme='ink'] .fqp-card {
-  background: #FAF7F2;
-  border: 1px solid #DDD6CC;
-  border-radius: 6px;
-  box-shadow: 0 2px 8px rgba(44,36,26,0.05);
-}
-[data-theme='ink'] .fqp-card:hover {
-  border-color: #C5BEB4;
-  box-shadow: 0 4px 16px rgba(44,36,26,0.08);
-}
-[data-theme='ink'] .fqp-table th {
-  background: #F0EBE0;
-  border-bottom: 2px solid #D5CFC6;
-  font-family: 'STKaiti', 'KaiTi', '楷体', serif;
-  letter-spacing: 0.08em;
-}
-[data-theme='ink'] .fqp-table td {
-  border-bottom: 1px solid #E8E2D6;
-}
-[data-theme='ink'] .fqp-table tbody tr:hover {
-  background: rgba(44,36,26,0.03);
-}
-[data-theme='ink'] .fqp-table tbody tr::before {
-  background: #2C2C2C;
-}
-[data-theme='ink'] .fqp-table tbody tr[data-selected="true"] {
-  background: rgba(44,36,26,0.04);
-  box-shadow: inset 3px 0 0 #2C2C2C;
-}
-[data-theme='ink'] .fqp-btn-primary {
-  background: #2C2C2C;
-  border: 1px solid #2C2C2C;
-  border-radius: 4px;
-  color: #FAF7F2;
-}
-[data-theme='ink'] .fqp-nav-item[data-active="true"],
-[data-theme='ink'] .fqp-nav-item:hover {
-  color: #2C2C2C;
-  font-weight: 700;
-}
-[data-theme='ink'] .fqp-sidebar-logo {
-  color: #2C2C2C;
-  text-shadow: none;
-  font-family: 'STKaiti', 'KaiTi', '楷体', serif;
-}
-[data-theme='ink'] .fqp-sidebar {
-  background: #F2EDE4;
-  border-right: 1px solid #DDD6CC;
-}
-[data-theme='ink'] .fqp-page-header h1 {
-  font-family: 'STKaiti', 'KaiTi', '楷体', serif;
-}
-
 /* ---- Betting Terminal -------------------------------------------------- */
 .betting-mobile-header,
 .betting-mobile-nav {
@@ -1251,10 +968,10 @@
 .betting-submit {
   width: 100%;
   margin-top: 12px;
-  border: 1px solid var(--fqp-success);
+  border: 1px solid var(--fqp-action);
   border-radius: 8px;
-  background: var(--fqp-success);
-  color: var(--fqp-bg);
+  background: var(--fqp-action);
+  color: var(--fqp-on-action);
   cursor: pointer;
   padding: 12px;
   font-weight: 800;
@@ -1297,7 +1014,7 @@
   position: relative;
   width: 100%;
   min-width: 0;
-  min-height: 104px;
+  min-height: 84px;
   padding: 10px 12px;
   flex-direction: column;
   align-items: center !important;
@@ -1307,8 +1024,8 @@
   white-space: normal;
   cursor: pointer;
   border-color: color-mix(in srgb, var(--fqp-border) 74%, var(--fqp-accent));
-  background: var(--fqp-card-bg);
-  box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--fqp-accent) 48%, transparent);
+  background: var(--fqp-panel);
+  box-shadow: none;
   transition: border-color 160ms ease, background-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
 }
 
@@ -1320,9 +1037,9 @@
 
 .betting-center-tab:not([data-active='true']):hover {
   border-color: var(--fqp-accent-strong);
-  background: color-mix(in srgb, var(--fqp-accent-muted) 65%, var(--fqp-card-bg));
+  background: color-mix(in srgb, var(--fqp-accent-muted) 65%, var(--fqp-panel));
   box-shadow: inset 0 -3px 0 var(--fqp-accent-strong);
-  transform: translateY(-2px);
+  transform: none;
 }
 
 .betting-center-tab:focus-visible {
@@ -1338,7 +1055,7 @@
   display: block;
   color: var(--fqp-text);
   font-size: 20px;
-  font-weight: 800;
+  font-weight: 600;
   line-height: 1.3;
 }
 
@@ -1371,10 +1088,6 @@
 }
 
 @media (max-width: 760px) {
-  .fqp-main:has(.betting-center-page) {
-    padding: 56px 0 0;
-  }
-
   .fqp-page-transition:has(.betting-center-page) {
     transform: none !important;
     animation: none !important;
@@ -1382,11 +1095,6 @@
 
   .betting-center-page {
     width: 100%;
-  }
-
-  .betting-center-page > .fqp-page-header,
-  .betting-center-page > .betting-center-context {
-    display: none !important;
   }
 
   .betting-center-page > .betting-center-tabs {
@@ -1420,8 +1128,8 @@
     gap: 0;
     width: 100%;
     margin: 0;
-    background: #f4f5f7;
-    color: #25282d;
+    background: var(--fqp-panel);
+    color: var(--fqp-text);
   }
 
   .betting-mobile-header {
@@ -1430,15 +1138,15 @@
     align-items: center;
     justify-content: space-between;
     padding: 0 16px;
-    background: #fff;
-    color: #15171a;
+    background: var(--fqp-panel);
+    color: var(--fqp-text);
     font-size: 20px;
   }
 
   .betting-mobile-back {
     border: 0;
     background: transparent;
-    color: #15171a;
+    color: var(--fqp-text);
     cursor: pointer;
     font-size: 34px;
     line-height: 1;
@@ -1455,8 +1163,8 @@
     align-items: center;
     overflow-x: auto;
     padding: 14px 18px 12px;
-    background: #063d50;
-    color: rgba(255, 255, 255, 0.68);
+    background: var(--fqp-panel-2);
+    color: var(--fqp-text-muted);
     white-space: nowrap;
   }
 
@@ -1466,7 +1174,7 @@
   }
 
   .betting-mobile-nav span.is-active {
-    color: #fff;
+    color: var(--fqp-text);
     font-weight: 700;
   }
 
@@ -1477,7 +1185,7 @@
     left: 30%;
     height: 3px;
     border-radius: 999px;
-    background: #68d4df;
+    background: var(--fqp-accent);
     content: '';
   }
 
@@ -1502,19 +1210,19 @@
 
   .betting-market-toolbar {
     padding: 12px 16px;
-    background: #fff;
+    background: var(--fqp-panel);
   }
 
   .betting-market-toolbar .fqp-input,
   .betting-market-toolbar .fqp-select {
-    border-color: #dfe2e6;
-    background: #fff;
-    color: #303238;
+    border-color: var(--fqp-border);
+    background: var(--fqp-panel);
+    color: var(--fqp-text);
   }
 
   .betting-rule-note strong,
   .betting-rule-note span {
-    color: #4a4d52;
+    color: var(--fqp-text-muted);
   }
 
   .betting-builder-panel {
@@ -1527,60 +1235,59 @@
 
   .betting-match-day {
     margin-top: 10px;
-    background: #eef0f3;
+    background: var(--fqp-panel);
   }
 
   .betting-match-day-head {
     padding: 10px 16px;
-    background: #fff;
+    background: var(--fqp-panel);
   }
 
   .betting-match-row {
     margin: 0 10px 10px;
     border: 0;
     border-radius: 12px;
-    background: #fff;
+    background: var(--fqp-panel);
     box-shadow: 0 2px 8px rgba(20, 38, 50, 0.08);
-    color: #24272c;
+    color: var(--fqp-text);
   }
 
   .betting-match-meta span,
   .betting-teams span,
   .betting-teams em,
   .betting-teams strong {
-    color: #2f3237;
+    color: var(--fqp-text);
   }
 
   .betting-odd {
-    border-color: #e1e3e6;
-    background: linear-gradient(180deg, #fff, #f7f7f8);
+    border-color: var(--fqp-border);
+    background: var(--fqp-panel-2);
     box-shadow: 0 3px 8px rgba(30, 42, 54, 0.08);
   }
 
   .betting-odd span,
   .betting-odd strong {
-    color: #36393e;
+    color: var(--fqp-text);
   }
 
-  .betting-odd.is-selected {
-    border-color: #ff5959;
-    background: #ff5959;
-  }
+  .betting-odd.is-selected { border-color: var(--fqp-action); background: var(--fqp-action); }
+  .betting-odd.is-selected span, .betting-odd.is-selected strong,
+  .betting-mobile-selected-count, .betting-submit { color: var(--fqp-on-action); }
 
   .betting-all-games {
-    border-color: #e1e3e6;
-    background: #fff;
-    color: #36393e;
+    border-color: var(--fqp-border);
+    background: var(--fqp-panel);
+    color: var(--fqp-text);
   }
 
   .betting-sale-flag em {
     background: #a9abb0;
-    color: #fff;
+    color: var(--fqp-text);
   }
 
   .betting-sale-marker.is-no-single .betting-sale-flag span {
     background: #d4d6d9;
-    color: #fff;
+    color: var(--fqp-text);
   }
 
   .betting-slip {
@@ -1594,7 +1301,7 @@
     overflow: hidden;
     border: 0;
     border-radius: 16px;
-    background: linear-gradient(135deg, #27485c, #00606a);
+    background: var(--fqp-panel-2);
     box-shadow: 0 -8px 20px rgba(20, 38, 50, 0.14);
     padding: 0;
   }
@@ -1612,7 +1319,7 @@
 
   .betting-mobile-slip-panel {
     display: block;
-    color: #fff;
+    color: var(--fqp-text);
   }
 
   .betting-mobile-slip-overview {
@@ -1632,7 +1339,7 @@
   }
 
   .betting-mobile-slip-overview > div:last-child span {
-    color: rgba(255, 255, 255, 0.66);
+    color: var(--fqp-text-muted);
     font-size: 12px;
   }
 
@@ -1642,7 +1349,7 @@
     min-width: 58px;
     height: 58px;
     border-radius: 14px;
-    background: #ff5959;
+    background: var(--fqp-action);
   }
 
   .betting-mobile-selected-count strong {
@@ -1667,14 +1374,14 @@
     border: 1px solid rgba(255, 255, 255, 0.28);
     border-radius: 7px;
     background: transparent;
-    color: rgba(255, 255, 255, 0.68);
+    color: var(--fqp-text-muted);
     font-weight: 700;
   }
 
   .betting-mobile-pass-buttons button.is-active {
-    border-color: #fff;
-    background: #fff;
-    color: #294a5e;
+    border-color: var(--fqp-text);
+    background: var(--fqp-panel);
+    color: var(--fqp-text);
   }
 
   .betting-mobile-slip-controls {
@@ -1690,7 +1397,7 @@
   }
 
   .betting-mobile-slip-controls > span {
-    color: rgba(255, 255, 255, 0.72);
+    color: var(--fqp-text-muted);
     font-size: 13px;
   }
 
@@ -1701,7 +1408,7 @@
     border: 1px solid rgba(255, 255, 255, 0.24);
     border-radius: 7px;
     background: transparent;
-    color: #fff;
+    color: var(--fqp-text);
     text-align: center;
   }
 
@@ -1717,7 +1424,7 @@
     width: calc(100% - 32px);
     margin: 10px 16px 14px;
     border-radius: 999px;
-    background: #ff5b57;
+    background: var(--fqp-action);
   }
 
   .betting-market {
@@ -1732,43 +1439,43 @@
   .betting-all-games-modal {
     width: 100%;
     max-height: 88vh;
-    border-color: #e2e4e7;
+    border-color: var(--fqp-border);
     border-radius: 18px 18px 0 0;
-    background: #fff;
+    background: var(--fqp-panel);
   }
 
   .betting-all-games-content {
     max-height: calc(88vh - 132px);
     padding: 8px 16px;
-    background: #fff;
+    background: var(--fqp-panel);
   }
 
   .betting-all-games-content section {
-    border-bottom-color: #e7e8eb;
+    border-bottom-color: var(--fqp-border);
   }
 
   .betting-all-games-content h4 {
-    color: #24272c;
+    color: var(--fqp-text);
   }
 
   .betting-all-games-modal-head {
     padding: 14px 16px;
     border-bottom-color: rgba(255, 255, 255, 0.18);
-    background: linear-gradient(135deg, #0b5066, #00685f);
+    background: var(--fqp-panel-2);
   }
 
   .betting-all-games-modal-head strong,
   .betting-all-games-modal-head span,
   .betting-all-games-modal-head button {
-    color: #fff;
+    color: var(--fqp-text);
   }
 
   .betting-all-games-close {
     width: calc(100% - 32px);
     margin-right: 16px;
     margin-left: 16px;
-    background: #fff;
-    color: #24272c;
+    background: var(--fqp-panel);
+    color: var(--fqp-text);
   }
 
   .betting-terminal-header,

@@ -1,5 +1,4 @@
 import PageHeader from '../shared/components/PageHeader';
-import AppearanceSettingsPanel from './settings/AppearanceSettingsPanel';
 import LocalSettingsPanel from './settings/LocalSettingsPanel';
 import PasswordChangePanel from './settings/PasswordChangePanel';
 
@@ -8,9 +7,8 @@ export default function SettingsPage() {
     <div className="settings-page">
       <PageHeader
         title="系统设置"
-        subtitle="外观、显示与本地运行偏好"
+        subtitle="管理本地业务偏好与账户安全"
       />
-      <AppearanceSettingsPanel />
       <LocalSettingsPanel />
       <PasswordChangePanel />
     </div>

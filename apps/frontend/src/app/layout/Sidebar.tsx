@@ -92,6 +92,7 @@ export default function Sidebar({ isOpen = false, onClose }: SidebarProps) {
   const disabledModules = new Set(settings.disabledModules);
   const localSidebarPanels = getSidebarPanels(disabledModules);
   const [runtimePanels, setRuntimePanels] = useState<SidebarPanel[] | null>(null);
+  const sidebarRef = useRef<HTMLElement>(null);
   const isMounted = useRef(false);
   const loadedSettingsKey = useRef<string | null>(null);
   const sidebarPanels = runtimePanels ?? localSidebarPanels;
@@ -119,14 +120,36 @@ export default function Sidebar({ isOpen = false, onClose }: SidebarProps) {
     };
   }, [settings.disabledModules]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    const previous = document.activeElement as HTMLElement | null;
+    const sidebar = sidebarRef.current;
+    const focusable = () => Array.from(sidebar?.querySelectorAll<HTMLElement>('button, a, select, [tabindex="0"]') ?? []).filter((element) => !element.hasAttribute('disabled') && element.getClientRects().length > 0 && getComputedStyle(element).visibility !== 'hidden');
+    const focusFrame = requestAnimationFrame(() => focusable()[0]?.focus());
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') { event.preventDefault(); onClose?.(); }
+      if (event.key !== 'Tab') return;
+      const items = focusable();
+      const first = items[0], last = items[items.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+      if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+    };
+    document.addEventListener('keydown', handleKey);
+    return () => { cancelAnimationFrame(focusFrame); document.removeEventListener('keydown', handleKey); previous?.focus(); };
+  }, [isOpen, onClose]);
+
   const handleNav = (path: string) => {
     navigate(path);
     onClose?.();
   };
 
   return (
-    <aside className={`fqp-sidebar${isOpen ? ' drawer-open' : ''}`}>
-      <div className="fqp-sidebar-logo">FQP</div>
+    <aside id="fqp-navigation" ref={sidebarRef} className={`fqp-sidebar${isOpen ? ' drawer-open' : ''}`}>
+      <div className="fqp-sidebar-logo">
+        <span className="fqp-brand-mark" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 19V5h16M4 11h11M8 17l4-4 3 2 5-7" /></svg></span>
+        <span className="fqp-brand-name"><span>FQP</span><small>FOOTBALL INTELLIGENCE</small></span>
+        <button type="button" className="fqp-sidebar-close" onClick={onClose} aria-label={language === 'en' ? 'Close menu' : '关闭菜单'}><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8"><path d="m6 6 12 12M6 18 18 6" /></svg></button>
+      </div>
       <nav className="fqp-sidebar-nav">
         {SIDEBAR_GROUP_ORDER.map((groupName) => {
           const groupPanels = sidebarPanels.filter((item) => {

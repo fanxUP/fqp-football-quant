@@ -10,6 +10,16 @@ export const LANGUAGE_OPTIONS: ReadonlyArray<{ value: AppLanguage; label: string
 ];
 
 const ENGLISH_TEXT: Record<string, string> = {
+  '足球量化研究工作台': 'Football research workspace',
+  '聚合比赛、模型与赛前证据，让每一次判断都有据可循。': 'Bring matches, models and pre-match evidence together for informed decisions.',
+  '登录工作台': 'Sign in to your workspace',
+  '输入访问密码，继续你的足球研究。': 'Enter your access password to continue your research.',
+  '访问密码': 'Access password',
+  '隐藏密码': 'Hide password',
+  '显示密码': 'Show password',
+  '管理本地业务偏好与账户安全': 'Manage local business preferences and account security',
+  '数据表格': 'Data table',
+
   '加载中...': 'Loading...',
   '加载数据中...': 'Loading data...',
   '加载失败': 'Failed to load',

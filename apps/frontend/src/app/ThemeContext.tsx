@@ -1,101 +1,45 @@
-import { createContext, useCallback, useContext, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { DEFAULT_APPEARANCE_SETTINGS } from '../theme/defaults';
-import { loadAppearanceSettings, saveAppearanceSettings } from '../theme/storage';
-import type { AppearanceSettings, ThemeId } from '../theme/types';
+import { createContext, useCallback, useContext, useLayoutEffect, useMemo, useState, type ReactNode } from 'react';
+import { loadTheme, saveTheme } from '../theme/storage';
+import type { ThemeId } from '../theme/types';
 
 interface ThemeContextValue {
-  appearance: AppearanceSettings;
   theme: ThemeId;
   setTheme: (theme: ThemeId) => void;
-  updateAppearance: (patch: Partial<AppearanceSettings>) => void;
-  previewAppearance: (settings: AppearanceSettings) => void;
-  commitAppearance: () => void;
-  cancelPreview: () => void;
-  resetAppearance: () => void;
   toggleTheme: () => void;
-  isPreviewing: boolean;
-}
-
-function applyAppearance(settings: AppearanceSettings): void {
-  const root = document.documentElement;
-  root.dataset.theme = settings.theme;
-  root.dataset.density = settings.density;
-  root.dataset.motion = settings.reduceMotion ? 'off' : settings.motion;
-  root.dataset.radius = settings.radius;
-  root.dataset.cardStyle = settings.cardStyle;
-  root.dataset.sidebarMode = settings.sidebarMode;
-  root.dataset.financialColors = settings.financialColorMode;
-  root.dataset.backgroundEffect = settings.backgroundEffect ? 'on' : 'off';
-  root.dataset.numberFont = settings.numberFont;
-  root.dataset.chartStyle = settings.chartStyle;
 }
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
+function applyTheme(theme: ThemeId): void {
+  const root = document.documentElement;
+  root.dataset.theme = theme;
+  for (const attribute of ['density', 'motion', 'radius', 'card-style', 'sidebar-mode', 'financial-colors', 'background-effect', 'number-font', 'chart-style']) {
+    root.removeAttribute(`data-${attribute}`);
+  }
+  saveTheme(theme);
+}
+
+/** Apply the stored palette before charts can read CSS during their first render. */
+export function initializeTheme(): void {
+  applyTheme(loadTheme());
+}
+
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [appearance, setAppearance] = useState<AppearanceSettings>(() => loadAppearanceSettings());
-  const savedAppearance = useRef(appearance);
-  const [isPreviewing, setIsPreviewing] = useState(false);
+  const [theme, updateTheme] = useState<ThemeId>(() => loadTheme());
 
-  useLayoutEffect(() => {
-    applyAppearance(appearance);
-  }, [appearance]);
+  useLayoutEffect(() => applyTheme(theme), [theme]);
 
-  useLayoutEffect(() => {
-    saveAppearanceSettings(savedAppearance.current);
+  const setTheme = useCallback((next: ThemeId) => {
+    // Chart consumers read CSS tokens while rendering, so publish the palette first.
+    applyTheme(next);
+    updateTheme(next);
   }, []);
-
-  const commit = useCallback((next: AppearanceSettings) => {
-    savedAppearance.current = next;
-    setAppearance(next);
-    setIsPreviewing(false);
-    saveAppearanceSettings(next);
-  }, []);
-
-  const setTheme = useCallback((theme: ThemeId) => {
-    commit({ ...savedAppearance.current, theme });
-  }, [commit]);
-
-  const updateAppearance = useCallback((patch: Partial<AppearanceSettings>) => {
-    commit({ ...savedAppearance.current, ...patch });
-  }, [commit]);
-
-  const previewAppearance = useCallback((settings: AppearanceSettings) => {
-    setAppearance(settings);
-    setIsPreviewing(true);
-  }, []);
-
-  const commitAppearance = useCallback(() => commit(appearance), [appearance, commit]);
-
-  const cancelPreview = useCallback(() => {
-    setAppearance(savedAppearance.current);
-    setIsPreviewing(false);
-  }, []);
-
-  const resetAppearance = useCallback(() => {
-    commit({ ...DEFAULT_APPEARANCE_SETTINGS });
-  }, [commit]);
 
   const toggleTheme = useCallback(() => {
-    commit({
-      ...savedAppearance.current,
-      theme: savedAppearance.current.theme === 'polar-lab' ? 'redline-quant' : 'polar-lab',
-    });
-  }, [commit]);
+    setTheme(theme === 'polar-lab' ? 'redline-quant' : 'polar-lab');
+  }, [setTheme, theme]);
 
-  const value = useMemo<ThemeContextValue>(() => ({
-    appearance,
-    theme: appearance.theme,
-    setTheme,
-    updateAppearance,
-    previewAppearance,
-    commitAppearance,
-    cancelPreview,
-    resetAppearance,
-    toggleTheme,
-    isPreviewing,
-  }), [appearance, cancelPreview, commitAppearance, isPreviewing, previewAppearance, resetAppearance, setTheme, toggleTheme, updateAppearance]);
-
+  const value = useMemo(() => ({ theme, setTheme, toggleTheme }), [setTheme, theme, toggleTheme]);
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 }
 

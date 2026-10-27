@@ -23,8 +23,8 @@ describe('SportteryBettingTerminal visual semantics', () => {
   it('keeps positive handicap red and negative handicap green after theme overrides', () => {
     expect(stylesheet).toMatch(/span\.is-positive\s*{[^}]*color:\s*var\(--st-handicap-positive\)/);
     expect(stylesheet).toMatch(/span\.is-negative\s*{[^}]*color:\s*var\(--st-handicap-negative\)/);
-    expect(stylesheet).toContain('--st-handicap-positive: #ff6b73;');
-    expect(stylesheet).toContain('--st-handicap-negative: #2fc39b;');
+    expect(stylesheet).toContain('--st-handicap-positive: var(--fqp-danger);');
+    expect(stylesheet).toContain('--st-handicap-negative: var(--fqp-success);');
     expect(stylesheet).toMatch(/span\.is-positive\s*{[^}]*background:\s*var\(--st-surface\)/);
     expect(stylesheet).toMatch(/span\.is-negative\s*{[^}]*background:\s*var\(--st-surface\)/);
   });
