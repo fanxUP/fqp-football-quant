@@ -68,7 +68,10 @@ def database(isolated_database, monkeypatch):
     conn.commit()
 
     def connection():
-        fresh = psycopg2.connect(conn.dsn, options="-c statement_timeout=5000 -c lock_timeout=1000")
+        fresh = psycopg2.connect(
+            os.environ["FQP_P106_TEST_DATABASE_URL"],
+            options="-c statement_timeout=5000 -c lock_timeout=1000",
+        )
         with fresh.cursor() as cur:
             cur.execute(sql.SQL("SET search_path TO {}").format(sql.Identifier(schema)))
             cur.execute("SET ROLE fqp")
@@ -360,7 +363,11 @@ job.run()
 """
     result = subprocess.run(
         [sys.executable, "-c", child],
-        env=dict(os.environ, FIXTURE_DSN=conn.dsn, FIXTURE_SCHEMA=schema),
+        env=dict(
+            os.environ,
+            FIXTURE_DSN=os.environ["FQP_P106_TEST_DATABASE_URL"],
+            FIXTURE_SCHEMA=schema,
+        ),
         capture_output=True,
         text=True,
         timeout=45,

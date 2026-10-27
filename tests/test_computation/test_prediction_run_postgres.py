@@ -62,7 +62,7 @@ def test_scheduled_count_snapshot_survives_failures_and_reads_without_history_ac
 
     @contextmanager
     def runtime_database():
-        with closing(psycopg2.connect(conn.dsn)) as runtime:
+        with closing(psycopg2.connect(os.environ["FQP_P106_TEST_DATABASE_URL"])) as runtime:
             with runtime.cursor() as cursor:
                 cursor.execute(sql.SQL("SET search_path TO {}").format(sql.Identifier(schema)))
                 cursor.execute("SET ROLE fqp")
@@ -2812,7 +2812,7 @@ def test_probability_inputs_cannot_abort_or_poison_other_matches(
 
     @contextmanager
     def runtime_database():
-        with closing(psycopg2.connect(conn.dsn)) as runtime:
+        with closing(psycopg2.connect(os.environ["FQP_P106_TEST_DATABASE_URL"])) as runtime:
             with runtime.cursor() as cursor:
                 cursor.execute(sql.SQL("SET search_path TO {}").format(sql.Identifier(schema)))
                 cursor.execute("SET ROLE fqp")
@@ -3577,7 +3577,7 @@ def test_pool_issue_and_prediction_reads_share_one_database_snapshot(
             rows = self.raw.fetchall()
             if "FROM football_pool_issues i" in self.query:
                 # A collector commits a correction between the two read queries.
-                with closing(psycopg2.connect(conn.dsn)) as writer:
+                with closing(psycopg2.connect(os.environ["FQP_P106_TEST_DATABASE_URL"])) as writer:
                     with writer.cursor() as other:
                         other.execute(
                             sql.SQL("SET search_path TO {}").format(sql.Identifier(schema))
