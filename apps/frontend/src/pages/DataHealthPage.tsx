@@ -4,9 +4,7 @@ import { ApiError, type OfficialCollectionStatus } from '../core/types';
 import PageHeader from '../shared/components/PageHeader';
 import Card from '../shared/components/Card';
 import StatusBadge from '../shared/components/StatusBadge';
-import LoadingSpinner from '../shared/components/LoadingSpinner';
 import Skeleton from '../shared/components/Skeleton';
-import ErrorState from '../shared/components/ErrorState';
 import useBackgroundRefresh from '../shared/hooks/useBackgroundRefresh';
 import { buildDataHealthRows, formatPipelineTime, type PipelineStatus } from './dataHealthPresentation';
 
@@ -141,7 +139,6 @@ export default function DataHealthPage() {
       }).length
     : 0;
   const stage8Total = Object.keys(STAGE8_TARGETS).length;
-  const stage8AllPass = stage8Passes === stage8Total;
   const latestOfficialCollection = officialCollection?.[0] ?? null;
   const overallHealth = (() => {
     if (opsStatus === 'critical') {

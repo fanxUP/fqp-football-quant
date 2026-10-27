@@ -21,7 +21,6 @@ from scripts.agent_storage import (
     list_review_gates,
     list_stale_tasks,
     list_task_artifacts,
-    recover_interrupted_job_runs,
     resolve_review_gate,
     retry_job_run,
     seed_agent_registry,
@@ -261,9 +260,18 @@ class TestStaleAgentTasks:
 
 class TestRetryJobRun:
     def test_retries_failed_job(self):
-        mock_conn, mock_cur = _mock_conn(fetchone=[7])
-        assert retry_job_run(mock_conn, 7, max_retries=2) is True
-        assert "status = 'running'" in mock_cur.execute.call_args[0][0]
+        mock_conn, mock_cur = _mock_conn(fetchone=[8])
+        assert retry_job_run(mock_conn, 7, max_retries=2) == 8
+        query = mock_cur.execute.call_args.args[0]
+        assert "INSERT INTO ai_job_runs" in query
+        assert "retry_of_run_id" in query
+        assert "ON CONFLICT" in query
+        assert "UPDATE ai_job_runs" not in query
+        mock_conn.commit.assert_called_once()
+
+    def test_unavailable_retry_returns_no_new_execution_id(self):
+        mock_conn, _ = _mock_conn(fetchone=None)
+        assert retry_job_run(mock_conn, 7) is None
         mock_conn.commit.assert_called_once()
 
     def test_rejects_negative_budget(self):
@@ -435,29 +443,18 @@ class TestListAuditLogs:
 
 
 class TestJobRuns:
-    def test_recovers_interrupted_runs_for_owned_job_codes(self):
-        mock_conn, mock_cur = _mock_conn(rowcount=2)
-
-        recovered = recover_interrupted_job_runs(
-            mock_conn,
-            ["official_odds_snapshot"],
-            reason="worker restarted",
-        )
-
-        assert recovered == 2
-        query, params = mock_cur.execute.call_args.args
-        assert "status = 'failed'" in query
-        assert "job_code = ANY" in query
-        assert params == ("worker restarted", ["official_odds_snapshot"])
+    def test_finish_does_not_claim_to_change_a_terminal_or_missing_run(self):
+        mock_conn, _ = _mock_conn(rowcount=0)
+        assert finish_job_run(mock_conn, 100, "failed", error="late error") is False
         mock_conn.commit.assert_called_once()
 
-    def test_recovery_skips_database_work_without_owned_jobs(self):
+    def test_finish_only_updates_running_run_and_uses_wall_clock(self):
         mock_conn, mock_cur = _mock_conn()
-
-        assert recover_interrupted_job_runs(mock_conn, []) == 0
-
-        mock_cur.execute.assert_not_called()
-        mock_conn.commit.assert_not_called()
+        assert finish_job_run(mock_conn, 100, "completed") is True
+        query = mock_cur.execute.call_args.args[0]
+        assert "status = 'running'" in query
+        assert "clock_timestamp()" in query
+        assert "2147483647" in query
 
     def test_start_job_run_returns_id(self):
         mock_conn, mock_cur = _mock_conn(fetchone=[100])

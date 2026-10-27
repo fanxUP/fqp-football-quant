@@ -543,14 +543,19 @@ def get_prediction_model_overview():
     """Return read-only runtime state for the supported prediction models."""
     with get_db() as conn:
         with conn.cursor() as cur:
+            # Match the indexed latest-identity read used by prediction summaries.
+            # The compatibility view ranks the entire legacy history before this
+            # endpoint can aggregate its few supported model versions.
+            cur.execute("SET LOCAL jit = off")
+            latest_ctes = latest_prediction_ctes(filter_match=False)
             cur.execute(
-                """
-                WITH current_versions AS (
+                f"""
+                WITH RECURSIVE current_versions AS (
                     SELECT DISTINCT ON (model_name)
                            id, model_name, version, is_active,
                            training_start_date, training_end_date, created_at
                     FROM model_versions
-                    WHERE model_name = ANY(%s)
+                    WHERE model_name = ANY(%(model_names)s)
                     ORDER BY model_name, is_active DESC, created_at DESC, id DESC
                 ), current_calibrations AS (
                     SELECT DISTINCT ON (model_name, play_type)
@@ -561,11 +566,24 @@ def get_prediction_model_overview():
                     FROM probability_calibration_profiles
                     WHERE is_active = true
                     ORDER BY model_name, play_type, created_at DESC, id DESC
+                ), {latest_ctes}, latest_prediction_ids AS (
+                    SELECT mapped.prediction_id AS id
+                    FROM latest_groups groups
+                    JOIN model_prediction_group_options mapped
+                      ON mapped.group_id = groups.group_id
+                    UNION ALL
+                    SELECT id FROM legacy_latest
                 ), prediction_stats AS MATERIALIZED (
                     SELECT mp.model_version_id,
                            COUNT(DISTINCT mp.match_id) AS valid_prediction_match_count,
                            MAX(mp.predict_time) AS latest_prediction_at
-                    FROM model_prediction_latest_rows mp
+                    FROM latest_prediction_ids latest
+                    JOIN LATERAL (
+                        SELECT p.model_version_id, p.match_id, p.predict_time,
+                               p.validation_status
+                        FROM model_predictions p
+                        WHERE p.id = latest.id OFFSET 0
+                    ) mp ON true
                     JOIN current_versions cv ON cv.id = mp.model_version_id
                     WHERE mp.validation_status = 'valid'
                     GROUP BY mp.model_version_id
@@ -581,7 +599,7 @@ def get_prediction_model_overview():
                 LEFT JOIN current_calibrations cp
                   ON cp.model_name = cv.model_name AND cp.play_type = 'spf'
                 """,
-                (list(MODEL_CODES),),
+                {"model_names": list(MODEL_CODES)},
             )
             rows = cur.fetchall()
 

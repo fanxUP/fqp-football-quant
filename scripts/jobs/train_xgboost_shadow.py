@@ -49,6 +49,7 @@ def _run_with_connection(conn: Any) -> dict[str, Any]:
         missing_message="xgboost shadow model version is not available",
         store_profile=_store_profile,
         save_artifact=lambda classifier, path: classifier.save_model(str(path)),
+        artifact_format="xgboost_json",
     )
 
 

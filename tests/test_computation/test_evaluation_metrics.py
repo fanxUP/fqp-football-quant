@@ -2,9 +2,73 @@
 
 from __future__ import annotations
 
+import subprocess
+import sys
+from pathlib import Path
+
 import pytest
 
-from scripts.evaluation_metrics import brier_score, log_loss_score, rps_score
+from scripts.evaluation_metrics import brier_score, compute_match_metrics, log_loss_score, rps_score
+
+
+def test_evaluation_script_can_start_outside_project_without_pythonpath(tmp_path):
+    script = Path(__file__).resolve().parents[2] / "scripts/evaluation_metrics.py"
+    completed = subprocess.run(
+        [sys.executable, "-I", str(script)],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        timeout=15,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr
+    assert "Brier Score:" in completed.stdout
+
+
+@pytest.mark.parametrize("bad", [None, -0.1, 1.1, float("nan"), float("inf"), "bad", True])
+def test_complete_evaluation_rejects_invalid_model_probability(bad):
+    with pytest.raises(ValueError):
+        compute_match_metrics({"3": bad, "1": 0.2, "0": 0.1}, {}, "3")
+
+
+@pytest.mark.parametrize(
+    "probs",
+    [{"3": 0.7}, {"3": 0.7, "1": 0.7, "0": 0.7}, {"3": 0.7, "1": 0.2, "0": 0.1, "unknown": 0.0}],
+)
+def test_complete_evaluation_rejects_incomplete_or_incoherent_model_vector(probs):
+    with pytest.raises(ValueError):
+        compute_match_metrics(probs, {}, "3")
+
+
+@pytest.mark.parametrize("bad", [None, -0.1, 1.1, float("nan"), float("inf"), "bad", True])
+def test_missing_market_does_not_block_independent_evaluation(bad):
+    model = {"3": 0.7, "1": 0.2, "0": 0.1}
+    closing = {"3": 0.5, "1": 0.3, "0": 0.2}
+    result = compute_match_metrics(
+        model, {"3": bad, "1": 0.35, "0": 0.25}, "3", closing_market_probs=closing
+    )
+    assert result["brier_score"] == 0.14
+    assert result["log_loss"] > 0 and result["rps"] >= 0
+    assert result["market_probability"] is None
+    assert result["clv_score"] is result["market_probability_move"] is None
+    assert all(result[f"gap_{option}"] is None for option in model)
+    assert result["closing_edge"] == 0.2
+
+
+@pytest.mark.parametrize("bad", [None, 0.0, 1.0, -1.0, float("nan"), float("inf"), "bad"])
+def test_bad_optional_closing_odds_stay_unknown(bad):
+    result = compute_match_metrics({"3": 0.7, "1": 0.2, "0": 0.1}, {}, "3", closing_odds={"3": bad})
+    assert result["official_sp"] is result["ev"] is None
+    assert result["brier_score"] == 0.14
+
+
+def test_probability_boundaries_and_rounding_are_preserved():
+    perfect = compute_match_metrics(
+        {"3": 1.0, "1": 0.0, "0": 0.0}, {"3": 0.0, "1": 0.6, "0": 0.4}, "3"
+    )
+    assert perfect["brier_score"] == 0 and perfect["market_probability"] == 0
+    rounded = compute_match_metrics({option: 0.333333 for option in ("3", "1", "0")}, {}, "1")
+    assert rounded["model_probability"] == 0.333333  # Never silently renormalize.
 
 
 class TestBrierScore:

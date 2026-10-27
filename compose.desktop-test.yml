@@ -2,6 +2,7 @@ x-app-environment: &app-environment
   FQP_MODE: local_development
   FQP_AUTH_MODE: session
   FQP_ADMIN_PASSWORD_HASH: "$$2b$$12$$7KBgTUvuPTHko3vnYDualuRizQa6ARItKWMzMPxnjuV2drbpJ/.P."
+  FQP_ADMIN_PASSWORD_FILE: /app/.runtime/admin-password.hash
   FQP_SESSION_TTL: "86400"
   FQP_PROVIDER_ENCRYPTION_KEY: ${FQP_PROVIDER_ENCRYPTION_KEY:?set in .env}
   FQP_DAILY_BUDGET: "500"

@@ -67,7 +67,7 @@ function DiagnosticResult({ tab, data, language }: { tab: DiagnosticTab; data: M
   }
   if (tab === 'comparison') {
     const comparison = data as ModelCompareData;
-    return <div className="model-metrics-table-wrap"><table className="model-metrics-table" aria-label={translate('模型横向对比')}><thead><tr><th>{translate('模型')}</th><th>n</th><th>Brier ↓</th><th>Log Loss ↓</th><th>{translate('市场概率变化')}</th><th>{translate('模型收盘优势')}</th></tr></thead><tbody>{comparison.models.map((model) => <tr key={model.name}><th scope="row">{translate(modelNameLabel(model.name))}</th><td>{model.n_predictions}</td><td>{model.brier.toFixed(4)}</td><td>{model.log_loss.toFixed(4)}</td><td>{model.market_probability_move?.toFixed(4) ?? '—'}</td><td>{model.closing_edge?.toFixed(4) ?? '—'}</td></tr>)}</tbody></table></div>;
+    return <div className="model-metrics-table-wrap"><table className="model-metrics-table" aria-label={translate('模型横向对比')}><thead><tr><th>{translate('模型')}</th><th>n</th><th>Brier ↓</th><th>Log Loss ↓</th><th>{translate('市场概率变化')}</th><th>{translate('模型收盘优势')}</th></tr></thead><tbody>{comparison.models.map((model) => <tr key={model.name}><th scope="row">{translate(modelNameLabel(model.name))}</th><td>{model.n_predictions}</td><td>{model.brier?.toFixed(4) ?? '—'}</td><td>{model.log_loss?.toFixed(4) ?? '—'}</td><td>{model.market_probability_move?.toFixed(4) ?? '—'}</td><td>{model.closing_edge?.toFixed(4) ?? '—'}</td></tr>)}</tbody></table></div>;
   }
   const combos = (data as { recommendations: ModelPlayTypeRecommendation[] }).recommendations ?? [];
   if (combos.length === 0) return <div className="model-panel-state">{translate('没有达到 30 场门槛的模型玩法组合')}</div>;

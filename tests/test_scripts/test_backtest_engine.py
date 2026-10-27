@@ -17,6 +17,105 @@ from scripts.backtest_engine import (
 from scripts.training_manifest import CandidateMatch
 
 
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        (field, value)
+        for field in ("step_days", "train_window_days", "test_window_days")
+        for value in (0, -1, 0.5, True, "30", float("inf"), 36501)
+    ]
+    + [
+        ("walk_forward", "false"),
+        ("walk_forward", 1),
+        ("time_start", "2026-02-30"),
+        ("time_end", "20260101"),
+        ("stake_per_bet", 0),
+        ("stake_per_bet", -1),
+        ("stake_per_bet", True),
+        ("stake_per_bet", float("nan")),
+        ("min_model_prob", 1.1),
+        ("confidence_min", -0.1),
+        ("odds_min", 1),
+        ("ev_min", float("inf")),
+        ("signal_strength", "typo"),
+        ("model_names", "maher"),
+        ("model_ids", [True]),
+        ("league_ids", [1]),
+        ("risk_levels", ["low"]),
+    ],
+)
+def test_invalid_backtest_configuration_is_rejected(field, value):
+    with pytest.raises(ValueError, match=field):
+        BacktestConfig(**{field: value})
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [
+        {"time_start": "2026-02-01", "time_end": "2026-01-01"},
+        {"odds_min": 3, "odds_max": 2},
+        {"ev_min": 1, "ev_max": 0},
+    ],
+)
+def test_backtest_rejects_reversed_ranges(fields):
+    with pytest.raises(ValueError):
+        BacktestConfig(**fields)
+
+
+def test_mutated_configuration_is_rejected_before_creating_a_run():
+    cfg = BacktestConfig()
+    cfg.step_days = 0
+    conn = MagicMock()
+    with pytest.raises(ValueError, match="step_days"):
+        run_backtest_from_config(conn, cfg)
+    conn.cursor.assert_not_called()
+    conn.commit.assert_not_called()
+
+
+def test_backtest_window_work_is_bounded_before_allocating():
+    engine = BacktestEngine(object(), BacktestConfig(train_window_days=1, step_days=1))
+    with pytest.raises(ValueError, match="窗口"):
+        engine._build_windows([date(2020, 1, 1), date(2026, 1, 1)])
+
+
+def test_backtest_valid_config_keeps_zero_thresholds_and_default_windows():
+    cfg = BacktestConfig(
+        confidence_min=0,
+        min_model_prob=0,
+        ev_min=0,
+        step_days=1,
+        train_window_days=1,
+        test_window_days=1,
+    )
+    windows = BacktestEngine(object(), cfg)._build_windows([date(2026, 1, 1), date(2026, 1, 5)])
+    assert len(windows) == 3
+    assert [w["test_start"] for w in windows] == ["2026-01-03", "2026-01-04", "2026-01-05"]
+
+
+def test_model_filter_without_explicit_dates_is_valid():
+    assert BacktestConfig(model_names=["maher_poisson"], play_types=["spf"]).time_start is None
+
+
+def test_backtest_name_respects_existing_database_column_limit():
+    assert len(BacktestConfig(name="名" * 255).name) == 255
+    with pytest.raises(ValueError, match="name"):
+        BacktestConfig(name="名" * 256)
+
+
+def test_explicit_excessive_window_range_is_rejected_before_run_creation():
+    with pytest.raises(ValueError, match="窗口"):
+        BacktestConfig(
+            time_start="2020-01-01", time_end="2026-01-01", train_window_days=1, step_days=1
+        )
+
+
+def test_window_dates_near_year_9999_do_not_overflow():
+    cfg = BacktestConfig(train_window_days=1, test_window_days=90, step_days=36500)
+    windows = BacktestEngine(object(), cfg)._build_windows([date(9999, 12, 28), date.max])
+    assert len(windows) == 1
+    assert windows[0]["test_end"] == "9999-12-31"
+
+
 def _settled_row(option_code: str, probability: float, ev: float) -> dict:
     return {
         "match_id": 101,
@@ -53,8 +152,11 @@ def test_backtest_query_maps_each_play_type_to_its_own_result() -> None:
     sql, _params = engine._build_query()
     normalized = " ".join(sql.split())
 
-    assert "WHEN mp.play_type = 'spf' THEN COALESCE" in normalized
+    assert "WHEN mp.play_type = 'spf' THEN spf.actual_result" in normalized
     assert "r.spf_result" in normalized
+    assert "LEFT JOIN settled_spf_results" in normalized
+    assert "r.full_home_goals >= 0" in normalized
+    assert "r.full_away_goals >= 0" in normalized
     assert "WHEN mp.play_type = 'rqspf'" in normalized
     assert "r.rqspf_result" in normalized
     assert "WHEN mp.play_type IN ('zjq', 'total_goals') THEN r.total_goals_result" in normalized
@@ -104,6 +206,51 @@ def test_backtest_missing_uncalibrated_confidence_stays_unknown() -> None:
     assert bets[0].confidence is None
 
 
+@pytest.mark.parametrize("bad", [None, -0.1, 1.1, float("nan"), float("inf"), "bad", True])
+def test_backtest_skips_unusable_model_probability_without_blocking_other_matches(bad):
+    engine = BacktestEngine(object(), BacktestConfig(signal_strength="all"))
+    good = _settled_row("3", 0.7, 0.1)
+    invalid = {**good, "match_id": 102, "model_probability": bad}
+    bets = engine._simulate_bets([invalid, good], "2026-07-01", "2026-07-31")
+    assert [bet.match_id for bet in bets] == [101]
+
+
+@pytest.mark.parametrize("bad", [None, -0.1, 1.1, float("nan"), float("inf"), "bad", True])
+def test_backtest_missing_market_keeps_profit_and_quality_without_invented_edge(bad):
+    engine = BacktestEngine(object(), BacktestConfig(signal_strength="all"))
+    good = _settled_row("3", 0.7, 0.1)
+    missing = {**good, "match_id": 102, "market_probability": bad}
+    bets = engine._simulate_bets([missing, good], "2026-07-01", "2026-07-31")
+    assert len(bets) == 2 and bets[0].market_prob is None
+    result = engine.compute_metrics(bets)
+    assert result["total_profit"] == 4 and result["brier_score"] == 0.09
+    assert result["clv"] is result["probability_edge"] is None
+
+
+@pytest.mark.parametrize(
+    "field,bad",
+    [("sp_value", value) for value in (None, 0, 1, -1, float("nan"), float("inf"))]
+    + [("ev", value) for value in (None, float("nan"), float("inf"), "bad")],
+)
+def test_backtest_skips_unusable_odds_or_ev(field, bad):
+    engine = BacktestEngine(object(), BacktestConfig(signal_strength="all"))
+    row = {**_settled_row("3", 0.7, 0.1), field: bad}
+    assert engine._simulate_bets([row], "2026-07-01", "2026-07-31") == []
+
+
+def test_backtest_preserves_zero_market_probability_and_unknown_confidence():
+    engine = BacktestEngine(object(), BacktestConfig(signal_strength="all"))
+    row = {
+        **_settled_row("3", 1.0, 0.0),
+        "market_probability": 0.0,
+        "confidence_score": float("nan"),
+    }
+    bets = engine._simulate_bets([row], "2026-07-01", "2026-07-31")
+    assert len(bets) == 1 and bets[0].market_prob == 0
+    assert bets[0].confidence is None
+    assert engine.compute_metrics(bets)["probability_edge"] == 1.0
+
+
 def test_drawdown_is_measured_from_a_real_initial_bankroll() -> None:
     bets = [
         BetRecord(1, "2026-07-01", "elo", "3", 0.5, 0.4, 3.0, 1.0, "3", 2.0, 0.1, 0.8),
@@ -122,13 +269,13 @@ def test_drawdown_is_measured_from_a_real_initial_bankroll() -> None:
 def test_backtest_config_records_current_methodology_version() -> None:
     config = BacktestConfig(name="versioned-backtest")
 
-    assert config.to_dict()["methodology_version"] == 4
+    assert config.to_dict()["methodology_version"] == 5
 
 
 def test_legacy_config_is_upgraded_when_rerun() -> None:
     config = BacktestConfig.from_dict({"name": "legacy-rerun", "methodology_version": 1})
 
-    assert config.to_dict()["methodology_version"] == 4
+    assert config.to_dict()["methodology_version"] == 5
 
 
 def test_backtest_run_is_marked_failed_when_execution_crashes() -> None:
@@ -144,6 +291,7 @@ def test_backtest_run_is_marked_failed_when_execution_crashes() -> None:
 
     executed_sql = [" ".join(call.args[0].split()) for call in cursor.execute.call_args_list]
     assert any("SET status = 'failed'" in sql for sql in executed_sql)
+    conn.rollback.assert_called_once()
 
 
 def _research_rows() -> list[ResearchMatch]:
@@ -285,3 +433,21 @@ def test_research_report_exposes_ambiguous_team_identity() -> None:
     audit = next(item for item in report["team_identity_audit"] if item["match_id"] == 88)
     assert audit["home"]["team_name"] == "同名球队"
     assert audit["home"]["selected_team_id"] is None
+
+
+@pytest.mark.parametrize(
+    "confidence", [None, float("nan"), float("inf"), float("-inf"), -0.1, 1.1, 0.49, True]
+)
+def test_explicit_confidence_min_rejects_unknown_invalid_or_below_threshold(confidence):
+    engine = BacktestEngine(object(), BacktestConfig(signal_strength="all", confidence_min=0.5))
+    row = {**_settled_row("3", 0.52, 0.12), "confidence_score": confidence}
+    assert engine._simulate_bets([row], "2026-07-01", "2026-07-31") == []
+
+
+@pytest.mark.parametrize("confidence", [0.5, 0.8, 1.0])
+def test_explicit_confidence_min_includes_valid_boundary(confidence):
+    engine = BacktestEngine(object(), BacktestConfig(signal_strength="all", confidence_min=0.5))
+    row = {**_settled_row("3", 0.52, 0.12), "confidence_score": confidence}
+    bets = engine._simulate_bets([row], "2026-07-01", "2026-07-31")
+    assert len(bets) == 1
+    assert bets[0].confidence == confidence

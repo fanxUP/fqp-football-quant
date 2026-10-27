@@ -6,18 +6,22 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from apps.backend.src.db import get_db
-from scripts.agent_storage import finish_job_run, recover_interrupted_job_runs, start_job_run
+from scripts.agent_storage import finish_job_run, start_job_run
 
 JOB_CODE = "refresh_prediction_count"
 COUNT_SCOPE = "valid_prematch_history_v1"
 MAX_AGE = timedelta(minutes=45)
 
 
-def latest_prediction_ctes(*, filter_match: bool) -> str:
+def latest_prediction_ctes(*, filter_match: bool, filter_match_ids: bool = False) -> str:
     """Seek legacy match/version/play keys before enumerating uncovered options."""
     group_match = "AND g.match_id = %(match_id)s" if filter_match else ""
     key_match = "WHERE p.match_id = %(match_id)s" if filter_match else ""
     next_match = "AND p.match_id = %(match_id)s" if filter_match else ""
+    if filter_match_ids:
+        group_match = "AND g.match_id = ANY(%(match_ids)s::bigint[])"
+        key_match = "WHERE p.match_id = ANY(%(match_ids)s::bigint[])"
+        next_match = "AND p.match_id = ANY(%(match_ids)s::bigint[])"
     return f"""
         latest_groups AS MATERIALIZED (
             SELECT DISTINCT ON (g.match_id, mv.model_name, g.play_type)
@@ -129,10 +133,9 @@ def refresh_prediction_count() -> dict[str, Any]:
                 if not cur.fetchone()[0]:
                     return {"status": "skipped", "reason": "refresh_already_running"}
             # Keep the lock on the count connection while the existing audit
-            # helpers commit on a separate connection. Only its lock owner may
-            # recover an interrupted execution of this job.
+            # helpers commit on a separate connection. Historical audit records
+            # have no ownership protocol, so do not infer their interruption.
             with get_db() as audit_conn:
-                recover_interrupted_job_runs(audit_conn, [JOB_CODE])
                 run_id = start_job_run(
                     audit_conn,
                     {

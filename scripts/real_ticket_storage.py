@@ -1,14 +1,17 @@
 """Stage 5 storage layer: real tickets, settlements, reviews, error analysis.
 
 Follows the same psycopg2 CRUD pattern as model_storage.py and official_storage.py.
-All functions accept conn: Any and call conn.commit() internally.
+Write functions commit by default; composite operations suppress inner commits.
 """
 
 from __future__ import annotations
 
 import json
-from decimal import ROUND_HALF_UP, Decimal
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import Any
+
+from psycopg2 import DataError
+from psycopg2.errors import ForeignKeyViolation
 
 from scripts.business_time import utc_now_iso
 
@@ -57,7 +60,7 @@ def _audit_log(
 # ---------------------------------------------------------------------------
 
 
-def create_real_ticket(conn: Any, ticket: dict) -> int | None:
+def create_real_ticket(conn: Any, ticket: dict, *, commit: bool = True) -> int | None:
     """Insert a real ticket. Returns the new ticket id."""
     sql = """
         INSERT INTO real_tickets (
@@ -94,8 +97,77 @@ def create_real_ticket(conn: Any, ticket: dict) -> int | None:
     with conn.cursor() as cur:
         cur.execute(sql, params)
         row = cur.fetchone()
-    conn.commit()
+    if commit:
+        conn.commit()
     return row[0] if row else None
+
+
+class TicketInputError(ValueError):
+    """The submitted confirmed ticket cannot be stored as a complete purchase."""
+
+
+def _validate_ticket_purchase(ticket: dict, items: list[dict]) -> None:
+    if not isinstance(ticket, dict):
+        raise TicketInputError("ticket 必须是对象")
+    if not isinstance(items, list) or not items:
+        raise TicketInputError("彩票必须包含至少一条明细")
+
+    def nonnegative(value: Any, field: str) -> None:
+        try:
+            number = Decimal(str(value))
+        except InvalidOperation, ValueError:
+            raise TicketInputError(f"{field} 必须是有效非负数") from None
+        if not number.is_finite() or number < 0:
+            raise TicketInputError(f"{field} 必须是有效非负数")
+
+    def text(value: Any, field: str, length: int) -> None:
+        if not isinstance(value, str) or not value.strip() or len(value) > length:
+            raise TicketInputError(f"{field} 必须是非空字符串，且不超过 {length} 字符")
+
+    nonnegative(ticket.get("total_amount", 0), "total_amount")
+    if ticket.get("theoretical_max_prize") is not None:
+        nonnegative(ticket["theoretical_max_prize"], "theoretical_max_prize")
+    multiple = ticket.get("multiple", 1)
+    if type(multiple) is not int or multiple < 1:
+        raise TicketInputError("multiple 必须是正整数")
+    text(ticket.get("pass_type", "single"), "pass_type", 64)
+    for index, item in enumerate(items, 1):
+        if not isinstance(item, dict):
+            raise TicketInputError(f"第 {index} 条明细必须是对象")
+        match_id = item.get("match_id")
+        if type(match_id) is not int or match_id < 1:
+            raise TicketInputError(f"第 {index} 条明细必须包含有效比赛编号")
+        text(item.get("play_type", "spf"), f"第 {index} 条 play_type", 32)
+        text(item.get("option_code"), f"第 {index} 条 option_code", 64)
+        nonnegative(item.get("sp_value", 0), f"第 {index} 条 sp_value")
+
+
+def create_real_ticket_with_items(
+    conn: Any, ticket: dict, items: list[dict]
+) -> tuple[int, list[int]]:
+    """Own one transaction for a complete purchase; never deduplicate purchases.
+
+    Call with a non-autocommit connection containing no unrelated writes.
+    Both standalone insert functions retain their default commit behavior.
+    """
+    if conn.autocommit is True:
+        raise RuntimeError("Complete ticket creation requires a transaction")
+    try:
+        _validate_ticket_purchase(ticket, items)
+        ticket_id = create_real_ticket(conn, ticket, commit=False)
+        if ticket_id is None:
+            raise RuntimeError("Ticket insert returned no identifier")
+        item_ids = create_real_ticket_items_batch(conn, ticket_id, items, commit=False)
+        if len(item_ids) != len(items):
+            raise RuntimeError("Not all ticket items were inserted")
+        conn.commit()
+        return ticket_id, item_ids
+    except (DataError, ForeignKeyViolation) as exc:
+        conn.rollback()
+        raise TicketInputError("彩票字段无效，或引用的比赛、赔率记录不存在") from exc
+    except Exception:
+        conn.rollback()
+        raise
 
 
 def update_real_ticket(conn: Any, ticket_id: int, updates: dict) -> bool:
@@ -268,7 +340,9 @@ def delete_real_ticket(conn: Any, ticket_id: int) -> bool:
 # ---------------------------------------------------------------------------
 
 
-def create_real_ticket_items_batch(conn: Any, ticket_id: int, items: list[dict]) -> list[int]:
+def create_real_ticket_items_batch(
+    conn: Any, ticket_id: int, items: list[dict], *, commit: bool = True
+) -> list[int]:
     """Batch-insert items for a real ticket. Returns list of new item ids."""
     sql = """
         INSERT INTO real_ticket_items (
@@ -305,7 +379,8 @@ def create_real_ticket_items_batch(conn: Any, ticket_id: int, items: list[dict])
             row = cur.fetchone()
             if row:
                 ids.append(row[0])
-    conn.commit()
+    if commit:
+        conn.commit()
     return ids
 
 

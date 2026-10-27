@@ -3,11 +3,26 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from scripts.agents.task_queue import check_job_dependencies, start_tracked_job
+from scripts.agents.task_queue import (
+    check_job_dependencies,
+    retry_tracked_job,
+    start_tracked_job,
+)
 
 
 def test_empty_dependencies_are_allowed():
     check_job_dependencies([])
+
+
+def test_retry_hands_the_new_execution_id_to_the_caller():
+    conn = MagicMock()
+    with (
+        patch("scripts.agents.task_queue.get_db") as get_db,
+        patch("scripts.agents.task_queue.retry_job_run", return_value=43) as retry,
+    ):
+        get_db.return_value.__enter__.return_value = conn
+        assert retry_tracked_job(42, max_retries=1) == 43
+        retry.assert_called_once_with(conn, 42, max_retries=1)
 
 
 def test_latest_failed_dependency_blocks():
@@ -49,7 +64,7 @@ def test_start_tracked_job_records_dependencies():
         ]
 
 
-def test_start_tracked_job_recovers_previous_interrupted_run():
+def test_generic_start_does_not_infer_interruption_from_matching_job_code():
     conn = MagicMock()
     cur = conn.cursor.return_value.__enter__.return_value
     cur.fetchone.return_value = [13]
@@ -59,7 +74,17 @@ def test_start_tracked_job_recovers_previous_interrupted_run():
         get_db.return_value.__enter__.return_value = conn
         assert start_tracked_job("official_odds_snapshot", "data_agent", {}) == 13
 
-    recovery_query, recovery_params = cur.execute.call_args_list[0].args
-    assert "status = 'failed'" in recovery_query
-    assert recovery_params[1] == ["official_odds_snapshot"]
-    assert cur.execute.call_count == 2
+    assert cur.execute.call_count == 1
+    assert "INSERT INTO ai_job_runs" in cur.execute.call_args.args[0]
+
+
+@pytest.mark.parametrize("job_code", ["model_prediction", "backtest"])
+def test_owned_job_start_never_recovers_jobs_without_execution_ownership(job_code):
+    conn = MagicMock()
+    cur = conn.cursor.return_value.__enter__.return_value
+    cur.fetchone.return_value = [14]
+    with patch("scripts.agents.task_queue.get_db") as get_db:
+        get_db.return_value.__enter__.return_value = conn
+        assert start_tracked_job(job_code, "model_agent", {}) == 14
+    assert cur.execute.call_count == 1
+    assert "INSERT INTO ai_job_runs" in cur.execute.call_args.args[0]

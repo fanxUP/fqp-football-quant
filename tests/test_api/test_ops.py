@@ -34,6 +34,54 @@ def _mock_db_conn(fetchall=None, fetchone=None, description=None):
 
 
 class TestBacktestsEndpoint:
+    @pytest.mark.parametrize(
+        "body",
+        [
+            {"step_days": 0},
+            {"step_days": True},
+            {"step_days": 0.5},
+            {"time_start": "2026-02-02", "time_end": "2026-01-01"},
+            {"league_ids": [1]},
+            {"risk_levels": ["low"]},
+            {"stake_per_bet": 0},
+            {"dry_run": "false"},
+            {"ev_max": -2},
+            {"unexpected": True},
+            {"dry_run": True, "step_days": 0},
+            {"name": "名" * 256},
+        ],
+    )
+    def test_invalid_request_is_422_before_model_lookup_or_execution(self, client, body):
+        with (
+            patch("apps.backend.src.routers.backtests.get_db") as database,
+            patch("apps.backend.src.routers.backtests.run_config") as execute,
+        ):
+            response = client.post("/api/backtests", json=body)
+        assert response.status_code == 422
+        database.assert_not_called()
+        execute.assert_not_called()
+
+    @pytest.mark.parametrize("busy", [False, True])
+    def test_manual_creation_uses_shared_owned_execution(self, client, busy):
+        result = (
+            {"status": "skipped", "reason": "backtest_execution_in_progress"}
+            if busy
+            else {"status": "ok", "run_id": 9, "aggregate": {"fixed": {"n_bets": 3}}}
+        )
+        with (
+            patch("apps.backend.src.routers.backtests.get_db") as database,
+            patch("apps.backend.src.routers.backtests.run_config", return_value=result) as run,
+        ):
+            response = client.post("/api/backtests", json={"model_names": ["fixed"]})
+        assert response.status_code == 200
+        database.assert_not_called()
+        assert run.call_args.args[0].model_names == ["fixed"]
+        assert response.json()["status"] == result["status"]
+        if busy:
+            assert response.json() == result
+        else:
+            assert response.json()["run_id"] == 9
+
     def test_lists_backtests_empty(self, client):
         mock_conn, mock_cur = _mock_db_conn(
             fetchall=[],

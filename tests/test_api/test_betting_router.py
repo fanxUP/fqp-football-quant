@@ -164,16 +164,12 @@ def test_create_real_betting_ticket_maps_agent_source(monkeypatch):
     created: dict[str, object] = {}
     inserted_items: list[dict] = []
 
-    def fake_create_real_ticket(conn, ticket):
+    def fake_create_real_ticket(conn, ticket, items):
         created.update(ticket)
-        return 88
-
-    def fake_create_items(conn, ticket_id, items):
         inserted_items.extend(items)
-        return [1]
+        return 88, [1]
 
-    monkeypatch.setattr(betting, "create_real_ticket", fake_create_real_ticket)
-    monkeypatch.setattr(betting, "create_real_ticket_items_batch", fake_create_items)
+    monkeypatch.setattr(betting, "create_real_ticket_with_items", fake_create_real_ticket)
 
     req = betting.CreateBettingTicketRequest(
         source="real-agent",
@@ -204,14 +200,11 @@ def test_create_real_betting_ticket_maps_agent_source(monkeypatch):
 def test_create_real_betting_ticket_attaches_ocr_confirmation(monkeypatch):
     created: dict[str, object] = {}
 
-    def fake_create_real_ticket(conn, ticket):
+    def fake_create_real_ticket(conn, ticket, items):
         created.update(ticket)
-        return 89
+        return 89, [1]
 
-    monkeypatch.setattr(betting, "create_real_ticket", fake_create_real_ticket)
-    monkeypatch.setattr(
-        betting, "create_real_ticket_items_batch", lambda conn, ticket_id, items: [1]
-    )
+    monkeypatch.setattr(betting, "create_real_ticket_with_items", fake_create_real_ticket)
 
     req = betting.CreateBettingTicketRequest(
         source="real-user",
@@ -247,10 +240,9 @@ def test_create_real_betting_ticket_persists_canonical_pass_type(monkeypatch):
 
     monkeypatch.setattr(
         betting,
-        "create_real_ticket",
-        lambda conn, ticket: created.update(ticket) or 90,
+        "create_real_ticket_with_items",
+        lambda conn, ticket, items: (created.update(ticket) or 90, [1]),
     )
-    monkeypatch.setattr(betting, "create_real_ticket_items_batch", lambda *args: [1])
 
     req = betting.CreateBettingTicketRequest(
         source="real-user",

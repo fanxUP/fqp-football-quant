@@ -122,19 +122,6 @@ def _load_prediction_feature_quality(
         return {int(row[0]): float(row[1] or 0) for row in cur.fetchall()}
 
 
-def _preferred_direction_by_market(
-    predictions: list[tuple[Any, ...]],
-) -> dict[tuple[int, str], tuple[str, float]]:
-    """Return the model's strongest direction inside each play type."""
-    preferred: dict[tuple[int, str], tuple[str, float]] = {}
-    for prediction in predictions:
-        key = (prediction[1], prediction[3])
-        probability = float(prediction[5] or 0)
-        if key not in preferred or probability > preferred[key][1]:
-            preferred[key] = (prediction[4], probability)
-    return preferred
-
-
 def _select_daily_candidates(candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Choose one transparent model recommendation per match.
 

@@ -1,12 +1,10 @@
 import { useEffect, useState } from 'react';
-import { api } from '../core/apiClient';
-import { ApiError } from '../core/types';
 import PageHeader from '../shared/components/PageHeader';
 import Card from '../shared/components/Card';
 import DataTable, { type Column } from '../shared/components/DataTable';
 import StatusBadge from '../shared/components/StatusBadge';
 import ErrorState from '../shared/components/ErrorState';
-import { actionLabel, agentLabel, agentTypeLabel, permissionLevelLabel, reviewStatusLabel, riskLabel, statusLabel } from '../shared/constants';
+import { agentLabel, agentTypeLabel, permissionLevelLabel, reviewStatusLabel, riskLabel, statusLabel } from '../shared/constants';
 import { formatTimestamp } from '../shared/utils';
 
 type TabKey = 'tasks' | 'jobs' | 'stale' | 'staleTasks' | 'gates' | 'audit';

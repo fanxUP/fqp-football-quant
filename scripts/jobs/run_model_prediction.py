@@ -12,8 +12,10 @@ Odds processing chain:
 
 from __future__ import annotations
 
+import logging
 import math
 import uuid
+from contextlib import nullcontext
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -90,6 +92,7 @@ from scripts.poisson_model import (
 )
 from scripts.prediction_input_fence import capture_prediction_input_fence
 from scripts.prediction_input_updates import InputUpdateSuperseded
+from scripts.prediction_job_execution import EXECUTION_PROTOCOL, prediction_execution
 from scripts.random_forest_shadow_model import (
     load_probabilities as load_random_forest_shadow_probabilities,
 )
@@ -100,12 +103,14 @@ from scripts.xgboost_shadow_model import load_probabilities as load_xgboost_shad
 # Negative means low scores (0:0, 1:0, 0:1, 1:1) are less common than
 # independent Poisson predicts.
 DEFAULT_RHO = -0.08
+logger = logging.getLogger(__name__)
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 _PREDICTION_SOURCE_PATHS = (
     "scripts/jobs/run_model_prediction.py",
     "apps/backend/src/db.py",
     "apps/backend/src/deployment_version.py",
     "scripts/agents/task_queue.py",
+    "scripts/prediction_job_execution.py",
     "scripts/bayesian_form_model.py",
     "scripts/bivariate_poisson_model.py",
     "scripts/business_time.py",
@@ -449,6 +454,7 @@ def _run_impl(
     match_id: int | None = None,
     dry_run: bool = False,
     prediction_run_id: uuid.UUID | str | None = None,
+    execution_conn: Any = None,
 ) -> dict[str, Any]:
     """Run model predictions for active matches."""
     if dry_run:
@@ -456,7 +462,7 @@ def _run_impl(
 
     predict_time = _now()
 
-    with get_db() as conn:
+    with nullcontext(execution_conn) if execution_conn is not None else get_db() as conn:
         # 1. Get active model version IDs
         with conn.cursor() as cur:
             cur.execute(
@@ -788,11 +794,18 @@ def _run_impl(
 
 
 def run(match_id: int | None = None, dry_run: bool = False) -> dict[str, Any]:
-    """Run predictions and persist its multi-agent execution record."""
+    """Serialize executions before recovering or creating audit/run records."""
+    with prediction_execution() as conn:
+        if conn is None:
+            return {"status": "skipped", "reason": "prediction_execution_in_progress"}
+        return _run_owned(conn, match_id=match_id, dry_run=dry_run)
+
+
+def _run_owned(conn: Any, *, match_id: int | None, dry_run: bool) -> dict[str, Any]:
     run_id = start_tracked_job(
         "model_prediction",
         "model_agent",
-        {"dry_run": dry_run, "match_id": match_id},
+        {"dry_run": dry_run, "match_id": match_id, "execution_protocol": EXECUTION_PROTOCOL},
         dependencies=[] if dry_run else ["official_odds_snapshot", "feature_snapshot_build"],
     )
     if dry_run:
@@ -806,6 +819,7 @@ def run(match_id: int | None = None, dry_run: bool = False) -> dict[str, Any]:
 
     prediction_run_id = uuid.uuid4()
     prediction_run_created = False
+    prediction_run_finalized = False
     try:
         try:
             code_fingerprint = fingerprint_runtime_sources(_PROJECT_ROOT, _PREDICTION_SOURCE_PATHS)
@@ -816,22 +830,22 @@ def run(match_id: int | None = None, dry_run: bool = False) -> dict[str, Any]:
                 "provenance_status": "incomplete",
                 "reason": "runtime_source_fingerprint_unavailable",
             }
-        with get_db() as conn:
-            create_prediction_run(
-                conn,
-                run_id=prediction_run_id,
-                ai_job_run_id=run_id,
-                release_id=RELEASE_ID,
-                code_fingerprint=code_fingerprint,
-                model_manifest=[],
-                input_manifest={"match_id_filter": match_id},
-                provenance_status="incomplete",
-            )
+        create_prediction_run(
+            conn,
+            run_id=prediction_run_id,
+            ai_job_run_id=run_id,
+            release_id=RELEASE_ID,
+            code_fingerprint=code_fingerprint,
+            model_manifest=[],
+            input_manifest={"match_id_filter": match_id},
+            provenance_status="incomplete",
+        )
         prediction_run_created = True
         result = _run_impl(
             match_id=match_id,
             dry_run=False,
             prediction_run_id=prediction_run_id,
+            execution_conn=conn,
         )
         run_status = (
             "failed"
@@ -851,24 +865,34 @@ def run(match_id: int | None = None, dry_run: bool = False) -> dict[str, Any]:
                 or ("prediction_job_error" if run_status == "failed" else "predictions_completed")
             ),
         }
-        with get_db() as conn:
-            finalize_prediction_run(
-                conn,
-                run_id=prediction_run_id,
-                run_status=run_status,
-                error_message=result.get("error") if run_status == "failed" else None,
-                output_summary=output_summary,
-            )
+        finalize_prediction_run(
+            conn,
+            run_id=prediction_run_id,
+            run_status=run_status,
+            error_message=result.get("error") if run_status == "failed" else None,
+            output_summary=output_summary,
+        )
+        prediction_run_finalized = True
         finish_tracked_job(run_id, result.get("status", "completed"), {"result": result})
         return result
     except Exception as exc:
-        if prediction_run_created:
+        if prediction_run_finalized:
+            logger.exception("Prediction output finalized but audit completion failed: %s", run_id)
+            raise
+        try:
+            conn.rollback()
+            if prediction_run_created:
+                fail_prediction_run(conn, prediction_run_id, str(exc))
+        except Exception:
+            # Leave the audit running when the business terminal state is
+            # unknown (including a lost successful COMMIT acknowledgement).
+            # The next owner reconciles both records from persisted facts.
+            logger.exception("Prediction run failure finalization failed: %s", prediction_run_id)
+        else:
             try:
-                with get_db() as conn:
-                    fail_prediction_run(conn, prediction_run_id, str(exc))
+                finish_tracked_job(run_id, "failed", error=str(exc))
             except Exception:
-                pass
-        finish_tracked_job(run_id, "failed", error=str(exc))
+                logger.exception("Prediction job failure finalization failed: %s", run_id)
         raise
 
 

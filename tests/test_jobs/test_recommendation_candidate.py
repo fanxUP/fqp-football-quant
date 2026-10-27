@@ -12,7 +12,6 @@ from scripts.jobs.run_recommendation_candidate import (
     _market_sp_quality,
     _option_label,
     _prediction_sp_value,
-    _preferred_direction_by_market,
     _select_daily_candidates,
 )
 from scripts.recommendation_prediction_loader import load_actionable_predictions
@@ -109,18 +108,6 @@ def test_prediction_quality_uses_its_bound_feature_snapshot(mock_conn) -> None:
     assert "WHERE id = ANY" in query
     assert params == ([101],)
     assert quality == {101: 55.0}
-
-
-def test_preferred_direction_never_compares_different_play_types() -> None:
-    spf_home = [None] * 18
-    spf_home[1], spf_home[3], spf_home[4], spf_home[5] = 7, "spf", "3", 0.55
-    total_zero = [None] * 18
-    total_zero[1], total_zero[3], total_zero[4], total_zero[5] = 7, "zjq", "0", 0.70
-
-    preferred = _preferred_direction_by_market([tuple(spf_home), tuple(total_zero)])
-
-    assert preferred[(7, "spf")] == ("3", 0.55)
-    assert preferred[(7, "zjq")] == ("0", 0.70)
 
 
 def test_rqspf_option_label_explains_handicap_outcome():

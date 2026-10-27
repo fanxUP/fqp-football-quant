@@ -56,12 +56,14 @@ def create_app() -> FastAPI:
         description="足彩/竞彩足球量化研究与长期运行系统。仅用于数据分析、模拟和复盘，不提供售彩、代购、出票、收款。",
         version="1.2.0",
     )
-    app.add_middleware(ApiV1AliasMiddleware)
     tickets.UPLOAD_ROOT.mkdir(parents=True, exist_ok=True)
     app.mount("/uploads", StaticFiles(directory=str(tickets.UPLOAD_ROOT)), name="uploads")
 
     app.include_router(auth_router.router)
     app.add_middleware(AuthMiddleware)
+    # Starlette executes the last registered middleware first. Authenticate the
+    # same canonical path that routing sees, including public login aliases.
+    app.add_middleware(ApiV1AliasMiddleware)
 
     app.include_router(health.router)
     app.include_router(official.router)

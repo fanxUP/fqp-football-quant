@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import io
 import math
+import pickle
 from collections.abc import Callable
 from numbers import Integral
+from pathlib import Path
 from typing import Any
 
 from scripts.feature_schema import (
@@ -13,6 +16,36 @@ from scripts.feature_schema import (
     numeric_feature_value,
     valid_feature_columns,
 )
+from scripts.model_artifact_identity import verify_file_artifact
+
+
+def load_shadow_artifact(
+    path: str,
+    parameters: dict[str, Any],
+    *,
+    artifact_format: str = "joblib",
+) -> Any:
+    """Load exactly the verified bytes; retain legacy profiles without inventing hashes."""
+    verified = "artifact_sha256" in parameters or "artifact_size_bytes" in parameters
+    content = None
+    if verified:
+        content = Path(path).read_bytes()
+        verify_file_artifact(
+            content,
+            sha256=parameters.get("artifact_sha256"),
+            size_bytes=parameters.get("artifact_size_bytes"),
+        )
+    if artifact_format == "xgboost_json":
+        import xgboost as xgb
+
+        classifier = xgb.XGBClassifier()
+        classifier.load_model(bytearray(content) if content is not None else path)
+        return classifier
+    if artifact_format != "joblib":
+        raise ValueError("unsupported shadow artifact format")
+    import joblib
+
+    return joblib.load(io.BytesIO(content) if content is not None else path)
 
 
 def prepare_shadow_input(
@@ -92,11 +125,9 @@ def load_shadow_probabilities(
     if profile is None or model_input is None:
         return None
     try:
-        import joblib
-
-        classifier = joblib.load(profile.artifact_path)
+        classifier = load_shadow_artifact(profile.artifact_path, parameters or {})
         if not artifact_matches_features(classifier, profile.feature_columns):
             return None
         return probabilities_from_classifier(classifier, profile, model_input)
-    except ImportError, OSError, ValueError:
+    except ImportError, OSError, ValueError, TypeError, EOFError, pickle.UnpicklingError:
         return None

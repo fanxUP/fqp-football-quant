@@ -525,6 +525,7 @@ def finalize_prediction_run(
     run_status: str,
     error_message: str | None = None,
     output_summary: Mapping[str, Any] | None = None,
+    commit: bool = True,
 ) -> None:
     normalized_run_id = _uuid(run_id)
     if run_status not in {"completed", "partial", "failed"}:
@@ -571,14 +572,18 @@ def finalize_prediction_run(
         )
         if cur.rowcount != 1:
             raise ValueError("running prediction run was not found")
-    conn.commit()
+    if commit:
+        conn.commit()
 
 
-def fail_prediction_run(conn: Any, run_id: uuid.UUID | str, error_message: str) -> None:
+def fail_prediction_run(
+    conn: Any, run_id: uuid.UUID | str, error_message: str, *, commit: bool = True
+) -> None:
     normalized_run_id = _uuid(run_id)
     finalize_prediction_run(
         conn,
         run_id=normalized_run_id,
         run_status="failed",
         error_message=error_message,
+        commit=commit,
     )

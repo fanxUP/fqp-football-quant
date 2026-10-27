@@ -25,7 +25,7 @@ def test_deterministic_pool_sample_is_computed_once(monkeypatch):
     assert simulation_counts == [1_000]
 
 
-def test_pool_analysis_uses_coherent_prematch_model_consensus(client):
+def test_pool_analysis_without_official_issues_does_not_read_predictions(client):
     conn = MagicMock()
     cur = MagicMock()
     conn.__enter__.return_value = conn
@@ -37,11 +37,9 @@ def test_pool_analysis_uses_coherent_prematch_model_consensus(client):
 
     assert response.status_code == 404
     query = " ".join(cur.execute.call_args.args[0].split())
-    assert "mp.predict_time < m.kickoff_time" in query
-    assert "mp.validation_status = 'valid'" in query
-    assert "model_independent" in query
-    assert "DISTINCT ON (mp.model_version_id, mp.option_code)" in query
-    assert "AVG(model_probability) FILTER" in query
+    assert "football_pool_issues" in query
+    assert "model_prediction" not in query
+    assert cur.fetchall.call_count == 1
 
 
 def test_pool_analysis_uses_latest_complete_official_issue_for_historical_review(client):
@@ -49,7 +47,7 @@ def test_pool_analysis_uses_latest_complete_official_issue_for_historical_review
     cur = MagicMock()
     conn.__enter__.return_value = conn
     conn.cursor.return_value.__enter__.return_value = cur
-    cur.fetchall.return_value = [
+    rows = [
         (
             279,
             "26092",
@@ -64,12 +62,14 @@ def test_pool_analysis_uses_latest_complete_official_issue_for_historical_review
             "测试联赛",
             "2026-07-15 02:00:00",
             1000 + order,
-            "模型共识",
-            0.45,
-            0.30,
-            0.25,
         )
         for order in range(1, 15)
+    ]
+    newer = [(280, "26093", *row[2:12], row[12] + 1000) for row in rows]
+    cur.fetchall.side_effect = [
+        newer + rows,
+        [(2000 + order, 0.45, 0.30, 0.25) for order in range(1, 9)],
+        [(1000 + order, 0.45, 0.30, 0.25) for order in range(1, 15)],
     ]
 
     with (
@@ -87,6 +87,13 @@ def test_pool_analysis_uses_latest_complete_official_issue_for_historical_review
     assert payload["analysis_mode"] == "historical"
     assert payload["issue"]["issue_no"] == "26092"
     assert payload["issue"]["status"] == "closed"
+    consensus_calls = [
+        call for call in cur.execute.call_args_list if "latest_model_options" in call.args[0]
+    ]
+    assert [call.args[1]["match_ids"] for call in consensus_calls] == [
+        list(range(2001, 2015)),
+        list(range(1001, 1015)),
+    ]
 
 
 def test_closed_pool_never_backfills_a_recommendation_with_post_sale_predictions(client):
@@ -94,7 +101,7 @@ def test_closed_pool_never_backfills_a_recommendation_with_post_sale_predictions
     cur = MagicMock()
     conn.__enter__.return_value = conn
     conn.cursor.return_value.__enter__.return_value = cur
-    cur.fetchall.return_value = [
+    rows = [
         (
             280,
             "26103",
@@ -109,13 +116,10 @@ def test_closed_pool_never_backfills_a_recommendation_with_post_sale_predictions
             "测试联赛",
             "2026-08-14 02:00:00",
             2000 + order,
-            "模型共识" if order <= 8 else None,
-            0.45 if order <= 8 else None,
-            0.30 if order <= 8 else None,
-            0.25 if order <= 8 else None,
         )
         for order in range(1, 15)
     ]
+    cur.fetchall.side_effect = [rows, [(2000 + order, 0.45, 0.30, 0.25) for order in range(1, 9)]]
 
     with patch("apps.backend.src.routers.pool.get_db", return_value=conn):
         response = client.get("/api/pool/analyze?issue_id=26103")
@@ -124,3 +128,41 @@ def test_closed_pool_never_backfills_a_recommendation_with_post_sale_predictions
     assert "已停售" in response.json()["detail"]
     assert "8/14" in response.json()["detail"]
     assert "不会使用停售后的数据追补推荐" in response.json()["detail"]
+
+
+def test_current_pool_reads_only_its_matches_and_keeps_incomplete_state(client):
+    conn = MagicMock()
+    cur = conn.cursor.return_value.__enter__.return_value
+    conn.__enter__.return_value = conn
+    current = [
+        (
+            280,
+            "26103",
+            "t14c",
+            14,
+            "selling",
+            "2026-10-25 22:00",
+            order,
+            None,
+            f"home{order}",
+            f"away{order}",
+            "league",
+            "2026-10-26 02:00",
+            2000 + order,
+        )
+        for order in range(1, 15)
+    ]
+    historical = [(279, "26102", *row[2:4], "closed", *row[5:]) for row in current]
+    cur.fetchall.side_effect = [
+        current + historical,
+        [(2000 + order, 0.45, 0.30, 0.25) for order in range(1, 9)],
+    ]
+    with patch("apps.backend.src.routers.pool.get_db", return_value=conn):
+        response = client.get("/api/pool/analyze")
+    assert response.status_code == 409
+    assert "8/14" in response.json()["detail"]
+    consensus_calls = [
+        call for call in cur.execute.call_args_list if "latest_model_options" in call.args[0]
+    ]
+    assert len(consensus_calls) == 1
+    assert consensus_calls[0].args[1]["match_ids"] == list(range(2001, 2015))

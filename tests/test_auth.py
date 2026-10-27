@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import os
+import subprocess
+import sys
 import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
 from urllib.parse import urlparse
@@ -20,6 +22,15 @@ from apps.backend.src import auth, deployment_version
 from apps.backend.src.auth import verify_password
 from apps.backend.src.routers import auth_router
 from main import app
+
+
+@pytest.fixture(autouse=True)
+def isolated_password_file(tmp_path, monkeypatch):
+    # Authentication regressions must never read or replace a real login secret.
+    target = tmp_path / "runtime" / "admin-password.hash"
+    monkeypatch.setattr(auth, "DEFAULT_PASSWORD_FILE", target, raising=False)
+    monkeypatch.setenv("FQP_ADMIN_PASSWORD_FILE", str(target))
+    return target
 
 
 class TestPasswordVerification:
@@ -108,7 +119,10 @@ class TestAuthEndpoints:
         )
         assert auth.COOKIE_NAME in response.headers["set-cookie"]
 
-    async def test_password_login_with_stale_cookie_uses_acl_scoped_session_keys(self, monkeypatch):
+    @pytest.mark.parametrize("prefix", ["/api", "/api/v1"])
+    async def test_password_login_with_stale_cookie_uses_acl_scoped_session_keys(
+        self, prefix, monkeypatch
+    ):
         redis_url = os.getenv("FQP_QUOTA_TEST_REDIS_URL", "")
         if not redis_url:
             pytest.skip("requires the isolated FQP_QUOTA_TEST_REDIS_URL Redis service")
@@ -160,7 +174,9 @@ class TestAuthEndpoints:
                 base_url="http://test",
                 cookies={auth.COOKIE_NAME: stale_session_id},
             ) as client:
-                response = await client.post("/api/auth/login", json={"password": "test-password"})
+                response = await client.post(
+                    prefix + "/auth/login", json={"password": "test-password"}
+                )
 
             assert response.status_code == 200
             assert response.json() == {"ok": True, "user": "admin"}
@@ -260,3 +276,151 @@ class TestAuthEndpoints:
         destroy_session.assert_awaited_once_with("stale-session")
         assert 'fqp_session=""' in response.headers["set-cookie"]
         assert "max-age=0" in response.headers["set-cookie"].lower()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("prefix", ["/api", "/api/v1"])
+async def test_auth_aliases_keep_public_routes_and_protect_business(prefix, monkeypatch):
+    monkeypatch.setenv("FQP_AUTH_MODE", "session")
+    monkeypatch.setenv("FQP_ADMIN_PASSWORD_HASH", "")
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        release = await client.get(f"{prefix}/auth/release")
+        assert release.status_code == 200
+        assert release.headers["cache-control"].startswith("no-store")
+        login = await client.post(f"{prefix}/auth/login", json={"password": "wrong"})
+        assert login.status_code == 401 and login.json()["detail"] == "密码错误"
+        assert (await client.post(f"{prefix}/auth/logout")).status_code == 200
+        assert (await client.get(f"{prefix}/auth/me")).status_code == 401
+        for path in ["/modules", "/model-providers", "/predictions"]:
+            assert (await client.get(prefix + path)).status_code == 401
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("prefix", ["/api", "/api/v1"])
+async def test_auth_alias_rejects_previous_deployment_session(prefix, monkeypatch):
+    monkeypatch.setenv("FQP_AUTH_MODE", "session")
+    monkeypatch.setattr(auth_router, "inspect_session", AsyncMock(return_value=(None, True)))
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+        cookies={auth.COOKIE_NAME: "stale"},
+    ) as client:
+        response = await client.get(prefix + "/auth/me")
+    assert response.status_code == 409
+    assert response.json() == {"code": "deployment_changed"}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("prefix", ["/api", "/api/v1"])
+async def test_password_change_persists_after_fresh_process(
+    prefix, isolated_password_file, tmp_path, monkeypatch
+):
+    old_hash = bcrypt.hashpw(b"old-password", bcrypt.gensalt(rounds=4)).decode()
+    monkeypatch.setenv("FQP_AUTH_MODE", "session")
+    monkeypatch.setenv("FQP_ADMIN_PASSWORD_HASH", old_hash)
+    old_env = tmp_path / "legacy.env"
+    old_env.write_text("UNCHANGED='private-configuration'\n")
+    monkeypatch.setenv("ENV_FILE", str(old_env))
+    create_session = AsyncMock()
+    monkeypatch.setattr(auth_router, "create_session", create_session)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            prefix + "/auth/change-password",
+            json={
+                "old_password": "old-password",
+                "new_password": "new-password",
+            },
+        )
+        assert (
+            await client.post(prefix + "/auth/login", json={"password": "old-password"})
+        ).status_code == 401
+        assert (
+            await client.post(prefix + "/auth/login", json={"password": "new-password"})
+        ).status_code == 200
+    create_session.assert_awaited_once()
+    assert response.status_code == 200
+    assert not verify_password("old-password") and verify_password("new-password")
+    assert old_env.read_text() == "UNCHANGED='private-configuration'\n"
+    assert isolated_password_file.stat().st_mode & 0o777 == 0o600
+    stored = isolated_password_file.read_text().strip()
+    assert bcrypt.checkpw(b"new-password", stored.encode())
+    assert "new-password" not in stored
+    # A truly fresh interpreter receives the original image/env hash. The
+    # persistent file must remain authoritative without reloading .env.local.
+    env = {k: os.environ[k] for k in ["PATH", "LANG"] if k in os.environ}
+    env.update(
+        FQP_ADMIN_PASSWORD_HASH=old_hash, FQP_ADMIN_PASSWORD_FILE=str(isolated_password_file)
+    )
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "from apps.backend.src.auth import verify_password; "
+            "assert verify_password('new-password'); assert not verify_password('old-password')",
+        ],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+    assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.asyncio
+async def test_password_replace_failure_keeps_old_secret(isolated_password_file, monkeypatch):
+    old_hash = bcrypt.hashpw(b"old-password", bcrypt.gensalt(rounds=4)).decode()
+    isolated_password_file.parent.mkdir()
+    isolated_password_file.write_text(old_hash + "\n")
+    monkeypatch.setenv("FQP_AUTH_MODE", "session")
+    monkeypatch.setenv("FQP_ADMIN_PASSWORD_HASH", old_hash)
+
+    def reject_replace(*_args):
+        raise PermissionError("private-path-with-secret")
+
+    monkeypatch.setattr(os, "replace", reject_replace)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            "/api/auth/change-password",
+            json={
+                "old_password": "old-password",
+                "new_password": "new-password",
+            },
+        )
+    assert response.status_code == 500
+    assert "private-path-with-secret" not in response.text
+    assert isolated_password_file.read_text() == old_hash + "\n"
+    assert os.environ["FQP_ADMIN_PASSWORD_HASH"] == old_hash
+    assert verify_password("old-password") and not verify_password("new-password")
+    assert list(isolated_password_file.parent.iterdir()) == [isolated_password_file]
+
+
+@pytest.mark.parametrize("kind", ["invalid", "unreadable"])
+def test_existing_bad_password_file_never_falls_back_to_bootstrap(
+    kind, isolated_password_file, monkeypatch
+):
+    monkeypatch.setenv(
+        "FQP_ADMIN_PASSWORD_HASH", bcrypt.hashpw(b"bootstrap", bcrypt.gensalt(rounds=4)).decode()
+    )
+    isolated_password_file.parent.mkdir()
+    if kind == "invalid":
+        isolated_password_file.write_text("not-a-bcrypt-hash\n")
+    else:
+        isolated_password_file.mkdir()
+    assert not verify_password("bootstrap")
+
+
+@pytest.mark.asyncio
+async def test_password_byte_limit_is_a_client_error(isolated_password_file, monkeypatch):
+    monkeypatch.setenv(
+        "FQP_ADMIN_PASSWORD_HASH", bcrypt.hashpw(b"old-password", bcrypt.gensalt(rounds=4)).decode()
+    )
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            "/api/auth/change-password",
+            json={
+                "old_password": "old-password",
+                "new_password": "足" * 25,
+            },
+        )
+    assert response.status_code == 400
+    assert not isolated_password_file.exists()

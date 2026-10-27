@@ -92,13 +92,16 @@ def test_time_machine_ticket_persists_historical_purchase_date_and_server_resolv
             }
         ],
     )
-    monkeypatch.setattr(
-        time_machine, "create_real_ticket", lambda _conn, ticket: stored.update(ticket) or 77
-    )
+
+    def save_ticket(_conn, ticket, items):
+        stored.update(ticket)
+        stored_items.extend(items)
+        return 77, [1]
+
     monkeypatch.setattr(
         time_machine,
-        "create_real_ticket_items_batch",
-        lambda _conn, _ticket_id, items: stored_items.extend(items) or [1],
+        "create_real_ticket_with_items",
+        save_ticket,
     )
 
     result = time_machine.create_time_machine_ticket(

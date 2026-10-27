@@ -393,6 +393,19 @@ def build_model_artifact_identity(
                 model_version_id, model_name, parameters, "artifact_file_unavailable"
             )
         artifact_bytes = candidate.read_bytes()
+        if "artifact_sha256" in parameters or "artifact_size_bytes" in parameters:
+            from scripts.model_artifact_identity import verify_file_artifact
+
+            try:
+                verify_file_artifact(
+                    artifact_bytes,
+                    sha256=parameters.get("artifact_sha256"),
+                    size_bytes=parameters.get("artifact_size_bytes"),
+                )
+            except ValueError:
+                return _incomplete_identity(
+                    model_version_id, model_name, parameters, "artifact_digest_mismatch"
+                )
         relative_path = candidate.relative_to(root).as_posix()
         artifact = {
             "kind": "external_file",

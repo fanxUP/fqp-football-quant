@@ -12,7 +12,6 @@ from datetime import datetime
 from apps.backend.src.db import get_db
 from scripts.agent_storage import (
     finish_job_run,
-    recover_interrupted_job_runs,
     retry_job_run,
     start_job_run,
 )
@@ -84,11 +83,8 @@ def start_tracked_job(
     if dependency_list:
         tracked_input_refs["dependencies"] = dependency_list
     with get_db() as conn:
-        recover_interrupted_job_runs(
-            conn,
-            [job_code],
-            reason="superseded by a new execution after process interruption",
-        )
+        # Matching job codes do not prove that a previous execution stopped.
+        # Only protocol-specific owners may reconcile their own interrupted runs.
         return start_job_run(
             conn,
             {
@@ -115,8 +111,8 @@ def finish_tracked_job(
         finish_job_run(conn, run_id, status, output_refs=output_refs, error=error)
 
 
-def retry_tracked_job(run_id: int, max_retries: int = 2) -> bool:
-    """Retry a failed local job within its explicit retry budget."""
+def retry_tracked_job(run_id: int, max_retries: int = 2) -> int | None:
+    """Allocate a retry audit and return its new ID; no business dispatch."""
     with get_db() as conn:
         return retry_job_run(conn, run_id, max_retries=max_retries)
 

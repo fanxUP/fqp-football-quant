@@ -828,19 +828,19 @@ export interface FeatureModelInfo {
 export interface ModelCompareItem {
   name: string;
   n_predictions: number;
-  brier: number;
-  log_loss: number;
-  rps: number;
+  brier: number | null;
+  log_loss: number | null;
+  rps: number | null;
   market_probability_move: number | null;
   closing_edge: number | null;
   odds_clv: number | null;
   flb_score: number | null;
-  hit_rate?: number;
-  roi?: number;
-  sharpe?: number;
-  max_drawdown_pct?: number;
-  profit_factor?: number;
-  total_profit?: number;
+  hit_rate?: number | null;
+  roi?: number | null;
+  sharpe?: number | null;
+  max_drawdown_pct?: number | null;
+  profit_factor?: number | null;
+  total_profit?: number | null;
 }
 
 export interface RadarDimension {

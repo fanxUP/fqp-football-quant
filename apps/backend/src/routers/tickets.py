@@ -17,10 +17,8 @@ from scripts.ocr_ticket_parser import (
     result_to_dict,
 )
 from scripts.real_ticket_storage import (
-    create_real_ticket as _create_ticket,
-)
-from scripts.real_ticket_storage import (
-    create_real_ticket_items_batch,
+    TicketInputError,
+    create_real_ticket_with_items,
     get_error_summary,
     get_settlement_summary,
     get_settlements_by_date,
@@ -106,10 +104,12 @@ def create_real_ticket(body: dict):
     Body: {"ticket": {...}, "items": [{...}, ...]}
     """
     with get_db() as conn:
-        ticket_id = _create_ticket(conn, body.get("ticket", {}))
-        if not ticket_id:
-            return {"status": "error", "error": "failed to create ticket"}
-        item_ids = create_real_ticket_items_batch(conn, ticket_id, body.get("items", []))
+        try:
+            ticket_id, item_ids = create_real_ticket_with_items(
+                conn, body.get("ticket", {}), body.get("items", [])
+            )
+        except TicketInputError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
     return {"status": "ok", "ticket_id": ticket_id, "item_count": len(item_ids)}
 
 

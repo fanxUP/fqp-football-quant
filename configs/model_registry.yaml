@@ -1,3 +1,6 @@
+# 历史模型目录设计及早期 SQL 种子参考；运行时不读取本文件。
+# 实际启用状态以数据库 model_versions 和预测入口的模型支持范围为准。
+# 此处六项不代表当前全部模型，也不控制线上启用或发布资格。
 models:
   - name: market_baseline
     version: v1

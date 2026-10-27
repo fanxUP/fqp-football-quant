@@ -84,6 +84,23 @@ jobs:
           --health-timeout 5s
           --health-retries 5
 
+      # The legacy schema/observation fixture uses fqp as its bootstrap admin.
+      # Keep permission regressions on a separate disposable cluster where fqp
+      # really is a restricted runtime role; never use that superuser as proof.
+      audit-postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: fqp_audit_test_ci
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: fqp_audit_fixture_password
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - uses: actions/checkout@v6
 
@@ -179,14 +196,66 @@ jobs:
           FQP_OBSERVATION_TEST_POSTGRES_DSN: host=127.0.0.1 port=5432 user=fqp_observation_test dbname=fqp_observation_test
           PGPASSWORD: fqp_test_password
 
+      - name: Initialize isolated audit and P106 databases
+        run: |
+          set -euo pipefail
+          psql -X -v ON_ERROR_STOP=1 -h 127.0.0.1 -p 5433 -U postgres -d fqp_audit_test_ci <<'SQL'
+          CREATE ROLE fqp NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
+          CREATE DATABASE fqp_p106_test_ci;
+          DO $$
+          BEGIN
+            IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname='fqp'
+                AND NOT rolsuper AND NOT rolcreatedb AND NOT rolcreaterole
+                AND NOT rolreplication AND NOT rolbypassrls AND NOT rolcanlogin)
+                OR pg_has_role('fqp', 'postgres', 'MEMBER') THEN
+              RAISE EXCEPTION 'Unsafe audit runtime role';
+            END IF;
+          END $$;
+          SQL
+        env:
+          PGPASSWORD: fqp_audit_fixture_password
+
       - name: Run tests with coverage
         run: |
-          DATABASE_URL=postgresql://fqp:fqp_test_password@localhost:5432/fqp_test \
-          pytest --cov=. --cov-report=xml --cov-report=term --cov-fail-under=50 -m "not slow"
+          set -euo pipefail
+          pytest tests apps/backend/src --cov=. --cov-report=xml --cov-report=term \
+            --cov-fail-under=50 -m "not slow" --junitxml="${RUNNER_TEMP}/regressions.xml"
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          from xml.etree import ElementTree as ET
+
+          required = {
+              "tests.test_computation.test_prediction_run_postgres",
+              "tests.test_computation.test_prematch_dataset_postgres",
+              "tests.test_computation.test_prediction_job_execution_postgres",
+              "tests.test_computation.test_backtest_job_execution_postgres",
+              "tests.test_computation.test_generic_job_audit_postgres",
+              "tests.test_computation.test_real_ticket_postgres",
+              "tests.test_computation.test_shadow_training_postgres",
+              "tests.test_computation.test_contamination_audit_postgres",
+              "tests.test_sql.test_dashboard_prediction_count",
+          }
+          services = {str(p.with_suffix("")).replace("/", ".")
+                      for p in Path("apps/backend/src").rglob("test_*.py")}
+          if not services:
+              raise SystemExit("Backend service/router tests were not found")
+          required |= services
+          cases = ET.parse(Path(os.environ["RUNNER_TEMP"]) / "regressions.xml").findall(".//testcase")
+          for module in sorted(required):
+              selected = [c for c in cases if c.get("classname", "") == module
+                          or c.get("classname", "").startswith(module + ".")]
+              if not selected or any(c.find(s) is not None for c in selected
+                                     for s in ("skipped", "error", "failure")):
+                  raise SystemExit(f"Required regression missing or not passed: {module}")
+              print(f"{module}: {len(selected)} passed, no skips")
+          PY
         env:
           DATABASE_URL: postgresql://fqp:fqp_test_password@localhost:5432/fqp_test
           FQP_PI_TEST_DB: postgresql://fqp:fqp_test_password@localhost:5432/fqp_pi_test
           FQP_QUOTA_TEST_REDIS_URL: redis://127.0.0.1:6379/15
           FQP_FEATURE_TEST_POSTGRES_DSN: postgresql://fqp:fqp_test_password@localhost:5432/fqp_feature_contract_test
           FQP_OBSERVATION_TEST_POSTGRES_DSN: host=127.0.0.1 port=5432 user=fqp_observation_test dbname=fqp_observation_test
+          FQP_P106_TEST_DATABASE_URL: postgresql://postgres:fqp_audit_fixture_password@127.0.0.1:5433/fqp_p106_test_ci
+          FQP_AUDIT_TEST_DATABASE_URL: postgresql://postgres:fqp_audit_fixture_password@127.0.0.1:5433/fqp_audit_test_ci
           PGPASSWORD: fqp_test_password

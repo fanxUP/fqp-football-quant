@@ -6,7 +6,6 @@ import PageHeader from '../shared/components/PageHeader';
 import DataTable, { type Column } from '../shared/components/DataTable';
 import ErrorState from '../shared/components/ErrorState';
 import StatusBadge from '../shared/components/StatusBadge';
-import LoadingSpinner from '../shared/components/LoadingSpinner';
 import Skeleton from '../shared/components/Skeleton';
 import EmptyState from '../shared/components/EmptyState';
 import MatchDetailDrawer from '../shared/components/MatchDetailDrawer';

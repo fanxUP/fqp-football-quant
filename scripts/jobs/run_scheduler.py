@@ -230,6 +230,18 @@ def _audited_job(
         "validate_evidence_chain",
         "audit_data_contamination",
         "run_backtest",
+        "train_xgboost_shadow",
+        "train_logistic_shadow",
+        "train_random_forest_shadow",
+        "train_naive_bayes_shadow",
+        "train_svm_shadow",
+        "train_negative_binomial_shadow",
+        "train_extra_trees_shadow",
+        "train_hist_gradient_boosting_shadow",
+        "train_adaboost_shadow",
+        "train_lda_shadow",
+        "train_knn_shadow",
+        "train_mlp_shadow",
     }
     if job_code in self_tracked:
         return fn
@@ -240,16 +252,10 @@ def _audited_job(
             from apps.backend.src.db import get_db
             from scripts.agent_storage import (
                 finish_job_run,
-                recover_interrupted_job_runs,
                 start_job_run,
             )
 
             with get_db() as conn:
-                recover_interrupted_job_runs(
-                    conn,
-                    [job_code],
-                    reason=("superseded by a new scheduler execution after process interruption"),
-                )
                 run_id = start_job_run(
                     conn,
                     {
@@ -260,12 +266,41 @@ def _audited_job(
                         "environment": "prod",
                     },
                 )
+            if run_id is None:
+                raise RuntimeError("scheduler audit owner ID was not returned")
             result = fn()
             if run_id:
-                with get_db() as conn:
-                    finish_job_run(
-                        conn, run_id, "completed", output_refs={"result": str(result)[:500]}
+                # A returned failure is a failure even when no exception escaped.
+                # Legacy procedures returning None/count/dict-without-status retain
+                # their historical success contract; explicit unknown states fail.
+                status = result.get("status") if isinstance(result, dict) else None
+                error = None
+                if status in ("ok", "completed", "success"):
+                    terminal = "completed"
+                elif status in ("skipped", "no_data", "dry_run"):
+                    terminal = "skipped"
+                elif (
+                    (isinstance(result, dict) and "status" in result)
+                    or result is False
+                    or (isinstance(result, dict) and result.get("error"))
+                ):
+                    terminal = "failed"
+                    error = (
+                        str(
+                            result.get("error")
+                            or result.get("message")
+                            or f"任务未完整成功: {status}"
+                        )
+                        if isinstance(result, dict)
+                        else "任务返回 False"
                     )
+                else:
+                    terminal = "completed"
+                with get_db() as conn:
+                    kwargs: dict[str, Any] = {"output_refs": {"result": str(result)[:500]}}
+                    if error:
+                        kwargs["error"] = error[:1000]
+                    finish_job_run(conn, run_id, terminal, **kwargs)
         except Exception as e:
             if run_id:
                 try:

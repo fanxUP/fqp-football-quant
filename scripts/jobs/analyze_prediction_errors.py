@@ -15,6 +15,7 @@ from __future__ import annotations
 from typing import Any
 
 from apps.backend.src.db import get_db
+from scripts.model_evaluation_scope import EVALUATION_PREDICTION_ROWS_CTES
 from scripts.real_ticket_storage import create_error_analyses_batch
 
 
@@ -27,8 +28,8 @@ def run(dry_run: bool = False) -> dict[str, Any]:
         # 1. Build one decision per match/model from the latest pre-match option set.
         with conn.cursor() as cur:
             cur.execute(
-                """
-                WITH latest_options AS (
+                f"""
+                {EVALUATION_PREDICTION_ROWS_CTES}, latest_options AS (
                     SELECT DISTINCT ON (
                         mp.match_id, mp.model_version_id, mp.option_code
                     )
@@ -39,7 +40,7 @@ def run(dry_run: bool = False) -> dict[str, Any]:
                         mp.predict_time,
                         r.spf_result, r.full_home_goals, r.full_away_goals,
                         mv.model_name
-                    FROM model_prediction_latest_rows mp
+                    FROM evaluation_prediction_rows mp
                     JOIN official_matches m ON m.id = mp.match_id
                     JOIN official_results r ON r.match_id = mp.match_id
                     JOIN model_versions mv ON mv.id = mp.model_version_id

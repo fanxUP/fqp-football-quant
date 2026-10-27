@@ -29,14 +29,17 @@ from scripts.feature_schema import (
     numeric_feature_value,
 )
 from scripts.model_evaluation_scope import (
+    CALIBRATION_PREDICTIONS_CTE,
+    MARKET_BASELINE_BRIER_CTES,
+    METRIC_HOME_PREDICTIONS_CTE,
+    MODEL_PUBLICATION_MIN_SAMPLES,
+    SETTLED_SPF_RESULTS_CTE,
+)
+from scripts.model_evaluation_scope import (
     LATEST_METRICS_CTE as _LATEST_METRICS_CTE,
 )
 from scripts.model_evaluation_scope import (
     LATEST_PREDICTIONS_CTE as _LATEST_PREDICTIONS_CTE,
-)
-from scripts.model_evaluation_scope import (
-    MARKET_BASELINE_BRIER_CTES,
-    MODEL_PUBLICATION_MIN_SAMPLES,
 )
 from scripts.model_evaluation_scope import (
     model_sample_status as _model_sample_status,
@@ -127,6 +130,8 @@ def _load_training_data(
 ) -> tuple[np.ndarray, np.ndarray, list[int], list[str]] | None:
     """从 match_feature_snapshots + official_results 构建训练集。
 
+    只使用已确认、完整非负且SPF一致的赛果，异常样本不计入训练门槛。
+
     Returns:
         (X, y, match_ids, feature_names) or None if insufficient data.
         y in {0, 1, 2} = {客胜, 平局, 主胜}
@@ -143,20 +148,19 @@ def _load_training_data(
                 WHERE fs.feature_version IN %(feature_versions)s
                   AND fs.snapshot_time < m.kickoff_time
                 ORDER BY fs.match_id, fs.snapshot_time DESC, fs.id DESC
-            )
+            ){SETTLED_SPF_RESULTS_CTE}
             SELECT
                 fs.match_id,
                 m.league_name,
                 {col_refs},
                 CASE
-                    WHEN r.full_home_goals > r.full_away_goals THEN 2
-                    WHEN r.full_home_goals = r.full_away_goals THEN 1
+                    WHEN r.actual_result = '3' THEN 2
+                    WHEN r.actual_result = '1' THEN 1
                     ELSE 0
                 END AS label
             FROM latest_feature_snapshots fs
             JOIN official_matches m ON m.id = fs.match_id
-            JOIN official_results r ON r.match_id = fs.match_id
-            WHERE r.result_status IN ('final', 'confirmed')
+            JOIN settled_spf_results r ON r.match_id = fs.match_id
             ORDER BY m.business_date DESC, fs.match_id
             LIMIT 5000
         """,
@@ -235,6 +239,11 @@ def train_if_needed(conn: Any, force: bool = False) -> dict[str, Any]:
         }
 
     X, y, _match_ids, feature_names = data
+
+    if X.shape[1] == 0:
+        return {"status": "error", "error": "训练特征全部缺失，暂无可用的解释模型输入"}
+    if not np.array_equal(np.unique(y), np.array([0, 1, 2])):
+        return {"status": "error", "error": "训练结果类别不足，需要主胜、平局、客胜三类样本"}
 
     # Train XGBoost multi-class classifier
     n_classes = 3
@@ -511,6 +520,12 @@ def get_model_comparison_data(conn: Any) -> dict[str, Any]:
     """
     models_data: dict[str, dict[str, Any]] = {}
 
+    from scripts.market_metric_validation import finite_number
+
+    def known_metric(value: Any, digits: int = 4) -> float | None:
+        parsed = finite_number(value)
+        return round(parsed, digits) if parsed is not None else None
+
     # 1. Evaluation metrics from market_efficiency_metrics
     with conn.cursor() as cur:
         cur.execute(f"""
@@ -536,23 +551,13 @@ def get_model_comparison_data(conn: Any) -> dict[str, Any]:
             models_data[name] = {
                 "name": name,
                 "n_predictions": int(d["n_predictions"] or 0),
-                "brier": round(float(d["avg_brier"] or 0), 4),
-                "log_loss": round(float(d["avg_log_loss"] or 0), 4),
-                "rps": round(float(d["avg_rps"] or 0), 4),
-                "market_probability_move": (
-                    round(float(d["avg_market_probability_move"]), 4)
-                    if d["avg_market_probability_move"] is not None
-                    else None
-                ),
-                "closing_edge": (
-                    round(float(d["avg_closing_edge"]), 4)
-                    if d["avg_closing_edge"] is not None
-                    else None
-                ),
+                "brier": known_metric(d["avg_brier"]),
+                "log_loss": known_metric(d["avg_log_loss"]),
+                "rps": known_metric(d["avg_rps"]),
+                "market_probability_move": known_metric(d["avg_market_probability_move"]),
+                "closing_edge": known_metric(d["avg_closing_edge"]),
                 "odds_clv": None,
-                "flb_score": (
-                    round(float(d["avg_flb_score"]), 4) if d["avg_flb_score"] is not None else None
-                ),
+                "flb_score": known_metric(d["avg_flb_score"]),
             }
 
     # 2. Backtest performance (latest aggregate)
@@ -579,17 +584,17 @@ def get_model_comparison_data(conn: Any) -> dict[str, Any]:
             if name in models_data:
                 models_data[name].update(
                     {
-                        "hit_rate": round(float(d["hit_rate"] or 0), 4),
-                        "roi": round(float(d["roi"] or 0), 4),
-                        "sharpe": round(float(d["sharpe_ratio"] or 0), 4),
-                        "max_drawdown_pct": round(float(d["max_drawdown_pct"] or 0), 4),
-                        "profit_factor": round(float(d["profit_factor"] or 0), 4),
-                        "total_profit": round(float(d["total_profit"] or 0), 2),
+                        "hit_rate": known_metric(d["hit_rate"]),
+                        "roi": known_metric(d["roi"]),
+                        "sharpe": known_metric(d["sharpe_ratio"]),
+                        "max_drawdown_pct": known_metric(d["max_drawdown_pct"]),
+                        "profit_factor": known_metric(d["profit_factor"]),
+                        "total_profit": known_metric(d["total_profit"], 2),
                     }
                 )
 
     models_list = list(models_data.values())
-    models_list.sort(key=lambda m: m.get("roi", -999), reverse=True)
+    models_list.sort(key=lambda m: (m.get("roi") is not None, m.get("roi") or 0), reverse=True)
 
     return {
         "status": "ok",
@@ -736,20 +741,12 @@ def get_calibration_data(
         if model_name:
             cur.execute(
                 f"""
-                {_LATEST_PREDICTIONS_CTE}
+                {CALIBRATION_PREDICTIONS_CTE}
                 SELECT
                     mp.model_probability,
-                    CASE
-                        WHEN r.full_home_goals > r.full_away_goals AND mp.option_code = '3' THEN 1
-                        WHEN r.full_home_goals = r.full_away_goals AND mp.option_code = '1' THEN 1
-                        WHEN r.full_home_goals < r.full_away_goals AND mp.option_code = '0' THEN 1
-                        ELSE 0
-                    END AS is_correct
-                FROM latest_predictions mp
-                JOIN official_results r ON r.match_id = mp.match_id
+                    CASE WHEN mp.option_code = mp.actual_result THEN 1 ELSE 0 END AS is_correct
+                FROM calibration_predictions mp
                 WHERE mp.canonical_model_name = %s
-                  AND mp.play_type = 'spf'
-                  AND mp.model_probability IS NOT NULL
                 ORDER BY mp.predict_time DESC
                 LIMIT 2000
             """,
@@ -757,19 +754,11 @@ def get_calibration_data(
             )
         else:
             cur.execute(f"""
-                {_LATEST_PREDICTIONS_CTE}
+                {CALIBRATION_PREDICTIONS_CTE}
                 SELECT
                     mp.model_probability,
-                    CASE
-                        WHEN r.full_home_goals > r.full_away_goals AND mp.option_code = '3' THEN 1
-                        WHEN r.full_home_goals = r.full_away_goals AND mp.option_code = '1' THEN 1
-                        WHEN r.full_home_goals < r.full_away_goals AND mp.option_code = '0' THEN 1
-                        ELSE 0
-                    END AS is_correct
-                FROM latest_predictions mp
-                JOIN official_results r ON r.match_id = mp.match_id
-                WHERE mp.play_type = 'spf'
-                  AND mp.model_probability IS NOT NULL
+                    CASE WHEN mp.option_code = mp.actual_result THEN 1 ELSE 0 END AS is_correct
+                FROM calibration_predictions mp
                 ORDER BY mp.predict_time DESC
                 LIMIT 5000
             """)
@@ -837,6 +826,7 @@ def get_condition_performance(
         with conn.cursor() as cur:
             cur.execute(f"""
                 {_LATEST_METRICS_CTE}
+                {METRIC_HOME_PREDICTIONS_CTE}
                 SELECT
                     CASE
                         WHEN mp_home.market_probability < 0.30 THEN '低概率 (<30%)'
@@ -849,7 +839,7 @@ def get_condition_performance(
                     COUNT(*) AS n,
                     ROUND(AVG(mem.brier_score)::numeric, 4) AS avg_brier
                 FROM latest_metrics mem
-                JOIN model_prediction_latest_rows mp_home ON mp_home.match_id = mem.match_id
+                JOIN metric_home_predictions mp_home ON mp_home.match_id = mem.match_id
                     AND mp_home.model_version_id = mem.model_version_id
                     AND mp_home.play_type = mem.play_type
                     AND mp_home.option_code = '3'
@@ -866,6 +856,7 @@ def get_condition_performance(
         with conn.cursor() as cur:
             cur.execute(f"""
                 {_LATEST_METRICS_CTE}
+                {METRIC_HOME_PREDICTIONS_CTE}
                 SELECT
                     CASE
                         WHEN mp_home.confidence_score IS NULL THEN '未校准/未知'
@@ -878,7 +869,7 @@ def get_condition_performance(
                     COUNT(*) AS n,
                     ROUND(AVG(mem.brier_score)::numeric, 4) AS avg_brier
                 FROM latest_metrics mem
-                JOIN model_prediction_latest_rows mp_home ON mp_home.match_id = mem.match_id
+                JOIN metric_home_predictions mp_home ON mp_home.match_id = mem.match_id
                     AND mp_home.model_version_id = mem.model_version_id
                     AND mp_home.play_type = mem.play_type
                     AND mp_home.option_code = '3'

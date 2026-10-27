@@ -4,11 +4,15 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from scripts.real_ticket_storage import (
+    TicketInputError,
     create_bankroll_transaction,
     create_error_analyses_batch,
     create_real_ticket,
     create_real_ticket_items_batch,
+    create_real_ticket_with_items,
     create_settlement,
     delete_real_ticket,
     get_daily_review,
@@ -38,6 +42,11 @@ def _mock_conn(fetchone=None, fetchall=None, rowcount=1):
 
 
 class TestCreateRealTicket:
+    def test_can_defer_commit_to_complete_purchase(self):
+        conn, _ = _mock_conn(fetchone=[42])
+        assert create_real_ticket(conn, {}, commit=False) == 42
+        conn.commit.assert_not_called()
+
     def test_inserts_and_returns_id(self):
         mock_conn, mock_cur = _mock_conn(fetchone=[42])
 
@@ -226,6 +235,11 @@ class TestDeleteRealTicket:
 
 
 class TestCreateRealTicketItemsBatch:
+    def test_can_defer_commit_to_complete_purchase(self):
+        conn, _ = _mock_conn(fetchone=[5])
+        assert create_real_ticket_items_batch(conn, 1, [{"match_id": 1}], commit=False) == [5]
+        conn.commit.assert_not_called()
+
     def test_inserts_multiple_items(self):
         mock_cur = MagicMock()
         mock_cur.fetchone.side_effect = [[1], [2], [3]]
@@ -240,6 +254,73 @@ class TestCreateRealTicketItemsBatch:
         result = create_real_ticket_items_batch(mock_conn, 1, items)
         assert result == [1, 2, 3]
         assert mock_cur.execute.call_count == 3
+        mock_conn.commit.assert_called_once()
+
+
+class TestCreateCompleteRealTicket:
+    def test_one_commit_keeps_zero_amount_zero_odds_and_away_option(self):
+        conn, cur = _mock_conn()
+        cur.fetchone.side_effect = [[42], [43]]
+        ticket = {"total_amount": 0, "theoretical_max_prize": 0}
+        items = [{"match_id": 1, "option_code": "0", "sp_value": 0}]
+        assert create_real_ticket_with_items(conn, ticket, items) == (42, [43])
+        assert cur.execute.call_args_list[0].args[1]["total_amount"] == 0
+        assert cur.execute.call_args_list[1].args[1]["option_code"] == "0"
+        assert cur.execute.call_args_list[1].args[1]["sp_value"] == 0
+        conn.commit.assert_called_once()
+        conn.rollback.assert_not_called()
+
+    @pytest.mark.parametrize(
+        ("ticket", "items"),
+        [
+            (None, [{"match_id": 1, "option_code": "0"}]),
+            ({}, []),
+            ({}, None),
+            ({}, [None]),
+            ({}, [{"option_code": "0"}]),
+            ({}, [{"match_id": True, "option_code": "0"}]),
+            ({}, [{"match_id": 1, "option_code": ""}]),
+            ({}, [{"match_id": 1, "option_code": "0", "play_type": None}]),
+            ({}, [{"match_id": 1, "option_code": "0", "sp_value": "NaN"}]),
+            ({}, [{"match_id": 1, "option_code": "0", "sp_value": "Infinity"}]),
+            ({}, [{"match_id": 1, "option_code": "0", "sp_value": -1}]),
+            ({"total_amount": -1}, [{"match_id": 1, "option_code": "0"}]),
+            ({"total_amount": None}, [{"match_id": 1, "option_code": "0"}]),
+            ({"multiple": 0}, [{"match_id": 1, "option_code": "0"}]),
+            ({"multiple": 1.5}, [{"match_id": 1, "option_code": "0"}]),
+        ],
+    )
+    def test_invalid_input_is_rejected_before_any_insert(self, ticket, items):
+        conn, cur = _mock_conn()
+        with pytest.raises(TicketInputError):
+            create_real_ticket_with_items(conn, ticket, items)
+        cur.execute.assert_not_called()
+        conn.commit.assert_not_called()
+        conn.rollback.assert_called_once()
+
+    @pytest.mark.parametrize("missing", ["ticket_id", "item_id"])
+    def test_missing_insert_result_rolls_back(self, missing):
+        conn, cur = _mock_conn()
+        cur.fetchone.side_effect = [None] if missing == "ticket_id" else [[42], None]
+        with pytest.raises(RuntimeError, match="identifier|Not all"):
+            create_real_ticket_with_items(conn, {}, [{"match_id": 1, "option_code": "0"}])
+        conn.rollback.assert_called_once()
+        conn.commit.assert_not_called()
+
+    def test_commit_failure_rolls_back_and_never_reports_success(self):
+        conn, cur = _mock_conn()
+        cur.fetchone.side_effect = [[42], [43]]
+        conn.commit.side_effect = RuntimeError("commit failed")
+        with pytest.raises(RuntimeError, match="commit failed"):
+            create_real_ticket_with_items(conn, {}, [{"match_id": 1, "option_code": "0"}])
+        conn.rollback.assert_called_once()
+
+    def test_autocommit_cannot_silently_break_atomicity(self):
+        conn, cur = _mock_conn()
+        conn.autocommit = True
+        with pytest.raises(RuntimeError, match="requires a transaction"):
+            create_real_ticket_with_items(conn, {}, [{"match_id": 1, "option_code": "0"}])
+        cur.execute.assert_not_called()
 
 
 class TestSettlements:

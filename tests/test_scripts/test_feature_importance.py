@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, Mock
 
 import numpy as np
+import pytest
 
 from scripts import feature_importance
 
@@ -334,6 +335,53 @@ def test_model_comparison_preserves_unavailable_metrics_as_null() -> None:
     assert result["models"][0]["flb_score"] is None
 
 
+@pytest.mark.parametrize("missing", [None, float("nan"), float("inf")])
+def test_model_comparison_keeps_missing_losses_and_backtest_values_unknown(missing):
+    conn = MagicMock()
+    cursor = conn.cursor.return_value.__enter__.return_value
+    metric_names = [
+        "model_name",
+        "n_predictions",
+        "avg_brier",
+        "avg_log_loss",
+        "avg_rps",
+        "avg_market_probability_move",
+        "avg_closing_edge",
+        "avg_flb_score",
+    ]
+    backtest_names = [
+        "model_name",
+        "hit_rate",
+        "roi",
+        "sharpe_ratio",
+        "max_drawdown_pct",
+        "profit_factor",
+        "total_profit",
+    ]
+    cursor.description = [(name,) for name in metric_names]
+
+    def fetch():
+        if cursor.execute.call_count == 1:
+            cursor.description = [(name,) for name in backtest_names]
+            return [
+                ("unknown", 2, 0.6, missing, missing, missing, missing, missing),
+                ("zero", 2, 0, 0, 0, 0, 0, 0),
+            ]
+        return [
+            ("unknown", missing, missing, missing, missing, missing, missing),
+            ("zero", 0, 0, 0, 0, 0, 0),
+        ]
+
+    # get_model_comparison_data reads description before fetchall.
+    cursor.fetchall.side_effect = fetch
+    result = feature_importance.get_model_comparison_data(conn)
+    by_name = {m["name"]: m for m in result["models"]}
+    for key in ("log_loss", "rps", "roi", "sharpe", "profit_factor", "total_profit"):
+        assert by_name["unknown"][key] is None
+        assert by_name["zero"][key] == 0
+    assert result["models"][0]["name"] == "zero"
+
+
 def test_feature_training_uses_one_pre_match_snapshot_per_match() -> None:
     conn = CaptureTrainingConnection()
 
@@ -343,3 +391,39 @@ def test_feature_training_uses_one_pre_match_snapshot_per_match() -> None:
     query = conn.cursor_instance.query
     assert "DISTINCT ON (fs.match_id)" in query
     assert "fs.snapshot_time < m.kickoff_time" in query
+
+
+@pytest.mark.parametrize(
+    "labels", [[0] * 100, [1] * 100, [2] * 100, [0, 1] * 50, [0, 2] * 50, [1, 2] * 50]
+)
+def test_explanation_missing_outcome_classes_returns_friendly_error_without_replacing_cache(
+    monkeypatch, labels
+):
+    old_model = object()
+    factory = Mock(return_value=FakeClassifier())
+    monkeypatch.setitem(sys.modules, "xgboost", SimpleNamespace(XGBClassifier=factory))
+    monkeypatch.setattr(feature_importance, "_trained_model", old_model)
+    monkeypatch.setattr(
+        feature_importance,
+        "_load_training_data",
+        lambda _conn: (np.ones((100, 1)), np.array(labels), list(range(100)), ["home_elo"]),
+    )
+    result = feature_importance.train_if_needed(object(), force=True)
+    assert result["status"] == "error"
+    assert "类别" in result["error"]
+    factory.assert_not_called()
+    assert feature_importance._trained_model is old_model
+
+
+def test_explanation_all_missing_features_returns_friendly_error(monkeypatch):
+    factory = Mock(return_value=FakeClassifier())
+    monkeypatch.setitem(sys.modules, "xgboost", SimpleNamespace(XGBClassifier=factory))
+    monkeypatch.setattr(
+        feature_importance,
+        "_load_training_data",
+        lambda _conn: (np.empty((102, 0)), np.tile([0, 1, 2], 34), list(range(102)), []),
+    )
+    result = feature_importance.train_if_needed(object(), force=True)
+    assert result["status"] == "error"
+    assert "特征" in result["error"]
+    factory.assert_not_called()

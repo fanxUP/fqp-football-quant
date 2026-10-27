@@ -4,6 +4,7 @@ from datetime import time as clock_time
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
 from apscheduler.schedulers.background import BackgroundScheduler
 
 from apps.backend.src.services.pipeline_status import JOB_DEFINITIONS
@@ -74,6 +75,40 @@ def test_self_tracked_job_is_not_wrapped_again():
     assert wrapped is job
 
 
+@pytest.mark.parametrize(
+    "code",
+    [
+        "train_xgboost_shadow",
+        "train_logistic_shadow",
+        "train_random_forest_shadow",
+        "train_naive_bayes_shadow",
+        "train_svm_shadow",
+        "train_negative_binomial_shadow",
+        "train_extra_trees_shadow",
+        "train_hist_gradient_boosting_shadow",
+        "train_adaboost_shadow",
+        "train_lda_shadow",
+        "train_knn_shadow",
+        "train_mlp_shadow",
+    ],
+)
+def test_training_owner_is_not_double_recorded(code):
+    def job():
+        return {"status": "skipped"}
+
+    assert _audited_job(code, code, "model_agent", job) is job
+
+
+def test_missing_audit_owner_prevents_untracked_business_execution():
+    business = MagicMock()
+    with (
+        patch("apps.backend.src.db.get_db"),
+        patch("scripts.agent_storage.start_job_run", return_value=None),
+    ):
+        _audited_job("fixture", "固定样本", "qa_agent", business)()
+    business.assert_not_called()
+
+
 def test_upset_provider_collection_is_not_double_tracked():
     def job():
         return {"status": "skipped"}
@@ -102,28 +137,72 @@ def test_scheduler_uses_completed_status_for_successful_legacy_jobs():
     from pathlib import Path
 
     source = Path("scripts/jobs/run_scheduler.py").read_text()
-    assert 'conn, run_id, "completed"' in source
     assert 'finish_job_run(conn, run_id, "success"' not in source
 
 
-def test_scheduler_recovers_interrupted_legacy_run_before_starting_next_one():
+@pytest.mark.parametrize(
+    "result,expected",
+    [
+        ({"status": "ok"}, "completed"),
+        ({"status": "completed"}, "completed"),
+        ({"status": "error", "error": "missing key"}, "failed"),
+        ({"status": "failed"}, "failed"),
+        ({"status": "partial"}, "failed"),
+        ({"status": "store_failed"}, "failed"),
+        ({"status": "typo"}, "failed"),
+        ({"status": "skipped", "reason": "insufficient_data"}, "skipped"),
+        ({"status": "no_data"}, "skipped"),
+        ({"status": "dry_run"}, "skipped"),
+        (None, "completed"),
+        ({}, "completed"),
+        (False, "failed"),
+    ],
+)
+def test_generic_scheduler_records_actual_outcome(result, expected):
+    conn = MagicMock()
+    wrapped = _audited_job("fixture", "固定样本", "qa_agent", lambda: result)
+    with (
+        patch("apps.backend.src.db.get_db") as database,
+        patch("scripts.agent_storage.start_job_run", return_value=81),
+        patch("scripts.agent_storage.finish_job_run") as finish,
+    ):
+        database.return_value.__enter__.return_value = conn
+        wrapped()
+    assert finish.call_count == 1
+    assert finish.call_args.args == (conn, 81, expected)
+    if expected == "failed":
+        assert finish.call_args.kwargs.get("error")
+
+
+def test_generic_scheduler_records_exception_once():
+    wrapped = _audited_job(
+        "fixture", "固定样本", "qa_agent", MagicMock(side_effect=RuntimeError("boom"))
+    )
+    with (
+        patch("apps.backend.src.db.get_db"),
+        patch("scripts.agent_storage.start_job_run", return_value=81),
+        patch("scripts.agent_storage.finish_job_run") as finish,
+    ):
+        wrapped()
+    assert finish.call_count == 1
+    assert finish.call_args.args[2] == "failed"
+    assert finish.call_args.kwargs["error"] == "boom"
+
+
+def test_scheduler_start_does_not_change_other_running_jobs():
     conn = MagicMock()
     wrapped = _audited_job("settle_tickets", "票单结算", "settlement_agent", lambda: {})
 
     with (
         patch("apps.backend.src.db.get_db") as get_db,
-        patch("scripts.agent_storage.recover_interrupted_job_runs") as recover,
         patch("scripts.agent_storage.start_job_run", return_value=21),
-        patch("scripts.agent_storage.finish_job_run"),
+        patch("scripts.agent_storage.finish_job_run") as finish,
     ):
         get_db.return_value.__enter__.return_value = conn
         wrapped()
 
-    recover.assert_called_once_with(
-        conn,
-        ["settle_tickets"],
-        reason="superseded by a new scheduler execution after process interruption",
-    )
+    conn.cursor.assert_not_called()
+    finish.assert_called_once_with(conn, 21, "completed", output_refs={"result": "{}"})
 
 
 def test_scheduler_has_no_numberless_match_refresh_path():

@@ -4,7 +4,6 @@ import { ApiError } from '../core/types';
 import type {
   ModelCompareItem,
   ModelPlayTypeRecommendation,
-  RadarDimension,
   FeatureRanking,
   ShapEntry,
   ConditionSegment,
@@ -355,9 +354,8 @@ function AnalysisMatchDrawer({
 // Tab: 模型对比
 // ---------------------------------------------------------------------------
 
-function ModelCompareTab() {
+export function ModelCompareTab() {
   const [models, setModels] = useState<ModelCompareItem[]>([]);
-  const [dimensions, setDimensions] = useState<RadarDimension[]>([]);
   const [recommendations, setRecommendations] = useState<ModelPlayTypeRecommendation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -370,7 +368,6 @@ function ModelCompareTab() {
       .then(([res, recRes]) => {
         if (res.status === 'ok') {
           setModels(res.models);
-          setDimensions(res.radar_dimensions);
         }
         setRecommendations(recRes.recommendations || []);
         setLoading(false);
@@ -382,7 +379,11 @@ function ModelCompareTab() {
   }, []);
 
   // Build radar chart option
-  const radarOption = buildRadarOption(models, dimensions);
+  const radarOption = buildRadarOption(models);
+  const hasKnown = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
+  const metric = (value: unknown, digits = 2) => hasKnown(value) ? value.toFixed(digits) : '—';
+  const percent = (value: unknown) => hasKnown(value) ? `${(value * 100).toFixed(1)}%` : '—';
+  const radarExplanation = '仅比较所有模型共同已知的指标；缺失或非有限指标不补零、不参与归一化。';
 
   if (error) return <ErrorState message={error} />;
   if (loading) return <div style={{ padding: 32, color: 'var(--fqp-text-muted)' }}>加载模型对比数据...</div>;
@@ -479,7 +480,10 @@ function ModelCompareTab() {
       )}
 
       {/* Radar chart */}
-      <ChartCard title="模型综合对比（雷达图）" option={radarOption} height={420} />
+      <ChartCard title="模型综合对比（雷达图）" option={radarOption} height={420}
+        subtitle={radarExplanation} empty={radarOption.radar.indicator.length < 3}
+        emptyReason="共同已知指标不足三个，暂不绘制雷达图；可在下表查看已有指标。" />
+      <p style={{ color: 'var(--fqp-text-muted)', fontSize: 12 }}>{radarExplanation}</p>
 
       {/* Ranking table */}
       <Card title="指标排名" style={{ marginTop: 20 }}>
@@ -508,26 +512,26 @@ function ModelCompareTab() {
                   </td>
                   <td style={{ ...tdS, fontWeight: 600 }}>{m.name}</td>
                   <td style={{ ...tdS, textAlign: 'center' }} className="fqp-mono">{m.n_predictions}</td>
-                  <td style={tdRight} className="fqp-mono">{m.brier.toFixed(4)}</td>
-                  <td style={tdRight} className="fqp-mono">{m.log_loss.toFixed(4)}</td>
+                  <td style={tdRight} className="fqp-mono">{metric(m.brier, 4)}</td>
+                  <td style={tdRight} className="fqp-mono">{metric(m.log_loss, 4)}</td>
                   <td style={tdRight} className="fqp-mono">
-                    <span style={{ color: (m.roi ?? 0) >= 0 ? 'var(--fqp-success)' : 'var(--fqp-red-neon)' }}>
-                      {m.roi !== undefined ? `${((m.roi ?? 0) * 100).toFixed(1)}%` : '—'}
+                    <span style={{ color: !hasKnown(m.roi) ? 'var(--fqp-text-muted)' : m.roi >= 0 ? 'var(--fqp-success)' : 'var(--fqp-red-neon)' }}>
+                      {percent(m.roi)}
                     </span>
                   </td>
                   <td style={tdRight} className="fqp-mono">
-                    {m.hit_rate !== undefined ? `${(m.hit_rate * 100).toFixed(1)}%` : '—'}
+                    {percent(m.hit_rate)}
                   </td>
-                  <td style={tdRight} className="fqp-mono">{m.sharpe?.toFixed(2) ?? '—'}</td>
+                  <td style={tdRight} className="fqp-mono">{metric(m.sharpe)}</td>
                   <td style={tdRight} className="fqp-mono">
                     <span style={{ color: 'var(--fqp-red-neon)' }}>
-                      {m.max_drawdown_pct !== undefined ? `${m.max_drawdown_pct.toFixed(1)}%` : '—'}
+                      {hasKnown(m.max_drawdown_pct) ? `${m.max_drawdown_pct.toFixed(1)}%` : '—'}
                     </span>
                   </td>
-                  <td style={tdRight} className="fqp-mono">{m.profit_factor?.toFixed(2) ?? '—'}</td>
+                  <td style={tdRight} className="fqp-mono">{metric(m.profit_factor)}</td>
                   <td style={tdRight} className="fqp-mono">
-                    <span style={{ color: (m.total_profit ?? 0) >= 0 ? 'var(--fqp-success)' : 'var(--fqp-red-neon)' }}>
-                      {m.total_profit !== undefined ? `${m.total_profit >= 0 ? '+' : ''}${m.total_profit.toFixed(2)}` : '—'}
+                    <span style={{ color: !hasKnown(m.total_profit) ? 'var(--fqp-text-muted)' : m.total_profit >= 0 ? 'var(--fqp-success)' : 'var(--fqp-red-neon)' }}>
+                      {hasKnown(m.total_profit) ? `${m.total_profit >= 0 ? '+' : ''}${m.total_profit.toFixed(2)}` : '—'}
                     </span>
                   </td>
                 </tr>
@@ -540,34 +544,30 @@ function ModelCompareTab() {
   );
 }
 
-function buildRadarOption(models: ModelCompareItem[], dimensions: RadarDimension[]) {
+export function buildRadarOption(models: ModelCompareItem[]) {
   // Radar dimensions: brier (inv), log_loss (inv), roi, sharpe, hit_rate, profit_factor
   const radarKeys = ['brier', 'log_loss', 'roi', 'sharpe', 'hit_rate', 'profit_factor'] as const satisfies readonly (keyof ModelCompareItem)[];
   const radarLabels = ['布里尔分数 ↓', '对数损失 ↓', 'ROI', '夏普', '胜率', '盈利因子'];
   const invertFlags = [true, true, false, false, false, false];
 
-  // Collect all values per dimension
+  // Only common finite dimensions can compare models fairly. Unknown is never
+  // plotted as zero (which would become a perfect score for a loss metric).
+  const knownDimensions = radarKeys.map((key, i) => ({ key, label: radarLabels[i], invert: invertFlags[i] }))
+    .filter(({ key }) => models.length > 0 && models.every((m) => typeof m[key] === 'number' && Number.isFinite(m[key])));
   const allValues: Record<string, number[]> = {};
-  for (let i = 0; i < radarKeys.length; i++) {
-    const key = radarKeys[i];
-    allValues[key] = models.map((m) => {
-      const v = m[key];
-      return typeof v === 'number' ? v : 0;
-    });
+  for (const { key } of knownDimensions) {
+    allValues[key] = models.map((m) => m[key] as number);
   }
 
-  const indicator = radarLabels.map((label, i) => ({
+  const indicator = knownDimensions.map(({ label }) => ({
     name: label,
     max: 1,
     min: 0,
   }));
 
   const seriesData = models.map((m) => {
-    const values = radarKeys.map((key, i) => {
-      const v = m[key];
-      const val = typeof v === 'number' ? v : 0;
-      return normalizeForRadar(val, allValues[key], invertFlags[i]);
-    });
+    const values = knownDimensions.map(({ key, invert }) =>
+      normalizeForRadar(m[key] as number, allValues[key], invert));
     return { name: m.name, value: values };
   });
 
@@ -577,6 +577,12 @@ function buildRadarOption(models: ModelCompareItem[], dimensions: RadarDimension
   return {
     tooltip: {
       trigger: 'item',
+      renderMode: 'richText',
+      formatter: (params: { dataIndex: number }) => {
+        const model = models[params.dataIndex];
+        if (!model) return '';
+        return [model.name, ...knownDimensions.map(({ key, label }) => `${label}: ${(model[key] as number).toFixed(4)}`)].join('\n');
+      },
     },
     legend: {
       bottom: 0,

@@ -9,6 +9,8 @@ from typing import Any
 from apps.backend.src.db import get_db
 from scripts.agents.task_queue import finish_tracked_job, start_tracked_job
 from scripts.business_time import business_now
+from scripts.market_metric_validation import spf_probability_vector
+from scripts.model_evaluation_scope import CALIBRATION_PREDICTIONS_CTE
 from scripts.probability_calibration import (
     OUTCOME_CODES,
     evaluate_temperature_scaling_temporal_holdout,
@@ -22,32 +24,43 @@ def fit_profiles_from_prediction_rows(
     rows: list[tuple[Any, ...]],
     minimum_samples: int = MINIMUM_CALIBRATION_SAMPLES,
     minimum_validation_samples: int = MINIMUM_VALIDATION_SAMPLES,
+    *,
+    diagnostics: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     """Fit on earlier matches and score profiles on a later temporal holdout."""
     grouped: dict[tuple[str, int], dict[str, Any]] = {}
     for model_name, match_id, option_code, probability, actual, kickoff_time in rows:
-        if option_code not in OUTCOME_CODES or actual not in OUTCOME_CODES:
-            continue
         key = (str(model_name), int(match_id))
         entry = grouped.setdefault(
             key,
-            {"actual": actual, "kickoff_time": str(kickoff_time), "probabilities": {}},
+            {
+                "actual": actual,
+                "kickoff_time": str(kickoff_time),
+                "probabilities": {},
+                "invalid": False,
+            },
         )
-        if entry["actual"] != actual:
+        if (
+            option_code not in OUTCOME_CODES
+            or actual not in OUTCOME_CODES
+            or entry["actual"] != actual
+            or entry["kickoff_time"] != str(kickoff_time)
+            or option_code in entry["probabilities"]
+        ):
+            entry["invalid"] = True
             continue
         entry["probabilities"][option_code] = probability
 
     samples_by_model: dict[str, list[tuple[str, dict[str, float], str]]] = defaultdict(list)
+    rejected: dict[str, int] = defaultdict(int)
     for (model_name, _), entry in grouped.items():
         probabilities = entry["probabilities"]
-        if set(probabilities) != set(OUTCOME_CODES):
-            continue
-        try:
-            normalized = {code: float(probabilities[code]) for code in OUTCOME_CODES}
-        except TypeError, ValueError:
+        validated = spf_probability_vector(probabilities)
+        if entry["invalid"] or validated is None:
+            rejected[model_name] += 1
             continue
         samples_by_model[model_name].append(
-            (str(entry["kickoff_time"]), normalized, str(entry["actual"]))
+            (str(entry["kickoff_time"]), validated, str(entry["actual"]))
         )
 
     profiles: list[dict[str, Any]] = []
@@ -63,37 +76,27 @@ def fit_profiles_from_prediction_rows(
         )
         if profile is not None:
             profiles.append({"model_name": model_name, "play_type": "spf", **profile})
+    if diagnostics is not None:
+        diagnostics.update(
+            {
+                "candidate_groups": len(grouped),
+                "valid_groups": sum(map(len, samples_by_model.values())),
+                "rejected_groups": sum(rejected.values()),
+                "rejected_by_model": dict(sorted(rejected.items())),
+            }
+        )
     return profiles
 
 
 def _load_settled_prediction_rows(conn: Any) -> list[tuple[Any, ...]]:
     with conn.cursor() as cur:
         cur.execute(
-            """
-            WITH latest_predictions AS (
-                SELECT DISTINCT ON (mp.match_id, mv.model_name, mp.play_type, mp.option_code)
-                       mp.match_id, mv.model_name, mp.play_type, mp.option_code, mp.model_probability,
-                       m.kickoff_time,
-                       CASE
-                         WHEN r.full_home_goals > r.full_away_goals THEN '3'
-                         WHEN r.full_home_goals = r.full_away_goals THEN '1'
-                         ELSE '0'
-                       END AS actual_result
-                FROM model_prediction_latest_rows mp
-                JOIN model_versions mv ON mv.id = mp.model_version_id
-                JOIN official_matches m ON m.id = mp.match_id
-                JOIN official_results r ON r.match_id = mp.match_id
-                WHERE mp.play_type = 'spf'
-                  AND mp.option_code IN ('3', '1', '0')
-                  AND mp.model_probability IS NOT NULL
-                  AND mp.predict_time < m.kickoff_time
-                  AND mp.validation_status = 'valid'
-                ORDER BY mp.match_id, mv.model_name, mp.play_type, mp.option_code,
-                         mp.predict_time DESC, mp.id DESC
-            )
-            SELECT model_name, match_id, option_code, model_probability, actual_result, kickoff_time
-            FROM latest_predictions
-            ORDER BY model_name, kickoff_time, match_id, option_code
+            f"""
+            {CALIBRATION_PREDICTIONS_CTE}
+            SELECT canonical_model_name, match_id, option_code, model_probability,
+                   actual_result, kickoff_time
+            FROM calibration_predictions
+            ORDER BY canonical_model_name, kickoff_time, match_id, option_code
             """
         )
         return list(cur.fetchall())
@@ -147,9 +150,10 @@ def _store_profiles(conn: Any, profiles: list[dict[str, Any]]) -> int:
 
 
 def _run_impl(dry_run: bool = False) -> dict[str, Any]:
+    diagnostics: dict[str, Any] = {}
     with get_db() as conn:
         rows = _load_settled_prediction_rows(conn)
-        profiles = fit_profiles_from_prediction_rows(rows)
+        profiles = fit_profiles_from_prediction_rows(rows, diagnostics=diagnostics)
         stored = 0 if dry_run else _store_profiles(conn, profiles)
     return {
         "status": "ok",
@@ -157,6 +161,7 @@ def _run_impl(dry_run: bool = False) -> dict[str, Any]:
         "settled_prediction_rows": len(rows),
         "profiles": len(profiles),
         "stored": stored,
+        "sample_quality": diagnostics,
         "note": "校准结果仅供评估，不会写回预测、推荐或风控链路",
     }
 

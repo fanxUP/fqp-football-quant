@@ -5,6 +5,40 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 from math import isfinite
+from typing import Any
+
+PROBABILITY_SUM_TOLERANCE = 0.005
+
+
+def finite_number(value: Any) -> float | None:
+    """Parse legacy/DB numbers without treating missing, boolean or NaN as data."""
+    if isinstance(value, bool):
+        return None
+    try:
+        number = float(value)
+    except TypeError, ValueError, OverflowError:
+        return None
+    return number if isfinite(number) else None
+
+
+def probability_value(value: Any) -> float | None:
+    number = finite_number(value)
+    return number if number is not None and 0 <= number <= 1 else None
+
+
+def spf_probability_vector(values: Mapping[str, Any] | None) -> dict[str, float] | None:
+    """Accept one complete SPF distribution; preserve original rounding."""
+    if not isinstance(values, Mapping) or set(values) != {"3", "1", "0"}:
+        return None
+    parsed = {}
+    for option, value in values.items():
+        probability = probability_value(value)
+        if probability is None:
+            return None
+        parsed[option] = probability
+    if abs(sum(parsed.values()) - 1.0) > PROBABILITY_SUM_TOLERANCE:
+        return None
+    return parsed
 
 
 class MarketMetricValidationError(ValueError):
@@ -25,7 +59,7 @@ def validate_market(
     market_probabilities: Mapping[str, float],
     odds_by_option: Mapping[str, float],
     snapshot_ids: Mapping[str, int],
-    tolerance: float = 0.005,
+    tolerance: float = PROBABILITY_SUM_TOLERANCE,
 ) -> dict[str, OptionMetrics]:
     """Validate and calculate metrics for the same market and evidence batch."""
     option_codes = set(model_probabilities)

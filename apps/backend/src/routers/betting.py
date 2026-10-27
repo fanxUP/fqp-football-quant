@@ -15,8 +15,8 @@ from apps.backend.src.db import get_db
 from scripts.betting_ledger import read_ledger_page
 from scripts.business_time import business_now, business_today
 from scripts.real_ticket_storage import (
-    create_real_ticket,
-    create_real_ticket_items_batch,
+    TicketInputError,
+    create_real_ticket_with_items,
     list_real_tickets,
 )
 from scripts.simulator_calculator import (
@@ -662,26 +662,26 @@ def _create_real_betting_ticket(conn, req: CreateBettingTicketRequest) -> dict:
 
     source_type = "agent" if req.source == "real-agent" else "user_manual"
     ocr_status = req.ocr_status or ("recognized" if req.ticket_image_url else "not_applicable")
-    ticket_id = create_real_ticket(
-        conn,
-        {
-            "ticket_image_url": req.ticket_image_url,
-            "ticket_no": req.ticket_no,
-            "store_code": req.store_code,
-            "total_amount": calc["total_cost"],
-            "multiple": req.multiple,
-            "pass_type": calc["pass_type"],
-            "theoretical_max_prize": calc["max_prize"],
-            "source_type": source_type,
-            "ocr_status": ocr_status,
-            "confirm_status": "confirmed",
-            "settlement_status": "pending",
-        },
-    )
-    if not ticket_id:
-        raise HTTPException(status_code=500, detail="创建彩票失败")
-
-    create_real_ticket_items_batch(conn, ticket_id, items)
+    try:
+        ticket_id, _ = create_real_ticket_with_items(
+            conn,
+            {
+                "ticket_image_url": req.ticket_image_url,
+                "ticket_no": req.ticket_no,
+                "store_code": req.store_code,
+                "total_amount": calc["total_cost"],
+                "multiple": req.multiple,
+                "pass_type": calc["pass_type"],
+                "theoretical_max_prize": calc["max_prize"],
+                "source_type": source_type,
+                "ocr_status": ocr_status,
+                "confirm_status": "confirmed",
+                "settlement_status": "pending",
+            },
+            items,
+        )
+    except TicketInputError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     return {
         "status": "ok",
         "ticketUid": f"real:{ticket_id}",

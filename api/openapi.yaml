@@ -345,8 +345,71 @@ paths:
         '200': { description: 回测任务列表 }
     post:
       summary: 创建回测任务
+      description: >-
+        同步回放已保存的预测；walk_forward 仅划分回放窗口，不重新训练模型。
+        配置在模型查询和执行写入前校验。联赛身份及风险筛选尚未接通，非空
+        league_ids/risk_levels 明确拒绝，不会悄悄使用全量数据。
+        最多 1000 个滚动窗口；日期跨度最多 36500 天。dry_run 也校验参数。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                name: { type: string, maxLength: 255 }
+                description: { type: string, maxLength: 5000 }
+                time_start: { type: string, nullable: true, format: date }
+                time_end: { type: string, nullable: true, format: date }
+                model_names:
+                  type: array
+                  nullable: true
+                  maxItems: 100
+                  items: { type: string, minLength: 1, maxLength: 200 }
+                model_ids:
+                  type: array
+                  nullable: true
+                  maxItems: 100
+                  items: { type: integer, minimum: 1 }
+                play_types:
+                  type: array
+                  nullable: true
+                  maxItems: 100
+                  items: { type: string, minLength: 1, maxLength: 200 }
+                league_ids:
+                  type: array
+                  nullable: true
+                  maxItems: 0
+                  items: { type: integer }
+                risk_levels:
+                  type: array
+                  nullable: true
+                  maxItems: 0
+                  items: { type: string }
+                vote_directions:
+                  type: array
+                  nullable: true
+                  maxItems: 100
+                  items: { type: string, minLength: 1, maxLength: 200 }
+                odds_min: { type: number, nullable: true, minimum: 1, exclusiveMinimum: true, maximum: 1000000 }
+                odds_max: { type: number, nullable: true, minimum: 1, exclusiveMinimum: true, maximum: 1000000 }
+                ev_min: { type: number, nullable: true, minimum: -1, maximum: 1000000 }
+                ev_max: { type: number, nullable: true, minimum: -1, maximum: 1000000 }
+                min_model_prob: { type: number, minimum: 0, maximum: 1, default: 0.35 }
+                confidence_min: { type: number, nullable: true, minimum: 0, maximum: 1 }
+                stake_per_bet: { type: number, minimum: 0, exclusiveMinimum: true, maximum: 1000000000, default: 1 }
+                signal_strength: { type: string, enum: [strong, weak, all], default: strong }
+                walk_forward: { type: boolean, default: true }
+                train_window_days: { type: integer, minimum: 1, maximum: 36500, default: 365 }
+                test_window_days: { type: integer, minimum: 1, maximum: 36500, default: 90 }
+                step_days: { type: integer, minimum: 1, maximum: 36500, default: 90 }
+                dry_run: { type: boolean, default: false }
+                methodology_version:
+                  description: 历史配置兼容字段；忽略请求值，执行代码决定实际方法版本。
       responses:
-        '202': { description: 回测任务已提交 }
+        '200': { description: 同步回测结果、无可用模型或执行占用而跳过 }
+        '422': { description: 参数无效、范围倒置、工作量超限或尚不支持的筛选 }
   /api/v1/backtests/{id}:
     get:
       summary: 查询回测任务详情

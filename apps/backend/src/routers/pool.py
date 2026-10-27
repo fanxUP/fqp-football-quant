@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from functools import lru_cache
-from typing import Optional
+from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException, Query
 
@@ -13,8 +13,51 @@ from scripts.pool_combination_optimizer import (
     analyze_pool,
     pool_analysis_to_dict,
 )
+from scripts.prediction_statistics import latest_prediction_ctes
 
 router = APIRouter(tags=["pool"])
+
+
+def _read_pool_model_consensus(cur: Any, match_ids: list[int]) -> dict[int, tuple]:
+    """Read consensus only for the official matches in a candidate issue."""
+    if not match_ids:
+        return {}
+    latest_ctes = latest_prediction_ctes(filter_match=False, filter_match_ids=True)
+    cur.execute(
+        f"""WITH RECURSIVE {latest_ctes}, latest_ids AS (
+            SELECT mapped.prediction_id AS id FROM latest_groups g
+            JOIN model_prediction_group_options mapped ON mapped.group_id = g.group_id
+            UNION ALL
+            SELECT id FROM legacy_latest
+        ), latest_model_options AS (
+            SELECT DISTINCT ON (mp.match_id, mp.model_version_id, mp.option_code)
+                   mp.match_id, mp.model_version_id, mp.option_code, mp.model_probability
+            FROM latest_ids latest
+            JOIN LATERAL (
+                SELECT p.* FROM model_predictions p WHERE p.id = latest.id OFFSET 0
+            ) mp ON true
+            JOIN model_versions mv ON mv.id = mp.model_version_id
+            JOIN official_matches m ON m.id = mp.match_id
+            WHERE mp.match_id = ANY(%(match_ids)s::bigint[])
+              AND mp.play_type = 'spf'
+              AND mp.predict_time < m.kickoff_time
+              AND mp.validation_status = 'valid'
+              AND COALESCE((mp.uncertainty_reason->>'model_independent')::boolean, false) = true
+              AND mv.is_active = true
+              AND mp.model_probability IS NOT NULL
+            ORDER BY mp.match_id, mp.model_version_id, mp.option_code,
+                     mp.predict_time DESC, mp.id DESC
+        )
+        SELECT match_id,
+               AVG(model_probability) FILTER (WHERE option_code = '3'),
+               AVG(model_probability) FILTER (WHERE option_code = '1'),
+               AVG(model_probability) FILTER (WHERE option_code = '0')
+        FROM latest_model_options
+        GROUP BY match_id
+        HAVING COUNT(DISTINCT model_version_id) > 0""",
+        {"match_ids": sorted(set(match_ids))},
+    )
+    return {int(row[0]): tuple(row[1:]) for row in cur.fetchall()}
 
 
 @router.get("/api/pool/analyze")
@@ -46,7 +89,12 @@ def run_pool_analysis(
         raise HTTPException(400, "strategy must be conservative | balanced | aggressive")
 
     with get_db() as conn:
+        # get_db's connection health probe starts a transaction. Start this
+        # multi-query read with one consistent issue/prediction snapshot.
+        conn.rollback()
         with conn.cursor() as cur:
+            cur.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
+            cur.execute("SET LOCAL jit = off")
             # 官方胜负彩彩池是唯一的14场来源。
             cur.execute(
                 """
@@ -57,9 +105,7 @@ def run_pool_analysis(
                        COALESCE(im.away_team_name, m.away_team_name) AS away_team,
                        COALESCE(im.league_name, m.league_name) AS league,
                        COALESCE(im.kickoff_time, m.kickoff_time)::text AS match_date,
-                       m.id AS official_match_id,
-                       latest.model_name,
-                       latest.prob_home, latest.prob_draw, latest.prob_away
+                       m.id AS official_match_id
                 FROM football_pool_issues i
                 JOIN football_pool_issue_matches im ON im.issue_id = i.id
                 LEFT JOIN official_matches m
@@ -67,32 +113,6 @@ def run_pool_analysis(
                   OR (m.home_team_name = im.home_team_name
                       AND m.away_team_name = im.away_team_name
                       AND m.kickoff_time::date = im.kickoff_time::date)
-                LEFT JOIN LATERAL (
-                    WITH latest_model_options AS (
-                        SELECT DISTINCT ON (mp.model_version_id, mp.option_code)
-                               mp.model_version_id, mp.option_code, mp.model_probability
-                        FROM model_prediction_latest_rows mp
-                        JOIN model_versions mv ON mv.id = mp.model_version_id
-                        WHERE mp.match_id = m.id
-                          AND mp.play_type = 'spf'
-                          AND mp.predict_time < m.kickoff_time
-                          AND mp.validation_status = 'valid'
-                          AND COALESCE(
-                              (mp.uncertainty_reason->>'model_independent')::boolean,
-                              false
-                          ) = true
-                          AND mv.is_active = true
-                          AND mp.model_probability IS NOT NULL
-                        ORDER BY mp.model_version_id, mp.option_code,
-                                 mp.predict_time DESC, mp.id DESC
-                    )
-                    SELECT '模型共识' AS model_name,
-                           AVG(model_probability) FILTER (WHERE option_code = '3') AS prob_home,
-                           AVG(model_probability) FILTER (WHERE option_code = '1') AS prob_draw,
-                           AVG(model_probability) FILTER (WHERE option_code = '0') AS prob_away
-                    FROM latest_model_options
-                    HAVING COUNT(DISTINCT model_version_id) > 0
-                ) latest ON true
                 WHERE i.game_type = 't14c'
                   AND (%s IS NULL OR i.id::text = %s OR i.issue_no = %s)
                 ORDER BY CASE WHEN i.official_status = 'selling' THEN 0 ELSE 1 END,
@@ -119,19 +139,34 @@ def run_pool_analysis(
             ordered_issues = list(issues.values())
             first_issue = ordered_issues[0]
             first_is_current = first_issue[0][4] == "selling"
-            if first_is_current or issue_id is not None:
-                matches = first_issue
-            else:
-                matches = next(
-                    (
-                        issue_rows
-                        for issue_rows in ordered_issues
-                        if issue_rows[0][3] == 14
-                        and len(issue_rows) == 14
-                        and ready_count(issue_rows) == 14
-                    ),
-                    first_issue,
+
+            def with_consensus(issue_rows: list[tuple]) -> list[tuple]:
+                consensus = _read_pool_model_consensus(
+                    cur, [int(row[12]) for row in issue_rows if row[12] is not None]
                 )
+                return [
+                    (*row, "模型共识", *consensus[row[12]])
+                    if row[12] in consensus
+                    else (*row, None, None, None, None)
+                    for row in issue_rows
+                ]
+
+            matches: list[tuple]
+            if first_is_current or issue_id is not None:
+                matches = with_consensus(first_issue)
+            else:
+                selected = None
+                first_with_consensus = None
+                for issue_rows in ordered_issues:
+                    if issue_rows[0][3] != 14 or len(issue_rows) != 14:
+                        continue
+                    candidate = with_consensus(issue_rows)
+                    if issue_rows is first_issue:
+                        first_with_consensus = candidate
+                    if ready_count(candidate) == 14:
+                        selected = candidate
+                        break
+                matches = selected or first_with_consensus or with_consensus(first_issue)
 
             issue_no = matches[0][1]
             if matches[0][3] != 14 or len(matches) != 14:

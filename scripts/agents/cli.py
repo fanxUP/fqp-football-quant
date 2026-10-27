@@ -55,6 +55,10 @@ def _parser() -> argparse.ArgumentParser:
     job_finish.add_argument("status", choices=("completed", "failed", "blocked"))
     job_finish.add_argument("--error", default=None)
     job_retry = sub.add_parser("job-retry")
+    job_retry.description = (
+        "Allocate a distinct retry audit record; this command does not execute business work. "
+        "Use retry_run_id for job-finish. Session-owned jobs require their dedicated entrypoint."
+    )
     job_retry.add_argument("run_id", type=int)
     job_retry.add_argument("--max-retries", type=int, default=2)
     gate = sub.add_parser("review-resolve")
@@ -138,8 +142,14 @@ def main(argv: list[str] | None = None) -> int:
         print({"run_id": args.run_id, "updated": ok, "status": args.status})
     elif args.command == "job-retry":
         with get_db() as conn:
-            ok = retry_job_run(conn, args.run_id, max_retries=args.max_retries)
-        print({"run_id": args.run_id, "retried": ok})
+            retry_run_id = retry_job_run(conn, args.run_id, max_retries=args.max_retries)
+        print(
+            {
+                "run_id": args.run_id,
+                "retried": retry_run_id is not None,
+                "retry_run_id": retry_run_id,
+            }
+        )
     elif args.command == "review-resolve":
         with get_db() as conn:
             ok = resolve_review_gate(conn, args.gate_id, args.reviewer, args.status, args.comment)

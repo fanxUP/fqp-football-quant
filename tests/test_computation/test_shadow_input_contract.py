@@ -179,7 +179,7 @@ def test_shared_training_persists_contract_without_promoting(tmp_path):
         model_name="test_shadow",
         missing_message="missing",
         store_profile=store,
-        save_artifact=lambda _, path: path.write_bytes(b"fixed-fixture"),
+        save_artifact=joblib.dump,
     )
     assert result["status"] == "ok"
     saved = store.call_args.args[1]

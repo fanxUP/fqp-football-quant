@@ -225,7 +225,8 @@ def _load_training_dataset(
     cutoff_at: datetime | None = None,
 ) -> TrainingDataset:
     """Materialize candidate rows once, then derive both samples and manifest."""
-    del league_id  # official_matches has no competition_id column
+    if league_id is not None:
+        raise ValueError("league_id 暂未接入官方赛事身份，不能静默使用全量训练数据")
     if cutoff_at is not None and cutoff_at.tzinfo is not None and cutoff_at.utcoffset() is not None:
         raise ValueError("cutoff_at must be timezone-naive to match TIMESTAMP columns")
     cutoff_clause = "WHERE m.kickoff_time < %s" if cutoff_at is not None else ""

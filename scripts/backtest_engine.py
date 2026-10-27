@@ -19,6 +19,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import math
 import os
 import sys
@@ -29,7 +30,14 @@ from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from typing import Any
 
+from scripts.market_metric_validation import (
+    PROBABILITY_SUM_TOLERANCE,
+    finite_number,
+    probability_value,
+)
 from scripts.training_manifest import CandidateMatch
+
+_LOG = logging.getLogger(__name__)
 
 # Ensure project root on sys.path
 _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -39,7 +47,9 @@ if _PROJECT_ROOT not in sys.path:
 
 # —— 数据结构 ——
 
-CURRENT_METHODOLOGY_VERSION = 4
+CURRENT_METHODOLOGY_VERSION = 5
+MAX_BACKTEST_DAYS = 36500
+MAX_BACKTEST_WINDOWS = 1000
 
 
 @dataclass
@@ -74,9 +84,90 @@ class BacktestConfig:
     min_model_prob: float = 0.35  # 最低模型概率阈值（低于此值不下注）
     signal_strength: str = "strong"  # "strong" | "weak" | "all" — 只下注此强度的信号
 
+    def __post_init__(self) -> None:
+        self.validate()
+
+    def validate(self) -> None:
+        """One contract for API, CLI, replay and mutable legacy callers."""
+        for key in ("train_window_days", "test_window_days", "step_days"):
+            value = getattr(self, key)
+            if type(value) is not int or not 1 <= value <= MAX_BACKTEST_DAYS:
+                raise ValueError(f"{key} 必须是 1–{MAX_BACKTEST_DAYS} 的整数")
+        if type(self.walk_forward) is not bool:
+            raise ValueError("walk_forward 必须是布尔值")
+        dates: dict[str, date] = {}
+        for key in ("time_start", "time_end"):
+            value = getattr(self, key)
+            if value is None:
+                continue
+            try:
+                parsed = date.fromisoformat(value)
+                if parsed.isoformat() != value:
+                    raise ValueError
+            except (TypeError, ValueError) as exc:
+                raise ValueError(f"{key} 必须是有效的 YYYY-MM-DD 日期") from exc
+            dates[key] = parsed
+        if len(dates) == 2:
+            span = (dates["time_end"] - dates["time_start"]).days
+            if not 0 <= span <= MAX_BACKTEST_DAYS:
+                raise ValueError(f"time_start/time_end 必须有序且跨度不超过 {MAX_BACKTEST_DAYS} 天")
+            if self.walk_forward:
+                count = max(0, (span - self.train_window_days - 1) // self.step_days + 1)
+                if count > MAX_BACKTEST_WINDOWS:
+                    raise ValueError(f"回测窗口超过 {MAX_BACKTEST_WINDOWS}，请增大 step_days")
+        for key in ("league_ids", "risk_levels"):
+            value = getattr(self, key)
+            if value is not None and (not isinstance(value, list) or value):
+                raise ValueError(f"{key} 暂不支持非空筛选，不能静默使用全量数据")
+        for key in ("model_names", "play_types", "vote_directions", "model_ids"):
+            value = getattr(self, key)
+            if value is None:
+                continue
+            if not isinstance(value, list) or len(value) > 100:
+                raise ValueError(f"{key} 必须是最多 100 项的列表")
+            if key == "model_ids":
+                valid = all(type(item) is int and item > 0 for item in value)
+            else:
+                valid = all(
+                    isinstance(item, str) and item.strip() and len(item) <= 200 for item in value
+                )
+            if not valid:
+                raise ValueError(f"{key} 包含无效项")
+        if self.signal_strength not in ("strong", "weak", "all"):
+            raise ValueError("signal_strength 必须是 strong、weak 或 all")
+        for key, lower, upper, inclusive in (
+            ("stake_per_bet", 0, 1e9, False),
+            ("min_model_prob", 0, 1, True),
+            ("confidence_min", 0, 1, True),
+            ("odds_min", 1, 1e6, False),
+            ("odds_max", 1, 1e6, False),
+            ("ev_min", -1, 1e6, True),
+            ("ev_max", -1, 1e6, True),
+        ):
+            value = getattr(self, key)
+            if value is None and key not in ("stake_per_bet", "min_model_prob"):
+                continue
+            number = None if isinstance(value, str) else finite_number(value)
+            if (
+                number is None
+                or number > upper
+                or (number < lower if inclusive else number <= lower)
+            ):
+                raise ValueError(f"{key} 必须是合法范围内的有限数值")
+        for lower_field, upper_field in (("odds_min", "odds_max"), ("ev_min", "ev_max")):
+            if getattr(self, lower_field) is not None and getattr(self, upper_field) is not None:
+                if getattr(self, lower_field) > getattr(self, upper_field):
+                    raise ValueError(f"{lower_field} 不能大于 {upper_field}")
+        for key in ("name", "description"):
+            limit = 255 if key == "name" else 5000
+            if not isinstance(getattr(self, key), str) or len(getattr(self, key)) > limit:
+                raise ValueError(f"{key} 必须是最多 {limit} 字符的文本")
+
     def to_dict(self) -> dict:
         return {
-            # v4 起按玩法匹配官方赛果；继续采用赛前最新预测与预测时点赔率。
+            # v5 排除不完整/负比分、矛盾SPF及非法数值；缺市场概率不补0。
+            # 继续按玩法匹配官方赛果，
+            # 采用同版本/时刻的赛前最新组与预测时点赔率；稀疏组不补齐。
             # 版本由执行代码决定；旧配置重跑时自动升级，不能由请求覆盖。
             "methodology_version": CURRENT_METHODOLOGY_VERSION,
             "name": self.name,
@@ -117,7 +208,7 @@ class BetRecord:
     model_name: str
     option_code: str  # "3" / "1" / "0"
     model_prob: float
-    market_prob: float
+    market_prob: float | None
     odds: float  # 赔率 (sp_value)
     stake: float
     actual_result: str  # "3" / "1" / "0"
@@ -192,6 +283,7 @@ class BacktestEngine:
     """
 
     def __init__(self, conn: Any, config: BacktestConfig):
+        config.validate()
         self.conn = conn
         self.config = config
 
@@ -204,11 +296,19 @@ class BacktestEngine:
 
         JOIN: model_predictions → model_versions → official_matches → official_results → official_odds_snapshots
         """
+        self.config.validate()
+        from scripts.model_evaluation_scope import (
+            EVALUATION_PREDICTION_ROWS_CTES,
+            SETTLED_SPF_RESULTS_CTE,
+        )
+
         where = [
             "mp.prediction_rank = 1",
             "m.match_status = 'Settled'",
-            "r.full_home_goals IS NOT NULL",
-            "r.full_away_goals IS NOT NULL",
+            "r.full_home_goals >= 0",
+            "r.full_away_goals >= 0",
+            "(mp.play_type <> 'spf' OR "
+            "(spf.match_id IS NOT NULL AND mp.option_code IN ('3', '1', '0')))",
             "mp.model_probability > 0",
         ]
         params: list = []
@@ -219,9 +319,6 @@ class BacktestEngine:
         if self.config.time_end:
             where.append("m.business_date <= %s")
             params.append(self.config.time_end)
-        if self.config.league_ids:
-            # league_ids stores league name patterns; match by league_name
-            pass  # Filter by league_name not implemented for league_ids — use league name list instead
         if self.config.play_types:
             placeholders = ",".join(["%s"] * len(self.config.play_types))
             where.append(f"mp.play_type IN ({placeholders})")
@@ -237,30 +334,59 @@ class BacktestEngine:
         if self.config.confidence_min is not None:
             where.append("mp.confidence_score >= %s")
             params.append(self.config.confidence_min)
-        if self.config.vote_directions:
-            # 需要 JOIN model_committee_votes
-            pass  # handled separately in load_data
 
         where_clause = " AND ".join(where)
 
-        sql = f"""
-            WITH ranked_predictions AS (
+        sql = f"""{EVALUATION_PREDICTION_ROWS_CTES}{SETTLED_SPF_RESULTS_CTE}
+            , eligible_predictions AS (
                 SELECT
                     source_mp.*,
-                    DENSE_RANK() OVER (
-                        PARTITION BY source_mp.match_id,
-                                     source_mp.model_version_id,
-                                     source_mp.play_type
-                        ORDER BY source_mp.predict_time DESC
-                    ) AS prediction_rank
-                FROM model_prediction_latest_rows source_mp
+                    source_mv.model_name AS canonical_model_name
+                FROM evaluation_prediction_rows source_mp
                 JOIN official_matches source_m ON source_m.id = source_mp.match_id
+                JOIN model_versions source_mv ON source_mv.id = source_mp.model_version_id
                 WHERE source_mp.predict_time < source_m.kickoff_time
                   AND source_mp.validation_status = 'valid'
+                  AND (source_mp.play_type <> 'spf' OR source_mp.option_code IN ('3', '1', '0'))
                   AND COALESCE(
                       (source_mp.uncertainty_reason->>'model_independent')::boolean,
                       false
                   ) = true
+            ), prediction_groups AS (
+                -- Inspect every present option before numeric/confidence/EV
+                -- filters can disguise a malformed full group as a sparse one.
+                SELECT match_id, canonical_model_name, model_version_id, play_type, predict_time,
+                       MAX(id) AS latest_prediction_id,
+                       BOOL_AND(COALESCE(model_probability BETWEEN 0 AND 1, false))
+                           AND CASE WHEN COUNT(*) = 3
+                               THEN ABS(SUM(model_probability) - 1) <= {PROBABILITY_SUM_TOLERANCE}
+                               ELSE SUM(model_probability) <= 1 + {PROBABILITY_SUM_TOLERANCE}
+                           END AS model_group_valid,
+                       BOOL_AND(COALESCE(market_probability BETWEEN 0 AND 1, false))
+                           AND CASE WHEN COUNT(*) = 3
+                               THEN ABS(SUM(market_probability) - 1) <= {PROBABILITY_SUM_TOLERANCE}
+                               ELSE SUM(market_probability) <= 1 + {PROBABILITY_SUM_TOLERANCE}
+                           END AS market_group_valid
+                FROM eligible_predictions
+                GROUP BY match_id, canonical_model_name, model_version_id, play_type, predict_time
+            ), ranked_prediction_groups AS (
+                -- Select the newest version/time as one unit. Never borrow
+                -- older-version peers or fall back after rejecting its values.
+                SELECT prediction_groups.*,
+                       DENSE_RANK() OVER (
+                           PARTITION BY match_id, canonical_model_name, play_type
+                           ORDER BY predict_time DESC, latest_prediction_id DESC
+                       ) AS prediction_rank
+                FROM prediction_groups
+            ), ranked_predictions AS (
+                SELECT source_mp.*, groups.prediction_rank, groups.market_group_valid
+                FROM eligible_predictions source_mp
+                JOIN ranked_prediction_groups groups
+                  ON groups.match_id = source_mp.match_id
+                 AND groups.model_version_id = source_mp.model_version_id
+                 AND groups.play_type = source_mp.play_type
+                 AND groups.predict_time = source_mp.predict_time
+                WHERE source_mp.play_type <> 'spf' OR groups.model_group_valid
             )
             SELECT
                 mp.match_id,
@@ -269,19 +395,13 @@ class BacktestEngine:
                 mp.play_type,
                 mp.option_code,
                 mp.model_probability,
-                mp.market_probability,
+                CASE WHEN mp.play_type = 'spf' AND NOT mp.market_group_valid THEN NULL
+                     ELSE mp.market_probability END AS market_probability,
                 mp.ev,
                 mp.confidence_score,
                 mp.predict_time,
                 CASE
-                    WHEN mp.play_type = 'spf' THEN COALESCE(
-                        NULLIF(r.spf_result, ''),
-                        CASE
-                            WHEN r.full_home_goals > r.full_away_goals THEN '3'
-                            WHEN r.full_home_goals = r.full_away_goals THEN '1'
-                            ELSE '0'
-                        END
-                    )
+                    WHEN mp.play_type = 'spf' THEN spf.actual_result
                     WHEN mp.play_type = 'rqspf' THEN NULLIF(r.rqspf_result, '')
                     WHEN mp.play_type IN ('zjq', 'total_goals') THEN r.total_goals_result
                     WHEN mp.play_type IN ('bf', 'score') THEN r.score_result
@@ -313,6 +433,7 @@ class BacktestEngine:
             JOIN model_versions mv ON mv.id = mp.model_version_id
             JOIN official_matches m ON m.id = mp.match_id
             JOIN official_results r ON r.match_id = mp.match_id
+            LEFT JOIN settled_spf_results spf ON spf.match_id = mp.match_id
             WHERE {where_clause}
               AND r.result_status IN ('final', 'confirmed')
             ORDER BY m.business_date ASC, mp.predict_time ASC
@@ -341,6 +462,7 @@ class BacktestEngine:
 
         如果没有足够的日期范围，回退到单窗口模式。
         """
+        self.config.validate()
         if not match_dates:
             return []
 
@@ -359,24 +481,27 @@ class BacktestEngine:
                 }
             ]
 
-        from datetime import timedelta
-
+        # Bound work before allocating windows. Ordinals avoid date.max overflow.
+        last_start = max_date.toordinal() - cfg.train_window_days - 1
+        count = max(0, (last_start - min_date.toordinal()) // cfg.step_days + 1)
+        if count > MAX_BACKTEST_WINDOWS:
+            raise ValueError(
+                f"回测窗口超过 {MAX_BACKTEST_WINDOWS}，请增大 step_days 或缩小日期范围"
+            )
         windows = []
         current = min_date
         idx = 0
 
         while current < max_date:
             train_start = current
-            train_end = current + timedelta(days=cfg.train_window_days)
-            test_start = train_end + timedelta(days=1)
-            test_end = test_start + timedelta(days=cfg.test_window_days)
-
-            if test_start > max_date:
+            test_ordinal = current.toordinal() + cfg.train_window_days + 1
+            if test_ordinal > max_date.toordinal():
                 break
-
-            # Clamp test_end
-            if test_end > max_date:
-                test_end = max_date
+            train_end = date.fromordinal(test_ordinal - 1)
+            test_start = date.fromordinal(test_ordinal)
+            test_end = date.fromordinal(
+                min(test_ordinal + cfg.test_window_days, max_date.toordinal())
+            )
 
             windows.append(
                 {
@@ -388,7 +513,10 @@ class BacktestEngine:
                 }
             )
             idx += 1
-            current += timedelta(days=cfg.step_days)
+            next_ordinal = current.toordinal() + cfg.step_days
+            if next_ordinal >= max_date.toordinal():
+                break
+            current = date.fromordinal(next_ordinal)
 
         # Fallback: single window if no windows generated
         if not windows:
@@ -413,9 +541,16 @@ class BacktestEngine:
         cfg = self.config
 
         # 概率阈值
-        mp = float(row["model_probability"])
-        if mp < cfg.min_model_prob:
+        mp = probability_value(row.get("model_probability"))
+        if mp is None or mp <= 0 or mp < cfg.min_model_prob:
             return False
+
+        # Explicit confidence filters must also hold for in-memory/replayed rows.
+        # PostgreSQL NUMERIC NaN sorts above finite values and can pass SQL >=.
+        if cfg.confidence_min is not None:
+            confidence = probability_value(row.get("confidence_score"))
+            if confidence is None or confidence < cfg.confidence_min:
+                return False
 
         # 信号强度过滤
         if cfg.signal_strength != "all":
@@ -424,14 +559,18 @@ class BacktestEngine:
                 return False
 
         # 赔率过滤
-        sp = float(row.get("sp_value", 0))
+        sp = finite_number(row.get("sp_value"))
+        if sp is None or sp <= 1:
+            return False
         if cfg.odds_min is not None and sp < cfg.odds_min:
             return False
         if cfg.odds_max is not None and sp > cfg.odds_max:
             return False
 
         # EV 过滤
-        ev = float(row.get("ev", 0))
+        ev = finite_number(row.get("ev"))
+        if ev is None:
+            return False
         if cfg.ev_min is not None and ev < cfg.ev_min:
             return False
         if cfg.ev_max is not None and ev > cfg.ev_max:
@@ -509,17 +648,13 @@ class BacktestEngine:
                     model_name=row["model_name"],
                     option_code=opt,
                     model_prob=float(row["model_probability"]),
-                    market_prob=float(row.get("market_probability", 0)),
+                    market_prob=probability_value(row.get("market_probability")),
                     odds=sp,
                     stake=stake,
                     actual_result=actual,
                     profit=profit,
                     ev=float(row.get("ev", 0)),
-                    confidence=(
-                        float(row["confidence_score"])
-                        if row.get("confidence_score") is not None
-                        else None
-                    ),
+                    confidence=finite_number(row.get("confidence_score")),
                     play_type=str(row.get("play_type") or "spf"),
                 )
             )
@@ -568,6 +703,7 @@ class BacktestEngine:
         brier_total = 0.0
         log_loss_total = 0.0
         probability_edge_total = 0.0
+        complete_market = True
         for b in bets:
             # Brier: (p - o)^2 where o=1 if correct
             o = 1.0 if b.option_code == b.actual_result else 0.0
@@ -580,11 +716,17 @@ class BacktestEngine:
             else:
                 log_loss_total -= math.log(1.0 - p_clamped)
             # Probability edge at prediction time; closing odds are not available.
-            probability_edge_total += b.model_prob - b.market_prob
+            market_probability = probability_value(b.market_prob)
+            if market_probability is None:
+                complete_market = False
+            else:
+                probability_edge_total += b.model_prob - market_probability
 
         brier_score = brier_total / n
         log_loss = log_loss_total / n
-        probability_edge = probability_edge_total / n
+        # Do not turn missing market evidence into zero or silently change
+        # the aggregate denominator. Profit and quality remain independent.
+        probability_edge = probability_edge_total / n if complete_market else None
 
         # 资金曲线 + 最大回撤 + 最长连亏
         equity_curve: list[dict] = []
@@ -653,8 +795,10 @@ class BacktestEngine:
             "avg_odds": round(avg_odds, 4),
             "brier_score": round(brier_score, 4),
             "log_loss": round(log_loss, 4),
-            "clv": round(probability_edge, 4),  # legacy storage/API alias
-            "probability_edge": round(probability_edge, 4),
+            "clv": round(probability_edge, 4) if probability_edge is not None else None,
+            "probability_edge": round(probability_edge, 4)
+            if probability_edge is not None
+            else None,
             "odds_clv": None,
             "clv_semantics": "probability_edge_legacy_alias",
             "max_drawdown": round(max_drawdown, 4),
@@ -866,9 +1010,11 @@ class BacktestEngine:
             cur.execute(
                 """UPDATE backtest_runs
                    SET status = 'completed', finished_at = NOW()
-                   WHERE id = %s""",
+                   WHERE id = %s AND status = 'running'""",
                 (run_id,),
             )
+            if cur.rowcount != 1:
+                raise RuntimeError("backtest run is no longer running")
 
         self.conn.commit()
         return stored
@@ -917,10 +1063,27 @@ class BacktestEngine:
 # —— 快速运行入口（不依赖 DB 连接） ——
 
 
+def _record_backtest_failure(conn: Any, run_id: int, error: Exception) -> bool:
+    """Discard aborted/partial result writes; never overwrite a committed success."""
+    conn.rollback()
+    with conn.cursor() as cur:
+        cur.execute(
+            """UPDATE backtest_runs
+               SET status = 'failed', error_message = %s, finished_at = clock_timestamp()
+               WHERE id = %s AND status = 'running' RETURNING id""",
+            (str(error)[:1000], run_id),
+        )
+        changed = cur.fetchone() is not None
+    conn.commit()
+    return changed
+
+
 def run_backtest_from_config(
     conn: Any,
     config: BacktestConfig,
     store: bool = True,
+    *,
+    ai_job_run_id: int | None = None,
 ) -> dict[str, Any]:
     """便捷函数：创建回测 run → 执行 → 存储。
 
@@ -932,23 +1095,39 @@ def run_backtest_from_config(
     Returns:
         回测结果 dict
     """
+    config.validate()  # Reject invalid mutable configurations before any business write.
     # 创建 run 记录
     run_id = None
     if store:
         with conn.cursor() as cur:
-            cur.execute(
-                """INSERT INTO backtest_runs (name, description, config, status, started_at)
-                   VALUES (%s, %s, %s, 'running', NOW())
-                   RETURNING id""",
-                (
-                    config.name or f"backtest_{datetime.now().isoformat(timespec='seconds')}",
-                    config.description or "",
-                    json.dumps(config.to_dict(), ensure_ascii=False),
-                ),
+            values = (
+                config.name or f"backtest_{datetime.now().isoformat(timespec='seconds')}",
+                config.description or "",
+                json.dumps(config.to_dict(), ensure_ascii=False),
             )
+            if ai_job_run_id is None:
+                # Isolated research/legacy callers retain their unlinked schema
+                # contract. Scheduler/manual API always pass an explicit owner.
+                cur.execute(
+                    """INSERT INTO backtest_runs (name, description, config, status, started_at)
+                       VALUES (%s, %s, %s, 'running', NOW()) RETURNING id""",
+                    values,
+                )
+            else:
+                from scripts.backtest_job_execution import EXECUTION_PROTOCOL
+
+                cur.execute(
+                    """INSERT INTO backtest_runs
+                         (name, description, config, status, started_at, ai_job_run_id)
+                       SELECT %s, %s, %s, 'running', NOW(), id FROM ai_job_runs
+                       WHERE id=%s AND job_code='backtest' AND status='running'
+                         AND input_snapshot_refs->>'execution_protocol'=%s RETURNING id""",
+                    (*values, ai_job_run_id, EXECUTION_PROTOCOL),
+                )
             row = cur.fetchone()
-            if row:
-                run_id = row[0]
+            if not row:
+                raise RuntimeError("backtest run could not be created for its audit owner")
+            run_id = row[0]
         conn.commit()
 
     # 执行回测。计算异常也必须收口运行状态，避免永久停在 running。
@@ -957,31 +1136,28 @@ def run_backtest_from_config(
         result = engine.run()
     except Exception as e:
         if store and run_id:
-            with conn.cursor() as cur:
-                cur.execute(
-                    """UPDATE backtest_runs
-                       SET status = 'failed', error_message = %s, finished_at = NOW()
-                       WHERE id = %s""",
-                    (str(e)[:1000], run_id),
-                )
-            conn.commit()
+            try:
+                _record_backtest_failure(conn, run_id, e)
+            except Exception:
+                _LOG.exception("Failed to persist backtest computation failure")
         raise
 
     # 存储结果
     if store and run_id:
+        result["run_id"] = run_id
         try:
             engine.store_results(run_id, result)
-            result["run_id"] = run_id
         except Exception as e:
-            # 标记失败
-            with conn.cursor() as cur:
-                cur.execute(
-                    """UPDATE backtest_runs
-                       SET status = 'failed', error_message = %s, finished_at = NOW()
-                       WHERE id = %s""",
-                    (str(e)[:1000], run_id),
-                )
-            conn.commit()
+            try:
+                changed = _record_backtest_failure(conn, run_id, e)
+            except Exception as cleanup_error:
+                _LOG.exception("Failed to reconcile backtest result storage")
+                raise e from cleanup_error
+            if not changed:
+                # COMMIT may have succeeded despite a lost acknowledgement.
+                # Let the owner read the durable completed fact; do not claim a
+                # storage failure or reclassify the already committed output.
+                raise
             result["status"] = "store_failed"
             result["store_error"] = str(e)
 
@@ -1996,7 +2172,6 @@ if __name__ == "__main__":
         name="测试回测",
         time_start="2025-01-01",
         time_end="2025-06-30",
-        league_ids=[1, 2],
         odds_min=1.5,
         odds_max=5.0,
         ev_min=0.02,

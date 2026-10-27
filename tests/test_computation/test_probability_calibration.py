@@ -6,7 +6,37 @@ from scripts.probability_calibration import (
     apply_temperature_scaling,
     evaluate_temperature_scaling_temporal_holdout,
     fit_temperature_scaling,
+    multiclass_log_loss,
 )
+
+
+@pytest.mark.parametrize(
+    "probabilities",
+    [
+        {"3": 0.7, "1": 0.7, "0": 0.7},
+        {"3": 1.1, "1": 0, "0": -0.1},
+        {"3": True, "1": 0, "0": 0},
+        {"3": float("nan"), "1": 0.5, "0": 0.5},
+        {"3": 0.5, "1": 0.5},
+    ],
+)
+def test_calibration_rejects_invalid_raw_probability_groups(probabilities):
+    with pytest.raises(ValueError):
+        apply_temperature_scaling(probabilities, 1)
+    with pytest.raises(ValueError):
+        multiclass_log_loss([(probabilities, "3")])
+
+
+def test_valid_zero_probabilities_remain_known_zero():
+    vector = {"3": 1.0, "1": 0.0, "0": 0.0}
+    assert apply_temperature_scaling(vector, 1.5) == vector
+    assert multiclass_log_loss([(vector, "3")]) == 0
+    assert multiclass_log_loss([(vector, "0")]) > 20
+
+
+def test_temperature_uses_stable_weights_at_small_positive_temperatures():
+    result = apply_temperature_scaling({"3": 0.6, "1": 0.3, "0": 0.1}, 1e-300)
+    assert result == {"3": 1, "1": 0, "0": 0}
 
 
 def test_temperature_scaling_keeps_three_way_probability_distribution_normalized() -> None:

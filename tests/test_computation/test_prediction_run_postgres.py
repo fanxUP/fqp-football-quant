@@ -157,7 +157,9 @@ def test_scheduled_count_snapshot_survives_failures_and_reads_without_history_ac
     assert dashboard.get_prediction_count()["status"] == "ok"
     with conn.cursor() as cursor:
         cursor.execute("SELECT status FROM ai_job_runs ORDER BY id")
-        assert cursor.fetchall() == [("completed",), ("failed",), ("failed",), ("completed",)]
+        # An unversioned historical run has no provable owner, even though the
+        # current producer holds its own count lock. Do not relabel history.
+        assert cursor.fetchall() == [("completed",), ("failed",), ("running",), ("completed",)]
 
 
 @pytest.mark.parametrize("job", ["daily_review", "news_shadow"])
@@ -1096,6 +1098,2136 @@ def test_market_baseline_only_reads_matches_in_the_evaluation_scope(
         )
 
 
+@pytest.mark.parametrize("archive_snapshots", [100, 1000])
+def test_condition_statistics_only_rank_predictions_for_evaluated_matches(
+    isolated_database, archive_snapshots
+):
+    from psycopg2 import sql
+
+    from scripts import feature_importance
+    from scripts.model_prediction_run_identity import content_sha256
+    from scripts.model_prediction_run_storage import (
+        create_prediction_run,
+        finalize_prediction_run,
+        store_prediction_group,
+    )
+
+    conn, schema = isolated_database
+    migrations = Path(__file__).resolve().parents[2] / "sql"
+    with conn.cursor() as cursor:
+        cursor.execute("SET statement_timeout='20s'")
+        cursor.execute("SET jit=off")
+        # The minimal run fixture omits the base schema's read indexes. Use the
+        # actual existing DDL, so this is not a new product index or migration.
+        match_index = re.search(
+            r"CREATE INDEX IF NOT EXISTS idx_predictions_match\b[^;]+;",
+            (migrations / "06_indexes_constraints.sql").read_text(),
+        )
+        assert match_index is not None
+        cursor.execute(match_index[0])
+        cursor.execute("INSERT INTO model_versions(model_name) VALUES ('same'),('same'),('other')")
+        cursor.execute("""INSERT INTO official_matches(kickoff_time)
+            SELECT '2026-10-26 18:00'::timestamp FROM generate_series(1,136)""")
+        cursor.execute("""INSERT INTO official_results(match_id,result_status,spf_result)
+            SELECT id,'confirmed','3' FROM official_matches WHERE id>100""")
+        cursor.execute("""CREATE TABLE market_efficiency_metrics (
+            id BIGSERIAL PRIMARY KEY, match_id BIGINT NOT NULL, model_version_id BIGINT,
+            play_type TEXT NOT NULL, snapshot_time TIMESTAMP NOT NULL,
+            brier_score NUMERIC, log_loss NUMERIC)""")
+        cursor.execute((migrations / "114_evaluation_read_paths.sql").read_text())
+        cursor.execute(
+            """INSERT INTO model_predictions
+                (match_id,model_version_id,predict_time,play_type,option_code,
+                 model_probability,market_probability,confidence_score,validation_status)
+            SELECT m.id,mv.id,'2026-01-01'::timestamp+n*INTERVAL '1 minute',
+                   'spf',o,0.333333,0.333333,0.5,'valid'
+            FROM official_matches m CROSS JOIN model_versions mv
+            CROSS JOIN generate_series(1,%s) n CROSS JOIN unnest(ARRAY['3','1','0']) o
+            WHERE m.id<=100""",
+            (archive_snapshots,),
+        )
+        for case in range(12):
+            for repeat in range(3):
+                match_id = 101 + case * 3 + repeat
+                version = 2 if case == 6 else 1
+                when = "2026-10-25 09:00" if case == 6 else "2026-10-25 10:00"
+                market, confidence = ((0.2, None), (0.4, 0), (0.6, 0.6), (0.8, 0.9))[case % 4]
+                if case == 10:
+                    market, confidence = None, 0.4
+                cursor.execute(
+                    """INSERT INTO market_efficiency_metrics
+                        (match_id,model_version_id,play_type,snapshot_time,brier_score,log_loss)
+                    VALUES (%s,%s,'spf',%s,0.6,1)""",
+                    (match_id, version, when),
+                )
+                if case != 9:  # A scored match without a prediction must stay excluded.
+                    cursor.execute(
+                        """INSERT INTO model_predictions
+                            (match_id,model_version_id,predict_time,play_type,option_code,
+                             model_probability,market_probability,confidence_score,validation_status)
+                        VALUES (%s,%s,%s,'spf','3',0.5,%s,%s,'valid')""",
+                        (match_id, version, when, market, confidence),
+                    )
+                if case in (4, 5, 6, 8, 11):
+                    # Keep canonical view semantics: a newer invalid row must
+                    # not revive an old valid row; newer times/versions can
+                    # remove the exact evaluation-snapshot association.
+                    cursor.execute(
+                        """INSERT INTO model_predictions
+                            (match_id,model_version_id,predict_time,play_type,option_code,
+                             model_probability,market_probability,confidence_score,validation_status)
+                        VALUES (%s,%s,%s,%s,'3',0.9,0.9,0.9,%s)""",
+                        (
+                            match_id,
+                            2 if case == 8 else version,
+                            when if case in (4, 8) else "2026-10-25 11:00",
+                            "rqspf" if case == 11 else "spf",
+                            "invalid" if case == 4 else "valid",
+                        ),
+                    )
+    conn.commit()
+
+    # Published groups override newer legacy rows; unfinished groups must not
+    # hide the older unmapped prediction. Exercise the real publication code.
+    for case, completed in ((6, True), (7, False)):
+        for match_id in range(101 + case * 3, 104 + case * 3):
+            version = 2 if completed else 1
+            run_id = uuid.uuid4()
+            create_prediction_run(
+                conn,
+                run_id=run_id,
+                ai_job_run_id=None,
+                release_id="condition-fixture",
+                code_fingerprint={"files": {}, "sha256": content_sha256({})},
+                model_manifest=[{"model_version_id": version}],
+                input_manifest={"match_ids": [match_id]},
+                provenance_status="incomplete",
+            )
+            metadata = {
+                "match_id": match_id,
+                "model_version_id": version,
+                "play_type": "spf",
+                "predict_time": "2026-10-25T09:00:00" if completed else "2026-10-25T11:00:00",
+                "feature_snapshot_id": 77,
+                "expected_options": ["3", "1", "0"],
+            }
+            store_prediction_group(
+                conn,
+                run_id=run_id,
+                metadata=metadata,
+                predictions=[
+                    {
+                        **{k: v for k, v in metadata.items() if k != "expected_options"},
+                        "option_code": option,
+                        "model_probability": probability,
+                        "market_probability": probability,
+                        "confidence_score": None,
+                        "validation_status": "valid",
+                        "calculation_version": "condition-fixture",
+                        "odds_snapshot_id": 30,
+                        "break_even_probability": probability,
+                        "market_edge": 0,
+                        "breakeven_edge": 0,
+                        "ev": 0,
+                    }
+                    for option, probability in (("3", 0.6), ("1", 0.25), ("0", 0.15))
+                ],
+            )
+            if completed:
+                finalize_prediction_run(
+                    conn,
+                    run_id=run_id,
+                    run_status="completed",
+                    output_summary={
+                        "expected_groups": 1,
+                        "completed_groups": 1,
+                        "skipped_groups": 0,
+                        "missing_groups": [],
+                        "input_updates_skipped": 0,
+                        "completion_reason": "predictions_completed",
+                    },
+                )
+    with conn.cursor() as cursor:
+        cursor.execute("ANALYZE")
+        cursor.execute(sql.SQL("GRANT USAGE ON SCHEMA {} TO fqp").format(sql.Identifier(schema)))
+        cursor.execute(
+            sql.SQL("GRANT SELECT ON ALL TABLES IN SCHEMA {} TO fqp").format(sql.Identifier(schema))
+        )
+    conn.commit()
+
+    class CapturedConnection:
+        query = ""
+
+        @contextmanager
+        def cursor(self):
+            with conn.cursor() as cursor:
+
+                class CapturedCursor:
+                    def execute(self, query):
+                        captured.query = query
+                        cursor.execute(query)
+
+                    def __getattr__(self, name):
+                        return getattr(cursor, name)
+
+                yield CapturedCursor()
+
+    def prediction_work(node):
+        own = 0
+        if node.get("Relation Name") == "model_predictions":
+            own = (node["Actual Rows"] + node.get("Rows Removed by Filter", 0)) * node[
+                "Actual Loops"
+            ]
+        return own + sum(prediction_work(child) for child in node.get("Plans", []))
+
+    captured = CapturedConnection()
+    measurements = []
+    for dimension, column, expression in (
+        (
+            "odds_range",
+            "odds_range",
+            """CASE WHEN mp_home.market_probability<0.30 THEN '低概率 (<30%)'
+                WHEN mp_home.market_probability<0.45 THEN '中低概率 (30-45%)'
+                WHEN mp_home.market_probability<0.55 THEN '中概率 (45-55%)'
+                WHEN mp_home.market_probability<0.70 THEN '中高概率 (55-70%)'
+                ELSE '高概率 (>70%)' END""",
+        ),
+        (
+            "confidence",
+            "confidence_range",
+            """CASE WHEN mp_home.confidence_score IS NULL THEN '未校准/未知'
+                WHEN mp_home.confidence_score<0.3 THEN '低信心 (<30%)'
+                WHEN mp_home.confidence_score<0.5 THEN '中低信心 (30-50%)'
+                WHEN mp_home.confidence_score<0.7 THEN '中高信心 (50-70%)'
+                ELSE '高信心 (>70%)' END""",
+        ),
+    ):
+        with conn.cursor() as cursor:
+            cursor.execute("SET LOCAL ROLE fqp")
+        response = feature_importance.get_condition_performance(captured, dimension)
+        assert sum(segment["n"] for segment in response["segments"]) == 27
+        with conn.cursor() as cursor:
+            # Independent original join, with no match-bound prediction CTE.
+            reference_query = (
+                feature_importance._LATEST_METRICS_CTE
+                + f""" SELECT {expression} AS {column}, mem.canonical_model_name AS model_name,
+                    COUNT(*) AS n, ROUND(AVG(mem.brier_score)::numeric,4) AS avg_brier
+                FROM latest_metrics mem
+                JOIN model_prediction_latest_rows mp_home ON mp_home.match_id=mem.match_id
+                    AND mp_home.model_version_id=mem.model_version_id
+                    AND mp_home.play_type=mem.play_type AND mp_home.option_code='3'
+                    AND mp_home.predict_time=mem.snapshot_time
+                WHERE mem.brier_score IS NOT NULL
+                GROUP BY {column},mem.canonical_model_name HAVING COUNT(*)>=3
+                ORDER BY {column},avg_brier ASC"""
+            )
+            cursor.execute(reference_query)
+            names = [description[0] for description in cursor.description]
+            expected = [dict(zip(names, row, strict=True)) for row in cursor.fetchall()]
+            assert response == {"status": "ok", "dimension": dimension, "segments": expected}
+            cursor.execute("EXPLAIN (ANALYZE,FORMAT JSON) " + reference_query)
+            reference_plan = cursor.fetchone()[0][0]
+            cursor.execute("EXPLAIN (ANALYZE,FORMAT JSON) " + captured.query)
+            plan = cursor.fetchone()[0][0]
+            measurements.append(
+                {
+                    "dimension": dimension,
+                    "archive_rows": 900 * archive_snapshots,
+                    "original_prediction_node_work": prediction_work(reference_plan["Plan"]),
+                    "original_execution_ms": reference_plan["Execution Time"],
+                    "prediction_node_work": prediction_work(plan["Plan"]),
+                    "execution_ms": plan["Execution Time"],
+                }
+            )
+    print(json.dumps({"condition_reads": measurements}), flush=True)
+    conn.rollback()  # Drop the restricted role before fixture-only deletion.
+    with conn.cursor() as cursor:
+        cursor.execute("DELETE FROM market_efficiency_metrics")
+        cursor.execute("SET LOCAL ROLE fqp")
+    for dimension in ("odds_range", "confidence"):
+        assert feature_importance.get_condition_performance(captured, dimension)["segments"] == []
+        with conn.cursor() as cursor:
+            cursor.execute("EXPLAIN (ANALYZE,FORMAT JSON) " + captured.query)
+            assert prediction_work(cursor.fetchone()[0][0]["Plan"]) == 0
+    assert all(measurement["prediction_node_work"] < 1000 for measurement in measurements)
+
+
+@pytest.mark.parametrize("archive_snapshots", [100, 1000])
+def test_error_and_calibration_reads_seek_latest_before_applying_eligibility(
+    isolated_database, archive_snapshots, monkeypatch
+):
+    from psycopg2 import sql
+
+    from scripts import feature_importance
+    from scripts.jobs import analyze_prediction_errors
+    from scripts.model_prediction_run_identity import content_sha256
+    from scripts.model_prediction_run_storage import (
+        create_prediction_run,
+        finalize_prediction_run,
+        store_prediction_group,
+    )
+
+    conn, schema = isolated_database
+    migrations = Path(__file__).resolve().parents[2] / "sql"
+    with conn.cursor() as cursor:
+        cursor.execute("SET statement_timeout='20s'")
+        cursor.execute("SET jit=off")
+        # Exercise the actual already-published seek index, not a test-only fix.
+        cursor.execute((migrations / "113_prediction_read_paths.sql").read_text())
+        cursor.execute("INSERT INTO model_versions(model_name) VALUES ('same'),('same'),('other')")
+        cursor.execute("""INSERT INTO official_matches(kickoff_time)
+            SELECT '2026-10-26 18:00'::timestamp FROM generate_series(1,114)""")
+        for column in ("rqspf_result", "total_goals_result", "score_result", "half_full_result"):
+            cursor.execute(
+                sql.SQL("ALTER TABLE official_results ADD COLUMN {} TEXT").format(
+                    sql.Identifier(column)
+                )
+            )
+        cursor.execute("""INSERT INTO official_results
+            (match_id,result_status,spf_result,full_home_goals,full_away_goals,rqspf_result)
+            SELECT id, CASE WHEN id=110 THEN 'pending'
+                           WHEN id%2=0 THEN 'final' ELSE 'confirmed' END,
+                   CASE WHEN id=109 THEN NULL WHEN id IN (106,108,114) THEN '1'
+                        WHEN id=107 THEN '0' ELSE '3' END,
+                   CASE WHEN id=107 THEN 0 WHEN id IN (106,108,114) THEN 1 ELSE 2 END,
+                   CASE WHEN id IN (106,107,108,114) THEN 1 ELSE 0 END,'3'
+            FROM official_matches WHERE id<>111""")
+        cursor.execute(
+            """INSERT INTO model_predictions
+                (match_id,model_version_id,predict_time,play_type,option_code,
+                 model_probability,market_probability,validation_status,uncertainty_reason)
+            SELECT m.id,mv.id,'2026-01-01'::timestamp+n*INTERVAL '1 minute',
+                   'spf',o,0.333333,0.333333,'valid','{"model_independent":true}'
+            FROM official_matches m CROSS JOIN model_versions mv
+            CROSS JOIN generate_series(1,%s) n CROSS JOIN unnest(ARRAY['3','1','0']) o
+            WHERE m.id<=100""",
+            (archive_snapshots,),
+        )
+        cursor.execute("""INSERT INTO model_predictions
+                (match_id,model_version_id,predict_time,play_type,option_code,
+                 model_probability,market_probability,ev,validation_status,uncertainty_reason)
+            SELECT m.id,1,'2026-10-25'::timestamp+m.id*INTERVAL '1 minute',
+                   CASE WHEN m.id=112 THEN 'rqspf' ELSE 'spf' END,o,
+                   CASE WHEN o='3' THEN CASE WHEN m.id=114 THEN 0.45 ELSE 0.61 END
+                        WHEN o='1' THEN CASE WHEN m.id=114 THEN 0.3 ELSE 0.24 END
+                        ELSE CASE WHEN m.id=114 THEN 0.25 ELSE 0.15 END END,
+                   0.333333,0.1,'valid','{"model_independent":true}'
+            FROM official_matches m CROSS JOIN unnest(ARRAY['3','1','0']) o WHERE m.id>100""")
+        cursor.execute("""INSERT INTO model_predictions
+                (match_id,model_version_id,predict_time,play_type,option_code,
+                 model_probability,validation_status,uncertainty_reason)
+            SELECT m.id,2,CASE WHEN m.id=103 THEN '2026-10-27'::timestamp
+                              WHEN m.id=108 THEN '2026-10-25'::timestamp
+                                                +m.id*INTERVAL '1 minute'
+                              ELSE '2026-10-25 12:00'::timestamp END,'spf',o,
+                   CASE WHEN m.id=105 THEN NULL WHEN o='1' THEN 0.6 ELSE 0.2 END,
+                   CASE WHEN m.id=102 THEN 'invalid' ELSE 'valid' END,
+                   CASE WHEN m.id=104 THEN '{"model_independent":false}'::jsonb
+                        ELSE '{"model_independent":true}'::jsonb END
+            FROM official_matches m CROSS JOIN unnest(ARRAY['3','1','0']) o
+            WHERE m.id IN (102,103,104,105,108) AND (m.id<>105 OR o='3')""")
+    conn.commit()
+
+    # Use real publication boundaries: complete wins over newer legacy;
+    # unfinished rows are invisible; a published post-match set shields legacy.
+    for match_id, completed in ((106, True), (107, False), (113, True)):
+        run_id = uuid.uuid4()
+        create_prediction_run(
+            conn,
+            run_id=run_id,
+            ai_job_run_id=None,
+            release_id="evaluation-reads-fixture",
+            code_fingerprint={"files": {}, "sha256": content_sha256({})},
+            model_manifest=[{"model_version_id": 2}],
+            input_manifest={"match_ids": [match_id]},
+            provenance_status="incomplete",
+        )
+        metadata = {
+            "match_id": match_id,
+            "model_version_id": 2,
+            "play_type": "spf",
+            "predict_time": "2026-10-27T12:00:00" if match_id == 113 else "2026-10-24T12:00:00",
+            "feature_snapshot_id": 77,
+            "expected_options": ["3", "1", "0"],
+        }
+        store_prediction_group(
+            conn,
+            run_id=run_id,
+            metadata=metadata,
+            predictions=[
+                {
+                    **{key: value for key, value in metadata.items() if key != "expected_options"},
+                    "option_code": option,
+                    "model_probability": probability,
+                    "market_probability": probability,
+                    "validation_status": "valid",
+                    "calculation_version": "evaluation-fixture",
+                    "odds_snapshot_id": 30,
+                    "break_even_probability": probability,
+                    "market_edge": 0,
+                    "breakeven_edge": 0,
+                    "ev": 0,
+                    "uncertainty_reason": {"model_independent": True},
+                }
+                for option, probability in (("3", 0.1), ("1", 0.25), ("0", 0.65))
+            ],
+        )
+        if completed:
+            finalize_prediction_run(
+                conn,
+                run_id=run_id,
+                run_status="completed",
+                output_summary={
+                    "expected_groups": 1,
+                    "completed_groups": 1,
+                    "skipped_groups": 0,
+                    "missing_groups": [],
+                    "input_updates_skipped": 0,
+                    "completion_reason": "predictions_completed",
+                },
+            )
+    with conn.cursor() as cursor:
+        cursor.execute("ANALYZE")
+        cursor.execute(sql.SQL("GRANT USAGE ON SCHEMA {} TO fqp").format(sql.Identifier(schema)))
+        cursor.execute(
+            sql.SQL("GRANT SELECT ON ALL TABLES IN SCHEMA {} TO fqp").format(sql.Identifier(schema))
+        )
+    conn.commit()
+
+    # Frozen pre-repair scope: the oracle keeps ranking all legacy history in
+    # the canonical view. Only the caller's unchanged projection is reused.
+    original_scope = """WITH latest_predictions AS (
+        SELECT DISTINCT ON (source_mp.match_id,source_mv.model_name,
+                            source_mp.play_type,source_mp.option_code)
+               source_mp.*,source_mv.model_name AS canonical_model_name
+        FROM model_prediction_latest_rows source_mp
+        JOIN model_versions source_mv ON source_mv.id=source_mp.model_version_id
+        JOIN official_matches source_match ON source_match.id=source_mp.match_id
+        JOIN official_results source_result ON source_result.match_id=source_mp.match_id
+        WHERE source_mp.predict_time<source_match.kickoff_time
+          AND source_mp.validation_status='valid'
+          AND COALESCE((source_mp.uncertainty_reason->>'model_independent')::boolean,false)=true
+          AND source_result.result_status IN ('final','confirmed')
+        ORDER BY source_mp.match_id,source_mv.model_name,source_mp.play_type,
+                 source_mp.option_code,source_mp.predict_time DESC,source_mp.id DESC
+    )"""
+    writes = []
+
+    class CapturedConnection:
+        query = ""
+        params = None
+        rows = None
+        reference = False
+
+        @contextmanager
+        def cursor(self):
+            with conn.cursor() as cursor:
+
+                class CapturedCursor:
+                    def execute(self, query, params=None):
+                        captured.query, captured.params = query, params
+                        if captured.reference:
+                            if "latest_options AS" in query:
+                                query = "WITH " + query[query.index("latest_options AS") :]
+                                query = query.replace(
+                                    "evaluation_prediction_rows mp",
+                                    "model_prediction_latest_rows mp",
+                                )
+                            else:
+                                query = query.replace(
+                                    feature_importance._LATEST_PREDICTIONS_CTE, original_scope
+                                )
+                        cursor.execute(query, params)
+
+                    def fetchall(self):
+                        captured.rows = cursor.fetchall()
+                        return captured.rows
+
+                yield CapturedCursor()
+
+    captured = CapturedConnection()
+    monkeypatch.setattr(analyze_prediction_errors, "get_db", lambda: nullcontext(captured))
+
+    def capture_writes(_connection, errors):
+        writes.extend(copy.deepcopy(errors))
+        return len(errors)
+
+    monkeypatch.setattr(analyze_prediction_errors, "create_error_analyses_batch", capture_writes)
+
+    def prediction_work(node):
+        own = 0
+        if node.get("Relation Name") == "model_predictions":
+            own = (node["Actual Rows"] + node.get("Rows Removed by Filter", 0)) * node[
+                "Actual Loops"
+            ]
+        return own + sum(prediction_work(child) for child in node.get("Plans", []))
+
+    measurements = []
+    for kind, read in (
+        ("errors", analyze_prediction_errors.run),
+        ("calibration_named", lambda: feature_importance.get_calibration_data(captured, "same")),
+        ("calibration_all", lambda: feature_importance.get_calibration_data(captured)),
+        ("combos", lambda: feature_importance.recommend_best_combos(captured, min_samples=1)),
+    ):
+        with conn.cursor() as cursor:
+            cursor.execute("SET LOCAL ROLE fqp")
+            cursor.execute("SELECT rolsuper FROM pg_roles WHERE rolname=current_user")
+            assert cursor.fetchone() == (False,)
+        captured.reference = False
+        writes.clear()
+        actual = read()
+        query, params = captured.query, captured.params
+        actual_rows, actual_writes = captured.rows, copy.deepcopy(writes)
+        captured.reference = True
+        writes.clear()
+        expected = read()
+        assert actual == expected
+        assert actual_writes == writes
+        assert sorted(actual_rows) == sorted(captured.rows)
+        assert actual_rows
+        if kind == "errors":
+            picks = {row[1]: row for row in actual_rows if row[1] > 100}
+            assert set(picks) == {101, 105, 106, 107, 108, 114}
+            assert picks[106][4] == "0" and picks[106][2] == 2
+            assert picks[107][4] == "3" and picks[107][2] == 1
+            assert picks[108][4] == "1" and picks[108][2] == 2
+            assert actual["analyzed"] == 206
+            assert actual["errors_found"] == 204
+            reference_query = "WITH " + query[query.index("latest_options AS") :]
+            reference_query = reference_query.replace(
+                "evaluation_prediction_rows mp", "model_prediction_latest_rows mp"
+            )
+        else:
+            reference_query = query.replace(
+                feature_importance._LATEST_PREDICTIONS_CTE, original_scope
+            )
+        with conn.cursor() as cursor:
+            cursor.execute("EXPLAIN (ANALYZE,FORMAT JSON) " + reference_query, params)
+            reference_plan = cursor.fetchone()[0][0]
+            cursor.execute("EXPLAIN (ANALYZE,FORMAT JSON) " + query, params)
+            plan = cursor.fetchone()[0][0]
+        measurements.append(
+            {
+                "kind": kind,
+                "archive_rows": 900 * archive_snapshots,
+                "original_prediction_node_work": prediction_work(reference_plan["Plan"]),
+                "original_execution_ms": reference_plan["Execution Time"],
+                "prediction_node_work": prediction_work(plan["Plan"]),
+                "execution_ms": plan["Execution Time"],
+            }
+        )
+    print(json.dumps({"evaluation_reads": measurements}), flush=True)
+    # No settled results must yield empty reports rather than stale samples or
+    # synthetic errors, even when historical predictions remain in the table.
+    conn.rollback()
+    with conn.cursor() as cursor:
+        cursor.execute("DELETE FROM official_results")
+        cursor.execute("SET LOCAL ROLE fqp")
+    captured.reference = False
+    writes.clear()
+    assert analyze_prediction_errors.run()["analyzed"] == 0
+    assert writes == []
+    assert feature_importance.get_calibration_data(captured, "same")["n_predictions"] == 0
+    assert feature_importance.get_calibration_data(captured)["n_predictions"] == 0
+    assert feature_importance.recommend_best_combos(captured, min_samples=1) == []
+    assert all(measurement["prediction_node_work"] < 15000 for measurement in measurements)
+
+
+@pytest.mark.parametrize("archive_snapshots", [100, 1000])
+def test_calibration_training_and_display_exclude_unusable_results_without_blocking(
+    isolated_database, archive_snapshots, monkeypatch
+):
+    from psycopg2 import sql
+
+    from scripts import feature_importance
+    from scripts.jobs import train_probability_calibration as training
+    from scripts.model_prediction_run_identity import content_sha256
+    from scripts.model_prediction_run_storage import (
+        create_prediction_run,
+        finalize_prediction_run,
+        store_prediction_group,
+    )
+
+    conn, schema = isolated_database
+    with conn.cursor() as cursor:
+        cursor.execute("SET statement_timeout='20s'")
+        cursor.execute("SET jit=off")
+        cursor.execute(
+            (Path(__file__).resolve().parents[2] / "sql/113_prediction_read_paths.sql").read_text()
+        )
+        cursor.execute("INSERT INTO model_versions(model_name) VALUES ('same'),('same'),('other')")
+        cursor.execute("""INSERT INTO official_matches(kickoff_time)
+            SELECT '2026-08-01 18:00'::timestamp FROM generate_series(1,134)""")
+        cursor.execute("UPDATE official_matches SET kickoff_time=NULL WHERE id=130")
+        cursor.execute("""INSERT INTO official_results
+            (match_id,result_status,spf_result,full_home_goals,full_away_goals)
+            SELECT id,'confirmed','3',2,0 FROM official_matches WHERE id<=100""")
+        results = {match_id: [match_id, "final", "3", 2, 0] for match_id in range(101, 135)}
+        results[102][1:] = ["confirmed", "1", 1, 1]
+        results[103][1:] = ["confirmed", "0", 0, 1]
+        for match_id, status in ((104, "pending"), (105, "provisional"), (106, "cancelled")):
+            results[match_id][1] = status
+        results[107][3] = None
+        results[108][4] = None
+        results[109][3:] = [None, None]
+        results[110][3] = -1
+        results[111][4] = -1
+        results[112][2] = "1"  # Confirmed SPF contradicts the full-time score.
+        results[113][2] = "void"
+        results[114][2] = None  # Complete score can supply a missing SPF code.
+        results[115][2] = ""
+        results[132][2:] = [None, 0, 0]
+        results[133][3:] = [-1, -1]
+        results[134][2] = "h"
+        cursor.executemany(
+            """INSERT INTO official_results
+                (match_id,result_status,spf_result,full_home_goals,full_away_goals)
+                VALUES (%s,%s,%s,%s,%s)""",
+            [row for match_id, row in results.items() if match_id != 125],
+        )
+        cursor.execute(
+            """INSERT INTO model_predictions
+                (match_id,model_version_id,predict_time,play_type,option_code,
+                 model_probability,validation_status,uncertainty_reason)
+            SELECT m.id,mv.id,'2026-01-01'::timestamp+n*INTERVAL '1 minute',
+                   'spf',o,CASE WHEN o='3' THEN 0.7 WHEN o='1' THEN 0.2 ELSE 0.1 END,
+                   'valid','{"model_independent":true}'
+            FROM official_matches m CROSS JOIN model_versions mv
+            CROSS JOIN generate_series(1,%s) n CROSS JOIN unnest(ARRAY['3','1','0']) o
+            WHERE m.id<=100""",
+            (archive_snapshots,),
+        )
+        cursor.execute("""INSERT INTO model_predictions
+                (match_id,model_version_id,predict_time,play_type,option_code,
+                 model_probability,validation_status,uncertainty_reason)
+            SELECT m.id,1,'2026-07-29'::timestamp+m.id*INTERVAL '1 minute',
+                   CASE WHEN m.id=123 THEN 'rqspf' ELSE 'spf' END,o,
+                   CASE WHEN o='3' THEN 0.7 WHEN o='1' THEN 0.2 ELSE 0.1 END,
+                   CASE WHEN m.id=129 THEN 'invalid' ELSE 'valid' END,
+                   CASE WHEN m.id=116 THEN '{"model_independent":false}'::jsonb
+                        WHEN m.id=117 THEN '{}'::jsonb
+                        ELSE '{"model_independent":true}'::jsonb END
+            FROM official_matches m CROSS JOIN unnest(ARRAY['3','1','0']) o WHERE m.id>100""")
+        cursor.execute("""INSERT INTO model_predictions
+                (match_id,model_version_id,predict_time,play_type,option_code,
+                 model_probability,validation_status,uncertainty_reason)
+            SELECT m.id,2,CASE WHEN m.id=119 THEN '2026-08-02'::timestamp
+                              WHEN m.id=122 THEN '2026-07-29'::timestamp
+                                                +m.id*INTERVAL '1 minute'
+                              ELSE '2026-07-30'::timestamp END,'spf',o,
+                   CASE WHEN m.id=121 THEN NULL WHEN o='1' THEN 0.6 ELSE 0.2 END,
+                   CASE WHEN m.id=118 THEN 'invalid' ELSE 'valid' END,
+                   CASE WHEN m.id=120 THEN '{"model_independent":false}'::jsonb
+                        ELSE '{"model_independent":true}'::jsonb END
+            FROM official_matches m CROSS JOIN unnest(ARRAY['3','1','0']) o
+            WHERE m.id IN (118,119,120,121,122) AND (m.id<>121 OR o='3')""")
+        cursor.execute("""INSERT INTO model_predictions
+                (match_id,model_version_id,predict_time,play_type,option_code,
+                 model_probability,validation_status,uncertainty_reason)
+            VALUES (124,1,'2026-07-30','spf','unknown',0.9,'valid',
+                    '{"model_independent":true}')""")
+    conn.commit()
+
+    for match_id, completed in ((126, True), (127, False), (128, True)):
+        run_id = uuid.uuid4()
+        create_prediction_run(
+            conn,
+            run_id=run_id,
+            ai_job_run_id=None,
+            release_id="calibration-integrity-fixture",
+            code_fingerprint={"files": {}, "sha256": content_sha256({})},
+            model_manifest=[{"model_version_id": 2}],
+            input_manifest={"match_ids": [match_id]},
+            provenance_status="incomplete",
+        )
+        metadata = {
+            "match_id": match_id,
+            "model_version_id": 2,
+            "play_type": "spf",
+            "predict_time": "2026-08-02T12:00:00" if match_id == 128 else "2026-07-28T12:00:00",
+            "feature_snapshot_id": 77,
+            "expected_options": ["3", "1", "0"],
+        }
+        store_prediction_group(
+            conn,
+            run_id=run_id,
+            metadata=metadata,
+            predictions=[
+                {
+                    **{key: value for key, value in metadata.items() if key != "expected_options"},
+                    "option_code": option,
+                    "model_probability": probability,
+                    "market_probability": probability,
+                    "validation_status": "valid",
+                    "calculation_version": "calibration-fixture",
+                    "odds_snapshot_id": 30,
+                    "break_even_probability": probability,
+                    "market_edge": 0,
+                    "breakeven_edge": 0,
+                    "ev": 0,
+                    "uncertainty_reason": {"model_independent": True},
+                }
+                for option, probability in (("3", 0.1), ("1", 0.2), ("0", 0.7))
+            ],
+        )
+        if completed:
+            finalize_prediction_run(
+                conn,
+                run_id=run_id,
+                run_status="completed",
+                output_summary={
+                    "expected_groups": 1,
+                    "completed_groups": 1,
+                    "skipped_groups": 0,
+                    "missing_groups": [],
+                    "input_updates_skipped": 0,
+                    "completion_reason": "predictions_completed",
+                },
+            )
+    with conn.cursor() as cursor:
+        cursor.execute("ANALYZE")
+        cursor.execute(sql.SQL("GRANT USAGE ON SCHEMA {} TO fqp").format(sql.Identifier(schema)))
+        cursor.execute(
+            sql.SQL("GRANT SELECT ON ALL TABLES IN SCHEMA {} TO fqp").format(sql.Identifier(schema))
+        )
+    conn.commit()
+
+    # Explicit known labels/probabilities, independent of the production SQL.
+    probabilities = {"3": 0.7, "1": 0.2, "0": 0.1}
+    expected = [
+        (model, match_id, option, probability, "3")
+        for model in ("same", "other")
+        for match_id in range(1, 101)
+        for option, probability in probabilities.items()
+    ]
+    for match_id in (101, 102, 103, 114, 121, 122, 124, 126, 127, 131, 132):
+        actual = "1" if match_id in (102, 132) else "0" if match_id == 103 else "3"
+        selected = (
+            {"3": 0.2, "1": 0.6, "0": 0.2}
+            if match_id == 122
+            else {"3": 0.1, "1": 0.2, "0": 0.7}
+            if match_id == 126
+            else probabilities
+        )
+        expected.extend(
+            ("same", match_id, option, probability, actual)
+            for option, probability in selected.items()
+            if match_id != 121 or option != "3"
+        )
+
+    class CapturedConnection:
+        query = ""
+        params = None
+        rows = None
+
+        @contextmanager
+        def cursor(self):
+            with conn.cursor() as cursor:
+
+                class CapturedCursor:
+                    def execute(self, query, params=None):
+                        captured.query, captured.params = query, params
+                        cursor.execute(query, params)
+
+                    def fetchall(self):
+                        captured.rows = cursor.fetchall()
+                        return captured.rows
+
+                yield CapturedCursor()
+
+    captured = CapturedConnection()
+    with conn.cursor() as cursor:
+        cursor.execute("SET LOCAL ROLE fqp")
+        cursor.execute("SELECT rolsuper FROM pg_roles WHERE rolname=current_user")
+        assert cursor.fetchone() == (False,)
+    rows = training._load_settled_prediction_rows(captured)
+    training_query = captured.query
+    actual = [(row[0], row[1], row[2], float(row[3]), row[4]) for row in rows]
+    assert sorted(actual) == sorted(expected)
+    assert [row[:3] for row in rows] == [
+        row[:3] for row in sorted(rows, key=lambda row: (row[0], row[5], row[1], row[2]))
+    ]
+
+    plans = []
+    for model in ("same", None):
+        result = feature_importance.get_calibration_data(captured, model, n_bins=10)
+        expected_pairs = [
+            (row[3], int(row[2] == row[4])) for row in expected if model is None or row[0] == model
+        ]
+        assert sorted((float(p), int(correct)) for p, correct in captured.rows) == sorted(
+            expected_pairs
+        )
+        assert result["status"] == "ok"
+        assert result["model_name"] == (model or "all")
+        assert result["n_predictions"] == len(expected_pairs)
+        assert sum(bin_["count"] for bin_ in result["bins"]) == len(expected_pairs)
+        assert sum(bin_["actual_freq"] * bin_["count"] for bin_ in result["bins"]) == pytest.approx(
+            sum(correct for _, correct in expected_pairs), abs=0.1
+        )
+        plans.append((model or "all", captured.query, captured.params))
+    plans.append(("training", training_query, None))
+
+    def prediction_work(node):
+        own = 0
+        if node.get("Relation Name") == "model_predictions":
+            own = (node["Actual Rows"] + node.get("Rows Removed by Filter", 0)) * node[
+                "Actual Loops"
+            ]
+        return own + sum(prediction_work(child) for child in node.get("Plans", []))
+
+    measurements = []
+    for kind, query, params in plans:
+        with conn.cursor() as cursor:
+            cursor.execute("EXPLAIN (ANALYZE,FORMAT JSON) " + query, params)
+            plan = cursor.fetchone()[0][0]
+        work = prediction_work(plan["Plan"])
+        measurements.append(
+            {
+                "kind": kind,
+                "archive_rows": 900 * archive_snapshots,
+                "prediction_node_work": work,
+                "execution_ms": plan["Execution Time"],
+            }
+        )
+        assert work < 15000
+    print(json.dumps({"calibration_integrity_reads": measurements}), flush=True)
+
+    # The real dry-run path succeeds with no usable results and stores nothing.
+    conn.rollback()
+    with conn.cursor() as cursor:
+        cursor.execute("UPDATE official_results SET result_status='pending'")
+        cursor.execute("SET LOCAL ROLE fqp")
+    monkeypatch.setattr(training, "get_db", lambda: nullcontext(captured))
+    empty = training._run_impl(dry_run=True)
+    assert empty["status"] == "ok"
+    assert empty["settled_prediction_rows"] == empty["profiles"] == empty["stored"] == 0
+    for model in ("same", None):
+        result = feature_importance.get_calibration_data(captured, model)
+        assert result["n_predictions"] == 0
+        assert result["bins"] == []
+
+
+@pytest.mark.parametrize("archive_snapshots", [100, 1000])
+def test_evaluation_job_stores_only_consistent_complete_results_and_retries_without_duplicates(
+    isolated_database, archive_snapshots, monkeypatch, request
+):
+    from psycopg2 import sql
+
+    from scripts import evaluation_metrics
+    from scripts.model_prediction_run_identity import content_sha256
+    from scripts.model_prediction_run_storage import (
+        create_prediction_run,
+        finalize_prediction_run,
+        store_prediction_group,
+    )
+
+    conn, schema = isolated_database
+
+    def reset_role():
+        conn.rollback()
+        with conn.cursor() as cursor:
+            cursor.execute("RESET ROLE")
+        conn.commit()
+
+    request.addfinalizer(reset_role)
+    with conn.cursor() as cursor:
+        cursor.execute("SET statement_timeout='20s'")
+        cursor.execute("SET jit=off")
+        migrations = Path(__file__).resolve().parents[2] / "sql"
+        cursor.execute((migrations / "113_prediction_read_paths.sql").read_text())
+        metrics_ddl = re.search(
+            r"CREATE TABLE IF NOT EXISTS market_efficiency_metrics \(.*?\n\);",
+            (migrations / "03_model_research_schema.sql").read_text(),
+            re.S,
+        )
+        assert metrics_ddl is not None
+        cursor.execute(metrics_ddl.group())
+        cursor.execute("ALTER TABLE official_matches ADD COLUMN sale_stop_time TIMESTAMP")
+        cursor.execute("INSERT INTO model_versions(model_name) VALUES ('same'),('same'),('other')")
+        cursor.execute("""INSERT INTO official_matches(kickoff_time,business_date,match_status)
+            SELECT '2026-08-01 18:00'::timestamp,'2026-08-01'::date,'Settled'
+            FROM generate_series(1,132)""")
+        cursor.execute("UPDATE official_matches SET match_status='Scheduled' WHERE id=129")
+        cursor.execute("UPDATE official_matches SET kickoff_time=NULL WHERE id=130")
+        cursor.execute("""INSERT INTO official_results
+            (match_id,result_status,spf_result,full_home_goals,full_away_goals)
+            SELECT id,'confirmed','3',2,0 FROM official_matches WHERE id<=100""")
+        results = {match_id: [match_id, "final", "3", 2, 0] for match_id in range(101, 133)}
+        results[102][1:] = ["confirmed", "1", 1, 1]
+        results[103][1:] = ["confirmed", "0", 0, 1]
+        for match_id, status in ((104, "pending"), (105, "provisional"), (106, "cancelled")):
+            results[match_id][1] = status
+        results[107][3] = None
+        results[108][4] = None
+        results[109][3:] = [None, None]
+        results[110][3] = -1
+        results[111][4] = -1
+        results[112][2] = "1"
+        results[113][2] = "void"
+        results[114][2] = None
+        results[115][2] = ""
+        cursor.executemany(
+            """INSERT INTO official_results
+                (match_id,result_status,spf_result,full_home_goals,full_away_goals)
+                VALUES (%s,%s,%s,%s,%s)""",
+            [row for match_id, row in results.items() if match_id != 125],
+        )
+        cursor.execute(
+            """INSERT INTO model_predictions
+                (match_id,model_version_id,predict_time,play_type,option_code,
+                 model_probability,market_probability,validation_status,uncertainty_reason)
+            SELECT m.id,mv.id,'2026-01-01'::timestamp+n*INTERVAL '1 minute','spf',o,
+                   CASE WHEN o='3' THEN 0.7 WHEN o='1' THEN 0.2 ELSE 0.1 END,
+                   CASE WHEN o='3' THEN 0.4 WHEN o='1' THEN 0.35 ELSE 0.25 END,
+                   'valid','{"model_independent":true}'
+            FROM official_matches m CROSS JOIN model_versions mv
+            CROSS JOIN generate_series(1,%s) n CROSS JOIN unnest(ARRAY['3','1','0']) o
+            WHERE m.id<=100""",
+            (archive_snapshots,),
+        )
+        cursor.execute("""INSERT INTO model_predictions
+                (match_id,model_version_id,predict_time,play_type,option_code,
+                 model_probability,market_probability,validation_status,uncertainty_reason)
+            SELECT m.id,1,'2026-07-29'::timestamp,'spf',o,
+                   CASE WHEN o='3' THEN 0.7 WHEN o='1' THEN 0.2 ELSE 0.1 END,
+                   CASE WHEN o='3' THEN 0.4 WHEN o='1' THEN 0.35 ELSE 0.25 END,'valid',
+                   CASE WHEN m.id=116 THEN '{"model_independent":false}'::jsonb
+                        WHEN m.id=117 THEN '{}'::jsonb
+                        ELSE '{"model_independent":true}'::jsonb END
+            FROM official_matches m CROSS JOIN unnest(ARRAY['3','1','0']) o WHERE m.id>100""")
+        cursor.execute("UPDATE model_predictions SET play_type='rqspf' WHERE match_id=123")
+        cursor.execute("""INSERT INTO model_predictions
+                (match_id,model_version_id,predict_time,play_type,option_code,
+                 model_probability,market_probability,validation_status,uncertainty_reason)
+            SELECT m.id,CASE WHEN m.id=122 THEN 2 ELSE 1 END,
+                   CASE WHEN m.id=119 THEN '2026-08-02'::timestamp
+                        WHEN m.id=122 THEN '2026-07-29'::timestamp
+                        ELSE '2026-07-30'::timestamp END,'spf',o,
+                   CASE WHEN o='3' THEN 0.7 WHEN o='1' THEN 0.2 ELSE 0.1 END,
+                   CASE WHEN o='3' THEN 0.4 WHEN o='1' THEN 0.35 ELSE 0.25 END,
+                   CASE WHEN m.id=118 THEN 'invalid' ELSE 'valid' END,
+                   CASE WHEN m.id=120 THEN '{"model_independent":false}'::jsonb
+                        ELSE '{"model_independent":true}'::jsonb END
+            FROM official_matches m CROSS JOIN unnest(ARRAY['3','1','0']) o
+            WHERE m.id IN (118,119,120,121,122) AND (m.id<>121 OR o='3')""")
+        cursor.execute("""INSERT INTO model_predictions
+                (match_id,model_version_id,predict_time,play_type,option_code,
+                 model_probability,market_probability,validation_status,uncertainty_reason)
+            VALUES (124,1,'2026-07-29','spf','unknown',0.9,0.9,'valid',
+                    '{"model_independent":true}')""")
+        cursor.execute("""INSERT INTO official_odds_snapshots
+                (match_id,play_type,option_code,sp_value,snapshot_time)
+            SELECT m.id,'spf',o,CASE WHEN o='h' THEN 2 WHEN o='d' THEN 3 ELSE 6 END,
+                   '2026-08-01 17:00'::timestamp
+            FROM official_matches m CROSS JOIN unnest(ARRAY['h','d','a']) o WHERE m.id<>132""")
+        cursor.execute("""INSERT INTO market_efficiency_metrics
+                (match_id,model_version_id,snapshot_time,play_type,option_code,
+                 brier_score,clv_score) VALUES (131,1,'2026-07-29','spf','3',0.77,0.02)""")
+    conn.commit()
+
+    for match_id, completed in ((126, True), (127, False), (128, True)):
+        run_id = uuid.uuid4()
+        create_prediction_run(
+            conn,
+            run_id=run_id,
+            ai_job_run_id=None,
+            release_id="evaluation-truth-fixture",
+            code_fingerprint={"files": {}, "sha256": content_sha256({})},
+            model_manifest=[{"model_version_id": 2}],
+            input_manifest={"match_ids": [match_id]},
+            provenance_status="incomplete",
+        )
+        metadata = {
+            "match_id": match_id,
+            "model_version_id": 2,
+            "play_type": "spf",
+            "predict_time": "2026-08-02T12:00:00" if match_id == 128 else "2026-07-28T12:00:00",
+            "feature_snapshot_id": 77,
+            "expected_options": ["3", "1", "0"],
+        }
+        store_prediction_group(
+            conn,
+            run_id=run_id,
+            metadata=metadata,
+            predictions=[
+                {
+                    **{key: value for key, value in metadata.items() if key != "expected_options"},
+                    "option_code": option,
+                    "model_probability": probability,
+                    "market_probability": {"3": 0.4, "1": 0.35, "0": 0.25}[option],
+                    "validation_status": "valid",
+                    "calculation_version": "evaluation-fixture",
+                    "odds_snapshot_id": 30,
+                    "break_even_probability": probability,
+                    "market_edge": 0,
+                    "breakeven_edge": 0,
+                    "ev": 0,
+                    "uncertainty_reason": {"model_independent": True},
+                }
+                for option, probability in (("3", 0.1), ("1", 0.2), ("0", 0.7))
+            ],
+        )
+        if completed:
+            finalize_prediction_run(
+                conn,
+                run_id=run_id,
+                run_status="completed",
+                output_summary={
+                    "expected_groups": 1,
+                    "completed_groups": 1,
+                    "skipped_groups": 0,
+                    "missing_groups": [],
+                    "input_updates_skipped": 0,
+                    "completion_reason": "predictions_completed",
+                },
+            )
+    with conn.cursor() as cursor:
+        cursor.execute("ANALYZE")
+        cursor.execute(sql.SQL("GRANT USAGE ON SCHEMA {} TO fqp").format(sql.Identifier(schema)))
+        cursor.execute(
+            sql.SQL("GRANT SELECT ON ALL TABLES IN SCHEMA {} TO fqp").format(sql.Identifier(schema))
+        )
+        cursor.execute("GRANT INSERT,UPDATE ON market_efficiency_metrics TO fqp")
+        cursor.execute("GRANT USAGE ON SEQUENCE market_efficiency_metrics_id_seq TO fqp")
+        cursor.execute("SET ROLE fqp")
+        cursor.execute("SELECT rolsuper FROM pg_roles WHERE rolname=current_user")
+        assert cursor.fetchone() == (False,)
+    conn.commit()
+
+    class CapturedConnection:
+        query = ""
+        parameters = None
+
+        def cursor(self):
+            cursor = conn.cursor()
+
+            class CapturedCursor:
+                def execute(self, query, parameters=None):
+                    if "closing_odds AS" in query:
+                        captured.query, captured.parameters = query, parameters
+                    cursor.execute(query, parameters)
+
+                def fetchall(self):
+                    return cursor.fetchall()
+
+                def fetchone(self):
+                    return cursor.fetchone()
+
+                def __enter__(self):
+                    return self
+
+                def __exit__(self, *_args):
+                    cursor.close()
+
+            return CapturedCursor()
+
+        def commit(self):
+            conn.commit()
+
+    captured = CapturedConnection()
+    monkeypatch.setattr("apps.backend.src.db.get_db", lambda: nullcontext(captured))
+    result = evaluation_metrics.run()
+    with conn.cursor() as cursor:
+        cursor.execute("""SELECT match_id,model_version_id,option_code,brier_score,
+                                 log_loss,rps,clv_score FROM market_efficiency_metrics
+                          ORDER BY match_id,model_version_id""")
+        stored = cursor.fetchall()
+    # Explicit expected match/version truth, independent of the production SQL.
+    expected = {(match_id, version): "3" for match_id in range(1, 101) for version in (2, 3)}
+    for match_id in (101, 102, 103, 114, 122, 124, 126, 127, 132):
+        expected[(match_id, 2 if match_id in (122, 126) else 1)] = (
+            "1" if match_id == 102 else "0" if match_id == 103 else "3"
+        )
+    assert {(row[0], row[1]) for row in stored} == set(expected) | {(131, 1)}
+    assert result["status"] == "ok"
+    assert result["evaluated"] == result["stored"] == len(expected)
+    assert result["model_count"] == 2
+    for match_id, version, selected, bs, ll, rps, move in stored:
+        if match_id == 131:
+            assert float(bs) == 0.77 and float(move) == 0.02
+            continue
+        truth = expected[(match_id, version)]
+        probabilities = (
+            {"3": 0.1, "1": 0.2, "0": 0.7} if match_id == 126 else {"3": 0.7, "1": 0.2, "0": 0.1}
+        )
+        expected_bs = sum(
+            (probability - int(option == truth)) ** 2
+            for option, probability in probabilities.items()
+        )
+        assert float(bs) == pytest.approx(expected_bs, abs=1e-6)
+        assert float(ll) > 0 and float(rps) >= 0
+        assert selected == ("0" if match_id == 126 else "3")
+        if match_id == 132:
+            assert move is None
+        else:
+            assert float(move) == pytest.approx(-1 / 12 if match_id == 126 else 0.1, abs=1e-6)
+
+    # Remove only newly generated rows so EXPLAIN measures the same pending scope.
+    conn.rollback()
+    with conn.cursor() as cursor:
+        cursor.execute("RESET ROLE")
+        cursor.execute("DELETE FROM market_efficiency_metrics WHERE match_id<>131")
+        cursor.execute("SET LOCAL ROLE fqp")
+        cursor.execute("EXPLAIN (ANALYZE,FORMAT JSON) " + captured.query, captured.parameters)
+        plan = cursor.fetchone()[0][0]
+
+    def prediction_work(node):
+        own = 0
+        if node.get("Relation Name") == "model_predictions":
+            own = (node["Actual Rows"] + node.get("Rows Removed by Filter", 0)) * node[
+                "Actual Loops"
+            ]
+        return own + sum(prediction_work(child) for child in node.get("Plans", []))
+
+    work = prediction_work(plan["Plan"])
+    print(
+        json.dumps(
+            {
+                "evaluation_truth_reads": {
+                    "archive_rows": 900 * archive_snapshots,
+                    "prediction_node_work": work,
+                    "execution_ms": plan["Execution Time"],
+                }
+            }
+        ),
+        flush=True,
+    )
+    assert work < 15000
+    conn.rollback()
+    second = evaluation_metrics.run()
+    assert second["evaluated"] == second["stored"] == 1  # NULL CLV may be updated, not duplicated.
+    with conn.cursor() as cursor:
+        cursor.execute("SELECT count(*) FROM market_efficiency_metrics")
+        assert cursor.fetchone()[0] == len(expected) + 1
+    conn.rollback()
+    with conn.cursor() as cursor:
+        cursor.execute("RESET ROLE")
+        cursor.execute("UPDATE official_results SET result_status='pending'")
+        cursor.execute("SET LOCAL ROLE fqp")
+    assert evaluation_metrics.run()["evaluated"] == 0
+
+
+@pytest.mark.parametrize("archive_snapshots", [100, 1000])
+def test_backtest_uses_consistent_spf_truth_without_changing_other_play_results(
+    isolated_database, archive_snapshots
+):
+    from psycopg2 import sql
+
+    from scripts.backtest_engine import BacktestConfig, BacktestEngine
+    from scripts.model_prediction_run_identity import content_sha256
+    from scripts.model_prediction_run_storage import (
+        create_prediction_run,
+        finalize_prediction_run,
+        store_prediction_group,
+    )
+
+    conn, schema = isolated_database
+    with conn.cursor() as cursor:
+        cursor.execute("SET statement_timeout='20s'")
+        cursor.execute("SET jit=off")
+        cursor.execute(
+            (Path(__file__).resolve().parents[2] / "sql/113_prediction_read_paths.sql").read_text()
+        )
+        cursor.execute("""ALTER TABLE official_results ADD COLUMN rqspf_result TEXT,
+            ADD COLUMN total_goals_result TEXT, ADD COLUMN score_result TEXT,
+            ADD COLUMN half_full_result TEXT""")
+        cursor.execute("INSERT INTO model_versions(model_name) VALUES ('same'),('same'),('other')")
+        cursor.execute("""INSERT INTO official_matches(kickoff_time,business_date,match_status)
+            SELECT '2026-08-01 18:00'::timestamp,'2026-08-01'::date,'Settled'
+            FROM generate_series(1,133)""")
+        cursor.execute("UPDATE official_matches SET match_status='Scheduled' WHERE id=129")
+        cursor.execute("UPDATE official_matches SET kickoff_time=NULL WHERE id=130")
+        cursor.execute("""INSERT INTO official_results
+            (match_id,result_status,spf_result,full_home_goals,full_away_goals)
+            SELECT id,'confirmed','3',2,0 FROM official_matches WHERE id<=100""")
+        results = {match_id: [match_id, "final", "3", 2, 0] for match_id in range(101, 134)}
+        results[102][1:] = ["confirmed", "1", 1, 1]
+        results[103][1:] = ["confirmed", "0", 0, 1]
+        for match_id, status in ((104, "pending"), (105, "provisional"), (106, "cancelled")):
+            results[match_id][1] = status
+        results[107][3] = None
+        results[108][4] = None
+        results[109][3:] = [None, None]
+        results[110][3] = -1
+        results[111][4] = -1
+        results[112][2] = "1"
+        results[113][2] = "void"
+        results[114][2:] = [None, 0, 0]
+        results[115][2] = ""
+        cursor.executemany(
+            """INSERT INTO official_results
+                (match_id,result_status,spf_result,full_home_goals,full_away_goals)
+                VALUES (%s,%s,%s,%s,%s)""",
+            [row for match_id, row in results.items() if match_id != 125],
+        )
+        # Other plays have their own truth. A contradictory SPF cannot decide
+        # a handicap, total, correct score or half/full bet.
+        cursor.execute("""UPDATE official_results SET rqspf_result='1',
+            total_goals_result='2',score_result='20',half_full_result='1-3'""")
+        cursor.execute(
+            """INSERT INTO model_predictions
+                (match_id,model_version_id,predict_time,play_type,option_code,
+                 model_probability,market_probability,ev,validation_status,uncertainty_reason)
+            SELECT m.id,mv.id,'2026-01-01'::timestamp+n*INTERVAL '1 minute','spf',o,
+                   CASE WHEN o='3' THEN 0.7 WHEN o='1' THEN 0.2 ELSE 0.1 END,
+                   0.3,0.1,'valid','{"model_independent":true}'
+            FROM official_matches m CROSS JOIN model_versions mv
+            CROSS JOIN generate_series(1,%s) n CROSS JOIN unnest(ARRAY['3','1','0']) o
+            WHERE m.id<=100""",
+            (archive_snapshots,),
+        )
+        cursor.execute("""INSERT INTO model_predictions
+                (match_id,model_version_id,predict_time,play_type,option_code,
+                 model_probability,market_probability,ev,confidence_score,
+                 validation_status,uncertainty_reason)
+            SELECT id,1,'2026-07-29','spf',o,
+                   CASE WHEN o='3' THEN 0.7 WHEN o='1' THEN 0.2 ELSE 0.1 END,
+                   0.3,0.1,0.8,'valid',
+                   CASE WHEN id=116 THEN '{"model_independent":false}'::jsonb
+                        WHEN id=117 THEN '{}'::jsonb
+                        ELSE '{"model_independent":true}'::jsonb END
+            FROM official_matches CROSS JOIN unnest(ARRAY['3','1','0']) o WHERE id>100""")
+        cursor.execute("""INSERT INTO model_predictions
+                (match_id,model_version_id,predict_time,play_type,option_code,
+                 model_probability,market_probability,ev,confidence_score,
+                 validation_status,uncertainty_reason)
+            SELECT id,CASE WHEN id=122 THEN 2 ELSE 1 END,
+                   CASE WHEN id=119 THEN '2026-08-02'::timestamp
+                        WHEN id=122 THEN '2026-07-29'::timestamp
+                        ELSE '2026-07-30'::timestamp END,'spf',o,
+                   CASE WHEN id=122 THEN CASE o WHEN '3' THEN 0.6 WHEN '1' THEN 0.3 ELSE 0.1 END
+                        ELSE 0.6 END,
+                   0.3,0.1,0.8,CASE WHEN id=118 THEN 'invalid' ELSE 'valid' END,
+                   CASE WHEN id=120 THEN '{"model_independent":false}'::jsonb
+                        ELSE '{"model_independent":true}'::jsonb END
+            FROM official_matches CROSS JOIN unnest(ARRAY['3','1','0']) o
+            WHERE id IN (118,119,120,121,122) AND (id<>121 OR o='3')""")
+        cursor.execute("UPDATE model_predictions SET model_probability=0 WHERE match_id=132")
+        cursor.execute("UPDATE model_predictions SET model_probability=NULL WHERE match_id=133")
+        cursor.execute("""INSERT INTO model_predictions
+                (match_id,model_version_id,predict_time,play_type,option_code,
+                 model_probability,market_probability,ev,confidence_score,
+                 validation_status,uncertainty_reason)
+            SELECT m.id,1,'2026-07-29',p.play,p.option_code,0.7,0.3,0.1,0.8,
+                   'valid','{"model_independent":true}'
+            FROM official_matches m CROSS JOIN (VALUES
+                ('rqspf','1'),('zjq','2'),('total_goals','2'),('bf','20'),
+                ('score','20'),('bqc','13'),('half_full','13')) p(play,option_code)
+            WHERE m.id IN (101,104,107,108,110,111,112,113,114,115)""")
+        cursor.execute("""INSERT INTO model_predictions
+                (match_id,model_version_id,predict_time,play_type,option_code,
+                 model_probability,market_probability,ev,validation_status,uncertainty_reason)
+            VALUES (124,1,'2026-07-29','spf','unknown',0.9,0.3,0.9,'valid',
+                    '{"model_independent":true}')""")
+        cursor.execute("""INSERT INTO official_odds_snapshots
+                (match_id,play_type,option_code,sp_value,snapshot_time)
+            SELECT m.id,p.play,p.option_code,s.value,s.at_time
+            FROM official_matches m CROSS JOIN (VALUES
+                ('spf','h'),('spf','d'),('spf','a'),('rqspf','d'),('zjq','2'),
+                ('total_goals','2'),('bf','20'),('score','20'),('bqc','13'),('half_full','13')
+            ) p(play,option_code) CROSS JOIN (VALUES
+                (2.0,'2025-12-30'::timestamp), (2.5,'2025-12-31'::timestamp),
+                (2.0,'2026-07-27'::timestamp), (2.5,'2026-07-28'::timestamp),
+                (9.0,'2026-07-31'::timestamp)) s(value,at_time)
+            WHERE m.id<>131""")
+    conn.commit()
+
+    for match_id, completed in ((126, True), (127, False), (128, True)):
+        run_id = uuid.uuid4()
+        create_prediction_run(
+            conn,
+            run_id=run_id,
+            ai_job_run_id=None,
+            release_id="backtest-truth-fixture",
+            code_fingerprint={"files": {}, "sha256": content_sha256({})},
+            model_manifest=[{"model_version_id": 2}],
+            input_manifest={"match_ids": [match_id]},
+            provenance_status="incomplete",
+        )
+        metadata = {
+            "match_id": match_id,
+            "model_version_id": 2,
+            "play_type": "spf",
+            "predict_time": "2026-08-02T12:00:00" if match_id == 128 else "2026-07-28T12:00:00",
+            "feature_snapshot_id": 77,
+            "expected_options": ["3", "1", "0"],
+        }
+        store_prediction_group(
+            conn,
+            run_id=run_id,
+            metadata=metadata,
+            predictions=[
+                {
+                    **{key: value for key, value in metadata.items() if key != "expected_options"},
+                    "option_code": option,
+                    "model_probability": probability,
+                    "market_probability": 0.3,
+                    "validation_status": "valid",
+                    "calculation_version": "backtest-fixture",
+                    "odds_snapshot_id": 30,
+                    "break_even_probability": probability,
+                    "market_edge": 0,
+                    "breakeven_edge": 0,
+                    "ev": 0.1,
+                    "uncertainty_reason": {"model_independent": True},
+                }
+                for option, probability in (("3", 0.1), ("1", 0.2), ("0", 0.7))
+            ],
+        )
+        if completed:
+            finalize_prediction_run(
+                conn,
+                run_id=run_id,
+                run_status="completed",
+                output_summary={
+                    "expected_groups": 1,
+                    "completed_groups": 1,
+                    "skipped_groups": 0,
+                    "missing_groups": [],
+                    "input_updates_skipped": 0,
+                    "completion_reason": "predictions_completed",
+                },
+            )
+    with conn.cursor() as cursor:
+        cursor.execute("ANALYZE")
+        cursor.execute(sql.SQL("GRANT USAGE ON SCHEMA {} TO fqp").format(sql.Identifier(schema)))
+        cursor.execute(
+            sql.SQL("GRANT SELECT ON ALL TABLES IN SCHEMA {} TO fqp").format(sql.Identifier(schema))
+        )
+    conn.commit()
+    with conn.cursor() as cursor:
+        cursor.execute("SET LOCAL ROLE fqp")
+        cursor.execute("SELECT rolsuper FROM pg_roles WHERE rolname=current_user")
+        assert cursor.fetchone() == (False,)
+    engine = BacktestEngine(
+        conn, BacktestConfig(walk_forward=False, signal_strength="all", min_model_prob=0.01)
+    )
+    rows = engine.load_data()
+    expected = {
+        (match_id, version, "spf", option): "3"
+        for match_id in range(1, 101)
+        for version in (2, 3)
+        for option in ("3", "1", "0")
+    }
+    for match_id in (101, 102, 103, 114, 121, 122, 123, 124, 126, 127, 131):
+        version = 2 if match_id in (122, 126) else 1
+        truth = "1" if match_id in (102, 114) else "0" if match_id == 103 else "3"
+        for option in ("3",) if match_id == 121 else ("3", "1", "0"):
+            expected[(match_id, version, "spf", option)] = truth
+    other_results = {
+        "rqspf": "1",
+        "zjq": "2",
+        "total_goals": "2",
+        "bf": "20",
+        "score": "20",
+        "bqc": "13",
+        "half_full": "13",
+    }
+    for match_id in (101, 112, 113, 114, 115):
+        for play, truth in other_results.items():
+            expected[(match_id, 1, play, truth)] = truth
+    # Keep the existing public row shape (model name, no version column).
+    expected_by_name = {
+        (match_id, "other" if version == 3 else "same", play, option): truth
+        for (match_id, version, play, option), truth in expected.items()
+    }
+    actual = {
+        (row["match_id"], row["model_name"], row["play_type"], row["option_code"]): row[
+            "actual_result"
+        ]
+        for row in rows
+    }
+    assert actual == expected_by_name
+    assert len(rows) == len(expected_by_name)
+    assert {
+        row["option_code"]: float(row["model_probability"])
+        for row in rows
+        if row["match_id"] == 122
+    } == {"3": 0.6, "1": 0.3, "0": 0.1}
+    assert all(float(row["sp_value"]) == (0 if row["match_id"] == 131 else 2.5) for row in rows)
+    bets = engine._simulate_bets(rows, "2026-08-01", "2026-08-01")
+    assert len(bets) == 245
+    assert sum(bet.profit for bet in bets) == pytest.approx(357.5)
+    assert next(bet for bet in bets if bet.match_id == 126).option_code == "0"
+    result = engine.run()
+    assert result["status"] == "ok" and result["total_bets"] == len(bets)
+    assert sum(metrics["total_profit"] for metrics in result["aggregate"].values()) == 357.5
+
+    query, parameters = engine._build_query()
+    with conn.cursor() as cursor:
+        # Compare only the read boundary against the canonical original view;
+        # eligibility and the repaired result rules stay identical.
+        from scripts.model_evaluation_scope import EVALUATION_PREDICTION_ROWS_CTES
+
+        oracle = query.replace(EVALUATION_PREDICTION_ROWS_CTES, "WITH ", 1).replace(
+            "FROM evaluation_prediction_rows source_mp",
+            "FROM model_prediction_latest_rows source_mp",
+        )
+        oracle = re.sub(r"\bWITH\s*,", "WITH ", oracle, count=1)
+        cursor.execute(oracle, parameters)
+        assert sorted(cursor.fetchall(), key=repr) == sorted(
+            [tuple(row[column[0]] for column in cursor.description) for row in rows], key=repr
+        )
+        cursor.execute("EXPLAIN (ANALYZE,FORMAT JSON) " + query, parameters)
+        plan = cursor.fetchone()[0][0]
+
+    def prediction_work(node):
+        own = 0
+        if node.get("Relation Name") == "model_predictions":
+            own = (node["Actual Rows"] + node.get("Rows Removed by Filter", 0)) * node[
+                "Actual Loops"
+            ]
+        return own + sum(prediction_work(child) for child in node.get("Plans", []))
+
+    work = prediction_work(plan["Plan"])
+    print(
+        json.dumps(
+            {
+                "backtest_truth_reads": {
+                    "archive_rows": 900 * archive_snapshots,
+                    "prediction_node_work": work,
+                    "execution_ms": plan["Execution Time"],
+                }
+            }
+        ),
+        flush=True,
+    )
+    assert work < 15000
+    filtered = BacktestEngine(
+        conn,
+        BacktestConfig(
+            time_start="2026-08-01",
+            time_end="2026-08-01",
+            play_types=["rqspf"],
+            model_names=["same"],
+            model_ids=[1],
+            confidence_min=0.5,
+        ),
+    ).load_data()
+    assert {row["match_id"] for row in filtered} == {101, 112, 113, 114, 115}
+    assert BacktestEngine(conn, BacktestConfig(time_start="2026-08-02")).load_data() == []
+    conn.rollback()
+    with conn.cursor() as cursor:
+        cursor.execute("UPDATE official_results SET result_status='pending'")
+        cursor.execute("SET LOCAL ROLE fqp")
+    assert engine.run()["status"] == "no_data"
+
+
+@pytest.mark.parametrize("valid_matches", [90, 120, 5005])
+def test_explanation_training_uses_only_trustworthy_results_and_eligible_snapshots(
+    isolated_database, monkeypatch, valid_matches
+):
+    import numpy as np
+    from psycopg2 import sql
+
+    from scripts import feature_importance
+    from scripts.feature_schema import CURRENT_SNAPSHOT_VERSION, FEATURE_COLUMNS
+
+    conn, schema = isolated_database
+    with conn.cursor() as cursor:
+        cursor.execute("SET statement_timeout='15s'")
+        cursor.execute("CREATE TABLE competition_seasons(id BIGINT PRIMARY KEY)")
+        cursor.execute("CREATE TABLE stadiums(id BIGINT PRIMARY KEY)")
+        cursor.execute("CREATE TABLE simulation_ticket_items(id BIGINT PRIMARY KEY)")
+        migrations = Path(__file__).resolve().parents[2] / "sql"
+        cursor.execute((migrations / "12_match_feature_snapshots.sql").read_text())
+        cursor.execute((migrations / "71_upset_risk_feature_schema.sql").read_text())
+        cursor.execute("ALTER TABLE official_matches ADD COLUMN league_name TEXT")
+        cursor.execute("INSERT INTO teams(team_name_cn) VALUES ('home'),('away')")
+        cursor.execute(
+            """INSERT INTO official_matches(business_date,kickoff_time,match_status,league_name)
+            SELECT '2026-08-01'::date,'2026-08-01 18:00'::timestamp,'Settled','fixture'
+            FROM generate_series(1,%s)""",
+            (valid_matches + 24,),
+        )
+        cursor.execute(
+            """INSERT INTO official_results
+                (match_id,result_status,spf_result,full_home_goals,full_away_goals)
+            SELECT id,'confirmed',CASE id%%3 WHEN 0 THEN '0' WHEN 1 THEN '1' ELSE '3' END,
+                   CASE id%%3 WHEN 0 THEN 0 WHEN 1 THEN 1 ELSE 2 END,
+                   CASE id%%3 WHEN 0 THEN 2 WHEN 1 THEN 1 ELSE 0 END
+            FROM official_matches WHERE id<=%s""",
+            (valid_matches,),
+        )
+        results = {index: [valid_matches + index, "final", "3", 2, 0] for index in range(1, 25)}
+        results[2][1:] = ["confirmed", "1", 1, 1]
+        results[3][1:] = ["confirmed", "0", 0, 1]
+        for index, status in ((4, "pending"), (5, "provisional"), (6, "cancelled")):
+            results[index][1] = status
+        results[7][3] = None
+        results[8][4] = None
+        results[9][3:] = [None, None]
+        results[10][3] = -1
+        results[11][4] = -1
+        results[12][2] = "1"
+        results[13][2] = "void"
+        results[14][2:] = [None, 0, 0]
+        results[15][2] = ""
+        cursor.executemany(
+            """INSERT INTO official_results
+                (match_id,result_status,spf_result,full_home_goals,full_away_goals)
+            VALUES (%s,%s,%s,%s,%s)""",
+            [row for index, row in results.items() if index != 20],
+        )
+        cursor.execute(
+            """UPDATE official_matches SET kickoff_time=NULL WHERE id=%s""",
+            (valid_matches + 19,),
+        )
+        cursor.execute(
+            "UPDATE official_matches SET match_status='Scheduled' WHERE id=%s",
+            (valid_matches + 24,),
+        )
+        # Bad labels are newer than the valid business dates: filtering must
+        # happen before LIMIT, so they cannot consume the 5000-match budget.
+        cursor.execute(
+            "UPDATE official_matches SET business_date='2026-08-02' WHERE id=ANY(%s)",
+            ([valid_matches + index for index in (7, 8, 9, 10, 11, 12, 13, 15)],),
+        )
+        cursor.execute(
+            """INSERT INTO match_feature_snapshots
+                (match_id,snapshot_time,feature_version,home_team_id,away_team_id,
+                 home_attack_strength_score,home_lineup_confirmed,temperature_2m,precipitation)
+            SELECT id,'2026-07-30',%s,1,2,id::numeric/100,false,
+                   CASE WHEN id%%2=0 THEN 20 ELSE NULL END,0
+            FROM official_matches WHERE id<>%s""",
+            (CURRENT_SNAPSHOT_VERSION, valid_matches + 23),
+        )
+        cursor.execute(
+            "UPDATE match_feature_snapshots SET feature_version='v4_observed_form' WHERE match_id=%s",
+            (valid_matches + 16,),
+        )
+        cursor.execute(
+            "UPDATE match_feature_snapshots SET snapshot_time='2026-08-02' WHERE match_id=%s",
+            (valid_matches + 17,),
+        )
+        cursor.execute(
+            "UPDATE match_feature_snapshots SET snapshot_time='2026-08-01 18:00' WHERE match_id=%s",
+            (valid_matches + 18,),
+        )
+        cursor.execute(
+            """UPDATE match_feature_snapshots SET wind_speed_10m=99
+            WHERE match_id=ANY(%s)""",
+            ([valid_matches + index for index in (7, 8, 9, 10, 11, 12, 13, 15)],),
+        )
+        cursor.executemany(
+            """INSERT INTO match_feature_snapshots
+                (match_id,snapshot_time,feature_version,home_team_id,away_team_id,
+                 home_attack_strength_score,home_lineup_confirmed,precipitation)
+            VALUES (%s,%s,%s,1,2,%s,false,NULL)""",
+            [
+                (valid_matches + 21, "2026-07-30", CURRENT_SNAPSHOT_VERSION, 0),
+                (valid_matches + 21, "2026-08-02", CURRENT_SNAPSHOT_VERSION, 999),
+                (valid_matches + 22, "2026-07-31", "future-unsupported", 999),
+            ],
+        )
+        cursor.execute(sql.SQL("GRANT USAGE ON SCHEMA {} TO fqp").format(sql.Identifier(schema)))
+        cursor.execute(
+            sql.SQL("GRANT SELECT ON ALL TABLES IN SCHEMA {} TO fqp").format(sql.Identifier(schema))
+        )
+    conn.commit()
+    with conn.cursor() as cursor:
+        cursor.execute("SET LOCAL ROLE fqp")
+        cursor.execute("SELECT rolsuper FROM pg_roles WHERE rolname=current_user")
+        assert cursor.fetchone() == (False,)
+    data = feature_importance._load_training_data(conn, min_samples=1)
+    assert data is not None
+    features, labels, match_ids, names = data
+    expected_ids = sorted(
+        [*range(1, valid_matches + 1), *[valid_matches + i for i in (1, 2, 3, 14, 21, 22, 24)]]
+    )[:5000]
+    assert match_ids == expected_ids
+    expected_labels = [
+        match_id % 3
+        if match_id <= valid_matches
+        else 1
+        if match_id - valid_matches in (2, 14)
+        else 0
+        if match_id - valid_matches == 3
+        else 2
+        for match_id in expected_ids
+    ]
+    np.testing.assert_array_equal(labels, expected_labels)
+    expected_names = [
+        name
+        for name in FEATURE_COLUMNS
+        if name
+        in (
+            "home_attack_strength_score",
+            "home_lineup_confirmed",
+            "temperature_2m",
+            "precipitation",
+        )
+    ]
+    assert names == expected_names  # Excluded-only wind is not an observed feature.
+    expected_features = [
+        [
+            0 if match_id == valid_matches + 21 else match_id / 100,
+            0,
+            np.nan if match_id == valid_matches + 21 or match_id % 2 else 20,
+            np.nan if match_id == valid_matches + 21 else 0,
+        ]
+        for match_id in expected_ids
+    ]
+    np.testing.assert_allclose(features, expected_features, equal_nan=True)
+    assert feature_importance._load_training_data(conn, min_samples=len(expected_ids) + 1) is None
+
+    if valid_matches in (90, 120):
+        # Exercise the real XGBoost fit at >=100 accepted matches. All model
+        # state is restored by monkeypatch; no artifact/profile is persisted.
+        for name, value in {
+            "_trained_model": None,
+            "_trained_explainer": None,
+            "_explainer_initialized": False,
+            "_feature_names_cache": [],
+            "_importance_cache": {},
+            "_train_score": 0.0,
+        }.items():
+            monkeypatch.setattr(feature_importance, name, value)
+        trained = feature_importance.train_if_needed(conn, force=True)
+        if valid_matches == 90:
+            assert trained["status"] == "error" and "至少100场" in trained["error"]
+            assert feature_importance._trained_model is None
+        else:
+            assert trained["status"] == "ok" and trained["n_samples"] == 127
+            assert trained["n_features"] == len(names)
+            assert trained["class_distribution"] == {
+                "home_win": int((labels == 2).sum()),
+                "draw": int((labels == 1).sum()),
+                "away_win": int((labels == 0).sum()),
+            }
+            probabilities = feature_importance._trained_model.predict_proba(features[:3])
+            assert probabilities.shape == (3, 3) and np.isfinite(probabilities).all()
+            np.testing.assert_allclose(probabilities.sum(axis=1), 1, atol=1e-6)
+    conn.rollback()
+    with conn.cursor() as cursor:
+        cursor.execute("UPDATE official_results SET result_status='pending'")
+        cursor.execute("SET LOCAL ROLE fqp")
+    assert feature_importance._load_training_data(conn, min_samples=1) is None
+    print(
+        json.dumps(
+            {
+                "explanation_training_truth": {
+                    "base_matches": valid_matches,
+                    "admitted_matches": len(match_ids),
+                    "feature_names": names,
+                    "native_missing_values": int(np.isnan(features).sum()),
+                    "real_fit": valid_matches == 120,
+                }
+            }
+        ),
+        flush=True,
+    )
+
+
+@pytest.mark.parametrize("consumer", ["evaluation", "backtest"])
+def test_probability_inputs_cannot_abort_or_poison_other_matches(
+    isolated_database, monkeypatch, consumer
+):
+    import math
+
+    import psycopg2
+    from psycopg2 import sql
+
+    from scripts import evaluation_metrics
+    from scripts.backtest_engine import BacktestConfig, BacktestEngine
+
+    conn, schema = isolated_database
+    with conn.cursor() as cursor:
+        migrations = Path(__file__).resolve().parents[2] / "sql"
+        cursor.execute((migrations / "113_prediction_read_paths.sql").read_text())
+        metrics_ddl = re.search(
+            r"CREATE TABLE IF NOT EXISTS market_efficiency_metrics \(.*?\n\);",
+            (migrations / "03_model_research_schema.sql").read_text(),
+            re.S,
+        )
+        assert metrics_ddl is not None
+        cursor.execute(metrics_ddl.group())
+        cursor.execute("ALTER TABLE official_matches ADD COLUMN sale_stop_time TIMESTAMP")
+        cursor.execute("""ALTER TABLE official_results ADD COLUMN rqspf_result TEXT,
+            ADD COLUMN total_goals_result TEXT, ADD COLUMN score_result TEXT,
+            ADD COLUMN half_full_result TEXT""")
+        cursor.execute("INSERT INTO model_versions(model_name) VALUES ('probability-fixture')")
+        cursor.execute("""INSERT INTO official_matches(business_date,kickoff_time,match_status)
+            SELECT '2026-08-01'::date,'2026-08-01 18:00'::timestamp,'Settled'
+            FROM generate_series(1,22)""")
+        cursor.execute("""INSERT INTO official_results
+            (match_id,result_status,spf_result,full_home_goals,full_away_goals)
+            SELECT id,'final','3',2,0 FROM official_matches""")
+        cursor.execute("""INSERT INTO model_predictions
+                (match_id,model_version_id,predict_time,play_type,option_code,
+                 model_probability,market_probability,ev,confidence_score,
+                 validation_status,uncertainty_reason)
+            SELECT id,1,'2026-07-29','spf',o,
+                   CASE o WHEN '3' THEN 0.7 WHEN '1' THEN 0.2 ELSE 0.1 END,
+                   CASE o WHEN '3' THEN 0.4 WHEN '1' THEN 0.35 ELSE 0.25 END,
+                   CASE o WHEN '3' THEN 0.3 ELSE 0.1 END,0.8,
+                   'valid','{"model_independent":true}'
+            FROM official_matches CROSS JOIN unnest(ARRAY['3','1','0']) o""")
+        for match_id, value in ((2, None), (3, -0.1), (4, 1.1), (5, "NaN")):
+            cursor.execute(
+                "UPDATE model_predictions SET model_probability=%s WHERE match_id=%s AND option_code='3'",
+                (value, match_id),
+            )
+        cursor.execute("UPDATE model_predictions SET model_probability=0.7 WHERE match_id=6")
+        cursor.execute("""UPDATE model_predictions SET model_probability=
+            CASE option_code WHEN '3' THEN 1 ELSE 0 END WHERE match_id=7""")
+        cursor.execute("UPDATE model_predictions SET model_probability=0 WHERE match_id=8")
+        for match_id, value in ((9, None), (10, "NaN"), (11, -0.1), (12, 1.1)):
+            cursor.execute(
+                "UPDATE model_predictions SET market_probability=%s WHERE match_id=%s AND option_code='3'",
+                (value, match_id),
+            )
+        cursor.execute("""UPDATE model_predictions SET market_probability=0.45
+            WHERE match_id=13 AND option_code='0'""")
+        cursor.execute("""UPDATE model_predictions SET market_probability=
+            CASE option_code WHEN '3' THEN 0 WHEN '1' THEN 0.6 ELSE 0.4 END WHERE match_id=14""")
+        cursor.execute("UPDATE model_predictions SET ev=NULL WHERE match_id=19")
+        cursor.execute("UPDATE model_predictions SET ev='NaN' WHERE match_id=20")
+        cursor.execute("UPDATE model_predictions SET ev=0 WHERE match_id=21")
+        cursor.execute("UPDATE model_predictions SET market_probability=NULL WHERE match_id=22")
+        cursor.execute("""INSERT INTO model_predictions
+                (match_id,model_version_id,predict_time,play_type,option_code,
+                 model_probability,market_probability,ev,validation_status,uncertainty_reason)
+            SELECT id,1,'2026-07-30','spf',o,
+                   CASE WHEN id=17 THEN 'NaN'::numeric
+                        WHEN o='3' THEN 0.6 WHEN o='1' THEN 0.3 ELSE 0.1 END,
+                   'NaN'::numeric,0.1,'valid','{"model_independent":true}'
+            FROM official_matches CROSS JOIN unnest(ARRAY['3','1','0']) o WHERE id IN (17,18)""")
+        cursor.execute("""INSERT INTO official_odds_snapshots
+                (match_id,play_type,option_code,sp_value,snapshot_time)
+            SELECT id,'spf',o,2,'2026-07-28'::timestamp
+            FROM official_matches CROSS JOIN unnest(ARRAY['h','d','a']) o WHERE id<>16""")
+        cursor.execute("""INSERT INTO official_odds_snapshots
+                (match_id,play_type,option_code,sp_value,snapshot_time)
+            SELECT id,'spf',o,CASE WHEN id=15 AND o='h' THEN 'NaN'::numeric ELSE 2.5 END,
+                   '2026-08-01 17:00'::timestamp
+            FROM official_matches CROSS JOIN unnest(ARRAY['h','d','a']) o WHERE id<>16""")
+        cursor.execute(sql.SQL("GRANT USAGE ON SCHEMA {} TO fqp").format(sql.Identifier(schema)))
+        cursor.execute(
+            sql.SQL("GRANT SELECT ON ALL TABLES IN SCHEMA {} TO fqp").format(sql.Identifier(schema))
+        )
+        cursor.execute("GRANT INSERT,UPDATE ON market_efficiency_metrics TO fqp")
+        cursor.execute("GRANT USAGE ON SEQUENCE market_efficiency_metrics_id_seq TO fqp")
+    conn.commit()
+
+    @contextmanager
+    def runtime_database():
+        with closing(psycopg2.connect(conn.dsn)) as runtime:
+            with runtime.cursor() as cursor:
+                cursor.execute(sql.SQL("SET search_path TO {}").format(sql.Identifier(schema)))
+                cursor.execute("SET ROLE fqp")
+                cursor.execute("SET statement_timeout='15s'")
+                cursor.execute("SELECT rolsuper FROM pg_roles WHERE rolname=current_user")
+                assert cursor.fetchone() == (False,)
+            runtime.commit()
+            yield runtime
+
+    if consumer == "evaluation":
+        monkeypatch.setattr("apps.backend.src.db.get_db", runtime_database)
+        result = evaluation_metrics.run()
+        assert result["evaluated"] == result["stored"] == 15
+        expected = {1, 7, 9, 10, 11, 12, 13, 14, 15, 16, 18, 19, 20, 21, 22}
+        with conn.cursor() as cursor:
+            cursor.execute("""SELECT match_id,model_probability,market_probability,brier_score,
+                log_loss,rps,clv_score,official_sp,ev FROM market_efficiency_metrics""")
+            stored = {row[0]: row[1:] for row in cursor.fetchall()}
+        assert set(stored) == expected
+        for match_id, row in stored.items():
+            probability, market, brier, ll, rps, move, odds, ev = row
+            assert float(brier) == pytest.approx(
+                0 if match_id == 7 else 0.26 if match_id == 18 else 0.14
+            )
+            assert all(value is None or math.isfinite(float(value)) for value in row)
+            if match_id in (9, 10, 11, 12, 13, 18, 22):
+                assert market is None and move is None
+            if match_id in (15, 16):
+                assert move is odds is ev is None
+            if match_id == 14:
+                assert market == 0 and float(move) == pytest.approx(1 / 3, abs=1e-6)
+        assert float(stored[18][0]) == 0.6  # Latest missing market must not restore old prediction.
+        assert evaluation_metrics.run()["stored"] == 9  # Existing NULL-CLV updates, no duplicates.
+        with conn.cursor() as cursor:
+            cursor.execute("SELECT count(*) FROM market_efficiency_metrics")
+            assert cursor.fetchone() == (15,)
+    else:
+        with runtime_database() as runtime:
+            engine = BacktestEngine(
+                runtime, BacktestConfig(walk_forward=False, signal_strength="all")
+            )
+            rows = engine.load_data()
+            bets = engine._simulate_bets(rows, "2026-08-01", "2026-08-01")
+            # Known malformed complete groups must not become sparse samples
+            # after invalid/zero options or betting filters are removed.
+            assert {bet.match_id for bet in bets} == {
+                1,
+                7,
+                9,
+                10,
+                11,
+                12,
+                13,
+                14,
+                15,
+                18,
+                21,
+                22,
+            }
+            assert len(bets) == 12 and sum(bet.profit for bet in bets) == 12
+            for bet in bets:
+                if bet.match_id in (9, 10, 11, 12, 13, 18, 22):
+                    assert bet.market_prob is None
+            assert next(bet for bet in bets if bet.match_id == 18).model_prob == 0.6
+            result = engine.run()
+            metrics = result["aggregate"]["probability-fixture"]
+            assert metrics["total_profit"] == 12 and metrics["probability_edge"] is None
+            json.dumps(result, allow_nan=False)
+    json.dumps(result, allow_nan=False)
+    print(json.dumps({"probability_input_consumer": consumer, "result": result}), flush=True)
+
+
+@pytest.mark.parametrize("confidence_min", [None, 0.5])
+def test_backtest_preserves_sparse_groups_without_mixing_or_hiding_bad_peers(
+    isolated_database, confidence_min
+):
+    from psycopg2 import sql
+
+    from scripts.backtest_engine import BacktestConfig, BacktestEngine
+
+    conn, schema = isolated_database
+    with conn.cursor() as cursor:
+        cursor.execute("SET statement_timeout='15s'")
+        cursor.execute("SET jit=off")
+        cursor.execute(
+            (Path(__file__).resolve().parents[2] / "sql/113_prediction_read_paths.sql").read_text()
+        )
+        cursor.execute("""ALTER TABLE official_results ADD COLUMN rqspf_result TEXT,
+            ADD COLUMN total_goals_result TEXT, ADD COLUMN score_result TEXT,
+            ADD COLUMN half_full_result TEXT""")
+        cursor.execute("INSERT INTO model_versions(model_name) VALUES ('same'),('same')")
+        cursor.execute("""INSERT INTO official_matches(business_date,kickoff_time,match_status)
+            SELECT '2026-08-01'::date,'2026-08-01 18:00'::timestamp,'Settled'
+            FROM generate_series(1,28)""")
+        cursor.execute("""INSERT INTO official_results
+                (match_id,result_status,spf_result,full_home_goals,full_away_goals,rqspf_result)
+            SELECT id,'final','3',2,0,'1' FROM official_matches""")
+        cursor.execute("""INSERT INTO model_predictions
+                (match_id,model_version_id,predict_time,play_type,option_code,
+                 model_probability,market_probability,ev,confidence_score,
+                 validation_status,uncertainty_reason)
+            SELECT id,1,'2026-07-29','spf',o,
+                   CASE o WHEN '3' THEN 0.7 WHEN '1' THEN 0.2 ELSE 0.1 END,
+                   CASE o WHEN '3' THEN 0.4 WHEN '1' THEN 0.35 ELSE 0.25 END,
+                   CASE o WHEN '3' THEN 0.3 ELSE 0.1 END,0.8,
+                   'valid','{"model_independent":true}'
+            FROM official_matches CROSS JOIN unnest(ARRAY['3','1','0']) o""")
+        cursor.execute("UPDATE model_predictions SET model_probability=0.7 WHERE match_id=2")
+        for match_id, value in ((3, None), (4, "NaN"), (5, -0.1), (6, 1.1), (27, "NaN")):
+            cursor.execute(
+                """UPDATE model_predictions SET model_probability=%s
+                    WHERE match_id=%s AND option_code='0'""",
+                (value, match_id),
+            )
+        cursor.execute("""UPDATE model_predictions SET model_probability=
+            CASE option_code WHEN '3' THEN 1 ELSE 0 END WHERE match_id=7""")
+        cursor.execute("""DELETE FROM model_predictions WHERE
+            (match_id IN (8,21) AND option_code<>'3') OR
+            (match_id IN (9,10) AND option_code='0') OR match_id IN (16,26)""")
+        cursor.execute("""UPDATE model_predictions SET model_probability=0.5
+            WHERE match_id=10 AND option_code='1'""")
+        cursor.execute("""UPDATE model_predictions SET model_probability=0.699
+            WHERE match_id=11 AND option_code='3'""")
+        cursor.execute("""UPDATE model_predictions SET market_probability=NULL
+            WHERE match_id IN (12,28) AND option_code='0'""")
+        cursor.execute("""UPDATE model_predictions SET market_probability=0.5
+            WHERE match_id=13 AND option_code='0'""")
+        cursor.execute("""UPDATE model_predictions SET ev=0.9
+            WHERE match_id IN (14,15) AND option_code='0'""")
+        cursor.execute("""INSERT INTO model_predictions
+                (match_id,model_version_id,predict_time,play_type,option_code,
+                 model_probability,market_probability,ev,confidence_score,
+                 validation_status,uncertainty_reason)
+            VALUES (14,2,'2026-07-30','spf','3',0.45,0.4,0.01,0.8,
+                    'valid','{"model_independent":true}'),
+                   (15,2,'2026-07-30','spf','3','NaN',0.4,0.01,0.8,
+                    'valid','{"model_independent":true}'),
+                   (16,1,'2026-07-29','spf','3',0.6,0.4,0.9,0.8,
+                    'valid','{"model_independent":true}'),
+                   (16,2,'2026-07-29','spf','1',0.4,0.35,0.1,0.8,
+                    'valid','{"model_independent":true}')""")
+        cursor.execute("""INSERT INTO model_predictions
+                (match_id,model_version_id,predict_time,play_type,option_code,
+                 model_probability,market_probability,ev,confidence_score,
+                 validation_status,uncertainty_reason)
+            SELECT id,CASE WHEN id=19 THEN 1 ELSE 2 END,'2026-07-30','spf',o,
+                   CASE WHEN id IN (18,19) THEN 0.7
+                        WHEN o='3' THEN 0.6 WHEN o='1' THEN 0.3 ELSE 0.1 END,
+                   CASE o WHEN '3' THEN 0.4 WHEN '1' THEN 0.35 ELSE 0.25 END,
+                   CASE o WHEN '3' THEN 0.3 ELSE 0.1 END,0.8,
+                   'valid','{"model_independent":true}'
+            FROM official_matches CROSS JOIN unnest(ARRAY['3','1','0']) o
+            WHERE id IN (17,18,19)""")
+        cursor.execute(
+            "UPDATE model_predictions SET market_probability=0 WHERE match_id IN (20,21)"
+        )
+        cursor.execute("UPDATE model_predictions SET model_probability=0 WHERE match_id=22")
+        cursor.execute("""UPDATE model_predictions SET model_probability=
+            CASE WHEN match_id=23 THEN 0.705 ELSE 0.706 END
+            WHERE match_id IN (23,24) AND option_code='3'""")
+        cursor.execute("""INSERT INTO model_predictions
+                (match_id,model_version_id,predict_time,play_type,option_code,
+                 model_probability,market_probability,ev,confidence_score,
+                 validation_status,uncertainty_reason)
+            VALUES (25,1,'2026-07-30','spf','unknown',0.9,0.4,0.9,0.8,
+                    'valid','{"model_independent":true}'),
+                   (26,1,'2026-07-29','rqspf','3',0.7,0.4,0.1,0.8,
+                    'valid','{"model_independent":true}'),
+                   (26,1,'2026-07-29','rqspf','1',0.7,0.35,0.3,0.8,
+                    'valid','{"model_independent":true}')""")
+        cursor.execute("""UPDATE model_predictions SET confidence_score=NULL,ev=NULL
+            WHERE match_id IN (27,28) AND option_code='0'""")
+        cursor.execute("""INSERT INTO official_odds_snapshots
+                (match_id,play_type,option_code,sp_value,snapshot_time)
+            SELECT id,p.play,o,2,'2026-07-28'::timestamp
+            FROM official_matches CROSS JOIN unnest(ARRAY['h','d','a']) o
+            CROSS JOIN (VALUES ('spf'),('rqspf')) p(play)""")
+        cursor.execute(sql.SQL("GRANT USAGE ON SCHEMA {} TO fqp").format(sql.Identifier(schema)))
+        cursor.execute(
+            sql.SQL("GRANT SELECT ON ALL TABLES IN SCHEMA {} TO fqp").format(sql.Identifier(schema))
+        )
+    conn.commit()
+    with conn.cursor() as cursor:
+        cursor.execute("SET LOCAL ROLE fqp")
+        cursor.execute("SELECT rolsuper FROM pg_roles WHERE rolname=current_user")
+        assert cursor.fetchone() == (False,)
+    engine = BacktestEngine(
+        conn,
+        BacktestConfig(
+            walk_forward=False,
+            signal_strength="all",
+            min_model_prob=0.01,
+            confidence_min=confidence_min,
+        ),
+    )
+    rows = engine.load_data()
+    expected_options = {
+        1: "3",
+        7: "3",
+        8: "3",
+        9: "3",
+        11: "3",
+        12: "3",
+        13: "3",
+        14: "3",
+        16: "1",
+        17: "3",
+        20: "3",
+        21: "3",
+        23: "3",
+        25: "3",
+        26: "1",
+        28: "3",
+    }
+    # No malformed complete group may be disguised as a sparse group by SQL
+    # positivity/confidence or the later EV/odds/threshold filters.
+    assert {row["match_id"] for row in rows} == set(expected_options)
+    assert {row["option_code"] for row in rows if row["match_id"] == 14} == {"3"}
+    assert {row["option_code"] for row in rows if row["match_id"] == 16} == {"1"}
+    for row in rows:
+        if row["match_id"] in (12, 13, 20, 28):
+            assert row["market_probability"] is None
+        if row["match_id"] == 21:
+            assert row["market_probability"] == 0
+    bets = engine._simulate_bets(rows, "2026-08-01", "2026-08-01")
+    assert {bet.match_id: bet.option_code for bet in bets} == expected_options
+    assert next(bet.model_prob for bet in bets if bet.match_id == 14) == 0.45
+    assert next(bet.model_prob for bet in bets if bet.match_id == 17) == 0.6
+    assert sum(bet.profit for bet in bets) == 14  # One draw selection loses; handicap draw wins.
+    assert engine.compute_metrics(bets)["probability_edge"] is None
+    result = engine.run()
+    assert result["status"] == "ok" and result["total_bets"] == 16
+    json.dumps(result, allow_nan=False)
+    print(
+        json.dumps(
+            {
+                "backtest_group_confidence_min": confidence_min,
+                "bets": len(bets),
+                "profit": sum(bet.profit for bet in bets),
+            }
+        ),
+        flush=True,
+    )
+
+
+@pytest.mark.parametrize("archive_snapshots", [100, 3000])
+def test_latest_evaluation_metrics_seek_versions_before_merging_model_names(
+    isolated_database, archive_snapshots, monkeypatch
+):
+    from psycopg2 import sql
+
+    from scripts import feature_importance
+    from scripts.model_evaluation_scope import LATEST_METRICS_CTE
+
+    conn, schema = isolated_database
+    reference_cte = """WITH latest_metrics AS (
+        SELECT DISTINCT ON (source_mem.match_id, source_mv.model_name)
+            source_mem.*, source_mv.model_name AS canonical_model_name
+        FROM market_efficiency_metrics source_mem
+        JOIN model_versions source_mv ON source_mv.id=source_mem.model_version_id
+        JOIN official_matches source_match ON source_match.id=source_mem.match_id
+        JOIN official_results source_result ON source_result.match_id=source_mem.match_id
+        WHERE source_mem.brier_score IS NOT NULL AND source_mem.play_type='spf'
+          AND source_mem.snapshot_time<source_match.kickoff_time
+          AND source_result.result_status IN ('final','confirmed')
+        ORDER BY source_mem.match_id,source_mv.model_name,
+                 source_mem.snapshot_time DESC,source_mem.id DESC
+    )"""
+    suffix = " SELECT id,canonical_model_name FROM latest_metrics ORDER BY id"
+    with conn.cursor() as cursor:
+        cursor.execute("SET statement_timeout='20s'")
+        cursor.execute("""CREATE TABLE market_efficiency_metrics (
+            id BIGSERIAL PRIMARY KEY, match_id BIGINT NOT NULL, model_version_id BIGINT,
+            play_type TEXT NOT NULL, snapshot_time TIMESTAMP NOT NULL,
+            brier_score NUMERIC, log_loss NUMERIC, rps NUMERIC,
+            clv_score NUMERIC, probability_gap NUMERIC, favourite_longshot_score NUMERIC)""")
+        cursor.execute("""CREATE INDEX idx_mem_model_version
+            ON market_efficiency_metrics(model_version_id)""")
+        cursor.execute("""INSERT INTO model_versions(model_name)
+            VALUES ('maher_poisson'),('maher_poisson'),('elo_rating')""")
+        cursor.execute("""INSERT INTO official_matches(kickoff_time)
+            SELECT '2026-10-26 18:00'::timestamp FROM generate_series(1,109)""")
+        cursor.execute("ALTER TABLE official_matches ADD COLUMN league_name TEXT DEFAULT 'fixture'")
+        cursor.execute("UPDATE official_matches SET kickoff_time=NULL WHERE id=106")
+        cursor.execute("""INSERT INTO official_results(match_id,result_status,spf_result)
+            SELECT id,CASE WHEN id=103 THEN 'provisional' ELSE 'confirmed' END,'3'
+            FROM official_matches WHERE id<>104""")
+        cursor.execute(
+            """INSERT INTO market_efficiency_metrics
+                (match_id,model_version_id,play_type,snapshot_time,brier_score,log_loss,rps)
+            SELECT m.id,mv.id,'spf','2026-01-01'::timestamp+n*INTERVAL '1 minute',0.6,1,0.2
+            FROM official_matches m CROSS JOIN model_versions mv
+            CROSS JOIN generate_series(1,%s) n WHERE m.id<=100""",
+            (archive_snapshots,),
+        )
+        cursor.execute("""INSERT INTO market_efficiency_metrics
+                (match_id,model_version_id,play_type,snapshot_time,brier_score,log_loss,rps)
+            VALUES
+                (101,1,'spf','2026-10-25 10:00',0.8,1,0.2),
+                (101,2,'spf','2026-10-25 10:00',0.2,1,0.2),
+                (101,2,'spf','2026-10-25 12:00',NULL,1,0.2),
+                (101,2,'spf','2026-10-26 18:00',0.9,1,0.2),
+                (101,2,'spf','2026-10-26 19:00',0.9,1,0.2),
+                (101,2,'rqspf','2026-10-25 13:00',0.9,1,0.2),
+                (102,1,'spf','2026-10-25 10:00',0.3,1,0.2),
+                (102,2,'spf','2026-10-25 09:00',0.9,1,0.2),
+                (103,1,'spf','2026-10-25 10:00',0.9,1,0.2),
+                (104,1,'spf','2026-10-25 10:00',0.9,1,0.2),
+                (105,1,'spf','2026-10-26 19:00',0.9,1,0.2),
+                (106,1,'spf','2026-10-25 10:00',0.9,1,0.2),
+                (107,1,'spf','2026-10-25 10:00',0.4,1,0.2),
+                (107,NULL,'spf','2026-10-25 12:00',0.9,1,0.2),
+                (107,9999,'spf','2026-10-25 12:00',0.9,1,0.2),
+                (108,1,'spf','2026-10-25 10:00',0.5,1,0.2),
+                (108,1,'spf','2026-10-25 10:00',0.6,1,0.2),
+                (109,3,'spf','2026-10-25 10:00',0,0,0)""")
+        migrations = Path(__file__).resolve().parents[2] / "sql"
+        cursor.execute((migrations / "19_backtest_schema.sql").read_text())
+        cursor.execute("""INSERT INTO backtest_runs(name,status,created_at)
+            VALUES ('old','completed','2026-10-20'),('new','completed','2026-10-21'),
+                   ('unfinished','running','2026-10-22')""")
+        cursor.execute("""INSERT INTO backtest_run_results
+                (run_id,model_name,window_index,roi,hit_rate,total_profit)
+            VALUES (1,'maher_poisson',NULL,0.1,0.4,1),
+                   (2,'maher_poisson',NULL,0.2,0.5,2),
+                   (2,'maher_poisson',1,0.9,0.9,9),
+                   (3,'maher_poisson',NULL,0.8,0.8,8)""")
+        started = time.perf_counter()
+        migration = (migrations / "114_evaluation_read_paths.sql").read_text()
+        cursor.execute(migration)
+        build_ms = (time.perf_counter() - started) * 1000
+        cursor.execute(migration)  # Existing migration prebuild/replay remains safe.
+        cursor.execute("""SELECT indisvalid,indisready,pg_relation_size(indexrelid)
+            FROM pg_index WHERE indexrelid='idx_mem_identity_latest_scored_spf'::regclass""")
+        valid, ready, index_bytes = cursor.fetchone()
+        assert valid and ready
+        cursor.execute("ANALYZE")
+        cursor.execute(reference_cte + suffix)
+        expected = cursor.fetchall()
+        cursor.execute(LATEST_METRICS_CTE + suffix)
+        assert cursor.fetchall() == expected
+        cursor.execute(
+            reference_cte
+            + """ INSERT INTO model_predictions
+                (match_id,model_version_id,play_type,option_code,predict_time,
+                 model_probability,market_probability,confidence_score,validation_status)
+            SELECT match_id,model_version_id,'spf','3',snapshot_time,0.5,0.5,NULL,'valid'
+            FROM latest_metrics"""
+        )
+        cursor.execute(sql.SQL("GRANT USAGE ON SCHEMA {} TO fqp").format(sql.Identifier(schema)))
+        cursor.execute(
+            sql.SQL("GRANT SELECT ON ALL TABLES IN SCHEMA {} TO fqp").format(sql.Identifier(schema))
+        )
+    conn.commit()
+
+    with conn.cursor() as cursor:
+        cursor.execute("SET LOCAL ROLE fqp")
+        cursor.execute(LATEST_METRICS_CTE + suffix)
+        assert cursor.fetchall() == expected
+        cursor.execute("EXPLAIN (ANALYZE, FORMAT JSON) " + LATEST_METRICS_CTE + suffix)
+        plan = cursor.fetchone()[0][0]
+
+    comparison = feature_importance.get_model_comparison_data(conn)
+    by_name = {model["name"]: model for model in comparison["models"]}
+    assert comparison["total_models"] == 2
+    assert by_name["maher_poisson"]["n_predictions"] == 104
+    assert by_name["maher_poisson"]["brier"] == 0.5913
+    assert by_name["maher_poisson"]["roi"] == 0.2
+    assert by_name["elo_rating"]["n_predictions"] == 101
+    assert by_name["elo_rating"]["brier"] == 0.5941
+    assert all(model["closing_edge"] is None for model in comparison["models"])
+    summary = feature_importance.get_evaluation_summary(conn)
+    assert summary["overall"]["total_evaluated"] == 205
+    assert all(model["paired_market_samples"] == 0 for model in summary["models"])
+    assert all(model["brier_improvement_vs_market"] is None for model in summary["models"])
+    conditions = {}
+    for dimension in ("league", "odds_range", "confidence"):
+        conditions[dimension] = feature_importance.get_condition_performance(conn, dimension)
+        assert sorted(segment["n"] for segment in conditions[dimension]["segments"]) == [101, 104]
+    assert all(
+        segment["confidence_range"] == "未校准/未知"
+        for segment in conditions["confidence"]["segments"]
+    )
+    with monkeypatch.context() as oracle:
+        oracle.setattr(feature_importance, "_LATEST_METRICS_CTE", reference_cte)
+        assert feature_importance.get_model_comparison_data(conn) == comparison
+        assert feature_importance.get_evaluation_summary(conn) == summary
+        for dimension, response in conditions.items():
+            assert feature_importance.get_condition_performance(conn, dimension) == response
+
+    def metric_work(node):
+        own = 0
+        if node.get("Relation Name") == "market_efficiency_metrics":
+            own = (node["Actual Rows"] + node.get("Rows Removed by Filter", 0)) * node[
+                "Actual Loops"
+            ]
+        return own + sum(metric_work(child) for child in node.get("Plans", []))
+
+    work = metric_work(plan["Plan"])
+    assert "idx_mem_identity_latest_scored_spf" in json.dumps(plan)
+    print(
+        json.dumps(
+            {
+                "metric_archive_rows": archive_snapshots * 300,
+                "metric_node_rows_examined": work,
+                "execution_time_ms": plan["Execution Time"],
+                "index_build_ms": build_ms,
+                "index_bytes": index_bytes,
+            }
+        ),
+        flush=True,
+    )
+    assert work < 20000, "latest model metrics must not sort repeated historical snapshots"
+
+
 def test_model_overview_aggregates_global_latest_predictions_once(isolated_database, monkeypatch):
     from apps.backend.src.routers import predictions as router
 
@@ -1115,7 +3247,7 @@ def test_model_overview_aggregates_global_latest_predictions_once(isolated_datab
         cursor.execute("""INSERT INTO model_versions (model_name)
             VALUES ('market_baseline'), ('elo_rating'), ('maher_poisson')""")
         cursor.execute("""INSERT INTO official_matches (kickoff_time)
-            SELECT '2026-10-25 18:00'::timestamp FROM generate_series(1,100)""")
+            SELECT '2026-10-25 18:00'::timestamp FROM generate_series(1,1000)""")
         cursor.execute("""INSERT INTO model_predictions (
             match_id, model_version_id, predict_time, play_type,
             option_code, model_probability, validation_status)
@@ -1127,6 +3259,10 @@ def test_model_overview_aggregates_global_latest_predictions_once(isolated_datab
         cursor.execute("ANALYZE model_predictions")
         cursor.execute("ANALYZE model_versions")
         cursor.execute("ANALYZE official_matches")
+        migration = (
+            Path(__file__).resolve().parents[2] / "sql/113_prediction_read_paths.sql"
+        ).read_text()
+        cursor.execute(migration)
     conn.commit()
 
     capture = MagicMock()
@@ -1134,6 +3270,9 @@ def test_model_overview_aggregates_global_latest_predictions_once(isolated_datab
     monkeypatch.setattr(router, "get_db", lambda: nullcontext(capture))
     router.get_prediction_model_overview()
     query, params = capture.cursor.return_value.__enter__.return_value.execute.call_args.args
+    assert "WITH RECURSIVE" in query
+    assert "FROM model_prediction_latest_rows" not in query
+    assert "FROM legacy_latest" in query
 
     with conn.cursor() as cursor:
         cursor.execute(query, params)
@@ -1156,17 +3295,322 @@ def test_model_overview_aggregates_global_latest_predictions_once(isolated_datab
         for child in node.get("Plans", []):
             yield from windows(child)
 
+    def indexes(node):
+        if node.get("Index Name"):
+            yield node["Index Name"]
+        for child in node.get("Plans", []):
+            yield from indexes(child)
+
     loops = list(windows(plan["Plan"]))
+    used_indexes = set(indexes(plan["Plan"]))
     print(
         json.dumps(
             {
-                "fixture_rows": 90000,
+                "fixture_rows": 900000,
                 "execution_time_ms": plan["Execution Time"],
                 "global_ranking_loops": loops,
+                "used_indexes": sorted(used_indexes),
             }
         )
     )
-    assert loops and max(loops) == 1, "global legacy ranking must not repeat per model"
+    assert not loops, "model overview should seek latest identities instead of ranking history"
+    assert "idx_predictions_identity_latest" in used_indexes
+
+
+@pytest.mark.parametrize("archive_snapshots", [100, 1000])
+def test_pool_consensus_preserves_latest_evidence_without_ranking_history(
+    isolated_database, archive_snapshots
+):
+    from psycopg2 import sql
+
+    from apps.backend.src.routers.pool import _read_pool_model_consensus
+    from scripts.model_prediction_run_identity import content_sha256
+    from scripts.model_prediction_run_storage import (
+        create_prediction_run,
+        finalize_prediction_run,
+        store_prediction_group,
+    )
+
+    conn, schema = isolated_database
+    target_ids = list(range(101, 115))
+    with conn.cursor() as cursor:
+        cursor.execute("SET LOCAL jit = off")
+        cursor.execute("ALTER TABLE model_versions ADD COLUMN is_active BOOLEAN DEFAULT true")
+        cursor.execute("""INSERT INTO model_versions(model_name,is_active)
+            VALUES ('shared',true),('shared',true),('independent',true),('shared',false)""")
+        cursor.execute("""INSERT INTO official_matches(kickoff_time)
+            SELECT '2026-10-25 20:00'::timestamp FROM generate_series(1,114)""")
+        cursor.execute(
+            """INSERT INTO model_predictions
+                (match_id,model_version_id,predict_time,play_type,option_code,
+                 model_probability,validation_status,uncertainty_reason)
+            SELECT m.id,mv.id,'2026-01-01'::timestamp+n*INTERVAL '1 minute',
+                   'spf',o,0.333333,'valid','{"model_independent":true}'::jsonb
+            FROM official_matches m CROSS JOIN model_versions mv
+            CROSS JOIN generate_series(1,%s) n CROSS JOIN unnest(ARRAY['3','1','0']) o
+            WHERE (m.id<=100 AND mv.id<=3) OR (m.id>100 AND mv.id=1)""",
+            (archive_snapshots,),
+        )
+        rows = []
+
+        def vector(
+            match,
+            version=1,
+            when="2026-10-25 10:00",
+            values=(0.2, 0.3, 0.5),
+            status="valid",
+            independent=True,
+        ):
+            for option, probability in zip(("3", "1", "0"), values, strict=True):
+                rows.append(
+                    (
+                        match,
+                        version,
+                        when,
+                        option,
+                        probability,
+                        status,
+                        json.dumps({"model_independent": independent}),
+                    )
+                )
+
+        for match_id in target_ids:
+            vector(match_id)
+        vector(101, 2, "2026-10-25 11:00", (0.4, 0.35, 0.25))
+        vector(102, 4, "2026-10-25 11:00")
+        vector(103, when="2026-10-25 11:00", status="invalid")
+        vector(104, 2, "2026-10-25 11:00")
+        vector(105, when="2026-10-25 11:00", independent=False)
+        vector(106, when="2026-10-25 11:00", independent=None)
+        vector(107, 3, "2026-10-25 11:00", (0.6, 0.2, 0.2))
+        vector(108, when="2026-10-25 11:00", values=(0.2, None, 0.5))
+        vector(111, when="2026-10-25 10:00", values=(0.5, 0.3, 0.2))
+        vector(114, when="2026-10-25 11:00", status=None)
+        cursor.executemany(
+            """INSERT INTO model_predictions
+            (match_id,model_version_id,predict_time,play_type,option_code,
+             model_probability,validation_status,uncertainty_reason)
+            VALUES (%s,%s,%s,'spf',%s,%s,%s,%s::jsonb)""",
+            rows,
+        )
+        cursor.execute("UPDATE official_matches SET kickoff_time='2026-10-25 10:30' WHERE id=104")
+        cursor.execute("UPDATE official_matches SET kickoff_time=NULL WHERE id=113")
+        cursor.execute(
+            (Path(__file__).resolve().parents[2] / "sql/113_prediction_read_paths.sql").read_text()
+        )
+    conn.commit()
+
+    # A published complete vector takes priority over newer legacy rows. Rows
+    # mapped to an unfinished run cannot replace the last published/legacy evidence.
+    for match_id, completed in ((109, True), (110, False)):
+        run_id = uuid.uuid4()
+        create_prediction_run(
+            conn,
+            run_id=run_id,
+            ai_job_run_id=None,
+            release_id="pool-fixture",
+            code_fingerprint={"files": {}, "sha256": content_sha256({})},
+            model_manifest=[{"model_version_id": 2}],
+            input_manifest={"match_ids": [match_id]},
+            provenance_status="incomplete",
+        )
+        metadata = {
+            "match_id": match_id,
+            "model_version_id": 2,
+            "play_type": "spf",
+            "predict_time": "2026-10-25T09:00:00" if completed else "2026-10-25T11:00:00",
+            "feature_snapshot_id": 77,
+            "expected_options": ["3", "1", "0"],
+        }
+        store_prediction_group(
+            conn,
+            run_id=run_id,
+            metadata=metadata,
+            predictions=[
+                {
+                    **{k: v for k, v in metadata.items() if k != "expected_options"},
+                    "option_code": option,
+                    "model_probability": probability,
+                    "validation_status": "valid",
+                    "calculation_version": "pool-fixture",
+                    "uncertainty_reason": {"model_independent": True},
+                    "odds_snapshot_id": 30,
+                    "market_probability": probability,
+                    "break_even_probability": probability,
+                    "market_edge": 0,
+                    "breakeven_edge": 0,
+                    "ev": 0,
+                }
+                for option, probability in (("3", 0.6), ("1", 0.25), ("0", 0.15))
+            ],
+        )
+        if completed:
+            finalize_prediction_run(
+                conn,
+                run_id=run_id,
+                run_status="completed",
+                output_summary={
+                    "expected_groups": 1,
+                    "completed_groups": 1,
+                    "skipped_groups": 0,
+                    "missing_groups": [],
+                    "input_updates_skipped": 0,
+                    "completion_reason": "predictions_completed",
+                },
+            )
+    with conn.cursor() as cursor:
+        cursor.execute("ANALYZE")
+        cursor.execute(sql.SQL("GRANT USAGE ON SCHEMA {} TO fqp").format(sql.Identifier(schema)))
+        cursor.execute(
+            sql.SQL("GRANT SELECT ON ALL TABLES IN SCHEMA {} TO fqp").format(sql.Identifier(schema))
+        )
+        cursor.execute("SET LOCAL ROLE fqp")
+        cursor.execute("SET LOCAL jit = off")
+        # Independent oracle: the original canonical view and pool filters.
+        cursor.execute(
+            """SELECT mp.match_id,
+            AVG(mp.model_probability) FILTER (WHERE mp.option_code='3'),
+            AVG(mp.model_probability) FILTER (WHERE mp.option_code='1'),
+            AVG(mp.model_probability) FILTER (WHERE mp.option_code='0')
+            FROM model_prediction_latest_rows mp
+            JOIN model_versions mv ON mv.id=mp.model_version_id
+            JOIN official_matches m ON m.id=mp.match_id
+            WHERE mp.match_id=ANY(%s) AND mp.play_type='spf'
+              AND mp.predict_time<m.kickoff_time AND mp.validation_status='valid'
+              AND COALESCE((mp.uncertainty_reason->>'model_independent')::boolean,false)=true
+              AND mv.is_active=true AND mp.model_probability IS NOT NULL
+            GROUP BY mp.match_id""",
+            (target_ids,),
+        )
+        expected = {int(row[0]): tuple(row[1:]) for row in cursor.fetchall()}
+
+        class CaptureCursor:
+            def execute(self, query, params):
+                self.query, self.params = query, params
+                cursor.execute(query, params)
+
+            def fetchall(self):
+                return cursor.fetchall()
+
+        capture = CaptureCursor()
+        assert _read_pool_model_consensus(capture, target_ids) == expected
+        assert tuple(map(float, expected[101])) == (0.4, 0.35, 0.25)
+        assert all(match not in expected for match in (102, 103, 104, 105, 106, 113, 114))
+        assert tuple(map(float, expected[107])) == (0.4, 0.25, 0.35)
+        assert expected[108][1] is None
+        assert tuple(map(float, expected[109])) == (0.6, 0.25, 0.15)
+        assert tuple(map(float, expected[110])) == (0.2, 0.3, 0.5)
+        assert tuple(map(float, expected[111])) == (0.5, 0.3, 0.2)
+        cursor.execute("EXPLAIN (ANALYZE,FORMAT JSON) " + capture.query, capture.params)
+        plan = cursor.fetchone()[0][0]
+
+    def prediction_work(node):
+        own = 0
+        if node.get("Relation Name") == "model_predictions":
+            own = (node["Actual Rows"] + node.get("Rows Removed by Filter", 0)) * node[
+                "Actual Loops"
+            ]
+        return own + sum(prediction_work(child) for child in node.get("Plans", []))
+
+    work = prediction_work(plan["Plan"])
+    print(
+        json.dumps(
+            {
+                "pool_archive_rows": 942 * archive_snapshots,
+                "prediction_node_rows_examined": work,
+                "execution_time_ms": plan["Execution Time"],
+            }
+        ),
+        flush=True,
+    )
+    assert work < 5000, "pool consensus must seek latest identities, not rank selected history"
+
+
+def test_pool_issue_and_prediction_reads_share_one_database_snapshot(
+    isolated_database, monkeypatch
+):
+    import psycopg2
+    from psycopg2 import sql
+
+    from apps.backend.src.routers import pool
+
+    conn, schema = isolated_database
+    with conn.cursor() as cursor:
+        cursor.execute("ALTER TABLE model_versions ADD COLUMN is_active BOOLEAN DEFAULT true")
+        cursor.execute("ALTER TABLE official_matches ADD COLUMN league_name TEXT")
+        cursor.execute("INSERT INTO model_versions(model_name) VALUES ('pool-snapshot')")
+        cursor.execute("""INSERT INTO official_matches(kickoff_time)
+            SELECT '2026-10-25 20:00'::timestamp FROM generate_series(1,14)""")
+        cursor.execute("""CREATE TABLE football_pool_issues (
+            id INT, issue_no TEXT, game_type TEXT, total_matches INT, official_status TEXT,
+            sale_stop_time TIMESTAMP, updated_at TIMESTAMP)""")
+        cursor.execute("""INSERT INTO football_pool_issues
+            VALUES (1,'26103','t14c',14,'selling','2026-10-25 18:00',now())""")
+        cursor.execute("""CREATE TABLE football_pool_issue_matches (
+            issue_id INT, match_order INT, match_id BIGINT, home_team_name TEXT,
+            away_team_name TEXT, league_name TEXT, kickoff_time TIMESTAMP)""")
+        cursor.execute("""INSERT INTO football_pool_issue_matches
+            SELECT 1,id,id,'home-'||id,'away-'||id,'fixture',kickoff_time FROM official_matches""")
+        cursor.execute("""INSERT INTO model_predictions
+            (match_id,model_version_id,predict_time,play_type,option_code,
+             model_probability,validation_status,uncertainty_reason)
+            SELECT id,1,'2026-10-25 10:00','spf',o,0.333333,'valid',
+                   '{"model_independent":true}'::jsonb
+            FROM official_matches CROSS JOIN unnest(ARRAY['3','1','0']) o""")
+    conn.commit()
+    statements = []
+
+    class RuntimeCursor:
+        def __enter__(self):
+            self.raw = conn.cursor()
+            return self
+
+        def __exit__(self, *args):
+            self.raw.close()
+
+        def execute(self, query, params=None):
+            self.query = query
+            statements.append(query)
+            self.raw.execute(query, params)
+
+        def fetchall(self):
+            rows = self.raw.fetchall()
+            if "FROM football_pool_issues i" in self.query:
+                # A collector commits a correction between the two read queries.
+                with closing(psycopg2.connect(conn.dsn)) as writer:
+                    with writer.cursor() as other:
+                        other.execute(
+                            sql.SQL("SET search_path TO {}").format(sql.Identifier(schema))
+                        )
+                        other.execute("UPDATE official_matches SET kickoff_time='2026-10-25 09:00'")
+                    writer.commit()
+            return rows
+
+    runtime = MagicMock()
+    runtime.rollback.side_effect = conn.rollback
+    runtime.cursor.side_effect = RuntimeCursor
+    observed = []
+    monkeypatch.setattr(pool, "get_db", lambda: nullcontext(runtime))
+    monkeypatch.setattr(
+        pool, "analyze_pool", lambda matches, **kwargs: observed.extend(matches) or {}
+    )
+    monkeypatch.setattr(pool, "pool_analysis_to_dict", lambda value: value)
+    try:
+        result = pool.run_pool_analysis(
+            budget=256, strategy="balanced", seed_match_id=None, issue_id=None
+        )
+        assert result["issue"]["issue_no"] == "26103"
+        assert len(observed) == 14
+        assert all(match.prob_home == 0.333333 for match in observed)
+        assert all(match.match_date == "2026-10-25 20:00:00" for match in observed)
+        assert len([query for query in statements if "latest_model_options" in query]) == 1
+    finally:
+        conn.rollback()
+    with conn.cursor() as cursor:
+        cursor.execute(
+            "SELECT count(*) FROM official_matches WHERE kickoff_time='2026-10-25 09:00'"
+        )
+        assert cursor.fetchone()[0] == 14
 
 
 @pytest.fixture

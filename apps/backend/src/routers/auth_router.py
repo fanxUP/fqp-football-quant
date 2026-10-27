@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import os
-
 from fastapi import APIRouter, HTTPException, Request, Response
 from pydantic import BaseModel
 from starlette.responses import JSONResponse
@@ -13,6 +11,7 @@ from apps.backend.src.auth import (
     create_session,
     destroy_session,
     inspect_session,
+    save_password_hash,
     verify_password,
 )
 from apps.backend.src.deployment_version import RELEASE_ID
@@ -88,29 +87,24 @@ async def me(request: Request) -> MeResponse | JSONResponse:
 
 @router.post("/change-password")
 async def change_password(body: ChangePasswordRequest, request: Request) -> dict[str, bool]:
-    """Change the admin password. Updates .env.local with new bcrypt hash."""
+    """Change the admin password only after its private hash has been saved."""
     if not verify_password(body.old_password):
         raise HTTPException(status_code=401, detail="原密码错误")
 
     if len(body.new_password) < 4:
         raise HTTPException(status_code=400, detail="密码至少4位")
+    if len(body.new_password.encode("utf-8")) > 72:
+        raise HTTPException(status_code=400, detail="密码的UTF-8长度不能超过72字节")
 
     import bcrypt
 
     new_hash = bcrypt.hashpw(body.new_password.encode("utf-8"), bcrypt.gensalt(rounds=12)).decode()
 
-    # Update .env.local
-    env_path = os.getenv("ENV_FILE", "/home/admin/fqp-football-quant/.env.local")
-    lines = open(env_path).readlines()
-    found = False
-    for i, line in enumerate(lines):
-        if line.startswith("FQP_ADMIN_PASSWORD_HASH="):
-            lines[i] = f"FQP_ADMIN_PASSWORD_HASH={new_hash}\n"
-            found = True
-            break
-    if not found:
-        lines.append(f"FQP_ADMIN_PASSWORD_HASH={new_hash}\n")
-    open(env_path, "w").writelines(lines)
-    os.environ["FQP_ADMIN_PASSWORD_HASH"] = new_hash
+    try:
+        save_password_hash(new_hash)
+    except OSError as exc:
+        raise HTTPException(
+            status_code=500, detail="密码保存失败，请检查管理员密码文件的持久化目录及写入权限"
+        ) from exc
 
     return {"ok": True}

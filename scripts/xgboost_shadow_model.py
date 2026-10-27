@@ -10,6 +10,7 @@ import numpy as np
 
 from scripts.shadow_model_helpers import (
     artifact_matches_features,
+    load_shadow_artifact,
     map_official_probabilities,
     prepare_shadow_input,
     valid_shadow_profile,
@@ -114,10 +115,9 @@ def load_probabilities(
     if profile is None or model_input is None:
         return None
     try:
-        import xgboost as xgb
-
-        classifier = xgb.XGBClassifier()
-        classifier.load_model(profile.artifact_path)
+        classifier = load_shadow_artifact(
+            profile.artifact_path, parameters or {}, artifact_format="xgboost_json"
+        )
         if not artifact_matches_features(classifier, profile.feature_columns):
             return None
         return probabilities_from_classifier(classifier, profile, model_input)

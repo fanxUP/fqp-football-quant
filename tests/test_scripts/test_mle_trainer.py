@@ -28,6 +28,14 @@ def _artifact_source_tree(tmp_path):
     return source_root
 
 
+@pytest.mark.parametrize("league_id", [1, 2, 0, True, "1"])
+def test_unsupported_league_is_rejected_before_loading_all_training_rows(league_id):
+    conn = MagicMock()
+    with pytest.raises(ValueError, match="league_id"):
+        _load_training_dataset(conn, league_id=league_id)
+    conn.cursor.assert_not_called()
+
+
 def _sample_training_manifest(
     selection_version="settled-official-score-team-history/v1",
 ):

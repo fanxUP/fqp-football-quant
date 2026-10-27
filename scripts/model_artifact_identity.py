@@ -65,6 +65,18 @@ def _is_sha256(value: Any) -> bool:
     return isinstance(value, str) and _SHA256_RE.fullmatch(value) is not None
 
 
+def verify_file_artifact(content: bytes, *, sha256: Any, size_bytes: Any) -> None:
+    """Validate external binary/JSON bytes without deserializing unverified content."""
+    if (
+        not _is_sha256(sha256)
+        or type(size_bytes) is not int
+        or size_bytes <= 0
+        or len(content) != size_bytes
+        or hashlib.sha256(content).hexdigest() != sha256
+    ):
+        raise ValueError("artifact digest or size does not match saved metadata")
+
+
 def training_manifest_sha256(training_manifest: Mapping[str, Any]) -> str:
     """Recompute the training identity digest from its hash-covered fields."""
     fields = (

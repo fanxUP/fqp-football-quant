@@ -16,8 +16,11 @@ Job 调度：每周日 04:00（错开高峰时段）
 from __future__ import annotations
 
 import json
+import logging
+import math
 import os
 import sys
+from contextlib import nullcontext
 from datetime import timedelta
 from typing import Any
 
@@ -26,9 +29,16 @@ _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(
 if _PROJECT_ROOT not in sys.path:
     sys.path.insert(0, _PROJECT_ROOT)
 
-from scripts.agents.task_queue import finish_tracked_job, start_tracked_job  # noqa: E402
+from scripts.agent_storage import start_job_run  # noqa: E402
 from scripts.backtest_engine import BacktestConfig, run_backtest_from_config  # noqa: E402
+from scripts.backtest_job_execution import (  # noqa: E402
+    EXECUTION_PROTOCOL,
+    backtest_execution,
+    reconcile_backtest_job,
+)
 from scripts.business_time import business_today  # noqa: E402
+
+_LOG = logging.getLogger(__name__)
 
 
 def _default_config(name: str, model_names: list[str] | None = None) -> BacktestConfig:
@@ -64,7 +74,9 @@ def _get_active_model_names(conn: Any) -> list[str]:
         return [row[0] for row in cur.fetchall()]
 
 
-def run_full_backtest(conn: Any, dry_run: bool = False) -> dict[str, Any]:
+def run_full_backtest(
+    conn: Any, dry_run: bool = False, *, ai_job_run_id: int | None = None
+) -> dict[str, Any]:
     """对所有活跃模型运行全量回测。"""
     if dry_run:
         return {"status": "dry_run", "message": "full backtest (dry run)"}
@@ -78,13 +90,14 @@ def run_full_backtest(conn: Any, dry_run: bool = False) -> dict[str, Any]:
         model_names=model_names,
     )
 
-    result = run_backtest_from_config(conn, config, store=True)
+    result = run_backtest_from_config(conn, config, store=True, ai_job_run_id=ai_job_run_id)
     return {
         "status": result.get("status", "ok"),
         "run_id": result.get("run_id"),
         "models_tested": model_names,
         "total_bets": result.get("total_bets", 0),
         "total_windows": result.get("total_windows", 0),
+        **({"store_error": result["store_error"]} if "store_error" in result else {}),
         "aggregate": {
             m: {k: v for k, v in metrics.items() if k != "equity_curve"}
             for m, metrics in result.get("aggregate", {}).items()
@@ -96,6 +109,8 @@ def run_model_backtest(
     conn: Any,
     model_name: str,
     dry_run: bool = False,
+    *,
+    ai_job_run_id: int | None = None,
 ) -> dict[str, Any]:
     """对单个模型运行回测（用于模型上线前验证）。"""
     if dry_run:
@@ -106,7 +121,7 @@ def run_model_backtest(
         model_names=[model_name],
     )
 
-    result = run_backtest_from_config(conn, config, store=True)
+    result = run_backtest_from_config(conn, config, store=True, ai_job_run_id=ai_job_run_id)
 
     # 检查模型上线门槛
     aggregate = result.get("aggregate", {})
@@ -128,6 +143,7 @@ def run_model_backtest(
         "production_gate": checks,
         "production_ready": all(checks.values()),
         "total_bets": result.get("total_bets", 0),
+        **({"store_error": result["store_error"]} if "store_error" in result else {}),
     }
 
 
@@ -136,6 +152,8 @@ def run_parameter_sweep(
     base_config: BacktestConfig,
     param_grid: dict[str, list],
     dry_run: bool = False,
+    *,
+    ai_job_run_id: int | None = None,
 ) -> dict[str, Any]:
     """参数扫描：对多个配置组合批量回测。
 
@@ -157,20 +175,37 @@ def run_parameter_sweep(
 
     from itertools import product
 
+    if any(key not in BacktestConfig.__dataclass_fields__ for key in keys):
+        raise ValueError("参数扫描包含不支持的配置项")
+    if any(not isinstance(value, list) or not value for value in values):
+        raise ValueError("参数扫描的每项必须是非空列表")
+    if math.prod(map(len, values)) > 100:
+        raise ValueError("参数扫描最多允许 100 组")
     combinations = list(product(*values))
+    configs = []
+    for combo in combinations:
+        params = dict(zip(keys, combo, strict=True))
+        generated_name = f"sweep-{'-'.join(f'{k}={v}' for k, v in params.items())}"
+        configs.append(
+            BacktestConfig.from_dict({**base_config.to_dict(), **params, "name": generated_name})
+        )
 
-    results = []
+    results: list[dict[str, Any]] = []
     best_roi = float("-inf")
     best_result = None
 
-    for combo in combinations:
+    for combo, cfg in zip(combinations, configs, strict=True):
         param_dict = dict(zip(keys, combo, strict=False))
-        cfg_dict = base_config.to_dict()
-        cfg_dict.update(param_dict)
-        cfg_dict["name"] = f"sweep-{'-'.join(f'{k}={v}' for k, v in param_dict.items())}"
-        cfg = BacktestConfig.from_dict(cfg_dict)
-
-        result = run_backtest_from_config(conn, cfg, store=True)
+        result = run_backtest_from_config(conn, cfg, store=True, ai_job_run_id=ai_job_run_id)
+        if result.get("status") == "store_failed":
+            return {
+                "status": "store_failed",
+                "run_id": result.get("run_id"),
+                "store_error": result.get("store_error"),
+                "total_runs": len(results) + 1,
+                "param_keys": keys,
+                "best": best_result,
+            }
 
         # 提取最佳 ROI
         for model_name, metrics in result.get("aggregate", {}).items():
@@ -208,10 +243,21 @@ def run_parameter_sweep(
 # —— Job entry point ——
 
 
+def _sweep_grid() -> dict[str, list[Any]]:
+    return {
+        "min_model_prob": [0.30, 0.35, 0.40],
+        "odds_min": [1.5, 2.0],
+        "signal_strength": ["strong", "all"],
+    }
+
+
 def _run_impl(
     model_name: str | None = None,
     sweep: bool = False,
     dry_run: bool = False,
+    *,
+    execution_conn: Any = None,
+    ai_job_run_id: int | None = None,
 ) -> dict[str, Any]:
     """Job 入口：从调度器或 CLI 调用。
 
@@ -225,21 +271,16 @@ def _run_impl(
 
     from apps.backend.src.db import get_db
 
-    with get_db() as conn:
+    with nullcontext(execution_conn) if execution_conn is not None else get_db() as conn:
         if sweep:
             # 参数扫描模式
             base = _default_config("参数扫描")
-            grid: dict[str, list[Any]] = {
-                "min_model_prob": [0.30, 0.35, 0.40],
-                "odds_min": [1.5, 2.0],
-                "signal_strength": ["strong", "all"],
-            }
-            return run_parameter_sweep(conn, base, grid)
+            return run_parameter_sweep(conn, base, _sweep_grid(), ai_job_run_id=ai_job_run_id)
 
         if model_name:
-            return run_model_backtest(conn, model_name)
+            return run_model_backtest(conn, model_name, ai_job_run_id=ai_job_run_id)
 
-    return run_full_backtest(conn)
+        return run_full_backtest(conn, ai_job_run_id=ai_job_run_id)
 
 
 def run(
@@ -247,18 +288,74 @@ def run(
     sweep: bool = False,
     dry_run: bool = False,
 ) -> dict[str, Any]:
-    """Run backtest and persist its multi-agent execution record."""
-    run_id = start_tracked_job(
-        "backtest",
-        "backtest_agent",
-        {"model_name": model_name, "sweep": sweep, "dry_run": dry_run},
-    )
+    """Scheduled/CLI entry, sharing ownership with manual API backtests."""
+    return _run_owned(model_name=model_name, sweep=sweep, dry_run=dry_run)
+
+
+def run_config(config: BacktestConfig) -> dict[str, Any]:
+    """Manual API entry; use the same execution protocol and writing session."""
+    return _run_owned(config=config)
+
+
+def _run_owned(
+    *,
+    config: BacktestConfig | None = None,
+    model_name: str | None = None,
+    sweep: bool = False,
+    dry_run: bool = False,
+) -> dict[str, Any]:
+    if config is not None:
+        config.validate()
+    with backtest_execution() as conn:
+        if conn is None:
+            return {"status": "skipped", "reason": "backtest_execution_in_progress"}
+        expected = 0 if dry_run else math.prod(map(len, _sweep_grid().values())) if sweep else 1
+        job_id = start_job_run(
+            conn,
+            {
+                "job_code": "backtest",
+                "job_name": "backtest",
+                "owner_agent": "backtest_agent",
+                "schedule_type": "manual" if config is not None else "scheduled",
+                "environment": "local",
+                "input_snapshot_refs": {
+                    "execution_protocol": EXECUTION_PROTOCOL,
+                    "expected_runs": expected,
+                    "model_name": model_name,
+                    "sweep": sweep,
+                    "dry_run": dry_run,
+                },
+            },
+        )
+        if job_id is None:
+            raise RuntimeError("backtest audit owner ID was not returned")
+        return _execute_owned(conn, job_id, config, model_name, sweep, dry_run)
+
+
+def _execute_owned(conn, job_id, config, model_name, sweep, dry_run):
     try:
-        result = _run_impl(model_name=model_name, sweep=sweep, dry_run=dry_run)
-        finish_tracked_job(run_id, result.get("status", "completed"), {"result": result})
+        if config is not None:
+            result = run_backtest_from_config(conn, config, store=True, ai_job_run_id=job_id)
+        else:
+            result = _run_impl(
+                model_name=model_name,
+                sweep=sweep,
+                dry_run=dry_run,
+                execution_conn=conn,
+                ai_job_run_id=job_id,
+            )
+        reconcile_backtest_job(
+            conn, job_id, result=result, error=result.get("store_error") or result.get("error")
+        )
         return result
     except Exception as exc:
-        finish_tracked_job(run_id, "failed", error=str(exc))
+        try:
+            conn.rollback()
+            reconcile_backtest_job(conn, job_id, error=str(exc))
+        except Exception:
+            _LOG.exception(
+                "Backtest reconciliation failed; leaving durable facts for the next owner"
+            )
         raise
 
 

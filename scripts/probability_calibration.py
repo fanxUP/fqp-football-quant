@@ -10,16 +10,14 @@ from __future__ import annotations
 import math
 from typing import Any
 
+from scripts.market_metric_validation import finite_number, spf_probability_vector
+
 OUTCOME_CODES = ("3", "1", "0")
 _EPSILON = 1e-12
 
 
 def _complete_distribution(probabilities: dict[str, float]) -> bool:
-    try:
-        values = [float(probabilities[code]) for code in OUTCOME_CODES]
-    except KeyError, TypeError, ValueError:
-        return False
-    return all(math.isfinite(value) and value > 0 for value in values)
+    return spf_probability_vector(probabilities) is not None
 
 
 def apply_temperature_scaling(
@@ -31,13 +29,18 @@ def apply_temperature_scaling(
     sharpens it.  Invalid inputs fail closed instead of creating a partial
     output that could be mistaken for a usable prediction.
     """
-    if not _complete_distribution(probabilities):
-        raise ValueError("概率校准需要完整且为正的胜平负分布")
-    if not math.isfinite(temperature) or temperature <= 0:
+    vector = spf_probability_vector(probabilities)
+    if vector is None:
+        raise ValueError("概率校准需要完整、有限、0–1 且总和为 1 的胜平负分布")
+    parsed_temperature = finite_number(temperature)
+    if parsed_temperature is None or parsed_temperature <= 0:
         raise ValueError("校准温度必须为正数")
-
+    # Stable softmax of log probabilities; known zeros remain zero. Epsilon is
+    # only for scoring log loss, never for repairing malformed raw vectors.
+    logs = {code: math.log(value) for code, value in vector.items() if value > 0}
+    maximum = max(logs.values())
     weights = {
-        code: max(float(probabilities[code]), _EPSILON) ** (1.0 / temperature)
+        code: math.exp((logs[code] - maximum) / parsed_temperature) if code in logs else 0.0
         for code in OUTCOME_CODES
     }
     total = sum(weights.values())

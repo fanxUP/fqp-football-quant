@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query
 
 from apps.backend.src.db import get_db
-from scripts.backtest_engine import BacktestConfig, run_backtest_from_config
+from scripts.backtest_engine import BacktestConfig
 from scripts.business_time import business_today
+from scripts.jobs.run_backtest import run_config
 
 router = APIRouter(tags=["backtests"])
 
@@ -168,49 +169,46 @@ def create_backtest(body: dict):
             "dry_run": bool (optional, default false)
         }
     """
-    model_names = body.get("model_names")
     dry_run = body.get("dry_run", False)
+    today = business_today()
+    try:
+        if type(dry_run) is not bool:
+            raise ValueError("dry_run 必须是布尔值")
+        unknown = (
+            set(body)
+            - set(BacktestConfig.__dataclass_fields__)
+            - {"dry_run", "methodology_version"}
+        )
+        if unknown:
+            raise ValueError(f"不支持的回测参数: {', '.join(sorted(unknown))}")
+        config = BacktestConfig.from_dict(
+            {
+                "name": f"手动回测-{today.isoformat()}",
+                "play_types": ["spf"],
+                **body,
+            }
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     if dry_run:
         return {"status": "dry_run", "message": "backtest creation acknowledged (dry run)"}
 
-    # If no model names specified, use all active
-    if not model_names:
+    if not config.model_names:
         with get_db() as conn:
             with conn.cursor() as cur:
                 cur.execute("SELECT model_name FROM model_versions WHERE is_active = true")
-                model_names = [row[0] for row in cur.fetchall()]
-
-    if not model_names:
+                config.model_names = [row[0] for row in cur.fetchall()]
+    if not config.model_names:
         return {"status": "error", "error": "no models to test"}
 
-    today = business_today()
-    name = body.get("name") or f"手动回测-{today.isoformat()}"
+    try:
+        result = run_config(config)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    config = BacktestConfig(
-        name=name,
-        description=body.get("description", ""),
-        time_start=body.get("time_start"),
-        time_end=body.get("time_end"),
-        league_ids=body.get("league_ids"),
-        play_types=body.get("play_types", ["spf"]),
-        odds_min=body.get("odds_min"),
-        odds_max=body.get("odds_max"),
-        ev_min=body.get("ev_min"),
-        model_names=model_names,
-        confidence_min=body.get("confidence_min"),
-        vote_directions=body.get("vote_directions"),
-        walk_forward=body.get("walk_forward", True),
-        train_window_days=body.get("train_window_days", 365),
-        test_window_days=body.get("test_window_days", 90),
-        step_days=body.get("step_days", 90),
-        stake_per_bet=body.get("stake_per_bet", 1.0),
-        min_model_prob=body.get("min_model_prob", 0.35),
-        signal_strength=body.get("signal_strength", "strong"),
-    )
-
-    with get_db() as conn:
-        result = run_backtest_from_config(conn, config, store=True)
+    if result.get("status") == "skipped":
+        return result
 
     # Build simplified response
     aggregate_summary = {}

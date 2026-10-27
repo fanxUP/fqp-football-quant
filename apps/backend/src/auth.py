@@ -7,7 +7,9 @@ FQP_AUTH_MODE defaults to "session"; "none" is an explicit local-only bypass.
 from __future__ import annotations
 
 import os
+import tempfile
 import uuid
+from pathlib import Path
 from typing import Any
 
 import bcrypt
@@ -20,6 +22,7 @@ from starlette.types import ASGIApp
 from apps.backend.src.deployment_version import RELEASE_ID
 
 COOKIE_NAME = "fqp_session"
+DEFAULT_PASSWORD_FILE = Path(__file__).resolve().parents[3] / ".runtime" / "admin-password.hash"
 SESSION_TTL = int(os.getenv("FQP_SESSION_TTL", "86400"))
 # Keep release markers under the existing session:* Redis ACL namespace. The
 # runtime account can then inspect, refresh, and delete both session keys.
@@ -43,9 +46,48 @@ async def get_redis() -> aioredis.Redis:
     return _redis_pool
 
 
+def password_file() -> Path:
+    return Path(os.getenv("FQP_ADMIN_PASSWORD_FILE") or DEFAULT_PASSWORD_FILE)
+
+
+def _password_hash() -> str:
+    try:
+        # A small bounded read also rejects a malformed or unexpectedly large file.
+        with password_file().open(encoding="ascii") as source:
+            return source.read(256).strip()
+    except FileNotFoundError:
+        # Existing installations and a new persistent volume bootstrap from env.
+        return os.getenv("FQP_ADMIN_PASSWORD_HASH", "")
+    except OSError, UnicodeError:
+        # Never resurrect a bootstrap password when persistent state is broken.
+        return ""
+
+
+def save_password_hash(new_hash: str) -> None:
+    """Publish a complete private hash file; never rewrite application env files."""
+    target = password_file()
+    target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    fd, temporary = tempfile.mkstemp(prefix=".admin-password-", dir=target.parent)
+    try:
+        with os.fdopen(fd, "w", encoding="ascii") as output:
+            output.write(new_hash + "\n")
+            output.flush()
+            os.fsync(output.fileno())
+        os.replace(temporary, target)
+        # Persist the directory entry as well as the file contents.
+        directory = os.open(target.parent, os.O_RDONLY)
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
+    finally:
+        Path(temporary).unlink(missing_ok=True)
+    os.environ["FQP_ADMIN_PASSWORD_HASH"] = new_hash
+
+
 def verify_password(password: str) -> bool:
-    """Check password against bcrypt hash in env."""
-    stored_hash = os.getenv("FQP_ADMIN_PASSWORD_HASH", "")
+    """Use the persistent hash after first change, env only for bootstrap."""
+    stored_hash = _password_hash()
     if not stored_hash:
         return False
     try:

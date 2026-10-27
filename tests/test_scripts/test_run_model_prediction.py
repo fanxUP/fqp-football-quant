@@ -871,7 +871,15 @@ def test_each_prediction_binds_its_matching_official_option_snapshot():
     assert stored["0"]["odds_snapshot_id"] == 13
 
 
-def test_prediction_job_requires_odds_and_feature_snapshot_jobs() -> None:
+@pytest.fixture
+def prediction_owner():
+    # These orchestration units isolate database ownership; actual lock/session
+    # lifetime and loss are covered by the disposable PostgreSQL regressions.
+    with patch("scripts.jobs.run_model_prediction.prediction_execution") as owner:
+        yield owner.return_value.__enter__.return_value
+
+
+def test_prediction_job_requires_odds_and_feature_snapshot_jobs(prediction_owner) -> None:
     with (
         patch("scripts.jobs.run_model_prediction.start_tracked_job", return_value=9) as start,
         patch("scripts.jobs.run_model_prediction.finish_tracked_job"),
@@ -895,7 +903,7 @@ def test_prediction_job_requires_odds_and_feature_snapshot_jobs() -> None:
     ]
 
 
-def test_prediction_job_records_run_identity_and_preserves_partial_status() -> None:
+def test_prediction_job_records_run_identity_and_preserves_partial_status(prediction_owner) -> None:
     with (
         patch("scripts.jobs.run_model_prediction.start_tracked_job", return_value=9),
         patch("scripts.jobs.run_model_prediction.finish_tracked_job"),
@@ -967,7 +975,7 @@ def test_prediction_job_records_run_identity_and_preserves_partial_status() -> N
     assert result["input_updates_skipped"] == 1
 
 
-def test_prediction_job_marks_missing_output_groups_partial() -> None:
+def test_prediction_job_marks_missing_output_groups_partial(prediction_owner) -> None:
     with (
         patch("scripts.jobs.run_model_prediction.start_tracked_job", return_value=9),
         patch("scripts.jobs.run_model_prediction.finish_tracked_job"),
@@ -1004,7 +1012,7 @@ def test_prediction_job_marks_missing_output_groups_partial() -> None:
     assert finalize_run.call_args.kwargs["run_status"] == "partial"
 
 
-def test_prediction_job_persists_no_input_completion_reason() -> None:
+def test_prediction_job_persists_no_input_completion_reason(prediction_owner) -> None:
     with (
         patch("scripts.jobs.run_model_prediction.start_tracked_job", return_value=9),
         patch("scripts.jobs.run_model_prediction.finish_tracked_job"),
@@ -1281,3 +1289,101 @@ def test_prediction_run_loads_training_manifest_for_maher_provenance():
     load_manifest.assert_called_once_with(conn, 73)
     assert build_identity.call_args.kwargs["training_manifest"] == manifest
     assert result["completion_reason"] == "no_matches"
+
+
+def test_prediction_owner_busy_skips_without_creating_or_finishing_records():
+    with (
+        patch("scripts.jobs.run_model_prediction.prediction_execution", create=True) as owner,
+        patch("scripts.jobs.run_model_prediction.start_tracked_job") as start,
+        patch("scripts.jobs.run_model_prediction.finish_tracked_job") as finish,
+        patch("scripts.jobs.run_model_prediction._run_impl") as predict,
+        patch("scripts.jobs.run_model_prediction.get_db"),
+        patch("scripts.jobs.run_model_prediction.create_prediction_run"),
+        patch("scripts.jobs.run_model_prediction.finalize_prediction_run"),
+    ):
+        owner.return_value.__enter__.return_value = None
+        result = run()
+    assert result == {"status": "skipped", "reason": "prediction_execution_in_progress"}
+    start.assert_not_called()
+    finish.assert_not_called()
+    predict.assert_not_called()
+
+
+def test_prediction_execution_uses_owning_connection_for_all_run_writes():
+    conn = MagicMock()
+    with (
+        patch("scripts.jobs.run_model_prediction.prediction_execution", create=True) as owner,
+        patch("scripts.jobs.run_model_prediction.start_tracked_job", return_value=9) as start,
+        patch("scripts.jobs.run_model_prediction.finish_tracked_job"),
+        patch("scripts.jobs.run_model_prediction.get_db"),
+        patch("scripts.jobs.run_model_prediction.fingerprint_runtime_sources", return_value={}),
+        patch("scripts.jobs.run_model_prediction.create_prediction_run") as create,
+        patch("scripts.jobs.run_model_prediction.finalize_prediction_run") as finalize,
+        patch(
+            "scripts.jobs.run_model_prediction._run_impl", return_value={"status": "ok"}
+        ) as predict,
+    ):
+        owner.return_value.__enter__.return_value = conn
+        run()
+    assert create.call_args.args[0] is conn
+    assert finalize.call_args.args[0] is conn
+    assert predict.call_args.kwargs["execution_conn"] is conn
+    assert start.call_args.args[2]["execution_protocol"] == "prediction-session/v1"
+
+
+def test_prediction_error_rolls_back_before_failure_finalization_and_logs_cleanup_failure(caplog):
+    conn = MagicMock()
+    events = []
+    conn.rollback.side_effect = lambda: events.append("rollback")
+
+    def fail(*args):
+        events.append("fail")
+        raise RuntimeError("cleanup unavailable")
+
+    with (
+        patch("scripts.jobs.run_model_prediction.prediction_execution") as owner,
+        patch("scripts.jobs.run_model_prediction.start_tracked_job", return_value=9),
+        patch("scripts.jobs.run_model_prediction.finish_tracked_job") as finish,
+        patch("scripts.jobs.run_model_prediction.fingerprint_runtime_sources", return_value={}),
+        patch("scripts.jobs.run_model_prediction.create_prediction_run"),
+        patch("scripts.jobs.run_model_prediction.fail_prediction_run", side_effect=fail),
+        patch(
+            "scripts.jobs.run_model_prediction._run_impl",
+            side_effect=ValueError("original failure"),
+        ),
+    ):
+        owner.return_value.__enter__.return_value = conn
+        with pytest.raises(ValueError, match="original failure"):
+            run()
+    assert events == ["rollback", "fail"]
+    assert "Prediction run failure finalization failed" in caplog.text
+    finish.assert_not_called()  # Persisted run state is unknown; next owner reconciles.
+
+
+def test_prediction_audit_failure_preserves_already_finalized_outputs(prediction_owner, caplog):
+    with (
+        patch("scripts.jobs.run_model_prediction.start_tracked_job", return_value=9),
+        patch(
+            "scripts.jobs.run_model_prediction.finish_tracked_job",
+            side_effect=RuntimeError("audit ack lost"),
+        ) as finish,
+        patch("scripts.jobs.run_model_prediction.fingerprint_runtime_sources", return_value={}),
+        patch("scripts.jobs.run_model_prediction.create_prediction_run"),
+        patch("scripts.jobs.run_model_prediction.finalize_prediction_run"),
+        patch("scripts.jobs.run_model_prediction.fail_prediction_run") as fail,
+        patch("scripts.jobs.run_model_prediction._run_impl", return_value={"status": "ok"}),
+    ):
+        with pytest.raises(RuntimeError, match="audit ack lost"):
+            run()
+    fail.assert_not_called()
+    assert finish.call_count == 1
+    assert "output finalized but audit completion failed" in caplog.text
+
+
+def test_prediction_impl_reuses_owner_instead_of_getting_an_unfenced_connection():
+    conn = MagicMock()
+    conn.cursor.return_value.__enter__.return_value.fetchall.return_value = []
+    conn.cursor.return_value.__enter__.return_value.fetchone.return_value = None
+    with patch("scripts.jobs.run_model_prediction.get_db") as get_db:
+        assert _run_impl(execution_conn=conn)["status"] == "error"
+    get_db.assert_not_called()

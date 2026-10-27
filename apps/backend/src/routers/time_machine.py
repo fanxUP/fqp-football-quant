@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 from apps.backend.src.db import get_db
 from apps.backend.src.services.time_machine_betting import build_time_machine_matches
 from scripts.business_time import business_today
-from scripts.real_ticket_storage import create_real_ticket, create_real_ticket_items_batch
+from scripts.real_ticket_storage import TicketInputError, create_real_ticket_with_items
 from scripts.simulator_calculator import calculate_multi_all, parse_pass_types, validate_items
 
 router = APIRouter(tags=["time-machine"])
@@ -189,24 +189,25 @@ def create_time_machine_ticket(request: CreateTimeMachineTicketRequest):
     with get_db() as conn:
         items = _resolve_selections(conn, request)
         calculation = _calculate(items, request.pass_type, request.multiple)
-        ticket_id = create_real_ticket(
-            conn,
-            {
-                "ticket_no": request.ticket_no,
-                "purchase_time": request.business_date.isoformat(),
-                "total_amount": calculation["total_cost"],
-                "multiple": request.multiple,
-                "pass_type": calculation["pass_type"],
-                "theoretical_max_prize": calculation["max_prize"],
-                "source_type": "time_machine_manual",
-                "ocr_status": "not_applicable",
-                "confirm_status": "confirmed",
-                "settlement_status": "pending",
-            },
-        )
-        if not ticket_id:
-            raise HTTPException(status_code=500, detail="历史彩票创建失败")
-        create_real_ticket_items_batch(conn, ticket_id, items)
+        try:
+            ticket_id, _ = create_real_ticket_with_items(
+                conn,
+                {
+                    "ticket_no": request.ticket_no,
+                    "purchase_time": request.business_date.isoformat(),
+                    "total_amount": calculation["total_cost"],
+                    "multiple": request.multiple,
+                    "pass_type": calculation["pass_type"],
+                    "theoretical_max_prize": calculation["max_prize"],
+                    "source_type": "time_machine_manual",
+                    "ocr_status": "not_applicable",
+                    "confirm_status": "confirmed",
+                    "settlement_status": "pending",
+                },
+                items,
+            )
+        except TicketInputError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
     return {
         "status": "ok",
         "ticketUid": f"real:{ticket_id}",

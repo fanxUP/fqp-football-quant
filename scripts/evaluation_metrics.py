@@ -13,15 +13,25 @@
 
 from __future__ import annotations
 
+import logging
 import math
 import os
 import sys
+from collections.abc import Mapping
 from typing import Any
 
 # Ensure project root on path
 _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _PROJECT_ROOT not in sys.path:
     sys.path.insert(0, _PROJECT_ROOT)
+
+from scripts.market_metric_validation import (  # noqa: E402
+    MarketMetricValidationError,
+    finite_number,
+    spf_probability_vector,
+)
+
+_LOG = logging.getLogger(__name__)
 
 
 # —— 核心指标 ——
@@ -147,7 +157,7 @@ def probability_gap(
 
 def compute_match_metrics(
     probs: dict[str, float],
-    market_probs: dict[str, float],
+    market_probs: Mapping[str, float | None],
     actual: str,
     model_name: str = "unknown",
     *,
@@ -158,7 +168,15 @@ def compute_match_metrics(
 
     ``clv_score`` is retained as a database compatibility field, but its
     semantics are market probability movement rather than true odds CLV.
+    Bad model vectors cannot be scored. Optional market evidence stays unknown
+    without suppressing independent Brier/LogLoss/RPS scores.
     """
+    parsed_probs = spf_probability_vector(probs)
+    if parsed_probs is None or actual not in {"3", "1", "0"}:
+        raise MarketMetricValidationError("完整模型概率或实际胜平负结果非法")
+    probs = parsed_probs
+    market = spf_probability_vector(market_probs) or {}
+    closing = spf_probability_vector(closing_market_probs) or {}
     bs = brier_score(probs, actual)
     ll = log_loss_score(probs, actual)
     rps = rps_score(probs, actual)
@@ -168,25 +186,29 @@ def compute_match_metrics(
     gaps = {}
     for opt in ["3", "1", "0"]:
         mp = probs.get(opt, 0.0)
-        mrk = market_probs.get(opt, 0.0)
-        closing_probability = (closing_market_probs or {}).get(opt)
+        mrk = market.get(opt)
+        closing_probability = closing.get(opt)
         clv_scores[f"clv_{opt}"] = (
-            round(closing_probability - mrk, 6) if closing_probability is not None else None
+            round(closing_probability - mrk, 6)
+            if closing_probability is not None and mrk is not None
+            else None
         )
         closing_edges[f"closing_edge_{opt}"] = (
             round(mp - closing_probability, 6) if closing_probability is not None else None
         )
-        gaps[f"gap_{opt}"] = round(probability_gap(mp, mrk), 6)
+        gaps[f"gap_{opt}"] = round(probability_gap(mp, mrk), 6) if mrk is not None else None
 
     selected = max(probs, key=lambda option: (probs[option], option))
-    selected_odds = (closing_odds or {}).get(selected)
-    selected_probability = (closing_market_probs or {}).get(selected)
+    selected_odds = finite_number((closing_odds or {}).get(selected))
+    if selected_odds is not None and selected_odds <= 1:
+        selected_odds = None
+    selected_probability = closing.get(selected)
 
     return {
         "model_name": model_name,
         "option_code": selected,
         "model_probability": probs[selected],
-        "market_probability": market_probs.get(selected),
+        "market_probability": market.get(selected),
         "closing_market_probability": selected_probability,
         "probability_gap": (
             round(probs[selected] - selected_probability, 6)
@@ -361,7 +383,7 @@ def run(dry_run: bool = False) -> dict[str, Any]:
 
     查询条件：
       - official_matches 已结算 (Settled)
-      - official_results 有比分
+      - official_results 已确认、双方比分完整非负且与已给出的胜平负一致
       - model_predictions 有预测记录
       - 尚未有对应的 market_efficiency_metrics 记录
     """
@@ -369,13 +391,19 @@ def run(dry_run: bool = False) -> dict[str, Any]:
         return {"status": "dry_run", "message": "evaluation metrics (dry run)"}
 
     from apps.backend.src.db import get_db
+    from scripts.model_evaluation_scope import (
+        EVALUATION_PREDICTION_ROWS_CTES,
+        SETTLED_SPF_RESULTS_CTE,
+    )
 
     with get_db() as conn:
         cur = conn.cursor()
 
         # 查找待评估的预测
-        cur.execute("""
-            WITH closing_odds AS (
+        cur.execute(f"""
+            {EVALUATION_PREDICTION_ROWS_CTES}
+            {SETTLED_SPF_RESULTS_CTE}
+            , closing_odds AS (
                 SELECT DISTINCT ON (odds.match_id, odds.play_type, odds.option_code)
                     odds.match_id, odds.play_type, odds.option_code,
                     odds.sp_value, odds.snapshot_time
@@ -410,22 +438,16 @@ def run(dry_run: bool = False) -> dict[str, Any]:
                 mv.model_name,
                 closing.closing_probability,
                 closing.sp_value,
-                CASE
-                    WHEN r.full_home_goals > r.full_away_goals THEN '3'
-                    WHEN r.full_home_goals = r.full_away_goals THEN '1'
-                    ELSE '0'
-                END AS actual_result
-            FROM model_prediction_latest_rows mp
+                r.actual_result
+            FROM evaluation_prediction_rows mp
             JOIN model_versions mv ON mv.id = mp.model_version_id
-            JOIN official_results r ON r.match_id = mp.match_id
+            JOIN settled_spf_results r ON r.match_id = mp.match_id
             JOIN official_matches m ON m.id = mp.match_id
             LEFT JOIN closing_market closing
               ON closing.match_id = mp.match_id
              AND closing.play_type = mp.play_type
              AND closing.option_code = mp.option_code
             WHERE m.match_status = 'Settled'
-              AND r.full_home_goals IS NOT NULL
-              AND r.result_status IN ('final', 'confirmed')
               AND mp.play_type = 'spf'
               AND mp.option_code IN ('3', '1', '0')
               AND mp.predict_time < m.kickoff_time
@@ -482,12 +504,12 @@ def run(dry_run: bool = False) -> dict[str, Any]:
             g["model_version_id"] = mv_id
             g["predict_time"] = str(pred_time)
             g["model_name"] = model_name
-            g["probs"][opt_code] = float(model_p)
-            g["market_probs"][opt_code] = float(market_p)
+            g["probs"][opt_code] = model_p
+            g["market_probs"][opt_code] = market_p
             if closing_probability is not None:
-                g["closing_probs"][opt_code] = float(closing_probability)
+                g["closing_probs"][opt_code] = closing_probability
             if closing_odd is not None:
-                g["closing_odds"][opt_code] = float(closing_odd)
+                g["closing_odds"][opt_code] = closing_odd
             g["actual"] = actual
 
         # 计算指标
@@ -496,18 +518,25 @@ def run(dry_run: bool = False) -> dict[str, Any]:
             lambda: {"brier": [], "log_loss": [], "rps": [], "count": 0}
         )
 
+        invalid_groups = 0
         for _key, g in groups.items():
             if len(g["probs"]) < 3 or g["actual"] is None:
                 continue
 
-            m = compute_match_metrics(
-                g["probs"],
-                g["market_probs"],
-                g["actual"],
-                g.get("model_name", "unknown"),
-                closing_market_probs=g["closing_probs"] if len(g["closing_probs"]) == 3 else None,
-                closing_odds=g["closing_odds"] if len(g["closing_odds"]) == 3 else None,
-            )
+            try:
+                m = compute_match_metrics(
+                    g["probs"],
+                    g["market_probs"],
+                    g["actual"],
+                    g.get("model_name", "unknown"),
+                    closing_market_probs=g["closing_probs"]
+                    if len(g["closing_probs"]) == 3
+                    else None,
+                    closing_odds=g["closing_odds"] if len(g["closing_odds"]) == 3 else None,
+                )
+            except MarketMetricValidationError:
+                invalid_groups += 1
+                continue
             m["match_id"] = g["match_id"]
             m["model_version_id"] = g["model_version_id"]
             m["predict_time"] = g["predict_time"]
@@ -520,6 +549,11 @@ def run(dry_run: bool = False) -> dict[str, Any]:
             model_stats[mn]["log_loss"].append(m["log_loss"])
             model_stats[mn]["rps"].append(m["rps"])
             model_stats[mn]["count"] += 1
+
+        if invalid_groups:
+            _LOG.warning(
+                "Skipped %d evaluation groups with invalid model probabilities", invalid_groups
+            )
 
         # 汇总
         summary = {}

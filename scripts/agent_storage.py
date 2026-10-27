@@ -490,15 +490,20 @@ def finish_job_run(
     output_refs: dict | None = None,
     error: str | None = None,
 ) -> bool:
-    """Mark an ai_job_run as completed/failed. Returns True on success."""
+    """Finish this running audit once; preserve terminal facts on late retries."""
     sql = """
+        WITH finish_clock AS MATERIALIZED (SELECT clock_timestamp() AS finished)
         UPDATE ai_job_runs
         SET status = %(status)s,
             output_refs = %(output_refs)s,
             error_message = %(error)s,
-            finished_at = now(),
-            duration_ms = EXTRACT(EPOCH FROM (now() - started_at)) * 1000
-        WHERE id = %(run_id)s
+            finished_at = finished,
+            duration_ms = CASE WHEN
+                EXTRACT(EPOCH FROM (finished - started_at)) * 1000 BETWEEN 0 AND 2147483647
+                THEN FLOOR(EXTRACT(EPOCH FROM (finished - started_at)) * 1000)::BIGINT
+                ELSE NULL END
+        FROM finish_clock
+        WHERE id = %(run_id)s AND status = 'running'
     """
     params = {
         "run_id": run_id,
@@ -508,56 +513,45 @@ def finish_job_run(
     }
     with conn.cursor() as cur:
         cur.execute(sql, params)
+        updated = cur.rowcount == 1
     conn.commit()
-    return True
+    return updated
 
 
-def recover_interrupted_job_runs(
-    conn: Any,
-    job_codes: list[str],
-    reason: str = "owning process restarted before completion",
-) -> int:
-    """Fail unfinished runs that belong to a restarting single-owner process."""
-    owned_codes = list(dict.fromkeys(code for code in job_codes if code))
-    if not owned_codes:
-        return 0
-    with conn.cursor() as cur:
-        cur.execute(
-            """UPDATE ai_job_runs
-               SET status = 'failed', finished_at = now(),
-                   duration_ms = EXTRACT(EPOCH FROM (now() - started_at)) * 1000,
-                   error_message = %s
-               WHERE status = 'running' AND job_code = ANY(%s)
-               """,
-            (reason, owned_codes),
-        )
-        recovered = cur.rowcount
-    conn.commit()
-    return int(recovered or 0)
+def retry_job_run(conn: Any, run_id: int, max_retries: int = 2) -> int | None:
+    """Allocate a distinct retry audit ID without reopening the failed parent.
 
-
-def retry_job_run(conn: Any, run_id: int, max_retries: int = 2) -> bool:
-    """Restart a failed job run when its retry budget has not been exhausted.
-
-    Retries reuse the same run record so the execution history remains
-    append-only at the audit/job level while ``retry_count`` is explicit.
-    Only failed runs may be retried.
+    One child per parent is enforced by migration116's unique index, including
+    concurrent requests or a retry after COMMIT acknowledgement loss. Callers
+    must finish the returned ID, never the parent. This only allocates an audit
+    record; it does not dispatch business work or acquire an execution lock.
+    Session-owned prediction/backtest jobs must use their dedicated entrypoints.
     """
     if max_retries < 0:
         raise ValueError("max_retries must be non-negative")
     with conn.cursor() as cur:
         cur.execute(
-            """UPDATE ai_job_runs
-               SET status = 'running', retry_count = retry_count + 1,
-                   started_at = now(), finished_at = NULL,
-                   duration_ms = NULL, error_message = NULL
-               WHERE id = %s AND status = 'failed' AND retry_count < %s
+            """INSERT INTO ai_job_runs (
+                   job_code, job_name, owner_agent, schedule_type, environment,
+                   input_snapshot_refs, status, retry_count, started_at, created_at,
+                   retry_of_run_id
+               )
+               SELECT job_code, job_name, owner_agent, schedule_type, environment,
+                   input_snapshot_refs, 'running', retry_count + 1,
+                   clock_timestamp(), clock_timestamp(), id
+               FROM ai_job_runs
+               WHERE id = %s AND status = 'failed'
+                 AND retry_count >= 0 AND retry_count < LEAST(%s, 2147483647)
+                 AND job_code NOT IN ('model_prediction', 'backtest')
+                 AND input_snapshot_refs->>'execution_protocol' IS NULL
+               ON CONFLICT (retry_of_run_id) WHERE retry_of_run_id IS NOT NULL
+               DO NOTHING
                RETURNING id""",
             (run_id, max_retries),
         )
         row = cur.fetchone()
     conn.commit()
-    return bool(row)
+    return row[0] if row else None
 
 
 def list_job_runs(

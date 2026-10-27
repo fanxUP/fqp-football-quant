@@ -1,3 +1,6 @@
+# 历史设计参考：运行时不读取本文件，以下原则不作为当前执行规则。
+# 版本以 pyproject.toml、requirements、package lockfile 和 CI 为准；
+# 分支以 AGENTS.md 的唯一 main 规则为准。保留旧内容仅供追溯。
 policy_name: local_latest_no_pinning
 scope: local_personal_deployment
 priority: final_execution_policy
