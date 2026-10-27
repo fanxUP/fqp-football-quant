@@ -105,7 +105,7 @@ describe('OddsMovementPage', () => {
     vi.useRealTimers();
   });
 
-  it('按当前与历史日期批量展示全部比赛', async () => {
+  it('通过日历选择历史日期，清空后返回当前赔率', async () => {
     render(<OddsMovementPage />);
 
     await waitFor(() => expect(oddsIndex).toHaveBeenCalledOnce());
@@ -116,11 +116,33 @@ describe('OddsMovementPage', () => {
     expect(screen.getByText(/周二202/)).toBeInTheDocument();
     expect(screen.getByRole('combobox', { name: '赔率联赛' })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: /07-13/ }));
+    const dateInput = screen.getByLabelText('赔率历史日期');
+    expect(dateInput).toHaveAttribute('type', 'date');
+    expect(dateInput).toHaveAttribute('min', '2026-07-13');
+    expect(dateInput).toHaveAttribute('max', '2026-07-13');
+    expect(dateInput).toHaveValue('');
+    fireEvent.change(dateInput, { target: { value: '2026-07-13' } });
 
     await waitFor(() => expect(oddsMovements).toHaveBeenLastCalledWith({
       scope: 'history', business_date: '2026-07-13', play_type: 'spf', resolution: 'hour', limit: 200,
     }));
+    expect(screen.getByText('2026-07-13 · 3 场')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '当前 (2)' })).toHaveAttribute('aria-pressed', 'false');
+
+    fireEvent.change(dateInput, { target: { value: '' } });
+    await waitFor(() => expect(oddsMovements).toHaveBeenLastCalledWith({
+      scope: 'current', business_date: undefined, play_type: 'spf', resolution: 'raw', limit: 200,
+    }));
+    expect(screen.getByRole('button', { name: '当前 (2)' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('没有历史日期时禁用日历，仍然展示当前赔率', async () => {
+    oddsIndex.mockResolvedValue({ current: { count: 2 }, history: [] });
+    render(<OddsMovementPage />);
+
+    expect(await screen.findByLabelText('赔率历史日期')).toBeDisabled();
+    expect(screen.getByText('暂无历史赔率记录')).toBeInTheDocument();
+    expect(await screen.findByText(/周二201/)).toBeInTheDocument();
   });
 
   it('定时同步当前开盘比赛的新赔率', async () => {
@@ -165,9 +187,9 @@ describe('赔率查询隔离与筛选', () => {
     let resolveOld!: (value: unknown) => void;
     oddsMovements.mockImplementationOnce(() => new Promise(resolve => { resolveOld = resolve; }));
     render(<OddsMovementPage />);
-    await screen.findByRole('button', { name: /07-13/ });
+    await screen.findByLabelText('赔率历史日期');
     oddsMovements.mockResolvedValue({ ...oddsResponse([oddsFixture(305)]), scope: 'history', business_date: '2026-07-13', resolution: 'hour' });
-    fireEvent.click(screen.getByRole('button', { name: /07-13/ }));
+    fireEvent.change(screen.getByLabelText('赔率历史日期'), { target: { value: '2026-07-13' } });
     await screen.findByText(/测试305.*图表/);
     await waitFor(() => expect(oddsMovements).toHaveBeenCalledTimes(2));
     await act(async () => resolveOld(oddsResponse([oddsFixture(999)])));
@@ -227,7 +249,7 @@ describe('赔率查询隔离与筛选', () => {
   it('历史模式不自动刷新', async () => {
     render(<OddsMovementPage />); await screen.findByText(/测试304.*图表/);
     oddsMovements.mockResolvedValue({ ...oddsResponse(), scope: 'history', business_date: '2026-07-13', resolution: 'hour' });
-    fireEvent.click(screen.getByRole('button', { name: /07-13/ }));
+    fireEvent.change(screen.getByLabelText('赔率历史日期'), { target: { value: '2026-07-13' } });
     await waitFor(() => expect(oddsMovements).toHaveBeenCalledTimes(2));
     vi.useFakeTimers();
     await act(async () => { vi.advanceTimersByTime(30_000); });
@@ -250,7 +272,7 @@ describe('赔率响应边界', () => {
   it('错历史日期拒绝展示', async () => {
     render(<OddsMovementPage />); await screen.findByText(/测试304.*图表/);
     oddsMovements.mockResolvedValue({ ...oddsResponse(), scope: 'history', business_date: '2026-07-12', resolution: 'hour' });
-    fireEvent.click(screen.getByRole('button', { name: /07-13/ }));
+    fireEvent.change(screen.getByLabelText('赔率历史日期'), { target: { value: '2026-07-13' } });
     expect(await screen.findByText(/赔率响应与当前查询不一致/)).toBeInTheDocument();
     expect(screen.queryByRole('article')).not.toBeInTheDocument();
   });
