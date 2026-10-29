@@ -1,7 +1,7 @@
 export interface TeamCrestEntry {
   names: string[];
   logoUrl: string;
-  source: 'official' | '500com';
+  source: 'official' | '500com' | 'titan007';
 }
 
 import { GENERATED_TEAM_CREST_REGISTRY } from './teamCrests.generated';
@@ -16,7 +16,8 @@ const normalizeTeamName = (value: string) =>
 /**
  * Team crest registry.
  *
- * Every entry resolves to a locally bundled, original provider crest. Do not
+ * Every entry resolves to a locally bundled provider crest; Titan007 entries
+ * have an explicit source-ID/alias/hash manifest. Do not
  * add generated initials, simplified SVGs, or unofficial fan artwork here.
  */
 export const TEAM_CREST_REGISTRY: TeamCrestEntry[] = GENERATED_TEAM_CREST_REGISTRY;

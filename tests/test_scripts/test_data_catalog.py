@@ -12,7 +12,7 @@ from scripts.data_contracts import CONTRACT_VERSION
 def test_catalog_is_versioned_and_does_not_enable_unknown_sources():
     catalog = load_data_catalog()
     assert catalog["contract_version"] == CONTRACT_VERSION
-    assert catalog["catalog_version"] == "2026-10-19.1"
+    assert catalog["catalog_version"] == "2026-10-29.3"
     assert catalog["runtime_authorization"] is False
     for source in catalog["sources"].values():
         assert source["account_verification"] == "unknown"
@@ -102,3 +102,17 @@ def test_field_resolution_policy_is_explicit_metadata_not_a_source_grant(
 def test_unsupported_field_does_not_guess_a_global_source_order():
     with pytest.raises(KeyError):
         get_field_resolution_policy("player.eligibility")
+
+
+def test_league_reference_product_shares_postgres_but_cannot_be_used_as_official_input():
+    import importlib.util
+
+    source = get_data_source("titan007")
+    assert source["runtime_scheduled"] is False
+    assert importlib.util.find_spec(source["refresh_entrypoint"]) is not None
+    product = get_data_product("league_references", purpose="display")
+    assert product["writer"] == "titan007_import"
+    assert "league_reference_fixtures" in product["tables"]
+    for purpose in ("settlement", "prediction"):
+        with pytest.raises(PermissionError):
+            get_data_product("league_references", purpose=purpose)

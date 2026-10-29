@@ -3,7 +3,7 @@ import DataTable, { type Column } from '../../shared/components/DataTable';
 import PageHeader from '../../shared/components/PageHeader';
 import TeamName from '../../shared/components/TeamName';
 import Skeleton from '../../shared/components/Skeleton';
-import { disconnectedLeagueSource } from './dataSource';
+import { sharedLeagueSource } from './dataSource';
 import type { EventCenterState } from './state';
 import type { LeagueDataSource, LeagueEvidence, LeagueFixtureQuery, LeagueSeasonData, LeagueStanding, StandingScope } from './types';
 import './LeagueCenter.css';
@@ -69,7 +69,7 @@ function DeferredFeatures() {
   </aside>;
 }
 
-export default function LeagueCenter({ source = disconnectedLeagueSource, state, onChange }: {
+export default function LeagueCenter({ source = sharedLeagueSource, state, onChange }: {
   source?: LeagueDataSource; state: EventCenterState; onChange: Change;
 }) {
   const directory = useLeagueRead(source.catalog);
@@ -193,7 +193,7 @@ function Teams({ source, data, state, onChange, openTeam }: { source: LeagueData
 }
 
 function Fixtures({ source, data, state, onChange, teamId }: { source: LeagueDataSource; data: LeagueSeasonData; state: EventCenterState; onChange: Change; teamId: number | null }) {
-  const query: LeagueFixtureQuery = { competitionSeasonId: data.competitionSeasonId, roundId: state.roundId, status: state.status, teamId, limit: PAGE_SIZE, offset: (state.page - 1) * PAGE_SIZE };
+  const query: LeagueFixtureQuery = { competitionSeasonId: data.competitionSeasonId, batchId: data.evidence.batchId ?? undefined, roundId: state.roundId, status: state.status, teamId, limit: PAGE_SIZE, offset: (state.page - 1) * PAGE_SIZE };
   if (query.roundId !== null && !data.rounds.some(round => round.id === query.roundId)) return <Notice title="所选轮次暂无覆盖"><button type="button" onClick={() => onChange({ roundId: null, page: 1 })}>查看全部轮次</button></Notice>;
   if (!Number.isSafeInteger(query.offset)) return <Notice title="赛程页码超出范围"><button type="button" onClick={() => onChange({ page: 1 })}>返回第一页</button></Notice>;
   return <div className="lc-fixtures">
@@ -212,8 +212,9 @@ function FixtureResults({ source, query, page, onChange }: { source: LeagueDataS
   const loader = useCallback(async () => {
     const result = await source.fixtures(query);
     if (result.competitionSeasonId !== query.competitionSeasonId) throw new Error('返回赛程与所选赛季不一致');
+    if (query.batchId && result.evidence.batchId !== query.batchId) throw new Error('返回赛程与所选资料批次不一致');
     return result;
-  }, [source, query.competitionSeasonId, query.roundId, query.status, query.teamId, query.limit, query.offset]);
+  }, [source, query.competitionSeasonId, query.batchId, query.roundId, query.status, query.teamId, query.limit, query.offset]);
   const resource = useLeagueRead(loader);
   const result = resource.data;
   const pages = result ? Math.max(1, Math.ceil(result.total / PAGE_SIZE)) : 1;

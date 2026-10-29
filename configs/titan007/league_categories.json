@@ -1,0 +1,3277 @@
+{
+  "generated_at": "2026-10-23T19:02:12",
+  "entries": [
+    {
+      "league_id": 1,
+      "name": "爱尔兰超级联赛",
+      "region": "欧洲",
+      "country": "爱尔兰",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 2,
+      "name": "阿根廷甲级联赛",
+      "region": "南美",
+      "country": "阿根廷",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "A",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 3,
+      "name": "奥地利甲组联赛",
+      "region": "欧洲",
+      "country": "奥地利",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 4,
+      "name": "巴西甲组联赛",
+      "region": "南美",
+      "country": "巴西",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "A",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 6,
+      "name": "波兰超级联赛",
+      "region": "欧洲",
+      "country": "波兰",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 8,
+      "name": "德国甲组联赛",
+      "region": "欧洲",
+      "country": "德国",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "S",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 9,
+      "name": "德国乙组联赛",
+      "region": "欧洲",
+      "country": "德国",
+      "type": "league",
+      "audience": "men",
+      "tier": 2,
+      "priority": "A",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 10,
+      "name": "俄罗斯超级联赛",
+      "region": "欧洲",
+      "country": "俄罗斯",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "A",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 11,
+      "name": "法国甲组联赛",
+      "region": "欧洲",
+      "country": "法国",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "S",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 12,
+      "name": "法国乙组联赛",
+      "region": "欧洲",
+      "country": "法国",
+      "type": "league",
+      "audience": "men",
+      "tier": 2,
+      "priority": "A",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 13,
+      "name": "芬兰超级联赛",
+      "region": "欧洲",
+      "country": "芬兰",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 15,
+      "name": "南韩K联赛",
+      "region": "亚洲",
+      "country": "韩国",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "A",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 16,
+      "name": "荷兰甲组联赛",
+      "region": "欧洲",
+      "country": "荷兰",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "A",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 17,
+      "name": "荷兰乙组联赛",
+      "region": "欧洲",
+      "country": "荷兰",
+      "type": "league",
+      "audience": "men",
+      "tier": 2,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 21,
+      "name": "美国职业大联盟",
+      "region": "北美",
+      "country": "美国",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "A",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 22,
+      "name": "挪威超级联赛",
+      "region": "欧洲",
+      "country": "挪威",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 25,
+      "name": "日本职业联赛J1",
+      "region": "亚洲",
+      "country": "日本",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "A",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 26,
+      "name": "瑞典超级联赛",
+      "region": "欧洲",
+      "country": "瑞典",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 29,
+      "name": "苏格兰超级联赛",
+      "region": "欧洲",
+      "country": "苏格兰",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 30,
+      "name": "土耳其超级联赛",
+      "region": "欧洲",
+      "country": "土耳其",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "A",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 31,
+      "name": "西班牙甲组联赛",
+      "region": "欧洲",
+      "country": "西班牙",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "S",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 32,
+      "name": "希腊超级联赛",
+      "region": "欧洲",
+      "country": "希腊",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 33,
+      "name": "西班牙乙组联赛",
+      "region": "欧洲",
+      "country": "西班牙",
+      "type": "league",
+      "audience": "men",
+      "tier": 2,
+      "priority": "A",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 34,
+      "name": "意大利甲组联赛",
+      "region": "欧洲",
+      "country": "意大利",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "S",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 35,
+      "name": "英格兰乙组联赛",
+      "region": "欧洲",
+      "country": "英格兰",
+      "type": "league",
+      "audience": "men",
+      "tier": 2,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 36,
+      "name": "英格兰超级联赛",
+      "region": "欧洲",
+      "country": "英格兰",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "S",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 37,
+      "name": "英格兰冠军联赛",
+      "region": "欧洲",
+      "country": "英格兰",
+      "type": "league",
+      "audience": "men",
+      "tier": 2,
+      "priority": "A",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 39,
+      "name": "英格兰甲组联赛",
+      "region": "欧洲",
+      "country": "英格兰",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 40,
+      "name": "意大利乙组联赛",
+      "region": "欧洲",
+      "country": "意大利",
+      "type": "league",
+      "audience": "men",
+      "tier": 2,
+      "priority": "A",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 41,
+      "name": "球会友谊赛",
+      "region": "国际",
+      "country": "国际",
+      "type": "friendly",
+      "audience": "men",
+      "tier": 0,
+      "priority": "C",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 60,
+      "name": "中国超级联赛",
+      "region": "亚洲",
+      "country": "中国",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "A",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 61,
+      "name": "中国甲级联赛",
+      "region": "亚洲",
+      "country": "中国",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 70,
+      "name": "葡萄牙杯",
+      "region": "欧洲",
+      "country": "葡萄牙",
+      "type": "cup",
+      "audience": "men",
+      "tier": 0,
+      "priority": "C",
+      "tags": [
+        "淘汰赛"
+      ],
+      "source": "auto"
+    },
+    {
+      "league_id": 74,
+      "name": "瑞士杯",
+      "region": "欧洲",
+      "country": "瑞士",
+      "type": "cup",
+      "audience": "men",
+      "tier": 0,
+      "priority": "C",
+      "tags": [
+        "淘汰赛"
+      ],
+      "source": "auto"
+    },
+    {
+      "league_id": 89,
+      "name": "南美解放者杯",
+      "region": "南美",
+      "country": "国际",
+      "type": "cup",
+      "audience": "men",
+      "tier": 0,
+      "priority": "A",
+      "tags": [
+        "淘汰赛",
+        "洲际"
+      ],
+      "source": "auto"
+    },
+    {
+      "league_id": 108,
+      "name": "比利时杯",
+      "region": "欧洲",
+      "country": "比利时",
+      "type": "cup",
+      "audience": "men",
+      "tier": 0,
+      "priority": "C",
+      "tags": [
+        "淘汰赛"
+      ],
+      "source": "auto"
+    },
+    {
+      "league_id": 113,
+      "name": "欧罗巴联赛杯",
+      "region": "欧洲",
+      "country": "国际",
+      "type": "cup",
+      "audience": "men",
+      "tier": 0,
+      "priority": "S",
+      "tags": [
+        "淘汰赛",
+        "欧战"
+      ],
+      "source": "auto"
+    },
+    {
+      "league_id": 118,
+      "name": "以色列超级联赛",
+      "region": "亚洲",
+      "country": "以色列",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 119,
+      "name": "乌克兰超级联赛",
+      "region": "欧洲",
+      "country": "乌克兰",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 122,
+      "name": "瑞典甲组联赛",
+      "region": "欧洲",
+      "country": "瑞典",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 124,
+      "name": "罗马尼亚甲组联赛",
+      "region": "欧洲",
+      "country": "罗马尼亚",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 127,
+      "name": "丹麦甲级联赛",
+      "region": "欧洲",
+      "country": "丹麦",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 128,
+      "name": "奥地利乙组联赛",
+      "region": "欧洲",
+      "country": "奥地利",
+      "type": "league",
+      "audience": "men",
+      "tier": 2,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 129,
+      "name": "塞尔维亚超级联赛",
+      "region": "欧洲",
+      "country": "塞尔维亚",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 130,
+      "name": "土耳其甲组联赛",
+      "region": "欧洲",
+      "country": "土耳其",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 132,
+      "name": "斯洛伐克超级联赛",
+      "region": "欧洲",
+      "country": "斯洛伐克",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 133,
+      "name": "克罗地亚甲组联赛",
+      "region": "欧洲",
+      "country": "克罗地亚",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 136,
+      "name": "匈牙利甲组联赛",
+      "region": "欧洲",
+      "country": "匈牙利",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 137,
+      "name": "捷克甲组联赛",
+      "region": "欧洲",
+      "country": "捷克",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 140,
+      "name": "墨西哥超级联赛",
+      "region": "北美",
+      "country": "墨西哥",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "A",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 142,
+      "name": "意大利丙级联赛",
+      "region": "欧洲",
+      "country": "意大利",
+      "type": "league",
+      "audience": "men",
+      "tier": 3,
+      "priority": "C",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 150,
+      "name": "苏格兰冠军联赛",
+      "region": "欧洲",
+      "country": "苏格兰",
+      "type": "league",
+      "audience": "men",
+      "tier": 2,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 151,
+      "name": "苏格兰甲级联赛",
+      "region": "欧洲",
+      "country": "苏格兰",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 152,
+      "name": "苏格兰乙级联赛",
+      "region": "欧洲",
+      "country": "苏格兰",
+      "type": "league",
+      "audience": "men",
+      "tier": 2,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 159,
+      "name": "塞浦路斯甲级联赛",
+      "region": "欧洲",
+      "country": "塞浦路斯",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 165,
+      "name": "北爱尔兰超级联赛",
+      "region": "欧洲",
+      "country": "北爱尔兰",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 166,
+      "name": "冰岛超级联赛",
+      "region": "欧洲",
+      "country": "冰岛",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 193,
+      "name": "阿尔及利亚甲级联赛",
+      "region": "非洲",
+      "country": "阿尔及利亚",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 194,
+      "name": "新加坡联赛",
+      "region": "亚洲",
+      "country": "新加坡",
+      "type": "league",
+      "audience": "men",
+      "tier": 0,
+      "priority": "C",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 196,
+      "name": "保加利亚杯",
+      "region": "欧洲",
+      "country": "保加利亚",
+      "type": "cup",
+      "audience": "men",
+      "tier": 0,
+      "priority": "C",
+      "tags": [
+        "淘汰赛"
+      ],
+      "source": "auto"
+    },
+    {
+      "league_id": 203,
+      "name": "法国丙组联赛",
+      "region": "欧洲",
+      "country": "法国",
+      "type": "league",
+      "audience": "men",
+      "tier": 3,
+      "priority": "C",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 210,
+      "name": "欧洲U17青年锦标赛",
+      "region": "欧洲",
+      "country": "国际",
+      "type": "tournament",
+      "audience": "youth",
+      "tier": 0,
+      "priority": "C",
+      "tags": [
+        "青年",
+        "欧战"
+      ],
+      "source": "auto"
+    },
+    {
+      "league_id": 212,
+      "name": "芬兰甲组联赛",
+      "region": "欧洲",
+      "country": "芬兰",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 214,
+      "name": "拉脱维亚超级联赛",
+      "region": "欧洲",
+      "country": "拉脱维亚",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 217,
+      "name": "立陶宛甲组联赛",
+      "region": "欧洲",
+      "country": "立陶宛",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 218,
+      "name": "瑞典乙级联赛",
+      "region": "欧洲",
+      "country": "瑞典",
+      "type": "league",
+      "audience": "men",
+      "tier": 2,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 221,
+      "name": "波兰甲组联赛",
+      "region": "欧洲",
+      "country": "波兰",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 230,
+      "name": "白俄罗斯超级联赛",
+      "region": "欧洲",
+      "country": "白俄罗斯",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 235,
+      "name": "俄罗斯甲组联赛",
+      "region": "欧洲",
+      "country": "俄罗斯",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 240,
+      "name": "乌拉圭甲组联赛",
+      "region": "南美",
+      "country": "乌拉圭",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 242,
+      "name": "秘鲁甲组联赛",
+      "region": "南美",
+      "country": "秘鲁",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 247,
+      "name": "斯洛文尼亚甲组联赛",
+      "region": "欧洲",
+      "country": "斯洛文尼亚",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 250,
+      "name": "哥伦比亚甲组联赛",
+      "region": "南美",
+      "country": "哥伦比亚",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 271,
+      "name": "丹麦丙级联赛",
+      "region": "欧洲",
+      "country": "丹麦",
+      "type": "league",
+      "audience": "men",
+      "tier": 3,
+      "priority": "C",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 273,
+      "name": "澳大利亚足球超级联赛",
+      "region": "大洋洲",
+      "country": "澳大利亚",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 279,
+      "name": "伊朗超级联赛",
+      "region": "亚洲",
+      "country": "伊朗",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 284,
+      "name": "日本职业联赛J2",
+      "region": "亚洲",
+      "country": "日本",
+      "type": "league",
+      "audience": "men",
+      "tier": 2,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 292,
+      "name": "沙特阿拉伯职业联赛",
+      "region": "亚洲",
+      "country": "沙特阿拉伯",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "A",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 297,
+      "name": "英格兰足球议会北部联赛",
+      "region": "欧洲",
+      "country": "英格兰",
+      "type": "league",
+      "audience": "men",
+      "tier": 4,
+      "priority": "C",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 298,
+      "name": "英格兰足球议会南部联赛",
+      "region": "欧洲",
+      "country": "英格兰",
+      "type": "league",
+      "audience": "men",
+      "tier": 4,
+      "priority": "C",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 301,
+      "name": "阿联酋超级联赛",
+      "region": "亚洲",
+      "country": "阿联酋",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 308,
+      "name": "南非超级联赛",
+      "region": "非洲",
+      "country": "南非",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 309,
+      "name": "约旦超级联赛",
+      "region": "亚洲",
+      "country": "约旦",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 311,
+      "name": "香港超级联赛",
+      "region": "亚洲",
+      "country": "中国香港",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 313,
+      "name": "卡塔尔联赛",
+      "region": "亚洲",
+      "country": "卡塔尔",
+      "type": "league",
+      "audience": "men",
+      "tier": 0,
+      "priority": "C",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 315,
+      "name": "阿尔巴尼亚超级联赛",
+      "region": "欧洲",
+      "country": "阿尔巴尼亚",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 316,
+      "name": "马来西亚超级联赛",
+      "region": "亚洲",
+      "country": "马来西亚",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 318,
+      "name": "巴林超级联赛",
+      "region": "亚洲",
+      "country": "巴林",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 321,
+      "name": "摩洛哥超级联赛",
+      "region": "非洲",
+      "country": "摩洛哥",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 324,
+      "name": "利比亚甲组联赛",
+      "region": "非洲",
+      "country": "利比亚",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 341,
+      "name": "新西兰足球全国联赛",
+      "region": "大洋洲",
+      "country": "新西兰",
+      "type": "league",
+      "audience": "men",
+      "tier": 0,
+      "priority": "C",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 348,
+      "name": "阿尔巴尼亚甲组联赛",
+      "region": "欧洲",
+      "country": "阿尔巴尼亚",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 352,
+      "name": "波斯尼亚甲级联赛",
+      "region": "欧洲",
+      "country": "波斯尼亚",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 353,
+      "name": "爱沙尼亚甲组联赛",
+      "region": "欧洲",
+      "country": "爱沙尼亚",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 354,
+      "name": "巴拉圭甲级联赛",
+      "region": "南美",
+      "country": "巴拉圭",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 358,
+      "name": "巴西乙级联赛",
+      "region": "南美",
+      "country": "巴西",
+      "type": "league",
+      "audience": "men",
+      "tier": 2,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 391,
+      "name": "委内瑞拉超级联赛",
+      "region": "南美",
+      "country": "委内瑞拉",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 392,
+      "name": "北马其顿甲组联赛",
+      "region": "欧洲",
+      "country": "北马其顿",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 423,
+      "name": "阿根廷乙组联赛",
+      "region": "南美",
+      "country": "阿根廷",
+      "type": "league",
+      "audience": "men",
+      "tier": 2,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 440,
+      "name": "法国女子甲组联赛",
+      "region": "欧洲",
+      "country": "法国",
+      "type": "league",
+      "audience": "women",
+      "tier": 1,
+      "priority": "C",
+      "tags": [
+        "女子"
+      ],
+      "source": "auto"
+    },
+    {
+      "league_id": 441,
+      "name": "德国女子联赛",
+      "region": "欧洲",
+      "country": "德国",
+      "type": "league",
+      "audience": "women",
+      "tier": 0,
+      "priority": "C",
+      "tags": [
+        "女子"
+      ],
+      "source": "auto"
+    },
+    {
+      "league_id": 443,
+      "name": "瑞典女子超级联赛",
+      "region": "欧洲",
+      "country": "瑞典",
+      "type": "league",
+      "audience": "women",
+      "tier": 1,
+      "priority": "C",
+      "tags": [
+        "女子"
+      ],
+      "source": "auto"
+    },
+    {
+      "league_id": 448,
+      "name": "美国冠军联赛",
+      "region": "北美",
+      "country": "美国",
+      "type": "league",
+      "audience": "men",
+      "tier": 2,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 455,
+      "name": "日本职业女子乙级联赛",
+      "region": "亚洲",
+      "country": "日本",
+      "type": "league",
+      "audience": "women",
+      "tier": 2,
+      "priority": "C",
+      "tags": [
+        "女子"
+      ],
+      "source": "auto"
+    },
+    {
+      "league_id": 466,
+      "name": "哈萨克斯坦超级联赛",
+      "region": "亚洲",
+      "country": "哈萨克斯坦",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 469,
+      "name": "阿美尼亚超级联赛",
+      "region": "欧洲",
+      "country": "亚美尼亚",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 473,
+      "name": "挪威女子超级足球联赛",
+      "region": "欧洲",
+      "country": "挪威",
+      "type": "league",
+      "audience": "women",
+      "tier": 4,
+      "priority": "C",
+      "tags": [
+        "女子"
+      ],
+      "source": "auto"
+    },
+    {
+      "league_id": 483,
+      "name": "美国公开赛冠军杯",
+      "region": "北美",
+      "country": "美国",
+      "type": "cup",
+      "audience": "men",
+      "tier": 0,
+      "priority": "C",
+      "tags": [
+        "淘汰赛"
+      ],
+      "source": "auto"
+    },
+    {
+      "league_id": 500,
+      "name": "波兰青年联赛U21",
+      "region": "欧洲",
+      "country": "波兰",
+      "type": "league",
+      "audience": "youth",
+      "tier": 0,
+      "priority": "C",
+      "tags": [
+        "青年"
+      ],
+      "source": "auto"
+    },
+    {
+      "league_id": 504,
+      "name": "哥斯达黎加甲组联赛",
+      "region": "北美",
+      "country": "哥斯达黎加",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 511,
+      "name": "萨尔瓦多超级联赛",
+      "region": "北美",
+      "country": "萨尔瓦多",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 533,
+      "name": "马耳他甲级联赛",
+      "region": "欧洲",
+      "country": "马耳他",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 562,
+      "name": "黑山甲组联赛",
+      "region": "欧洲",
+      "country": "黑山",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 563,
+      "name": "格鲁吉亚甲级联赛",
+      "region": "欧洲",
+      "country": "格鲁吉亚",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 593,
+      "name": "玻利维亚甲组联赛",
+      "region": "南美",
+      "country": "玻利维亚",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 596,
+      "name": "厄瓜多尔甲级联赛",
+      "region": "南美",
+      "country": "厄瓜多尔",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 604,
+      "name": "荷兰青年甲级联赛",
+      "region": "欧洲",
+      "country": "荷兰",
+      "type": "league",
+      "audience": "youth",
+      "tier": 1,
+      "priority": "C",
+      "tags": [
+        "青年"
+      ],
+      "source": "auto"
+    },
+    {
+      "league_id": 611,
+      "name": "智利乙组联赛",
+      "region": "南美",
+      "country": "智利",
+      "type": "league",
+      "audience": "men",
+      "tier": 2,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 613,
+      "name": "阿塞拜疆超级联赛",
+      "region": "欧洲",
+      "country": "阿塞拜疆",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 635,
+      "name": "哥伦比亚杯",
+      "region": "南美",
+      "country": "哥伦比亚",
+      "type": "cup",
+      "audience": "men",
+      "tier": 0,
+      "priority": "C",
+      "tags": [
+        "淘汰赛"
+      ],
+      "source": "auto"
+    },
+    {
+      "league_id": 645,
+      "name": "中国女子超级联赛",
+      "region": "亚洲",
+      "country": "中国",
+      "type": "league",
+      "audience": "women",
+      "tier": 1,
+      "priority": "C",
+      "tags": [
+        "女子"
+      ],
+      "source": "auto"
+    },
+    {
+      "league_id": 646,
+      "name": "爱沙尼亚杯",
+      "region": "欧洲",
+      "country": "爱沙尼亚",
+      "type": "cup",
+      "audience": "men",
+      "tier": 0,
+      "priority": "C",
+      "tags": [
+        "淘汰赛"
+      ],
+      "source": "auto"
+    },
+    {
+      "league_id": 686,
+      "name": "中国足球乙级联赛",
+      "region": "亚洲",
+      "country": "中国",
+      "type": "league",
+      "audience": "men",
+      "tier": 2,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 693,
+      "name": "德国丙级联赛",
+      "region": "欧洲",
+      "country": "德国",
+      "type": "league",
+      "audience": "men",
+      "tier": 3,
+      "priority": "C",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 699,
+      "name": "海湾青年U17冠军盃",
+      "region": "亚洲",
+      "country": "国际",
+      "type": "cup",
+      "audience": "youth",
+      "tier": 0,
+      "priority": "C",
+      "tags": [
+        "青年",
+        "淘汰赛"
+      ],
+      "source": "auto"
+    },
+    {
+      "league_id": 700,
+      "name": "泰国超级联赛",
+      "region": "亚洲",
+      "country": "泰国",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 703,
+      "name": "匈牙利乙组部联赛",
+      "region": "欧洲",
+      "country": "匈牙利",
+      "type": "league",
+      "audience": "men",
+      "tier": 2,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 706,
+      "name": "捷克丙组联赛CFL",
+      "region": "欧洲",
+      "country": "捷克",
+      "type": "league",
+      "audience": "men",
+      "tier": 3,
+      "priority": "C",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 720,
+      "name": "丹麦女子超级联赛",
+      "region": "欧洲",
+      "country": "丹麦",
+      "type": "league",
+      "audience": "women",
+      "tier": 1,
+      "priority": "C",
+      "tags": [
+        "女子"
+      ],
+      "source": "auto"
+    },
+    {
+      "league_id": 729,
+      "name": "澳洲女子联赛",
+      "region": "大洋洲",
+      "country": "澳大利亚",
+      "type": "league",
+      "audience": "women",
+      "tier": 0,
+      "priority": "C",
+      "tags": [
+        "女子"
+      ],
+      "source": "auto"
+    },
+    {
+      "league_id": 730,
+      "name": "女子U17世界杯",
+      "region": "国际",
+      "country": "国际",
+      "type": "cup",
+      "audience": "women_youth",
+      "tier": 0,
+      "priority": "C",
+      "tags": [
+        "女子",
+        "青年",
+        "淘汰赛"
+      ],
+      "source": "auto"
+    },
+    {
+      "league_id": 733,
+      "name": "阿拉伯联合酋长国联赛杯",
+      "region": "亚洲",
+      "country": "阿联酋",
+      "type": "cup",
+      "audience": "men",
+      "tier": 0,
+      "priority": "C",
+      "tags": [
+        "淘汰赛"
+      ],
+      "source": "auto"
+    },
+    {
+      "league_id": 749,
+      "name": "沙地阿拉伯青年联赛",
+      "region": "亚洲",
+      "country": "沙特阿拉伯",
+      "type": "league",
+      "audience": "youth",
+      "tier": 0,
+      "priority": "C",
+      "tags": [
+        "青年"
+      ],
+      "source": "auto"
+    },
+    {
+      "league_id": 766,
+      "name": "越南足球联赛",
+      "region": "亚洲",
+      "country": "越南",
+      "type": "league",
+      "audience": "men",
+      "tier": 4,
+      "priority": "C",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 772,
+      "name": "乌兹别克斯坦超级联赛",
+      "region": "亚洲",
+      "country": "乌兹别克斯坦",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 780,
+      "name": "日本足球联赛",
+      "region": "亚洲",
+      "country": "日本",
+      "type": "league",
+      "audience": "men",
+      "tier": 4,
+      "priority": "C",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 783,
+      "name": "以色列乙级联赛",
+      "region": "亚洲",
+      "country": "以色列",
+      "type": "league",
+      "audience": "men",
+      "tier": 2,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 802,
+      "name": "美国女子职业足球赛",
+      "region": "北美",
+      "country": "美国",
+      "type": "league",
+      "audience": "women",
+      "tier": 0,
+      "priority": "C",
+      "tags": [
+        "女子"
+      ],
+      "source": "auto"
+    },
+    {
+      "league_id": 807,
+      "name": "捷克U19",
+      "region": "欧洲",
+      "country": "捷克",
+      "type": "league",
+      "audience": "youth",
+      "tier": 0,
+      "priority": "C",
+      "tags": [
+        "青年"
+      ],
+      "source": "auto"
+    },
+    {
+      "league_id": 847,
+      "name": "墨西哥甲组联赛",
+      "region": "北美",
+      "country": "墨西哥",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 872,
+      "name": "乌克兰甲组联赛",
+      "region": "欧洲",
+      "country": "乌克兰",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 882,
+      "name": "泰国足总杯",
+      "region": "亚洲",
+      "country": "泰国",
+      "type": "cup",
+      "audience": "men",
+      "tier": 0,
+      "priority": "C",
+      "tags": [
+        "淘汰赛"
+      ],
+      "source": "auto"
+    },
+    {
+      "league_id": 889,
+      "name": "南美女足解放者杯",
+      "region": "南美",
+      "country": "国际",
+      "type": "cup",
+      "audience": "women",
+      "tier": 0,
+      "priority": "C",
+      "tags": [
+        "女子",
+        "淘汰赛",
+        "洲际"
+      ],
+      "source": "auto"
+    },
+    {
+      "league_id": 893,
+      "name": "匈U19",
+      "region": "欧洲",
+      "country": "匈牙利",
+      "type": "league",
+      "audience": "youth",
+      "tier": 0,
+      "priority": "C",
+      "tags": [
+        "青年"
+      ],
+      "source": "auto"
+    },
+    {
+      "league_id": 897,
+      "name": "立陶宛乙组联赛",
+      "region": "欧洲",
+      "country": "立陶宛",
+      "type": "league",
+      "audience": "men",
+      "tier": 2,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 917,
+      "name": "阿根廷乙组曼特波里顿联赛",
+      "region": "南美",
+      "country": "阿根廷",
+      "type": "league",
+      "audience": "men",
+      "tier": 2,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 947,
+      "name": "以色列女子甲组联赛",
+      "region": "亚洲",
+      "country": "以色列",
+      "type": "league",
+      "audience": "women",
+      "tier": 1,
+      "priority": "C",
+      "tags": [
+        "女子"
+      ],
+      "source": "auto"
+    },
+    {
+      "league_id": 951,
+      "name": "西班牙丁组联赛",
+      "region": "欧洲",
+      "country": "西班牙",
+      "type": "league",
+      "audience": "men",
+      "tier": 4,
+      "priority": "C",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 952,
+      "name": "以U19",
+      "region": "亚洲",
+      "country": "以色列",
+      "type": "league",
+      "audience": "youth",
+      "tier": 0,
+      "priority": "C",
+      "tags": [
+        "青年"
+      ],
+      "source": "auto"
+    },
+    {
+      "league_id": 963,
+      "name": "巴西伯拉纳布加诺联赛",
+      "region": "南美",
+      "country": "巴西",
+      "type": "league",
+      "audience": "men",
+      "tier": 0,
+      "priority": "C",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 994,
+      "name": "马耳他女子甲组联赛",
+      "region": "欧洲",
+      "country": "马耳他",
+      "type": "league",
+      "audience": "women",
+      "tier": 1,
+      "priority": "C",
+      "tags": [
+        "女子"
+      ],
+      "source": "auto"
+    },
+    {
+      "league_id": 1042,
+      "name": "斯伐U19",
+      "region": "欧洲",
+      "country": "斯洛伐克",
+      "type": "league",
+      "audience": "youth",
+      "tier": 0,
+      "priority": "C",
+      "tags": [
+        "青年"
+      ],
+      "source": "auto"
+    },
+    {
+      "league_id": 1043,
+      "name": "爱沙尼亚乙组联赛",
+      "region": "欧洲",
+      "country": "爱沙尼亚",
+      "type": "league",
+      "audience": "men",
+      "tier": 2,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 1048,
+      "name": "泰国甲级联赛",
+      "region": "亚洲",
+      "country": "泰国",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 1054,
+      "name": "伊拉克明星联赛",
+      "region": "亚洲",
+      "country": "伊拉克",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 1056,
+      "name": "匈牙利女子甲组联赛",
+      "region": "欧洲",
+      "country": "匈牙利",
+      "type": "league",
+      "audience": "women",
+      "tier": 1,
+      "priority": "C",
+      "tags": [
+        "女子"
+      ],
+      "source": "auto"
+    },
+    {
+      "league_id": 1070,
+      "name": "拉脱维亚甲组联赛",
+      "region": "欧洲",
+      "country": "拉脱维亚",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 1077,
+      "name": "哈萨克斯坦甲级联赛",
+      "region": "亚洲",
+      "country": "哈萨克斯坦",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 1078,
+      "name": "约旦甲",
+      "region": "亚洲",
+      "country": "约旦",
+      "type": "league",
+      "audience": "men",
+      "tier": 0,
+      "priority": "C",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 1079,
+      "name": "爱沙尼亚女子甲级联赛",
+      "region": "欧洲",
+      "country": "爱沙尼亚",
+      "type": "league",
+      "audience": "women",
+      "tier": 1,
+      "priority": "C",
+      "tags": [
+        "女子"
+      ],
+      "source": "auto"
+    },
+    {
+      "league_id": 1106,
+      "name": "土U19联",
+      "region": "欧洲",
+      "country": "土耳其",
+      "type": "league",
+      "audience": "youth",
+      "tier": 0,
+      "priority": "C",
+      "tags": [
+        "青年"
+      ],
+      "source": "auto"
+    },
+    {
+      "league_id": 1116,
+      "name": "格鲁吉亚乙级联赛",
+      "region": "欧洲",
+      "country": "格鲁吉亚",
+      "type": "league",
+      "audience": "men",
+      "tier": 2,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 1122,
+      "name": "印度尼西亚超级联赛",
+      "region": "亚洲",
+      "country": "印度尼西亚",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 1147,
+      "name": "英格兰足总女子超级联赛",
+      "region": "欧洲",
+      "country": "英格兰",
+      "type": "league",
+      "audience": "women",
+      "tier": 1,
+      "priority": "C",
+      "tags": [
+        "女子"
+      ],
+      "source": "auto"
+    },
+    {
+      "league_id": 1154,
+      "name": "爱沙尼亚丙组联赛",
+      "region": "欧洲",
+      "country": "爱沙尼亚",
+      "type": "league",
+      "audience": "men",
+      "tier": 3,
+      "priority": "C",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 1159,
+      "name": "波兰女子超级联赛",
+      "region": "欧洲",
+      "country": "波兰",
+      "type": "league",
+      "audience": "women",
+      "tier": 1,
+      "priority": "C",
+      "tags": [
+        "女子"
+      ],
+      "source": "auto"
+    },
+    {
+      "league_id": 1184,
+      "name": "委内杯",
+      "region": "南美",
+      "country": "委内瑞拉",
+      "type": "cup",
+      "audience": "men",
+      "tier": 0,
+      "priority": "C",
+      "tags": [
+        "淘汰赛"
+      ],
+      "source": "auto"
+    },
+    {
+      "league_id": 1186,
+      "name": "西班牙女子超级联赛",
+      "region": "欧洲",
+      "country": "西班牙",
+      "type": "league",
+      "audience": "women",
+      "tier": 1,
+      "priority": "C",
+      "tags": [
+        "女子"
+      ],
+      "source": "auto"
+    },
+    {
+      "league_id": 1191,
+      "name": "捷克女子甲组联赛",
+      "region": "欧洲",
+      "country": "捷克",
+      "type": "league",
+      "audience": "women",
+      "tier": 1,
+      "priority": "C",
+      "tags": [
+        "女子"
+      ],
+      "source": "auto"
+    },
+    {
+      "league_id": 1217,
+      "name": "意女甲",
+      "region": "欧洲",
+      "country": "意大利",
+      "type": "league",
+      "audience": "women",
+      "tier": 0,
+      "priority": "C",
+      "tags": [
+        "女子"
+      ],
+      "source": "auto"
+    },
+    {
+      "league_id": 1227,
+      "name": "印度尼西亚甲级联赛",
+      "region": "亚洲",
+      "country": "印度尼西亚",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 1248,
+      "name": "越南甲组联赛",
+      "region": "亚洲",
+      "country": "越南",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 1260,
+      "name": "英格兰超级联赛U21",
+      "region": "欧洲",
+      "country": "英格兰",
+      "type": "league",
+      "audience": "youth",
+      "tier": 1,
+      "priority": "C",
+      "tags": [
+        "青年"
+      ],
+      "source": "auto"
+    },
+    {
+      "league_id": 1275,
+      "name": "巴青杯",
+      "region": "南美",
+      "country": "巴西",
+      "type": "cup",
+      "audience": "youth",
+      "tier": 0,
+      "priority": "C",
+      "tags": [
+        "淘汰赛"
+      ],
+      "source": "auto"
+    },
+    {
+      "league_id": 1292,
+      "name": "南韩K2联赛",
+      "region": "亚洲",
+      "country": "韩国",
+      "type": "league",
+      "audience": "men",
+      "tier": 2,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 1333,
+      "name": "非洲青年冠军杯外围赛",
+      "region": "非洲",
+      "country": "国际",
+      "type": "qualifier",
+      "audience": "youth",
+      "tier": 0,
+      "priority": "C",
+      "tags": [
+        "青年"
+      ],
+      "source": "auto"
+    },
+    {
+      "league_id": 1346,
+      "name": "日本职业联赛J3",
+      "region": "亚洲",
+      "country": "日本",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 1347,
+      "name": "巴西丙组联赛",
+      "region": "南美",
+      "country": "巴西",
+      "type": "league",
+      "audience": "men",
+      "tier": 3,
+      "priority": "C",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 1352,
+      "name": "玻利维亚联赛杯",
+      "region": "南美",
+      "country": "玻利维亚",
+      "type": "cup",
+      "audience": "men",
+      "tier": 0,
+      "priority": "C",
+      "tags": [
+        "淘汰赛"
+      ],
+      "source": "auto"
+    },
+    {
+      "league_id": 1355,
+      "name": "波兰乙级联赛",
+      "region": "欧洲",
+      "country": "波兰",
+      "type": "league",
+      "audience": "men",
+      "tier": 2,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 1366,
+      "name": "国际友谊赛",
+      "region": "国际",
+      "country": "国际",
+      "type": "friendly",
+      "audience": "men",
+      "tier": 0,
+      "priority": "C",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 1367,
+      "name": "印度超级联赛",
+      "region": "亚洲",
+      "country": "印度",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 1398,
+      "name": "厄瓜多尔乙级联赛",
+      "region": "南美",
+      "country": "厄瓜多尔",
+      "type": "league",
+      "audience": "men",
+      "tier": 2,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 1405,
+      "name": "比利时女子超级联赛",
+      "region": "欧洲",
+      "country": "比利时",
+      "type": "league",
+      "audience": "women",
+      "tier": 1,
+      "priority": "C",
+      "tags": [
+        "女子"
+      ],
+      "source": "auto"
+    },
+    {
+      "league_id": 1407,
+      "name": "挪威丙组联赛",
+      "region": "欧洲",
+      "country": "挪威",
+      "type": "league",
+      "audience": "men",
+      "tier": 3,
+      "priority": "C",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 1413,
+      "name": "西班牙皇家足协乙级联赛",
+      "region": "欧洲",
+      "country": "西班牙",
+      "type": "league",
+      "audience": "men",
+      "tier": 2,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 1416,
+      "name": "德国地区联赛",
+      "region": "欧洲",
+      "country": "德国",
+      "type": "league",
+      "audience": "men",
+      "tier": 4,
+      "priority": "C",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 1423,
+      "name": "罗马尼亚乙级联赛",
+      "region": "欧洲",
+      "country": "罗马尼亚",
+      "type": "league",
+      "audience": "men",
+      "tier": 2,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 1424,
+      "name": "希丙",
+      "region": "欧洲",
+      "country": "希腊",
+      "type": "league",
+      "audience": "men",
+      "tier": 3,
+      "priority": "C",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 1427,
+      "name": "丹麦乙组联赛",
+      "region": "欧洲",
+      "country": "丹麦",
+      "type": "league",
+      "audience": "men",
+      "tier": 2,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 1428,
+      "name": "挪威乙组联赛",
+      "region": "欧洲",
+      "country": "挪威",
+      "type": "league",
+      "audience": "men",
+      "tier": 2,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 1430,
+      "name": "瑞典女子甲级联赛",
+      "region": "欧洲",
+      "country": "瑞典",
+      "type": "league",
+      "audience": "women",
+      "tier": 1,
+      "priority": "C",
+      "tags": [
+        "女子"
+      ],
+      "source": "auto"
+    },
+    {
+      "league_id": 1431,
+      "name": "土耳其乙级联赛",
+      "region": "欧洲",
+      "country": "土耳其",
+      "type": "league",
+      "audience": "men",
+      "tier": 2,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 1432,
+      "name": "土耳其丙级联赛",
+      "region": "欧洲",
+      "country": "土耳其",
+      "type": "league",
+      "audience": "men",
+      "tier": 3,
+      "priority": "C",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 1436,
+      "name": "瑞典丙组联赛",
+      "region": "欧洲",
+      "country": "瑞典",
+      "type": "league",
+      "audience": "men",
+      "tier": 3,
+      "priority": "C",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 1443,
+      "name": "缅甸联赛",
+      "region": "亚洲",
+      "country": "缅甸",
+      "type": "league",
+      "audience": "men",
+      "tier": 0,
+      "priority": "C",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 1465,
+      "name": "埃塞俄比亚超级联赛",
+      "region": "非洲",
+      "country": "埃塞俄比亚",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 1473,
+      "name": "乌拉乙",
+      "region": "南美",
+      "country": "乌拉圭",
+      "type": "league",
+      "audience": "men",
+      "tier": 2,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 1482,
+      "name": "秘鲁乙",
+      "region": "南美",
+      "country": "秘鲁",
+      "type": "league",
+      "audience": "men",
+      "tier": 2,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 1494,
+      "name": "巴拿马甲级联赛",
+      "region": "北美",
+      "country": "巴拿马",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 1500,
+      "name": "泰国乙级联赛",
+      "region": "亚洲",
+      "country": "泰国",
+      "type": "league",
+      "audience": "men",
+      "tier": 2,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 1502,
+      "name": "芬女甲",
+      "region": "欧洲",
+      "country": "芬兰",
+      "type": "league",
+      "audience": "women",
+      "tier": 0,
+      "priority": "C",
+      "tags": [
+        "女子"
+      ],
+      "source": "auto"
+    },
+    {
+      "league_id": 1514,
+      "name": "奥丁",
+      "region": "欧洲",
+      "country": "奥地利",
+      "type": "league",
+      "audience": "men",
+      "tier": 4,
+      "priority": "C",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 1527,
+      "name": "孟加拉国联赛",
+      "region": "亚洲",
+      "country": "孟加拉国",
+      "type": "league",
+      "audience": "men",
+      "tier": 0,
+      "priority": "C",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 1534,
+      "name": "波兰丙",
+      "region": "欧洲",
+      "country": "波兰",
+      "type": "league",
+      "audience": "men",
+      "tier": 3,
+      "priority": "C",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 1538,
+      "name": "柬埔寨超级联赛",
+      "region": "亚洲",
+      "country": "柬埔寨",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 1547,
+      "name": "塞尔U19",
+      "region": "欧洲",
+      "country": "塞尔维亚",
+      "type": "league",
+      "audience": "youth",
+      "tier": 0,
+      "priority": "C",
+      "tags": [
+        "青年"
+      ],
+      "source": "auto"
+    },
+    {
+      "league_id": 1557,
+      "name": "捷丁",
+      "region": "欧洲",
+      "country": "捷克",
+      "type": "league",
+      "audience": "men",
+      "tier": 4,
+      "priority": "C",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 1563,
+      "name": "哥斯乙",
+      "region": "北美",
+      "country": "哥斯达黎加",
+      "type": "league",
+      "audience": "men",
+      "tier": 2,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 1565,
+      "name": "爱女联",
+      "region": "欧洲",
+      "country": "爱沙尼亚",
+      "type": "league",
+      "audience": "women",
+      "tier": 0,
+      "priority": "C",
+      "tags": [
+        "女子"
+      ],
+      "source": "auto"
+    },
+    {
+      "league_id": 1567,
+      "name": "新西女超",
+      "region": "大洋洲",
+      "country": "新西兰",
+      "type": "league",
+      "audience": "women",
+      "tier": 0,
+      "priority": "C",
+      "tags": [
+        "女子"
+      ],
+      "source": "auto"
+    },
+    {
+      "league_id": 1570,
+      "name": "匈丙",
+      "region": "欧洲",
+      "country": "匈牙利",
+      "type": "league",
+      "audience": "men",
+      "tier": 3,
+      "priority": "C",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 1609,
+      "name": "墨西丙",
+      "region": "北美",
+      "country": "墨西哥",
+      "type": "league",
+      "audience": "men",
+      "tier": 3,
+      "priority": "C",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 1612,
+      "name": "克罗地亚乙组联赛",
+      "region": "欧洲",
+      "country": "克罗地亚",
+      "type": "league",
+      "audience": "men",
+      "tier": 2,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 1685,
+      "name": "以丙",
+      "region": "亚洲",
+      "country": "以色列",
+      "type": "league",
+      "audience": "men",
+      "tier": 3,
+      "priority": "C",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 1734,
+      "name": "希腊U19",
+      "region": "欧洲",
+      "country": "希腊",
+      "type": "league",
+      "audience": "youth",
+      "tier": 0,
+      "priority": "C",
+      "tags": [
+        "青年"
+      ],
+      "source": "auto"
+    },
+    {
+      "league_id": 1817,
+      "name": "墨西哥女子超级联赛",
+      "region": "北美",
+      "country": "墨西哥",
+      "type": "league",
+      "audience": "women",
+      "tier": 1,
+      "priority": "C",
+      "tags": [
+        "女子"
+      ],
+      "source": "auto"
+    },
+    {
+      "league_id": 1820,
+      "name": "西青U19",
+      "region": "欧洲",
+      "country": "西班牙",
+      "type": "league",
+      "audience": "youth",
+      "tier": 0,
+      "priority": "C",
+      "tags": [
+        "青年"
+      ],
+      "source": "auto"
+    },
+    {
+      "league_id": 1831,
+      "name": "葡萄牙青年U19联赛",
+      "region": "欧洲",
+      "country": "葡萄牙",
+      "type": "league",
+      "audience": "youth",
+      "tier": 0,
+      "priority": "C",
+      "tags": [
+        "青年"
+      ],
+      "source": "auto"
+    },
+    {
+      "league_id": 1834,
+      "name": "阿尔女联",
+      "region": "非洲",
+      "country": "阿尔及利亚",
+      "type": "league",
+      "audience": "women",
+      "tier": 0,
+      "priority": "C",
+      "tags": [
+        "女子"
+      ],
+      "source": "auto"
+    },
+    {
+      "league_id": 1862,
+      "name": "加勒比俱乐部冠军杯",
+      "region": "北美",
+      "country": "国际",
+      "type": "cup",
+      "audience": "men",
+      "tier": 0,
+      "priority": "C",
+      "tags": [
+        "淘汰赛"
+      ],
+      "source": "auto"
+    },
+    {
+      "league_id": 1910,
+      "name": "法罗乙",
+      "region": "欧洲",
+      "country": "法罗群岛",
+      "type": "league",
+      "audience": "men",
+      "tier": 2,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 1980,
+      "name": "南非后备",
+      "region": "非洲",
+      "country": "南非",
+      "type": "league",
+      "audience": "reserve",
+      "tier": 0,
+      "priority": "C",
+      "tags": [
+        "预备队"
+      ],
+      "source": "auto"
+    },
+    {
+      "league_id": 2028,
+      "name": "加拿大职业超级联赛",
+      "region": "北美",
+      "country": "加拿大",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 2035,
+      "name": "哥斯女甲",
+      "region": "北美",
+      "country": "哥斯达黎加",
+      "type": "league",
+      "audience": "women",
+      "tier": 0,
+      "priority": "C",
+      "tags": [
+        "女子"
+      ],
+      "source": "auto"
+    },
+    {
+      "league_id": 2044,
+      "name": "南非女联",
+      "region": "非洲",
+      "country": "南非",
+      "type": "league",
+      "audience": "women",
+      "tier": 0,
+      "priority": "C",
+      "tags": [
+        "女子"
+      ],
+      "source": "auto"
+    },
+    {
+      "league_id": 2049,
+      "name": "印尼U20",
+      "region": "亚洲",
+      "country": "印度尼西亚",
+      "type": "league",
+      "audience": "youth",
+      "tier": 0,
+      "priority": "C",
+      "tags": [
+        "青年"
+      ],
+      "source": "auto"
+    },
+    {
+      "league_id": 2105,
+      "name": "中国台湾木兰女子足球联赛",
+      "region": "亚洲",
+      "country": "中国台湾",
+      "type": "league",
+      "audience": "women",
+      "tier": 4,
+      "priority": "C",
+      "tags": [
+        "女子"
+      ],
+      "source": "auto"
+    },
+    {
+      "league_id": 2110,
+      "name": "南韩K4联赛",
+      "region": "亚洲",
+      "country": "韩国",
+      "type": "league",
+      "audience": "men",
+      "tier": 0,
+      "priority": "C",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 2141,
+      "name": "捷戊",
+      "region": "欧洲",
+      "country": "捷克",
+      "type": "league",
+      "audience": "men",
+      "tier": 4,
+      "priority": "C",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 2149,
+      "name": "所罗岛联",
+      "region": "大洋洲",
+      "country": "所罗门群岛",
+      "type": "league",
+      "audience": "men",
+      "tier": 0,
+      "priority": "C",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 2158,
+      "name": "意大利青年乙级联赛",
+      "region": "欧洲",
+      "country": "意大利",
+      "type": "league",
+      "audience": "youth",
+      "tier": 2,
+      "priority": "C",
+      "tags": [
+        "青年"
+      ],
+      "source": "auto"
+    },
+    {
+      "league_id": 2160,
+      "name": "中台乙",
+      "region": "亚洲",
+      "country": "中国台湾",
+      "type": "league",
+      "audience": "men",
+      "tier": 2,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 2167,
+      "name": "葡女锦",
+      "region": "欧洲",
+      "country": "葡萄牙",
+      "type": "tournament",
+      "audience": "women",
+      "tier": 0,
+      "priority": "C",
+      "tags": [
+        "女子"
+      ],
+      "source": "auto"
+    },
+    {
+      "league_id": 2187,
+      "name": "欧足联协会联赛",
+      "region": "欧洲",
+      "country": "国际",
+      "type": "league",
+      "audience": "men",
+      "tier": 0,
+      "priority": "A",
+      "tags": [
+        "欧战"
+      ],
+      "source": "auto"
+    },
+    {
+      "league_id": 2199,
+      "name": "洪都A联",
+      "region": "北美",
+      "country": "洪都拉斯",
+      "type": "league",
+      "audience": "men",
+      "tier": 0,
+      "priority": "C",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 2218,
+      "name": "巴马全联",
+      "region": "北美",
+      "country": "巴哈马",
+      "type": "league",
+      "audience": "men",
+      "tier": 4,
+      "priority": "C",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 2232,
+      "name": "波女联",
+      "region": "欧洲",
+      "country": "波兰",
+      "type": "league",
+      "audience": "women",
+      "tier": 0,
+      "priority": "C",
+      "tags": [
+        "女子"
+      ],
+      "source": "auto"
+    },
+    {
+      "league_id": 2254,
+      "name": "西班牙皇家足协甲级联赛",
+      "region": "欧洲",
+      "country": "西班牙",
+      "type": "league",
+      "audience": "men",
+      "tier": 3,
+      "priority": "C",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 2263,
+      "name": "日本女子职业联赛",
+      "region": "亚洲",
+      "country": "日本",
+      "type": "league",
+      "audience": "women",
+      "tier": 1,
+      "priority": "C",
+      "tags": [
+        "女子"
+      ],
+      "source": "auto"
+    },
+    {
+      "league_id": 2284,
+      "name": "肯尼女联",
+      "region": "非洲",
+      "country": "肯尼亚",
+      "type": "league",
+      "audience": "women",
+      "tier": 0,
+      "priority": "C",
+      "tags": [
+        "女子"
+      ],
+      "source": "auto"
+    },
+    {
+      "league_id": 2290,
+      "name": "墨西哥乙组联赛",
+      "region": "北美",
+      "country": "墨西哥",
+      "type": "league",
+      "audience": "men",
+      "tier": 2,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 2297,
+      "name": "葡女甲",
+      "region": "欧洲",
+      "country": "葡萄牙",
+      "type": "league",
+      "audience": "women",
+      "tier": 0,
+      "priority": "C",
+      "tags": [
+        "女子"
+      ],
+      "source": "auto"
+    },
+    {
+      "league_id": 2298,
+      "name": "意青U19",
+      "region": "欧洲",
+      "country": "意大利",
+      "type": "league",
+      "audience": "youth",
+      "tier": 0,
+      "priority": "C",
+      "tags": [
+        "青年"
+      ],
+      "source": "auto"
+    },
+    {
+      "league_id": 2318,
+      "name": "斯伐女联",
+      "region": "欧洲",
+      "country": "斯洛伐克",
+      "type": "league",
+      "audience": "women",
+      "tier": 0,
+      "priority": "C",
+      "tags": [
+        "女子"
+      ],
+      "source": "auto"
+    },
+    {
+      "league_id": 2343,
+      "name": "美预备联",
+      "region": "北美",
+      "country": "美国",
+      "type": "league",
+      "audience": "reserve",
+      "tier": 0,
+      "priority": "C",
+      "tags": [
+        "预备队"
+      ],
+      "source": "auto"
+    },
+    {
+      "league_id": 2468,
+      "name": "中U21联赛",
+      "region": "亚洲",
+      "country": "中国",
+      "type": "league",
+      "audience": "youth",
+      "tier": 0,
+      "priority": "C",
+      "tags": [
+        "青年"
+      ],
+      "source": "auto"
+    },
+    {
+      "league_id": 2482,
+      "name": "CONCACAF中美洲俱乐部杯",
+      "region": "北美",
+      "country": "国际",
+      "type": "cup",
+      "audience": "men",
+      "tier": 0,
+      "priority": "C",
+      "tags": [
+        "淘汰赛"
+      ],
+      "source": "auto"
+    },
+    {
+      "league_id": 2501,
+      "name": "瑞士U19",
+      "region": "欧洲",
+      "country": "瑞士",
+      "type": "league",
+      "audience": "youth",
+      "tier": 0,
+      "priority": "C",
+      "tags": [
+        "青年"
+      ],
+      "source": "auto"
+    },
+    {
+      "league_id": 2581,
+      "name": "亚足联挑战联赛",
+      "region": "亚洲",
+      "country": "国际",
+      "type": "league",
+      "audience": "men",
+      "tier": 0,
+      "priority": "C",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 2627,
+      "name": "阿根业余锦",
+      "region": "南美",
+      "country": "阿根廷",
+      "type": "tournament",
+      "audience": "men",
+      "tier": 0,
+      "priority": "C",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 2632,
+      "name": "美国足球甲组联赛",
+      "region": "北美",
+      "country": "美国",
+      "type": "league",
+      "audience": "men",
+      "tier": 1,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 2643,
+      "name": "百慕超联",
+      "region": "北美",
+      "country": "百慕大",
+      "type": "league",
+      "audience": "men",
+      "tier": 4,
+      "priority": "C",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 2683,
+      "name": "江苏省城市足球联赛",
+      "region": "亚洲",
+      "country": "中国",
+      "type": "league",
+      "audience": "men",
+      "tier": 4,
+      "priority": "C",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 2746,
+      "name": "澳大利亚足球锦标赛",
+      "region": "大洋洲",
+      "country": "澳大利亚",
+      "type": "tournament",
+      "audience": "men",
+      "tier": 0,
+      "priority": "C",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 2766,
+      "name": "阿尔U20",
+      "region": "非洲",
+      "country": "阿尔及利亚",
+      "type": "league",
+      "audience": "youth",
+      "tier": 0,
+      "priority": "C",
+      "tags": [
+        "青年"
+      ],
+      "source": "auto"
+    },
+    {
+      "league_id": 2784,
+      "name": "波斯尼亚丙级联赛",
+      "region": "欧洲",
+      "country": "波斯尼亚",
+      "type": "league",
+      "audience": "men",
+      "tier": 3,
+      "priority": "C",
+      "tags": [],
+      "source": "auto"
+    },
+    {
+      "league_id": 2872,
+      "name": "日联U21",
+      "region": "亚洲",
+      "country": "日本",
+      "type": "league",
+      "audience": "youth",
+      "tier": 0,
+      "priority": "C",
+      "tags": [
+        "青年"
+      ],
+      "source": "auto"
+    },
+    {
+      "league_id": 2874,
+      "name": "墨西哥乙级联赛",
+      "region": "北美",
+      "country": "墨西哥",
+      "type": "league",
+      "audience": "men",
+      "tier": 2,
+      "priority": "B",
+      "tags": [],
+      "source": "auto"
+    }
+  ]
+}

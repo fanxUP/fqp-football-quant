@@ -14,6 +14,26 @@ describe('team crest registry', () => {
     });
   });
 
+  it('uses verified cached EPL crests for Chinese, English and traditional aliases', () => {
+    expect(findTeamCrest('阿森纳')).toMatchObject({ logoUrl: '/team-crests/titan007-19.png', source: 'titan007' });
+    expect(findTeamCrestUrl('Arsenal')).toBe('/team-crests/titan007-19.png');
+    expect(findTeamCrestUrl('阿仙奴')).toBe('/team-crests/titan007-19.png');
+    expect(findTeamCrestUrl('托特纳姆热刺')).toBe('/team-crests/titan007-33.png');
+    expect(findTeamCrestUrl('曼城')).toBe(findTeamCrestUrl('Manchester City'));
+    expect(findTeamCrestUrl('曼联')).toBe('/team-crests/titan007-27.png');
+  });
+
+  it('preserves national-team identity and assigns each EPL alias to one crest', () => {
+    expect(findTeamCrestUrl('中国')).toBe('/team-crests/500-426.png');
+    const verified = TEAM_CREST_REGISTRY.filter((entry) => entry.source === 'titan007');
+    expect(verified).toHaveLength(20);
+    for (const entry of verified) {
+      for (const name of entry.names) {
+        expect(TEAM_CREST_REGISTRY.filter((candidate) => candidate.names.includes(name))).toHaveLength(1);
+      }
+    }
+  });
+
   it('contains a non-circular crest asset for every current database team', () => {
     expect(TEAM_CREST_REGISTRY.length).toBeGreaterThanOrEqual(119);
     expect(TEAM_CREST_REGISTRY.every((entry) => entry.logoUrl.startsWith('/team-crests/'))).toBe(true);

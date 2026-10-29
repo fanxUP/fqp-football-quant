@@ -667,6 +667,17 @@ export const api = {
       request<MatchDetailSections[Section]>(`/api/matches/${matchId}/detail${qs({ section })}`),
   },
 
+  // Shared, read-only supplementary league data. Browsing never collects data.
+  leagues: {
+    catalog: () => request<import('../features/league-center/types').LeagueCatalog>('/api/league-data/catalog'),
+    season: (id: number) => request<import('../features/league-center/types').LeagueSeasonData>(`/api/league-data/seasons/${id}`),
+    fixtures: (query: import('../features/league-center/types').LeagueFixtureQuery) =>
+      request<import('../features/league-center/types').LeagueFixturePage>(`/api/league-data/seasons/${query.competitionSeasonId}/fixtures${qs({
+        round_id: query.roundId ?? undefined, status: query.status, team_id: query.teamId ?? undefined,
+        limit: query.limit, offset: query.offset, batch_id: query.batchId,
+      })}`),
+  },
+
   // Events (tournament center)
   events: {
     catalog: (params?: { source?: 'official'; league_name?: string; start_date?: string; end_date?: string; limit?: number; offset?: number }) =>

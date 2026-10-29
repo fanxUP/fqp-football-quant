@@ -19,6 +19,7 @@ from apps.backend.src.routers import (
     dashboard,
     enrichment,
     health,
+    league_data,
     model_providers,
     news_intelligence,
     official,
@@ -70,6 +71,7 @@ def create_app() -> FastAPI:
     app.include_router(health.router)
     app.include_router(official.router)
     app.include_router(teams.router)
+    app.include_router(league_data.router)
     app.include_router(predictions.router)
     app.include_router(tickets.router)
     app.include_router(agents.router)

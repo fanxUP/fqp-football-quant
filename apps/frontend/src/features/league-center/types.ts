@@ -66,6 +66,7 @@ export interface LeagueFixture {
 }
 export interface LeagueFixtureQuery {
   competitionSeasonId: number;
+  batchId?: string; // freeze pagination to the selected season resource's revision
   roundId: string | null;
   status: FixtureFilter;
   teamId: number | null;

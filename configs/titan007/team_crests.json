@@ -1,0 +1,203 @@
+{
+  "source": "titan007",
+  "source_league_id": 36,
+  "season": "2026-2027",
+  "reviewed_on": "2026-10-29",
+  "entries": [
+    {
+      "source_id": 19,
+      "names": [
+        "阿森纳",
+        "Arsenal",
+        "阿仙奴"
+      ],
+      "sha256": "7cbb68e8ac0a6cf60f3626687a41f3f3a3e382ee043d1144a9ee7b93640165af",
+      "source_url": "https://zq.titan007.com/Image/team/images/19/1kenbrx1hg1z.png"
+    },
+    {
+      "source_id": 20,
+      "names": [
+        "阿斯顿维拉",
+        "Aston Villa",
+        "阿士東維拉"
+      ],
+      "sha256": "fd6cc15fe8544a99945d524e3e10b77a3e5abd1c7a80c3fb898c0f4582fb7dfb",
+      "source_url": "https://zq.titan007.com/Image/team/images/20/1kenbrwzj42k.png"
+    },
+    {
+      "source_id": 24,
+      "names": [
+        "切尔西",
+        "Chelsea",
+        "車路士"
+      ],
+      "sha256": "a2079a7052173e74aa4f7cc5d98a99233e549326a08500c6d2aef4169c6a89b7",
+      "source_url": "https://zq.titan007.com/Image/team/images/24/1kenbrwz272p.png"
+    },
+    {
+      "source_id": 25,
+      "names": [
+        "利物浦",
+        "Liverpool"
+      ],
+      "sha256": "0029573610c3d56e220ba3d2a799e1e788bd7aaff73d163e75aec2ec6c597295",
+      "source_url": "https://zq.titan007.com/Image/team/images/1jq85dyw7v2x.png"
+    },
+    {
+      "source_id": 26,
+      "names": [
+        "曼彻斯特城",
+        "Manchester City",
+        "曼城"
+      ],
+      "sha256": "8b5faaa563f9f68c966144a7b7d8d32a3213fcf13ddd8c8139fbd1f670b63370",
+      "source_url": "https://zq.titan007.com/Image/team/images/26/1kenbrwykc26.png"
+    },
+    {
+      "source_id": 27,
+      "names": [
+        "曼彻斯特联",
+        "Manchester United",
+        "曼聯",
+        "曼联"
+      ],
+      "sha256": "781176879249a6a137610df9398300d86af13858e9b2b3c3c3d45aab22e9aec0",
+      "source_url": "https://zq.titan007.com/Image/team/images/27/1kenbrwykps.png"
+    },
+    {
+      "source_id": 28,
+      "names": [
+        "纽卡斯尔联",
+        "Newcastle United",
+        "紐卡素",
+        "纽卡斯尔"
+      ],
+      "sha256": "5de854e865a58cc557a8d902f48d3c98742476cdcc107b22422d0ccfbb9ae70f",
+      "source_url": "https://zq.titan007.com/Image/team/images/28/1kenbrx11j2w.png"
+    },
+    {
+      "source_id": 29,
+      "names": [
+        "富勒姆",
+        "Fulham",
+        "富咸"
+      ],
+      "sha256": "314409acf906b2d7d93b76398f2b182d02f793e432ed3ece78087a42027b944b",
+      "source_url": "https://zq.titan007.com/Image/team/images/29/1khfjvec6d2z.png"
+    },
+    {
+      "source_id": 31,
+      "names": [
+        "埃弗顿",
+        "Everton",
+        "愛華頓"
+      ],
+      "sha256": "9eee98b35dfb69eae2b3fec8121c67b64f36aebb1d1e793bc0d755fc33b3e8c5",
+      "source_url": "https://zq.titan007.com/Image/team/images/31/1kenbrwz241f.png"
+    },
+    {
+      "source_id": 33,
+      "names": [
+        "托特纳姆热刺",
+        "Tottenham Hotspur",
+        "熱刺"
+      ],
+      "sha256": "7cc4909108dbeb3d9f4664080b565e47aa918be9099a41f3f164dafbaae12fbd",
+      "source_url": "https://zq.titan007.com/Image/team/images/33/1kkaner1b71t.png"
+    },
+    {
+      "source_id": 35,
+      "names": [
+        "水晶宫",
+        "Crystal Palace",
+        "水晶宮"
+      ],
+      "sha256": "7a1463613735fb3506522402887f5122ee58902e8c5b3fa4b110b3ecf70080e5",
+      "source_url": "https://zq.titan007.com/Image/team/images/35/1kenbrwyk39.png"
+    },
+    {
+      "source_id": 49,
+      "names": [
+        "诺丁汉森林",
+        "Nottingham Forest",
+        "諾定咸森林"
+      ],
+      "sha256": "93d378f851026d8551a18df004615923b6467222e8ad80ea16d15391e3aa1340",
+      "source_url": "https://zq.titan007.com/Image/team/images/164869100556.png"
+    },
+    {
+      "source_id": 56,
+      "names": [
+        "利兹联",
+        "Leeds United",
+        "列斯聯"
+      ],
+      "sha256": "a3510108694427f5796f47caefc977b519733dabb478f26822dc06f22d8e530e",
+      "source_url": "https://zq.titan007.com/Image/team/images/56/1kenbrwy3m15.png"
+    },
+    {
+      "source_id": 57,
+      "names": [
+        "考文垂"
+      ],
+      "sha256": "e395ace0ba19c4d9a7d8d59c200ae5b33db63e61899826d84177c59750772107",
+      "source_url": "https://zq.titan007.com/Image/team/images/57/1m0gxfbq9q18.png"
+    },
+    {
+      "source_id": 60,
+      "names": [
+        "布莱顿",
+        "Brighton Hove Albion",
+        "白禮頓"
+      ],
+      "sha256": "d94ed0b47b657289f8c559da02691ca6d4ac424a68cbc34217bb7ea9fe61ed74",
+      "source_url": "https://zq.titan007.com/Image/team/images/60/1kenbrwzjqw.png"
+    },
+    {
+      "source_id": 65,
+      "names": [
+        "桑德兰",
+        "Sunderland A.F.C",
+        "新特蘭"
+      ],
+      "sha256": "1bd86b712226b78301518928f16ce0fd985b3e7b7cd898599ad57bf9541e9926",
+      "source_url": "https://zq.titan007.com/Image/team/images/65/1kenbrx1hsp.png"
+    },
+    {
+      "source_id": 68,
+      "names": [
+        "伊普斯维奇"
+      ],
+      "sha256": "60f0acd4ee849e8b6fe6268a073e12027342de2c270e4f2bedb157fc81d3f42f",
+      "source_url": "https://zq.titan007.com/Image/team/images/68/1m0khnbn3t20.png"
+    },
+    {
+      "source_id": 348,
+      "names": [
+        "伯恩茅斯",
+        "AFC Bournemouth",
+        "般尼茅夫"
+      ],
+      "sha256": "8d678f2266d704baf0a2f38fae7ec232a30453d06362258a9e5bf8dd133fd510",
+      "source_url": "https://zq.titan007.com/Image/team/images/348/1kenbrwz2jd.png"
+    },
+    {
+      "source_id": 365,
+      "names": [
+        "布伦特福德",
+        "Brentford",
+        "賓福特"
+      ],
+      "sha256": "135ee7f6ae7838376964bdcc7a6f76a17ca5235a23a4c9878e24ff8c7ef59dbe",
+      "source_url": "https://zq.titan007.com/Image/team/images/365/1kenbrx1hb1c.png"
+    },
+    {
+      "source_id": 384,
+      "names": [
+        "赫尔城"
+      ],
+      "sha256": "a31cc50915f0b90fe97e4727de8769a4aa5d4f600b48e7494f6c2bcb9b5d02e3",
+      "source_url": "https://zq.titan007.com/Image/team/images/384/1m0khnbmm41c.png"
+    }
+  ]
+}

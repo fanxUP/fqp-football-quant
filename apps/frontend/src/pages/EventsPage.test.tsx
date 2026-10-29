@@ -23,7 +23,9 @@ list.mockResolvedValue({
 });
 
 vi.mock('../core/apiClient', () => ({
-  api: { events: { catalog, list } },
+  api: { events: { catalog, list }, leagues: {
+    catalog: vi.fn().mockResolvedValue({ status: 'not_connected', competitions: [{ code: 'premier-league', name: '英超', country: '英格兰', seasons: [] }] }),
+  } },
 }));
 
 describe('EventsPage', () => {

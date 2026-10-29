@@ -1,0 +1,18 @@
+{
+  "source_league_id": 36,
+  "competition_code": "premier-league",
+  "competition_aliases": ["apifootball:39"],
+  "competition_name": "英超",
+  "competition_name_en": "English Premier League",
+  "competition_name_aliases": ["英格兰超级联赛"],
+  "country": "英格兰",
+  "season": "2026-2027",
+  "season_code": "premier-league:2026-2027",
+  "season_aliases": ["apifootball:39:2026"],
+  "start_date": "2026-07-01",
+  "end_date": "2027-06-30",
+  "is_current": true,
+  "expected_teams": 20,
+  "expected_fixtures": 380,
+  "total_rounds": 38
+}

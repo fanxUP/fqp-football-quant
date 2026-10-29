@@ -1,7 +1,13 @@
 {
-  "git_revision": "3c3823cae4c7064ec15270a645d292e7fecf5c2f",
+  "schema_version": 4,
+  "task_id": "TITAN007-LEAGUE-INTEGRATION-20261029",
+  "base_commit": "b07b104258cfccbfdd5f868300482850b0b88e4c",
+  "base_branch": "main",
+  "recorded_at": "2026-10-29",
+  "notes": "Continuing prior 50-path raw-source integration on main; preserve all changes. Acquisition regressions already passed 82 tests before this stage.",
+  "git_revision": "b07b104258cfccbfdd5f868300482850b0b88e4c",
   "branch": "main",
-  "dirty": false,
-  "captured_at": "2026-10-28T09:26:06.981562+00:00",
+  "dirty": true,
+  "captured_at": "2026-10-29T14:03:06.459948+08:00",
   "checks": {}
 }

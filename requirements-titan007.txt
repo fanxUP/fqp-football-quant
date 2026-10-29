@@ -1,0 +1,3 @@
+# Optional transport for the copied zq/vip/info public interfaces.
+# Install after requirements.txt; public scoreboard/history use existing httpx.
+curl_cffi==0.16.3

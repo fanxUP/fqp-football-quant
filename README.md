@@ -25,6 +25,10 @@ FQP 用于官方足球数据分析、概率模型研究、虚拟票单、实票�
 | 模块与菜单 | `configs/final_module_registry.yaml`、`configs/final_panel_registry.yaml` |
 | 数据结构与测试 | `sql/`、`tests/` |
 
+## 足球补充数据
+
+已将本地球探采集能力纳入 `scripts/sources/titan007/`；原始缓存保存在忽略的 `data/sources/titan007/`。英超共享 PostgreSQL 导入与现有联赛页已在本机 Docker Desktop 启用：380 场赛程、20 队、总/主/客榜各 20 行，20 队共享队徽已离线核对修正。入口为 `http://127.0.0.1:18066/#/events?view=league`；有界更新入口 `scripts.titan007_refresh` 已将本机参考数据更新至 2026-10-29 15:01（80 场完场），支持冻结回执和零联网重试发布。服务器发布、自动调度和模型输入接通仍属后续。采集方法、请求限制、运行命令见 [足球补充数据](docs/titan007-data-source.md)。
+
 ## 运行方式
 
 | 环境 | 代码入口 | 适用范围 |

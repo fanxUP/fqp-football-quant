@@ -1,0 +1,37 @@
+{
+  "source_root": "/Volumes/Nas/足球数据",
+  "source_commit": "22d1aa691a7d5550010b56b9e7e62bbf06e319be",
+  "files": {
+    "titan007/__init__.py": "d6b0f634e9687860e8925742980d8fbf1229a8e675ed3a57c13556a911b4ff13",
+    "titan007/analysis.py": "34bf9d6a50c15b1af05f7559f5ca232e335fe9657e413817982c64fe9bfdf3ba",
+    "titan007/assets.py": "020178dcc1cb30456bd9e612455f41efa22d60c892eec982ac5a756f25ed0bee",
+    "titan007/backfill.py": "96dde0eb248e25414307e2627ed947539542867e26fb6bd32dfd9ea2b9ae458c",
+    "titan007/classify.py": "7aa1c602699f4aa64cfdfcdf1067ccd14cc0f67c12f2dd0c3a85919c0cc8bb51",
+    "titan007/cli.py": "f0fe461f306f682cace59d6975799f9e68aa01b9fe7f3224d40876472a3b2600",
+    "titan007/client.py": "b068f0694070ddc318c3ad2b07b053731445961d696fcc58541621c733a74972",
+    "titan007/companies.py": "e143c55caa7d1ed43c21458e775c638ac871f37e8102558f6089cb9b7f2b5f6b",
+    "titan007/derive.py": "46b0a5ad1962963f5ccc1f0e25dbf5e9d4dcf4088bfe9d0fecfcc22a12c08943",
+    "titan007/jsfmt.py": "47063dd9991bd8ef590f9faa795177dc69b860e5254cdd330154b8614c39426d",
+    "titan007/leagues.py": "fe96b3db30dee779e8371d8788b9a0a0ad3c95afffc1928dba7c9dd043f413c7",
+    "titan007/lottery.py": "343a236d54a5af7f9eaeb800e1f7943754d235c5de5cf5046465c25232bf6dbf",
+    "titan007/monitor.py": "e4cf83c1c128f4f2baa80ca3ffcba66cc639060c0e8be5a0dcb71e70acfe23ed",
+    "titan007/odds.py": "5ad01063611576608691a7d93f2b1ec303bc51f1a8b7170d6f8b8b3d7a16bfdf",
+    "titan007/parsers.py": "474165a125d792178fb6fac8daf50286250c3d98a6a32c829047e8ded88ed15a",
+    "titan007/relations.py": "97386c8d86f0a2597d7b6eff796f6320b52f2e0cb160b913973c45791ea005b2",
+    "titan007/roster.py": "60591070b403bd9245c05a1e3e0b8b18c9e13c0faa54225d5b9b4076b26c513d",
+    "titan007/store.py": "c2eda1679166769b88867ee833e20b977f929d4b6ad1777389d972d534203357",
+    "titan007/team_sync.py": "9735b8eeb214a21fdfce30b657de26f5b26eb682c6fd51d37f8a4472c73385c7",
+    "titan007/teams.py": "691dabaf2b8b10d1cb6a5da58ffc7c577b3e52e567ed6f160831ed6c4e049f0a"
+  },
+  "copied_on": "2026-10-29",
+  "source_commit_is_full_worktree_proof": false,
+  "project_package": "scripts/sources/titan007",
+  "adaptations": [
+    "FQP private-cache CLI and consistent SQLite copy, leaving the original directory intact",
+    "Existing httpx transport; optional curl_cffi for original protected public domains",
+    "Budget, serialized acquisition, cooldown, failure receipts and bounded validated redirects",
+    "Built-in HTML parser and Python 3.14 project style",
+    "New-cache metadata columns and explicit connection lifetime",
+    "Source cache remains separate from canonical business facts and training labels"
+  ]
+}

@@ -1,19 +1,23 @@
 """Build the locally bundled team-crest library from public provider assets.
 
 The frontend must never depend on a live third-party logo URL at render time.
-This script maps every current ``teams`` row (including aliases) to a 500.com
-team identifier, downloads the transparent crest PNG once, and regenerates
-the TypeScript registry consumed by the UI.
+Resolve 500.com identifiers only through that provider's named directory.
+Verified Titan007 cache images can also refresh the shared registry offline.
 
 Run from the repository root:
     python3 scripts/jobs/build_team_icon_library.py
+    python3 scripts/jobs/build_team_icon_library.py --sync-cached-crests data/sources/titan007
 """
 
 from __future__ import annotations
 
+import argparse
+import hashlib
 import json
+import os
 import re
 import sys
+import tempfile
 import urllib.request
 from pathlib import Path
 from typing import Any
@@ -26,6 +30,7 @@ from apps.backend.src.db import get_db  # noqa: E402
 
 ASSET_DIR = ROOT / "apps/frontend/public/team-crests"
 REGISTRY_PATH = ROOT / "apps/frontend/src/shared/data/teamCrests.generated.ts"
+PINNED_CRESTS_PATH = ROOT / "configs/titan007/team_crests.json"
 ICON_URL = "https://liansai.500.com/static/soccerdata/images/TeamPic/teamsignnew_{team_id}.png"
 LEAGUE_PAGE_URL = "https://liansai.500.com/zuqiu-{league_id}/"
 LEAGUE_IDS = (19476, 19554, 19501, 19506, 19507)
@@ -68,10 +73,8 @@ def fetch_provider_teams() -> dict[str, dict[str, str]]:
 def load_database_teams() -> list[dict[str, Any]]:
     with get_db() as conn:
         with conn.cursor() as cur:
-            # Official Sporttery rows carry the stable 500.com-compatible
-            # team ids in raw_json.  Prefer these ids over name scraping so
-            # every team in the official match history can receive a crest,
-            # including teams outside the five currently tracked leagues.
+            # Official history expands name coverage only. Its numerical IDs
+            # belong to another namespace and cannot identify 500.com images.
             cur.execute(
                 """
                 SELECT team_name, provider_id
@@ -152,27 +155,6 @@ def resolve_team_icons(
     resolved: list[dict[str, Any]] = []
     missing: list[str] = []
     for team in database_teams:
-        if team.get("provider_id"):
-            resolved.append(
-                {
-                    "names": list(
-                        dict.fromkeys(
-                            name
-                            for name in [
-                                team["name_cn"],
-                                team["name_en"],
-                                team["short_name"],
-                                *team["aliases"],
-                            ]
-                            if name
-                        )
-                    ),
-                    "logoUrl": f"/team-crests/500-{team['provider_id']}.png",
-                    "source": "500com",
-                    "sourceUrl": ICON_URL.format(team_id=team["provider_id"]),
-                }
-            )
-            continue
         names = [team["name_cn"], team["name_en"], team["short_name"], *team["aliases"]]
         manual = MANUAL_PROVIDER_NAMES.get(team["name_cn"])
         if manual:
@@ -237,7 +219,134 @@ def download_assets(entries: list[dict[str, Any]]) -> int:
     return downloaded
 
 
-def write_registry(entries: list[dict[str, Any]]) -> None:
+def _write_if_changed(path: Path, body: bytes) -> bool:
+    if path.is_file() and path.read_bytes() == body:
+        return False
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(dir=path.parent, delete=False) as output:
+        temporary = Path(output.name)
+        try:
+            output.write(body)
+            os.fchmod(output.fileno(), 0o644)
+            output.close()
+            temporary.replace(path)
+        finally:
+            temporary.unlink(missing_ok=True)
+    return True
+
+
+def _read_pinned_crests(
+    source_dir: Path, filename_template: str, manifest_path: Path
+) -> tuple[list[dict[str, Any]], dict[str, bytes]]:
+    """Validate every local image before the caller mutates assets or registry."""
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if manifest.get("source") != "titan007" or not isinstance(manifest.get("entries"), list):
+        raise ValueError("invalid pinned crest manifest")
+    if not 1 <= len(manifest["entries"]) <= 1000:
+        raise ValueError("invalid pinned crest count")
+    source_dir = source_dir.resolve()
+    entries, images = [], {}
+    aliases: set[str] = set()
+    for item in manifest["entries"]:
+        source_id = item.get("source_id")
+        names = item.get("names")
+        digest = item.get("sha256")
+        if type(source_id) is not int or source_id <= 0:
+            raise ValueError("invalid or duplicate source ID")
+        if (
+            not isinstance(names, list)
+            or not names
+            or not all(isinstance(n, str) and n.strip() for n in names)
+        ):
+            raise ValueError("invalid crest aliases")
+        keys = {normalize_team_name(n) for n in names}
+        if not all(keys) or aliases & keys:
+            raise ValueError("duplicate or empty crest alias ownership")
+        aliases.update(keys)
+        path = (source_dir / filename_template.format(source_id=source_id)).resolve()
+        if not path.is_relative_to(source_dir):
+            raise ValueError("image outside the cache directory")
+        body = path.read_bytes()
+        if not isinstance(digest, str) or hashlib.sha256(body).hexdigest() != digest:
+            raise ValueError(f"crest digest mismatch: titan007:{source_id}")
+        if asset_extension(body) != ".png":
+            raise ValueError("pinned crest must be PNG")
+        asset_name = f"titan007-{source_id}.png"
+        if asset_name in images:
+            raise ValueError("duplicate source ID")
+        images[asset_name] = body
+        entries.append(
+            {"names": names, "logoUrl": f"/team-crests/{asset_name}", "source": "titan007"}
+        )
+    return entries, images
+
+
+def _merge_crests(
+    existing: list[dict[str, Any]], pinned: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    aliases = {
+        normalize_team_name(name): index
+        for index, entry in enumerate(pinned)
+        for name in entry["names"]
+    }
+    merged = []
+    replacements: dict[int, dict[str, Any]] = {}
+    for entry in existing:
+        matches = {
+            aliases[normalize_team_name(n)]
+            for n in entry["names"]
+            if normalize_team_name(n) in aliases
+        }
+        if len(matches) > 1:
+            raise ValueError("ambiguous existing crest aliases")
+        if not matches:
+            merged.append(entry)
+            continue
+        index = next(iter(matches))
+        if index not in replacements:
+            replacements[index] = {**pinned[index], "names": list(pinned[index]["names"])}
+            merged.append(replacements[index])
+        replacements[index]["names"] = list(
+            dict.fromkeys([*replacements[index]["names"], *entry["names"]])
+        )
+    merged.extend(entry for index, entry in enumerate(pinned) if index not in replacements)
+    # Old aliases added during merging must not steal another team's name.
+    owners: dict[str, str] = {}
+    for entry in merged:
+        for name in entry["names"]:
+            key = normalize_team_name(name)
+            if key in owners and owners[key] != entry["logoUrl"]:
+                raise ValueError("ambiguous merged crest aliases")
+            owners[key] = entry["logoUrl"]
+    return merged
+
+
+def sync_cached_crests(
+    cache_dir: Path,
+    *,
+    manifest_path: Path = PINNED_CRESTS_PATH,
+    registry_path: Path = REGISTRY_PATH,
+    asset_dir: Path = ASSET_DIR,
+) -> dict[str, Any]:
+    """Copy only explicitly reviewed source/hash pairs; no DB or network calls."""
+    pinned, images = _read_pinned_crests(cache_dir, "images/teams/{source_id}.png", manifest_path)
+    text = registry_path.read_text(encoding="utf-8")
+    array = text.split(" = ", 1)[1].strip().removesuffix(";")
+    existing = json.loads(re.sub(r",\s*]", "]", array))
+    merged = _merge_crests(existing, pinned)
+    written = sum(
+        _write_if_changed(asset_dir / filename, body) for filename, body in images.items()
+    )
+    write_registry(merged, registry_path=registry_path)
+    return {
+        "status": "ok",
+        "verified_crests": len(pinned),
+        "assets_written": written,
+        "registry_entries": len(merged),
+    }
+
+
+def write_registry(entries: list[dict[str, Any]], *, registry_path: Path = REGISTRY_PATH) -> None:
     lines = [
         "// Generated by scripts/jobs/build_team_icon_library.py. Do not edit manually.",
         "import type { TeamCrestEntry } from './teamCrests';",
@@ -248,16 +357,20 @@ def write_registry(entries: list[dict[str, Any]]) -> None:
         public_entry = {key: entry[key] for key in ("names", "logoUrl", "source")}
         lines.append(f"  {json.dumps(public_entry, ensure_ascii=False)},")
     lines.extend(["];", ""])
-    REGISTRY_PATH.write_text("\n".join(lines), encoding="utf-8")
+    _write_if_changed(registry_path, "\n".join(lines).encode("utf-8"))
 
 
 def run() -> dict[str, Any]:
+    pinned, _ = _read_pinned_crests(ASSET_DIR, "titan007-{source_id}.png", PINNED_CRESTS_PATH)
     provider_teams = fetch_provider_teams()
     database_teams = load_database_teams()
     entries, missing = resolve_team_icons(database_teams, provider_teams)
+    pinned_names = {normalize_team_name(n) for entry in pinned for n in entry["names"]}
+    missing = [name for name in missing if normalize_team_name(name) not in pinned_names]
     if missing:
         raise RuntimeError(f"unmapped teams: {', '.join(missing)}")
-    downloaded = download_assets(entries)
+    entries = _merge_crests(entries, pinned)
+    downloaded = download_assets([entry for entry in entries if entry["source"] == "500com"])
     write_registry(entries)
     return {
         "status": "ok",
@@ -269,4 +382,12 @@ def run() -> dict[str, Any]:
 
 
 if __name__ == "__main__":
-    print(run())
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--sync-cached-crests",
+        type=Path,
+        metavar="CACHE_DIR",
+        help="offline: apply reviewed, hash-pinned Titan007 cache crests",
+    )
+    args = parser.parse_args()
+    print(sync_cached_crests(args.sync_cached_crests) if args.sync_cached_crests else run())

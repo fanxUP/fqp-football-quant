@@ -36,8 +36,45 @@ function Harness({ dataSource }: { dataSource: LeagueDataSource }) {
   const [state, update] = useEventCenterState();
   return <LeagueCenter source={dataSource} state={state} onChange={update} />;
 }
+function SharedHarness() {
+  const [state, update] = useEventCenterState();
+  return <LeagueCenter state={state} onChange={update} />;
+}
 describe('LeagueCenter integration (isolated fixed samples only)', () => {
   beforeEach(() => window.history.replaceState(null, '', '#/events?view=league'));
+
+  it('uses the shared backend by default and pins fixture reads to the season revision', async () => {
+    const directory = await source().catalog();
+    const actualSeason = { ...structuredClone(season), evidence: { ...evidence, batchId: '17' } };
+    const actualPage = { ...structuredClone(fixtures), evidence: { ...evidence, batchId: '17' } };
+    const fetch = vi.spyOn(globalThis, 'fetch').mockImplementation(async input => {
+      const path = String(input);
+      const body = path.endsWith('/catalog') ? directory : path.includes('/fixtures?') ? actualPage : actualSeason;
+      return new Response(JSON.stringify(body), { status: 200 });
+    });
+    const mounted = render(<SharedHarness />);
+    try {
+      await screen.findByRole('button', { name: '查看球队 测试主队' });
+      fireEvent.click(screen.getByRole('button', { name: '赛程赛果' }));
+      await screen.findByText('0 : 0');
+      const urls = fetch.mock.calls.map(call => String(call[0]));
+      expect(urls.every(url => url.startsWith('/api/league-data/'))).toBe(true);
+      expect(urls.some(url => url.includes('/fixtures?') && new URL(url, 'http://localhost').searchParams.get('batch_id') === '17')).toBe(true);
+    } finally {
+      mounted.unmount();
+      fetch.mockRestore();
+    }
+  });
+
+  it('rejects fixture responses from a different published batch', async () => {
+    const s = source();
+    s.fixtures = vi.fn().mockResolvedValue({ ...structuredClone(fixtures), evidence: { ...evidence, batchId: 'another-batch' } });
+    render(<Harness dataSource={s} />);
+    await screen.findByRole('button', { name: '查看球队 测试主队' });
+    fireEvent.click(screen.getByRole('button', { name: '赛程赛果' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('返回赛程与所选资料批次不一致');
+    expect(screen.queryByText('0 : 0')).not.toBeInTheDocument();
+  });
 
   it('has no network or business writes when real data is deferred', async () => {
     const fetch = vi.spyOn(globalThis, 'fetch');
@@ -69,7 +106,7 @@ describe('LeagueCenter integration (isolated fixed samples only)', () => {
     expect(screen.getByRole('link', { name: '查看分析 ref:12' })).toHaveAttribute('href', '#/matches/811');
     expect(screen.queryByRole('link', { name: '查看分析 ref:11' })).not.toBeInTheDocument();
     expect(screen.getByText('未关联竞彩比赛')).toBeInTheDocument();
-    expect(s.fixtures).toHaveBeenCalledWith({ competitionSeasonId: 42, roundId: null, status: 'all', teamId: null, limit: 20, offset: 0 });
+    expect(s.fixtures).toHaveBeenCalledWith({ competitionSeasonId: 42, batchId: 'test-batch-1', roundId: null, status: 'all', teamId: null, limit: 20, offset: 0 });
     fireEvent.change(screen.getByLabelText('赛程状态'), { target: { value: 'postponed' } });
     await waitFor(() => expect(s.fixtures).toHaveBeenLastCalledWith(expect.objectContaining({ status: 'postponed', offset: 0 })));
     expect(window.location.hash).toContain('status=postponed');

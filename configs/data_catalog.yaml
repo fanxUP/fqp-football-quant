@@ -1,7 +1,7 @@
 # Metadata only. Does not enable a collector, establish account permission,
 # certify coverage, or grant a caller access to any database table.
 contract_version: fqp-data/v1
-catalog_version: '2026-10-19.1'
+catalog_version: '2026-10-29.3'
 runtime_authorization: false
 sources:
   sporttery:
@@ -21,6 +21,19 @@ sources:
     coverage_verification: unknown
     permission_evidence: verify actual account, purpose and league-season fields before enabling
     quota_owner: P103
+  titan007:
+    family: titan007
+    alias_namespace: titan007
+    implementation: local_raw_cache_and_league_reference_adapter
+    account_verification: unknown
+    coverage_verification: unknown
+    permission_evidence: user_provided_local_collector_for_personal_research
+    quota_owner: P103
+    runtime_scheduled: false
+    request_governance: local_cache_lock_batch_and_utc_daily_budget_shared_runtime_pending
+    storage_role: raw_source_cache_not_business_truth
+    entrypoint: scripts.titan007_data
+    refresh_entrypoint: scripts.titan007_refresh
   open_meteo:
     family: open_meteo
     alias_namespace: null
@@ -78,6 +91,13 @@ field_resolution:
       max_age_seconds: 1800
       sources: {api_football: 10}
 products:
+  league_references:
+    contract_owner: league_center
+    writer: titan007_import
+    tables: [football_team_source_links, league_reference_batches, league_reference_fixtures, league_reference_standings]
+    purposes: [research, display, operations]
+    consumers: [league_center, source_review]
+    availability: published_batches_with_explicit_source_and_scope_completeness
   source_observations:
     contract_owner: P104
     writer: observation_storage

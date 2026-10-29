@@ -1,6 +1,14 @@
+import { api } from '../../core/apiClient';
 import type { LeagueDataSource } from './types';
 
-/** Deliberately disconnected until the shared-data adapter is implemented.
+/** Same-origin shared PostgreSQL reads through the ordinary session-auth API client. */
+export const sharedLeagueSource: LeagueDataSource = {
+  catalog: () => api.leagues.catalog(),
+  season: id => api.leagues.season(id),
+  fixtures: query => api.leagues.fixtures(query),
+};
+
+/** Explicit disconnected source for isolated empty-state tests.
  * The catalogue is product scope, not evidence of season/team/data coverage.
  * No demo facts, external requests, fake season IDs or fallback to official-only matches.
  */
