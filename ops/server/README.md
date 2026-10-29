@@ -1,6 +1,6 @@
 # Ubuntu 发布与 Nginx
 
-在现有干净 `main` 上运行 `deploy.sh <完整提交SHA> --plan` 查看差异，按现有发布证据协议 `--apply <证据JSON>` 发布。目标须为 `origin/main`；仅有待执行数据库迁移时要求迁移演练及最近备份。入口仍负责恢复旧代码、前端及服务，不能将配置成功等同整个业务验收成功。
+在现有干净 `main` 上运行 `deploy.sh <完整提交SHA> --plan` 查看差异，按现有发布证据协议 `--apply <证据JSON>` 发布。目标须为 `origin/main`；普通待执行迁移须有迁移演练和一小时内校验过的备份。`--apply-no-backup` 仅对审核过的 `123_football_history_odds_invalid_timezone.sql` 开放，并同时核对唯一待执行迁移、固定 SHA256、隔离 PostgreSQL 演练及证据中的明确授权；其他迁移仍要求有效备份。入口负责恢复旧代码、前端及服务，不能将配置成功等同整个业务验收成功。
 
 ## 静态资源配置
 

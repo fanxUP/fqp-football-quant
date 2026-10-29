@@ -21,7 +21,7 @@ RELEASE_SHA="${1:-}"
 RELEASE_MODE="${2:---plan}"
 RELEASE_EVIDENCE="${3:-}"
 [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo 'Pass the full target commit SHA' >&2; exit 2; }
-[[ "$RELEASE_MODE" == '--plan' || "$RELEASE_MODE" == '--apply' ]] || exit 2
+[[ "$RELEASE_MODE" == '--plan' || "$RELEASE_MODE" == '--apply' || "$RELEASE_MODE" == '--apply-no-backup' ]] || exit 2
 [[ -z "$(git status --porcelain)" ]] || { echo 'Checkout must be clean' >&2; exit 1; }
 [[ "$(git branch --show-current)" == 'main' ]] || { echo 'Checkout must be on main' >&2; exit 1; }
 [[ -x .venv/bin/python ]] || { echo 'Missing application virtualenv' >&2; exit 1; }
@@ -64,7 +64,7 @@ if [[ "$RELEASE_MODE" == '--plan' ]]; then
     if [[ "$FRONTEND_DEV_DEPENDENCIES_CHANGED" == true ]]; then
         echo 'Verified frontend Vite/Vitest devDependency update; rollback will reinstall the prior lockfile.'
     fi
-    echo 'Plan only. Record quality/rollback/HTTP evidence before --apply; migration copy-dry-run and a recent backup are required only when migrations are pending.'
+    echo 'Plan only. Record quality/rollback/HTTP evidence and a migration rehearsal before apply. Ordinary pending migrations require a recent verified backup; --apply-no-backup is restricted to the pinned migration 123 with explicit evidence.'
     exit 0
 fi
 [[ -f "$RELEASE_EVIDENCE" ]] || { echo 'Missing release evidence JSON' >&2; exit 1; }
@@ -223,10 +223,8 @@ npm --prefix apps/frontend ci --ignore-scripts
 npm --prefix apps/frontend run build
 MIGRATION_PLAN_OUTPUT="$(run_migration)"
 printf '%s\n' "$MIGRATION_PLAN_OUTPUT"
-PENDING_MIGRATION_COUNT="$(printf '%s\n' "$MIGRATION_PLAN_OUTPUT" | .venv/bin/python -c '
-import ast
-import re
-import sys
+PENDING_MIGRATIONS="$(printf '%s\n' "$MIGRATION_PLAN_OUTPUT" | .venv/bin/python -c '
+import ast, json, re, sys
 
 output = sys.stdin.read()
 matches = re.findall(r"^Role: [^;]+; pending migrations: (.+)$", output, re.MULTILINE)
@@ -235,15 +233,32 @@ if len(matches) != 1:
 pending = ast.literal_eval(matches[0])
 if not isinstance(pending, list) or any(not isinstance(name, str) for name in pending):
     raise SystemExit("Database migration plan has an invalid pending-migration list")
-print(len(pending))
+print(json.dumps(pending))
 ')"
+PENDING_MIGRATION_COUNT="$(.venv/bin/python -c 'import json,sys; print(len(json.loads(sys.argv[1])))' "$PENDING_MIGRATIONS")"
 if (( PENDING_MIGRATION_COUNT > 0 )); then
-    .venv/bin/python - "$RELEASE_EVIDENCE" <<'PY'
+    .venv/bin/python - "$RELEASE_EVIDENCE" "$RELEASE_MODE" "$PENDING_MIGRATIONS" <<'PY'
 import hashlib, json, pathlib, subprocess, sys
 from datetime import UTC, datetime
 record = json.loads(pathlib.Path(sys.argv[1]).read_text())
+release_mode = sys.argv[2]
+pending = json.loads(sys.argv[3])
 if record.get('migration_copy_dry_run') != 'passed':
-    raise SystemExit('Pending migrations require a passed migration copy dry-run')
+    if not (release_mode == '--apply-no-backup' and record.get('migration_transaction_dry_run') == 'passed'):
+        raise SystemExit('Pending migrations require a passed migration rehearsal')
+if release_mode == '--apply-no-backup':
+    allowed = ['123_football_history_odds_invalid_timezone.sql']
+    migration = pathlib.Path('sql/123_football_history_odds_invalid_timezone.sql')
+    expected_sha256 = 'ba62d08357813c093a5304d9143c2e2c5e0295f010e4338afeb4d4ca65911744'
+    if pending != allowed or not migration.is_file():
+        raise SystemExit('No-backup release is restricted to the single reviewed migration 123')
+    if hashlib.sha256(migration.read_bytes()).hexdigest() != expected_sha256:
+        raise SystemExit('Migration 123 checksum is outside the reviewed no-backup release')
+    if record.get('no_backup_authorized') is not True or not str(record.get('no_backup_reason', '')).strip():
+        raise SystemExit('No-backup release requires explicit recorded operator authorization')
+    if record.get('migration_transaction_dry_run') != 'passed':
+        raise SystemExit('No-backup release requires a passed isolated migration transaction rehearsal')
+    sys.exit(0)
 backup_path = record.get('backup_path')
 if not isinstance(backup_path, str) or not backup_path:
     raise SystemExit('Pending migrations require a verified pre-deployment backup')

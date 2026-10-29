@@ -1,16 +1,19 @@
-{
-  "schema_version": 4,
-  "task_id": "TITAN007-HISTORY-RELEASE-PREP-20261030",
-  "max_files_changed": 13,
-  "max_new_files": 8,
-  "max_new_dependencies": 0,
-  "max_schema_migrations": 5,
-  "max_public_api_changes": 0,
-  "declared_public_api_changes": 0,
-  "regression_budget": {
-    "new_test_failures": 0,
-    "new_lint_errors": 0,
-    "new_type_errors": 0
-  },
-  "notes": "Supersedes the completed league-integration scope. Includes the ten already pending paths. Add only this scope update and the existing CI workflow: total12 paths/7 new, no dependency, API or migration expansion. Existing production ledger119-122 hashes are frozen. New checks use only disposable localhost PostgreSQL and frozen local samples; no paid API, source crawl, production changes, training, push or app deployment. Existing production verification remains valid and is reused. A single read-only review covers the pending material migration/import risk. Before follow-up edits, scope expands to13 paths/8 new/5 migration files for the read-only review findings. Only migration123 changes timezone-error handling; applied119-122 remain byte-identical. Migration123 is local and not yet applied on production; no historical batch rewrites."
-}
+schema_version: 4
+task_id: HISTORY-DEPLOY-NO-BACKUP-123-20261030
+max_files_changed: 4
+max_new_files: 0
+max_new_dependencies: 0
+max_schema_migrations: 0
+max_public_api_changes: 0
+declared_public_api_changes: 0
+regression_budget:
+  new_test_failures: 0
+  new_lint_errors: 0
+  new_type_errors: 0
+notes: >-
+  Deployment-only follow-up on main. Honor the user's explicit no-backup release
+  instruction through a narrow, auditable override for the exact already-reviewed
+  migration 123 function replacement. Require its pinned SHA256, pending-migration
+  allowlist, existing quality/rollback/HTTP evidence, and migration rehearsal.
+  All other pending migrations keep the existing recent-backup requirement.
+  No source data import or historical row rewrite is in scope.
