@@ -160,7 +160,14 @@ def parse_1x2d(text: str) -> dict[str, Any]:
                     "home": _f(f[0]),
                     "line": _f(f[1]),
                     "away": _f(f[2]),
-                    "change_time": f[3],
+                    # Recent feeds carry the year separately; keep it through
+                    # the existing SQLite TEXT column. Invalid explicit dates
+                    # remain explicit, so downstream checks cannot guess a year.
+                    "change_time": f"{f[7].strip()}-{f[3]}"
+                    if len(f) > 7 and f[7].strip()
+                    else f[3],
+                    "change_time_raw": f[3],
+                    "source_year_raw": f[7].strip() if len(f) > 7 else None,
                     "live_kelly_home": _f(f[4]) if len(f) > 4 else None,
                     "live_kelly_draw": _f(f[5]) if len(f) > 5 else None,
                     "live_kelly_away": _f(f[6]) if len(f) > 6 else None,

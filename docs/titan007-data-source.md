@@ -2,6 +2,76 @@
 
 本模块来自用户提供的本地采集项目 `/Volumes/Nas/足球数据`。采集、解析、原始缓存和固定样本已复制进 FQP；源目录继续保留。统一入口为 `python -m scripts.titan007_data`，采集实现位于 `scripts/sources/titan007/`。这份文档是 FQP 的现行操作入口，两份附带的原文仅作接口与字段参考。
 
+## 历史明细回填（2026-10-29）
+
+离线工具 `scripts.titan007_history` 清洗来源库中的比赛、技术统计、事件、实际/预计阵容、历史伤停、转会、球员统计、派生出场分钟和第三方赔率。迁移 `119_football_history_backfill.sql` 在同一个共享 PostgreSQL 建立历史批次、来源比赛与分类明细；不另建业务数据库。结构与实际生产启用、逐域数量以本次回填回执为准。
+
+原采集时间缺失不阻止历史事实保存，未知字段保留为空，服务端记录真实入库时间。来源旧脚本会从 `updated_at` 派生 `first_fetched_at`、从替补事件和默认 90 分钟推算出场时间、从 `updated_at` 复制预计阵容的 `announced_at`，也会按伤停原因关键词生成 `kind` 分类；这些字段保留来源解释，不能升级为真实发布时间、采集时间、直接报告的出场分钟或额外的伤停证据。
+
+两份比赛目录中的球队、开球时间或完场比分冲突会隔离该来源比赛及其相关记录。技术统计规范数值和百分比，并区分半场与加时；未完成比赛的赛后明细不回填。实际阵容保存名单完整性；预计阵容始终为预测资料，伤停不自动成为当前缺阵，转会不等于注册资格已核实。赔率全部为第三方市场资料，原字段 `live` 不单独证明滚球状态；缺少年份的变化时间保留原文，`timeline_usable=false`。
+
+### 赔率变化年份补全
+
+迁移 `120_football_history_odds_timeline.sql` 提供共享读取视图 `football_history_odds_timeline`，不修改119号迁移、已发布批次或原始 `value_json`。该视图的独立列 `change_at`、`time_basis`、`time_resolution_reason` 和 `timeline_usable` 是补全结果；原 JSON 内同名字段仍是回填时的原始质量标记，消费者应明确读取视图列。
+
+需同时应用 `121_football_history_odds_parallel_safety.sql`：日期合法性校验包含异常处理，须禁用该查询的并行执行，避免全量读取时发生子事务错误。该修正只调整函数属性，保留已应用的120号迁移摘要。
+
+- `MM-DD HH:mm` 按站点北京时间，枚举开球年份的前一年、当年、后一年；只有开球前180天至后12小时内的唯一有效日历时间可推定。跨年和闰日使用真实日历校验，无法推定的记录继续可查，不阻塞其他数据。
+- 以批次、来源比赛、公司、赔率类型及采集来源共同分组，按原 `seq` 校验。允许正序、倒序及相同时间；检查会跨过缺失时间记录。已解析时间出现来回倒序，或序号缺失/重复时，整组不提供可用时间轴，不强行调年份使其顺序成立。
+- `time_basis=inferred_year` 表示推定年份，`source_full` 表示来源已有完整日期，`unresolved` 表示未解决。时区假设另由 `change_timezone_basis` 说明。`timeline_usable=true` 只表示通过上述规则，可用于带标识的参考走势；不证明来源当时已发布、模型当时已获取或属于赛前盘，也不允许直接冒充无泄漏回测样本。
+- 120/121的基础规则版本为 `titan007-odds-year/v1`。按 `batch_id`、`source_match_id` 查询单场，避免页面请求每次全表扫描；该视图尚未自动接入已有赔率页面或模型输入。
+
+#### 来源年份与延期赛程修正（v2）
+
+在120/121之后应用 `122_football_history_odds_evidence.sql`。v2增加同一共享库内的稀疏证据表 `football_history_odds_time_evidence`，只为已核验的原记录保存时间依据，不复制整套历史事实。证据关联批次、原记录键和精确原值，逐条保留来源URL、响应摘要、实际核验时间与身份信息；证据本身也不可覆盖、删除或清空，应用账户只读。
+
+- 来源已有完整日期，或重新核验到明确年份时，保留为 `source_full`。开球前180天窗口只用于普通缺年推定，不能据此拒用已经明确年份的早期开盘。原始第8字段年份在采集解析时合入 `change_time`，经现有SQLite文本列保存；旧格式仍保留月日原文，非法明确日期继续交由日历检查拒用，不能换年掩盖错误。
+- 有官网与相同来源比赛身份共同支持的延期赛程，以独立 `effective_kickoff_at` 提供新参考时间，`kickoff_at` 保留原始回填值，`kickoff_time_basis` 说明依据。同一批次同场不允许矛盾参考时间。不能由赔率最后变化时间反推真实开球，也不能把所有赔率都标为赛前。
+- 2022世界杯这一批早盘仅在已核验赛事范围、同组已有窗口内锚点和连续顺序支持下添加逐条证据，仍为 `inferred_year`，原因 `event_sequence_evidence`；没有全局扩大缺年窗口。来源明确年份证据的原因是 `source_year_evidence`。
+- 整组顺序检查继续覆盖补正后的时间；证据存在也不能绕过重复序号或来回倒序检查。核验日期不等于原始采集日期，走势可用不等于可进行无泄漏赛前回放。
+
+`scripts.titan007_odds_evidence` 离线核对已冻结响应的摘要、比赛/球队身份、序号和赔率原值后生成证据包，不发送网络请求。导入调用 `import_package` 默认回滚；正式导入前核对已发布批次摘要，冲突原值或既有证据不同会回滚，不静默覆盖。迁移、证据导入和迁移账本可以在同一事务内验证后提交。
+
+```bash
+.venv/bin/python -m scripts.titan007_odds_evidence \
+  --verification /absolute/evidence/verification.json \
+  --batch-content-sha256 <published-batch-sha256> \
+  --official-schedules /absolute/evidence/official-schedules.json \
+  --output /absolute/evidence/time-evidence-package.json
+```
+
+```sql
+SELECT source_record_key, value_json->>'change_time' AS original_time,
+       change_at, time_basis, time_resolution_reason, group_direction,
+       timeline_usable, change_timezone_basis,
+       effective_kickoff_at, kickoff_time_basis, time_evidence_url
+FROM football_history_odds_timeline
+WHERE batch_id = 1 AND source_match_id = 2389577
+ORDER BY change_at NULLS LAST, source_record_key;
+```
+
+```bash
+# 只读来源并生成有摘要的清洗传输包；不连接数据库、不抓取网页。
+.venv/bin/python -m scripts.titan007_history --export /absolute/new/package-directory
+
+# 目标库启用 119 后，使用有历史导入权限的账户执行。
+# DATABASE_URL 必须明确指定本机回环地址；默认演练并回滚。
+.venv/bin/python -m scripts.titan007_history --import-package /absolute/package-directory
+.venv/bin/python -m scripts.titan007_history --import-package /absolute/package-directory --apply
+```
+
+导入验证压缩文件及解压内容摘要、记录数量、数据库约束后原子发布。重复相同包返回 `unchanged`；失败回滚整个事务，已发布批次不可修改、删除、追加或清空。普通应用账户仅有历史表读取权限，显式导入账户负责写入。未知规范球队、球员和官方比赛身份保留为带命名空间的来源身份，不能按同名强行合并。
+
+后续导出在同源比赛身份、开球和已知赛事一致时，从 `league_results` 保留赛季，元数据注明 `season_source_table`；详情表本身没有赛季列。两个目录的已知赛事冲突时隔离，不借用另一个赛事的赛季。此修复不改写已发布批次，旧批次缺失的赛季仍为空，不能因此重新全量导入。
+
+历史导入CLI要求显式回环 `DATABASE_URL`，同时拒绝外部 `hostaddr`、service和 `PGHOSTADDR` / `PGSERVICE` / `PGSERVICEFILE` 环境路由；连接时固定数字回环地址，避免DNS或libpq默认路由把写入转向其他主机。通过SSH在目标服务器本机运行同样适用；不会据此连接其他数据库。
+
+迁移 `123_football_history_odds_invalid_timezone.sql` 在122之后加固日期函数：非法时区偏移（如 `+25:00`）返回 `unresolved` / `invalid_timezone_offset`，不让单条坏数据中断其他赔率读取。保留正常候选、视图列和并行禁用属性；119—122已应用摘要保持不变。123属于后续发布内容，不能将本地测试通过表述为生产已应用。
+
+GitHub CI在隔离集群创建专用 `fqp_history_test_ci`，设置 `FQP_HISTORY_TEST_DSN` 后运行本文件对应回归；JUnit校验要求该模块存在且零跳过。手动测试也必须使用 `127.0.0.1` 上以 `fqp_history_test_` 开头的一次性数据库；缺少DSN时本地数据库用例会跳过，不构成发布验证。
+
+模块可查询 `football_history_available` 视图，按明确的 `batch_id` 与 `domain` 读取，避免多批重复计数。视图只展示已发布批次，并提供已核实的规范球队与官方比赛链接。当前官方结算、旧阵容投影和预测输入链路不自动读取这批历史明细；接入训练/特征时应单独验证字段用途。同场赛后数据不得成为同场赛前特征，但可以在核实后用于后续比赛的历史分析。
+
 ## 当前可以做什么
 
 - 一致复制已有 SQLite 数据库和图片；使用 SQLite 在线复制 API 读取已提交状态，包含 WAL 中已提交的数据，不直接复制正在使用的数据库文件。目标已存在时拒绝覆盖，失败清除临时副本。完成后保留内容摘要和校验清单。系统临时盘空间足够时，在同一顺序读取中计算摘要并生成临时校验副本，避免 NAS 上的逐页随机校验；校验副本随后清除，不作为运行数据库。

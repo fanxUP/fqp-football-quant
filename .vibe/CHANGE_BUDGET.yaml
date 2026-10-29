@@ -1,16 +1,16 @@
 {
   "schema_version": 4,
-  "task_id": "TITAN007-LEAGUE-INTEGRATION-20261029",
-  "max_files_changed": 100,
-  "max_new_files": 75,
-  "max_new_dependencies": 1,
-  "max_schema_migrations": 1,
-  "max_public_api_changes": 3,
-  "declared_public_api_changes": 3,
+  "task_id": "TITAN007-HISTORY-RELEASE-PREP-20261030",
+  "max_files_changed": 13,
+  "max_new_files": 8,
+  "max_new_dependencies": 0,
+  "max_schema_migrations": 5,
+  "max_public_api_changes": 0,
+  "declared_public_api_changes": 0,
   "regression_budget": {
     "new_test_failures": 0,
     "new_lint_errors": 0,
     "new_type_errors": 0
   },
-  "notes": "New stage declared before implementation; includes prior 50-path acquisition changes. Up to 17 additional required paths for importer/config, one additive migration, storage, three authenticated GETs, existing UI adapter and targeted regression/docs. The one optional dependency belongs to the prior acquisition stage; this stage adds none. Follow-up stage needs 20 small named cached assets, a pinned provenance manifest and five existing generator/registry/test paths (up to 93 total paths/73 new). Raised before product edits for this required visual correction; no new dependency/API/migration allowance. Bounded refresh continuation adds two paths (95 total / 75 new) within existing limits, shared client governance and existing importer/tests/docs updates; no additional dependency, API or migration."
+  "notes": "Supersedes the completed league-integration scope. Includes the ten already pending paths. Add only this scope update and the existing CI workflow: total12 paths/7 new, no dependency, API or migration expansion. Existing production ledger119-122 hashes are frozen. New checks use only disposable localhost PostgreSQL and frozen local samples; no paid API, source crawl, production changes, training, push or app deployment. Existing production verification remains valid and is reused. A single read-only review covers the pending material migration/import risk. Before follow-up edits, scope expands to13 paths/8 new/5 migration files for the read-only review findings. Only migration123 changes timezone-error handling; applied119-122 remain byte-identical. Migration123 is local and not yet applied on production; no historical batch rewrites."
 }
