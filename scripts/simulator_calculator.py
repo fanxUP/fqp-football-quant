@@ -345,24 +345,6 @@ def calculate_winning_prize(
     return round(total, 2)
 
 
-def calculate_cost(match_count: int, pass_type: str, multiple: int = 1) -> float:
-    """Total cost = bet_count × 2 yuan base × multiple."""
-    info = get_pass_type_info(pass_type)
-    # For 'single', bet_count == number of matches (each match is a separate bet)
-    if pass_type == "single":
-        bet_count = match_count
-    elif pass_type.endswith("x1"):
-        required = int(pass_type.split("x")[0])
-        if match_count < required:
-            raise ValueError(
-                f"Pass type '{pass_type}' requires at least {required} matches, got {match_count}"
-            )
-        bet_count = comb(match_count, required)
-    else:
-        bet_count = info["bet_count"]
-    return round(bet_count * UNIT_STAKE * multiple, 2)
-
-
 def calculate_all(
     items: list[dict],
     pass_type: str,

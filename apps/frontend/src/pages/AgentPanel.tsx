@@ -1,138 +1,67 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import PageHeader from '../shared/components/PageHeader';
 import Card from '../shared/components/Card';
 import DataTable, { type Column } from '../shared/components/DataTable';
 import StatusBadge from '../shared/components/StatusBadge';
-import ErrorState from '../shared/components/ErrorState';
+import { api } from '../core/apiClient';
+import type { AgentTask, JobRun, AuditLog, ReviewGate, StaleJob, StaleTask } from '../core/types';
+import useManualEvidence from './useManualEvidence';
+import useBackgroundRefresh from '../shared/hooks/useBackgroundRefresh';
+import ReadEvidenceStatus from './ReadEvidenceStatus';
+import './BusinessEvidence.css';
 import { agentLabel, agentTypeLabel, permissionLevelLabel, reviewStatusLabel, riskLabel, statusLabel } from '../shared/constants';
 import { formatTimestamp } from '../shared/utils';
 
 type TabKey = 'tasks' | 'jobs' | 'stale' | 'staleTasks' | 'gates' | 'audit';
 
-// ---- Types for agent data ----
-interface AgentTask {
-  id: number;
-  task_code: string;
-  task_title: string;
-  task_type: string;
-  owner_agent: string;
-  priority: string;
-  risk_level: string;
-  status: string;
-  human_review_required: boolean;
-  created_at: string | null;
+function useAgentRead<T>(fetcher: () => Promise<T>) {
+  const resource = useManualEvidence(fetcher);
+  useBackgroundRefresh(resource.refresh);
+  return resource;
 }
 
-interface JobRun {
-  id: number;
-  job_code: string;
-  job_name: string;
-  owner_agent: string;
-  status: string;
-  started_at: string | null;
-  finished_at: string | null;
-  duration_ms: number | null;
-  error_message: string | null;
+function checkedList<T>(rows: T[], label: string): T[] {
+  if (!Array.isArray(rows)) throw new Error(`${label}响应格式不正确`);
+  return rows;
 }
 
-interface AuditLog {
-  id: number;
-  task_id: number | null;
-  agent_name: string;
-  action_type: string;
-  result_status: string;
-  result_summary: string;
-  created_at: string | null;
-}
-
-interface ReviewGate {
-  id: number;
-  task_code: string;
-  task_title: string;
-  gate_type: string;
-  reason: string;
-  reviewer: string | null;
-  review_status: string;
-  review_comment: string | null;
-  created_at: string | null;
-}
-
-interface AgentSummary {
-  active_agents: number;
-  open_tasks: number;
-  running_jobs: number;
-  stale_jobs: number;
-  stale_tasks: number;
-  failed_jobs_24h: number;
-  pending_review_gates: number;
-  scheduler_running: boolean;
-}
-
-interface AgentDefinition {
-  id: number;
-  agent_name: string;
-  agent_type: string;
-  description: string;
-  permission_level: string;
-  is_active: boolean;
-}
-
-interface SchedulerStatus {
-  running: boolean;
-  heartbeat_at: string | null;
-  pid: number | null;
-  pid_alive: boolean;
-}
-
-interface StaleJob {
-  id: number;
-  job_code: string;
-  job_name: string;
-  owner_agent: string;
-  started_at: string;
-  running_minutes: number;
-}
-
-interface StaleTask {
-  id: number;
-  task_code: string;
-  task_title: string;
-  owner_agent: string;
-  status: string;
-  started_at: string | null;
-  updated_at: string | null;
-  stale_minutes: number;
+function AgentTable<T extends { id: number }>({ resource, columns, label, emptyText }: {
+  resource: ReturnType<typeof useAgentRead<T[]>>; columns: Column<T>[]; label: string; emptyText: string;
+}) {
+  return <>
+    <ReadEvidenceStatus resource={resource} label={label} note="可见页面每 30 秒刷新" />
+    {(resource.data !== null || resource.loading) && <Card style={{ padding: 0, overflow: 'hidden' }}>
+      <DataTable columns={columns} rows={resource.data ?? []} loading={resource.loading && resource.data === null} emptyText={emptyText} rowKey={row => row.id} />
+    </Card>}
+  </>;
 }
 
 export default function AgentPanel() {
   const [activeTab, setActiveTab] = useState<TabKey>('tasks');
-  const [summary, setSummary] = useState<AgentSummary | null>(null);
-  const [scheduler, setScheduler] = useState<SchedulerStatus | null>(null);
-  const [agents, setAgents] = useState<AgentDefinition[]>([]);
-
-  useEffect(() => {
-    const refresh = () => {
-      Promise.all([
-        fetch('/api/agent-summary').then((r) => r.json()),
-        fetch('/api/agent-scheduler-status').then((r) => r.json()),
-        fetch('/api/agents').then((r) => r.json()),
-      ])
-        .then(([summaryResponse, schedulerResponse, agentsResponse]) => {
-          setSummary(summaryResponse.summary ? { stale_tasks: 0, ...summaryResponse.summary } : null);
-          setScheduler(schedulerResponse.scheduler || null);
-          setAgents(agentsResponse.agents || []);
-        })
-        .catch(() => { setSummary(null); setScheduler(null); setAgents([]); });
-    };
-    refresh();
-    const timer = window.setInterval(refresh, 30_000);
-    return () => window.clearInterval(timer);
-  }, []);
+  const overview = useAgentRead(async () => {
+    // Wait for all readers to settle before releasing the refresh guard.
+    const responses = await Promise.allSettled([
+      api.agentOperations.summary(), api.agentOperations.scheduler(), api.agentOperations.list(),
+    ] as const);
+    const [summaryResponse, schedulerResponse, agentsResponse] = responses;
+    for (const response of responses) if (response.status === 'rejected') throw response.reason;
+    if (summaryResponse.status !== 'fulfilled' || schedulerResponse.status !== 'fulfilled' || agentsResponse.status !== 'fulfilled') throw new Error('代理概览读取失败');
+    const summary = summaryResponse.value.summary;
+    if (!summary || !schedulerResponse.value.scheduler ||
+        [summary.active_agents, summary.open_tasks, summary.running_jobs, summary.stale_jobs, summary.stale_tasks,
+          summary.failed_jobs_24h, summary.pending_review_gates].some(value => !Number.isSafeInteger(value) || value < 0) ||
+        typeof summary.scheduler_running !== 'boolean') throw new Error('代理概览响应格式不正确');
+    return { summary: summaryResponse.value.summary, scheduler: schedulerResponse.value.scheduler, agents: checkedList(agentsResponse.value.agents, '代理列表') };
+  });
+  const summary = overview.data?.summary;
+  const scheduler = overview.data?.scheduler;
+  const agents = overview.data?.agents ?? [];
 
   return (
-    <div>
+    <div className="be-page">
       <PageHeader title="智能代理中心" />
-      <Card style={{ padding: 0, overflow: 'hidden', marginBottom: 20 }}>
+      <ReadEvidenceStatus resource={overview} label="刷新代理概览" note="可见页面每 30 秒刷新" />
+      {(overview.data !== null || overview.loading) && <Card style={{ padding: 0, overflow: 'hidden', marginBottom: 20 }}>
         <div style={{ padding: '16px 20px 8px' }}>
           <h2 style={{ margin: 0, fontSize: 16 }}>智能代理列表</h2>
           <div className="fqp-stat-sub">已注册 {agents.length} 个本地智能代理</div>
@@ -146,11 +75,11 @@ export default function AgentPanel() {
             { key: 'is_active', title: '状态', render: (value) => <StatusBadge status={value ? 'ok' : 'disabled'} label={value ? '启用' : '停用'} /> },
           ]}
           rows={agents}
-          loading={!summary && agents.length === 0}
+          loading={overview.loading && overview.data === null}
           emptyText="暂无已注册智能代理"
           rowKey={(row) => row.id}
         />
-      </Card>
+      </Card>}
       {summary && (
         <div className="fqp-grid-4" style={{ marginBottom: 20 }}>
           <Card className="fqp-stat-card"><div className="fqp-stat-label">活跃智能代理</div><div className="fqp-stat-value">{summary.active_agents}</div></Card>
@@ -194,21 +123,7 @@ export default function AgentPanel() {
 }
 
 function StaleTasksTab() {
-  const [tasks, setTasks] = useState<StaleTask[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const fetchStaleTasks = () => {
-    setLoading(true); setError(null);
-    fetch('/api/agent-stale-tasks?threshold_minutes=60&limit=100')
-      .then((r) => r.json())
-      .then((d) => { setTasks(d.tasks || []); setLoading(false); })
-      .catch((e) => { setError(e.message); setLoading(false); });
-  };
-  useEffect(() => {
-    fetchStaleTasks();
-    const timer = window.setInterval(fetchStaleTasks, 30_000);
-    return () => window.clearInterval(timer);
-  }, []);
+  const resource = useAgentRead(async () => checkedList((await api.agentOperations.staleTasks()).tasks, '刷新超时任务'));
   const columns: Column<StaleTask>[] = [
     { key: 'task_code', title: '任务编号' },
     { key: 'task_title', title: '任务标题' },
@@ -217,26 +132,11 @@ function StaleTasksTab() {
     { key: 'stale_minutes', title: '未更新时长', render: (v) => `${Number(v).toFixed(1)} 分钟` },
     { key: 'updated_at', title: '最后更新', render: (v) => formatTimestamp(v) },
   ];
-  if (error) return <ErrorState message={error} onRetry={fetchStaleTasks} />;
-  return <Card style={{ padding: 0, overflow: 'hidden' }}><DataTable columns={columns} rows={tasks} loading={loading} emptyText="暂无超时智能代理任务" rowKey={(r) => String(r.id)} /></Card>;
+  return <AgentTable resource={resource} columns={columns} label="刷新超时任务" emptyText="暂无超时智能代理任务" />;
 }
 
 function StaleJobsTab() {
-  const [jobs, setJobs] = useState<StaleJob[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const fetchStaleJobs = () => {
-    setLoading(true); setError(null);
-    fetch('/api/agent-stale-jobs?threshold_minutes=30&limit=100')
-      .then((r) => r.json())
-      .then((d) => { setJobs(d.jobs || []); setLoading(false); })
-      .catch((e) => { setError(e.message); setLoading(false); });
-  };
-  useEffect(() => {
-    fetchStaleJobs();
-    const timer = window.setInterval(fetchStaleJobs, 30_000);
-    return () => window.clearInterval(timer);
-  }, []);
+  const resource = useAgentRead(async () => checkedList((await api.agentOperations.staleJobs()).jobs, '刷新超时调度任务'));
   const columns: Column<StaleJob>[] = [
     { key: 'job_code', title: '调度任务编码' },
     { key: 'job_name', title: '任务名称' },
@@ -244,59 +144,45 @@ function StaleJobsTab() {
     { key: 'running_minutes', title: '运行时长', render: (v) => `${Number(v).toFixed(1)} 分钟` },
     { key: 'started_at', title: '开始时间', render: (v) => formatTimestamp(v) },
   ];
-  if (error) return <ErrorState message={error} onRetry={fetchStaleJobs} />;
-  return <Card style={{ padding: 0, overflow: 'hidden' }}><DataTable columns={columns} rows={jobs} loading={loading} emptyText="暂无超时调度任务" rowKey={(r) => String(r.id)} /></Card>;
+  return <AgentTable resource={resource} columns={columns} label="刷新超时调度任务" emptyText="暂无超时调度任务" />;
 }
 
 function GatesTab() {
-  const [gates, setGates] = useState<ReviewGate[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const fetchGates = () => {
-    setLoading(true); setError(null);
-    fetch('/api/agent-review-gates?limit=100')
-      .then((r) => r.json())
-      .then((d) => { setGates(d.gates || []); setLoading(false); })
-      .catch((e) => { setError(e.message); setLoading(false); });
-  };
-  useEffect(() => {
-    fetchGates();
-    const timer = window.setInterval(fetchGates, 30_000);
-    return () => window.clearInterval(timer);
-  }, []);
+  const resource = useAgentRead(async () => checkedList((await api.agentOperations.gates()).gates, '刷新审核闸门'));
   const columns: Column<ReviewGate>[] = [
     { key: 'task_code', title: '任务编号' },
     { key: 'task_title', title: '任务标题' },
     { key: 'reason', title: '审核原因' },
     { key: 'reviewer', title: '审核人', render: (v) => typeof v === 'string' && v ? v : '待审核' },
     { key: 'review_status', title: '状态', render: (v) => <StatusBadge status={v === 'approved' ? 'ok' : v === 'rejected' ? 'error' : 'warning'} label={reviewStatusLabel(String(v))} /> },
-    { key: 'id', title: '操作', render: (_v, row) => row.review_status === 'pending' ? <GateActions gateId={row.id} onResolved={fetchGates} /> : '—' },
+    { key: 'id', title: '操作', render: (_v, row) => row.review_status === 'pending' ? <GateActions gateId={row.id} onResolved={resource.refresh} /> : '—' },
     { key: 'created_at', title: '创建时间', render: (v) => formatTimestamp(v) },
   ];
-  if (error) return <ErrorState message={error} onRetry={fetchGates} />;
-  return <Card style={{ padding: 0, overflow: 'hidden' }}><DataTable columns={columns} rows={gates} loading={loading} emptyText="暂无人工审核闸门" rowKey={(r) => String(r.id)} /></Card>;
+  return <AgentTable resource={resource} columns={columns} label="刷新审核闸门" emptyText="暂无人工审核闸门" />;
 }
 
-function GateActions({ gateId, onResolved }: { gateId: number; onResolved: () => void }) {
+function GateActions({ gateId, onResolved }: { gateId: number; onResolved: () => void | Promise<void> }) {
   const [reviewer, setReviewer] = useState('');
   const [comment, setComment] = useState('');
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const resolve = async (status: 'approved' | 'rejected') => {
     if (!reviewer.trim()) return;
     setBusy(true);
+    setError(null);
     try {
-      const response = await fetch(`/api/agent-review-gates/${gateId}/resolve`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reviewer: reviewer.trim(), status, comment }),
-      });
-      const data = await response.json();
-      if (data.status === 'ok') onResolved();
+      const data = await api.agentOperations.resolveGate(gateId, { reviewer: reviewer.trim(), status, comment });
+      if (data.status !== 'ok') throw new Error(data.error || '审核未保存，请重试');
+      await onResolved();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : '审核未保存，请重试');
     } finally { setBusy(false); }
   };
   return (
     <div style={{ display: 'flex', gap: 4, alignItems: 'center', minWidth: 300 }} onClick={(e) => e.stopPropagation()}>
-      <input className="fqp-input" value={reviewer} onChange={(e) => setReviewer(e.target.value)} placeholder="审核人" style={{ width: 80 }} />
-      <input className="fqp-input" value={comment} onChange={(e) => setComment(e.target.value)} placeholder="评论" style={{ width: 100 }} />
+      {error && <span role="alert">{error}</span>}
+      <input aria-label="审核人" className="fqp-input" value={reviewer} onChange={(e) => setReviewer(e.target.value)} placeholder="审核人" style={{ width: 80 }} />
+      <input aria-label="审核评论" className="fqp-input" value={comment} onChange={(e) => setComment(e.target.value)} placeholder="评论" style={{ width: 100 }} />
       <button className="fqp-btn fqp-btn-primary" disabled={busy || !reviewer.trim()} onClick={() => resolve('approved')}>批准</button>
       <button className="fqp-btn" disabled={busy || !reviewer.trim()} onClick={() => resolve('rejected')}>拒绝</button>
     </div>
@@ -305,22 +191,23 @@ function GateActions({ gateId, onResolved }: { gateId: number; onResolved: () =>
 
 // ---- Tasks Tab ----
 function TasksTab() {
-  const [tasks, setTasks] = useState<AgentTask[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState('');
+  return <div>
+      <div className="fqp-filter-bar">
+        <select aria-label="任务状态" className="fqp-select" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} style={{ minWidth: '160px' }}>
+          <option value="">全部状态</option>
+          <option value="created">已创建</option>
+          <option value="in_progress">执行中</option>
+          <option value="completed">已完成</option>
+          <option value="failed">失败</option>
+        </select>
+      </div>
+    <TasksList key={statusFilter} statusFilter={statusFilter} />
+  </div>;
+}
 
-  const fetchTasks = () => {
-    setLoading(true);
-    setError(null);
-    fetch(`/api/agent-tasks?limit=100${statusFilter ? `&status=${statusFilter}` : ''}`)
-      .then((r) => r.json())
-      .then((d) => { setTasks(d.tasks || []); setLoading(false); })
-      .catch((e) => { setError(e.message); setLoading(false); });
-  };
-
-  useEffect(() => { fetchTasks(); }, [statusFilter]);
-
+function TasksList({ statusFilter }: { statusFilter: string }) {
+  const resource = useAgentRead(async () => checkedList((await api.agentOperations.tasks(statusFilter)).tasks, '智能代理任务'));
   const statusBadge = (s: string): 'ok' | 'warning' | 'error' | 'info' | 'disabled' => {
     const map: Record<string, 'ok' | 'warning' | 'error' | 'info' | 'disabled'> = {
       created: 'info',
@@ -360,63 +247,16 @@ function TasksTab() {
     },
   ];
 
-  if (error) return <ErrorState message={error} onRetry={fetchTasks} />;
-
-  return (
-    <div>
-      <div className="fqp-filter-bar">
-        <select className="fqp-select" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} style={{ minWidth: '160px' }}>
-          <option value="">全部状态</option>
-          <option value="created">已创建</option>
-          <option value="in_progress">执行中</option>
-          <option value="completed">已完成</option>
-          <option value="failed">失败</option>
-        </select>
-      </div>
-      <Card style={{ padding: 0, overflow: 'hidden' }}>
-        <DataTable
-          columns={columns}
-          rows={tasks}
-          loading={loading}
-          emptyText="暂无智能代理任务记录"
-          rowKey={(r) => String(r.id)}
-        />
-      </Card>
-    </div>
-  );
+  return <AgentTable resource={resource} columns={columns} label="刷新智能代理任务" emptyText="暂无智能代理任务记录" />;
 }
 
 // ---- Jobs Tab ----
 function JobsTab() {
-  const [jobs, setJobs] = useState<JobRun[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const fetchJobs = () => {
-    setLoading(true);
-    setError(null);
-    fetch('/api/ai-jobs?limit=100')
-      .then((r) => r.json())
-      .then((d) => { setJobs(d.jobs || []); setLoading(false); })
-      .catch((e) => { setError(e.message); setLoading(false); });
+  const resource = useAgentRead(async () => checkedList((await api.agentOperations.jobs()).jobs, '刷新任务执行'));
+  const statusBadge = (status: string): 'ok' | 'warning' | 'error' | 'info' | 'disabled' => {
+    const statuses = { running: 'warning', success: 'ok', failed: 'error', pending: 'info' } as const;
+    return statuses[status as keyof typeof statuses] ?? 'disabled';
   };
-
-  useEffect(() => {
-    fetchJobs();
-    const timer = window.setInterval(fetchJobs, 30_000);
-    return () => window.clearInterval(timer);
-  }, []);
-
-  const statusBadge = (s: string): 'ok' | 'warning' | 'error' | 'info' | 'disabled' => {
-    const map: Record<string, 'ok' | 'warning' | 'error' | 'info' | 'disabled'> = {
-      running: 'warning',
-      success: 'ok',
-      failed: 'error',
-      pending: 'info',
-    };
-    return map[s] || 'disabled';
-  };
-
   const columns: Column<JobRun>[] = [
     { key: 'job_code', title: '任务编码' },
     { key: 'job_name', title: '任务名称' },
@@ -443,38 +283,12 @@ function JobsTab() {
     },
   ];
 
-  if (error) return <ErrorState message={error} onRetry={fetchJobs} />;
-
-  return (
-    <Card style={{ padding: 0, overflow: 'hidden' }}>
-      <DataTable
-        columns={columns}
-        rows={jobs}
-        loading={loading}
-        emptyText="暂无任务执行记录，等待定时任务首次触发"
-        rowKey={(r) => String(r.id)}
-      />
-    </Card>
-  );
+  return <AgentTable resource={resource} columns={columns} label="刷新任务执行" emptyText="暂无任务执行记录，等待定时任务首次触发" />;
 }
 
 // ---- Audit Tab ----
 function AuditTab() {
-  const [logs, setLogs] = useState<AuditLog[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const fetchLogs = () => {
-    setLoading(true);
-    setError(null);
-    fetch('/api/agent-audit-logs?limit=100')
-      .then((r) => r.json())
-      .then((d) => { setLogs(d.logs || []); setLoading(false); })
-      .catch((e) => { setError(e.message); setLoading(false); });
-  };
-
-  useEffect(() => { fetchLogs(); }, []);
-
+  const resource = useAgentRead(async () => checkedList((await api.agentOperations.audit()).logs, '刷新审计日志'));
   const columns: Column<AuditLog>[] = [
     {
       key: 'task_id',
@@ -501,17 +315,5 @@ function AuditTab() {
     },
   ];
 
-  if (error) return <ErrorState message={error} onRetry={fetchLogs} />;
-
-  return (
-    <Card style={{ padding: 0, overflow: 'hidden' }}>
-      <DataTable
-        columns={columns}
-        rows={logs}
-        loading={loading}
-        emptyText="暂无审计日志记录"
-        rowKey={(r) => String(r.id)}
-      />
-    </Card>
-  );
+  return <AgentTable resource={resource} columns={columns} label="刷新审计日志" emptyText="暂无审计日志记录" />;
 }

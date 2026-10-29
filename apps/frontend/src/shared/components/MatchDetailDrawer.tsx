@@ -1,15 +1,18 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { api } from '../../core/apiClient';
 import type {
   MatchDetail,
+  MatchDetailSections,
   MatchDetailFormEntry,
   MatchDetailH2HMatch,
   MatchDetailStandingEntry,
   MatchDetailInjury,
   MatchDetailLineup,
 } from '../../core/types';
-import { ApiError } from '../../core/types';
-import ErrorState from './ErrorState';
+import useManualEvidence from '../../pages/useManualEvidence';
+import ReadEvidenceStatus from '../../pages/ReadEvidenceStatus';
+import '../../pages/BusinessEvidence.css';
 import { optionLabel, statusLabel } from '../constants';
 import TeamLogo from './TeamLogo';
 import { formatRosterTime } from '../../features/tactics/RosterEvidencePanel';
@@ -141,28 +144,78 @@ const TABS: { key: TabKey; label: string; icon: string }[] = [
   { key: 'injuries', label: '伤停', icon: '🏥' },
 ];
 
+type CoreDetail = MatchDetailSections['core'];
+type TabDetail = CoreDetail & Partial<MatchDetail>;
+type DeferredSection = 'overview' | 'data' | 'injuries';
+const SECTION_LABELS = { overview: '刷新赛况', data: '刷新比赛数据', injuries: '刷新伤停' };
+const SECTION_REUSE_MS = 60_000;
+
+function detailIdentity(data: Pick<MatchDetail, 'match' | 'teams'>): string {
+  return JSON.stringify([data.match.id, data.match.home_team_name, data.match.away_team_name,
+    data.match.kickoff_time, data.teams.home.id, data.teams.away.id]);
+}
+
+function DeferredDetail({ core, section, active, render }: {
+  core: CoreDetail; section: DeferredSection; active: boolean; render: (data: TabDetail) => React.ReactNode;
+}) {
+  const resource = useManualEvidence(async () => {
+    const data = await api.matches.detailSection(core.match.id, section);
+    if (!data?.match || !data.teams?.home || !data.teams?.away || detailIdentity(data) !== detailIdentity(core)) throw new Error('比赛信息已变化，请先刷新比赛与预测');
+    if ((section === 'overview' && (!('h2h' in data) || !data.h2h || !('form' in data) || !Array.isArray(data.form?.home) || !Array.isArray(data.form?.away))) ||
+        (section === 'data' && (!('lineups' in data) || !data.lineups || !('standings' in data) || !Array.isArray(data.standings))) ||
+        (section === 'injuries' && (!('injuries' in data) || !Array.isArray(data.injuries)))) throw new Error('比赛扩展数据格式不正确');
+    return data;
+  });
+  const resourceRef = useRef(resource);
+  resourceRef.current = resource;
+  useEffect(() => {
+    const current = resourceRef.current;
+    if (active && current.receivedAt !== null && Date.now() - current.receivedAt >= SECTION_REUSE_MS) void current.refresh();
+  }, [active]);
+  return <section aria-busy={resource.loading}>
+    <ReadEvidenceStatus resource={resource} label={SECTION_LABELS[section]} note="标签独立读取；切回时复用一分钟内结果；接收时间不等于源快照时间" />
+    {resource.data && render({ ...resource.data, ...core })}
+  </section>;
+}
+
 // ── Main component ─────────────────────────────────────
 
-export default function MatchDetailDrawer({ matchId, onClose }: MatchDetailDrawerProps) {
-  const [data, setData] = useState<MatchDetail | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+function MatchDetailQuery({ matchId, onClose }: { matchId: number; onClose: () => void }) {
+  const core = useManualEvidence(async () => {
+    const data = await api.matches.detailSection(matchId, 'core');
+    if (!data?.match || data.match.id !== matchId || !data.teams?.home || !data.teams?.away || !('predictions' in data) || !('feature_snapshot' in data)) throw new Error('比赛基础信息与所选比赛不一致或格式不正确');
+    return data;
+  });
+  const data = core.data;
+  const loading = core.loading && core.data === null;
   const [activeTab, setActiveTab] = useState<TabKey>('overview');
+  const [visited, setVisited] = useState<TabKey[]>(['overview']);
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   const [closing, setClosing] = useState(false);
   const [mounted, setMounted] = useState(false);
 
-  // Trigger mounted for entrance animations
   useEffect(() => {
-    if (matchId) {
-      setMounted(false);
-      requestAnimationFrame(() => setMounted(true));
-    }
-  }, [matchId]);
+    const previousFocus = document.activeElement;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const frame = requestAnimationFrame(() => {
+      setMounted(true);
+      panelRef.current?.querySelector<HTMLButtonElement>('button')?.focus();
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+      if (closeTimer.current !== null) clearTimeout(closeTimer.current);
+      document.body.style.overflow = previousOverflow;
+      if (previousFocus instanceof HTMLElement && previousFocus.isConnected) previousFocus.focus();
+    };
+  }, []);
 
   // Close with animation
   const doClose = useCallback(() => {
+    if (closeTimer.current !== null) return;
     setClosing(true);
-    setTimeout(() => {
+    closeTimer.current = setTimeout(() => {
       setClosing(false);
       onClose();
     }, 200); // match slideOutRight duration
@@ -170,34 +223,21 @@ export default function MatchDetailDrawer({ matchId, onClose }: MatchDetailDrawe
 
   // Close on ESC
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
-    if (e.key === 'Escape') doClose();
+    if (e.key === 'Escape') { e.preventDefault(); doClose(); }
+    if (e.key !== 'Tab' || !panelRef.current) return;
+    const items = Array.from(panelRef.current.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex="0"]',
+    )).filter(element => !element.closest('[hidden]'));
+    const first = items[0], last = items[items.length - 1];
+    const outside = !panelRef.current.contains(document.activeElement);
+    if (e.shiftKey && (document.activeElement === first || outside)) { e.preventDefault(); last?.focus(); }
+    else if (!e.shiftKey && (document.activeElement === last || outside)) { e.preventDefault(); first?.focus(); }
   }, [doClose]);
 
   useEffect(() => {
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [handleKeyDown]);
-
-  // Reset tab when match changes
-  useEffect(() => {
-    setActiveTab('overview');
-  }, [matchId]);
-
-  // Fetch data
-  useEffect(() => {
-    if (!matchId) return;
-    setLoading(true);
-    setError(null);
-    setData(null);
-    api.matches.detail(matchId)
-      .then((res) => { setData(res); setLoading(false); })
-      .catch((e) => {
-        setError(e instanceof ApiError ? e.message : '加载失败');
-        setLoading(false);
-      });
-  }, [matchId]);
-
-  if (!matchId) return null;
 
   const d = data;
 
@@ -553,21 +593,12 @@ export default function MatchDetailDrawer({ matchId, onClose }: MatchDetailDrawe
       }}>
         {TABS.map(tab => {
           const isActive = activeTab === tab.key;
-          // Determine if tab has content
-          let hasContent = false;
-          if (d) {
-            switch (tab.key) {
-              case 'overview': hasContent = d.form.home.length > 0 || d.form.away.length > 0 || d.h2h.total_matches > 0; break;
-              case 'odds': hasContent = !!(d.predictions && d.predictions.models.some(m => m.play_type === 'spf' && m.model_probability != null)); break;
-              case 'data': hasContent = d.standings.length > 0 || !!(d.lineups.home || d.lineups.away) || !!d.feature_snapshot; break;
-              case 'injuries': hasContent = d.injuries.length > 0; break;
-            }
-          }
-          if (!hasContent && d) return null;
           return (
             <button
               key={tab.key}
-              onClick={() => setActiveTab(tab.key)}
+              type="button"
+              aria-pressed={isActive}
+              onClick={() => { setActiveTab(tab.key); setVisited(previous => previous.includes(tab.key) ? previous : [...previous, tab.key]); }}
               style={{
                 flex: 1, padding: '7px 10px',
                 border: 'none', borderRadius: '6px',
@@ -588,10 +619,10 @@ export default function MatchDetailDrawer({ matchId, onClose }: MatchDetailDrawe
 
   // ── Tab content ──
 
-  function renderTabContent() {
-    if (!d) return null;
-    switch (activeTab) {
+  function renderTabContent(d: TabDetail, tab: TabKey) {
+    switch (tab) {
       case 'overview':
+        if (!d.form || !d.h2h) return null;
         return (
           <div key="overview" style={{ animation: 'tabEnter 0.2s ease-out both' }}>
             {/* Form */}
@@ -710,6 +741,7 @@ export default function MatchDetailDrawer({ matchId, onClose }: MatchDetailDrawe
         );
 
       case 'data':
+        if (!d.lineups || !d.standings) return null;
         return (
           <div key="data" style={{ animation: 'tabEnter 0.2s ease-out both' }}>
             {/* Standings */}
@@ -797,6 +829,7 @@ export default function MatchDetailDrawer({ matchId, onClose }: MatchDetailDrawe
         );
 
       case 'injuries':
+        if (!d.injuries) return null;
         return (
           <div key="injuries" style={{ animation: 'tabEnter 0.2s ease-out both' }}>
             <p>球队最新情报不代表历史比赛赛前伤停；空列表不代表全员健康。</p>
@@ -821,13 +854,19 @@ export default function MatchDetailDrawer({ matchId, onClose }: MatchDetailDrawe
     <div
       onClick={doClose}
       style={{
-        position: 'fixed', inset: 0, zIndex: 1000,
+        // Above mobile navigation (1100), below global notifications (2000).
+        position: 'fixed', inset: 0, zIndex: 1200,
         background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)',
         animation: closing ? 'fadeOut 0.2s ease-in forwards' : 'drawerFadeIn 0.2s ease-out both',
       }}
     >
       {/* Drawer panel */}
       <div
+        ref={panelRef}
+        className="be-page"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={`match-detail-title-${matchId}`}
         onAnimationEnd={() => {
           // Prevent double events
         }}
@@ -851,13 +890,14 @@ export default function MatchDetailDrawer({ matchId, onClose }: MatchDetailDrawe
           flexShrink: 0,
           background: 'rgba(0,0,0,0.2)',
         }}>
-          <span style={{ fontSize: '15px', fontWeight: 700 }}>
+          <span id={`match-detail-title-${matchId}`} style={{ fontSize: '15px', fontWeight: 700 }}>
             {data ? `${data.match.home_team_name} VS ${data.match.away_team_name}` : '比赛详情'}
           </span>
           <button
             onClick={doClose}
+            aria-label="关闭比赛详情"
             style={{
-              width: '32px', height: '32px',
+              width: '44px', height: '44px',
               background: 'var(--fqp-hover-bg)',
               border: '1px solid var(--fqp-border-medium)',
               color: 'var(--fqp-text-muted)',
@@ -921,13 +961,15 @@ export default function MatchDetailDrawer({ matchId, onClose }: MatchDetailDrawe
               ))}
             </div>
           )}
-          {error && <ErrorState message={error} onRetry={() => { setError(null); setLoading(true); api.matches.detail(matchId).then(setData).catch(e => setError(e instanceof ApiError ? e.message : '加载失败')).finally(() => setLoading(false)); }} />}
+          <ReadEvidenceStatus resource={core} label="刷新比赛与预测" note="基本信息与赛前预测独立于扩展标签读取" />
 
           {d && (
             <>
               {renderScoreboard()}
               {renderTabs()}
-              {renderTabContent()}
+              {visited.map(tab => <div key={`${detailIdentity(d)}:${tab}`} hidden={activeTab !== tab}>
+                {tab === 'odds' ? renderTabContent(d, tab) : <DeferredDetail core={d} section={tab} active={activeTab === tab} render={value => renderTabContent(value, tab)} />}
+              </div>)}
             </>
           )}
         </div>
@@ -950,4 +992,8 @@ export default function MatchDetailDrawer({ matchId, onClose }: MatchDetailDrawe
       `}</style>
     </div>
   );
+}
+
+export default function MatchDetailDrawer({ matchId, onClose }: MatchDetailDrawerProps) {
+  return matchId === null ? null : createPortal(<MatchDetailQuery key={matchId} matchId={matchId} onClose={onClose} />, document.body);
 }

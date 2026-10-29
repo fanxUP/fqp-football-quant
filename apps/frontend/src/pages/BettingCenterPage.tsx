@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import './BettingCenterPage.css';
 import PageHeader from '../shared/components/PageHeader';
 import BettingTerminalPage from './BettingTerminalPage';
 import TicketsPage from './TicketsPage';

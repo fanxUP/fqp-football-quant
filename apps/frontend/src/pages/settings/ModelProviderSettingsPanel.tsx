@@ -1,3 +1,4 @@
+import './ModelProviderSettingsPanel.css';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api, type ModelProviderConnection, type ModelProviderPreset, type ProviderConfigPayload } from '../../core/apiClient';
 import Card from '../../shared/components/Card';

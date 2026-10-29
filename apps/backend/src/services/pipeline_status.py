@@ -159,6 +159,9 @@ JOB_DEFINITIONS: dict[str, JobDefinition] = {
     "train_xgboost_shadow": JobDefinition(
         "XGBoost 特征模型影子训练", "每日 23:47", "model", max_age=timedelta(hours=30)
     ),
+    "train_feature_explanation": JobDefinition(
+        "特征解释模型训练", "每日 23:44（启动后3分钟首跑）", "model", max_age=timedelta(hours=30)
+    ),
     "train_logistic_shadow": JobDefinition(
         "逻辑回归特征模型影子训练", "每日 23:50", "model", max_age=timedelta(hours=30)
     ),

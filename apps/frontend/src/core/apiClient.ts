@@ -18,6 +18,8 @@ import type {
   BacktestRun,
   BacktestWindow,
   BacktestResult,
+  AgentTask, JobRun, AuditLog, ReviewGate, AgentSummary, AgentDefinition,
+  SchedulerStatus, StaleJob, StaleTask, MatchDetailSections,
 } from './types';
 
 export interface RuntimeModule {
@@ -319,7 +321,8 @@ async function performRequest<T>(path: string, init?: RequestInit): Promise<T> {
     if (!res.ok) {
       throw new ApiError(res.status, await readErrorMessage(res));
     }
-    return res.json();
+    // Keep abort/normalization active until the complete JSON body is received.
+    return await res.json();
   } catch (e) {
     if (e instanceof ApiError) throw e;
     if ((e as Error).name === 'AbortError') {
@@ -396,6 +399,22 @@ export interface OfficialOddsSnapshot {
 export const api = {
   // Health
   health: () => request<{ status: string; service?: string }>('/health'),
+
+  agentOperations: {
+    summary: () => request<{ summary: AgentSummary }>('/api/agent-summary'),
+    scheduler: () => request<{ scheduler: SchedulerStatus }>('/api/agent-scheduler-status'),
+    list: () => request<{ agents: AgentDefinition[] }>('/api/agents'),
+    tasks: (status?: string) => request<{ tasks: AgentTask[] }>(`/api/agent-tasks${qs({ limit: 100, status })}`),
+    jobs: () => request<{ jobs: JobRun[] }>('/api/ai-jobs?limit=100'),
+    staleJobs: () => request<{ jobs: StaleJob[] }>('/api/agent-stale-jobs?threshold_minutes=30&limit=100'),
+    staleTasks: () => request<{ tasks: StaleTask[] }>('/api/agent-stale-tasks?threshold_minutes=60&limit=100'),
+    gates: () => request<{ gates: ReviewGate[] }>('/api/agent-review-gates?limit=100'),
+    audit: () => request<{ logs: AuditLog[] }>('/api/agent-audit-logs?limit=100'),
+    resolveGate: (gateId: number, payload: { reviewer: string; status: 'approved' | 'rejected'; comment: string }) =>
+      request<{ status: 'ok' | 'error'; error?: string }>(`/api/agent-review-gates/${gateId}/resolve`, {
+        method: 'POST', body: JSON.stringify(payload),
+      }),
+  },
 
   // Runtime registry
   ui: {
@@ -599,7 +618,7 @@ export const api = {
   },
 
   // Teams
-  teams: () => request<{ teams: Team[]; total: number }>('/api/teams'),
+  teams: (params?: { count_only?: boolean }) => request<{ teams: Team[]; total: number }>(`/api/teams${qs({ count_only: params?.count_only === undefined ? undefined : String(params.count_only) })}`),
 
   // Cold-result research
   upsets: {
@@ -644,6 +663,8 @@ export const api = {
       ),
     detail: (matchId: number) =>
       request<import('./types').MatchDetail>(`/api/matches/${matchId}/detail`),
+    detailSection: <Section extends keyof MatchDetailSections>(matchId: number, section: Section) =>
+      request<MatchDetailSections[Section]>(`/api/matches/${matchId}/detail${qs({ section })}`),
   },
 
   // Events (tournament center)
@@ -833,9 +854,6 @@ export const api = {
         `/api/analysis/features/importance${qs({ method: params?.method, top_n: params?.top_n })}`,
       ),
 
-    featureModelInfo: () =>
-      request<import('./types').FeatureModelInfo>('/api/analysis/features/model-info'),
-
     shapExplanation: (matchId: number, topN?: number) =>
       request<import('./types').ShapExplanation>(
         `/api/analysis/explain/${matchId}${qs({ top_n: topN })}`,
@@ -863,17 +881,6 @@ export const api = {
 
   // Legacy endpoints kept for historical ticket detail and existing data screens.
   simulator: {
-    matches: (params?: { date?: string; league_name?: string; limit?: number }) =>
-      request<{ matches: import('./types').BettingMatch[]; total: number; sales_window?: import('./types').SportterySalesWindow }>(
-        `/api/simulator/matches${qs({ date: params?.date, league_name: params?.league_name, limit: params?.limit ?? 50 })}`,
-      ),
-
-    calculate: (body: { items: import('./types').CalculateItem[]; pass_type: string; multiple: number }) =>
-      request<import('./types').CalculationResult>('/api/simulator/calculate', {
-        method: 'POST',
-        body: JSON.stringify(body),
-      }),
-
     tickets: {
       list: (params?: { status?: string; limit?: number; offset?: number }) =>
         request<{ tickets: import('./types').SimulatorTicket[]; total: number }>(

@@ -4,7 +4,6 @@ Computes features that don't require external data sources:
   - Odds-implied probabilities (from official_odds_snapshots)
   - Rest days between matches
   - Team form from historical results
-  - Data completeness scoring
 
 All features are computed from data already in PostgreSQL (Stage 2).
 """
@@ -118,53 +117,6 @@ def compute_rest_days(
         return delta
     except ValueError, TypeError:
         return None
-
-
-def compute_data_completeness(
-    has_odds: bool = False,
-    has_team_mapping: bool = False,
-    has_team_profile: bool = False,
-    has_lineup: bool = False,
-    has_injury: bool = False,
-    has_weather: bool = False,
-    has_motivation: bool = False,
-) -> dict[str, float]:
-    """Compute data completeness and uncertainty scores.
-
-    Weighted scoring based on which data components are available.
-    Formula from docs/04: official(40%) + odds(25%) + third-party(20%) + mapping(15%)
-    Simplified for Stage 3a: odds(40%) + team_mapping(35%) + team_profile(25%)
-    """
-    weights = {
-        "has_odds": 0.40,
-        "has_team_mapping": 0.35,
-        "has_team_profile": 0.25,
-    }
-    score = 0.0
-    if has_odds:
-        score += weights["has_odds"] * 100
-    if has_team_mapping:
-        score += weights["has_team_mapping"] * 100
-    if has_team_profile:
-        score += weights["has_team_profile"] * 100
-
-    completeness = round(score, 1)
-
-    # Uncertainty: higher when data is missing
-    missing_components = 0
-    if not has_odds:
-        missing_components += 1
-    if not has_team_mapping:
-        missing_components += 1
-    if not has_team_profile:
-        missing_components += 1
-
-    uncertainty = round(missing_components * 25.0, 1)  # 0-75 range
-
-    return {
-        "data_completeness_score": completeness,
-        "uncertainty_score": uncertainty,
-    }
 
 
 def compute_team_form(

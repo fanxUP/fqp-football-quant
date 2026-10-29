@@ -246,13 +246,29 @@ def test_explanation_training_keeps_native_nan_instead_of_median():
     np.testing.assert_allclose(features, [[1, np.nan], [np.nan, 4], [3, 2]], equal_nan=True)
 
 
-def test_explanation_prediction_keeps_native_nan_and_real_zero(monkeypatch):
+@pytest.fixture
+def explanation_classifier(monkeypatch):
     classifier = Classifier()
-    monkeypatch.setattr(feature_importance, "_trained_model", classifier)
-    monkeypatch.setattr(feature_importance, "_feature_names_cache", list(FEATURE_COLUMNS[:3]))
-    monkeypatch.setattr(feature_importance, "_explainer_initialized", True)
-    monkeypatch.setattr(feature_importance, "_trained_explainer", None)
-    monkeypatch.setattr(feature_importance, "train_if_needed", lambda _: {"status": "ok"})
+    state = {
+        "artifact": {
+            "features": list(FEATURE_COLUMNS[:3]),
+            "sha256": "input-contract-fixture",
+            "info": {"trained_at": "2026-10-29T00:00:00+00:00"},
+        },
+        "error": None,
+    }
+    monkeypatch.setattr(feature_importance.explanation_artifact, "read_state", lambda: state)
+    monkeypatch.setattr(
+        feature_importance.explanation_artifact, "load_classifier", lambda _artifact: classifier
+    )
+    monkeypatch.setattr(feature_importance, "_build_shap_explainer", lambda _model: None)
+    train = Mock(side_effect=AssertionError("prediction explanation must not train"))
+    monkeypatch.setattr(feature_importance, "train_if_needed", train)
+    yield classifier
+    train.assert_not_called()
+
+
+def test_explanation_prediction_keeps_native_nan_and_real_zero(explanation_classifier):
     conn = MagicMock()
     conn.cursor.return_value.__enter__.return_value.fetchone.return_value = (
         1,
@@ -264,7 +280,7 @@ def test_explanation_prediction_keeps_native_nan_and_real_zero(monkeypatch):
         *([None] * (len(FEATURE_COLUMNS) - 3)),
     )
     assert feature_importance.explain_prediction(conn, 1)["status"] == "ok"
-    np.testing.assert_allclose(classifier.rows[0], [[np.nan, 0.0, 0.6]], equal_nan=True)
+    np.testing.assert_allclose(explanation_classifier.rows[0], [[np.nan, 0.0, 0.6]], equal_nan=True)
 
 
 def test_dataset_restricts_semantics_and_preserves_nan_zero_false():
@@ -288,16 +304,14 @@ def test_dataset_restricts_semantics_and_preserves_nan_zero_false():
     assert dates == ["2026-01-01"]
 
 
-def test_shap_missing_feature_is_null_and_strict_json_safe(monkeypatch):
-    monkeypatch.setattr(feature_importance, "_trained_model", Classifier())
-    monkeypatch.setattr(feature_importance, "_feature_names_cache", list(FEATURE_COLUMNS[:3]))
-    monkeypatch.setattr(feature_importance, "_explainer_initialized", True)
-    monkeypatch.setattr(feature_importance, "train_if_needed", lambda _: {"status": "ok"})
+def test_shap_missing_feature_is_null_and_strict_json_safe(monkeypatch, explanation_classifier):
     monkeypatch.setattr(
         feature_importance,
-        "_trained_explainer",
-        lambda _: SimpleNamespace(
-            values=np.array([[[0.1, 0.2, 0.3]] * 3]), base_values=np.array([[0.3, 0.3, 0.4]])
+        "_build_shap_explainer",
+        lambda _model: (
+            lambda _rows: SimpleNamespace(
+                values=np.array([[[0.1, 0.2, 0.3]] * 3]), base_values=np.array([[0.3, 0.3, 0.4]])
+            )
         ),
     )
     conn = MagicMock()

@@ -22,6 +22,7 @@ from scripts.jobs.run_scheduler import (
     _audited_job,
     _business_now,
     _odds_dispatch_owner,
+    _register_feature_explanation_job,
     _scheduler_timezone_name,
     _should_retry_season_reconciliation,
     _should_run_recommendation_catchup,
@@ -79,6 +80,7 @@ def test_self_tracked_job_is_not_wrapped_again():
     "code",
     [
         "train_xgboost_shadow",
+        "train_feature_explanation",
         "train_logistic_shadow",
         "train_random_forest_shadow",
         "train_naive_bayes_shadow",
@@ -97,6 +99,27 @@ def test_training_owner_is_not_double_recorded(code):
         return {"status": "skipped"}
 
     assert _audited_job(code, code, "model_agent", job) is job
+
+
+def test_explanation_trainer_is_registered_with_catchup_and_single_instance(monkeypatch):
+    scheduler = BackgroundScheduler(timezone="Asia/Shanghai")
+    before = datetime.now().astimezone()
+    _register_feature_explanation_job(scheduler)
+    scheduled = scheduler.get_job("train_feature_explanation")
+    assert scheduled is not None
+    assert scheduled.max_instances == 1
+    assert scheduled.coalesce is True
+    assert (
+        timedelta(minutes=2, seconds=59)
+        < scheduled.next_run_time - before
+        < timedelta(minutes=3, seconds=1)
+    )
+    assert str(scheduled.trigger) == "cron[hour='23', minute='44']"
+    assert JOB_DEFINITIONS["train_feature_explanation"].max_age == timedelta(hours=30)
+    execute = MagicMock(return_value={"status": "ok"})
+    monkeypatch.setattr("scripts.jobs.train_feature_explanation.run", execute)
+    assert scheduled.func() == {"status": "ok"}
+    execute.assert_called_once_with()
 
 
 def test_missing_audit_owner_prevents_untracked_business_execution():

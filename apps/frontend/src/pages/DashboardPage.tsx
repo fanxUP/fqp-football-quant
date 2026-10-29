@@ -103,7 +103,7 @@ export default function DashboardPage() {
 
     // Publish each completed card independently of the charts.
     const stats = Promise.all([
-      settle('teams', api.teams(), (t) => update({ teamCount: t.total })),
+      settle('teams', api.teams({ count_only: true }), (t) => update({ teamCount: t.total })),
       settle('predictions', api.dashboard.predictionCount(), (p) => update({
         predictionCount: p.total,
         predictionCountStatus: p.status,

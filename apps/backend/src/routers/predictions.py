@@ -14,7 +14,7 @@ from scripts.calibration_review import (
     review_calibration_profile,
     review_calibration_trend,
 )
-from scripts.prediction_statistics import latest_prediction_ctes
+from scripts.prediction_statistics import latest_prediction_ctes, recent_prediction_rows_ctes
 from scripts.sporttery_sales import get_sporttery_sales_window
 
 router = APIRouter(tags=["predictions"])
@@ -361,7 +361,7 @@ def list_predictions(
                     "total": summary["total"] if summary is not None else None,
                     "summary": summary,
                 }
-            cur.execute(
+            recent_ctes = (
                 f"""
                 WITH RECURSIVE {latest_ctes}, latest_ids AS (
                     SELECT mapped.prediction_id AS id FROM latest_groups g
@@ -380,6 +380,13 @@ def list_predictions(
                     ORDER BY mp.predict_time DESC, mp.ev DESC, mp.id DESC
                     LIMIT %(limit)s
                 )
+            """
+                if match_id is not None
+                else recent_prediction_rows_ctes()
+            )
+            cur.execute(
+                f"""
+                {recent_ctes}
                 SELECT mp.id, mp.match_id, mp.predict_time,
                    mv.model_name, mp.play_type, mp.option_code,
                    COALESCE(mp.raw_model_probability, mp.model_probability),
@@ -454,7 +461,7 @@ def list_predictions(
                  AND od.snapshot_time <= mp.predict_time
                 ORDER BY mp.predict_time DESC, mp.ev DESC, mp.id DESC
                 """,
-                params,
+                {**params, "seed_limit": max(1000, limit * 4)} if match_id is None else params,
             )
             rows = cur.fetchall()
             if include_summary:
@@ -547,7 +554,9 @@ def get_prediction_model_overview():
             # The compatibility view ranks the entire legacy history before this
             # endpoint can aggregate its few supported model versions.
             cur.execute("SET LOCAL jit = off")
-            latest_ctes = latest_prediction_ctes(filter_match=False)
+            latest_ctes = latest_prediction_ctes(
+                filter_match=False, match_scope="overview_match_scope"
+            )
             cur.execute(
                 f"""
                 WITH RECURSIVE current_versions AS (
@@ -566,6 +575,13 @@ def get_prediction_model_overview():
                     FROM probability_calibration_profiles
                     WHERE is_active = true
                     ORDER BY model_name, play_type, created_at DESC, id DESC
+                ), overview_match_scope AS MATERIALIZED (
+                    SELECT m.id AS match_id FROM official_matches m
+                    WHERE EXISTS (
+                        SELECT 1 FROM model_predictions p
+                        WHERE p.match_id = m.id
+                          AND p.model_version_id = ANY(ARRAY(SELECT id FROM current_versions))
+                    )
                 ), {latest_ctes}, latest_prediction_ids AS (
                     SELECT mapped.prediction_id AS id
                     FROM latest_groups groups

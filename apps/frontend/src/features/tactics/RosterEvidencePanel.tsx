@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { api } from '../../core/apiClient';
-import type { MatchDetail, MatchDetailLineup } from '../../core/types';
+import type { MatchDetailSections, MatchDetailLineup } from '../../core/types';
 import { formatTimestamp } from '../../shared/utils';
 import useManualEvidence from '../../pages/useManualEvidence';
 import ReadEvidenceStatus from '../../pages/ReadEvidenceStatus';
@@ -15,7 +15,7 @@ type Selection = { side: Side; playerId: number } | null;
 function positive(value: unknown): value is number { return Number.isSafeInteger(value) && Number(value) > 0; }
 function optionalNumber(value: unknown) { return value == null || (typeof value === 'number' && Number.isFinite(value)); }
 function optionalText(value: unknown) { return value == null || typeof value === 'string'; }
-export function checkedRoster(data: MatchDetail, matchId: number): MatchDetail {
+export function checkedRoster(data: MatchDetailSections['roster'], matchId: number): MatchDetailSections['roster'] {
   if (!data || data.match?.id !== matchId) throw new Error('阵容证据与所选比赛不一致');
   if (!data.teams?.home || !data.teams?.away || !data.lineups || !Array.isArray(data.injuries) || data.injuries.length > 40) throw new Error('阵容证据格式不正确');
   if (typeof data.match.home_team_name !== 'string' || typeof data.match.away_team_name !== 'string' || !optionalText(data.availability_scope) || (data.availability_limit_per_team !== undefined && data.availability_limit_per_team !== 20)) throw new Error('阵容证据范围格式不正确');
@@ -75,7 +75,7 @@ function TeamRoster({ lineup, name, matchId, teamId, selectedId, onSelect }: {li
   </section>;
 }
 function RosterQuery({matchId}:{matchId:number}) {
-  const resource=useManualEvidence(async()=>checkedRoster(await api.matches.detail(matchId),matchId));
+  const resource=useManualEvidence(async()=>checkedRoster(await api.matches.detailSection(matchId, 'roster'),matchId));
   const data=resource.data;
   const [viewSide,setViewSide]=useState<Side>('home');
   const [selection,setSelection]=useState<Selection>(null);

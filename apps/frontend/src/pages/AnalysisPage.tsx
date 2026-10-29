@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { api } from '../core/apiClient';
 import { ApiError } from '../core/types';
 import type {
@@ -620,41 +620,44 @@ export function buildRadarOption(models: ModelCompareItem[]) {
 // Tab: 特征重要性
 // ---------------------------------------------------------------------------
 
-function FeatureImportanceTab() {
+export function FeatureImportanceTab() {
   const [rankings, setRankings] = useState<FeatureRanking[]>([]);
   const [modelInfo, setModelInfo] = useState<FeatureModelInfo | null>(null);
   const [method, setMethod] = useState<'permutation' | 'gain'>('permutation');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const requestId = useRef(0);
 
   const fetchData = useCallback((m: 'permutation' | 'gain') => {
+    const current = ++requestId.current;
     setLoading(true);
     setError(null);
-    Promise.all([
-      api.analysis.featureImportance({ method: m, top_n: 20 }),
-      api.analysis.featureModelInfo(),
-    ])
-      .then(([impRes, infoRes]) => {
-        if (impRes.status === 'ok') {
-          const r = impRes.rankings as FeatureRanking[];
-          setRankings(r);
+    api.analysis.featureImportance({ method: m, top_n: 20 })
+      .then((result) => {
+        if (current !== requestId.current) return;
+        if (result.status !== 'ok') {
+          setError(result.error || '解释模型尚未就绪，等待后台训练任务生成结果');
+          setRankings([]);
+          setModelInfo(null);
+          return;
         }
-        if (infoRes.status === 'ok') {
-          setModelInfo(infoRes);
-        }
-        setLoading(false);
+        setRankings(result.rankings as FeatureRanking[]);
+        setModelInfo(result.model_info ?? null);
       })
       .catch((e) => {
-        setError(e instanceof ApiError ? e.message : '加载失败');
-        setLoading(false);
+        if (current === requestId.current) setError(e instanceof ApiError ? e.message : '加载失败');
+      })
+      .finally(() => {
+        if (current === requestId.current) setLoading(false);
       });
   }, []);
 
   useEffect(() => {
     fetchData(method);
+    return () => { requestId.current += 1; };
   }, [method, fetchData]);
 
-  if (error) return <ErrorState message={error} />;
+  if (error) return <ErrorState message={error} onRetry={() => fetchData(method)} />;
 
   // Build horizontal bar chart
   const barOption = {
@@ -747,6 +750,12 @@ function FeatureImportanceTab() {
                   {modelInfo.train_accuracy !== undefined ? `${(modelInfo.train_accuracy * 100).toFixed(1)}%` : '—'}
                 </strong>
               </div>
+              {modelInfo.trained_at && (
+                <div>
+                  <span style={{ color: 'var(--fqp-text-muted)' }}>训练时间：</span>
+                  <time dateTime={modelInfo.trained_at}>{new Date(modelInfo.trained_at).toLocaleString('zh-CN')}</time>
+                </div>
+              )}
               {modelInfo.class_distribution && (
                 <div>
                   <span style={{ color: 'var(--fqp-text-muted)' }}>类别分布：</span>
@@ -760,16 +769,22 @@ function FeatureImportanceTab() {
         )}
       </div>
 
+      {modelInfo?.warning && (
+        <p role="status" style={{ color: 'var(--fqp-warning)' }}>
+          最近更新未成功，当前显示上一份有效结果：{modelInfo.warning}
+        </p>
+      )}
+
       {/* Bar chart */}
       {loading ? (
-        <div style={{ padding: 32, color: 'var(--fqp-text-muted)' }}>训练 XGBoost 模型并计算特征重要性...</div>
+        <div style={{ padding: 32, color: 'var(--fqp-text-muted)' }}>读取特征重要性...</div>
       ) : rankings.length === 0 ? (
         <Card title="特征重要性">
           <div className="fqp-empty-state">
             <div className="fqp-empty-icon">🧪</div>
             <div className="fqp-empty-title">暂无特征重要性数据</div>
             <div className="fqp-empty-desc">
-              需要 match_feature_snapshots 表中有已结算比赛的特征快照（至少50条）
+              等待后台生成可用的特征重要性结果
             </div>
           </div>
         </Card>
@@ -784,7 +799,7 @@ function FeatureImportanceTab() {
 // Tab: SHAP 解释
 // ---------------------------------------------------------------------------
 
-function ShapExplainTab({ initialMatchId }: { initialMatchId?: number | null }) {
+export function ShapExplainTab({ initialMatchId }: { initialMatchId?: number | null }) {
   const [matchIdInput, setMatchIdInput] = useState(initialMatchId ? String(initialMatchId) : '');
   const [matchId, setMatchId] = useState<number | null>(null);
   const [shapEntries, setShapEntries] = useState<ShapEntry[]>([]);
@@ -792,6 +807,7 @@ function ShapExplainTab({ initialMatchId }: { initialMatchId?: number | null }) 
   const [homeTeam, setHomeTeam] = useState('');
   const [awayTeam, setAwayTeam] = useState('');
   const [baseValues, setBaseValues] = useState<number[]>([]);
+  const [modelWarning, setModelWarning] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -807,8 +823,9 @@ function ShapExplainTab({ initialMatchId }: { initialMatchId?: number | null }) 
           setHomeTeam(res.home_team);
           setAwayTeam(res.away_team);
           setBaseValues(res.base_values);
+          setModelWarning(res.warning ?? null);
         } else {
-          setError('SHAP 解释失败');
+          setError(res.error || 'SHAP 解释失败');
         }
         setLoading(false);
       })
@@ -928,6 +945,12 @@ function ShapExplainTab({ initialMatchId }: { initialMatchId?: number | null }) 
 
       {error && <ErrorState message={error} />}
 
+      {modelWarning && (
+        <p role="status" style={{ color: 'var(--fqp-warning)' }}>
+          最近更新未成功，当前显示上一份有效结果：{modelWarning}
+        </p>
+      )}
+
       {/* Results */}
       {matchId && probs && (
         <div style={{ animation: 'fqpSlideUpBounce 0.4s ease both' }}>
@@ -953,10 +976,10 @@ function ShapExplainTab({ initialMatchId }: { initialMatchId?: number | null }) 
                 </div>
               </div>
               <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: 12, color: 'var(--fqp-text-muted)' }}>基准值</div>
+                <div style={{ fontSize: 12, color: 'var(--fqp-text-muted)' }}>基准值（原始分数）</div>
                 <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--fqp-text-muted)' }}>
                   {baseValues.length === 3
-                    ? `${(baseValues[2] * 100).toFixed(1)}% / ${(baseValues[1] * 100).toFixed(1)}% / ${(baseValues[0] * 100).toFixed(1)}%`
+                    ? `${baseValues[2].toFixed(4)} / ${baseValues[1].toFixed(4)} / ${baseValues[0].toFixed(4)}`
                     : '—'}
                 </div>
               </div>

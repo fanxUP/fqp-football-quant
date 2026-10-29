@@ -7,6 +7,8 @@ RUN npm run build
 
 FROM nginx:1.27-alpine
 COPY --from=build /src/apps/frontend/dist/ /usr/share/nginx/html/
+COPY ops/server/nginx/http.conf /etc/nginx/conf.d/00-fqp-performance.conf
+COPY ops/server/nginx/static.conf /etc/nginx/snippets/fqp-static.conf
 COPY ops/docker-test/nginx.conf /etc/nginx/conf.d/default.conf
 ARG FQP_REVISION=unknown
 LABEL org.opencontainers.image.revision=$FQP_REVISION

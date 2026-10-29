@@ -119,4 +119,49 @@ describe('api client GET request coalescing', () => {
       expect.objectContaining({ headers: expect.objectContaining({ 'Content-Type': 'application/json' }) }),
     );
   });
+
+  it('keeps full detail compatible and coalesces only identical section reads', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) });
+    vi.stubGlobal('fetch', fetchMock);
+    await Promise.all([
+      api.matches.detail(101), api.matches.detailSection(101, 'core'),
+      api.matches.detailSection(101, 'core'), api.matches.detailSection(101, 'roster'),
+    ]);
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+      '/api/matches/101/detail', '/api/matches/101/detail?section=core', '/api/matches/101/detail?section=roster',
+    ]);
+  });
+
+  it('bounds coalesced agent reads, releases timed-out requests and allows a fresh retry', async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn((_path: string, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+    const reads = Promise.allSettled([api.agentOperations.tasks('failed'), api.agentOperations.tasks('failed')]);
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(await reads).toEqual([
+      { status: 'rejected', reason: expect.objectContaining({ status: 0, message: expect.stringContaining('超时') }) },
+      { status: 'rejected', reason: expect.objectContaining({ status: 0, message: expect.stringContaining('超时') }) },
+    ]);
+    fetchMock.mockResolvedValueOnce(new Response('{"tasks":[]}'));
+    await expect(api.agentOperations.tasks('failed')).resolves.toEqual({ tasks: [] });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps the timeout active while reading the response body', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('fetch', vi.fn(async (_path: string, init?: RequestInit) => ({
+      ok: true,
+      json: () => new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
+      }),
+    })));
+    let result: unknown;
+    const read = api.agentOperations.staleJobs().catch(reason => { result = reason; });
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(result).toEqual(expect.objectContaining({ status: 0, message: expect.stringContaining('超时') }));
+    await read;
+  });
 });

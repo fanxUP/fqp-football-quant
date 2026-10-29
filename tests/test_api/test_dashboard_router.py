@@ -8,6 +8,35 @@ from apps.backend.src.routers import dashboard
 from scripts import prediction_statistics
 
 
+@pytest.fixture(autouse=True)
+def isolated_read_snapshots(monkeypatch):
+    from apps.backend.src.services.read_performance import ReadSnapshotCache
+
+    monkeypatch.setattr(dashboard, "_read_snapshots", ReadSnapshotCache())
+
+
+@pytest.mark.parametrize("path", ["today", "model-performance"])
+def test_dashboard_read_failures_are_not_successful_empty_charts(client, path):
+    with patch.object(dashboard, "get_db", side_effect=RuntimeError("private database details")):
+        response = client.get(f"/api/dashboard/{path}")
+    assert response.status_code == 503
+    assert "private database details" not in response.text
+
+
+def test_today_snapshot_reuses_original_data_time_and_db_work(client, mock_conn):
+    conn, cur = mock_conn
+    cur.fetchone.return_value = (12,)
+    cur.description = [("match_count",)]
+    with patch.object(dashboard, "get_db", return_value=nullcontext(conn)) as get_db:
+        first = client.get("/api/dashboard/today").json()["data"]
+        hit = client.get("/api/dashboard/today").json()["data"]
+    assert first["meta"]["cache_status"] == "miss"
+    assert hit["meta"]["cache_status"] == "hit"
+    assert first["meta"]["data_as_of"] == hit["meta"]["data_as_of"]
+    assert first["meta"]["updated_at"] == hit["meta"]["updated_at"]
+    get_db.assert_called_once()
+
+
 def test_dashboard_metadata_uses_business_timezone(monkeypatch):
     monkeypatch.setattr(
         dashboard,

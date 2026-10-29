@@ -425,23 +425,6 @@ def list_real_ticket_items(conn: Any, ticket_id: int) -> list[dict]:
     ]
 
 
-def update_item_model_match(
-    conn: Any, item_id: int, is_matched: bool, deviation: str | None = None
-) -> bool:
-    """Update an item's model-matching status."""
-    sql = """
-        UPDATE real_ticket_items
-        SET is_matched_with_model = %(is_matched)s,
-            deviation_type = %(deviation)s
-        WHERE id = %(id)s
-    """
-    with conn.cursor() as cur:
-        cur.execute(sql, {"is_matched": is_matched, "deviation": deviation, "id": item_id})
-        ok = cur.rowcount > 0
-    conn.commit()
-    return ok
-
-
 # ---------------------------------------------------------------------------
 # Ticket settlements
 # ---------------------------------------------------------------------------

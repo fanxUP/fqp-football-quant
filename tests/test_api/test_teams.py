@@ -5,8 +5,47 @@ from __future__ import annotations
 from datetime import datetime
 from unittest.mock import MagicMock, patch
 
+import pytest
+
+
+@pytest.mark.parametrize("value", [0, None])
+def test_match_detail_preserves_zero_and_unknown_numeric_evidence(client, value):
+    conn, cur = MagicMock(), MagicMock()
+    conn.__enter__.return_value = conn
+    conn.cursor.return_value.__enter__.return_value = cur
+    kickoff = datetime(2026, 10, 29, 20)
+    match = (101, "联赛", "主队", "客队", kickoff, "scheduled", "selling")
+    cur.fetchone.side_effect = [match + (None,) * 16, (value,) * 21]
+    cur.fetchall.side_effect = [
+        [("maher_poisson", "spf", "3", value, value, value, value, value, kickoff)],
+        [],
+        [],
+        [],
+    ]
+    with patch("apps.backend.src.routers.teams.get_db", return_value=conn):
+        response = client.get("/api/matches/101/detail")
+    assert response.status_code == 200
+    data = response.json()
+    for name, actual in data["feature_snapshot"].items():
+        assert actual == value, name
+    prediction = data["predictions"]["models"][0]
+    for name in ("model_probability", "market_probability", "fair_odds", "ev", "confidence"):
+        assert prediction[name] == value, name
+    assert data["predictions"]["best_ev_model"] == ("maher_poisson" if value == 0 else None)
+
 
 class TestTeamsEndpoint:
+    def test_count_only_does_not_read_team_profiles_or_list_payload(self, client, mock_conn):
+        conn, cur = mock_conn
+        conn.__enter__.return_value = conn
+        cur.fetchone.return_value = (812,)
+        with patch("apps.backend.src.routers.teams.get_db", return_value=conn):
+            response = client.get("/api/teams?count_only=true")
+        assert response.status_code == 200
+        assert response.json() == {"teams": [], "total": 812}
+        cur.execute.assert_called_once_with("SELECT COUNT(*) FROM teams")
+        cur.fetchall.assert_not_called()
+
     def test_returns_empty_list_when_no_teams(self, client):
         mock_conn = MagicMock()
         mock_cur = MagicMock()
@@ -195,7 +234,7 @@ def test_match_detail_uses_latest_prematch_features_and_all_option_predictions(c
     assert response.status_code == 200
     queries = [" ".join(call.args[0].split()) for call in cur.execute.call_args_list]
     feature_query = next(q for q in queries if "FROM match_feature_snapshots" in q)
-    prediction_query = next(q for q in queries if "FROM model_prediction_latest_rows mp" in q)
+    prediction_query = next(q for q in queries if "FROM canonical_prediction_rows mp" in q)
     assert "snapshot_time <" in feature_query
     assert "mp.predict_time <" in prediction_query
     assert "mp.validation_status = 'valid'" in prediction_query
@@ -338,3 +377,105 @@ def test_latest_lineup_uses_deterministic_snapshot_order(client):
         if "FROM match_lineup_snapshots" in call.args[0]
     )
     assert "ORDER BY mls.snapshot_time DESC, mls.id DESC LIMIT 1" in query
+
+
+@pytest.mark.parametrize(
+    ("section", "fields", "query_count", "tables"),
+    [
+        (
+            "core",
+            {"feature_snapshot", "predictions"},
+            3,
+            {"match_feature_snapshots", "canonical_prediction_rows"},
+        ),
+        ("overview", {"h2h", "form"}, 4, set()),
+        (
+            "data",
+            {"lineups", "standings"},
+            5,
+            {"match_lineup_snapshots", "match_lineup_players", "season_standings_snapshots"},
+        ),
+        (
+            "injuries",
+            {"injuries", "availability_scope", "availability_limit_per_team"},
+            3,
+            {"player_availability_snapshots"},
+        ),
+        (
+            "roster",
+            {"lineups", "injuries", "availability_scope", "availability_limit_per_team"},
+            6,
+            {"match_lineup_snapshots", "match_lineup_players", "player_availability_snapshots"},
+        ),
+    ],
+)
+def test_detail_sections_only_read_requested_evidence(client, section, fields, query_count, tables):
+    conn, cur = _roster_detail_cursor()
+    with patch("apps.backend.src.routers.teams.get_db", return_value=conn):
+        response = client.get(f"/api/matches/101/detail?section={section}")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["match"]["id"] == 101
+    assert set(data) == {"match", "teams", "scores"} | fields
+    assert cur.execute.call_count == query_count
+    queries = " ".join(call.args[0] for call in cur.execute.call_args_list)
+    optional_tables = {
+        "match_feature_snapshots",
+        "canonical_prediction_rows",
+        "match_lineup_snapshots",
+        "match_lineup_players",
+        "season_standings_snapshots",
+        "player_availability_snapshots",
+    }
+    for table in optional_tables:
+        assert (table in queries) == (table in tables), table
+    full_conn, _ = _roster_detail_cursor()
+    with patch("apps.backend.src.routers.teams.get_db", return_value=full_conn):
+        full = client.get("/api/matches/101/detail").json()
+    assert data == {key: full[key] for key in data}
+
+
+def test_detail_full_default_and_explicit_all_are_backward_compatible(client):
+    results = []
+    counts = []
+    for query in ("", "?section=all"):
+        conn, cur = _roster_detail_cursor()
+        with patch("apps.backend.src.routers.teams.get_db", return_value=conn):
+            response = client.get(f"/api/matches/101/detail{query}")
+        assert response.status_code == 200
+        results.append(response.json())
+        counts.append(cur.execute.call_count)
+    assert results[0] == results[1]
+    assert set(results[0]) == {
+        "match",
+        "scores",
+        "teams",
+        "feature_snapshot",
+        "predictions",
+        "h2h",
+        "form",
+        "lineups",
+        "standings",
+        "injuries",
+        "availability_scope",
+        "availability_limit_per_team",
+    }
+    assert counts == [12, 12]
+
+
+def test_invalid_detail_section_does_not_acquire_database(client):
+    with patch("apps.backend.src.routers.teams.get_db") as db:
+        response = client.get("/api/matches/101/detail?section=invalid")
+    assert response.status_code == 422
+    db.assert_not_called()
+
+
+@pytest.mark.parametrize("section", ["core", "overview", "data", "injuries", "roster"])
+def test_detail_sections_keep_missing_match_as_404(client, section):
+    conn, cur = _roster_detail_cursor()
+    cur.fetchone.side_effect = None
+    cur.fetchone.return_value = None
+    with patch("apps.backend.src.routers.teams.get_db", return_value=conn):
+        response = client.get(f"/api/matches/404/detail?section={section}")
+    assert response.status_code == 404
+    assert cur.execute.call_count == 1

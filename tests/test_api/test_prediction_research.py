@@ -69,6 +69,7 @@ def test_prediction_research_uses_exact_foreign_keys(client, query):
     assert cur.execute.call_args_list[1].args[1] == {
         "match_id": 101 if query else None,
         "limit": 200 if query else 20,
+        **({"seed_limit": 1000} if not query else {}),
     }
     assert "mp.play_type IN ('spf', 'rqspf')" in sql
     assert "parameters_json" not in sql
@@ -147,7 +148,7 @@ def test_records_only_read_skips_full_aggregate(client, path):
     assert cur.execute.call_count == 2
     assert cur.execute.call_args_list[0].args == ("SET LOCAL jit = off",)
     assert "recent AS MATERIALIZED" in cur.execute.call_args.args[0]
-    assert cur.execute.call_args.args[1] == {"match_id": None, "limit": 200}
+    assert cur.execute.call_args.args[1] == {"match_id": None, "limit": 200, "seed_limit": 1000}
     cur.fetchone.assert_not_called()
 
 

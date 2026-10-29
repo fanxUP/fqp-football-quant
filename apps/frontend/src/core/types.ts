@@ -346,6 +346,111 @@ export interface MatchDetail {
   availability_limit_per_team?: number;
 }
 
+/** Each slice includes match identity; unrequested evidence is absent, never a fake empty list. */
+type MatchDetailIdentity = Pick<MatchDetail, 'match' | 'teams' | 'scores'>;
+export interface MatchDetailSections {
+  core: MatchDetailIdentity & Pick<MatchDetail, 'feature_snapshot' | 'predictions'>;
+  overview: MatchDetailIdentity & Pick<MatchDetail, 'h2h' | 'form'>;
+  data: MatchDetailIdentity & Pick<MatchDetail, 'lineups' | 'standings'>;
+  injuries: MatchDetailIdentity & Pick<MatchDetail, 'injuries' | 'availability_scope' | 'availability_limit_per_team'>;
+  roster: MatchDetailIdentity & Pick<MatchDetail, 'lineups' | 'injuries' | 'availability_scope' | 'availability_limit_per_team'>;
+}
+
+// ---- Types for agent data ----
+export interface AgentTask {
+  id: number;
+  task_code: string;
+  task_title: string;
+  task_type: string;
+  owner_agent: string;
+  priority: string;
+  risk_level: string;
+  status: string;
+  human_review_required: boolean;
+  created_at: string | null;
+}
+
+export interface JobRun {
+  id: number;
+  job_code: string;
+  job_name: string;
+  owner_agent: string;
+  status: string;
+  started_at: string | null;
+  finished_at: string | null;
+  duration_ms: number | null;
+  error_message: string | null;
+}
+
+export interface AuditLog {
+  id: number;
+  task_id: number | null;
+  agent_name: string;
+  action_type: string;
+  result_status: string;
+  result_summary: string;
+  created_at: string | null;
+}
+
+export interface ReviewGate {
+  id: number;
+  task_code: string;
+  task_title: string;
+  gate_type: string;
+  reason: string;
+  reviewer: string | null;
+  review_status: string;
+  review_comment: string | null;
+  created_at: string | null;
+}
+
+export interface AgentSummary {
+  active_agents: number;
+  open_tasks: number;
+  running_jobs: number;
+  stale_jobs: number;
+  stale_tasks: number;
+  failed_jobs_24h: number;
+  pending_review_gates: number;
+  scheduler_running: boolean;
+}
+
+export interface AgentDefinition {
+  id: number;
+  agent_name: string;
+  agent_type: string;
+  description: string;
+  permission_level: string;
+  is_active: boolean;
+}
+
+export interface SchedulerStatus {
+  running: boolean;
+  heartbeat_at: string | null;
+  pid: number | null;
+  pid_alive: boolean;
+}
+
+export interface StaleJob {
+  id: number;
+  job_code: string;
+  job_name: string;
+  owner_agent: string;
+  started_at: string;
+  running_minutes: number;
+}
+
+export interface StaleTask {
+  id: number;
+  task_code: string;
+  task_title: string;
+  owner_agent: string;
+  status: string;
+  started_at: string | null;
+  updated_at: string | null;
+  stale_minutes: number;
+}
+
 // ---- Stage 4: Model Predictions ----
 
 export interface PredictionResearchEvidence {
@@ -827,6 +932,8 @@ export interface FeatureRanking {
 
 export interface FeatureImportanceData {
   status: string;
+  error?: string;
+  model_info?: FeatureModelInfo;
   method: string;
   rankings: FeatureRanking[];
   model_accuracy: number;
@@ -835,6 +942,10 @@ export interface FeatureImportanceData {
 
 export interface FeatureModelInfo {
   status: string;
+  error?: string;
+  warning?: string | null;
+  trained_at?: string;
+  artifact_id?: string;
   n_samples?: number;
   n_features?: number;
   train_accuracy?: number;
@@ -882,6 +993,10 @@ export interface ShapEntry {
 
 export interface ShapExplanation {
   status: string;
+  error?: string;
+  warning?: string | null;
+  artifact_id?: string;
+  trained_at?: string;
   match_id: number;
   home_team: string;
   away_team: string;

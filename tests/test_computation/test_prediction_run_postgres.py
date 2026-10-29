@@ -2515,7 +2515,7 @@ def test_backtest_uses_consistent_spf_truth_without_changing_other_play_results(
 
 @pytest.mark.parametrize("valid_matches", [90, 120, 5005])
 def test_explanation_training_uses_only_trustworthy_results_and_eligible_snapshots(
-    isolated_database, monkeypatch, valid_matches
+    isolated_database, monkeypatch, tmp_path, valid_matches
 ):
     import numpy as np
     from psycopg2 import sql
@@ -2673,20 +2673,15 @@ def test_explanation_training_uses_only_trustworthy_results_and_eligible_snapsho
 
     if valid_matches in (90, 120):
         # Exercise the real XGBoost fit at >=100 accepted matches. All model
-        # state is restored by monkeypatch; no artifact/profile is persisted.
-        for name, value in {
-            "_trained_model": None,
-            "_trained_explainer": None,
-            "_explainer_initialized": False,
-            "_feature_names_cache": [],
-            "_importance_cache": {},
-            "_train_score": 0.0,
-        }.items():
-            monkeypatch.setattr(feature_importance, name, value)
+        # state is isolated in tmp_path; no project artifact/profile is persisted.
+        from scripts import feature_explanation_artifact as artifacts
+
+        monkeypatch.setenv("FQP_FEATURE_MODEL_ARTIFACT_PATH", str(tmp_path / "explanation.json"))
         trained = feature_importance.train_if_needed(conn, force=True)
+        state = artifacts.read_state()
         if valid_matches == 90:
             assert trained["status"] == "error" and "至少100场" in trained["error"]
-            assert feature_importance._trained_model is None
+            assert state == {"artifact": None, "error": trained["error"]}
         else:
             assert trained["status"] == "ok" and trained["n_samples"] == 127
             assert trained["n_features"] == len(names)
@@ -2695,7 +2690,10 @@ def test_explanation_training_uses_only_trustworthy_results_and_eligible_snapsho
                 "draw": int((labels == 1).sum()),
                 "away_win": int((labels == 0).sum()),
             }
-            probabilities = feature_importance._trained_model.predict_proba(features[:3])
+            assert state["artifact"]["sha256"] == trained["artifact_id"]
+            assert state["artifact"]["features"] == names
+            assert feature_importance.get_feature_model_info()["n_samples"] == 127
+            probabilities = artifacts.load_classifier(state["artifact"]).predict_proba(features[:3])
             assert probabilities.shape == (3, 3) and np.isfinite(probabilities).all()
             np.testing.assert_allclose(probabilities.sum(axis=1), 1, atol=1e-6)
     conn.rollback()
@@ -3462,6 +3460,147 @@ def isolated_database(request):
 
     connection.autocommit = False
     yield connection, schema_name
+
+
+def test_evaluation_scope_seeks_only_settled_match_histories(isolated_database):
+    from scripts.model_evaluation_scope import LATEST_PREDICTIONS_CTE
+
+    conn, _ = isolated_database
+    with conn.cursor() as cursor:
+        cursor.execute("SET LOCAL jit=off")
+        cursor.execute("INSERT INTO model_versions (model_name) VALUES ('maher'), ('maher')")
+        cursor.execute("""INSERT INTO official_matches (kickoff_time)
+            SELECT '2026-10-29 20:00'::timestamp FROM generate_series(1,300)""")
+        cursor.execute("""INSERT INTO official_results
+            (match_id, result_status, full_home_goals, full_away_goals, spf_result)
+            VALUES (1, 'confirmed', 0, 0, '1'), (2, 'provisional', 0, 0, '1')""")
+        cursor.execute("""INSERT INTO model_predictions (match_id, model_version_id,
+            predict_time, play_type, option_code, model_probability,
+            validation_status, uncertainty_reason)
+            SELECT m.id, mv.id, '2026-10-27'::timestamp + n * INTERVAL '1 minute',
+                   'spf', option_code, 0.333333, 'valid', '{"model_independent":true}'
+            FROM official_matches m CROSS JOIN model_versions mv
+            CROSS JOIN generate_series(1,100) n
+            CROSS JOIN unnest(ARRAY['3','1','0']) option_code""")
+        cursor.execute((Path("sql/113_prediction_read_paths.sql")).read_text())
+        cursor.execute("ANALYZE model_predictions")
+        query = LATEST_PREDICTIONS_CTE + " SELECT id FROM latest_predictions ORDER BY id"
+        cursor.execute(query)
+        actual = cursor.fetchall()
+        cursor.execute("""SELECT mp.id FROM model_prediction_latest_rows mp
+            JOIN official_matches m ON m.id=mp.match_id
+            JOIN official_results r ON r.match_id=mp.match_id
+            WHERE r.result_status IN ('final','confirmed')
+              AND mp.predict_time < m.kickoff_time AND mp.validation_status='valid'
+              AND (mp.uncertainty_reason->>'model_independent')::boolean
+            ORDER BY mp.id""")
+        assert actual == cursor.fetchall() and len(actual) == 3
+        cursor.execute("EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) " + query)
+        plan = cursor.fetchone()[0][0]
+
+    def work(node):
+        own = (
+            ((node["Actual Rows"] + node.get("Rows Removed by Filter", 0)) * node["Actual Loops"])
+            if node.get("Relation Name") == "model_predictions"
+            else 0
+        )
+        return own + sum(work(child) for child in node.get("Plans", []))
+
+    examined = work(plan["Plan"])
+    print(
+        json.dumps(
+            {
+                "archive_rows": 180000,
+                "prediction_rows_examined": examined,
+                "execution_ms": plan["Execution Time"],
+            }
+        ),
+        flush=True,
+    )
+    assert examined < 500, "unsettled matches must not enter canonical prediction enumeration"
+
+
+def test_recent_candidate_boundary_falls_back_instead_of_losing_older_eligible_rows(
+    isolated_database,
+):
+    from scripts.prediction_statistics import recent_prediction_rows_ctes
+
+    conn, _ = isolated_database
+    with conn.cursor() as cursor:
+        cursor.execute("SET LOCAL jit=off")
+        cursor.execute(
+            "INSERT INTO model_versions (model_name) VALUES ('same_model'), ('same_model')"
+        )
+        cursor.execute("""INSERT INTO official_matches (kickoff_time)
+            SELECT '2026-10-29 20:00'::timestamp FROM generate_series(1,3)""")
+        cursor.execute("""INSERT INTO model_predictions (match_id, model_version_id,
+                predict_time, play_type, option_code, model_probability, ev, validation_status)
+            SELECT 1, 1, '2026-10-28 10:00'::timestamp + n * INTERVAL '1 second',
+                   'spf', '3', 0.5, NULL, 'valid' FROM generate_series(1,50) n""")
+        cursor.execute("""INSERT INTO model_predictions (match_id, model_version_id,
+                predict_time, play_type, option_code, model_probability, ev, validation_status)
+            VALUES (1,2,'2026-10-28 11:00','spf','3',NULL,NULL,'invalid'),
+                   (2,1,'2026-10-27 10:00','spf','3',0.5,0,'valid'),
+                   (3,1,'2026-10-27 10:00','spf','3',0.5,NULL,'valid')""")
+        cursor.execute(Path("sql/113_prediction_read_paths.sql").read_text())
+        query = recent_prediction_rows_ctes()
+        cursor.execute(
+            query + " SELECT complete FROM read_boundary", {"seed_limit": 10, "limit": 2}
+        )
+        assert cursor.fetchone() == (False,)
+        cursor.execute(
+            query + " SELECT id,match_id FROM recent ORDER BY predict_time DESC,ev DESC,id DESC",
+            {"seed_limit": 10, "limit": 2},
+        )
+        actual = cursor.fetchall()
+        cursor.execute("""SELECT mp.id,mp.match_id FROM model_prediction_latest_rows mp
+            JOIN official_matches m ON m.id=mp.match_id
+            WHERE mp.validation_status='valid' AND mp.predict_time<m.kickoff_time
+            ORDER BY mp.predict_time DESC,mp.ev DESC,mp.id DESC LIMIT 2""")
+        assert actual == cursor.fetchall()
+        assert [row[1] for row in actual] == [3, 2]
+
+
+def test_interactive_sql_timeout_releases_connection_and_does_not_affect_background_jobs(
+    isolated_database, monkeypatch
+):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from apps.backend.src import db
+    from apps.backend.src.services import read_performance as reads
+
+    pool = db.BlockingThreadedConnectionPool(
+        1, 1, dsn=os.environ["FQP_P106_TEST_DATABASE_URL"], acquire_timeout=2
+    )
+    monkeypatch.setattr(db, "_pool", pool)
+    monkeypatch.setattr(reads, "READ_BUDGET_SECONDS", 0.25)
+    app = FastAPI()
+    app.add_middleware(reads.ReadPerformanceMiddleware)
+    observed = []
+
+    @app.get("/api/predictions")
+    def slow():
+        with db.get_db() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT current_setting('application_name')")
+                observed.append(cursor.fetchone()[0])
+                cursor.execute("SELECT pg_sleep(0.8)")
+
+    try:
+        started = time.perf_counter()
+        response = TestClient(app).get("/api/predictions")
+        assert response.status_code == 503
+        assert time.perf_counter() - started < 2
+        assert observed == ["fqp-read:" + response.headers["x-request-id"]]
+        with db.get_db() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute("SHOW statement_timeout")
+                assert cursor.fetchone() == ("0",)
+                cursor.execute("SELECT current_setting('application_name')")
+                assert not cursor.fetchone()[0].startswith("fqp-read:")
+    finally:
+        pool.closeall()
 
 
 def test_maher_training_query_excludes_ambiguous_team_names_with_candidate_audit(

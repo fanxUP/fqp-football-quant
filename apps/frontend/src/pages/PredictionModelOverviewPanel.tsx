@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useLanguage } from '../app/LanguageContext';
 import { api } from '../core/apiClient';
 import type { CalibrationProfile, CalibrationTrend, PredictionModelRuntimeState } from '../core/types';
@@ -29,8 +29,13 @@ export default function PredictionModelOverviewPanel() {
   const [calibrationError, setCalibrationError] = useState(false);
   const [calibrationProfiles, setCalibrationProfiles] = useState<CalibrationProfile[]>([]);
   const [calibrationTrends, setCalibrationTrends] = useState<CalibrationTrend[]>([]);
+  const [requested, setRequested] = useState(false);
+  const pending = useRef(false);
 
   const load = () => {
+    if (pending.current) return;
+    pending.current = true;
+    setRequested(true);
     setLoading(true);
     setRuntimeError(false);
     setCalibrationError(false);
@@ -47,10 +52,8 @@ export default function PredictionModelOverviewPanel() {
           setCalibrationError(true);
         }
       })
-      .finally(() => setLoading(false));
+      .finally(() => { pending.current = false; setLoading(false); });
   };
-
-  useEffect(() => { load(); }, []);
 
   const titleByCode = useMemo(() => new Map(states.map((state) => [
     state.code,
@@ -60,7 +63,9 @@ export default function PredictionModelOverviewPanel() {
   const activeCount = states.filter((state) => state.isActive).length;
 
   return (
-    <details className="prediction-model-overview">
+    <details className="prediction-model-overview" onToggle={(event) => {
+      if (event.currentTarget.open && !requested) load();
+    }}>
       <summary className="prediction-model-overview-summary">
         <span>
           <span className="appearance-eyebrow">{translate('预测体系')}</span>
@@ -68,7 +73,7 @@ export default function PredictionModelOverviewPanel() {
           <small>{translate('模型说明默认收起，运行状态与元数据由后端统一提供。')}</small>
         </span>
         <span className="prediction-model-overview-count">
-          {loading ? translate('加载中...') : `${activeCount}/${states.length} ${translate('已启用')}`}
+          {!requested ? translate('展开后加载') : loading ? translate('加载中...') : `${activeCount}/${states.length} ${translate('已启用')}`}
         </span>
       </summary>
 

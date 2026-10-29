@@ -105,22 +105,6 @@ def filter_match_relevant_candidates(
     return accepted, len(candidates) - len(accepted)
 
 
-def load_provider_request_counts(conn: Any, *, day_start: datetime) -> dict[str, int]:
-    """Count historical logical ingestion runs; not an account quota ledger."""
-    with conn.cursor() as cur:
-        cur.execute(
-            """
-            SELECT provider_code, COUNT(*)
-            FROM news_ingestion_runs
-            WHERE started_at >= %s
-            GROUP BY provider_code
-            """,
-            (day_start,),
-        )
-        rows = cur.fetchall()
-    return {str(row[0]): int(row[1]) for row in rows}
-
-
 def record_news_ingestion_request(conn: Any, payload: dict[str, Any]) -> None:
     """Persist one logical batch and its actual-send diagnostics for audit."""
     params = {**payload, "cursor_state": Json(payload.get("cursor_state", {}))}

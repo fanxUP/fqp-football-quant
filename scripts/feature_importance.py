@@ -17,12 +17,16 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import sys
+from functools import lru_cache
+from threading import RLock
 from typing import Any
 
 import numpy as np
 
+from scripts import feature_explanation_artifact as explanation_artifact
 from scripts.feature_schema import (
     COMPATIBLE_SNAPSHOT_VERSIONS,
     FEATURE_COLUMNS,
@@ -49,7 +53,7 @@ _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _PROJECT_ROOT not in sys.path:
     sys.path.insert(0, _PROJECT_ROOT)
 
-MIN_FEATURE_MODEL_MATCHES = 100
+MIN_FEATURE_MODEL_MATCHES = explanation_artifact.MIN_FEATURE_MODEL_MATCHES
 
 # ---------------------------------------------------------------------------
 # Feature column definitions — must match match_feature_snapshots table
@@ -198,34 +202,47 @@ def _load_training_data(
 # Model training
 # ---------------------------------------------------------------------------
 
-# Module-level cache
-_trained_model: Any = None
-_trained_explainer: Any = None
-_explainer_initialized = False
-_feature_names_cache: list[str] = []
-_importance_cache: dict[str, Any] = {}
-_train_score: float = 0.0
+_EXPLAINER_LOCK = RLock()
+
+
+def get_feature_model_info() -> dict[str, Any]:
+    """Read the background trainer's result without importing/fitting a classifier."""
+    return _model_info(explanation_artifact.read_state())
+
+
+def _model_info(state: dict[str, Any]) -> dict[str, Any]:
+    artifact = state["artifact"]
+    if artifact is None:
+        return {"status": "error", "error": state["error"]}
+    return {
+        **artifact["info"],
+        "status": "ok",
+        "cached": True,
+        "artifact_id": artifact["sha256"],
+        "warning": state["error"],
+    }
 
 
 def train_if_needed(conn: Any, force: bool = False) -> dict[str, Any]:
-    """训练 XGBoost 影子分类器（如果尚未训练或 force=True）。
+    """Background-only fit; the HTTP readers never call this function."""
+    with explanation_artifact.training_lock() as acquired:
+        if not acquired:
+            return {"status": "skipped", "reason": "training_in_progress"}
+        if not force:
+            previous = get_feature_model_info()
+            if previous["status"] == "ok":
+                return previous
+        try:
+            result = _train_explanation(conn)
+        except Exception:
+            logging.getLogger(__name__).exception("Background explanation training failed")
+            result = {"status": "error", "error": "后台解释模型训练失败，请查看任务日志"}
+        if result["status"] == "error":
+            explanation_artifact.record_failure(result["error"])
+        return result
 
-    Returns:
-        {"status": "ok", "n_samples": int, "n_features": int,
-         "train_accuracy": float, "feature_count": int}
-    """
-    global _trained_model, _trained_explainer, _explainer_initialized
-    global _feature_names_cache, _importance_cache, _train_score
 
-    if _trained_model is not None and not force:
-        return {
-            "status": "ok",
-            "cached": True,
-            "n_features": len(_feature_names_cache),
-            "train_accuracy": round(_train_score, 4),
-            "feature_count": len(_feature_names_cache),
-        }
-
+def _train_explanation(conn: Any) -> dict[str, Any]:
     try:
         import xgboost as xgb
     except ImportError:
@@ -235,15 +252,24 @@ def train_if_needed(conn: Any, force: bool = False) -> dict[str, Any]:
     if data is None:
         return {
             "status": "error",
+            "reason": "insufficient_data",
             "error": f"训练数据不足（需要至少{MIN_FEATURE_MODEL_MATCHES}场独立已结算比赛）",
         }
 
     X, y, _match_ids, feature_names = data
 
     if X.shape[1] == 0:
-        return {"status": "error", "error": "训练特征全部缺失，暂无可用的解释模型输入"}
+        return {
+            "status": "error",
+            "reason": "missing_features",
+            "error": "训练特征全部缺失，暂无可用的解释模型输入",
+        }
     if not np.array_equal(np.unique(y), np.array([0, 1, 2])):
-        return {"status": "error", "error": "训练结果类别不足，需要主胜、平局、客胜三类样本"}
+        return {
+            "status": "error",
+            "reason": "insufficient_classes",
+            "error": "训练结果类别不足，需要主胜、平局、客胜三类样本",
+        }
 
     # Train XGBoost multi-class classifier
     n_classes = 3
@@ -262,21 +288,12 @@ def train_if_needed(conn: Any, force: bool = False) -> dict[str, Any]:
     )
     model.fit(X, y)
 
-    _trained_model = model
-    _feature_names_cache = feature_names
-    _train_score = float(model.score(X, y))
-    _trained_explainer = None
-    _explainer_initialized = False
-
-    # Compute permutation importance
-    _importance_cache = _compute_permutation_importance(model, X, y, feature_names)
-
-    return {
-        "status": "ok",
-        "cached": False,
+    train_score = float(model.score(X, y))
+    importance = _compute_permutation_importance(model, X, y, feature_names)
+    info = {
         "n_samples": len(y),
         "n_features": len(feature_names),
-        "train_accuracy": round(_train_score, 4),
+        "train_accuracy": round(train_score, 4),
         "feature_count": len(feature_names),
         "class_distribution": {
             "home_win": int((y == 2).sum()),
@@ -284,10 +301,14 @@ def train_if_needed(conn: Any, force: bool = False) -> dict[str, Any]:
             "away_win": int((y == 0).sum()),
         },
     }
+    artifact = explanation_artifact.make_artifact(model, feature_names, importance, info)
+    explanation_artifact.publish_artifact(artifact)
+    return {**info, "status": "ok", "cached": False, "artifact_id": artifact["sha256"]}
 
 
-def _build_shap_explainer(model: Any, X: np.ndarray) -> Any:
-    """Build a SHAP TreeExplainer on a background sample."""
+@lru_cache(maxsize=1)
+def _build_shap_explainer(model: Any) -> Any:
+    """Cache the optional tree-path explainer by the exact immutable classifier."""
     try:
         import shap
 
@@ -351,40 +372,36 @@ def _compute_permutation_importance(
 
 
 def get_feature_importance(
-    conn: Any,
+    conn: Any = None,
     method: str = "permutation",
     top_n: int = 20,
 ) -> dict[str, Any]:
     """获取特征重要性排名。
 
     Args:
-        conn: DB 连接
+        conn: 保留旧调用兼容；读取工件不再使用数据库连接
         method: "permutation" | "gain" | "both"
         top_n: 返回前 N 个特征
 
     Returns:
         {"status": "ok", "method": str, "rankings": [...], "model_accuracy": float}
     """
-    train_result = train_if_needed(conn)
-    if train_result.get("status") == "error":
-        return train_result
-
-    if method == "permutation":
-        rankings = _importance_cache.get("permutation", [])[:top_n]
-    elif method == "gain":
-        rankings = _importance_cache.get("gain", [])[:top_n]
+    state = explanation_artifact.read_state()
+    info = _model_info(state)
+    if info["status"] == "error":
+        return info
+    importance = state["artifact"]["importance"]
+    if method in ("permutation", "gain"):
+        rankings = importance[method][:top_n]
     else:
-        rankings = {
-            "permutation": _importance_cache.get("permutation", [])[:top_n],
-            "gain": _importance_cache.get("gain", [])[:top_n],
-        }
-
+        rankings = {m: importance[m][:top_n] for m in ("permutation", "gain")}
     return {
         "status": "ok",
         "method": method,
         "rankings": rankings,
-        "model_accuracy": round(_train_score, 4),
-        "n_features": len(_feature_names_cache),
+        "model_accuracy": info["train_accuracy"],
+        "n_features": info["n_features"],
+        "model_info": info,
     }
 
 
@@ -401,15 +418,19 @@ def explain_prediction(
         top_n: 返回前 N 个重要特征
 
     Returns:
-        {"status": "ok", "match_id": int, "shap_values": [...],
-         "base_value": float, "predicted_probs": [float, float, float]}
+        SHAP 贡献和 base_values 为原始模型分数；不可用时均为空列表。
+        predicted_probs 为 home/draw/away 概率，独立于可选 SHAP 是否可用。
     """
-    global _trained_model, _trained_explainer, _explainer_initialized, _feature_names_cache
-
-    # Ensure model is trained
-    train_result = train_if_needed(conn)
-    if train_result.get("status") == "error":
-        return train_result
+    state = explanation_artifact.read_state()
+    info = _model_info(state)
+    if info["status"] == "error":
+        return info
+    artifact = state["artifact"]
+    try:
+        model = explanation_artifact.load_classifier(artifact)
+    except Exception:
+        return {"status": "error", "error": "解释模型无法加载，等待后台重新训练"}
+    feature_names = artifact["features"]
 
     # Load feature row for this match
     col_refs = ", ".join(f"fs.{c}" for c in FEATURE_COLUMNS)
@@ -445,26 +466,25 @@ def explain_prediction(
     full_vec = np.array([numeric_feature_value(v) for v in raw_features], dtype=np.float64)
 
     # Map to training feature subset
-    train_indices = [FEATURE_COLUMNS.index(f) for f in _feature_names_cache]
+    train_indices = [FEATURE_COLUMNS.index(f) for f in feature_names]
     X_single = full_vec[train_indices].reshape(1, -1)
 
     # Predict
-    probs = _trained_model.predict_proba(X_single)[0]  # [away, draw, home]
+    probs = model.predict_proba(X_single)[0]  # [away, draw, home]
 
     # SHAP values
     shap_data: list[dict[str, Any]] = []
-    base_values: list[float] = [0.33, 0.34, 0.33]
+    base_values: list[float] = []
 
-    if not _explainer_initialized:
+    with _EXPLAINER_LOCK:
         try:
-            _trained_explainer = _build_shap_explainer(_trained_model, X_single)
+            explainer = _build_shap_explainer(model)
         except Exception:
-            _trained_explainer = None
-        _explainer_initialized = True
+            explainer = None
 
-    if _trained_explainer is not None:
+    if explainer is not None:
         try:
-            shap_vals = _trained_explainer(X_single)  # shape: (1, n_features, n_classes)
+            shap_vals = explainer(X_single)  # shape: (1, n_features, n_classes)
             # shap_vals.values shape: (1, n_features, n_classes)
             raw_values = shap_vals.values[0]  # (n_features, n_classes)
 
@@ -474,11 +494,11 @@ def explain_prediction(
             base_values = shap_vals.base_values[0].tolist()  # (n_classes,)
 
             # Build per-feature SHAP data for waterfall (class 2 = home win)
-            for j in range(len(_feature_names_cache)):
+            for j in range(len(feature_names)):
                 shap_data.append(
                     {
-                        "feature": _feature_names_cache[j],
-                        "label": _label(_feature_names_cache[j]),
+                        "feature": feature_names[j],
+                        "label": _label(feature_names[j]),
                         "shap_value": round(float(raw_values[j, 2]), 6),  # home-win class
                         "shap_abs": round(float(agg_shap[j]), 6),
                         "feature_value": round(float(X_single[0, j]), 4)
@@ -493,10 +513,14 @@ def explain_prediction(
             shap_data.sort(key=lambda x: x["shap_value"])
         except Exception:
             shap_data = []
+            base_values = []
 
     return {
         "status": "ok",
         "match_id": match_id,
+        "artifact_id": info["artifact_id"],
+        "trained_at": info["trained_at"],
+        "warning": info["warning"],
         "home_team": home_team,
         "away_team": away_team,
         "predicted_probs": {
@@ -506,7 +530,7 @@ def explain_prediction(
         },
         "base_values": [round(float(b), 4) for b in base_values],
         "shap_values": shap_data,
-        "n_features_used": len(_feature_names_cache),
+        "n_features_used": len(feature_names),
     }
 
 

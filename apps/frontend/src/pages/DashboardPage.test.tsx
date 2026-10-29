@@ -70,6 +70,7 @@ describe('DashboardPage', () => {
     await waitFor(() => expect(api.dashboard.today).toHaveBeenCalledTimes(1));
     expect(api.health).toHaveBeenCalledTimes(1);
     expect(api.teams).toHaveBeenCalledTimes(1);
+    expect(api.teams).toHaveBeenCalledWith({ count_only: true });
     expect(api.dashboard.predictionCount).toHaveBeenCalledTimes(1);
     expect(api.predictions).not.toHaveBeenCalled();
   });

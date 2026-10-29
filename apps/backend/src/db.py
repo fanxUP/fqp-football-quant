@@ -16,6 +16,8 @@ import psycopg2
 import psycopg2.extras
 from psycopg2.pool import PoolError, ThreadedConnectionPool
 
+from apps.backend.src.services.read_performance import TimedConnection, current_read
+
 
 class BlockingThreadedConnectionPool(ThreadedConnectionPool):
     """Thread-safe pool that waits briefly when all connections are in use.
@@ -39,6 +41,9 @@ class BlockingThreadedConnectionPool(ThreadedConnectionPool):
 
     def getconn(self, key: Any = None):
         deadline = time.monotonic() + self._acquire_timeout
+        probe = current_read.get()
+        if probe is not None and probe.deadline is not None:
+            deadline = min(deadline, probe.deadline)
         with self._availability:
             while True:
                 try:
@@ -98,7 +103,11 @@ def get_db():
     """
     pool = get_pool()
     conn: Any = None
+    probe = current_read.get()
+    started = time.monotonic()
     try:
+        if probe is not None and probe.deadline is not None:
+            probe.remaining()
         conn = pool.getconn()
         # Verify connection is alive; reconnect if not
         try:
@@ -109,8 +118,21 @@ def get_db():
             pool.putconn(conn, close=True)
             conn = None
             conn = pool.getconn()
-        yield conn
+        if probe is not None:
+            probe.pool_ms += (time.monotonic() - started) * 1000
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT set_config('application_name', %s, true)",
+                    (f"fqp-read:{probe.request_id}",),
+                )
+                if probe.deadline is not None:
+                    cur.execute("SET LOCAL jit = off")
+            yield TimedConnection(conn, probe)
+        else:
+            yield conn
     except Exception:
+        if conn is None and probe is not None:
+            probe.pool_ms += (time.monotonic() - started) * 1000
         if conn is not None:
             pool.putconn(conn, close=True)
         raise

@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Query
 
 from apps.backend.src.db import get_db
+from scripts.prediction_statistics import canonical_prediction_rows_ctes
 
 router = APIRouter(tags=["teams"])
 
@@ -58,10 +59,13 @@ def list_event_coverage():
 
 
 @router.get("/api/teams")
-def list_teams():
+def list_teams(count_only: bool = False):
     """List known teams with alias counts and profiles."""
     with get_db() as conn:
         with conn.cursor() as cur:
+            if count_only:
+                cur.execute("SELECT COUNT(*) FROM teams")
+                return {"teams": [], "total": int(cur.fetchone()[0])}
             cur.execute(
                 """
                 SELECT
@@ -126,7 +130,7 @@ def list_today_matches():
                 "kickoff_time": r[4].isoformat() if hasattr(r[4], "isoformat") else str(r[4]),
                 "match_status": r[5],
                 "match_num_str": r[6],
-                "completeness": float(r[7]) if r[7] else None,
+                "completeness": float(r[7]) if r[7] is not None else None,
                 "odds_count": r[8] or 0,
             }
             for r in rows
@@ -236,8 +240,8 @@ def list_feature_snapshots(
                 "feature_version": r[3],
                 "home_team_id": r[4],
                 "away_team_id": r[5],
-                "data_completeness_score": float(r[6]) if r[6] else None,
-                "uncertainty_score": float(r[7]) if r[7] else None,
+                "data_completeness_score": float(r[6]) if r[6] is not None else None,
+                "uncertainty_score": float(r[7]) if r[7] is not None else None,
                 "home_rest_days": r[8],
                 "away_rest_days": r[9],
                 "rest_days_diff": r[10],
@@ -403,8 +407,11 @@ def list_event_matches(league_name: str):
 
 
 @router.get("/api/matches/{match_id}/detail")
-def get_match_detail(match_id: int):
-    """Comprehensive match detail for the Events Center drawer."""
+def get_match_detail(
+    match_id: int,
+    section: Literal["all", "core", "overview", "data", "injuries", "roster"] = "all",
+):
+    """Keep the full default; section reads omit unrelated queries and unloaded fields."""
     with get_db() as conn:
         with conn.cursor() as cur:
             # 1. Basic match info + scores + team IDs
@@ -478,359 +485,373 @@ def get_match_detail(match_id: int):
                 },
             }
 
-            # 2. Latest feature snapshot
-            cur.execute(
-                """
-                SELECT data_completeness_score, uncertainty_score,
-                       home_rest_days, away_rest_days, rest_days_diff,
-                       home_lineup_strength_score, away_lineup_strength_score,
-                       lineup_strength_diff, home_absence_impact_score,
-                       away_absence_impact_score, absence_impact_diff,
-                       home_motivation_score, away_motivation_score,
-                       motivation_diff, temperature_2m, precipitation,
-                       wind_speed_10m, weather_impact_score,
-                       away_travel_distance_km, away_travel_fatigue_score,
-                       stadium_id
-                FROM match_feature_snapshots
-                WHERE match_id = %s
-                  AND snapshot_time < %s
-                ORDER BY snapshot_time DESC LIMIT 1
-            """,
-                (match_id, row[4]),
-            )
-            fs = cur.fetchone()
-            feature_snapshot = None
-            if fs:
-                feature_snapshot = {
-                    "completeness_score": float(fs[0]) if fs[0] else None,
-                    "uncertainty_score": float(fs[1]) if fs[1] else None,
-                    "home_rest_days": fs[2],
-                    "away_rest_days": fs[3],
-                    "rest_days_diff": fs[4],
-                    "home_lineup_strength": float(fs[5]) if fs[5] else None,
-                    "away_lineup_strength": float(fs[6]) if fs[6] else None,
-                    "lineup_strength_diff": float(fs[7]) if fs[7] else None,
-                    "home_absence_impact": float(fs[8]) if fs[8] else None,
-                    "away_absence_impact": float(fs[9]) if fs[9] else None,
-                    "absence_impact_diff": float(fs[10]) if fs[10] else None,
-                    "home_motivation": float(fs[11]) if fs[11] else None,
-                    "away_motivation": float(fs[12]) if fs[12] else None,
-                    "motivation_diff": float(fs[13]) if fs[13] else None,
-                    "temperature": float(fs[14]) if fs[14] else None,
-                    "precipitation": float(fs[15]) if fs[15] else None,
-                    "wind_speed": float(fs[16]) if fs[16] else None,
-                    "weather_impact": float(fs[17]) if fs[17] else None,
-                    "travel_distance_km": float(fs[18]) if fs[18] else None,
-                    "travel_fatigue": float(fs[19]) if fs[19] else None,
-                    "stadium_id": fs[20],
-                }
-
-            # 3. Latest pre-match option set per model and play type.
-            cur.execute(
-                """
-                SELECT DISTINCT ON (mv.model_name, mp.play_type, mp.option_code)
-                    mv.model_name, mp.play_type, mp.option_code,
-                    mp.model_probability, mp.market_probability, mp.fair_odds, mp.ev,
-                    mp.confidence_score, mp.predict_time
-                FROM model_prediction_latest_rows mp
-                JOIN model_versions mv ON mv.id = mp.model_version_id
-                WHERE mp.match_id = %s
-                  AND mp.predict_time < %s
-                  AND mp.validation_status = 'valid'
-                ORDER BY mv.model_name, mp.play_type, mp.option_code,
-                         mp.predict_time DESC, mp.id DESC
-            """,
-                (match_id, row[4]),
-            )
-            pred_rows = cur.fetchall()
-            predictions = None
-            best_model = None
-            best_ev = -999.0
-            best_option = None
-            if pred_rows:
-                models = []
-                for pr in pred_rows:
-                    models.append(
-                        {
-                            "model_name": pr[0],
-                            "play_type": pr[1],
-                            "option_code": pr[2],
-                            "model_probability": float(pr[3]) if pr[3] else None,
-                            "market_probability": float(pr[4]) if pr[4] else None,
-                            "fair_odds": float(pr[5]) if pr[5] else None,
-                            "ev": float(pr[6]) if pr[6] else None,
-                            "confidence": float(pr[7]) if pr[7] else None,
-                            "predict_time": pr[8].isoformat()
-                            if hasattr(pr[8], "isoformat")
-                            else str(pr[8]),
-                        }
-                    )
-                    if pr[6] and float(pr[6]) > best_ev:
-                        best_ev = float(pr[6])
-                        best_model = pr[0]
-                        best_option = pr[2]
-                predictions = {
-                    "models": models,
-                    "best_ev_model": best_model,
-                    "best_ev_option": best_option,
-                }
-
-            # 4. Lineups
-            lineups: dict[str, dict[str, Any] | None] = {"home": None, "away": None}
-            for side, tid in [("home", home_team_id), ("away", away_team_id)]:
-                if not tid:
-                    continue
-                cur.execute(
-                    """
-                    SELECT mls.id, mls.formation, mls.lineup_strength_score,
-                           mls.starting_11_market_value, mls.starting_11_key_player_count,
-                           mls.lineup_type, mls.source_name, mls.snapshot_time,
-                           mls.created_at, mls.match_id, mls.team_id
-                    FROM match_lineup_snapshots mls
-                    WHERE mls.match_id = %s AND mls.team_id = %s
-                    ORDER BY mls.snapshot_time DESC, mls.id DESC LIMIT 1
-                """,
-                    (match_id, tid),
-                )
-                ls = cur.fetchone()
-                if not ls:
-                    continue
-                cur.execute(
-                    """
-                    SELECT mlp.player_id, mlp.is_starting, mlp.is_substitute,
-                           mlp.position, mlp.tactical_role,
-                           p.player_name_cn, p.player_name_en, p.primary_position
-                    FROM match_lineup_players mlp
-                    LEFT JOIN players p ON p.id = mlp.player_id
-                    WHERE mlp.lineup_snapshot_id = %s
-                    ORDER BY mlp.is_starting DESC, mlp.id
-                """,
-                    (ls[0],),
-                )
-                players = [
-                    {
-                        "player_id": pl[0],
-                        "is_starting": pl[1],
-                        "is_substitute": pl[2],
-                        "position": pl[3],
-                        "tactical_role": pl[4],
-                        "name_cn": pl[5],
-                        "name_en": pl[6],
-                        "primary_position": pl[7],
-                    }
-                    for pl in cur.fetchall()
-                ]
-                lineups[side] = {
-                    "formation": ls[1],
-                    "strength_score": float(ls[2]) if ls[2] is not None else None,
-                    "starting_11_value": float(ls[3]) if ls[3] is not None else None,
-                    "key_player_count": ls[4],
-                    "lineup_type": ls[5],
-                    "players": players,
-                    "snapshot_id": ls[0],
-                    "source": ls[6],
-                    "snapshot_time": ls[7].isoformat() if ls[7] is not None else None,
-                    "collected_at": ls[8].isoformat() if ls[8] is not None else None,
-                    "match_id": ls[9],
-                    "team_id": ls[10],
-                }
-
-            # 5. Head-to-head (last 10 matches between these teams)
-            h2h_all = []
-            h2h_matches = []
-            h2h_wins = {"home": 0, "draws": 0, "away": 0}
-            if home_team_id and away_team_id:
-                cur.execute(
-                    """
-                    SELECT m.kickoff_time, m.home_team_name, m.away_team_name,
-                           r.full_home_goals, r.full_away_goals, m.league_name
-                    FROM official_matches m
-                    LEFT JOIN official_results r ON r.match_id = m.id
-                    WHERE ((m.home_team_name = %s AND m.away_team_name = %s)
-                       OR (m.home_team_name = %s AND m.away_team_name = %s))
-                      AND LOWER(m.match_status) = 'settled'
-                    ORDER BY m.kickoff_time DESC
-                """,
-                    (row[2], row[3], row[3], row[2]),
-                )
-                h2h_all = cur.fetchall()
-                for h in h2h_all:
-                    if h[3] is not None and h[4] is not None:
-                        if h[3] > h[4]:
-                            if h[1] == row[2]:
-                                h2h_wins["home"] += 1
-                            else:
-                                h2h_wins["away"] += 1
-                        elif h[3] == h[4]:
-                            h2h_wins["draws"] += 1
-                    h2h_matches.append(
-                        {
-                            "date": h[0].isoformat() if hasattr(h[0], "isoformat") else str(h[0]),
-                            "home": h[1],
-                            "away": h[2],
-                            "home_goals": h[3],
-                            "away_goals": h[4],
-                            "league": h[5],
-                        }
-                    )
-                h2h_matches = h2h_matches[:10]
-
-            h2h = {
-                "total_matches": len(h2h_all) if (home_team_id and away_team_id) else 0,
-                "home_wins": h2h_wins["home"],
-                "draws": h2h_wins["draws"],
-                "away_wins": h2h_wins["away"],
-                "recent_matches": h2h_matches,
+            result: dict[str, Any] = {
+                "match": match_data,
+                "scores": scores,
+                "teams": teams_data,
             }
 
-            # 6. Recent form (last 5 matches per team)
-            form: dict[str, list[dict[str, Any]]] = {"home": [], "away": []}
-            for side_name, team_name in [("home", row[2]), ("away", row[3])]:
+            if section in ("all", "core"):
+                # 2. Latest feature snapshot
                 cur.execute(
                     """
-                    SELECT m.kickoff_time, m.home_team_name, m.away_team_name,
-                           r.full_home_goals, r.full_away_goals, m.league_name
-                    FROM official_matches m
-                    LEFT JOIN official_results r ON r.match_id = m.id
-                    WHERE (m.home_team_name = %s OR m.away_team_name = %s)
-                      AND m.id != %s
-                      AND LOWER(m.match_status) = 'settled'
-                    ORDER BY m.kickoff_time DESC LIMIT 5
+                    SELECT data_completeness_score, uncertainty_score,
+                           home_rest_days, away_rest_days, rest_days_diff,
+                           home_lineup_strength_score, away_lineup_strength_score,
+                           lineup_strength_diff, home_absence_impact_score,
+                           away_absence_impact_score, absence_impact_diff,
+                           home_motivation_score, away_motivation_score,
+                           motivation_diff, temperature_2m, precipitation,
+                           wind_speed_10m, weather_impact_score,
+                           away_travel_distance_km, away_travel_fatigue_score,
+                           stadium_id
+                    FROM match_feature_snapshots
+                    WHERE match_id = %s
+                      AND snapshot_time < %s
+                    ORDER BY snapshot_time DESC LIMIT 1
                 """,
-                    (team_name, team_name, match_id),
+                    (match_id, row[4]),
                 )
-                for fm in cur.fetchall():
-                    is_home = fm[1] == team_name
-                    home_goals = fm[3]
-                    away_goals = fm[4]
-                    goals_for = home_goals if is_home else away_goals
-                    goals_against = away_goals if is_home else home_goals
-                    if goals_for is not None and goals_against is not None:
-                        if goals_for > goals_against:
-                            f_status = "W"
-                        elif goals_for == goals_against:
-                            f_status = "D"
+                fs = cur.fetchone()
+                feature_snapshot = None
+                if fs:
+                    feature_snapshot = {
+                        "completeness_score": float(fs[0]) if fs[0] is not None else None,
+                        "uncertainty_score": float(fs[1]) if fs[1] is not None else None,
+                        "home_rest_days": fs[2],
+                        "away_rest_days": fs[3],
+                        "rest_days_diff": fs[4],
+                        "home_lineup_strength": float(fs[5]) if fs[5] is not None else None,
+                        "away_lineup_strength": float(fs[6]) if fs[6] is not None else None,
+                        "lineup_strength_diff": float(fs[7]) if fs[7] is not None else None,
+                        "home_absence_impact": float(fs[8]) if fs[8] is not None else None,
+                        "away_absence_impact": float(fs[9]) if fs[9] is not None else None,
+                        "absence_impact_diff": float(fs[10]) if fs[10] is not None else None,
+                        "home_motivation": float(fs[11]) if fs[11] is not None else None,
+                        "away_motivation": float(fs[12]) if fs[12] is not None else None,
+                        "motivation_diff": float(fs[13]) if fs[13] is not None else None,
+                        "temperature": float(fs[14]) if fs[14] is not None else None,
+                        "precipitation": float(fs[15]) if fs[15] is not None else None,
+                        "wind_speed": float(fs[16]) if fs[16] is not None else None,
+                        "weather_impact": float(fs[17]) if fs[17] is not None else None,
+                        "travel_distance_km": float(fs[18]) if fs[18] is not None else None,
+                        "travel_fatigue": float(fs[19]) if fs[19] is not None else None,
+                        "stadium_id": fs[20],
+                    }
+                result["feature_snapshot"] = feature_snapshot
+
+            if section in ("all", "core"):
+                # 3. Latest pre-match option set per model and play type.
+                cur.execute(
+                    f"""
+                    WITH RECURSIVE detail_match_scope AS (
+                        SELECT %(match_id)s::bigint AS match_id
+                    ), {canonical_prediction_rows_ctes(match_scope="detail_match_scope")}
+                    SELECT DISTINCT ON (mv.model_name, mp.play_type, mp.option_code)
+                        mv.model_name, mp.play_type, mp.option_code,
+                        mp.model_probability, mp.market_probability, mp.fair_odds, mp.ev,
+                        mp.confidence_score, mp.predict_time
+                    FROM canonical_prediction_rows mp
+                    JOIN model_versions mv ON mv.id = mp.model_version_id
+                    WHERE mp.match_id = %(match_id)s
+                      AND mp.predict_time < %(kickoff)s
+                      AND mp.validation_status = 'valid'
+                    ORDER BY mv.model_name, mp.play_type, mp.option_code,
+                             mp.predict_time DESC, mp.id DESC
+                """,
+                    {"match_id": match_id, "kickoff": row[4]},
+                )
+                pred_rows = cur.fetchall()
+                predictions = None
+                best_model = None
+                best_ev = -999.0
+                best_option = None
+                if pred_rows:
+                    models = []
+                    for pr in pred_rows:
+                        models.append(
+                            {
+                                "model_name": pr[0],
+                                "play_type": pr[1],
+                                "option_code": pr[2],
+                                "model_probability": float(pr[3]) if pr[3] is not None else None,
+                                "market_probability": float(pr[4]) if pr[4] is not None else None,
+                                "fair_odds": float(pr[5]) if pr[5] is not None else None,
+                                "ev": float(pr[6]) if pr[6] is not None else None,
+                                "confidence": float(pr[7]) if pr[7] is not None else None,
+                                "predict_time": pr[8].isoformat()
+                                if hasattr(pr[8], "isoformat")
+                                else str(pr[8]),
+                            }
+                        )
+                        if pr[6] is not None and float(pr[6]) > best_ev:
+                            best_ev = float(pr[6])
+                            best_model = pr[0]
+                            best_option = pr[2]
+                    predictions = {
+                        "models": models,
+                        "best_ev_model": best_model,
+                        "best_ev_option": best_option,
+                    }
+                result["predictions"] = predictions
+
+            if section in ("all", "data", "roster"):
+                # 4. Lineups
+                lineups: dict[str, dict[str, Any] | None] = {"home": None, "away": None}
+                for side, tid in [("home", home_team_id), ("away", away_team_id)]:
+                    if not tid:
+                        continue
+                    cur.execute(
+                        """
+                        SELECT mls.id, mls.formation, mls.lineup_strength_score,
+                               mls.starting_11_market_value, mls.starting_11_key_player_count,
+                               mls.lineup_type, mls.source_name, mls.snapshot_time,
+                               mls.created_at, mls.match_id, mls.team_id
+                        FROM match_lineup_snapshots mls
+                        WHERE mls.match_id = %s AND mls.team_id = %s
+                        ORDER BY mls.snapshot_time DESC, mls.id DESC LIMIT 1
+                    """,
+                        (match_id, tid),
+                    )
+                    ls = cur.fetchone()
+                    if not ls:
+                        continue
+                    cur.execute(
+                        """
+                        SELECT mlp.player_id, mlp.is_starting, mlp.is_substitute,
+                               mlp.position, mlp.tactical_role,
+                               p.player_name_cn, p.player_name_en, p.primary_position
+                        FROM match_lineup_players mlp
+                        LEFT JOIN players p ON p.id = mlp.player_id
+                        WHERE mlp.lineup_snapshot_id = %s
+                        ORDER BY mlp.is_starting DESC, mlp.id
+                    """,
+                        (ls[0],),
+                    )
+                    players = [
+                        {
+                            "player_id": pl[0],
+                            "is_starting": pl[1],
+                            "is_substitute": pl[2],
+                            "position": pl[3],
+                            "tactical_role": pl[4],
+                            "name_cn": pl[5],
+                            "name_en": pl[6],
+                            "primary_position": pl[7],
+                        }
+                        for pl in cur.fetchall()
+                    ]
+                    lineups[side] = {
+                        "formation": ls[1],
+                        "strength_score": float(ls[2]) if ls[2] is not None else None,
+                        "starting_11_value": float(ls[3]) if ls[3] is not None else None,
+                        "key_player_count": ls[4],
+                        "lineup_type": ls[5],
+                        "players": players,
+                        "snapshot_id": ls[0],
+                        "source": ls[6],
+                        "snapshot_time": ls[7].isoformat() if ls[7] is not None else None,
+                        "collected_at": ls[8].isoformat() if ls[8] is not None else None,
+                        "match_id": ls[9],
+                        "team_id": ls[10],
+                    }
+                result["lineups"] = lineups
+
+            if section in ("all", "overview"):
+                # 5. Head-to-head (last 10 matches between these teams)
+                h2h_all = []
+                h2h_matches = []
+                h2h_wins = {"home": 0, "draws": 0, "away": 0}
+                if home_team_id and away_team_id:
+                    cur.execute(
+                        """
+                        SELECT m.kickoff_time, m.home_team_name, m.away_team_name,
+                               r.full_home_goals, r.full_away_goals, m.league_name
+                        FROM official_matches m
+                        LEFT JOIN official_results r ON r.match_id = m.id
+                        WHERE ((m.home_team_name = %s AND m.away_team_name = %s)
+                           OR (m.home_team_name = %s AND m.away_team_name = %s))
+                          AND LOWER(m.match_status) = 'settled'
+                        ORDER BY m.kickoff_time DESC
+                    """,
+                        (row[2], row[3], row[3], row[2]),
+                    )
+                    h2h_all = cur.fetchall()
+                    for h in h2h_all:
+                        if h[3] is not None and h[4] is not None:
+                            if h[3] > h[4]:
+                                if h[1] == row[2]:
+                                    h2h_wins["home"] += 1
+                                else:
+                                    h2h_wins["away"] += 1
+                            elif h[3] == h[4]:
+                                h2h_wins["draws"] += 1
+                        h2h_matches.append(
+                            {
+                                "date": h[0].isoformat()
+                                if hasattr(h[0], "isoformat")
+                                else str(h[0]),
+                                "home": h[1],
+                                "away": h[2],
+                                "home_goals": h[3],
+                                "away_goals": h[4],
+                                "league": h[5],
+                            }
+                        )
+                    h2h_matches = h2h_matches[:10]
+
+                h2h = {
+                    "total_matches": len(h2h_all) if (home_team_id and away_team_id) else 0,
+                    "home_wins": h2h_wins["home"],
+                    "draws": h2h_wins["draws"],
+                    "away_wins": h2h_wins["away"],
+                    "recent_matches": h2h_matches,
+                }
+
+                # 6. Recent form (last 5 matches per team)
+                form: dict[str, list[dict[str, Any]]] = {"home": [], "away": []}
+                for side_name, team_name in [("home", row[2]), ("away", row[3])]:
+                    cur.execute(
+                        """
+                        SELECT m.kickoff_time, m.home_team_name, m.away_team_name,
+                               r.full_home_goals, r.full_away_goals, m.league_name
+                        FROM official_matches m
+                        LEFT JOIN official_results r ON r.match_id = m.id
+                        WHERE (m.home_team_name = %s OR m.away_team_name = %s)
+                          AND m.id != %s
+                          AND LOWER(m.match_status) = 'settled'
+                        ORDER BY m.kickoff_time DESC LIMIT 5
+                    """,
+                        (team_name, team_name, match_id),
+                    )
+                    for fm in cur.fetchall():
+                        is_home = fm[1] == team_name
+                        home_goals = fm[3]
+                        away_goals = fm[4]
+                        goals_for = home_goals if is_home else away_goals
+                        goals_against = away_goals if is_home else home_goals
+                        if goals_for is not None and goals_against is not None:
+                            if goals_for > goals_against:
+                                f_status = "W"
+                            elif goals_for == goals_against:
+                                f_status = "D"
+                            else:
+                                f_status = "L"
                         else:
-                            f_status = "L"
-                    else:
-                        f_status = None
-                    form[side_name].append(
-                        {
-                            "date": fm[0].isoformat()
-                            if hasattr(fm[0], "isoformat")
-                            else str(fm[0]),
-                            "opponent": fm[2] if is_home else fm[1],
-                            "is_home": is_home,
-                            "goals_for": goals_for,
-                            "goals_against": goals_against,
-                            "status": f_status,
-                            "league": fm[5],
-                        }
-                    )
+                            f_status = None
+                        form[side_name].append(
+                            {
+                                "date": fm[0].isoformat()
+                                if hasattr(fm[0], "isoformat")
+                                else str(fm[0]),
+                                "opponent": fm[2] if is_home else fm[1],
+                                "is_home": is_home,
+                                "goals_for": goals_for,
+                                "goals_against": goals_against,
+                                "status": f_status,
+                                "league": fm[5],
+                            }
+                        )
+                result.update(h2h=h2h, form=form)
 
-            # 7. Standings — latest snapshot for the team's competition season
-            standings = []
-            if home_team_id:
-                cur.execute(
-                    """
-                    SELECT DISTINCT ON (sss.team_id)
-                           sss.rank, COALESCE(t.team_name_cn, t.team_name_en),
-                           sss.played, sss.won, sss.drawn, sss.lost,
-                           sss.goals_for, sss.goals_against, sss.goal_difference,
-                           sss.points, sss.round_no
-                    FROM season_standings_snapshots sss
-                    JOIN teams t ON t.id = sss.team_id
-                    WHERE sss.competition_season_id = (
-                        SELECT sss2.competition_season_id
-                        FROM season_standings_snapshots sss2
-                        WHERE sss2.team_id = %s
-                        ORDER BY sss2.snapshot_time DESC LIMIT 1
+            if section in ("all", "data"):
+                # 7. Standings — latest snapshot for the team's competition season
+                standings = []
+                if home_team_id:
+                    cur.execute(
+                        """
+                        SELECT DISTINCT ON (sss.team_id)
+                               sss.rank, COALESCE(t.team_name_cn, t.team_name_en),
+                               sss.played, sss.won, sss.drawn, sss.lost,
+                               sss.goals_for, sss.goals_against, sss.goal_difference,
+                               sss.points, sss.round_no
+                        FROM season_standings_snapshots sss
+                        JOIN teams t ON t.id = sss.team_id
+                        WHERE sss.competition_season_id = (
+                            SELECT sss2.competition_season_id
+                            FROM season_standings_snapshots sss2
+                            WHERE sss2.team_id = %s
+                            ORDER BY sss2.snapshot_time DESC LIMIT 1
+                        )
+                        ORDER BY sss.team_id, sss.snapshot_time DESC
+                    """,
+                        (home_team_id,),
                     )
-                    ORDER BY sss.team_id, sss.snapshot_time DESC
-                """,
-                    (home_team_id,),
+                    for st in cur.fetchall():
+                        standings.append(
+                            {
+                                "rank": st[0],
+                                "team_name": st[1],
+                                "played": st[2],
+                                "won": st[3],
+                                "drawn": st[4],
+                                "lost": st[5],
+                                "goals_for": st[6],
+                                "goals_against": st[7],
+                                "goal_diff": st[8],
+                                "points": st[9],
+                                "round": st[10],
+                            }
+                        )
+                    # Sort by rank
+                    standings.sort(key=lambda s: s["rank"] or 999)
+                result["standings"] = standings
+
+            if section in ("all", "injuries", "roster"):
+                # 8. Injuries
+                injuries = []
+                for tid in filter(None, [home_team_id, away_team_id]):
+                    cur.execute(
+                        """
+                        SELECT latest.team_id, latest.availability_status,
+                               latest.injury_type, latest.injury_body_part,
+                               latest.expected_return_date, latest.absence_impact_score,
+                               p.player_name_cn, p.player_name_en, p.primary_position,
+                               latest.player_id, latest.id, latest.source_name,
+                               latest.snapshot_time, latest.created_at
+                        FROM (
+                            SELECT DISTINCT ON (player_id) id, player_id, team_id,
+                                   availability_status, injury_type, injury_body_part,
+                                   expected_return_date, absence_impact_score, source_name,
+                                   snapshot_time, created_at
+                            FROM player_availability_snapshots
+                            WHERE team_id = %s
+                            ORDER BY player_id, snapshot_time DESC, id DESC
+                        ) latest
+                        LEFT JOIN players p ON p.id = latest.player_id
+                        WHERE latest.availability_status IN ('injured', 'suspended', 'doubtful')
+                        ORDER BY latest.absence_impact_score DESC NULLS LAST,
+                                 latest.snapshot_time DESC, latest.id DESC
+                        LIMIT 20
+                    """,
+                        (tid,),
+                    )
+                    for ij in cur.fetchall():
+                        injuries.append(
+                            {
+                                "team_id": ij[0],
+                                "status": ij[1],
+                                "injury_type": ij[2],
+                                "body_part": ij[3],
+                                "expected_return": str(ij[4]) if ij[4] else None,
+                                "impact_score": float(ij[5]) if ij[5] is not None else None,
+                                "player_name_cn": ij[6],
+                                "player_name_en": ij[7],
+                                "position": ij[8],
+                                "player_id": ij[9],
+                                "snapshot_id": ij[10],
+                                "source": ij[11],
+                                "snapshot_time": ij[12].isoformat() if ij[12] is not None else None,
+                                "collected_at": ij[13].isoformat() if ij[13] is not None else None,
+                            }
+                        )
+                result.update(
+                    injuries=injuries,
+                    availability_scope="latest_per_player_team",
+                    availability_limit_per_team=20,
                 )
-                for st in cur.fetchall():
-                    standings.append(
-                        {
-                            "rank": st[0],
-                            "team_name": st[1],
-                            "played": st[2],
-                            "won": st[3],
-                            "drawn": st[4],
-                            "lost": st[5],
-                            "goals_for": st[6],
-                            "goals_against": st[7],
-                            "goal_diff": st[8],
-                            "points": st[9],
-                            "round": st[10],
-                        }
-                    )
-                # Sort by rank
-                standings.sort(key=lambda s: s["rank"] or 999)
 
-            # 8. Injuries
-            injuries = []
-            for tid in filter(None, [home_team_id, away_team_id]):
-                cur.execute(
-                    """
-                    SELECT latest.team_id, latest.availability_status,
-                           latest.injury_type, latest.injury_body_part,
-                           latest.expected_return_date, latest.absence_impact_score,
-                           p.player_name_cn, p.player_name_en, p.primary_position,
-                           latest.player_id, latest.id, latest.source_name,
-                           latest.snapshot_time, latest.created_at
-                    FROM (
-                        SELECT DISTINCT ON (player_id) id, player_id, team_id,
-                               availability_status, injury_type, injury_body_part,
-                               expected_return_date, absence_impact_score, source_name,
-                               snapshot_time, created_at
-                        FROM player_availability_snapshots
-                        WHERE team_id = %s
-                        ORDER BY player_id, snapshot_time DESC, id DESC
-                    ) latest
-                    LEFT JOIN players p ON p.id = latest.player_id
-                    WHERE latest.availability_status IN ('injured', 'suspended', 'doubtful')
-                    ORDER BY latest.absence_impact_score DESC NULLS LAST,
-                             latest.snapshot_time DESC, latest.id DESC
-                    LIMIT 20
-                """,
-                    (tid,),
-                )
-                for ij in cur.fetchall():
-                    injuries.append(
-                        {
-                            "team_id": ij[0],
-                            "status": ij[1],
-                            "injury_type": ij[2],
-                            "body_part": ij[3],
-                            "expected_return": str(ij[4]) if ij[4] else None,
-                            "impact_score": float(ij[5]) if ij[5] is not None else None,
-                            "player_name_cn": ij[6],
-                            "player_name_en": ij[7],
-                            "position": ij[8],
-                            "player_id": ij[9],
-                            "snapshot_id": ij[10],
-                            "source": ij[11],
-                            "snapshot_time": ij[12].isoformat() if ij[12] is not None else None,
-                            "collected_at": ij[13].isoformat() if ij[13] is not None else None,
-                        }
-                    )
-
-    return {
-        "match": match_data,
-        "scores": scores,
-        "teams": teams_data,
-        "predictions": predictions,
-        "lineups": lineups,
-        "feature_snapshot": feature_snapshot,
-        "h2h": h2h,
-        "form": form,
-        "standings": standings,
-        "injuries": injuries,
-        "availability_scope": "latest_per_player_team",
-        "availability_limit_per_team": 20,
-    }
+    return result
 
 
 @router.get("/api/events/all/matches")

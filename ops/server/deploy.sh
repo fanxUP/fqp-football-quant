@@ -60,6 +60,7 @@ if ! git diff --quiet "$ROLLBACK_SHA" "$RELEASE_SHA" -- apps/frontend/package.js
 fi
 if [[ "$RELEASE_MODE" == '--plan' ]]; then
     git diff --stat "$ROLLBACK_SHA" "$RELEASE_SHA"
+    .venv/bin/python "$SCRIPT_DIR/configure_nginx.py" --plan
     if [[ "$FRONTEND_DEV_DEPENDENCIES_CHANGED" == true ]]; then
         echo 'Verified frontend Vite/Vitest devDependency update; rollback will reinstall the prior lockfile.'
     fi
@@ -89,6 +90,8 @@ sudo -n -u postgres -- test -r "$PROJECT_ROOT/ops/server/migrate.py" || {
 SERVICES=(fqp-backend fqp-scheduler fqp-worker)
 for service in "${SERVICES[@]}"; do sudo -n systemctl is-active --quiet "$service"; done
 sudo -n systemctl is-active --quiet nginx
+sudo -n nginx -t
+.venv/bin/python "$SCRIPT_DIR/configure_nginx.py" --plan
 if [[ ! -d "$WEB_ROOT" || ! -w "$WEB_ROOT" ]] || has_symlink_component "$WEB_ROOT"; then
     echo "Nginx web root is unavailable or not writable: $WEB_ROOT" >&2
     exit 1
@@ -291,6 +294,16 @@ for service in "${SERVICES[@]}"; do sudo -n systemctl is-active --quiet "$servic
 [[ "$(git rev-parse HEAD)" == "$(git rev-parse origin/main)" ]]
 FRONTEND_PUBLISH_ATTEMPTED=true
 publish_frontend
+# The installer validates and restores the previous files on test/reload failure.
+# Install last: the existing proxy/TLS/security rules remain in the selected site.
+NGINX_CONFIG_STATUS=0
+sudo -n -- "$PROJECT_ROOT/.venv/bin/python" "$SCRIPT_DIR/configure_nginx.py" --apply || NGINX_CONFIG_STATUS=$?
+if (( NGINX_CONFIG_STATUS == 3 )); then
+    trap - ERR
+    rollback_required 'Nginx configuration recovery failed; validate configuration before restarting'
+elif (( NGINX_CONFIG_STATUS != 0 )); then
+    false # invoke the existing application rollback after verified config restore
+fi
 trap - ERR
 printf 'Deployed: %s\n' "$RELEASE_SHA"
 

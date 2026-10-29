@@ -16,9 +16,9 @@ from scripts.feature_importance import (
     get_condition_performance,
     get_evaluation_summary,
     get_feature_importance,
+    get_feature_model_info,
     get_model_comparison_data,
     recommend_best_combos,
-    train_if_needed,
 )
 from scripts.model_performance_cache import (
     ModelHistoryUnavailable,
@@ -128,33 +128,24 @@ def model_comparison():
 def feature_importance(
     method: str = Query("permutation", description="方法：permutation | gain | both"),
     top_n: int = Query(20, ge=5, le=50, description="返回前 N 个特征"),
-    force_retrain: bool = Query(False, description="强制重新训练 XGBoost 模型"),
+    force_retrain: bool = Query(False, deprecated=True, description="GET 不再执行训练"),
 ):
     """获取特征重要性排名。
 
-    在 match_feature_snapshots 上训练 XGBoost 影子分类器，
-    计算排列重要性（permutation）和增益重要性（gain）。
-
-    首次调用自动训练并缓存模型。
+    只读后台任务生成的排列重要性、增益重要性和同一版本模型信息。
     """
     if method not in ("permutation", "gain", "both"):
         raise HTTPException(400, "method must be permutation | gain | both")
 
-    with get_db() as conn:
-        # Trigger training if needed
-        train_result = train_if_needed(conn, force=force_retrain)
-        if train_result.get("status") == "error":
-            return train_result
-
-        return get_feature_importance(conn, method=method, top_n=top_n)
+    if force_retrain:
+        raise HTTPException(400, "解释模型由后台任务训练，GET 不支持强制训练")
+    return get_feature_importance(method=method, top_n=top_n)
 
 
 @router.get("/api/analysis/features/model-info")
 def feature_model_info():
     """获取特征分析模型的元信息（样本数、特征数、训练准确率等）。"""
-    with get_db() as conn:
-        result = train_if_needed(conn)
-        return result
+    return get_feature_model_info()
 
 
 # ---------------------------------------------------------------------------
@@ -169,9 +160,12 @@ def shap_explanation(
 ):
     """为单场比赛提供 SHAP 特征贡献解释。
 
-    返回每个特征对预测结果的贡献值（正=提升主胜概率，负=降低主胜概率），
-    以及模型预测的三个结果概率。
+    返回每个特征对主胜类别原始分数的 SHAP 贡献、原始分数基准，
+    以及模型预测的三个结果概率；SHAP 不可用时基准和贡献为空。
     """
+    info = get_feature_model_info()
+    if info["status"] == "error":
+        return info
     with get_db() as conn:
         result = explain_prediction(conn, match_id, top_n=top_n)
         if result.get("status") == "error":

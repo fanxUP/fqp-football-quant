@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import PredictionModelOverviewPanel from './PredictionModelOverviewPanel';
 
@@ -13,6 +13,7 @@ const metadata = (title: string) => ({
 
 describe('PredictionModelOverviewPanel', () => {
   beforeEach(() => {
+    vi.clearAllMocks();
     apiMocks.calibrationProfiles.mockResolvedValue({
       policy: { sampleThreshold: 300, improvementThreshold: 0.005, affectsDecisionPath: false },
       trends: [{ modelCode: 'market_baseline', status: 'improving', label: '近期改善', latestLogLoss: 1.02, previousLogLoss: 1.04, logLossChange: -0.02, profileCount: 2, comparison: { status: 'comparable', label: '样本可比', sampleRatio: 1.067 }, affectsDecisionPath: false }],
@@ -32,9 +33,11 @@ describe('PredictionModelOverviewPanel', () => {
     const summary = await screen.findByText('预测模型说明');
     const details = summary.closest('details')!;
     expect(details.open).toBe(false);
+    expect(apiMocks.modelOverview).not.toHaveBeenCalled();
+    expect(apiMocks.calibrationProfiles).not.toHaveBeenCalled();
     fireEvent.click(summary.closest('summary')!);
     expect(details.open).toBe(true);
-    expect(screen.getAllByRole('article')).toHaveLength(3);
+    await waitFor(() => expect(screen.getAllByRole('article')).toHaveLength(3));
     expect(screen.getByRole('heading', { name: '市场赔率基准' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Maher Poisson 进球模型' })).toBeInTheDocument();
     expect(screen.getAllByText('已启用')[0]).toHaveAttribute('data-status', 'enabled');
@@ -43,6 +46,9 @@ describe('PredictionModelOverviewPanel', () => {
     expect(screen.getByText(/对数损失 1.024 → 1.001/)).toBeInTheDocument();
     expect(screen.getByText('概率校准监测')).toBeInTheDocument();
     expect(screen.getByText('具备人工评审基础')).toBeInTheDocument();
+    fireEvent.click(summary.closest('summary')!);
+    fireEvent.click(summary.closest('summary')!);
+    expect(apiMocks.modelOverview).toHaveBeenCalledTimes(1);
   });
 
   it('校准接口失败时明确提示接口错误', async () => {

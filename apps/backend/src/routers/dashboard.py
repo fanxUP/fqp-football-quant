@@ -13,10 +13,12 @@ from fastapi import APIRouter, HTTPException, Query
 
 from apps.backend.src.db import get_db
 from apps.backend.src.services.odds_movement import list_odds_movements
+from apps.backend.src.services.read_performance import ReadSnapshotCache
 from scripts.business_time import business_now
 from scripts.prediction_statistics import get_prediction_count_snapshot
 
 router = APIRouter(tags=["dashboard"])
+_read_snapshots = ReadSnapshotCache()
 
 
 def _meta(source: str) -> dict:
@@ -52,20 +54,23 @@ def get_prediction_count() -> dict:
 # ---------------------------------------------------------------------------
 @router.get("/api/dashboard/today")
 def get_today_summary():
+    key = f"today:{business_now().date().isoformat()}"
+    return _read_snapshots.get(key, _read_today_summary, ttl_seconds=20)
+
+
+def _read_today_summary():
     try:
         with get_db() as conn:
             with conn.cursor() as cur:
                 cur.execute("SELECT * FROM v_dashboard_today_summary")
                 row = cur.fetchone()
-    except Exception:
-        return _empty(
-            "今日总览", "无法读取 Dashboard 视图，请确认 v_dashboard_today_summary 已创建"
-        )
+                columns = [desc[0] for desc in cur.description]
+    except Exception as exc:
+        raise HTTPException(503, "今日总览暂时无法读取，请稍后重试") from exc
 
     if not row:
-        return _empty("今日总览", "暂无今日数据")
+        raise HTTPException(503, "今日总览尚无可读取的统计")
 
-    columns = [desc[0] for desc in cur.description]
     data = dict(zip(columns, row, strict=False))
     return {
         "code": 0,
@@ -350,6 +355,14 @@ def get_odds_movements(
 def get_model_performance(
     model_name: str | None = Query(None, description="模型名称（可选）"),
 ):
+    return _read_snapshots.get(
+        f"model-performance:{model_name or 'all'}",
+        lambda: _read_model_performance(model_name),
+        ttl_seconds=60,
+    )
+
+
+def _read_model_performance(model_name: str | None):
     try:
         with get_db() as conn:
             with conn.cursor() as cur:
@@ -367,11 +380,11 @@ def get_model_performance(
                     )
                 rows = cur.fetchall()
                 columns = [desc[0] for desc in cur.description]
-    except Exception:
-        return _empty("模型表现", "无法读取模型表现视图")
+    except Exception as exc:
+        raise HTTPException(503, "模型表现暂时无法读取，请稍后重试") from exc
 
     if not rows:
-        return _empty("模型表现", "暂无模型评估数据")
+        return {"code": 0, "data": _empty("模型表现", "暂无模型评估数据")}
 
     series = [dict(zip(columns, r, strict=False)) for r in rows]
     return {

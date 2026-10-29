@@ -127,18 +127,6 @@ def get_workspace_task_for_source(
     return _serialize(row) if row else None
 
 
-def list_workspace_tasks(conn: Any, limit: int = 20) -> list[dict[str, Any]]:
-    safe_limit = max(1, min(limit, 50))
-    with conn.cursor() as cur:
-        cur.execute(
-            """SELECT id, title, agent_code, provider_code, model, review_note, reviewed_at, created_at, prompt, response, comparison_id, source_type, source_ref
-               FROM agent_workspace_tasks ORDER BY created_at DESC, id DESC LIMIT %s""",
-            (safe_limit,),
-        )
-        rows = cur.fetchall()
-    return [_serialize(row) for row in rows]
-
-
 def list_workspace_comparison_tasks(conn: Any, comparison_id: str) -> list[dict[str, Any]]:
     """Return the small, explicitly linked set created by one manual comparison."""
     with conn.cursor() as cur:

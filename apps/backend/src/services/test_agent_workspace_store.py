@@ -14,7 +14,6 @@ from apps.backend.src.services.agent_workspace_store import (
     list_workspace_comparison_tasks,
     list_workspace_task_page,
     list_workspace_task_review_events,
-    list_workspace_tasks,
     set_workspace_comparison_completed,
     set_workspace_comparison_reviewed,
     set_workspace_task_reviewed,
@@ -74,10 +73,11 @@ def _task_row(reviewed_at=None):
 
 
 def test_workspace_tasks_return_untrusted_content_as_plain_data() -> None:
-    conn = _Connection(rows=[_task_row()])
+    conn = _Connection(rows=[_task_row()], row=(1,))
 
-    tasks = list_workspace_tasks(conn, limit=99)
+    tasks, total = list_workspace_task_page(conn, limit=99)
 
+    assert total == 1
     assert tasks[0]["prompt"] == "材料"
     assert tasks[0]["response"] == "结果"
     assert tasks[0]["reviewNote"] == "已核对来源"
@@ -85,7 +85,7 @@ def test_workspace_tasks_return_untrusted_content_as_plain_data() -> None:
     assert tasks[0]["comparisonId"] == "comparison-001"
     assert tasks[0]["sourceType"] == "pre_match"
     assert tasks[0]["sourceRef"] == "42"
-    assert conn.queries[-1][1] == (50,)
+    assert conn.queries[-1][1] == (50, 0)
 
 
 def test_workspace_source_lookup_returns_only_the_dedicated_automatic_report() -> None:

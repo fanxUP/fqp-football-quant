@@ -3,7 +3,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import RosterEvidencePanel from './RosterEvidencePanel';
 import MatchDetailPage from '../../pages/MatchDetailPage';
 const mocks = vi.hoisted(() => ({ detail: vi.fn(), features: vi.fn(), predictions: vi.fn() }));
-vi.mock('../../core/apiClient', () => ({ api: { matches: { detail: mocks.detail }, features: mocks.features, predictions: mocks.predictions } }));
+vi.mock('../../core/apiClient', () => ({ api: { matches: { detailSection: mocks.detail }, features: mocks.features, predictions: mocks.predictions } }));
 vi.mock('./TacticsScene', () => ({default: ({nodes,selectedId,onSelect,active,onFailure}:{nodes:{player:{player_id:number}}[];selectedId:number|null;onSelect:(id:number)=>void;active:boolean;onFailure:()=>void}) => <div data-testid="mock-tactics" data-selected={selectedId} data-active={String(active)}>{nodes.map(node=><button key={node.player.player_id} onClick={()=>onSelect(node.player.player_id)}>场景测试选择 {node.player.player_id}</button>)}<button onClick={onFailure}>场景测试中断</button></div>}));
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 function fixture(id = 101) {
@@ -12,6 +12,7 @@ function fixture(id = 101) {
 beforeEach(() => {localStorage.clear();vi.clearAllMocks();mocks.detail.mockResolvedValue(fixture());mocks.features.mockResolvedValue({snapshots:[]});mocks.predictions.mockResolvedValue({predictions:[]});});
 it('shows source times, provenance, real zero and keyboard-operable player details without jersey IDs', async () => {
   render(<RosterEvidencePanel matchId={101}/>);await screen.findByText('测试来源');
+  expect(mocks.detail).toHaveBeenCalledWith(101, 'roster');
   expect(screen.getByText(/入库时间/)).toBeInTheDocument();expect(screen.getByText('战力 0.00')).toBeInTheDocument();
   expect(screen.getByText('来源标记为确认首发 · 11/11')).toBeInTheDocument();
   const button=screen.getByRole('button',{name:'选择球员 球员1'});button.focus();expect(button).toHaveFocus();fireEvent.click(button);

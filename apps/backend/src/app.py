@@ -33,6 +33,7 @@ from apps.backend.src.routers import (
     ui,
     upsets,
 )
+from apps.backend.src.services.read_performance import ReadPerformanceMiddleware
 
 
 class ApiV1AliasMiddleware:
@@ -61,6 +62,7 @@ def create_app() -> FastAPI:
 
     app.include_router(auth_router.router)
     app.add_middleware(AuthMiddleware)
+    app.add_middleware(ReadPerformanceMiddleware)
     # Starlette executes the last registered middleware first. Authenticate the
     # same canonical path that routing sees, including public login aliases.
     app.add_middleware(ApiV1AliasMiddleware)

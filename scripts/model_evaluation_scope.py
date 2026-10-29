@@ -4,7 +4,7 @@ Model versions are implementation snapshots, not new independent observations.
 Every settled match is therefore counted at most once per logical model name.
 """
 
-from scripts.prediction_statistics import latest_prediction_ctes
+from scripts.prediction_statistics import canonical_prediction_rows_ctes
 
 MODEL_PRELIMINARY_MIN_SAMPLES = 30
 MODEL_PUBLICATION_MIN_SAMPLES = 100
@@ -69,9 +69,18 @@ LATEST_METRICS_CTE = """
 """
 
 
+def _metric_prediction_rows_ctes() -> str:
+    return f"""
+        , metric_prediction_matches AS MATERIALIZED (
+            SELECT DISTINCT match_id FROM latest_metrics
+        ), {canonical_prediction_rows_ctes(match_scope="metric_prediction_matches", spf_only=True)}
+    """
+
+
 METRIC_HOME_PREDICTIONS_CTE = """
     , metric_home_predictions AS (
-        -- Bind eligible matches before the canonical view ranks legacy history.
+        -- This small, option-scoped compatibility read already pushes the
+        -- match/option predicate ahead of the view's legacy ranking.
         -- Do not filter version/time here: a newer version or timestamp must
         -- still shield an older row that matched the evaluation snapshot.
         SELECT latest.* FROM model_prediction_latest_rows latest
@@ -82,19 +91,15 @@ METRIC_HOME_PREDICTIONS_CTE = """
 
 
 EVALUATION_PREDICTION_ROWS_CTES = f"""
-    WITH RECURSIVE {latest_prediction_ctes(filter_match=False)},
-    evaluation_prediction_ids AS (
-        SELECT mapped.prediction_id AS id FROM latest_groups groups
-        JOIN model_prediction_group_options mapped ON mapped.group_id = groups.group_id
-        UNION ALL
-        SELECT id FROM legacy_latest
-    ), evaluation_prediction_rows AS (
+    WITH RECURSIVE evaluation_matches AS MATERIALIZED (
+        SELECT DISTINCT m.id AS match_id FROM official_matches m
+        JOIN official_results r ON r.match_id = m.id
+        WHERE r.result_status IN ('final', 'confirmed')
+    ), {canonical_prediction_rows_ctes(match_scope="evaluation_matches")},
+    evaluation_prediction_rows AS (
         -- Reuse the canonical seek boundary, including invalid/latest rows and
         -- complete-group precedence. Apply evaluation eligibility afterwards.
-        SELECT mp.* FROM evaluation_prediction_ids latest
-        JOIN LATERAL (
-            SELECT p.* FROM model_predictions p WHERE p.id = latest.id OFFSET 0
-        ) mp ON true
+        SELECT * FROM canonical_prediction_rows
     )
 """
 
@@ -169,7 +174,9 @@ CALIBRATION_PREDICTIONS_CTE = (
 )
 
 
-MARKET_BASELINE_BRIER_CTES = """
+MARKET_BASELINE_BRIER_CTES = (
+    _metric_prediction_rows_ctes()
+    + """
     , latest_market_baseline_predictions AS (
         SELECT DISTINCT ON (source_mp.match_id, source_mp.option_code)
             source_mp.match_id,
@@ -177,9 +184,8 @@ MARKET_BASELINE_BRIER_CTES = """
             source_mp.model_probability
         FROM (
             -- Only these matches can be paired with an evaluated model.
-            -- Bind them before the view ranks legacy prediction history.
-            SELECT latest.* FROM model_prediction_latest_rows latest
-            WHERE latest.match_id = ANY(ARRAY(SELECT match_id FROM latest_metrics))
+            -- Their canonical rows were sought before evaluation eligibility.
+            SELECT latest.* FROM canonical_prediction_rows latest
         ) source_mp
         JOIN model_versions source_mv ON source_mv.id = source_mp.model_version_id
         JOIN official_matches source_match ON source_match.id = source_mp.match_id
@@ -211,3 +217,4 @@ MARKET_BASELINE_BRIER_CTES = """
         HAVING COUNT(DISTINCT source_mp.option_code) = 3
     )
 """
+)

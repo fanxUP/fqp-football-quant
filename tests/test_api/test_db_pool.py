@@ -104,3 +104,25 @@ def test_failed_reconnect_does_not_return_the_broken_connection_twice(monkeypatc
             pass
 
     assert len(pool.returned) == 1
+
+
+def test_request_budget_shortens_pool_queue_without_changing_background_limit(monkeypatch):
+    from apps.backend.src.services.read_performance import ReadProbe, current_read
+
+    pool = object.__new__(BlockingThreadedConnectionPool)
+    pool._acquire_timeout = 5
+    pool._availability = threading.Condition()
+    monkeypatch.setattr(
+        ThreadedConnectionPool,
+        "getconn",
+        lambda *_args: (_ for _ in ()).throw(PoolError("exhausted")),
+    )
+    started = time.monotonic()
+    token = current_read.set(ReadProbe("queue-fixture", started + 0.025))
+    try:
+        with pytest.raises(PoolError, match="timed out"):
+            pool.getconn()
+    finally:
+        current_read.reset(token)
+    assert 0.015 <= time.monotonic() - started < 1
+    assert pool._acquire_timeout == 5

@@ -3,7 +3,6 @@ import ReactDOM from 'react-dom/client';
 import App from './App';
 import { initializeTheme } from './app/ThemeContext';
 import './theme/red_black_tech_tokens.css';
-import './theme/themes.css';
 import './theme/appearance.css';
 import './features/command-center/command-center.css';
 import './theme/tokens/base.css';

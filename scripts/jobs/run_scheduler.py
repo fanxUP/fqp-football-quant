@@ -225,6 +225,7 @@ def _audited_job(
         "collect_weather",
         "run_model_prediction",
         "train_probability_calibration",
+        "train_feature_explanation",
         "run_recommendation_candidate",
         "generate_daily_review",
         "validate_evidence_chain",
@@ -316,6 +317,26 @@ def _audited_job(
     return wrapper
 
 
+def _register_feature_explanation_job(scheduler: Any) -> None:
+    # Local settled data only: this remains useful with external collection disabled.
+    # Shared .runtime artifacts survive API restarts; GET never starts a trainer.
+    scheduler.add_job(
+        _audited_job(
+            "train_feature_explanation",
+            "特征解释模型训练",
+            "model_agent",
+            lambda: __import__("scripts.jobs.train_feature_explanation", fromlist=["run"]).run(),
+        ),
+        "cron",
+        hour=23,
+        minute=44,
+        next_run_time=datetime.now(UTC) + timedelta(minutes=3),
+        id="train_feature_explanation",
+        max_instances=1,
+        coalesce=True,
+    )
+
+
 def main() -> None:
     print("FQP local scheduler started.")
     from scripts.local.scheduler_heartbeat import clear_scheduler_pid, write_scheduler_pid
@@ -337,6 +358,8 @@ def main() -> None:
 
         scheduler.add_job(test_heartbeat, "interval", minutes=1, id="test_heartbeat")
         test_heartbeat()
+
+        _register_feature_explanation_job(scheduler)
 
         # ----- Startup recovery: retry critical idempotent jobs until ready -----
         from scripts.jobs.startup_recovery import StartupRecovery
@@ -1253,7 +1276,7 @@ def main() -> None:
             print(f"APScheduler started with {len(scheduler.get_jobs())} jobs: {job_ids}")
         else:
             print(
-                "APScheduler started with 2 jobs: test_heartbeat, startup_recovery. "
+                "APScheduler started with 3 jobs: test_heartbeat, startup_recovery, train_feature_explanation. "
                 "Official data jobs disabled (OFFICIAL_SOURCE_ENABLED != true)."
             )
 

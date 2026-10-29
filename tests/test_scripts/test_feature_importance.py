@@ -10,6 +10,11 @@ import pytest
 from scripts import feature_importance
 
 
+@pytest.fixture(autouse=True)
+def isolated_explanation_artifact(monkeypatch, tmp_path):
+    monkeypatch.setenv("FQP_FEATURE_MODEL_ARTIFACT_PATH", str(tmp_path / "explanation.json"))
+
+
 def test_confidence_condition_preserves_uncalibrated_group():
     conn = MagicMock()
     cursor = conn.cursor.return_value.__enter__.return_value
@@ -219,11 +224,20 @@ def test_training_defers_shap_explainer_until_prediction_explanation(monkeypatch
     monkeypatch.setattr(feature_importance, "_compute_permutation_importance", lambda *_args: {})
     monkeypatch.setattr(feature_importance, "_build_shap_explainer", build_explainer)
 
+    monkeypatch.setattr(
+        feature_importance.explanation_artifact,
+        "make_artifact",
+        lambda *_args: {"sha256": "fixture"},
+    )
+    publish = Mock()
+    monkeypatch.setattr(feature_importance.explanation_artifact, "publish_artifact", publish)
+
     result = feature_importance.train_if_needed(object(), force=True)
 
     assert result["status"] == "ok"
     assert classifier_factory.call_args.kwargs["n_jobs"] == 1
     build_explainer.assert_not_called()
+    publish.assert_called_once()
 
 
 def test_permutation_importance_avoids_process_overhead_for_small_feature_sets(monkeypatch) -> None:
@@ -247,16 +261,25 @@ def test_permutation_importance_avoids_process_overhead_for_small_feature_sets(m
     assert permutation.call_args.kwargs["n_jobs"] == 1
 
 
-def test_prediction_stays_available_when_optional_shap_setup_fails(monkeypatch) -> None:
-    monkeypatch.setattr(feature_importance, "_trained_model", FakeClassifier())
-    monkeypatch.setattr(feature_importance, "_trained_explainer", None)
-    monkeypatch.setattr(feature_importance, "_explainer_initialized", False)
+def _mock_explanation_artifact(monkeypatch):
+    state = {
+        "artifact": {
+            "features": [feature_importance.FEATURE_COLUMNS[0]],
+            "sha256": "fixture",
+            "info": {"trained_at": "2026-10-29T00:00:00+00:00"},
+        },
+        "error": None,
+    }
+    monkeypatch.setattr(feature_importance.explanation_artifact, "read_state", lambda: state)
     monkeypatch.setattr(
-        feature_importance,
-        "_feature_names_cache",
-        [feature_importance.FEATURE_COLUMNS[0]],
+        feature_importance.explanation_artifact,
+        "load_classifier",
+        lambda _artifact: FakeClassifier(),
     )
-    monkeypatch.setattr(feature_importance, "train_if_needed", lambda _conn: {"status": "ok"})
+
+
+def test_prediction_stays_available_when_optional_shap_setup_fails(monkeypatch) -> None:
+    _mock_explanation_artifact(monkeypatch)
     monkeypatch.setattr(
         feature_importance,
         "_build_shap_explainer",
@@ -267,19 +290,13 @@ def test_prediction_stays_available_when_optional_shap_setup_fails(monkeypatch) 
 
     assert result["status"] == "ok"
     assert result["shap_values"] == []
+    assert result["base_values"] == []
     assert result["predicted_probs"] == {"home": 0.5, "draw": 0.3, "away": 0.2}
 
 
 def test_prediction_explanation_uses_latest_prematch_feature_snapshot(monkeypatch) -> None:
-    monkeypatch.setattr(feature_importance, "_trained_model", FakeClassifier())
-    monkeypatch.setattr(feature_importance, "_trained_explainer", None)
-    monkeypatch.setattr(feature_importance, "_explainer_initialized", True)
-    monkeypatch.setattr(
-        feature_importance,
-        "_feature_names_cache",
-        [feature_importance.FEATURE_COLUMNS[0]],
-    )
-    monkeypatch.setattr(feature_importance, "train_if_needed", lambda _conn: {"status": "ok"})
+    _mock_explanation_artifact(monkeypatch)
+    monkeypatch.setattr(feature_importance, "_build_shap_explainer", lambda _model: None)
     conn = FakeConnection()
 
     feature_importance.explain_prediction(conn, match_id=88)
@@ -399,10 +416,10 @@ def test_feature_training_uses_one_pre_match_snapshot_per_match() -> None:
 def test_explanation_missing_outcome_classes_returns_friendly_error_without_replacing_cache(
     monkeypatch, labels
 ):
-    old_model = object()
     factory = Mock(return_value=FakeClassifier())
     monkeypatch.setitem(sys.modules, "xgboost", SimpleNamespace(XGBClassifier=factory))
-    monkeypatch.setattr(feature_importance, "_trained_model", old_model)
+    publish = Mock()
+    monkeypatch.setattr(feature_importance.explanation_artifact, "publish_artifact", publish)
     monkeypatch.setattr(
         feature_importance,
         "_load_training_data",
@@ -412,7 +429,7 @@ def test_explanation_missing_outcome_classes_returns_friendly_error_without_repl
     assert result["status"] == "error"
     assert "类别" in result["error"]
     factory.assert_not_called()
-    assert feature_importance._trained_model is old_model
+    publish.assert_not_called()
 
 
 def test_explanation_all_missing_features_returns_friendly_error(monkeypatch):

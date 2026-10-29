@@ -1,16 +1,16 @@
 {
   "schema_version": 4,
-  "task_id": "UI-CONSOLIDATION-20261027",
-  "max_files_changed": 52,
-  "max_new_files": 2,
+  "task_id": "READ-EXPLANATION-BACKGROUND-20261029",
+  "max_files_changed": 74,
+  "max_new_files": 17,
   "max_new_dependencies": 0,
   "max_schema_migrations": 0,
-  "max_public_api_changes": 0,
-  "declared_public_api_changes": 0,
+  "max_public_api_changes": 5,
+  "declared_public_api_changes": 5,
   "regression_budget": {
     "new_test_failures": 0,
     "new_lint_errors": 0,
     "new_type_errors": 0
   },
-  "notes": "Includes deletion of ten theme CSS files, four appearance-only controls and obsolete appearance defaults; shared visual pass and scoped regression updates. Before reaching the limit, include current README/design-system/layout references and the English UI strings. Still frontend/documentation only. Verification identified two required UI follow-ups: league loading must not claim partial data before data arrives, and betting semantic colors need theme-aware assertions. Scope expanded before the file limit is reached."
+  "notes": "Seventh bounded batch declared before dependency/document edits: retain all six batches (57 paths / 12 new files). Three additional existing paths only: requirements.txt and two legacy architecture/milestone documents. Validate an isolated clean runtime without SQLAlchemy/Alembic before removing their direct pins; preserve all other pins, model math, public APIs, migrations and production. Use existing migration, scheduler, prediction, explanation and report tests plus real fixed-sample native-library smoke checks. No new dependencies/files, push or deployment. Eighth scope declared before edits: cumulative 73 paths / 17 new files; 13 additional paths, five new files. Existing core/types.ts and ops/server/README.md may be updated for the existing explanation contract. Three existing explanation GET contracts become read-only, including rejection of legacy force_retrain=true. Keep fitting parameters, minimum100 distinct settled prematch matches, ordered schema/missing policy, optional SHAP behavior and all previous changes. No new deps/services/migrations/branches, production, push or deployment. Test reader/worker separation, atomic artifact identity and reload, training contention, failure retention, audit and UI readiness. Eighth follow-up declared before edit: remove the now-unused internal api.analysis.featureModelInfo wrapper in already changed apiClient.ts; keep its public HTTP model-info route compatible/read-only. No added path or budget. Evidence-based eighth-batch correction declared before edits, within existing paths/budget: native SHAP confirms base_values are raw margins, not probabilities. Show raw scores in AnalysisPage and return unknown [] on optional SHAP failure; preserve predicted probabilities and successful SHAP values. Add focused backend/frontend regressions; no new endpoint or path. Integration acceptance scope declared before correction: update only the existing PostgreSQL explanation regression in tests/test_computation/test_prediction_run_postgres.py from removed process globals to a tmp_path-scoped persisted artifact; preserve all real SQL fixtures, eligibility/cutoff/missing-value/class and probability assertions. No product behavior or new path/dependency/migration/API change. Reuse passing checks on unchanged relevant sources. Additional required integration correction declared before editing: include tests/test_computation/test_shadow_input_contract.py for the other two reproduced AttributeError failures. Adapt only their explanation setup to the artifact-reader boundary, retaining NaN/real-zero and JSON-null safety assertions, and prohibit training. Cumulative budget becomes 74 paths / 17 new files; no product logic/dependency/migration/API change."
 }
