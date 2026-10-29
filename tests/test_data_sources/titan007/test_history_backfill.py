@@ -11,6 +11,7 @@ from uuid import uuid4
 
 import pytest
 
+from scripts.football_history_storage import match_history_reference
 from scripts.sources.titan007.store import connect
 from scripts.titan007_history import (
     DOMAINS,
@@ -842,3 +843,231 @@ def test_timezone_migration_preserves_v2_candidates_and_transaction_rollback(pg)
                 "select * from football_history_odds_time_candidate('2024-01-01T19:00:00+25:00','2024-01-01T12:00:00Z')"
             )
         cur.execute("rollback to savepoint timezone_migration")
+
+
+# Shared historical consumption uses real PostgreSQL, never the source cache.
+def _reference_batch(pg, *, publish=True, ambiguous=False, value=0):
+    from psycopg2.extras import Json
+
+    with pg.cursor() as cur:
+        cur.execute(
+            "insert into official_matches values (90,'1','甲','乙','2024-01-01 20:00'),"
+            "(91,'2','甲','乙','2024-01-01 20:00') on conflict do nothing"
+        )
+        cur.execute(
+            "insert into football_history_batches(source_name,content_sha256,normalization_version,manifest) "
+            "values ('titan007',%s,'test/v1','{}') returning id",
+            (uuid4().hex * 2,),
+        )
+        batch = cur.fetchone()[0]
+        for mid in [1, 2] if ambiguous else [1]:
+            cur.execute(
+                "insert into football_history_matches(batch_id,source_match_id,kickoff_at,match_status,"
+                "source_home_team_id,source_away_team_id,home_name,away_name,home_goals,away_goals,"
+                "source_metadata,official_match_id) values (%s,%s,'2024-01-01 20:00+08','finished',"
+                "10,20,'甲','乙',0,0,'{}',90)",
+                (batch, mid),
+            )
+        for domain, key, data in [
+            ("match_stats", "a", {"stat_key": "射正", "home_numeric": value, "away_numeric": None}),
+            ("match_stats", "b", {"stat_key": "角球", "home_numeric": 3, "away_numeric": 2}),
+            ("lineups", "1", {"player_name": "球员", "starter": 1, "roster_complete": False}),
+            (
+                "odds_history",
+                "1/1x2d/1",
+                {
+                    "company_id": 1,
+                    "odds_type": "europe",
+                    "source": "1x2d",
+                    "seq": 1,
+                    "change_time": "01-01 19:00",
+                    "change_at": None,
+                    "timeline_usable": False,
+                },
+            ),
+            (
+                "odds_history",
+                "1/1x2d/2",
+                {
+                    "company_id": 1,
+                    "odds_type": "europe",
+                    "source": "1x2d",
+                    "seq": 2,
+                    "change_time": "12-31 23:00",
+                    "change_at": None,
+                    "timeline_usable": False,
+                },
+            ),
+        ]:
+            cur.execute(
+                "insert into football_history_records(batch_id,domain,source_record_key,source_match_id,origin,value_json) "
+                "values (%s,%s,%s,1,%s,%s)",
+                (
+                    batch,
+                    domain,
+                    key,
+                    "market" if domain == "odds_history" else "reported",
+                    Json(data),
+                ),
+            )
+        if publish:
+            cur.execute(
+                "update football_history_batches set state='published' where id=%s", (batch,)
+            )
+    pg.commit()
+    return batch
+
+
+def _reference_timeline(pg):
+    with pg.cursor() as cur:
+        for version in (120, 121, 122, 123):
+            migration = next((Path(__file__).resolve().parents[3] / "sql").glob(f"{version}_*.sql"))
+            cur.execute(migration.read_text())
+    pg.commit()
+
+
+def test_reference_read_preserves_zero_unknown_and_quality(pg):
+    batch = _reference_batch(pg)
+    data = match_history_reference(pg, 90, limit=1)
+    assert data["batch"]["id"] == batch
+    assert data["source_match"]["season"] is None
+    assert data["counts"] == {"match_stats": 2, "lineups": 1, "odds_history": 2}
+    assert data["total"] == 2 and data["has_more"] is True
+    assert data["rows"][0]["value"]["home_numeric"] == 0
+    assert data["rows"][0]["value"]["away_numeric"] is None
+    assert data["rows"][0]["timeline"] is None
+    assert match_history_reference(pg, 90, domain="events")["rows"] == []
+    lineup = match_history_reference(pg, 90, domain="lineups")["rows"][0]
+    assert lineup["value"]["roster_complete"] is False
+
+
+def test_reference_latest_and_pinned_batch_never_mix_pages(pg):
+    first = _reference_batch(pg)
+    second = _reference_batch(pg, value=9)
+    assert match_history_reference(pg, 90)["batch"]["id"] == second
+    data = match_history_reference(pg, 90, batch_id=first, limit=1, offset=1)
+    assert data["batch"]["id"] == first
+    assert [row["key"] for row in data["rows"]] == ["b"]
+    assert data["has_more"] is False
+    assert match_history_reference(pg, 90, batch_id=first)["rows"][0]["value"]["home_numeric"] == 0
+
+
+def test_reference_building_batches_are_invisible(pg):
+    batch = _reference_batch(pg, publish=False)
+    assert match_history_reference(pg, 90)["status"] == "unmatched"
+    with pytest.raises(LookupError):
+        match_history_reference(pg, 90, batch_id=batch)
+
+
+def test_reference_ambiguous_identity_returns_no_rows(pg):
+    _reference_batch(pg, ambiguous=True)
+    data = match_history_reference(pg, 90)
+    assert data["status"] == "ambiguous" and data["rows"] == [] and data["batch"] is None
+
+
+def test_reference_missing_mapping_is_not_a_fake_empty_measurement(pg):
+    _reference_batch(pg)
+    data = match_history_reference(pg, 91)
+    assert data["status"] == "unmatched" and data["counts"] == {}
+    with pytest.raises(LookupError):
+        match_history_reference(pg, 999)
+    with pytest.raises(LookupError):
+        match_history_reference(pg, 90, batch_id=999)
+
+
+def test_reference_odds_reads_resolved_columns_and_keeps_raw_json(pg):
+    _reference_batch(pg)
+    _reference_timeline(pg)
+    data = match_history_reference(pg, 90, domain="odds_history", limit=1, offset=1)
+    row = data["rows"][0]
+    assert row["value"]["change_at"] is None
+    assert row["value"]["timeline_usable"] is False
+    assert row["timeline"]["timeline_usable"] is True
+    assert row["timeline"]["change_at"].year == 2023
+    assert row["timeline"]["time_basis"] == "inferred_year"
+    assert row["timeline"]["time_resolution_version"] == "titan007-odds-year/v2"
+
+
+def test_reference_read_works_with_restricted_role_and_readonly_transaction(pg):
+    from psycopg2 import sql
+
+    _reference_batch(pg)
+    with pg.cursor() as cur:
+        cur.execute("select current_schema()")
+        schema = cur.fetchone()[0]
+        cur.execute(sql.SQL("grant usage on schema {} to fqp").format(sql.Identifier(schema)))
+        cur.execute("grant select on official_matches to fqp")
+    pg.commit()
+    with pg.cursor() as cur:
+        cur.execute("set local role fqp")
+        cur.execute("set local transaction_read_only=on")
+    assert match_history_reference(pg, 90)["status"] == "available"
+    pg.rollback()
+
+
+def test_reference_pagination_cannot_hide_timeline_group_conflicts(pg):
+    from psycopg2.extras import Json
+
+    batch = _reference_batch(pg, publish=False)
+    with pg.cursor() as cur:
+        cur.execute(
+            "insert into football_history_records(batch_id,domain,source_record_key,source_match_id,origin,value_json) "
+            "values (%s,'odds_history','1/1x2d/3',1,'market',%s)",
+            (
+                batch,
+                Json(
+                    {
+                        "company_id": 1,
+                        "odds_type": "europe",
+                        "source": "1x2d",
+                        "seq": 3,
+                        "change_time": "01-01 18:00",
+                    }
+                ),
+            ),
+        )
+        cur.execute("update football_history_batches set state='published' where id=%s", (batch,))
+    pg.commit()
+    _reference_timeline(pg)
+    data = match_history_reference(pg, 90, domain="odds_history", limit=1)
+    assert data["total"] == 3
+    assert data["rows"][0]["timeline"]["timeline_usable"] is False
+    assert data["rows"][0]["timeline"]["time_resolution_reason"] == "inconsistent_group_order"
+
+
+def test_reference_real_http_serializes_resolved_times_from_readonly_database(pg, monkeypatch):
+    from contextlib import contextmanager
+
+    from fastapi.testclient import TestClient
+
+    from apps.backend.src.app import create_app
+    from apps.backend.src.routers import football_history
+
+    batch = _reference_batch(pg)
+    _reference_timeline(pg)
+
+    @contextmanager
+    def read_db():
+        yield pg
+
+    monkeypatch.setenv("FQP_AUTH_MODE", "none")
+    monkeypatch.setattr(football_history, "get_db", read_db)
+    response = TestClient(create_app()).get(
+        f"/api/matches/90/history-reference?domain=odds_history&batch_id={batch}&limit=1&offset=1"
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["rows"][0]["timeline"]["change_at"].startswith("2023-12-31")
+    assert data["rows"][0]["value"]["change_at"] is None
+    with pg.cursor() as cur:
+        cur.execute("show transaction_read_only")
+        assert cur.fetchone()[0] == "on"
+    pg.rollback()
+
+
+@pytest.mark.parametrize(
+    "kwargs", [{"domain": "player_transfers"}, {"limit": 101}, {"offset": 10001}, {"batch_id": 0}]
+)
+def test_reference_storage_rejects_unbounded_scope(kwargs):
+    with pytest.raises(ValueError):
+        match_history_reference(None, 90, **kwargs)

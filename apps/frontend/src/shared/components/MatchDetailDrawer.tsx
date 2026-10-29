@@ -751,7 +751,7 @@ function MatchDetailQuery({ matchId, onClose }: { matchId: number; onClose: () =
               </Section>
             )}
 
-            <p><a href={`#/matches/${d.match.id}`} onClick={onClose}>查看阵容与伤停来源证据</a></p>
+            <p><a href={`#/matches/${d.match.id}`} onClick={onClose}>查看阵容、伤停与历史参考资料</a></p>
             {/* Lineups */}
             {(d.lineups.home || d.lineups.away) && (
               <Section title="阵容" icon="👥" delay={120}>

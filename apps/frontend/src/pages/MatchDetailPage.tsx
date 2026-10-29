@@ -10,12 +10,13 @@ import { optionLabel, playTypeLabel } from '../shared/constants';
 import useManualEvidence from './useManualEvidence';
 import ReadEvidenceStatus from './ReadEvidenceStatus';
 import RosterEvidencePanel from '../features/tactics/RosterEvidencePanel';
+import HistoryReferencePanel from '../shared/components/HistoryReferencePanel';
 
 interface MatchDetailPageProps {
   matchId: number;
 }
 
-type TabKey = 'features' | 'predictions' | 'roster';
+type TabKey = 'features' | 'predictions' | 'roster' | 'history';
 
 function MatchQuery({ matchId }: MatchDetailPageProps) {
   const [activeTab, setActiveTab] = useState<TabKey>('features');
@@ -110,6 +111,7 @@ function MatchQuery({ matchId }: MatchDetailPageProps) {
       {/* Tabs */}
       <div className="fqp-tabs" style={{ flexWrap: 'wrap' }}>
         <button type="button" className={`fqp-tab${activeTab === 'roster' ? ' active' : ''}`} aria-pressed={activeTab === 'roster'} onClick={() => setActiveTab('roster')}>阵容与伤停</button>
+        <button type="button" className={`fqp-tab${activeTab === 'history' ? ' active' : ''}`} aria-pressed={activeTab === 'history'} onClick={() => setActiveTab('history')}>历史参考</button>
         <button
           className={`fqp-tab${activeTab === 'features' ? ' active' : ''}`}
           aria-pressed={activeTab === 'features'}
@@ -129,6 +131,7 @@ function MatchQuery({ matchId }: MatchDetailPageProps) {
       {/* Tab content with transition */}
       <div key={activeTab} className="fqp-anim-fadeIn">
         {activeTab === 'roster' && <RosterEvidencePanel matchId={matchId} />}
+        {activeTab === 'history' && <HistoryReferencePanel matchId={matchId} />}
         {activeTab === 'features' && (
           <Card>
             <ReadEvidenceStatus resource={featureResource} label="刷新多维特征" note="最多 10 个快照" />

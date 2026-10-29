@@ -1,26 +1,30 @@
 {
   "schema_version": 4,
-  "task_id": "HISTORY-DEPLOY-NO-BACKUP-123-20261030",
-  "objective": "Prepare and deploy the already-pushed historical data fixes while honoring the user's no-backup instruction. Permit a no-backup release only for the exact reviewed timezone-function migration 123, with its SHA pinned and existing release evidence preserved.",
+  "task_id": "HISTORY-MATCH-READ-20261030",
+  "objective": "Read published shared history in the existing match detail page with explicit identity, batch and quality.",
   "allowed_paths": [
-    ".vibe/CHANGE_BUDGET.yaml",
     ".vibe/SCOPE_LOCK.yaml",
-    "ops/server/deploy.sh",
-    "ops/server/README.md"
+    ".vibe/CHANGE_BUDGET.yaml",
+    "scripts/football_history_storage.py",
+    "apps/backend/src/routers/football_history.py",
+    "apps/backend/src/app.py",
+    "tests/test_api/test_football_history.py",
+    "tests/test_data_sources/titan007/test_history_backfill.py",
+    "apps/frontend/src/core/apiClient.ts",
+    "apps/frontend/src/core/types.ts",
+    "apps/frontend/src/shared/components/HistoryReferencePanel.tsx",
+    "apps/frontend/src/shared/components/HistoryReferencePanel.test.tsx",
+    "apps/frontend/src/pages/MatchDetailPage.tsx",
+    "apps/frontend/src/shared/components/MatchDetailDrawer.tsx",
+    "docs/titan007-data-source.md"
   ],
   "protected_paths": [
     "sql/**",
+    "ops/**",
     "**/package*.json",
     "**/*lock*",
-    "requirements.txt",
-    "requirements-dev.txt",
-    "ops/**"
+    "requirements*.txt"
   ],
-  "approved_protected_paths": [
-    ".vibe/CHANGE_BUDGET.yaml",
-    ".vibe/SCOPE_LOCK.yaml",
-    "ops/server/deploy.sh",
-    "ops/server/README.md"
-  ],
-  "notes": "Deployment-only follow-up on main. The user explicitly requested no backup. The no-backup path is valid only when the pending migration list is exactly 123_football_history_odds_invalid_timezone.sql and its content SHA256 equals ba62d08357813c093a5304d9143c2e2c5e0295f010e4338afeb4d4ca65911744. Existing quality, rollback, protected HTTP and migration rehearsal evidence remain mandatory. Every other pending migration keeps the existing one-hour verified backup requirement. No database migration files, source import, row rewrite, API or dependency changes are in scope."
+  "approved_protected_paths": [],
+  "notes": "Single main, read-only reference UI/API; no migrations, production writes, reimports, training or dependency additions."
 }

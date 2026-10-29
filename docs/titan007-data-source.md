@@ -19,7 +19,7 @@
 - `MM-DD HH:mm` 按站点北京时间，枚举开球年份的前一年、当年、后一年；只有开球前180天至后12小时内的唯一有效日历时间可推定。跨年和闰日使用真实日历校验，无法推定的记录继续可查，不阻塞其他数据。
 - 以批次、来源比赛、公司、赔率类型及采集来源共同分组，按原 `seq` 校验。允许正序、倒序及相同时间；检查会跨过缺失时间记录。已解析时间出现来回倒序，或序号缺失/重复时，整组不提供可用时间轴，不强行调年份使其顺序成立。
 - `time_basis=inferred_year` 表示推定年份，`source_full` 表示来源已有完整日期，`unresolved` 表示未解决。时区假设另由 `change_timezone_basis` 说明。`timeline_usable=true` 只表示通过上述规则，可用于带标识的参考走势；不证明来源当时已发布、模型当时已获取或属于赛前盘，也不允许直接冒充无泄漏回测样本。
-- 120/121的基础规则版本为 `titan007-odds-year/v1`。按 `batch_id`、`source_match_id` 查询单场，避免页面请求每次全表扫描；该视图尚未自动接入已有赔率页面或模型输入。
+- 120/121的基础规则版本为 `titan007-odds-year/v1`。按 `batch_id`、`source_match_id` 查询单场，避免页面请求每次全表扫描；比赛详情的新增参考读取见下文，原有赔率走势页与模型输入仍未切换。
 
 #### 来源年份与延期赛程修正（v2）
 
@@ -66,11 +66,21 @@ ORDER BY change_at NULLS LAST, source_record_key;
 
 历史导入CLI要求显式回环 `DATABASE_URL`，同时拒绝外部 `hostaddr`、service和 `PGHOSTADDR` / `PGSERVICE` / `PGSERVICEFILE` 环境路由；连接时固定数字回环地址，避免DNS或libpq默认路由把写入转向其他主机。通过SSH在目标服务器本机运行同样适用；不会据此连接其他数据库。
 
-迁移 `123_football_history_odds_invalid_timezone.sql` 在122之后加固日期函数：非法时区偏移（如 `+25:00`）返回 `unresolved` / `invalid_timezone_offset`，不让单条坏数据中断其他赔率读取。保留正常候选、视图列和并行禁用属性；119—122已应用摘要保持不变。123属于后续发布内容，不能将本地测试通过表述为生产已应用。
+迁移 `123_football_history_odds_invalid_timezone.sql` 在122之后加固日期函数：非法时区偏移（如 `+25:00`）返回 `unresolved` / `invalid_timezone_offset`，不让单条坏数据中断其他赔率读取。保留正常候选、视图列和并行禁用属性；119—122已应用摘要保持不变。123已随2026-10-30服务器发布应用，提交`7562775`；未重导原批次。
 
 GitHub CI在隔离集群创建专用 `fqp_history_test_ci`，设置 `FQP_HISTORY_TEST_DSN` 后运行本文件对应回归；JUnit校验要求该模块存在且零跳过。手动测试也必须使用 `127.0.0.1` 上以 `fqp_history_test_` 开头的一次性数据库；缺少DSN时本地数据库用例会跳过，不构成发布验证。
 
 模块可查询 `football_history_available` 视图，按明确的 `batch_id` 与 `domain` 读取，避免多批重复计数。视图只展示已发布批次，并提供已核实的规范球队与官方比赛链接。当前官方结算、旧阵容投影和预测输入链路不自动读取这批历史明细；接入训练/特征时应单独验证字段用途。同场赛后数据不得成为同场赛前特征，但可以在核实后用于后续比赛的历史分析。
+
+### 比赛详情历史参考读取（2026-10-30本地续作）
+
+现有比赛详情页新增“历史参考”，从共享PostgreSQL读取技术统计、事件、实际阵容、预计阵容、历史伤停和第三方赔率变化。后端共用入口为`scripts.football_history_storage.match_history_reference`；浏览不读取SQLite、不触发采集。该接线尚待提交发布，不能按本地实现推断服务器页面已更新。
+
+会话保护的`GET /api/matches/{official_match_id}/history-reference`接受`domain`（默认`match_stats`）、`batch_id`、`limit`（1—100，默认50）和`offset`（0—10000）。首次仅从已发布的`titan007`批次、已核实的`official_match_id`链接选取最新批次，同批多个来源身份返回`ambiguous`而不任选；没有映射返回`unmatched`，所选批次没有该比赛则404。页面拿到首个批次后将它固定到分类切换和分页请求，避免新发布过程中混批。
+
+返回来源比赛、批次及内容摘要、该场分类数量、分页记录。每条包含原始`value`与独立`timeline`；赔率采用视图的`change_at/time_basis/time_resolution_reason/timeline_usable`，组内完整顺序校验先于分页。读取限定单场/批次，事务只读且语句上限5秒；结构未就绪或超时返回可重试503。不要对每次页面读取运行全库统计。
+
+入库时间不等于来源发布时间，赛季未知保持未知，真实0保留，预计首发和名单不完整状态独立显示，历史伤停不冒充当前健康信息。`player_transfers`、派生出场分钟与模型训练接线不在此入口内。该页面消费仅供查看核对，不自动改变模型概率或官方结算。
 
 ## 当前可以做什么
 

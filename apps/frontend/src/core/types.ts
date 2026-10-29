@@ -1643,3 +1643,22 @@ export interface DashboardResponse<T> {
     extras?: Record<string, unknown>;
   };
 }
+/** Research-only history; resolved timeline columns deliberately remain separate from raw JSON. */
+export type HistoryDomain = 'match_stats' | 'events' | 'lineups' | 'predicted_lineups' | 'match_injuries' | 'odds_history';
+export interface HistoryReference {
+  match_id: number;
+  domain: HistoryDomain;
+  status: 'available' | 'unmatched' | 'ambiguous';
+  batch: { id: number; source_name: string; imported_at: string; content_sha256: string; normalization_version: string } | null;
+  source_match: { id: number; home_name: string | null; away_name: string | null; kickoff_at: string; season: string | null; status: string } | null;
+  counts: Partial<Record<HistoryDomain, number>>;
+  rows: {
+    key: string; side: 'home' | 'away' | null; origin: string; value: Record<string, unknown>;
+    timeline: {
+      change_at: string | null; time_basis: string; time_resolution_reason: string;
+      timeline_usable: boolean; change_timezone_basis: string; effective_kickoff_at: string;
+      kickoff_time_basis: string; time_resolution_version: string;
+    } | null;
+  }[];
+  limit: number; offset: number; total: number; has_more: boolean;
+}

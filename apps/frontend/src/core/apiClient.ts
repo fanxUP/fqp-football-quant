@@ -665,6 +665,8 @@ export const api = {
       request<import('./types').MatchDetail>(`/api/matches/${matchId}/detail`),
     detailSection: <Section extends keyof MatchDetailSections>(matchId: number, section: Section) =>
       request<MatchDetailSections[Section]>(`/api/matches/${matchId}/detail${qs({ section })}`),
+    historyReference: (matchId: number, params: { domain: import('./types').HistoryDomain; batch_id?: number; limit?: number; offset?: number }) =>
+      request<import('./types').HistoryReference>(`/api/matches/${matchId}/history-reference${qs(params)}`),
   },
 
   // Shared, read-only supplementary league data. Browsing never collects data.
