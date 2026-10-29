@@ -11,6 +11,7 @@ import sys
 import time
 from datetime import date, datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 from . import analysis as analysis_parser
 from . import assets as assets_mod
@@ -510,11 +511,12 @@ def cmd_odds(args) -> int:
                         }
                     )
                 store.save_odds(conn, rows)
-                by_company = {}
+                by_company: dict[int, list[dict[str, Any]]] = {}
                 for h in data["history"]:
-                    if not keep(h["company_id"]):
+                    company_id = int(h["company_id"])
+                    if not keep(company_id):
                         continue
-                    by_company.setdefault(h["company_id"], []).append(h)
+                    by_company.setdefault(company_id, []).append(h)
                 for cid, hist in by_company.items():
                     store.save_odds_history(conn, mid, cid, "europe", "1x2d", hist)
                 print(
@@ -702,7 +704,7 @@ def _sync_league(
         results = leagues_parser.normalize_results(data, season)
         standings = leagues_parser.normalize_standings(data)
 
-    scorers = {}
+    scorers: dict[str, list[dict[str, Any]]] = {}
     if include_scorers:
         try:
             archer_url = ARCHER_URL.format(season=season, league_id=league_id)
@@ -961,7 +963,7 @@ def cmd_league_classify(args) -> int:
     os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)
     classify_mod.write_json(out, entries)
     n = classify_mod.import_json(conn, out)
-    counts = {}
+    counts: dict[str, int] = {}
     for e in entries:
         counts[e["priority"]] = counts.get(e["priority"], 0) + 1
     unknown = sum(1 for e in entries if e["region"] == "未知")
@@ -1044,7 +1046,7 @@ def _fetch_league_teams(client, league_id: int, season: str) -> dict:
             else LEAGUE_JS_URL_PLAIN.format(season=season, league_id=league_id)
         )
         data = leagues_parser.parse_league_js(client.get(url, referer="https://zq.titan007.com/"))
-    return assets_mod.extract_team_logos(data.get("teams"))
+    return assets_mod.extract_team_logos(data.get("teams") or [])
 
 
 def _save_asset(conn, asset_type, entity_id, name, url, path, size, status):
@@ -1195,7 +1197,7 @@ def cmd_assets(args) -> int:
                 "SELECT entity_id FROM assets WHERE asset_type='player_photo' AND status='ok'"
             )
         }
-        targets = {
+        player_targets = {
             int(r["player_id"]): (r["name"], r["team_id"])
             for r in conn.execute(
                 """SELECT player_id, name, team_id FROM player_directory
@@ -1204,22 +1206,25 @@ def cmd_assets(args) -> int:
                 (derive_mod.SQUAD_ID_OFFSET,),
             )
         }
-        missing = {pid: v for pid, v in targets.items() if pid not in have}
-        known = {}
-        ids = list(missing)
-        for start in range(0, len(ids), 400):
-            chunk = ids[start : start + 400]
+        missing_players = {pid: value for pid, value in player_targets.items() if pid not in have}
+        known_player_photos: dict[int, tuple[Any, str]] = {}
+        player_ids = list(missing_players)
+        for start in range(0, len(player_ids), 400):
+            chunk = player_ids[start : start + 400]
             marks = ",".join("?" * len(chunk))
             for pid, raw in conn.execute(
                 f"SELECT player_id, raw FROM lineups WHERE player_id IN ({marks})", chunk
             ):
                 url = assets_mod.extract_player_photo(raw or "", int(pid))
-                if url and int(pid) not in known:
-                    known[int(pid)] = (missing[int(pid)][0], url)
-        print(f"阵容页解析出头像 {len(known)} 个（待补 {len(missing)} 人）", flush=True)
+                if url and int(pid) not in known_player_photos:
+                    known_player_photos[int(pid)] = (missing_players[int(pid)][0], url)
+        print(
+            f"阵容页解析出头像 {len(known_player_photos)} 个（待补 {len(missing_players)} 人）",
+            flush=True,
+        )
 
         if args.fill_missing:
-            todo = [pid for pid in missing if pid not in known]
+            todo = [pid for pid in missing_players if pid not in known_player_photos]
             if args.limit:
                 todo = todo[: args.limit]
             print(f"补抓头像：{len(todo)} 名球员", flush=True)

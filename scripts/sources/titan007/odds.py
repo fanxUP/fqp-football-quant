@@ -183,11 +183,13 @@ def parse_vip_change(html: str) -> list[dict[str, Any]]:
         texts = [re.sub(r"\s+", " ", td.get_text(" ", strip=True)).strip() for td in tds]
         if not re.fullmatch(r"\d+(?:\+\d+)?", texts[0]):
             continue
+        home: str | None = None
+        line: str | None = None
+        away: str | None = None
         if len(texts) >= 7:
             home, line, away = texts[2], texts[3], texts[4]
             change_time, status = texts[5], texts[6]
         else:
-            home = line = away = None
             change_time, status = texts[-2], texts[-1]
         rows.append(
             {

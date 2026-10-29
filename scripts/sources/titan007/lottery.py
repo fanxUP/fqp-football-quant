@@ -192,7 +192,7 @@ def map_teams(conn) -> dict[str, int]:
         if r["lottery_name"] and r["titan_team_id"]
     }
     now = datetime.now().isoformat(timespec="seconds")
-    id_to_name = {}
+    id_to_name: dict[int, str] = {}
     for teams in index.values():
         for tid, nm in teams.items():
             id_to_name.setdefault(tid, nm)
@@ -217,7 +217,7 @@ def map_teams(conn) -> dict[str, int]:
                 titan_id, titan_name = next(iter(candidates.items()))
                 method, confidence, status = "exact", 0.99, "mapped"
             elif len(candidates) > 1:
-                ranked = sorted(
+                ranked_exact = sorted(
                     candidates.items(),
                     key=lambda kv: (
                         _audience_penalty(norm, kv[1]),
@@ -225,15 +225,15 @@ def map_teams(conn) -> dict[str, int]:
                         kv[0],
                     ),
                 )
-                best_tid, best_name = ranked[0]
+                best_tid, best_name = ranked_exact[0]
                 best_pen = _audience_penalty(norm, best_name)
                 best_league = _league_score(best_tid, league_norm, team_leagues)
-                if len(ranked) == 1:
+                if len(ranked_exact) == 1:
                     clear = True
                 else:
-                    sec_name = ranked[1][1]
+                    sec_name = ranked_exact[1][1]
                     sec_pen = _audience_penalty(norm, sec_name)
-                    sec_league = _league_score(ranked[1][0], league_norm, team_leagues)
+                    sec_league = _league_score(ranked_exact[1][0], league_norm, team_leagues)
                     clear = (best_pen + 0.25 <= sec_pen) or (best_league >= sec_league + 0.12)
                 titan_id, titan_name = best_tid, best_name
                 method = "exact"
@@ -246,18 +246,18 @@ def map_teams(conn) -> dict[str, int]:
                     for tid, nm in teams.items():
                         if score > best.get(tid, (0.0, ""))[0]:
                             best[tid] = (score, nm)
-                ranked = []
+                ranked_fuzzy: list[tuple[float, int, str]] = []
                 for tid, (score, nm) in best.items():
                     composite = (
                         score
                         + 0.15 * _league_score(tid, league_norm, team_leagues)
                         - _audience_penalty(norm, nm)
                     )
-                    ranked.append((composite, tid, nm))
-                ranked.sort(reverse=True)
-                if ranked:
-                    score, tid, nm = ranked[0]
-                    second = ranked[1][0] if len(ranked) > 1 else 0.0
+                    ranked_fuzzy.append((composite, tid, nm))
+                ranked_fuzzy.sort(reverse=True)
+                if ranked_fuzzy:
+                    score, tid, nm = ranked_fuzzy[0]
+                    second = ranked_fuzzy[1][0] if len(ranked_fuzzy) > 1 else 0.0
                     titan_id, titan_name = tid, nm
                     if score >= 0.8 and score - second >= 0.03:
                         method, confidence, status = "fuzzy", min(score, 1.0), "mapped"
@@ -376,6 +376,7 @@ def link_matches(conn, start: str, end: str) -> dict[str, int]:
                     (home_id, away_id, titan_id),
                 )
         if titan_id:
+            assert link_type is not None
             conn.execute(
                 "UPDATE lottery_matches SET titan_match_id=?, link_type=? WHERE lottery_match_id=?",
                 (titan_id, link_type, row["lottery_match_id"]),

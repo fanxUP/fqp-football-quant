@@ -370,7 +370,7 @@ def parse_history_page(html: str, page_date: date) -> list[dict[str, Any]]:
             match_id = _int(m.group(1)) if m else None
         if not match_id:
             continue
-        league_ids = (tr.get("name") or "").split(",")
+        league_ids = str(tr.get("name") or "").split(",")
         league_id = _int(league_ids[0]) if league_ids else None
         sub_league_id = _int(league_ids[1]) if len(league_ids) > 1 else None
         country_id = _int(tr.get("infoid"))
@@ -478,8 +478,8 @@ def parse_detail_page(html: str, match_id: int) -> dict[str, Any]:
     header["away_logo"] = js_var("guestTeamFlg")
 
     # 天气 / 温度（详情页头部 <label>天气：…</label><label>温度：…</label>）
-    for label in soup.find_all("label"):
-        text = _clean(label.get_text(" ", strip=True))
+    for weather_label in soup.find_all("label"):
+        text = _clean(weather_label.get_text(" ", strip=True))
         if text.startswith("天气："):
             header["weather"] = text.split("：", 1)[1].strip() or None
         elif text.startswith("温度："):
@@ -491,12 +491,12 @@ def parse_detail_page(html: str, match_id: int) -> dict[str, Any]:
         spans = div.find_all("span", recursive=False)
         if len(spans) < 3:
             continue
-        label = _clean(spans[1].get_text(" ", strip=True))
+        stat_label = _clean(spans[1].get_text(" ", strip=True))
         home_value = _clean(spans[0].get_text(" ", strip=True))
         away_value = _clean(spans[2].get_text(" ", strip=True))
-        if not label or (not home_value and not away_value):
+        if not stat_label or (not home_value and not away_value):
             continue
-        stats[label] = {
+        stats[stat_label] = {
             "home": home_value,
             "away": away_value,
         }
@@ -506,22 +506,22 @@ def parse_detail_page(html: str, match_id: int) -> dict[str, Any]:
     # 重要事件
     events: list[dict[str, Any]] = []
     for li in soup.select("ul#teamEventDiv li.lists"):
-        div = li.find("div", class_="data")
-        if not div:
+        event_div = li.find("div", class_="data")
+        if not event_div:
             continue
-        spans = div.find_all("span", recursive=False)
+        spans = event_div.find_all("span", recursive=False)
         if len(spans) < 3:
             continue
         minute = _clean(spans[1].get_text(" ", strip=True))
         left, right = spans[0], spans[2]
         side = "home" if left.find(["img", "a", "i"]) else "away"
-        node = left if side == "home" else right
-        titles = [img.get("title") for img in node.find_all("img") if img.get("title")]
+        event_node = left if side == "home" else right
+        titles = [img.get("title") for img in event_node.find_all("img") if img.get("title")]
         event_type = titles[-1] if titles else ""
-        if not event_type and node.find("i", class_="goalicon"):
+        if not event_type and event_node.find("i", class_="goalicon"):
             event_type = "入球"
         players = []
-        for a in node.find_all("a"):
+        for a in event_node.find_all("a"):
             name = _clean(a.get("title") or a.get_text(" ", strip=True))
             if name:
                 players.append(name)
@@ -538,7 +538,7 @@ def parse_detail_page(html: str, match_id: int) -> dict[str, Any]:
                 "event_type": event_type,
                 "player_name": players[0] if players else None,
                 "assist_name": assist,
-                "raw": str(div)[:1000],
+                "raw": str(event_div)[:1000],
             }
         )
 
@@ -552,14 +552,14 @@ def parse_detail_page(html: str, match_id: int) -> dict[str, Any]:
             ("home", "div.backupPlay2 div.home", 0),
             ("away", "div.backupPlay2 div.guest", 0),
         ):
-            node = box.select_one(css)
-            if not node:
+            lineup_node = box.select_one(css)
+            if not lineup_node:
                 continue
-            for play in node.select("div.play"):
+            for play in lineup_node.select("div.play"):
                 name_node = play.select_one("div.name a")
                 if not name_node:
                     continue
-                href = name_node.get("href") or ""
+                href = str(name_node.get("href") or "")
                 m = re.search(r"/player/\d+/(\d+)\.html", href)
                 info = {}
                 for li in play.select("ul li"):
@@ -567,14 +567,13 @@ def parse_detail_page(html: str, match_id: int) -> dict[str, Any]:
                     parts = re.split(r"[：:]", txt, maxsplit=1)
                     if len(parts) == 2:
                         info[parts[0].strip()] = parts[1].strip()
+                number_node = play.select_one("em.num")
                 lineups.append(
                     {
                         "side": side,
                         "player_id": _int(m.group(1)) if m else None,
                         "player_name": _clean(name_node.get_text(" ", strip=True)),
-                        "number": _clean(play.select_one("em.num").get_text(strip=True))
-                        if play.select_one("em.num")
-                        else None,
+                        "number": _clean(number_node.get_text(strip=True)) if number_node else None,
                         "position": info.get("位置"),
                         "starter": starter,
                         "birth": info.get("生日"),
@@ -683,7 +682,7 @@ def merge_scorers(
 def parse_player_tech(html: str) -> dict[str, list[dict[str, Any]]]:
     """PlayerTech.aspx：两张表（主队/客队），表头即字段名。"""
     soup = BeautifulSoup(html, "html.parser")
-    out: dict[str, list[dict[str, str]]] = {"home": [], "away": []}
+    out: dict[str, list[dict[str, Any]]] = {"home": [], "away": []}
     for side, table in zip(("home", "away"), soup.find_all("table")[:2], strict=False):
         rows = table.find_all("tr")
         if not rows:
@@ -694,7 +693,9 @@ def parse_player_tech(html: str) -> dict[str, list[dict[str, Any]]]:
             cells = [c.get_text(" ", strip=True) for c in cell_nodes]
             if len(cells) < 4 or not cells[1]:
                 continue
-            row = {header[i]: cells[i] for i in range(min(len(header), len(cells))) if header[i]}
+            row: dict[str, Any] = {
+                header[i]: cells[i] for i in range(min(len(header), len(cells))) if header[i]
+            }
             m = re.search(r"PlayerID=(\d+)", str(cell_nodes[1]))
             row["player_id"] = int(m.group(1)) if m else None
             out[side].append(row)
@@ -784,7 +785,7 @@ def parse_predicted_lineup(html: str) -> dict[str, Any]:
             out[side].append(
                 {
                     "number": num.get_text(" ", strip=True) if num else None,
-                    "player_name": name.strip(),
+                    "player_name": _clean(name),
                     "position": None,
                 }
             )

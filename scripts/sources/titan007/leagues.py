@@ -192,7 +192,9 @@ def normalize_cup_results(
     seen = set()
     for key, value in data.get("groups", {}).items():
         m = re.match(r"G(\d+)", key)
-        round_no = _int(m.group(1)) if m else None
+        if not m:
+            continue
+        round_no = int(m.group(1))
         for row in _iter_cup_match_rows(value, league_id):
             if row[0] in seen:
                 continue
@@ -327,7 +329,7 @@ def parse_player_tech_scorers(text: str) -> list[dict[str, Any]]:
                 },
             }
         )
-    rows.sort(key=lambda r: r.get("goals") or 0, reverse=True)
+    rows.sort(key=lambda r: _int(r.get("goals")) or 0, reverse=True)
     for i, row in enumerate(rows, 1):
         row["rank"] = i
     return rows

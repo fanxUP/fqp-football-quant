@@ -9,6 +9,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
+from importlib import import_module
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -16,9 +17,8 @@ from urllib.parse import urljoin, urlsplit
 
 import httpx
 
-cffi_requests: ModuleType | None
 try:
-    from curl_cffi import requests as cffi_requests
+    cffi_requests: ModuleType | None = import_module("curl_cffi.requests")
 except ImportError:
     cffi_requests = None
 

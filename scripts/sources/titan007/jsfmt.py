@@ -68,7 +68,7 @@ def _sanitize_js(text: str) -> str:
     return text
 
 
-def js_literal(text: str) -> Any:
+def js_literal(text: str | None) -> Any:
     """把 JS 字面量转成 Python 对象；失败返回 None。"""
     if text is None:
         return None

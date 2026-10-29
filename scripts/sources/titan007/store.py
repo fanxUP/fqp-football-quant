@@ -6,7 +6,7 @@ import csv
 import json
 import os
 import sqlite3
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from contextlib import contextmanager
 from contextvars import ContextVar
 from datetime import UTC, datetime
@@ -1234,7 +1234,7 @@ def save_league(
     data: dict[str, Any],
     results: Iterable[dict[str, Any]],
     standings: Iterable[dict[str, Any]],
-    scorers: dict[str, Iterable[dict[str, Any]]],
+    scorers: Mapping[str, Iterable[dict[str, Any]]],
 ) -> None:
     info = data.get("league") or []
     if len(info) >= 10:

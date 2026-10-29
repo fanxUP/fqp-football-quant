@@ -21,10 +21,8 @@ def _strip_html(s: Any) -> str:
 
 
 def _int(v: Any) -> int | None:
-    try:
-        return int(re.search(r"-?\d+", str(v)).group())
-    except AttributeError, TypeError, ValueError:
-        return None
+    match = re.search(r"-?\d+", str(v))
+    return int(match.group()) if match else None
 
 
 def _team_link(row) -> tuple:
@@ -263,10 +261,12 @@ def parse_zq_analysis(html: str) -> dict[str, Any]:
     lname = soup.select_one("a.LName")
     if lname:
         meta["league_round"] = _clean(lname.get_text(" ", strip=True))
-        parent_text = _clean(lname.parent.get_text(" ", strip=True))
-        m = re.search(r"(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2})", parent_text)
-        if m:
-            meta["match_date"], meta["kickoff_time"] = m.group(1), m.group(2)
+        parent = lname.parent
+        if parent:
+            parent_text = _clean(parent.get_text(" ", strip=True))
+            m = re.search(r"(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2})", parent_text)
+            if m:
+                meta["match_date"], meta["kickoff_time"] = m.group(1), m.group(2)
     place = soup.select_one("a.place")
     if place:
         meta["venue"] = _clean(place.get_text(" ", strip=True)).replace("场地：", "").strip()
@@ -304,8 +304,9 @@ def parse_zq_analysis(html: str) -> dict[str, Any]:
     )
     if briefing_h2:
         container = briefing_h2.find_parent("div", class_="porletP") or briefing_h2.parent
-        text = _clean(container.get_text("\n", strip=True))
-        out["briefing"] = text.replace("赛前简报", "", 1).strip()
+        if container:
+            text = _clean(container.get_text("\n", strip=True))
+            out["briefing"] = text.replace("赛前简报", "", 1).strip()
 
     cup = soup.find(id="cupScore")
     if cup:

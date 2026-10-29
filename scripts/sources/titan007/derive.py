@@ -60,7 +60,7 @@ def derive_injuries(conn) -> int:
 
 def derive_appearances(conn) -> int:
     conn.execute("DELETE FROM player_appearances")
-    subs: dict[int, dict[str, list[int]]] = {}
+    subs: dict[int, dict[str, dict[str, int]]] = {}
     for r in conn.execute(
         "SELECT match_id, side, minute, player_name, assist_name FROM events "
         "WHERE event_type='换人'"
@@ -306,9 +306,11 @@ def refresh_player_directory(conn) -> int:
     ):
         team_id = int(r[0]) if r[0] is not None else None
         name, birth, position, nationality = r[2], r[3], r[4], r[5]
-        pid = live_key.get((team_id, _player_norm(name)))
-        if pid is not None:
-            entry = rows[pid]
+        if team_id is None:
+            continue
+        live_player_id = live_key.get((team_id, _player_norm(name)))
+        if live_player_id is not None:
+            entry = rows[live_player_id]
             if entry["squad_id"] is None:
                 entry["squad_id"] = int(r[1])
             for key, value in (
@@ -380,7 +382,7 @@ def derive_cup_ties(conn) -> int:
            WHERE (c.type IN ('cup','super_cup','tournament') OR COALESCE(c.tier,0)=0)
              AND lr.home_id IS NOT NULL AND lr.away_id IS NOT NULL"""
     ).fetchall()
-    groups = {}
+    groups: dict[tuple[Any, ...], list[Any]] = {}
     for r in rows:
         key = (r[0], r[1], r[2], min(r[3], r[4]), max(r[3], r[4]))
         groups.setdefault(key, []).append(r)
