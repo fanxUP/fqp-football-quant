@@ -392,7 +392,11 @@ def test_repeatable_read_retains_model_eligibility_across_collector_commit(datab
         assert cur.fetchone()[0] is False
 
 
-def test_batch_group_reads_do_not_scan_unbound_prediction_archive(database):
+@pytest.mark.parametrize("prefer_merge_join", [False, True])
+@pytest.mark.parametrize("analyze_options", [False, True])
+def test_batch_group_reads_do_not_scan_unbound_prediction_archive(
+    database, prefer_merge_join, analyze_options
+):
     conn, _ = database
     mid, model = seed_match(conn)
     publish(conn, match_id=mid, model_id=model)
@@ -409,6 +413,8 @@ def test_batch_group_reads_do_not_scan_unbound_prediction_archive(database):
         cur.execute("ANALYZE model_prediction_groups")
         cur.execute("ANALYZE model_prediction_runs")
         cur.execute("ANALYZE model_versions")
+        if analyze_options:
+            cur.execute("ANALYZE model_prediction_group_options")
     conn.commit()
     queries = []
 
@@ -437,8 +443,16 @@ def test_batch_group_reads_do_not_scan_unbound_prediction_archive(database):
     assert actual[0]["status"] == "complete"
     assert len(queries) == 2
     with conn.cursor() as cur:
+        if prefer_merge_join:
+            # Exercise another legal cost choice without depending on ANALYZE's
+            # random sample or the machine's relative index/merge costs.
+            cur.execute("SET LOCAL enable_nestloop = off")
+            cur.execute("SET LOCAL enable_hashjoin = off")
         cur.execute("EXPLAIN (ANALYZE,FORMAT JSON) " + queries[1][0], queries[1][1])
         plan = cur.fetchone()[0][0]
+        if prefer_merge_join:
+            cur.execute("SET LOCAL enable_nestloop = on")
+            cur.execute("SET LOCAL enable_hashjoin = on")
         cur.execute("EXPLAIN (ANALYZE,FORMAT JSON) " + queries[0][0], queries[0][1])
         group_plan = cur.fetchone()[0][0]
 
@@ -450,7 +464,10 @@ def test_batch_group_reads_do_not_scan_unbound_prediction_archive(database):
         )
         return n + sum(work(child) for child in node.get("Plans", []))
 
-    assert work(plan["Plan"]) <= 3
+    # Keep the actual plan in captured output when a different planner strategy
+    # exceeds the work bound; row counts alone do not identify the access path.
+    print({"prediction_option_plan": plan})
+    assert work(plan["Plan"]) <= 3, plan
 
     def group_work(node):
         n = (

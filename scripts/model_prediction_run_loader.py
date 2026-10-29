@@ -317,7 +317,12 @@ def load_pool_prediction_groups(
                       mp.predict_time, mp.play_type, mp.validation_status,
                       mp.uncertainty_reason, mp.created_at
                FROM model_prediction_group_options om
-               JOIN model_predictions mp ON mp.id=om.prediction_id
+               -- Keep each selected prediction-ID lookup parameterized instead
+               -- of merge-scanning the unrelated prediction archive.
+               JOIN LATERAL (
+                   SELECT p.* FROM model_predictions p
+                   WHERE p.id=om.prediction_id OFFSET 0
+               ) mp ON true
                WHERE om.group_id=ANY(%s::uuid[]) ORDER BY om.group_id, om.ordinal""",
             ([g[0] for g in groups],),
         )
