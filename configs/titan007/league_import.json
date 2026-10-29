@@ -1,18 +1,267 @@
 {
   "source_league_id": 36,
   "competition_code": "premier-league",
-  "competition_aliases": ["apifootball:39"],
+  "competition_aliases": [
+    "apifootball:39",
+    "sporttery:c4169e38cdfd"
+  ],
   "competition_name": "英超",
   "competition_name_en": "English Premier League",
-  "competition_name_aliases": ["英格兰超级联赛"],
+  "competition_name_aliases": [
+    "英格兰超级联赛"
+  ],
   "country": "英格兰",
   "season": "2026-2027",
   "season_code": "premier-league:2026-2027",
-  "season_aliases": ["apifootball:39:2026"],
+  "season_aliases": [
+    "apifootball:39:2026"
+  ],
   "start_date": "2026-07-01",
   "end_date": "2027-06-30",
   "is_current": true,
   "expected_teams": 20,
   "expected_fixtures": 380,
-  "total_rounds": 38
+  "total_rounds": 38,
+  "team_links": {
+    "19": {
+      "team_code": "阿森纳",
+      "evidence": {
+        "source": "titan007",
+        "source_team_id": "19",
+        "source_name": "阿森纳",
+        "source_name_en": "Arsenal",
+        "canonical_team_name_cn": "阿森纳",
+        "basis": "exact_unique_existing_canonical_chinese_team_name",
+        "verified_at": "2026-10-29"
+      }
+    },
+    "20": {
+      "team_code": "阿斯顿维",
+      "evidence": {
+        "source": "titan007",
+        "source_team_id": "20",
+        "source_name": "阿斯顿维拉",
+        "source_name_en": "Aston Villa",
+        "canonical_team_name_cn": "阿斯顿维拉",
+        "basis": "exact_unique_existing_canonical_chinese_team_name",
+        "verified_at": "2026-10-29"
+      }
+    },
+    "24": {
+      "team_code": "切尔西",
+      "evidence": {
+        "source": "titan007",
+        "source_team_id": "24",
+        "source_name": "切尔西",
+        "source_name_en": "Chelsea",
+        "canonical_team_name_cn": "切尔西",
+        "basis": "exact_unique_existing_canonical_chinese_team_name",
+        "verified_at": "2026-10-29"
+      }
+    },
+    "25": {
+      "team_code": "利物浦",
+      "evidence": {
+        "source": "titan007",
+        "source_team_id": "25",
+        "source_name": "利物浦",
+        "source_name_en": "Liverpool",
+        "canonical_team_name_cn": "利物浦",
+        "basis": "exact_unique_existing_canonical_chinese_team_name",
+        "verified_at": "2026-10-29"
+      }
+    },
+    "26": {
+      "team_code": "sporttery-team:f00dae11a0137fa43620",
+      "evidence": {
+        "source": "titan007",
+        "source_team_id": "26",
+        "source_name": "曼彻斯特城",
+        "source_name_en": "Manchester City",
+        "canonical_team_name_cn": "曼彻斯特城",
+        "basis": "exact_unique_existing_canonical_chinese_team_name",
+        "verified_at": "2026-10-29"
+      }
+    },
+    "27": {
+      "team_code": "曼彻斯特",
+      "evidence": {
+        "source": "titan007",
+        "source_team_id": "27",
+        "source_name": "曼彻斯特联",
+        "source_name_en": "Manchester United",
+        "canonical_team_name_cn": "曼彻斯特联",
+        "basis": "exact_unique_existing_canonical_chinese_team_name",
+        "verified_at": "2026-10-29"
+      }
+    },
+    "28": {
+      "team_code": "sporttery-team:e136458469844bfec3ff",
+      "evidence": {
+        "source": "titan007",
+        "source_team_id": "28",
+        "source_name": "纽卡斯尔联",
+        "source_name_en": "Newcastle United",
+        "canonical_team_name_cn": "纽卡斯尔联",
+        "basis": "exact_unique_existing_canonical_chinese_team_name",
+        "verified_at": "2026-10-29"
+      }
+    },
+    "29": {
+      "team_code": "富勒姆",
+      "evidence": {
+        "source": "titan007",
+        "source_team_id": "29",
+        "source_name": "富勒姆",
+        "source_name_en": "Fulham",
+        "canonical_team_name_cn": "富勒姆",
+        "basis": "exact_unique_existing_canonical_chinese_team_name",
+        "verified_at": "2026-10-29"
+      }
+    },
+    "31": {
+      "team_code": "埃弗顿",
+      "evidence": {
+        "source": "titan007",
+        "source_team_id": "31",
+        "source_name": "埃弗顿",
+        "source_name_en": "Everton",
+        "canonical_team_name_cn": "埃弗顿",
+        "basis": "exact_unique_existing_canonical_chinese_team_name",
+        "verified_at": "2026-10-29"
+      }
+    },
+    "33": {
+      "team_code": "托特纳姆",
+      "evidence": {
+        "source": "titan007",
+        "source_team_id": "33",
+        "source_name": "托特纳姆热刺",
+        "source_name_en": "Tottenham Hotspur",
+        "canonical_team_name_cn": "托特纳姆热刺",
+        "basis": "exact_unique_existing_canonical_chinese_team_name",
+        "verified_at": "2026-10-29"
+      }
+    },
+    "35": {
+      "team_code": "水晶宫",
+      "evidence": {
+        "source": "titan007",
+        "source_team_id": "35",
+        "source_name": "水晶宫",
+        "source_name_en": "Crystal Palace",
+        "canonical_team_name_cn": "水晶宫",
+        "basis": "exact_unique_existing_canonical_chinese_team_name",
+        "verified_at": "2026-10-29"
+      }
+    },
+    "49": {
+      "team_code": "诺丁汉森",
+      "evidence": {
+        "source": "titan007",
+        "source_team_id": "49",
+        "source_name": "诺丁汉森林",
+        "source_name_en": "Nottingham Forest",
+        "canonical_team_name_cn": "诺丁汉森林",
+        "basis": "exact_unique_existing_canonical_chinese_team_name",
+        "verified_at": "2026-10-29"
+      }
+    },
+    "56": {
+      "team_code": "利兹联",
+      "evidence": {
+        "source": "titan007",
+        "source_team_id": "56",
+        "source_name": "利兹联",
+        "source_name_en": "Leeds United",
+        "canonical_team_name_cn": "利兹联",
+        "basis": "exact_unique_existing_canonical_chinese_team_name",
+        "verified_at": "2026-10-29"
+      }
+    },
+    "57": {
+      "team_code": "考文垂",
+      "evidence": {
+        "source": "titan007",
+        "source_team_id": "57",
+        "source_name": "考文垂",
+        "source_name_en": "Coventry City",
+        "canonical_team_name_cn": "考文垂",
+        "basis": "exact_unique_existing_canonical_chinese_team_name",
+        "verified_at": "2026-10-29"
+      }
+    },
+    "60": {
+      "team_code": "布赖顿",
+      "evidence": {
+        "source": "titan007",
+        "source_team_id": "60",
+        "source_name": "布莱顿",
+        "source_name_en": "Brighton Hove Albion",
+        "canonical_team_name_cn": "布赖顿",
+        "basis": "unique_existing_brighton_identity_with_chinese_transliteration_variant",
+        "verified_at": "2026-10-29"
+      }
+    },
+    "65": {
+      "team_code": "桑德兰",
+      "evidence": {
+        "source": "titan007",
+        "source_team_id": "65",
+        "source_name": "桑德兰",
+        "source_name_en": "Sunderland A.F.C",
+        "canonical_team_name_cn": "桑德兰",
+        "basis": "exact_unique_existing_canonical_chinese_team_name",
+        "verified_at": "2026-10-29"
+      }
+    },
+    "68": {
+      "team_code": "伊普斯维",
+      "evidence": {
+        "source": "titan007",
+        "source_team_id": "68",
+        "source_name": "伊普斯维奇",
+        "source_name_en": "Ipswich Town",
+        "canonical_team_name_cn": "伊普斯维奇",
+        "basis": "exact_unique_existing_canonical_chinese_team_name",
+        "verified_at": "2026-10-29"
+      }
+    },
+    "348": {
+      "team_code": "伯恩茅斯",
+      "evidence": {
+        "source": "titan007",
+        "source_team_id": "348",
+        "source_name": "伯恩茅斯",
+        "source_name_en": "AFC Bournemouth",
+        "canonical_team_name_cn": "伯恩茅斯",
+        "basis": "exact_unique_existing_canonical_chinese_team_name",
+        "verified_at": "2026-10-29"
+      }
+    },
+    "365": {
+      "team_code": "布伦特福",
+      "evidence": {
+        "source": "titan007",
+        "source_team_id": "365",
+        "source_name": "布伦特福德",
+        "source_name_en": "Brentford",
+        "canonical_team_name_cn": "布伦特福德",
+        "basis": "exact_unique_existing_canonical_chinese_team_name",
+        "verified_at": "2026-10-29"
+      }
+    },
+    "384": {
+      "team_code": "赫尔城",
+      "evidence": {
+        "source": "titan007",
+        "source_team_id": "384",
+        "source_name": "赫尔城",
+        "source_name_en": "Hull City",
+        "canonical_team_name_cn": "赫尔城",
+        "basis": "exact_unique_existing_canonical_chinese_team_name",
+        "verified_at": "2026-10-29"
+      }
+    }
+  }
 }
