@@ -64,7 +64,7 @@ if [[ "$RELEASE_MODE" == '--plan' ]]; then
     if [[ "$FRONTEND_DEV_DEPENDENCIES_CHANGED" == true ]]; then
         echo 'Verified frontend Vite/Vitest devDependency update; rollback will reinstall the prior lockfile.'
     fi
-    echo 'Plan only. Record quality/rollback/HTTP evidence and a migration rehearsal before apply. Ordinary pending migrations require a recent verified backup; --apply-no-backup is restricted to the pinned migration 123 with explicit evidence.'
+    echo 'Plan only. Record quality/rollback/HTTP evidence and a migration rehearsal before apply. Ordinary pending migrations require a recent verified backup; --apply-no-backup accepts only pinned migration 123 or the exact 124+125 pair with isolated PostgreSQL rollback evidence.'
     exit 0
 fi
 [[ -f "$RELEASE_EVIDENCE" ]] || { echo 'Missing release evidence JSON' >&2; exit 1; }
@@ -237,44 +237,8 @@ print(json.dumps(pending))
 ')"
 PENDING_MIGRATION_COUNT="$(.venv/bin/python -c 'import json,sys; print(len(json.loads(sys.argv[1])))' "$PENDING_MIGRATIONS")"
 if (( PENDING_MIGRATION_COUNT > 0 )); then
-    .venv/bin/python - "$RELEASE_EVIDENCE" "$RELEASE_MODE" "$PENDING_MIGRATIONS" <<'PY'
-import hashlib, json, pathlib, subprocess, sys
-from datetime import UTC, datetime
-record = json.loads(pathlib.Path(sys.argv[1]).read_text())
-release_mode = sys.argv[2]
-pending = json.loads(sys.argv[3])
-if record.get('migration_copy_dry_run') != 'passed':
-    if not (release_mode == '--apply-no-backup' and record.get('migration_transaction_dry_run') == 'passed'):
-        raise SystemExit('Pending migrations require a passed migration rehearsal')
-if release_mode == '--apply-no-backup':
-    allowed = ['123_football_history_odds_invalid_timezone.sql']
-    migration = pathlib.Path('sql/123_football_history_odds_invalid_timezone.sql')
-    expected_sha256 = 'ba62d08357813c093a5304d9143c2e2c5e0295f010e4338afeb4d4ca65911744'
-    if pending != allowed or not migration.is_file():
-        raise SystemExit('No-backup release is restricted to the single reviewed migration 123')
-    if hashlib.sha256(migration.read_bytes()).hexdigest() != expected_sha256:
-        raise SystemExit('Migration 123 checksum is outside the reviewed no-backup release')
-    if record.get('no_backup_authorized') is not True or not str(record.get('no_backup_reason', '')).strip():
-        raise SystemExit('No-backup release requires explicit recorded operator authorization')
-    if record.get('migration_transaction_dry_run') != 'passed':
-        raise SystemExit('No-backup release requires a passed isolated migration transaction rehearsal')
-    sys.exit(0)
-backup_path = record.get('backup_path')
-if not isinstance(backup_path, str) or not backup_path:
-    raise SystemExit('Pending migrations require a verified pre-deployment backup')
-backup = pathlib.Path(backup_path)
-try:
-    age = datetime.now(UTC).timestamp() - backup.stat().st_mtime
-except OSError as exc:
-    raise SystemExit('Pending migrations require an accessible pre-deployment backup') from exc
-if not 0 <= age <= 3600:
-    raise SystemExit('Pending migrations require a pre-deployment backup from the last hour')
-with backup.open('rb') as stream:
-    checksum = hashlib.file_digest(stream, 'sha256').hexdigest()
-if checksum != record.get('backup_sha256'):
-    raise SystemExit('Backup checksum mismatch')
-subprocess.run(['pg_restore', '--list', str(backup)], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-PY
+    .venv/bin/python "$SCRIPT_DIR/release_migration_policy.py" \
+        "$RELEASE_EVIDENCE" "${RELEASE_MODE#--}" "$PENDING_MIGRATIONS" "$RELEASE_SHA"
     MIGRATION_APPLY_ATTEMPTED=true
     run_migration --apply
 else
