@@ -1,13 +1,15 @@
 {
   "schema_version": 4,
-  "task_id": "FIVE-SEASON-SAMPLE-20261030",
-  "objective": "Reconcile official EPL historical scope against existing shared history and remove invented midnight kickoffs from the saved-result importer.",
+  "task_id": "HISTORY-IDENTITY-20261030",
+  "objective": "Read immutable published historical facts through verified existing shared fixture source links without reimporting history.",
   "allowed_paths": [
     ".vibe/SCOPE_LOCK.yaml",
     ".vibe/CHANGE_BUDGET.yaml",
-    "scripts/official_history_importer.py",
-    "tests/test_scripts/test_official_history_importer.py",
-    "docs/official-season-retention.md"
+    "scripts/football_fixture_identity.py",
+    "scripts/football_history_storage.py",
+    "tests/test_computation/test_football_fixture_identity_postgres.py",
+    "tests/test_data_sources/titan007/test_history_backfill.py",
+    "docs/football-fixture-identity.md"
   ],
   "protected_paths": [
     "sql/**",
@@ -19,5 +21,5 @@
     "scripts/mle_trainer.py"
   ],
   "approved_protected_paths": [],
-  "notes": "Existing main only. This reviewed importer precision slice may be committed, pushed and released with current CI and release evidence under the user’s standing authorization. No schema/dependency/API/model changes or backups. Separate additive retention/pilot operations use an external plan, runtime fqp transaction, strict source-ID/date+code collision checks and explicit rollback/read verification; neither parser-only dry-run nor internally committing storage is represented as atomic rehearsal."
+  "notes": "Existing main only. No schema/dependency/public API/model changes or backups. Tests use isolated local fixtures. Production additive identity pilot requires separately bound source material, runtime-role rehearsal/read verification and scoped independent review; existing published batches remain immutable."
 }

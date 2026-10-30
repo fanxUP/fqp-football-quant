@@ -1,7 +1,7 @@
 {
   "schema_version": 4,
-  "task_id": "FIVE-SEASON-SAMPLE-20261030",
-  "max_files_changed": 5,
+  "task_id": "HISTORY-IDENTITY-20261030",
+  "max_files_changed": 7,
   "max_new_files": 0,
   "max_new_dependencies": 0,
   "max_schema_migrations": 0,
@@ -12,5 +12,5 @@
     "new_lint_errors": 0,
     "new_type_errors": 0
   },
-  "notes": "One bounded importer correction, focused existing tests and documentation; no new fetch framework or source-season rewrite. Release reuses 27 unchanged targeted regressions and requires current CI, scoped review, runtime preflight and post-release smoke. No additional repository paths are opened."
+  "notes": "Bounded identity writer + existing historical reference reader; reuse 125 schema and existing API. No five-season bulk import or frozen model re-run."
 }

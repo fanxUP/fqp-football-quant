@@ -210,6 +210,11 @@ def pg():
         )
         migration = Path(__file__).resolve().parents[3] / "sql/119_football_history_backfill.sql"
         cur.execute(migration.read_text())
+        # Actual 125 identity tables; other pool-specific objects are covered by
+        # test_football_fixture_identity_postgres with the complete migration.
+        identity = migration.with_name("125_football_fixture_identity.sql").read_text()
+        cur.execute(identity.split("ALTER TABLE football_pool_issue_matches", 1)[0])
+        cur.execute("GRANT SELECT ON football_fixtures,football_fixture_source_links TO fqp")
     conn.commit()
     try:
         yield conn

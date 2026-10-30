@@ -19,6 +19,7 @@ from psycopg2.errors import (
 )
 from psycopg2.extensions import parse_dsn
 
+from scripts.football_history_storage import match_history_reference
 from scripts.football_pool_catalog import read_pool_catalog, read_pool_catalog_issue
 from scripts.official_crawler import parse_traditional_lottery_response
 from scripts.official_storage import store_pool_issue, store_pool_issue_matches
@@ -108,6 +109,302 @@ def official(conn, source="9001", code="周五001", league="固定样本联赛")
             VALUES ('2026-10-30',%s,%s,%s,'主1','客1','2026-10-30 20:00:00') RETURNING id""",
         (code, source, league),
     )[0][0]
+
+
+@pytest.fixture
+def history_ready(ready):
+    with ready.cursor() as cur:
+        cur.execute("CREATE TABLE teams(id bigint PRIMARY KEY)")
+        cur.execute("INSERT INTO teams VALUES (10),(20)")
+        cur.execute((ROOT / "sql/119_football_history_backfill.sql").read_text())
+    ready.commit()
+    return ready
+
+
+def history_pair(
+    conn, *, links=None, kickoff="2026-10-30T12:00:00Z", publish=True, competing_fk=False
+):
+    from psycopg2.extras import Json
+
+    mid = official(conn)
+    old_fk = official(conn, source="9002", code="周五002") if competing_fk else None
+    with conn.cursor() as cur:
+        cur.execute(
+            "INSERT INTO official_results(match_id,full_home_goals,full_away_goals,result_status) VALUES (%s,2,1,'confirmed')",
+            (mid,),
+        )
+        cur.execute(
+            "INSERT INTO football_history_batches(source_name,content_sha256,normalization_version,manifest) VALUES ('titan007',%s,'fixed/v1','{}') RETURNING id",
+            ("a" * 64,),
+        )
+        bid = cur.fetchone()[0]
+        link = dict(
+            lottery_match_id=9001,
+            home_team="主1",
+            home_full_name="主1",
+            away_team="客1",
+            away_full_name="客1",
+            link_type="history2",
+        )
+        cur.execute(
+            """INSERT INTO football_history_matches(batch_id,source_match_id,source_competition_id,kickoff_at,match_status,source_home_team_id,source_away_team_id,home_name,away_name,home_goals,away_goals,source_metadata,official_match_id) VALUES (%s,5001,36,%s,'finished',10,20,'主1','客1',2,1,%s,%s)""",
+            (
+                bid,
+                kickoff,
+                Json(dict(lottery_links=links if links is not None else [link])),
+                old_fk,
+            ),
+        )
+        cur.execute(
+            "INSERT INTO football_history_records(batch_id,domain,source_record_key,source_match_id,origin,value_json) VALUES (%s,'match_stats','stat',5001,'reported','{"
+            + '"home_numeric":0,"away_numeric":null'
+            + "}')",
+            (bid,),
+        )
+        if publish:
+            cur.execute("UPDATE football_history_batches SET state='published' WHERE id=%s", (bid,))
+    conn.commit()
+    return mid, bid
+
+
+def test_history_identity_reads_original_published_facts_and_rolls_back(history_ready):
+    from scripts.football_fixture_identity import link_official_history_fixture
+
+    conn = history_ready
+    mid, bid = history_pair(conn)
+    assert match_history_reference(conn, mid)["status"] == "unmatched"
+    original = rows(conn, "SELECT * FROM football_history_matches")
+    linked = link_official_history_fixture(conn, mid, batch_id=bid, source_match_id=5001)
+    assert linked["identity_status"] == "linked"
+    data = match_history_reference(conn, mid, batch_id=bid)
+    assert data["status"] == "available" and data["source_match"]["id"] == 5001
+    assert data["rows"][0]["value"] == dict(home_numeric=0, away_numeric=None)
+    assert rows(conn, "SELECT * FROM football_history_matches") == original
+    assert link_official_history_fixture(conn, mid, batch_id=bid, source_match_id=5001) == linked
+    assert rows(conn, "SELECT count(*) FROM football_fixture_source_links") == [(2,)]
+    conn.rollback()
+    assert rows(conn, "SELECT count(*) FROM football_fixtures") == [(0,)]
+    assert match_history_reference(conn, mid)["status"] == "unmatched"
+
+
+@pytest.mark.parametrize(
+    "fault", ["time", "names", "result", "multi_jc", "unpublished", "existing_fk"]
+)
+def test_history_identity_rejects_unproven_pairs_without_writing(history_ready, fault):
+    from scripts.football_fixture_identity import link_official_history_fixture
+
+    conn = history_ready
+    links = [dict(lottery_match_id=9001, home_team="主1", away_team="客1")]
+    if fault == "names":
+        links[0]["home_team"] = "客1"
+    if fault == "multi_jc":
+        links.append(dict(lottery_match_id=9002))
+    mid, bid = history_pair(
+        conn,
+        links=links,
+        kickoff="2026-10-30T12:15:00Z" if fault == "time" else "2026-10-30T12:00:00Z",
+        publish=fault != "unpublished",
+        competing_fk=fault == "existing_fk",
+    )
+    if fault == "result":
+        rows(
+            conn,
+            "UPDATE official_results SET full_home_goals=3 WHERE match_id=%s RETURNING id",
+            (mid,),
+        )
+    result = link_official_history_fixture(conn, mid, batch_id=bid, source_match_id=5001)
+    assert result["identity_status"] in {"pending", "conflict"}
+    assert rows(conn, "SELECT count(*) FROM football_fixtures") == [(0,)]
+
+
+def test_history_identity_reuses_traditional_fixture_and_rejects_namespace_collision(history_ready):
+    from scripts.football_fixture_identity import link_official_history_fixture
+
+    conn = history_ready
+    mid, bid = history_pair(conn)
+    put(conn, [fixture_row()])
+    fixture = rows(conn, "SELECT fixture_id FROM football_pool_fixture_catalog")[0][0]
+    linked = link_official_history_fixture(conn, mid, batch_id=bid, source_match_id=5001)
+    assert linked["fixture_id"] == fixture
+    assert rows(conn, "SELECT count(*) FROM football_fixtures") == [(1,)]
+    assert rows(conn, "SELECT count(*) FROM football_fixture_source_links") == [(4,)]
+    conn.rollback()
+    rows(conn, "INSERT INTO football_fixtures DEFAULT VALUES RETURNING id")
+    fixture = rows(conn, "SELECT id FROM football_fixtures")[0][0]
+    rows(
+        conn,
+        "INSERT INTO football_fixture_source_links(source_name,id_system,source_match_id,fixture_id,evidence) VALUES ('sporttery','jc.matchId','9001',%s,'{}'),('titan007','matchId','9999',%s,'{}') RETURNING fixture_id",
+        (fixture, fixture),
+    )
+    result = link_official_history_fixture(conn, mid, batch_id=bid, source_match_id=5001)
+    assert result["identity_status"] == "conflict"
+    assert rows(conn, "SELECT count(*) FROM football_fixture_source_links") == [(2,)]
+
+
+def test_history_identity_restricted_writer_and_readonly_reader(history_ready):
+    from scripts.football_fixture_identity import link_official_history_fixture
+
+    conn = history_ready
+    mid, bid = history_pair(conn)
+    with conn.cursor() as cur:
+        cur.execute("SELECT current_schema()")
+        schema = cur.fetchone()[0]
+        cur.execute(sql.SQL("GRANT USAGE ON SCHEMA {} TO fqp").format(sql.Identifier(schema)))
+        cur.execute(
+            "GRANT SELECT ON official_matches,official_results,football_pool_issue_matches TO fqp"
+        )
+        # FOR SHARE requires UPDATE on at least one column. Normal production
+        # fqp already writes these tables; history remains SELECT-only.
+        cur.execute("GRANT UPDATE(kickoff_time) ON official_matches TO fqp")
+        cur.execute("GRANT UPDATE(result_status) ON official_results TO fqp")
+    conn.commit()
+    with conn.cursor() as cur:
+        cur.execute("SET ROLE fqp")
+    linked = link_official_history_fixture(conn, mid, batch_id=bid, source_match_id=5001)
+    assert linked["identity_status"] == "linked"
+    conn.commit()
+    with conn.cursor() as cur:
+        cur.execute("SET TRANSACTION READ ONLY")
+    assert match_history_reference(conn, mid)["status"] == "available"
+    conn.rollback()
+    with conn.cursor() as cur:
+        cur.execute("RESET ROLE")
+
+
+def test_history_reference_bridge_pins_batches_and_does_not_hide_direct_conflict(history_ready):
+    conn = history_ready
+    mid, bid = history_pair(conn)
+    # Seed only the exact typed identities; similarly named namespaces cannot match.
+    fid = rows(conn, "INSERT INTO football_fixtures DEFAULT VALUES RETURNING id")[0][0]
+    rows(
+        conn,
+        "INSERT INTO football_fixture_source_links(source_name,id_system,source_match_id,fixture_id,evidence) VALUES ('sporttery','jc.matchId','9001',%s,'{}'),('titan007','matchId','5001',%s,'{}') RETURNING fixture_id",
+        (fid, fid),
+    )
+    assert match_history_reference(conn, mid, batch_id=bid)["status"] == "available"
+
+    with pytest.raises(LookupError):
+        match_history_reference(conn, mid, batch_id=bid + 100)
+    with conn.cursor() as cur:
+        cur.execute(
+            "INSERT INTO football_history_batches(source_name,content_sha256,normalization_version,manifest) VALUES ('titan007',%s,'fixed/v1','{}') RETURNING id",
+            ("b" * 64,),
+        )
+        newer = cur.fetchone()[0]
+        cur.execute(
+            """INSERT INTO football_history_matches(batch_id,source_match_id,kickoff_at,match_status,source_home_team_id,source_away_team_id,source_metadata,official_match_id) VALUES (%s,5002,'2026-10-30T12:00:00Z','scheduled',10,20,'{}',%s)""",
+            (newer, mid),
+        )
+        cur.execute("UPDATE football_history_batches SET state='published' WHERE id=%s", (newer,))
+    data = match_history_reference(conn, mid)
+    assert data["status"] == "ambiguous" and data["rows"] == []
+    assert match_history_reference(conn, mid, batch_id=bid)["status"] == "available"
+
+
+@pytest.mark.parametrize(
+    ("source", "system", "value", "expected"),
+    [
+        ("other", "matchId", "5001", "unmatched"),
+        ("titan007", "other", "5001", "unmatched"),
+        ("titan007", "matchId", "not-a-number", "ambiguous"),
+        ("titan007", "matchId", "05001", "ambiguous"),
+        ("titan007", "matchId", "9007199254740992", "ambiguous"),
+    ],
+)
+def test_history_reference_typed_ids_never_cross_namespaces_or_cast_bad_values(
+    history_ready, source, system, value, expected
+):
+    conn = history_ready
+    mid, _ = history_pair(conn)
+    fid = rows(conn, "INSERT INTO football_fixtures DEFAULT VALUES RETURNING id")[0][0]
+    rows(
+        conn,
+        """INSERT INTO football_fixture_source_links
+        (source_name,id_system,source_match_id,fixture_id,evidence)
+        VALUES ('sporttery','jc.matchId','9001',%s,'{}'),(%s,%s,%s,%s,'{}')
+        RETURNING fixture_id""",
+        (fid, source, system, value, fid),
+    )
+    data = match_history_reference(conn, mid)
+    assert data["status"] == expected and data["rows"] == []
+
+
+def test_history_reference_shared_identity_uses_latest_or_pinned_single_batch(history_ready):
+    from scripts.football_fixture_identity import link_official_history_fixture
+
+    conn = history_ready
+    mid, first = history_pair(conn)
+    assert (
+        link_official_history_fixture(conn, mid, batch_id=first, source_match_id=5001)[
+            "identity_status"
+        ]
+        == "linked"
+    )
+    with conn.cursor() as cur:
+        cur.execute(
+            "INSERT INTO football_history_batches(source_name,content_sha256,normalization_version,manifest) VALUES ('titan007',%s,'fixed/v1','{}') RETURNING id",
+            ("b" * 64,),
+        )
+        second = cur.fetchone()[0]
+        cur.execute(
+            """INSERT INTO football_history_matches(batch_id,source_match_id,kickoff_at,match_status,source_home_team_id,source_away_team_id,source_metadata,official_match_id) VALUES (%s,5001,'2026-10-30T12:00:00Z','scheduled',10,20,'{}',%s)""",
+            (second, mid),
+        )
+        cur.execute(
+            "INSERT INTO football_history_records(batch_id,domain,source_record_key,source_match_id,origin,value_json) VALUES (%s,'match_stats','new',5001,'reported','{"
+            + '"home_numeric":9'
+            + "}')",
+            (second,),
+        )
+        cur.execute("UPDATE football_history_batches SET state='published' WHERE id=%s", (second,))
+    latest = match_history_reference(conn, mid)
+    assert latest["batch"]["id"] == second and latest["total"] == 1
+    assert latest["rows"][0]["value"]["home_numeric"] == 9
+    pinned = match_history_reference(conn, mid, batch_id=first)
+    assert pinned["rows"][0]["value"]["home_numeric"] == 0 and pinned["total"] == 1
+
+
+def test_history_reference_older_conflict_is_not_hidden_by_two_newer_batches(history_ready):
+    from scripts.football_fixture_identity import link_official_history_fixture
+
+    conn = history_ready
+    mid, first = history_pair(conn)
+    for digest, source, fk, imported in [
+        ("b", 5002, mid, "2020-01-01T00:00:00Z"),
+        ("c", 5001, None, "2030-01-01T00:00:00Z"),
+    ]:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO football_history_batches(source_name,content_sha256,normalization_version,manifest,imported_at) VALUES ('titan007',%s,'fixed/v1','{}',%s) RETURNING id",
+                (digest * 64, imported),
+            )
+            bid = cur.fetchone()[0]
+            cur.execute(
+                """INSERT INTO football_history_matches(batch_id,source_match_id,kickoff_at,match_status,source_home_team_id,source_away_team_id,source_metadata,official_match_id) VALUES (%s,%s,'2026-10-30T12:00:00Z','scheduled',10,20,'{}',%s)""",
+                (bid, source, fk),
+            )
+            cur.execute("UPDATE football_history_batches SET state='published' WHERE id=%s", (bid,))
+    rejected = link_official_history_fixture(conn, mid, batch_id=first, source_match_id=5001)
+    assert rejected["identity_status"] == "conflict"
+    assert rows(conn, "SELECT count(*) FROM football_fixtures") == [(0,)]
+    # Defensively read even a catalog binding made outside the validated writer.
+    fid = rows(conn, "INSERT INTO football_fixtures DEFAULT VALUES RETURNING id")[0][0]
+    rows(
+        conn,
+        "INSERT INTO football_fixture_source_links(source_name,id_system,source_match_id,fixture_id,evidence) VALUES ('sporttery','jc.matchId','9001',%s,'{}'),('titan007','matchId','5001',%s,'{}') RETURNING fixture_id",
+        (fid, fid),
+    )
+    assert match_history_reference(conn, mid)["status"] == "ambiguous"
+    assert match_history_reference(conn, mid, batch_id=first)["status"] == "available"
+
+
+@pytest.mark.parametrize("bad", [0, -1, True, 9007199254740992])
+def test_history_identity_invalid_scope_has_no_side_effects(history_ready, bad):
+    from scripts.football_fixture_identity import link_official_history_fixture
+
+    with pytest.raises(ValueError):
+        link_official_history_fixture(history_ready, bad, batch_id=1, source_match_id=5001)
+    assert rows(history_ready, "SELECT count(*) FROM football_fixtures") == [(0,)]
 
 
 def test_migration_keeps_existing_ids_results_and_saved_plan(database):

@@ -4,6 +4,8 @@ from typing import Literal
 
 from psycopg2.extras import RealDictCursor
 
+from scripts.football_fixture_identity import history_identity_conflicts
+
 HistoryDomain = Literal[
     "match_stats", "events", "lineups", "predicted_lineups", "match_injuries", "odds_history"
 ]
@@ -59,18 +61,51 @@ def match_history_reference(
         "has_more": False,
     }
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
-        cur.execute("SELECT id FROM official_matches WHERE id=%s", (match_id,))
-        if cur.fetchone() is None:
+        cur.execute("SELECT source_match_id FROM official_matches WHERE id=%s", (match_id,))
+        official = cur.fetchone()
+        if official is None:
             raise LookupError("所选比赛不存在")
         cur.execute(
-            """SELECT m.*, b.source_name, b.imported_at, b.content_sha256,
+            """SELECT t.source_match_id FROM football_fixture_source_links j
+               JOIN football_fixture_source_links t ON t.fixture_id=j.fixture_id
+               WHERE j.source_name='sporttery' AND j.id_system='jc.matchId'
+                 AND j.source_match_id=%s AND t.source_name='titan007'
+                 AND t.id_system='matchId'""",
+            (official["source_match_id"],),
+        )
+        linked = cur.fetchone()
+        source_id = None
+        if linked is not None:
+            raw = linked["source_match_id"]
+            if not (
+                raw.isascii()
+                and raw.isdecimal()
+                and 1 <= len(raw) <= 16
+                and 1 <= int(raw) <= 9007199254740991
+                and str(int(raw)) == raw
+            ):
+                return {**result, "status": "ambiguous"}
+            source_id = int(raw)
+            if history_identity_conflicts(cur, match_id, source_id, batch_id=batch_id):
+                return {**result, "status": "ambiguous"}
+        cur.execute(
+            """WITH candidates AS (
+                 SELECT batch_id,source_match_id FROM football_history_matches
+                 WHERE official_match_id=%s AND (%s::bigint IS NULL OR batch_id=%s)
+                 UNION
+                 SELECT m.batch_id,m.source_match_id FROM football_history_batches b
+                 JOIN football_history_matches m ON m.batch_id=b.id AND m.source_match_id=%s
+                 WHERE b.state='published' AND b.source_name='titan007'
+                   AND (%s::bigint IS NULL OR m.batch_id=%s)
+               )
+               SELECT m.*, b.source_name, b.imported_at, b.content_sha256,
                       b.normalization_version
-               FROM football_history_matches m
+               FROM candidates c JOIN football_history_matches m
+                 ON m.batch_id=c.batch_id AND m.source_match_id=c.source_match_id
                JOIN football_history_batches b ON b.id=m.batch_id AND b.state='published'
-               WHERE m.official_match_id=%s AND b.source_name='titan007'
-                 AND (%s::bigint IS NULL OR m.batch_id=%s)
+               WHERE b.source_name='titan007'
                ORDER BY b.imported_at DESC,b.id DESC,m.source_match_id LIMIT 2""",
-            (match_id, batch_id, batch_id),
+            (match_id, batch_id, batch_id, source_id, batch_id, batch_id),
         )
         candidates = cur.fetchall()
         if not candidates:
@@ -78,7 +113,16 @@ def match_history_reference(
                 raise LookupError("所选批次没有该比赛的已发布历史资料")
             return result
         selected = candidates[0]
-        if len(candidates) > 1 and candidates[1]["batch_id"] == selected["batch_id"]:
+        if (
+            source_id is not None
+            and any(
+                row["source_match_id"] != source_id
+                or row["official_match_id"] not in (None, match_id)
+                for row in candidates
+            )
+            or len(candidates) > 1
+            and candidates[1]["batch_id"] == selected["batch_id"]
+        ):
             return {**result, "status": "ambiguous"}
         batch = selected["batch_id"]
         source_match = selected["source_match_id"]

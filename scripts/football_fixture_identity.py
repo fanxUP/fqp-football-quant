@@ -92,12 +92,33 @@ def resolve_pool_fixture(
         exact = {r[0] for r in cur.fetchall()}
     if not keys:
         return _pending("missing_typed_source_identity")
+    return _bind_fixture(
+        cur,
+        [("sporttery", system, sid) for system, sid in keys],
+        names,
+        exact,
+        dict(
+            **names,
+            kickoff_time=kickoff.isoformat() if kickoff else None,
+            game_type=game_type,
+            issue_no=issue_no,
+            source_ids=ids,
+            official_match_id=official_id,
+            method="typed_source_or_exact_unique",
+        ),
+        official_id,
+    )
+
+
+def _bind_fixture(cur, keys, names, exact, evidence, official_id):
+    """Bind under IDENTITY_LOCK; every caller applies its own source proof first."""
+    fields = tuple(names)
     candidates = set(exact)
-    for system, sid in keys:
+    for source, system, sid in keys:
         cur.execute(
             """SELECT fixture_id FROM football_fixture_source_links
-               WHERE source_name='sporttery' AND id_system=%s AND source_match_id=%s""",
-            (system, sid),
+               WHERE source_name=%s AND id_system=%s AND source_match_id=%s""",
+            (source, system, sid),
         )
         bound = cur.fetchone()
         if bound:
@@ -105,23 +126,14 @@ def resolve_pool_fixture(
     if len(candidates) > 1:
         return _pending("conflicting_fixture_bindings", conflict=True)
     fixture_id = next(iter(candidates), None)
-    evidence = dict(
-        **names,
-        kickoff_time=kickoff.isoformat() if kickoff else None,
-        game_type=game_type,
-        issue_no=issue_no,
-        source_ids=ids,
-        official_match_id=official_id,
-        method="typed_source_or_exact_unique",
-    )
     if fixture_id is not None:
         cur.execute(
-            """SELECT id_system,source_match_id,evidence FROM football_fixture_source_links
-               WHERE fixture_id=%s AND source_name='sporttery'""",
+            """SELECT source_name,id_system,source_match_id,evidence FROM football_fixture_source_links
+               WHERE fixture_id=%s""",
             (fixture_id,),
         )
-        for system, sid, old_evidence in cur.fetchall():
-            if any(k == system and value != sid for k, value in keys):
+        for source, system, sid, old_evidence in cur.fetchall():
+            if any(src == source and k == system and value != sid for src, k, value in keys):
                 return _pending("source_namespace_collision", conflict=True)
             if any(
                 names[k] and old_evidence.get(k) and names[k] != old_evidence[k] for k in fields
@@ -145,13 +157,13 @@ def resolve_pool_fixture(
     else:
         cur.execute("INSERT INTO football_fixtures DEFAULT VALUES RETURNING id")
         fixture_id = cur.fetchone()[0]
-    for system, sid in keys:
+    for source, system, sid in keys:
         cur.execute(
             """INSERT INTO football_fixture_source_links
                 (source_name,id_system,source_match_id,fixture_id,evidence)
-                VALUES ('sporttery',%s,%s,%s,%s)
+                VALUES (%s,%s,%s,%s,%s)
                 ON CONFLICT (source_name,id_system,source_match_id) DO NOTHING""",
-            (system, sid, fixture_id, Json(evidence)),
+            (source, system, sid, fixture_id, Json(evidence)),
         )
     return dict(
         fixture_id=fixture_id,
@@ -159,3 +171,135 @@ def resolve_pool_fixture(
         identity_status="linked",
         evidence=evidence,
     )
+
+
+def link_official_history_fixture(
+    conn, official_match_id: int, *, batch_id: int, source_match_id: int
+) -> dict:
+    """Add identity links without rewriting a published historical batch.
+
+    Only explicit lottery IDs with exact directed names, kickoff and confirmed
+    score can bridge these namespaces. Caller commits or rolls back the batch.
+    Historical acquisition/publication and season meanings remain unchanged.
+    """
+    if conn.autocommit or any(
+        type(value) is not int or not 1 <= value <= 9007199254740991
+        for value in (official_match_id, batch_id, source_match_id)
+    ):
+        raise ValueError("History identity requires a transaction and positive integer IDs")
+    with conn.cursor() as cur:
+        cur.execute("SELECT pg_advisory_xact_lock(%s)", (IDENTITY_LOCK,))
+        # Stabilize the mutable official proof until the caller commits. History
+        # and existing shared links are immutable, and never updated here.
+        cur.execute(
+            """SELECT m.source_match_id,m.league_name,m.home_team_name,m.away_team_name,
+                              m.kickoff_time,r.full_home_goals,r.full_away_goals,r.result_status
+                       FROM official_matches m JOIN official_results r ON r.match_id=m.id
+                       WHERE m.id=%s FOR SHARE OF m,r""",
+            (official_match_id,),
+        )
+        official = cur.fetchone()
+        cur.execute(
+            """SELECT m.kickoff_at,m.home_goals,m.away_goals,m.source_metadata,
+                              m.official_match_id,b.content_sha256,m.match_status
+                       FROM football_history_matches m JOIN football_history_batches b
+                         ON b.id=m.batch_id AND b.state='published' AND b.source_name='titan007'
+                       WHERE m.batch_id=%s AND m.source_match_id=%s""",
+            (batch_id, source_match_id),
+        )
+        history = cur.fetchone()
+        if not official or not history:
+            return _pending("missing_published_history_or_official_result")
+        sid, league, home, away, kickoff, hg, ag, result_status = official
+        htime, hhg, hag, metadata, old_fk, digest, status = history
+        official_time = pool_time(kickoff)
+        links = metadata.get("lottery_links", [])
+        if (
+            not isinstance(links, list)
+            or not links
+            or any(
+                not isinstance(link, dict) or str(link.get("lottery_match_id")) != sid
+                for link in links
+            )
+            or not all(
+                home in (link.get("home_team"), link.get("home_full_name"))
+                and away in (link.get("away_team"), link.get("away_full_name"))
+                for link in links
+            )
+        ):
+            return _pending("unverified_or_multiple_lottery_identities", conflict=True)
+        if (
+            old_fk is not None
+            and old_fk != official_match_id
+            or official_time is None
+            or official_time != pool_time(htime)
+            or result_status != "confirmed"
+            or status != "finished"
+            or hg is None
+            or ag is None
+            or (hg, ag) != (hhg, hag)
+        ):
+            return _pending("historical_identity_fields_conflict", conflict=True)
+        if history_identity_conflicts(cur, official_match_id, source_match_id):
+            return _pending("conflicting_published_history_bindings", conflict=True)
+        names = dict(league_name=league, home_team_name=home, away_team_name=away)
+        cur.execute(
+            """SELECT DISTINCT fixture_id FROM football_pool_issue_matches
+                       WHERE identity_status='linked' AND league_name=%s
+                         AND home_team_name=%s AND away_team_name=%s AND kickoff_time=%s""",
+            (league, home, away, kickoff),
+        )
+        exact = {r[0] for r in cur.fetchall()}
+        evidence = dict(
+            **names,
+            kickoff_time=official_time.isoformat(),
+            official_match_id=official_match_id,
+            history_batch_id=batch_id,
+            history_content_sha256=digest,
+            history_source_match_id=source_match_id,
+            lottery_links=links,
+            method="verified_history_lottery_link",
+            historical_prematch_eligible=False,
+        )
+        return _bind_fixture(
+            cur,
+            [("sporttery", "jc.matchId", sid), ("titan007", "matchId", str(source_match_id))],
+            names,
+            exact,
+            evidence,
+            official_match_id,
+        )
+
+
+def history_identity_conflicts(cur, official_match_id, source_match_id, *, batch_id=None) -> bool:
+    """Check all relevant published rows before limiting to a newest batch.
+
+    Separate FK and source-ID branches permit the FK index and the existing
+    (batch_id,source_match_id) primary key, without a broad OR scan.
+    """
+    cur.execute(
+        """SELECT 1 FROM (
+             SELECT m.batch_id FROM football_history_matches m
+             JOIN football_history_batches b ON b.id=m.batch_id
+             WHERE b.state='published' AND b.source_name='titan007'
+               AND m.official_match_id=%s AND m.source_match_id<>%s
+               AND (%s::bigint IS NULL OR m.batch_id=%s)
+             UNION ALL
+             SELECT m.batch_id FROM football_history_batches b
+             JOIN football_history_matches m ON m.batch_id=b.id AND m.source_match_id=%s
+             WHERE b.state='published' AND b.source_name='titan007'
+               AND m.official_match_id IS NOT NULL AND m.official_match_id<>%s
+               AND (%s::bigint IS NULL OR m.batch_id=%s)
+           ) conflicts LIMIT 1""",
+        (
+            official_match_id,
+            source_match_id,
+            batch_id,
+            batch_id,
+            source_match_id,
+            official_match_id,
+            batch_id,
+            batch_id,
+        ),
+    )
+    return cur.fetchone() is not None
