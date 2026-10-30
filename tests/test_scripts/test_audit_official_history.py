@@ -57,7 +57,7 @@ def test_artifact_coverage_excludes_matches_outside_selected_event_seasons():
             },
         ],
         season_targets={
-            "美国职业大联盟": ("2026-02-21", "2026-12-24"),
+            "美国职业大联盟": [("2026-02-21", "2026-12-24")],
         },
         start_date="2025-01-01",
         end_date="2026-07-13",
@@ -163,3 +163,25 @@ def test_artifact_coverage_reports_missing_official_ids():
 
     assert coverage["missing_database_match_ids"] == 1
     assert coverage["source_completeness"] == "incomplete_against_official_artifacts"
+
+
+def test_artifact_coverage_uses_all_retained_windows_and_deduplicates_ids():
+    selected, excluded = select_in_scope_official_match_ids(
+        artifact_rows=[
+            {"match_id": mid, "league_name": league, "business_date": day}
+            for mid, league, day in [
+                ("old", "联赛", "2022-05-31"),
+                ("gap", "联赛", "2023-01-01"),
+                ("new", "联赛", "2025-08-01"),
+                ("unknown", "未知赛事", "2025-08-01"),
+                ("old", "联赛", "2022-05-31"),
+            ]
+        ],
+        season_targets={
+            "联赛": [("2021-08-01", "2022-05-31"), ("2025-08-01", "2026-05-31")],
+        },
+        start_date="2021-01-01",
+        end_date="2026-12-31",
+    )
+    assert selected == {"old", "new"}
+    assert excluded == 2

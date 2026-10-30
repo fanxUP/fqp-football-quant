@@ -1,4 +1,7 @@
 from datetime import date
+from unittest.mock import MagicMock
+
+import pytest
 
 from scripts.jobs.reconcile_event_seasons import (
     MANUAL_SEASON_CANDIDATES,
@@ -151,3 +154,35 @@ def test_emperors_cup_uses_full_2025_season_before_2026_start():
     assert selected.start_date == date(2025, 5, 24)
     assert selected.end_date == date(2025, 11, 22)
     assert selected.selection_reason == "previous_complete"
+
+
+@pytest.mark.parametrize(
+    "invalid", ["empty_batch", "inverted_dates", "missing_source", "invalid_refs"]
+)
+def test_invalid_retention_batch_is_rejected_before_any_sql(invalid):
+    from scripts.official_season_retention import retain_season_windows
+
+    conn = MagicMock()
+    window = dict(
+        league_name="联赛",
+        season_name="2025/2026",
+        start_date="2025-08-01",
+        end_date="2026-05-31",
+        selection_reason="historical",
+        boundary_source="sporttery",
+        source_url="https://example.test/official",
+        as_of_date="2026-10-30",
+        official_league_refs=[],
+    )
+    invalid_window = window.copy()
+    if invalid == "inverted_dates":
+        invalid_window["start_date"] = "2027-01-01"
+    elif invalid == "missing_source":
+        invalid_window["source_url"] = ""
+    elif invalid == "invalid_refs":
+        invalid_window["official_league_refs"] = "not-a-list"
+    batch = [] if invalid == "empty_batch" else [window, invalid_window]
+    with pytest.raises(ValueError):
+        retain_season_windows(conn, batch)
+    conn.cursor.assert_not_called()
+    conn.commit.assert_not_called()

@@ -31,8 +31,15 @@ def database(isolated_database):  # noqa: F811
     with conn.cursor() as cur:
         cur.execute("SET TIME ZONE 'UTC'")
         cur.execute("ALTER TABLE model_versions ADD COLUMN is_active BOOLEAN DEFAULT true")
+        # The base model-run fixture omits these real official identity fields.
+        # Keep this addition local to pool tests rather than expanding all P106.
+        cur.execute("ALTER TABLE official_matches ADD COLUMN league_name TEXT DEFAULT 'fixture'")
+        cur.execute(
+            "ALTER TABLE official_matches ADD COLUMN source_match_id TEXT GENERATED ALWAYS AS (id::text) STORED"
+        )
         cur.execute((ROOT / "sql/05_pool_reports_ops_schema.sql").read_text())
         cur.execute((ROOT / "sql/117_pool_identity_and_snapshots.sql").read_text())
+        cur.execute((ROOT / "sql/125_football_fixture_identity.sql").read_text())
     conn.commit()
     return conn, schema
 
@@ -305,6 +312,7 @@ def seed_catalogue(conn, predictions=10):
         fixtures.append(
             {
                 "match_order": order,
+                "league_name": "fixture",
                 "home_team_name": f"H{order}",
                 "away_team_name": f"A{order}",
                 "kickoff_time": kickoff,

@@ -62,7 +62,7 @@ ORDER BY change_at NULLS LAST, source_record_key;
 
 导入验证压缩文件及解压内容摘要、记录数量、数据库约束后原子发布。重复相同包返回 `unchanged`；失败回滚整个事务，已发布批次不可修改、删除、追加或清空。普通应用账户仅有历史表读取权限，显式导入账户负责写入。未知规范球队、球员和官方比赛身份保留为带命名空间的来源身份，不能按同名强行合并。
 
-后续导出在同源比赛身份、开球和已知赛事一致时，从 `league_results` 保留赛季，元数据注明 `season_source_table`；详情表本身没有赛季列。两个目录的已知赛事冲突时隔离，不借用另一个赛事的赛季。此修复不改写已发布批次，旧批次缺失的赛季仍为空，不能因此重新全量导入。
+后续导出在同源比赛身份、开球和已知赛事一致时，从 `league_results` 保留赛季，元数据注明 `season_source_table`；旧缓存 `matches.season` 可能是短年份或派生值，不能直接视为联赛赛季。两个目录的已知赛事冲突时隔离，不借用另一个赛事的赛季。此修复不改写已发布批次，旧批次缺失的赛季仍为空，不能因此重新全量导入。
 
 历史导入CLI要求显式回环 `DATABASE_URL`，同时拒绝外部 `hostaddr`、service和 `PGHOSTADDR` / `PGSERVICE` / `PGSERVICEFILE` 环境路由；连接时固定数字回环地址，避免DNS或libpq默认路由把写入转向其他主机。通过SSH在目标服务器本机运行同样适用；不会据此连接其他数据库。
 
@@ -72,15 +72,113 @@ GitHub CI在隔离集群创建专用 `fqp_history_test_ci`，设置 `FQP_HISTORY
 
 模块可查询 `football_history_available` 视图，按明确的 `batch_id` 与 `domain` 读取，避免多批重复计数。视图只展示已发布批次，并提供已核实的规范球队与官方比赛链接。当前官方结算、旧阵容投影和预测输入链路不自动读取这批历史明细；接入训练/特征时应单独验证字段用途。同场赛后数据不得成为同场赛前特征，但可以在核实后用于后续比赛的历史分析。
 
-### 比赛详情历史参考读取（2026-10-30本地续作）
+### 比赛详情历史参考读取（2026-10-30发布）
 
-现有比赛详情页新增“历史参考”，从共享PostgreSQL读取技术统计、事件、实际阵容、预计阵容、历史伤停和第三方赔率变化。后端共用入口为`scripts.football_history_storage.match_history_reference`；浏览不读取SQLite、不触发采集。该接线尚待提交发布，不能按本地实现推断服务器页面已更新。
+现有比赛详情页新增“历史参考”，从共享PostgreSQL读取技术统计、事件、实际阵容、预计阵容、历史伤停和第三方赔率变化。后端共用入口为`scripts.football_history_storage.match_history_reference`；浏览不读取SQLite、不触发采集。该接线已随`6bf375e`发布到服务器，并通过两主题、桌面与手机四组浏览器核验；它只供资料查看，不代表模型已经消费历史数据。
 
 会话保护的`GET /api/matches/{official_match_id}/history-reference`接受`domain`（默认`match_stats`）、`batch_id`、`limit`（1—100，默认50）和`offset`（0—10000）。首次仅从已发布的`titan007`批次、已核实的`official_match_id`链接选取最新批次，同批多个来源身份返回`ambiguous`而不任选；没有映射返回`unmatched`，所选批次没有该比赛则404。页面拿到首个批次后将它固定到分类切换和分页请求，避免新发布过程中混批。
 
 返回来源比赛、批次及内容摘要、该场分类数量、分页记录。每条包含原始`value`与独立`timeline`；赔率采用视图的`change_at/time_basis/time_resolution_reason/timeline_usable`，组内完整顺序校验先于分页。读取限定单场/批次，事务只读且语句上限5秒；结构未就绪或超时返回可重试503。不要对每次页面读取运行全库统计。
 
 入库时间不等于来源发布时间，赛季未知保持未知，真实0保留，预计首发和名单不完整状态独立显示，历史伤停不冒充当前健康信息。`player_transfers`、派生出场分钟与模型训练接线不在此入口内。该页面消费仅供查看核对，不自动改变模型概率或官方结算。
+
+### 历史训练候选清单（本地实现，尚未发布）
+
+`scripts.football_history_training`从同一共享PostgreSQL的已发布批次生成离线候选清单，复用规范球队ID，保留`titan007:match`来源身份。必须指定批次、赛事、研究赛季窗口和带时区的`as_of`；不把所有赛季混在一起，也不根据年份补造来源赛季。窗口最多400天，候选最多5000场，超过上限须缩小范围，不静默截断。
+
+完场、比分、规范球队、来源赛季冲突、同场重复身份、加时/点球和最终球队场次门槛分别检查，清单包含逐场排除原因。0比分正常保留。最低场次默认3，可显式调整；它只是候选检查参数，不改变现行模型要求。移除稀疏对手后会重新计算场次，直到最终样本满足声明条件。
+
+原始公布/采集时间缺失不阻止今天审查历史资料。`label_available_by`保持未知；批次的`imported_at`单独保留，它是创建批次时记录的时间，不是原始发布时间，也不精确证明事务何时提交可见。早于批次创建的`as_of`直接拒绝；晚于创建只通过必要条件检查，仍不证明历史时点已经可用。`as_of`用于候选开球筛选，不赋予赛前重放资格；来源旧`updated_at/first_fetched_at`不会升级为赛前证据。源比分仍为`source_reported_full_match`，尚未证明为体彩90分钟比分，因此清单明确标为非生产就绪、未验证时间重放、未验证SPF标签；不能直接传入现有官方Maher训练器或借此声称模型效果提升。
+
+```bash
+# DATABASE_URL须显式配置为本机回环数据库；读取不会抓取、导入或训练。
+# 下列时间是显式研究范围示例，as-of需根据实际审查时点填写。
+.venv/bin/python -m scripts.football_history_training \
+  --batch-id 1 --competition-id 36 --season 2026-2027 \
+  --window-start 2026-07-01T00:00:00+08:00 \
+  --window-end 2027-07-01T00:00:00+08:00 \
+  --as-of 2026-10-30T12:00:00+08:00 \
+  --output /absolute/research/history-training-candidates.json
+```
+
+读取只接受空闲、非autocommit连接，使用独立的repeatable-read/read-only事务和5秒语句上限，结束后回滚释放快照，不接管调用者已有事务。摘要覆盖批次内容摘要、范围、逐场数据、排除原因和用途限制，可用`verify_history_training_manifest`重算；这是完整性核对，不是外部真实性认证。输出文件为有界研究工件，已存在时拒绝覆盖；不建立第二个业务库。
+
+### 官方比分对照的单模型离线研究（本地实现，尚未发布）
+
+`scripts.football_history_research`额外固定同源已发布的`league_reference_batches`批次，逐场核对来源比赛ID、主客规范球队和开球时刻。核对一致才建立`study_season`，逐行保留证据批次、内容摘要和原始`source_season`；不会把所有“2026”全局替换为“2026–2027”，也不改写历史批次。参考赛程的更新比分不覆盖旧批次中的未完场状态。
+
+只将拥有真实官方比赛/赛果ID、唯一规范球队、相同主客方向及开球时刻、已结算且比分完全一致的记录适配到现有`TrainingDataset`，调用原有`fit_maher_poisson_dataset`。来源ID不会伪装为官方结果ID。常规时间字段名不是充分证据：旧缓存`home_score_rt`会由`derive_match_meta`从总比分复制，因此该入口采用核对一致的`official_results.full_home_goals/full_away_goals`标签；来源独有的比分使用下面独立的来源标签研究入口。
+
+官方子集重新迭代核验每队场次，再生成现有官方训练清单；外层研究包保留来源映射、候选/排除原因、用途限制、相关源文件摘要及拟合状态。`eligible_matches`与成功收敛的`fitted_matches`分开统计；数据不足或不收敛仍输出诊断包，CLI退出码为2，不能称训练成功。成功导出且收敛退出码为0；已有输出拒绝覆盖。
+
+```bash
+# 在已核实的本机数据库上执行；不抓取、不写业务表，不保存/启用model_versions。
+.venv/bin/python -m scripts.football_history_research \
+  --batch-id 1 --reference-batch-id 2 --competition-id 36 --season 2026-2027 \
+  --window-start 2026-07-01T00:00:00+08:00 \
+  --window-end 2027-07-01T00:00:00+08:00 \
+  --as-of 2026-10-30T12:00:00+08:00 \
+  --output /absolute/research/history-official-research.json
+```
+
+三类输入在同一repeatable-read/read-only快照中读取，随后回滚关闭连接，拟合不持有数据库事务。只读核验历史批次1/参考批次2得到：80场中79候选、1场旧批次未完场；56场官方标签符合核对，覆盖19队、各5—7场，另23场缺官方关联。56场本机离线拟合35次迭代收敛。这只是本批、单赛事、单研究窗口的通路验证，不代表全部历史资料覆盖，更不证明预测能力提升。
+
+56场官方标签发布时间均未知，保持`None`；这不阻止今天的离线研究，但正式清单`cutoff_at=None`，外层明确`point_in_time_replay_verified=false`。不能冒充历史时点回测、把事后阵容当赛前特征或将收敛当效果验收。研究包不生成生产激活身份，不改现行训练器/工件指纹，不改变线上概率。独立时间切分评价仍需区分事后静态排序与真实已知时点验证。
+
+### 来源全场比分的离线研究（本地实现，尚未发布）
+
+`scripts.football_history_source_research`消费上一入口保存的`history`和`official_rows`输入回执，只读本地文件，不再次连接服务器、请求网站或建立新数据库。它使用独立的`fqp.history-source-labels/v1`契约，将研究目标固定为`source_reported_full_match`。逐场标签ID为`titan007:match:<来源ID>`，保留来源/规范球队、原赛季与研究赛季、精确赛程证据、历史批次与摘要以及未知的公布时间。
+
+有官方关联的记录，仍须逐场核对官方身份、状态及比分，成功后标记`official_corroborated`并保留真实官方赛果ID。官方冲突、未结算、关联缺失赛果或缺少核验行会明确排除，不能降级成来源独有数据放行。仅当同一已保存快照中的完整官方LEFT JOIN行为空，且原候选明确无官方关联时，才标记`source_only`。这表示来源身份和标签可追溯，并不证明第三方与官方同等可信。排除后重新迭代检查每队覆盖，摘要和计算数组来自同一有序清单。
+
+数值优化复用现行`_nll_maher_with_gradient`目标；研究适配器使用与官方拟合器一致的初始化、边界及L-BFGS-B设置，并通过同样本参数等价回归。不伪造`TrainingDataset`、官方比赛或赛果ID，不修改现行训练/工件指纹。它仍是无时间权重的基础通路验证，尚未加入转会、阵容或球队动态变化，也不替代后续动态模型。
+
+```bash
+# 输入是已有只读查询回执。只在本机拟合，不连接数据库。
+.venv/bin/python -m scripts.football_history_source_research \
+  --input /absolute/research/history-inputs.json \
+  --output /absolute/research/history-source-fit.json
+```
+
+输出包含候选、来源标签清单、拟合状态、输入文件及代码摘要和用途限制；输入最多32MiB、候选最多5000场，输出已存在时拒绝覆盖。数据不足、不收敛或非有限优化结果不计入成功拟合，诊断包退出码为2。数值收敛且成功导出才退出0。
+
+2026-10-30真实回执本机拟合结果：79场、20队、每队7—8场，其中56场官方核对、23场来源独有；优化收敛。原批次仍未完场的第80场没有混入。所有来源发布时间仍未知，研究包明确`production_ready=false`、`point_in_time_replay_verified=false`、`spf_regulation_score_verified=false`，没有模型持久化、生产激活或线上概率变化。29项新固定样本/本地CLI回归通过。后续时间切分结果见下；来源全场比分研究的收敛不能当作体彩90分钟模型效果验收。
+
+### 来源比分的时间切分评价（本地实现，尚未发布）
+
+`scripts.football_history_source_evaluation`读取同一份本地输入回执并重建来源标签。复用现有日历窗口生成器、Maher研究拟合、生产同款进球率/比分矩阵转换和Brier/LogLoss/RPS评分，不要求补造官方身份或赔率。默认按北京时间划分两个7天滚动评价段与最新7天留出段；每段训练开球必须严格早于该段起点减24小时。在训练子集内部迭代检查每队至少5场，与现行概率转换门槛一致，不借用全79场参数或未来球队场次。24小时是本研究的开球间隔约定，不是已证实的赛果发布时间。
+
+两个基线分别为胜平负各1/3、该段实际保留训练赛果的加一平滑频率。逐场只在模型能生成概率时成对评分，未见球队、拟合失败、无有效进球率均保留排除原因；空窗口或无评分窗口使整份评价为`incomplete`，CLI导出诊断并退出2。部分覆盖会明确记录候选/评分/排除数量，不冒充完整覆盖。缺赔率仍可独立评分，市场比较标为`not_evaluated`。聚合按各段不同测试行加权，不把段均值简单平均。
+
+```bash
+.venv/bin/python -m scripts.football_history_source_evaluation \
+  --input /absolute/research/history-inputs.json \
+  --output /absolute/research/history-source-evaluation.json
+```
+
+CLI只处理本地文件；输入最多32MiB，候选最多5000场，最终规范JSON最多5MB，输出已存在时拒绝覆盖。输出保存逐段训练清单与参数、逐场预测和评分、来源标签/输入/代码摘要、基线与覆盖。没有数据库写入、模型持久化或自动晋级。
+
+本机真实结果：10月6—12日/13—19日/20—26日分别用50/59/69场训练，评分9/10/10场，全部29场有概率、无排除。三个训练均收敛。合计模型LogLoss为1.209688，均匀基线1.098612、频率基线1.093231，越低越好；最后10场模型1.584160，明显差于两基线。最后10场全部有官方比分核对，不能把这段劣化归咎于来源独有标签。21项新回归及实际CLI通过表示实现可运行，不表示模型效果通过。
+
+这仍是当前回填批次的事后时间留出；首次发布时间未知，且79场此前已做全量拟合，没有事先封存盲测集，不能声称严格赛前重放或前瞻优势。最新块本次查看后不能在调参时反复宣称未见。样本仅一个赛季早期，尚无转会/注册/伤停特征；当前基础模型缺少效果优势证据，不据此替换线上模型。后续应在训练侧验证收缩、概率校准与不确定性，再用预先固定的后续新比赛检验，逐步接入有时间证据的阵容变化。
+
+
+### 训练侧收缩诊断（本地实现，尚未发布）
+
+同一评价脚本新增可选`--development-cutoff`模式，仅用显式北京时间零点之前的开发标签，之后标签不评分。既有Maher目标已经有0.10球队ridge；本模式固定比较额外0/1/5（合计0.10/1.10/5.10），只收缩球队攻防参数，不额外惩罚主场优势与联赛截距。开发集内部再做两个7天窗口、24小时开球间隔和每队至少5场检查。所有候选必须对相同开发行完整评分，至少10条，失败/缺覆盖不选参；主指标预定LogLoss，1e-8内平手取较小收缩，不能事后改用最有利指标选参。选中后只在开发集重拟合，不保存或启用生产工件。
+
+```bash
+.venv/bin/python -m scripts.football_history_source_evaluation \
+  --input /absolute/research/history-inputs.json \
+  --output /absolute/research/history-training-diagnosis.json \
+  --development-cutoff 2026-10-19T00:00:00+08:00
+```
+
+输出已存在拒绝覆盖，输入32MiB/规范JSON输出5MB界限与原模式一致；诊断不完整或最终重拟合失败退出2。默认不带此参数仍是原时间评价模式。`nll`包含惩罚，不能在不同收缩强度间直接比较；选择只比较开发预测LogLoss。输出保留每个窗口真实训练清单/参数、基线、逐行概率、来源证据、覆盖、选参、描述统计及代码/输入摘要。
+
+2026-10-30本机结果：截止前69场/20队（46官方核对、23来源独有），最后10场未重评。两个开发窗口10月5—11日/12—18日分别用50/55场训练，评分9/10场。19场合计LogLoss：额外0为1.017667、额外1为0.983008、额外5为0.991304；频率基线1.078219。按预定主指标选额外1并在69场重拟合收敛。三个候选各19条，共57条概率/评分重算一致；68项不同关联回归通过，其中18项本轮新增。
+
+这19场是探索选参样本，部分此前已查看，不能将赢家的开发分数当独立效果证明。更强收缩降低了本批球队参数平方范数，但不足以证明上一轮最后10场退化的根因。复用原温度校准100条拟合+至少25条后段验证要求；目前仅19条窗口外预测，明确`insufficient_samples`，没有校准参数或应用。该要求是跨比赛的校准验证门槛，不是每队需125场，也不阻断现有基础预测。球队6—7场、19条预测及高置信数量均为描述统计，不冒充有效样本量或置信区间。后续冻结候选做新比赛前瞻记录，逐步补入真实时间可核验的转会/阵容/伤停信息；没有替换线上模型、生产访问、提交或部署。
 
 ## 当前可以做什么
 
@@ -94,6 +192,57 @@ GitHub CI在隔离集群创建专用 `fqp_history_test_ci`，设置 `FQP_HISTORY
 - `scripts.titan007_refresh` 可有界更新已核实的英超赛程/榜单，先冻结和核验，再选择发布；数据库发布失败可按原 `run_id` 重试，不再次访问网站。默认只准备数据，没有自动定时任务。
 
 采集缓存属于**本地来源暂存层**。在此基础上，已实现英超 2026–2027 的共享 PostgreSQL 参考数据导入，以及现有联赛页的后端读取适配；真实缓存已在隔离 PostgreSQL 中完成闭环验证。现有 Docker Desktop FQP 测试栈（前端 18066、API 18080）已启用，不使用缺少现行基础表的原生 5432 旧库。后续有界更新只用 3 次公开请求，已将 380 场、20 队、三类完整榜单发布为批次 `5`：来源截止 2026-10-29 15:01:20，80 场完场，采到时间独立留存。服务器发布、模型输入和自动调度仍待后续。
+
+### 固定候选的赛前记录与后续评分（本地实现，尚未发布）
+
+`scripts.football_history_prospective`提供`freeze / predict / score`三个本地入口。来源全场比分研究不能套用正式SPF工件；线上`observed_maher_shadow`仍使用正式模型，本入口不修改它。复用现有run manifest、Maher概率计算与LogLoss/Brier/RPS，仅保存研究JSON，不建立另一业务数据库，不向正式模型/推荐/彩票写入。
+
+`freeze`同时校验既有诊断摘要、原始输入回执字节摘要、开发清单/参数/代码指纹，保留原69场开发重拟合及额外ridge1，不重新拟合、校准或重评最后10场。CLI使用实际UTC时钟，没有可回填的`--as-of`。固定冻结后14天（且不超出研究赛季窗口）的观察范围；当前真实候选在北京时间2026-10-30 12:59:18封存，规范摘要为`941628c115b12495406d2ff1071ba155ec6c0a7a0b572eab7b4aab7dfa5a841b`。同日13:21:02已用统一数据库真实赛程形成首批20场赛前记录，尚无新赛果评分。
+
+`predict`对输入快照中所有合格比赛计算概率，保留每项排除原因与供给/预测/排除数量。已经开球、完场/带比分、超出观察窗、进入训练集、缺规范球队、重复来源ID或同一事件不能静默混入。计算完成再次核对时钟，计算中开球的比赛剔除；CLI还在输出写入后核对，过时输出删除并报错。模型代码指纹变化后拒绝继续使用旧候选；局部文件hash和时钟不是外部可信存证，不能保证人工修改后不可重写。各次输出拒绝覆盖，跨多次输出汇总时须按来源比赛ID取最早有效记录，不能重复累计；本批未实现跨文件汇总器或自动调度。
+
+赛程快照与后续赛果快照共用以下明确结构，之后可由已发布`league_reference_batches/fixtures`只读生成，不重新抓取或复制业务库。本轮没有连接生产获取真实待赛快照。`captured_at`是读取完成后实际观测时间，不能用来源未知公布时间替代；`batch.imported_at`单独留存。缺可选赔率、阵容、伤停不阻断这个基础比分候选，但不能据此宣称已建模这些因素。
+
+| 字段 | 含义 |
+| --- | --- |
+| `version` | `fqp.history-source-fixtures/v1` |
+| `source_name/source_competition_id/study_season` | 固定`titan007 / 36 / 2026-2027`，与冻结范围相同 |
+| `captured_at` | 带时区的实际观测时间，不能晚于运行时钟 |
+| `batch` | 已发布批次的`id/state/content_sha256/imported_at`，状态为`published` |
+| `fixtures` | 最多5000行；每行来源数字`source_match_id`、规范`home_team_id/away_team_id`、带时区`kickoff_at`、`status`与`home_goals/away_goals` |
+| `score_scope` | 后续评分必须为`source_reported_full_match`，不能假冒90分钟SPF |
+
+预测行需`status=scheduled`且比分为空。`score`只读取保存的预测和后续快照，逐场核对来源ID、主客方向及开球时刻；改期/身份变更明确排除，缺赛果/未完场保持待定，布尔/负数/不完整比分不评分。赛果观测必须晚于预测计算完成与该场开球；新赛果不会重拟合参数或修改原概率。三种模型/基线指标严格在同一批已评分比赛上计算，保留覆盖与来源批次。缺赔率不阻断概率评价，也不产生市场或盈利优势结论。`awaiting_results/partially_scored/evaluated`仅为评分进度，`promotion_allowed=false`始终不自动启用模型。
+
+```bash
+# 用已保存诊断和原始输入回执封存，不进行训练。
+.venv/bin/python -m scripts.football_history_prospective freeze \
+  --input /absolute/research/diagnosis.json \
+  --receipt /absolute/research/original-inputs.json \
+  --sha256 PREVIOUS_DIAGNOSIS_CANONICAL_SHA256 \
+  --output /absolute/research/frozen.json
+
+# SHA256始终是上一步JSON内的规范摘要，不是带排版JSON文件的字节摘要。
+.venv/bin/python -m scripts.football_history_prospective predict \
+  --input /absolute/research/frozen.json \
+  --receipt /absolute/research/observed-fixtures.json \
+  --sha256 FROZEN_CANONICAL_SHA256 \
+  --output /absolute/research/forecast.json
+
+.venv/bin/python -m scripts.football_history_prospective score \
+  --input /absolute/research/forecast.json \
+  --receipt /absolute/research/later-results.json \
+  --sha256 FORECAST_CANONICAL_SHA256 \
+  --output /absolute/research/score.json
+```
+
+输入最多32MiB，拒绝重复JSON键/非有限值，输出最多5MB且拒绝覆盖；没有合格预测时保留排除诊断、退出2，缺赛果正常输出待定状态。固定样本端到端CLI验证使用临时合成赛程，不冒充真实前瞻证据。34项本地回归、Ruff和Mypy通过，运行源码未变，真实记录阶段沿用这些证据。
+
+首批实际读取在北京时间2026-10-30 13:20:51完成，服务器`100.121.47.26`仍为`6bf375e`且工作区干净，4项服务active。通过stdin内存脚本，以fqp账号在REPEATABLE READ/READ ONLY事务中完整导出英超2026–2027最新已发布批次2的380场；本事务写入0，读取后回滚关闭连接，没有服务器文件、服务或模型变更。20队主客双循环380对齐，0缺开球、0未映射队，未来窗口20场全部记录；其余80场已开球、280场超出观察窗口，均有排除记录。首场按该批次为北京时间10月31日20:30，最后一场11月9日00:30，观察截止仍为11月13日12:59:18。
+
+赛程来源截止为10月29日15:01:20，采到于16:05:06，导入于19:30:56；本次读取时距来源截止约22.33小时。读取统一库不等于实时重抓网站；全批次覆盖已核对，但外部完整赛程及最新改期未另行联网核实。首批预测规范摘要`2bfc767c43f410ccc7061e9f2ced30f1359e05c3f1b783550095e2dc997c3fa1`，计划目录保存带`20261030T052051832607Z`的FIXTURES/CAPTURE/FORECAST及逐场概率表。固定参数、训练清单、14个运行源码和run身份已自核；不是独立发布审查。仅此一份真实预测文件，20场不能通过重复运行累加为更多样本。
+
+下一步等比赛实际结束后，沿用现有有界更新入口取得并发布新的完整参考批次，再只读捕获独立新赛果，按原预测文件执行score。缺赛果保持待定，改期或主客/身份冲突单列；不重新训练或更改本批概率。当前研究未接自动调度，未提交部署、未改变线上模型，不宣称效果更好或P105/P106完整效果验收通过。
 
 ## 数据和代码的位置
 

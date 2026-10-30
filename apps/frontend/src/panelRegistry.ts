@@ -438,7 +438,7 @@ export const PANEL_REGISTRY: PanelManifest[] = [
   {
     panelCode: 'pool_lottery',
     moduleCode: 'pool_lottery_module',
-    panelName: '足彩彩池',
+    panelName: '传统足彩玩法',
     panelType: 'workflow',
     routePath: '/pool',
     componentName: 'PoolPage',

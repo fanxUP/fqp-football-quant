@@ -3,15 +3,17 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from datetime import date
 from functools import lru_cache
-from typing import Any
+from typing import Any, Literal
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Path, Query
 from psycopg2.extras import Json
 from pydantic import BaseModel, ConfigDict, Field, StrictInt
 
 from apps.backend.src.db import get_db
 from scripts.business_time import business_now
+from scripts.football_pool_catalog import read_pool_catalog, read_pool_catalog_issue
 from scripts.market_metric_validation import spf_probability_vector
 from scripts.model_prediction_run_identity import content_sha256
 from scripts.model_prediction_run_loader import load_pool_prediction_groups
@@ -396,6 +398,42 @@ def list_pool_issues():
         for i in issues
     ]
     return {"issues": result, "total": len(result)}
+
+
+@router.get("/api/pool/catalog")
+def pool_catalog(
+    game_type: Literal["t14c", "r9", "bqc6", "jq4"] | None = None,
+    issue_no: str | None = Query(None, min_length=1, max_length=64),
+    date_from: date | None = None,
+    date_to: date | None = None,
+    limit: int = Query(20, ge=1, le=50),
+    offset: int = Query(0, ge=0, le=100000),
+):
+    if date_from and date_to and date_from > date_to:
+        raise HTTPException(400, "起始日期不能晚于结束日期")
+    if date_to == date.max:
+        raise HTTPException(400, "结束日期超出支持范围")
+    with get_db() as conn:
+        _start_snapshot(conn)
+        return read_pool_catalog(
+            conn,
+            game_type=game_type,
+            issue_no=issue_no,
+            date_from=date_from,
+            date_to=date_to,
+            limit=limit,
+            offset=offset,
+        )
+
+
+@router.get("/api/pool/catalog/{issue_id}")
+def pool_catalog_issue(issue_id: int = Path(gt=0, le=9007199254740991)):
+    with get_db() as conn:
+        _start_snapshot(conn)
+        result = read_pool_catalog_issue(conn, issue_id)
+    if result is None:
+        raise HTTPException(404, "未找到该官方期次")
+    return result
 
 
 @lru_cache(maxsize=1)

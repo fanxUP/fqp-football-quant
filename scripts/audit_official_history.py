@@ -19,6 +19,11 @@ from scripts.official_history_importer import (
     normalize_official_match_code,
     official_match_identity_error,
 )
+from scripts.official_season_retention import (
+    SeasonWindows,
+    allows_business_date,
+    load_retained_season_windows,
+)
 
 
 def summarize_official_history_rows(
@@ -116,11 +121,11 @@ def load_uniform_artifact_match_ids(artifact_dir: Path) -> tuple[int, set[str]]:
 def select_in_scope_official_match_ids(
     *,
     artifact_rows: list[dict[str, str]],
-    season_targets: dict[str, tuple[date | str, date | str]],
+    season_targets: SeasonWindows,
     start_date: str,
     end_date: str,
 ) -> tuple[set[str], int]:
-    """Keep only artifact identities allowed by the selected-season database."""
+    """Keep artifact identities admitted by any retained season window."""
     requested_start = date.fromisoformat(start_date)
     requested_end = date.fromisoformat(end_date)
     selected: set[str] = set()
@@ -133,27 +138,10 @@ def select_in_scope_official_match_ids(
             if match_id:
                 excluded_ids.add(match_id)
             continue
-        raw_target = season_targets.get(row.get("league_name", ""))
-        if season_targets and raw_target is None:
-            if match_id:
-                excluded_ids.add(match_id)
-            continue
-        if not season_targets:
-            if requested_start <= business_date <= requested_end:
-                selected.add(match_id)
-            elif match_id:
-                excluded_ids.add(match_id)
-            continue
-        assert raw_target is not None
-        target_start = (
-            raw_target[0] if isinstance(raw_target[0], date) else date.fromisoformat(raw_target[0])
-        )
-        target_end = (
-            raw_target[1] if isinstance(raw_target[1], date) else date.fromisoformat(raw_target[1])
-        )
         if (
-            requested_start <= business_date <= requested_end
-            and target_start <= business_date <= target_end
+            match_id
+            and allows_business_date(season_targets, row.get("league_name", ""), business_date)
+            and requested_start <= business_date <= requested_end
         ):
             selected.add(match_id)
         else:
@@ -202,11 +190,7 @@ def audit_official_history(
     with get_db() as conn:
         with conn.cursor() as cur:
             if artifact_rows:
-                cur.execute(
-                    "SELECT league_name, season_start_date, season_end_date "
-                    "FROM official_event_season_targets"
-                )
-                season_targets = {row[0]: (row[1], row[2]) for row in cur.fetchall()}
+                season_targets = load_retained_season_windows(conn)
                 artifact_match_ids, excluded_match_ids = select_in_scope_official_match_ids(
                     artifact_rows=artifact_rows,
                     season_targets=season_targets,

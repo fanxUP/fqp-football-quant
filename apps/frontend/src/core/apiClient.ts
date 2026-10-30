@@ -1003,6 +1003,9 @@ export const api = {
 
   // Pool lottery (Phase 10)
   pool: {
+    catalog: (params: import('./types').PoolCatalogFilters = {}) =>
+      request<import('./types').PoolCatalogPage>(`/api/pool/catalog${qs({ ...params })}`),
+    catalogIssue: (id: number) => request<import('./types').PoolCatalogDetail>(`/api/pool/catalog/${id}`),
     analyze: (params?: import('./types').PoolParameters) =>
       request<import('./types').PoolAnalysis>(`/api/pool/analyze${qs({
         budget: params?.budget, strategy: params?.strategy, issue_id: params?.issue_id,

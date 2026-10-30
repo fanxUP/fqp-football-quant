@@ -17,6 +17,12 @@ import re
 from datetime import UTC, date, datetime
 from typing import Any
 
+from psycopg2.extras import Json
+
+from scripts.football_fixture_identity import IDENTITY_LOCK, resolve_pool_fixture
+from scripts.official_season_retention import allows_business_date, load_retained_season_windows
+from scripts.pool_issue_state import pool_time
+
 OFFICIAL_MATCH_CODE_RE = re.compile(r"^周[一二三四五六日]\d{3}$")
 
 # ---------------------------------------------------------------------------
@@ -31,24 +37,6 @@ def _hash_raw(raw: Any) -> str:
 
 def _now() -> str:
     return datetime.now(UTC).replace(tzinfo=None).isoformat(timespec="seconds")
-
-
-def _event_season_targets(conn: Any) -> dict[str, tuple[date, date]]:
-    """Load the active event-center season gate; an empty table disables it."""
-    with conn.cursor() as cur:
-        cur.execute(
-            """
-            SELECT league_name, season_start_date, season_end_date
-            FROM official_event_season_targets
-            """
-        )
-        return {
-            str(row[0]): (
-                row[1] if isinstance(row[1], date) else date.fromisoformat(str(row[1])),
-                row[2] if isinstance(row[2], date) else date.fromisoformat(str(row[2])),
-            )
-            for row in cur.fetchall()
-        }
 
 
 # ---------------------------------------------------------------------------
@@ -134,7 +122,7 @@ def store_matches(conn: Any, matches: list[dict]) -> dict[str, Any]:
     if not valid_matches:
         return {"inserted": 0, "updated": 0, "errors": errors}
 
-    season_targets = _event_season_targets(conn)
+    season_targets = load_retained_season_windows(conn)
     if season_targets:
         season_valid: list[dict] = []
         for match in valid_matches:
@@ -142,12 +130,13 @@ def store_matches(conn: Any, matches: list[dict]) -> dict[str, Any]:
             business_date = (
                 raw_date if isinstance(raw_date, date) else date.fromisoformat(str(raw_date))
             )
-            target = season_targets.get(str(match.get("league_name") or ""))
-            if target is None or not target[0] <= business_date <= target[1]:
+            if not allows_business_date(
+                season_targets, str(match.get("league_name") or ""), business_date
+            ):
                 errors.append(
                     {
                         "match_code": str(match["official_match_code"]),
-                        "error": "outside selected event season",
+                        "error": "outside retained event seasons",
                     }
                 )
                 continue
@@ -657,6 +646,9 @@ def store_pool_issue(
     now_ts = _now()
     raw_hash = _hash_raw(raw_json or {})
     with conn.cursor() as cur:
+        # Lock before the header UPSERT too: every batch uses the same order,
+        # rather than holding an issue row while waiting for the identity lock.
+        cur.execute("SELECT pg_advisory_xact_lock(%s)", (IDENTITY_LOCK,))
         cur.execute(
             """
             INSERT INTO football_pool_issues
@@ -698,50 +690,57 @@ def store_pool_issue_matches(
     issue_id: int,
     matches: list[dict],
 ) -> int:
-    """Insert matches for a pool issue. Returns count inserted.
+    """Store current memberships and append revision evidence, without fabricating JC.
 
-    Each match dict:
-      match_order, match_id, league_name, home_team_name, away_team_name,
-      kickoff_time, home_win_prob, draw_prob, away_win_prob,
-      upset_score, public_heat_home, public_heat_draw, public_heat_away
+    The caller owns issue+fixtures atomicity. Missing or conflicting identity
+    material stays visible with an explicit status; SQL failures propagate.
     """
-    inserted = 0
+    stored = 0
     with conn.cursor() as cur:
+        # Serialize the small identity allocation section across pool writers.
+        # Unique source bindings remain a second database-level safeguard.
+        cur.execute("SELECT pg_advisory_xact_lock(%s)", (IDENTITY_LOCK,))
+        cur.execute(
+            "SELECT game_type,issue_no,source_game_type FROM football_pool_issues WHERE id=%s",
+            (issue_id,),
+        )
+        issue = cur.fetchone()
+        if not issue:
+            raise ValueError("pool issue does not exist")
+        game_type, issue_no, source_game_type = issue
         for m in matches:
-            # Supplier IDs never enter the local FK namespace. Exact unique
-            # identity only; ambiguous/unmapped fixtures remain visible.
+            identity = resolve_pool_fixture(
+                cur, m, game_type=game_type, issue_no=issue_no, source_game_type=source_game_type
+            )
+            kickoff = pool_time(m.get("kickoff_time"))
             cur.execute(
                 """INSERT INTO football_pool_issue_matches
-                    (issue_id, match_order, match_id, source_match_id, league_name,
-                     home_team_name, away_team_name, kickoff_time,
-                     home_win_prob, draw_prob, away_win_prob, upset_score,
-                     public_heat_home, public_heat_draw, public_heat_away)
-                VALUES (%s,%s,
-                    (SELECT CASE WHEN count(*)=1 THEN min(official.id) END
-                     FROM official_matches official
-                     WHERE official.home_team_name=%s AND official.away_team_name=%s
-                       AND official.kickoff_time=%s::timestamp),
-                    %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-                ON CONFLICT (issue_id, match_order) DO UPDATE SET
-                    match_id=EXCLUDED.match_id, source_match_id=EXCLUDED.source_match_id,
+                    (issue_id,match_order,match_id,source_match_id,league_name,
+                     home_team_name,away_team_name,kickoff_time,
+                     home_win_prob,draw_prob,away_win_prob,upset_score,
+                     public_heat_home,public_heat_draw,public_heat_away,
+                     fixture_id,identity_status,identity_evidence,source_raw_json)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                ON CONFLICT (issue_id,match_order) DO UPDATE SET
+                    match_id=EXCLUDED.match_id,source_match_id=EXCLUDED.source_match_id,
                     league_name=EXCLUDED.league_name,
-                    home_team_name=EXCLUDED.home_team_name, away_team_name=EXCLUDED.away_team_name,
+                    home_team_name=EXCLUDED.home_team_name,away_team_name=EXCLUDED.away_team_name,
                     kickoff_time=EXCLUDED.kickoff_time,
-                    home_win_prob=EXCLUDED.home_win_prob, draw_prob=EXCLUDED.draw_prob,
-                    away_win_prob=EXCLUDED.away_win_prob, upset_score=EXCLUDED.upset_score,
+                    home_win_prob=EXCLUDED.home_win_prob,draw_prob=EXCLUDED.draw_prob,
+                    away_win_prob=EXCLUDED.away_win_prob,upset_score=EXCLUDED.upset_score,
                     public_heat_home=EXCLUDED.public_heat_home,
-                    public_heat_draw=EXCLUDED.public_heat_draw, public_heat_away=EXCLUDED.public_heat_away""",
+                    public_heat_draw=EXCLUDED.public_heat_draw,public_heat_away=EXCLUDED.public_heat_away,
+                    fixture_id=EXCLUDED.fixture_id,identity_status=EXCLUDED.identity_status,
+                    identity_evidence=EXCLUDED.identity_evidence,source_raw_json=EXCLUDED.source_raw_json""",
                 (
                     issue_id,
                     m.get("match_order"),
-                    m.get("home_team_name"),
-                    m.get("away_team_name"),
-                    m.get("kickoff_time"),
+                    identity["official_match_id"],
                     m.get("source_match_id"),
                     m.get("league_name"),
                     m.get("home_team_name"),
                     m.get("away_team_name"),
-                    m.get("kickoff_time"),
+                    kickoff.replace(tzinfo=None) if kickoff else None,
                     m.get("home_win_prob"),
                     m.get("draw_prob"),
                     m.get("away_win_prob"),
@@ -749,9 +748,11 @@ def store_pool_issue_matches(
                     m.get("public_heat_home"),
                     m.get("public_heat_draw"),
                     m.get("public_heat_away"),
+                    identity["fixture_id"],
+                    identity["identity_status"],
+                    Json(identity["evidence"]),
+                    Json(m.get("raw_json") or {}),
                 ),
             )
-            inserted += 1
-    # The caller owns the issue+fixtures transaction. Do not swallow SQL errors
-    # or commit a partial official catalogue.
-    return inserted
+            stored += 1
+    return stored

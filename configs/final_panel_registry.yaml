@@ -98,7 +98,7 @@ panels:
     visible: true
     icon: trending-up
   - panel_id: pool_lottery
-    name: 足彩彩池
+    name: 传统足彩玩法
     route: /pool
     module_id: pool_lottery_module
     order: 210

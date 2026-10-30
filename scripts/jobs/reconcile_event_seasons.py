@@ -1,4 +1,4 @@
-"""Resolve target seasons and physically purge out-of-scope official matches."""
+"""Refresh current-season selections while retaining history without deletion."""
 
 from __future__ import annotations
 
@@ -13,6 +13,7 @@ from zoneinfo import ZoneInfo
 from psycopg2.extras import Json
 
 from apps.backend.src.db import get_db
+from scripts.official_season_retention import retain_season_windows
 from scripts.sporttery_client import SportteryClient
 
 SPORTTERY_CATALOG_URL = (
@@ -162,22 +163,6 @@ MANUAL_SOURCE_URLS = {
     "葡萄牙杯": "https://www3.fpf.pt/pt/News/Todas-as-not%C3%ADcias/Not%C3%ADcia/news/49352/contextid/971",
 }
 
-DEPENDENT_MATCH_TABLES = (
-    "simulation_ticket_items",
-    "prediction_error_analysis",
-    "model_committee_votes",
-    "market_efficiency_metrics",
-    "odds_probability_conversions",
-    "score_distribution_snapshots",
-    "real_ticket_items",
-    "football_pool_issue_matches",
-    "simulator_ticket_items",
-    "model_predictions",
-    "official_odds_snapshots",
-    "official_markets",
-    "official_results",
-)
-
 
 def select_season_window(candidates: list[SeasonCandidate], *, today: date) -> SelectedSeasonWindow:
     if not candidates:
@@ -303,105 +288,87 @@ def resolve_targets(
     return targets
 
 
-def _persist_and_purge(
+def _persist_targets(
     *, targets: dict[str, dict[str, Any]], today: date, dry_run: bool
 ) -> dict[str, Any]:
+    """Update current selections and retain every observed window atomically.
+
+    Missing or outside-window stored matches are review candidates, never a
+    deletion instruction. The legacy table remains the current selector only.
+    """
     with get_db() as conn:
-        with conn.cursor() as cur:
-            cur.execute("SELECT DISTINCT league_name FROM official_matches")
-            stored_leagues = {str(row[0]) for row in cur.fetchall()}
-            unknown = stored_leagues - set(targets)
-            if unknown:
-                raise RuntimeError(f"unresolved stored leagues: {', '.join(sorted(unknown))}")
-
-            cur.execute(
-                """
-                DELETE FROM official_event_season_targets
-                WHERE NOT (league_name = ANY(%s))
-                """,
-                (list(targets),),
+        try:
+            retain_season_windows(
+                conn,
+                [
+                    dict(target, league_name=league, as_of_date=today)
+                    for league, target in targets.items()
+                ],
             )
-            for league_name, target in targets.items():
-                serializable_target = json.loads(json.dumps(target, default=str))
-                cur.execute(
-                    """
-                    INSERT INTO official_event_season_targets (
-                        league_name, season_name, season_start_date, season_end_date,
-                        selection_reason, boundary_source, official_league_refs,
-                        source_url, as_of_date, raw_json, updated_at
-                    ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,now())
-                    ON CONFLICT (league_name) DO UPDATE SET
-                        season_name=EXCLUDED.season_name,
-                        season_start_date=EXCLUDED.season_start_date,
-                        season_end_date=EXCLUDED.season_end_date,
-                        selection_reason=EXCLUDED.selection_reason,
-                        boundary_source=EXCLUDED.boundary_source,
-                        official_league_refs=EXCLUDED.official_league_refs,
-                        source_url=EXCLUDED.source_url,
-                        as_of_date=EXCLUDED.as_of_date,
-                        raw_json=EXCLUDED.raw_json,
-                        updated_at=now()
-                    """,
-                    (
-                        league_name,
-                        target["season_name"],
-                        target["start_date"],
-                        target["end_date"],
-                        target["selection_reason"],
-                        target["boundary_source"],
-                        Json(target["official_league_refs"]),
-                        target["source_url"],
-                        today,
-                        Json(serializable_target),
-                    ),
+            with conn.cursor() as cur:
+                cur.execute("SELECT DISTINCT league_name FROM official_matches")
+                unknown = sorted(
+                    str(row[0]) for row in cur.fetchall() if str(row[0]) not in targets
                 )
-
-            cur.execute(
-                """
-                CREATE TEMP TABLE event_season_purge_ids ON COMMIT DROP AS
-                SELECT m.id
-                FROM official_matches m
-                LEFT JOIN official_event_season_targets target
-                  ON target.league_name = m.league_name
-                WHERE target.league_name IS NULL
-                   OR m.business_date NOT BETWEEN target.season_start_date
-                                              AND target.season_end_date
-                """
-            )
-            cur.execute("SELECT COUNT(*) FROM event_season_purge_ids")
-            matches_to_delete = int(cur.fetchone()[0])
-            dependent_counts: dict[str, int] = {}
-            for table in DEPENDENT_MATCH_TABLES:
-                cur.execute(
-                    f"SELECT COUNT(*) FROM {table} WHERE match_id IN "
-                    "(SELECT id FROM event_season_purge_ids)"
-                )
-                dependent_counts[table] = int(cur.fetchone()[0])
-            if not dry_run:
-                for table in DEPENDENT_MATCH_TABLES:
+                for league_name, target in targets.items():
+                    serializable_target = json.loads(json.dumps(target, default=str))
                     cur.execute(
-                        f"DELETE FROM {table} WHERE match_id IN "
-                        "(SELECT id FROM event_season_purge_ids)"
+                        """
+                        INSERT INTO official_event_season_targets (
+                            league_name, season_name, season_start_date, season_end_date,
+                            selection_reason, boundary_source, official_league_refs,
+                            source_url, as_of_date, raw_json, updated_at
+                        ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,now())
+                        ON CONFLICT (league_name) DO UPDATE SET
+                            season_name=EXCLUDED.season_name,
+                            season_start_date=EXCLUDED.season_start_date,
+                            season_end_date=EXCLUDED.season_end_date,
+                            selection_reason=EXCLUDED.selection_reason,
+                            boundary_source=EXCLUDED.boundary_source,
+                            official_league_refs=EXCLUDED.official_league_refs,
+                            source_url=EXCLUDED.source_url,
+                            as_of_date=EXCLUDED.as_of_date,
+                            raw_json=EXCLUDED.raw_json,
+                            updated_at=now()
+                        WHERE EXCLUDED.as_of_date >= official_event_season_targets.as_of_date
+                        """,
+                        (
+                            league_name,
+                            target["season_name"],
+                            target["start_date"],
+                            target["end_date"],
+                            target["selection_reason"],
+                            target["boundary_source"],
+                            Json(target["official_league_refs"]),
+                            target["source_url"],
+                            today,
+                            Json(serializable_target),
+                        ),
                     )
                 cur.execute(
-                    "DELETE FROM official_matches WHERE id IN "
-                    "(SELECT id FROM event_season_purge_ids)"
+                    """SELECT count(*) FROM official_matches m
+                       WHERE NOT EXISTS (
+                           SELECT 1 FROM official_event_season_retention target
+                           WHERE target.league_name=m.league_name
+                             AND m.business_date BETWEEN target.season_start_date
+                                                     AND target.season_end_date
+                       )"""
                 )
-                deleted = cur.rowcount
-                cur.execute("ANALYZE official_matches")
-            else:
-                deleted = 0
+                outside = int(cur.fetchone()[0])
+                cur.execute("SELECT count(*) FROM official_event_season_retention")
+                retained = int(cur.fetchone()[0])
+            if dry_run:
                 conn.rollback()
-                return {
-                    "matches_to_delete": matches_to_delete,
-                    "matches_deleted": deleted,
-                    "dependent_rows_to_delete": dependent_counts,
-                }
-        conn.commit()
+            else:
+                conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
     return {
-        "matches_to_delete": matches_to_delete,
-        "matches_deleted": deleted,
-        "dependent_rows_to_delete": dependent_counts,
+        "matches_outside_retention": outside,
+        "matches_deleted": 0,
+        "retained_window_count": retained,
+        "unresolved_stored_leagues": unknown,
     }
 
 
@@ -418,7 +385,7 @@ def run(
         targets = resolve_targets(today=business_today, artifact_root=root, client=client)
     finally:
         client.close()
-    cleanup = _persist_and_purge(targets=targets, today=business_today, dry_run=dry_run)
+    retention = _persist_targets(targets=targets, today=business_today, dry_run=dry_run)
     summary = {
         "status": "dry_run" if dry_run else "ok",
         "business_date": business_today.isoformat(),
@@ -426,7 +393,7 @@ def run(
         "minimum_target_start": min(item["start_date"] for item in targets.values()).isoformat(),
         "maximum_target_end": max(item["end_date"] for item in targets.values()).isoformat(),
         "targets": targets,
-        **cleanup,
+        **retention,
     }
     _write_json(root / "run_summary.json", summary)
     return summary

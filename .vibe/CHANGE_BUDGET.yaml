@@ -1,13 +1,13 @@
 schema_version: 4
-task_id: HISTORY-MATCH-READ-20261030
-max_files_changed: 16
-max_new_files: 6
+task_id: SPORTTERY-POOL-CATALOG-RELEASE-20261030
+max_files_changed: 48
+max_new_files: 23
 max_new_dependencies: 0
-max_schema_migrations: 0
-max_public_api_changes: 1
-declared_public_api_changes: 1
+max_schema_migrations: 2
+max_public_api_changes: 2
+declared_public_api_changes: 2
 regression_budget:
   new_test_failures: 0
   new_lint_errors: 0
   new_type_errors: 0
-notes: Read-only single-match history reference on existing main; no production writes or model changes.
+notes: Preserve previous32 paths; add four-game catalog read service/API, component/style/test, client/types and pool docs. No new schema in the catalog UI slice; user-requested navigation rename adds five existing registry/language/test paths, cumulative48/23. Commit/push authorized; production release remains subject to migration 124/125 release gate.

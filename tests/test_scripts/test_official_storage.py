@@ -98,7 +98,7 @@ def test_store_matches_rejects_numbered_match_outside_selected_event_season():
     assert result["errors"] == [
         {
             "match_code": "周日001",
-            "error": "outside selected event season",
+            "error": "outside retained event seasons",
         }
     ]
     assert cursor.execute.call_count == 1
@@ -127,9 +127,42 @@ def test_confirmed_result_closes_match_sales_even_when_match_was_already_settled
     assert result["settled"] == 1
 
 
-def test_pool_match_storage_resolves_exact_official_match_identity():
+def test_store_matches_accepts_each_retained_season_without_filling_the_gap():
     conn = MagicMock()
     cursor = conn.cursor.return_value.__enter__.return_value
+    cursor.fetchall.return_value = [
+        ("联赛", "2021-08-01", "2022-05-31"),
+        ("联赛", "2025-08-01", "2026-05-31"),
+    ]
+    cursor.fetchone.return_value = (7, True)
+    matches = [
+        dict(
+            business_date=day,
+            official_match_code=f"周日{n:03d}",
+            source_match_id=str(n),
+            league_name="联赛",
+            home_team_name="A",
+            away_team_name="B",
+            kickoff_time=day + "T23:00:00",
+        )
+        for n, day in enumerate(["2022-05-31", "2023-01-01", "2025-08-01"], 1)
+    ]
+    result = store_matches(conn, matches)
+    assert result["inserted"] == 2
+    assert [error["match_code"] for error in result["errors"]] == ["周日002"]
+    assert "FROM official_event_season_retention" in cursor.execute.call_args_list[0].args[0]
+
+
+def test_pool_match_storage_uses_shared_identity_and_caller_transaction(monkeypatch):
+    conn = MagicMock()
+    cursor = conn.cursor.return_value.__enter__.return_value
+    cursor.fetchone.return_value = ("t14c", "26001", "t14c")
+    resolved = MagicMock(
+        return_value=dict(
+            fixture_id=81, official_match_id=7, identity_status="linked", evidence={"fixture": True}
+        )
+    )
+    monkeypatch.setattr("scripts.official_storage.resolve_pool_fixture", resolved)
 
     inserted = store_pool_issue_matches(
         conn,
@@ -139,7 +172,7 @@ def test_pool_match_storage_resolves_exact_official_match_identity():
                 "match_order": 1,
                 "home_team_name": "萨巴赫",
                 "away_team_name": "库奥皮奥",
-                "kickoff_time": "2026-07-22T00:00:00",
+                "kickoff_time": "2026-07-21T16:00:00Z",
                 "league_name": "欧冠",
             }
         ],
@@ -148,8 +181,14 @@ def test_pool_match_storage_resolves_exact_official_match_identity():
     assert inserted == 1
     query = " ".join(cursor.execute.call_args.args[0].split())
     params = cursor.execute.call_args.args[1]
-    assert "CASE WHEN count(*)=1 THEN min(official.id) END" in query
-    assert "official.kickoff_time=%s::timestamp" in query
+    resolved.assert_called_once()
+    assert resolved.call_args.kwargs == {
+        "game_type": "t14c",
+        "issue_no": "26001",
+        "source_game_type": "t14c",
+    }
     assert query.count("%s") == len(params)
-    assert params[2:5] == ("萨巴赫", "库奥皮奥", "2026-07-22T00:00:00")
+    assert params[2] == 7
+    assert params[7].isoformat() == "2026-07-22T00:00:00"
+    assert params[15:17] == (81, "linked")
     conn.commit.assert_not_called()

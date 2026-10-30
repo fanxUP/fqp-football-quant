@@ -19,6 +19,7 @@ from typing import Any
 
 from apps.backend.src.db import get_db
 from scripts.business_time import business_today
+from scripts.football_fixture_identity import TRADITIONAL_MATCH_COUNTS, traditional_source_ids
 from scripts.official_storage import (
     log_crawl,
     record_official_collection_status,
@@ -1138,12 +1139,22 @@ def parse_traditional_lottery_response(
             continue
 
         match_list = section.get("matchList", [])
+        shape_verified = len(match_list) == TRADITIONAL_MATCH_COUNTS[game_type]
+        block_reason = None if shape_verified else "unverified_slot_layout"
+        for field in ("infohubMatchId", "matchId"):
+            ids = [sid for row in match_list if (sid := traditional_source_ids(row).get(field))]
+            if len(ids) != len(set(ids)):
+                shape_verified = False
+                block_reason = block_reason or "duplicate_fixture_slots"
         matches = []
         for i, m in enumerate(match_list):
             matches.append(
                 {
                     "match_order": i + 1,
                     "source_match_id": str(m.get("infohubMatchId") or m.get("matchId") or ""),
+                    "source_ids": traditional_source_ids(m),
+                    "raw_json": m,
+                    "identity_block_reason": block_reason,
                     "league_name": m.get("matchName", ""),
                     "home_team_name": m.get("masterTeamAllName")
                     or m.get("masterTeamName")
@@ -1175,7 +1186,7 @@ def parse_traditional_lottery_response(
                 "issue_no": issue_no,
                 "sale_start": sale_start,
                 "sale_stop": sale_stop,
-                "total_matches": len(match_list),
+                "total_matches": len(match_list) if shape_verified else None,
                 "official_status": official_status,
                 "matches": matches,
                 "raw_json": section,

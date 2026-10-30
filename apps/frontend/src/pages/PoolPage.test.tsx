@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import PoolPage from './PoolPage';
 import { ApiError, type PoolAnalysis } from '../core/types';
 
-const mocks = vi.hoisted(() => ({ analyze: vi.fn(), issues: vi.fn(), plans: vi.fn(), save: vi.fn(), plan: vi.fn() }));
+const mocks = vi.hoisted(() => ({ analyze: vi.fn(), issues: vi.fn(), plans: vi.fn(), save: vi.fn(), plan: vi.fn(), catalog: vi.fn(), catalogIssue: vi.fn() }));
 vi.mock('../core/apiClient', () => ({ api: { pool: mocks } }));
 function result(): PoolAnalysis {
   const issue = { id: 1, issue_no: '26100', game_type: 't14c', status: 'closed', sale_stop: '2026-10-27T10:00:00+08:00' };
@@ -23,6 +23,7 @@ describe('PoolPage corrected contracts', () => {
     vi.clearAllMocks();
     mocks.analyze.mockResolvedValue(result()); mocks.issues.mockResolvedValue({ issues: [] });
     mocks.plans.mockResolvedValue({ plans: [] });
+    mocks.catalog.mockResolvedValue({ issues: [], total: 0, limit: 20, offset: 0 });
   });
   it('部分预测不足时仍展示任九，并明确区分历史参考', async () => {
     render(<PoolPage />);

@@ -796,6 +796,49 @@ export interface PoolIssue {
   state?: string;
   sale_stop: string | null;
 }
+export type PoolGameType = 't14c' | 'r9' | 'bqc6' | 'jq4';
+export interface PoolCatalogFilters {
+  game_type?: PoolGameType;
+  issue_no?: string;
+  date_from?: string;
+  date_to?: string;
+  limit?: number;
+  offset?: number;
+}
+export interface PoolCatalogIssue extends PoolIssue {
+  game_type: PoolGameType;
+  expected_matches: number;
+  total_matches: number | null;
+  stored_matches: number;
+  linked_matches: number;
+  pending_matches: number;
+  conflict_matches: number;
+  unique_fixtures: number;
+  source_verified: boolean;
+  catalogue_complete: boolean;
+  first_kickoff: string | null;
+  last_kickoff: string | null;
+}
+export interface PoolCatalogPage {
+  issues: PoolCatalogIssue[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+export interface PoolCatalogDetail {
+  issue: PoolCatalogIssue;
+  fixtures: {
+    match_order: number;
+    fixture_id: number | null;
+    official_match_id: number | null;
+    identity_status: 'linked' | 'pending' | 'conflict';
+    identity_reason: string | null;
+    league: string;
+    home_team: string;
+    away_team: string;
+    kickoff: string | null;
+  }[];
+}
 export interface PoolParameters {
   budget: number;
   strategy: string;

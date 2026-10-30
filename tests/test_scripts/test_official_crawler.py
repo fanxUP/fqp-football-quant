@@ -115,6 +115,41 @@ def test_traditional_lottery_reads_official_sale_window_field_names():
     assert pools[0]["official_status"] == "selling"
 
 
+def test_traditional_source_ids_remain_typed_and_raw_evidence_is_preserved():
+    rows = [
+        {"infohubMatchId": 100 + i, "matchId": 200 + i, "homeTeam": "A", "awayTeam": "B"}
+        for i in range(14)
+    ]
+    pool = parse_traditional_lottery_response(
+        {"value": {"sfcDetail": {"lotteryDrawNum": "26001", "matchList": rows}}}
+    )[0]
+    assert pool["matches"][0]["source_ids"] == {"infohubMatchId": "100", "matchId": "200"}
+    assert pool["matches"][0]["raw_json"] == rows[0]
+    assert pool["matches"][0].get("identity_block_reason") is None
+    assert pool["total_matches"] == 14
+
+
+@pytest.mark.parametrize("section,size", [("bqcDetail", 12), ("jqcDetail", 8), ("rjDetail", 9)])
+def test_unverified_betting_slot_layout_never_claims_physical_match_count(section, size):
+    rows = [{"infohubMatchId": i // 2 + 1, "homeTeam": "A", "awayTeam": "B"} for i in range(size)]
+    pool = parse_traditional_lottery_response(
+        {"value": {section: {"lotteryDrawNum": "26001", "matchList": rows}}}
+    )[0]
+    assert pool["total_matches"] is None
+    assert len(pool["matches"]) == size  # Keep material; do not guess a folding rule.
+    assert {m["identity_block_reason"] for m in pool["matches"]} == {"unverified_slot_layout"}
+    assert pool["raw_json"]["matchList"] == rows
+
+
+def test_duplicate_source_slots_are_not_counted_as_distinct_physical_matches():
+    rows = [{"infohubMatchId": i // 2 + 1, "homeTeam": "A", "awayTeam": "B"} for i in range(6)]
+    pool = parse_traditional_lottery_response(
+        {"value": {"bqcDetail": {"lotteryDrawNum": "26001", "matchList": rows}}}
+    )[0]
+    assert pool["total_matches"] is None
+    assert {r["identity_block_reason"] for r in pool["matches"]} == {"duplicate_fixture_slots"}
+
+
 def test_parse_uniform_match_keeps_official_display_code_and_sale_status():
     raw = {
         "value": {

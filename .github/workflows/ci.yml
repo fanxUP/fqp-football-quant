@@ -235,6 +235,8 @@ jobs:
               "tests.test_computation.test_real_ticket_postgres",
               "tests.test_computation.test_shadow_training_postgres",
               "tests.test_computation.test_contamination_audit_postgres",
+              "tests.test_computation.test_event_season_retention_postgres",
+              "tests.test_computation.test_football_fixture_identity_postgres",
               "tests.test_sql.test_dashboard_prediction_count",
               "tests.test_data_sources.titan007.test_history_backfill",
           }

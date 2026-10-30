@@ -222,6 +222,434 @@ def pg():
         conn.close()
 
 
+def _publish_training_candidates(pg, *, digest="c", state="published"):
+    from psycopg2.extras import Json
+
+    with pg.cursor() as cur:
+        cur.execute(
+            """INSERT INTO football_history_batches
+               (source_name,content_sha256,normalization_version,manifest,imported_at)
+               VALUES ('titan007',%s,'titan007-history/v1','{}','2026-10-29T00:00:00Z') RETURNING id""",
+            (digest * 64,),
+        )
+        bid = cur.fetchone()[0]
+        for mid, competition, home_goals in ((1, 36, 0), (2, 36, 2), (3, 37, 8)):
+            cur.execute(
+                """INSERT INTO football_history_matches
+                   (batch_id,source_match_id,source_competition_id,kickoff_at,match_status,
+                    source_home_team_id,source_away_team_id,home_team_id,away_team_id,
+                    home_goals,away_goals,source_metadata)
+                   VALUES (%s,%s,%s,%s,'finished',10,20,10,20,%s,1,%s)""",
+                (
+                    bid,
+                    mid,
+                    competition,
+                    f"2026-08-0{mid}T12:00:00Z",
+                    home_goals,
+                    Json({"score_scope": "source_reported_full_match"}),
+                ),
+            )
+        if state == "published":
+            cur.execute("UPDATE football_history_batches SET state='published' WHERE id=%s", (bid,))
+    pg.commit()
+    return bid
+
+
+def _training_scope(**changes):
+    return {
+        "competition_id": 36,
+        "season": "2026-2027",
+        "window_start": "2026-07-01T00:00:00+08:00",
+        "window_end": "2027-07-01T00:00:00+08:00",
+        "as_of": "2026-10-30T00:00:00+08:00",
+        "min_team_matches": 1,
+        **changes,
+    }
+
+
+def test_training_candidates_real_snapshot_is_readonly_pinned_and_has_no_side_effects(
+    pg, monkeypatch
+):
+    from psycopg2.extensions import TRANSACTION_STATUS_IDLE
+
+    from scripts import football_history_training as training
+
+    bid = _publish_training_candidates(pg)
+    second = _publish_training_candidates(pg, digest="d")
+    original = training.build_history_training_manifest
+    observed = []
+
+    def inspect_snapshot(*args, **kwargs):
+        with pg.cursor() as cur:
+            cur.execute("SHOW transaction_read_only")
+            assert cur.fetchone()[0] == "on"
+            cur.execute("SHOW transaction_isolation")
+            assert cur.fetchone()[0] == "repeatable read"
+        observed.append(True)
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(training, "build_history_training_manifest", inspect_snapshot)
+    result = training.load_history_training_manifest(pg, batch_id=bid, **_training_scope())
+    assert observed == [True]
+    assert result["batch"]["id"] == bid and result["batch"]["id"] != second
+    assert [r["source_match_id"] for r in result["included"]] == [1, 2]
+    assert result["included"][0]["home_goals"] == 0
+    assert pg.get_transaction_status() == TRANSACTION_STATUS_IDLE
+    with pg.cursor() as cur:
+        cur.execute("SELECT count(*) FROM football_history_matches")
+        assert cur.fetchone()[0] == 6
+    pg.rollback()
+
+
+def test_training_candidates_cap_and_unknown_batch_errors_release_snapshot(pg):
+    from psycopg2.extensions import TRANSACTION_STATUS_IDLE
+
+    from scripts.football_history_training import load_history_training_manifest
+
+    bid = _publish_training_candidates(pg)
+    with pytest.raises(ValueError, match="exceeds"):
+        load_history_training_manifest(pg, batch_id=bid, **_training_scope(max_matches=1))
+    assert pg.get_transaction_status() == TRANSACTION_STATUS_IDLE
+    with pytest.raises(LookupError, match="not found"):
+        load_history_training_manifest(pg, batch_id=bid + 100, **_training_scope())
+    assert pg.get_transaction_status() == TRANSACTION_STATUS_IDLE
+    assert (
+        load_history_training_manifest(pg, batch_id=bid, **_training_scope())["summary"][
+            "included_count"
+        ]
+        == 2
+    )
+
+
+def test_training_candidates_building_batch_and_preimport_replay_are_rejected(pg):
+    from scripts.football_history_training import load_history_training_manifest
+
+    published = _publish_training_candidates(pg)
+    building = _publish_training_candidates(pg, digest="e", state="building")
+    with pytest.raises(LookupError):
+        load_history_training_manifest(pg, batch_id=building, **_training_scope())
+    with pytest.raises(ValueError, match="not available"):
+        load_history_training_manifest(
+            pg, batch_id=published, **_training_scope(as_of="2026-10-28T00:00:00Z")
+        )
+
+
+def test_training_candidates_work_with_select_only_application_role(pg):
+    from psycopg2 import sql
+
+    from scripts.football_history_training import load_history_training_manifest
+
+    bid = _publish_training_candidates(pg)
+    with pg.cursor() as cur:
+        cur.execute("SELECT current_schema()")
+        schema = cur.fetchone()[0]
+        cur.execute(sql.SQL("GRANT USAGE ON SCHEMA {} TO fqp").format(sql.Identifier(schema)))
+        cur.execute("SET ROLE fqp")
+    pg.commit()
+    try:
+        result = load_history_training_manifest(pg, batch_id=bid, **_training_scope())
+        assert result["summary"]["included_count"] == 2
+    finally:
+        pg.rollback()
+        with pg.cursor() as cur:
+            cur.execute("RESET ROLE")
+        pg.commit()
+
+
+def test_training_candidates_cli_exports_verified_manifest_without_overwriting(pg, tmp_path):
+    import subprocess
+    import sys
+
+    from scripts.football_history_training import verify_history_training_manifest
+
+    bid = _publish_training_candidates(pg)
+    with pg.cursor() as cur:
+        cur.execute("SELECT current_schema()")
+        schema = cur.fetchone()[0]
+    pg.rollback()
+    output = tmp_path / "candidates.json"
+    env = {
+        **os.environ,
+        "DATABASE_URL": os.environ["FQP_HISTORY_TEST_DSN"],
+        "PGOPTIONS": f"-c search_path={schema},public",
+    }
+    command = [
+        sys.executable,
+        "-m",
+        "scripts.football_history_training",
+        "--batch-id",
+        str(bid),
+        "--competition-id",
+        "36",
+        "--season",
+        "2026-2027",
+        "--window-start",
+        "2026-07-01T00:00:00+08:00",
+        "--window-end",
+        "2027-07-01T00:00:00+08:00",
+        "--as-of",
+        "2026-10-30T00:00:00+08:00",
+        "--min-team-matches",
+        "1",
+        "--output",
+        str(output),
+    ]
+    root = Path(__file__).resolve().parents[3]
+    result = subprocess.run(command, cwd=root, env=env, text=True, capture_output=True, timeout=15)
+    assert result.returncode == 0, result.stderr
+    manifest = json.loads(output.read_text())
+    verify_history_training_manifest(manifest)
+    assert json.loads(result.stdout)["included_count"] == 2
+    original = output.read_bytes()
+    repeated = subprocess.run(
+        command, cwd=root, env=env, text=True, capture_output=True, timeout=15
+    )
+    assert repeated.returncode != 0 and "FileExistsError" in repeated.stderr
+    assert output.read_bytes() == original
+
+
+def _publish_research_inputs(pg):
+    """Real 118/119 structures plus a tiny official-score cohort, in a private schema."""
+    with pg.cursor() as cur:
+        cur.execute("ALTER TABLE teams ADD COLUMN team_name_cn text")
+        cur.execute("UPDATE teams SET team_name_cn=CASE id WHEN 10 THEN '甲' ELSE '乙' END")
+        cur.execute("ALTER TABLE official_matches ADD COLUMN match_status text")
+        cur.execute(
+            "CREATE TABLE official_results(id bigint PRIMARY KEY,match_id bigint UNIQUE REFERENCES official_matches(id),"
+            "full_home_goals int,full_away_goals int,official_publish_time timestamp)"
+        )
+        cur.execute("CREATE TABLE competition_seasons(id bigint PRIMARY KEY)")
+        cur.execute("INSERT INTO competition_seasons VALUES (1)")
+        root = Path(__file__).resolve().parents[3]
+        cur.execute((root / "sql/118_league_reference_data.sql").read_text())
+        cur.execute(
+            """INSERT INTO league_reference_batches(competition_season_id,source_name,source_competition_id,
+               source_season,content_sha256,quality,raw_payload,imported_at)
+               VALUES (1,'titan007','36','2026-2027',%s,'{}','{}','2026-10-29T00:00:00Z') RETURNING id""",
+            ("b" * 64,),
+        )
+        reference_id = cur.fetchone()[0]
+        cur.execute(
+            """INSERT INTO football_history_batches
+               (source_name,content_sha256,normalization_version,manifest,imported_at)
+               VALUES ('titan007',%s,'titan007-history/v1','{}','2026-10-29T00:00:00Z') RETURNING id""",
+            ("c" * 64,),
+        )
+        bid = cur.fetchone()[0]
+        for mid, goals in [(1, 0), (2, 2)]:
+            cur.execute(
+                "INSERT INTO official_matches VALUES (%s,%s,'甲','乙',%s,'Settled')",
+                (100 + mid, str(mid), f"2026-08-0{mid} 20:00:00"),
+            )
+            cur.execute(
+                "INSERT INTO official_results VALUES (%s,%s,%s,1,NULL)",
+                (200 + mid, 100 + mid, goals),
+            )
+            cur.execute(
+                """INSERT INTO football_history_matches(batch_id,source_match_id,source_competition_id,
+                   source_season,kickoff_at,match_status,source_home_team_id,source_away_team_id,
+                   home_team_id,away_team_id,home_goals,away_goals,source_metadata,official_match_id)
+                   VALUES (%s,%s,36,'2026',%s,'finished',10,20,10,20,%s,1,
+                           '{"score_scope":"source_reported_full_match"}',%s)""",
+                (bid, mid, f"2026-08-0{mid}T12:00:00Z", goals, 100 + mid),
+            )
+            cur.execute(
+                """INSERT INTO league_reference_fixtures(batch_id,source_match_id,home_team_id,
+                   away_team_id,kickoff,round_id,status,home_goals,away_goals)
+                   VALUES (%s,%s,10,20,%s,'r1','finished',%s,1)""",
+                (reference_id, str(mid), f"2026-08-0{mid}T12:00:00Z", goals),
+            )
+        cur.execute("UPDATE football_history_batches SET state='published' WHERE id=%s", (bid,))
+        cur.execute(
+            "UPDATE league_reference_batches SET state='published' WHERE id=%s", (reference_id,)
+        )
+        cur.execute("GRANT SELECT ON teams,official_matches,official_results TO fqp")
+    pg.commit()
+    return bid, reference_id
+
+
+def test_history_research_readonly_snapshot_and_select_only_role(pg, monkeypatch):
+    from psycopg2 import sql
+    from psycopg2.extensions import TRANSACTION_STATUS_IDLE
+
+    from scripts import football_history_research as research
+
+    bid, rid = _publish_research_inputs(pg)
+    original = research.build_history_training_manifest
+
+    def observe(*args, **kwargs):
+        with pg.cursor() as cur:
+            cur.execute("SHOW transaction_read_only")
+            assert cur.fetchone()[0] == "on"
+            cur.execute("SHOW transaction_isolation")
+            assert cur.fetchone()[0] == "repeatable read"
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(research, "build_history_training_manifest", observe)
+    with pg.cursor() as cur:
+        cur.execute("SELECT current_schema()")
+        schema = cur.fetchone()[0]
+        cur.execute(sql.SQL("GRANT USAGE ON SCHEMA {} TO fqp").format(sql.Identifier(schema)))
+        cur.execute("SET ROLE fqp")
+    pg.commit()
+    try:
+        history, official = research.load_history_official_inputs(
+            pg, batch_id=bid, reference_batch_id=rid, **_training_scope()
+        )
+        assert pg.get_transaction_status() == TRANSACTION_STATUS_IDLE
+        assert history["season_reference"]["batch_id"] == rid
+        assert history["included"][0]["source_season"] == "2026"
+        result = research.fit_history_official_research(history, official)
+        assert result["summary"]["eligible_matches"] == 2
+        assert result["summary"]["fitted_matches"] == 0
+        assert "Insufficient data" in result["fit"]["error"]
+        assert [s["result_id"] for s in result["training_manifest"]["included"]] == [201, 202]
+    finally:
+        pg.rollback()
+        with pg.cursor() as cur:
+            cur.execute("RESET ROLE")
+        pg.commit()
+
+
+def test_history_research_errors_release_snapshot_and_do_not_switch_batches(pg):
+    from psycopg2.extensions import TRANSACTION_STATUS_IDLE
+
+    from scripts.football_history_research import load_history_official_inputs
+
+    bid, rid = _publish_research_inputs(pg)
+    with pytest.raises(ValueError, match="exceeds"):
+        load_history_official_inputs(
+            pg, batch_id=bid, reference_batch_id=rid, **_training_scope(max_matches=1)
+        )
+    assert pg.get_transaction_status() == TRANSACTION_STATUS_IDLE
+    with pytest.raises(LookupError):
+        load_history_official_inputs(
+            pg, batch_id=bid, reference_batch_id=rid + 10, **_training_scope()
+        )
+    assert pg.get_transaction_status() == TRANSACTION_STATUS_IDLE
+    with pytest.raises(ValueError, match="not available"):
+        load_history_official_inputs(
+            pg,
+            batch_id=bid,
+            reference_batch_id=rid,
+            **_training_scope(as_of="2026-10-28T00:00:00Z"),
+        )
+    assert pg.get_transaction_status() == TRANSACTION_STATUS_IDLE
+
+
+def test_history_research_ambiguous_official_team_names_are_not_silently_selected(pg):
+    from scripts.football_history_research import (
+        build_history_official_dataset,
+        load_history_official_inputs,
+    )
+
+    bid, rid = _publish_research_inputs(pg)
+    with pg.cursor() as cur:
+        cur.execute("INSERT INTO teams VALUES (30,'甲')")
+    pg.commit()
+    history, official = load_history_official_inputs(
+        pg, batch_id=bid, reference_batch_id=rid, **_training_scope()
+    )
+    dataset, review = build_history_official_dataset(history, official)
+    assert not dataset.samples
+    assert {r["reason"] for r in review["excluded"]} == {"official_identity_mismatch"}
+
+
+def test_history_research_labels_remain_in_same_snapshot_during_concurrent_update(pg, monkeypatch):
+    import psycopg2
+    from psycopg2 import sql
+
+    from scripts import football_history_research as research
+
+    bid, rid = _publish_research_inputs(pg)
+    with pg.cursor() as cur:
+        cur.execute("SELECT current_schema()")
+        schema = cur.fetchone()[0]
+    pg.rollback()
+    original = research.build_history_training_manifest
+
+    def concurrent_update(*args, **kwargs):
+        with psycopg2.connect(os.environ["FQP_HISTORY_TEST_DSN"]) as writer:
+            with writer.cursor() as cur:
+                cur.execute(sql.SQL("SET search_path TO {},public").format(sql.Identifier(schema)))
+                cur.execute("UPDATE official_results SET full_home_goals=9 WHERE id=201")
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(research, "build_history_training_manifest", concurrent_update)
+    history, official = research.load_history_official_inputs(
+        pg, batch_id=bid, reference_batch_id=rid, **_training_scope()
+    )
+    assert official[0]["home_goals"] == 0
+    monkeypatch.setattr(research, "build_history_training_manifest", original)
+    history, official = research.load_history_official_inputs(
+        pg, batch_id=bid, reference_batch_id=rid, **_training_scope()
+    )
+    dataset, review = research.build_history_official_dataset(history, official)
+    assert len(dataset.samples) == 1
+    assert review["excluded"][0] == {"source_match_id": 1, "reason": "official_score_conflict"}
+
+
+def test_history_research_real_cli_retains_restrictions_and_refuses_overwrite(pg, tmp_path):
+    import hashlib
+    import subprocess
+    import sys
+
+    from scripts.model_artifact_identity import canonical_json_bytes
+
+    bid, rid = _publish_research_inputs(pg)
+    with pg.cursor() as cur:
+        cur.execute("SELECT current_schema()")
+        schema = cur.fetchone()[0]
+    pg.rollback()
+    output = tmp_path / "research.json"
+    env = {
+        **os.environ,
+        "DATABASE_URL": os.environ["FQP_HISTORY_TEST_DSN"],
+        "PGOPTIONS": f"-c search_path={schema},public",
+    }
+    command = [
+        sys.executable,
+        "-m",
+        "scripts.football_history_research",
+        "--batch-id",
+        str(bid),
+        "--reference-batch-id",
+        str(rid),
+        "--competition-id",
+        "36",
+        "--season",
+        "2026-2027",
+        "--window-start",
+        "2026-07-01T00:00:00+08:00",
+        "--window-end",
+        "2027-07-01T00:00:00+08:00",
+        "--as-of",
+        "2026-10-30T00:00:00+08:00",
+        "--min-team-matches",
+        "1",
+        "--output",
+        str(output),
+    ]
+    root = Path(__file__).resolve().parents[3]
+    result = subprocess.run(command, cwd=root, env=env, text=True, capture_output=True, timeout=20)
+    assert result.returncode == 2, result.stderr
+    data = json.loads(output.read_text())
+    assert data["usage"]["production_ready"] is False
+    assert data["summary"]["eligible_matches"] == 2
+    assert data["summary"]["fitted_matches"] == 0
+    assert data["fit_status"] == "insufficient_data"
+    assert (
+        data["sha256"]
+        == hashlib.sha256(
+            canonical_json_bytes({k: v for k, v in data.items() if k != "sha256"})
+        ).hexdigest()
+    )
+    saved = output.read_bytes()
+    again = subprocess.run(command, cwd=root, env=env, text=True, capture_output=True, timeout=20)
+    assert again.returncode != 0 and "FileExistsError" in again.stderr
+    assert output.read_bytes() == saved
+
+
 def test_publication_dry_run_repeat_and_immutability(pg, source, tmp_path):
     import psycopg2
 

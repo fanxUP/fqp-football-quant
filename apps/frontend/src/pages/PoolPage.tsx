@@ -3,6 +3,7 @@ import { api } from '../core/apiClient';
 import { ApiError, type PoolAnalysis, type PoolIssue, type PoolParameters, type SavedPoolPlan } from '../core/types';
 import Card from '../shared/components/Card';
 import PageHeader from '../shared/components/PageHeader';
+import PoolFixtureCatalog from '../features/pool/PoolFixtureCatalog';
 
 const STATUS: Record<string, string> = {
   ready: '可生成', missing_predictions: '预测未齐', identity_pending: '比赛身份待核实',
@@ -12,7 +13,7 @@ const STATUS: Record<string, string> = {
 const STRATEGY_LABEL: Record<string, string> = { conservative: '单选', balanced: '重点覆盖', aggressive: '扩大覆盖' };
 const controlStyle = { minHeight: 44, maxWidth: '100%', marginTop: 6 };
 const fieldStyle = { flex: '1 1 180px', maxWidth: 280 };
-const stateLabel: Record<string, string> = { selling: '在售', closed: '已停售', unknown: '截止待核实', conflict: '销售证据冲突', suspended: '销售暂停', not_started: '未开售' };
+const stateLabel: Record<string, string> = { selling: '在售', closed: '已停售', unknown: '截止待核实', conflict: '销售证据冲突', suspended: '销售暂停', not_started: '未开售', missing_issue: '官方期次待采集' };
 const probability = (p: number | null | undefined) => p == null ? '未知' : p === 0 ? '0%' : `${(p * 100).toPrecision(4)}%`;
 const message = (e: unknown) => e instanceof ApiError || e instanceof Error ? e.message : '请求失败';
 const controlsStyle = { display: 'flex', flexWrap: 'wrap' as const, gap: 16, alignItems: 'end' };
@@ -90,7 +91,8 @@ export default function PoolPage() {
   const hasPlan = !!analysis?.full_combinations?.count || !!analysis?.rx9?.combinations_count;
 
   return <div className="fqp-page" style={{ display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0 }}>
-    <PageHeader title="传统足彩彩池" subtitle="官方期次、14场与任九研究方案" />
+    <PageHeader title="传统足彩彩池" subtitle="四玩法官方选场目录 · 14场与任九研究方案" />
+    <PoolFixtureCatalog />
     <Card title="分析参数">
       <form onSubmit={e => { e.preventDefault(); if (!Number.isInteger(budget) || budget < 2 || budget > 10000 || budget % 2) { setError('预算须为2至10000元之间的偶数整数'); return; } void load(parameters()); }}>
         <div style={controlsStyle}>

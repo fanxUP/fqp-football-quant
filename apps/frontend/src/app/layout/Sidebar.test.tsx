@@ -82,7 +82,7 @@ describe('Sidebar', () => {
         '智能工作台',
         '模型表现',
         '策略验证',
-        '足彩彩池',
+        '传统足彩玩法',
         '系统监控',
         '功能模块',
         '系统设置',
@@ -120,7 +120,7 @@ describe('Sidebar', () => {
 
       renderSidebar();
 
-      expect(screen.queryByText('足彩彩池')).toBeNull();
+      expect(screen.queryByText('传统足彩玩法')).toBeNull();
       expect(screen.getByText('投注中心')).toBeTruthy();
     });
 
@@ -229,7 +229,7 @@ describe('Sidebar', () => {
         ['今日决策分析', '/analysis'],
         ['模型表现', '/models'],
         ['策略验证', '/backtest'],
-        ['足彩彩池', '/pool'],
+        ['传统足彩玩法', '/pool'],
         ['系统监控', '/data-health'],
         ['功能模块', '/modules'],
         ['系统设置', '/settings'],
