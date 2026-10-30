@@ -50,7 +50,8 @@
     "apps/frontend/src/panelRegistry.test.ts",
     "apps/frontend/src/app/language.ts",
     "apps/frontend/src/app/layout/Sidebar.test.tsx",
-    "configs/final_panel_registry.yaml"
+    "configs/final_panel_registry.yaml",
+    "tests/test_api/test_ui_registry.py"
   ],
   "protected_paths": [
     "sql/**",
@@ -65,5 +66,5 @@
     "sql/124_official_event_season_retention.sql",
     "sql/125_football_fixture_identity.sql"
   ],
-  "notes": "User explicitly authorized commit/push/deployment on 2026-10-30. Keep the single main branch. Cumulative scope is 48 paths, 23 new files, no new dependencies, two migrations, and two GET endpoints. Local regressions and independent review passed. The user has a persistent no-backup preference; deploy.sh no-backup mode is pinned to migration 123 and does not allow migrations 124/125, so do not claim server deployment without a compliant release path. No production data has been changed."
+  "notes": "User explicitly authorized commit/push/deployment on 2026-10-30. Keep the single main branch. Cumulative scope is 49 paths, 23 new files, no new dependencies, two migrations, and two GET endpoints. GitHub CI found one stale menu assertion and three migration-test secondary-connection password failures; updated the expectation and reused the explicit isolated DSN. The user has a persistent no-backup preference; deploy.sh no-backup mode is pinned to migration 123 and does not allow migrations 124/125, so do not claim server deployment without a compliant release path. No production data has been changed."
 }

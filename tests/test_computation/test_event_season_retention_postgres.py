@@ -332,7 +332,7 @@ def test_migration_lock_timeout_rolls_back_new_table_and_keeps_original_gate(dat
         schema = cur.fetchone()[0]
     conn.commit()
     assert schema.startswith("retention_")
-    with closing(psycopg2.connect(conn.dsn)) as locker:
+    with closing(psycopg2.connect(os.environ["FQP_HISTORY_TEST_DSN"])) as locker:
         with locker.cursor() as cur:
             cur.execute(sql.SQL("SET search_path TO {}").format(sql.Identifier(schema)))
             cur.execute("LOCK TABLE official_event_season_targets IN ACCESS EXCLUSIVE MODE")

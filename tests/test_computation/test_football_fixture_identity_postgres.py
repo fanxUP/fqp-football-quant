@@ -581,7 +581,7 @@ def test_concurrent_game_writers_allocate_one_shared_identity(ready):
     conn.commit()
 
     def worker(game):
-        with closing(psycopg2.connect(conn.dsn)) as other:
+        with closing(psycopg2.connect(os.environ["FQP_HISTORY_TEST_DSN"])) as other:
             with other.cursor() as cur:
                 cur.execute(sql.SQL("SET search_path TO {}").format(sql.Identifier(schema)))
                 cur.execute("SET statement_timeout='5s'")
@@ -599,7 +599,7 @@ def test_migration_lock_timeout_rolls_back_partial_structure(database):
     conn = database
     schema = rows(conn, "SELECT current_schema()")[0][0]
     conn.commit()
-    with closing(psycopg2.connect(conn.dsn)) as locker:
+    with closing(psycopg2.connect(os.environ["FQP_HISTORY_TEST_DSN"])) as locker:
         with locker.cursor() as cur:
             cur.execute(sql.SQL("SET search_path TO {}").format(sql.Identifier(schema)))
             cur.execute("LOCK TABLE football_pool_issue_matches IN ACCESS EXCLUSIVE MODE")

@@ -59,7 +59,7 @@ def test_ui_panels_endpoint_reads_final_registry_in_order(client, tmp_path, monk
         "冷门研究",
         "新闻情报",
         "策略验证",
-        "足彩彩池",
+        "传统足彩玩法",
         "系统监控",
         "功能模块",
         "系统设置",
