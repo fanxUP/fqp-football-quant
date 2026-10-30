@@ -1,10 +1,10 @@
 {
   "schema_version": 4,
-  "task_id": "NO-BACKUP-MIGRATION-124-125-20261030",
-  "max_files_changed": 5,
+  "task_id": "FIVE-SEASON-RETENTION-ACL-20261030",
+  "max_files_changed": 13,
   "max_new_files": 3,
   "max_new_dependencies": 0,
-  "max_schema_migrations": 0,
+  "max_schema_migrations": 1,
   "max_public_api_changes": 0,
   "declared_public_api_changes": 0,
   "regression_budget": {
@@ -12,5 +12,5 @@
     "new_lint_errors": 0,
     "new_type_errors": 0
   },
-  "notes": "Release policy only: permit the exact 124+125 pending set when pinned hashes and isolated transaction/rollback evidence match; preserve migration 123 and ordinary backup behavior. No schema changes or runtime dependencies."
+  "notes": "Preserve prior seven paths; six additional paths cover one ACL-only forward migration, existing restricted-role regression module, narrow release policy/tests and release instructions/help. No dependencies or public API changes. No modification of applied SQL."
 }

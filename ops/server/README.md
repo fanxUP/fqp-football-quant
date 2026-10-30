@@ -2,9 +2,11 @@
 
 在现有干净 `main` 上运行 `deploy.sh <完整提交SHA> --plan` 查看差异，按现有发布证据协议 `--apply <证据JSON>` 发布。目标须为 `origin/main`；普通待执行迁移须有迁移副本演练和一小时内校验过的备份。
 
-`--apply-no-backup` 只接受两种固定集合：已审核迁移 123；或迁移 124、125 同时且按序待执行。124/125 的例外要求 SQL SHA256 与发布脚本白名单完全一致，证据包含 `migration_copy_dry_run=passed`、`migration_transaction_dry_run=passed`、明确的无备份授权及原因，并提供 `no_backup_migration_rehearsal` 记录。记录必须指向与发布证据同目录、24 小时内验证的独立 JSON 演练报告；脚本会核对报告哈希、目标提交 SHA、唯一待执行迁移列表、两条迁移摘要、隔离 PostgreSQL 版本、合成测试基线（明确记录不是生产数据副本）、既有数据引用保留、约束与触发器检查、事务回滚检查、2 秒锁等待超时、30 秒语句超时和无跳过的测试结果。只运行其中一条、顺序不符、SQL 改动或缺任何一项证据都会拒绝；其他待执行迁移仍要求一小时内可读取且经 `pg_restore --list` 校验的备份。无备份演练只能证明已审核迁移集的隔离行为，不等同于线上执行、生产行数/锁时长核验或完整备份恢复能力。
+`--apply-no-backup` 只接受三个固定集合：已审核迁移123；迁移124、125同时且按序待执行；或仅迁移126（留存表应用权限修复）。124/125和126的例外要求 SQL SHA256 与发布脚本白名单完全一致，证据包含 `migration_copy_dry_run=passed`、`migration_transaction_dry_run=passed`、明确的无备份授权及原因，并提供 `no_backup_migration_rehearsal` 记录。记录必须指向与发布证据同目录、24小时内验证的独立 JSON 演练报告；脚本会核对报告哈希、目标提交 SHA、唯一待执行迁移列表、对应迁移摘要、隔离 PostgreSQL 版本、合成测试基线（明确记录不是生产数据副本）、既有数据引用保留、约束与触发器检查、事务回滚检查、2秒锁等待超时、30秒语句超时和无跳过的测试结果。124/125只运行其中一条、顺序不符，与126混合执行、SQL改动或缺证据都会拒绝；其他待执行迁移仍要求一小时内可读取且经 `pg_restore --list` 校验的备份。无备份演练只能证明已审核迁移集的隔离行为，不等同于线上执行、生产行数/锁时长核验或完整备份恢复能力。
 
-无备份策略由 `release_migration_policy.py` 单独校验并有固定样本测试。迁移 124/125 的无备份测试记录应保存在本次发布计划目录；部署前仍需核实服务器当前迁移账本和服务状态。入口负责恢复旧代码、前端及服务，不能将配置成功等同整个业务验收成功。
+126仅授予`fqp`对`official_event_season_retention`的SELECT/INSERT/UPDATE，不改既有迁移、数据、所有权或触发器，不授予DELETE/TRUNCATE/DDL/转授权。除上述通用报告项，126还要求`application_role={"name":"fqp","superuser":false,"owns_retention_table":false}`，以及`application_role_acl`、`application_business_paths`、`acl_rollback_verified`均为`passed`；须以实际受限角色验证赛季刷新、比赛存储、范围拦截与回滚，不能用管理员成功或健康接口200替代。正式发布仍须绑定真实目标提交，复核生产权限与关键路径。本地开发记录不是生产已修复证明。
+
+无备份策略由 `release_migration_policy.py` 单独校验并有固定样本测试。对应迁移集的无备份测试记录应保存在本次发布计划目录；部署前仍需核实服务器当前迁移账本和服务状态。入口负责恢复旧代码、前端及服务，不能将配置成功等同整个业务验收成功。
 
 ## 静态资源配置
 

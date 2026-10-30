@@ -1,15 +1,21 @@
 {
   "schema_version": 4,
-  "task_id": "NO-BACKUP-MIGRATION-124-125-20261030",
-  "objective": "Permit no-backup deployment only for the checksum-pinned, additive migrations 124 and 125 after an isolated PostgreSQL transactional rehearsal; retain all other migration backup gates.",
+  "task_id": "FIVE-SEASON-RETENTION-ACL-20261030",
+  "objective": "Preserve the offline inventory slice and repair application retention-table ACL using an additive migration, restricted-role PostgreSQL regressions and a checksum-pinned no-backup release exception.",
   "allowed_paths": [
     ".vibe/SCOPE_LOCK.yaml",
     ".vibe/CHANGE_BUDGET.yaml",
-    "ops/server/deploy.sh",
-    "ops/server/README.md",
+    "scripts/football_pool_notice.py",
+    "tests/test_scripts/test_football_pool_notice.py",
+    "docs/football-pool.md",
+    "docs/official-season-retention.md",
+    "docs/football-fixture-identity.md",
+    "sql/126_official_season_retention_access.sql",
+    "tests/test_computation/test_event_season_retention_postgres.py",
     "ops/server/release_migration_policy.py",
     "tests/test_local/test_release_migration_policy.py",
-    "tests/test_computation/test_no_backup_migration_rehearsal_postgres.py"
+    "ops/server/deploy.sh",
+    "ops/server/README.md"
   ],
   "protected_paths": [
     "sql/**",
@@ -21,9 +27,10 @@
     "scripts/mle_trainer.py"
   ],
   "approved_protected_paths": [
+    "sql/126_official_season_retention_access.sql",
+    "ops/server/release_migration_policy.py",
     "ops/server/deploy.sh",
-    "ops/server/README.md",
-    "ops/server/release_migration_policy.py"
+    "ops/server/README.md"
   ],
-  "notes": "User requested this step first: prepare and validate the no-backup release gate for migrations 124/125. Scope is the deploy gate, release documentation, and focused policy/PostgreSQL rehearsal tests. The separate production deployment remains the next release step after this evidence is ready. Keep the single main branch."
+  "notes": "Single existing main checkout. Preserve the preceding 7-path offline inventory/parser work. Add only runtime SELECT/INSERT/UPDATE for the retention table; immutable migrations124/125, ownership and delete rights stay unchanged. Rehearse in a disposable local database, test actual fqp role and transactional ACL rollback. Prepare the narrow no-backup release evidence path; no production import, automatic cleanup, backup, commit, push or deployment in this development slice."
 }

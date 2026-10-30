@@ -21,11 +21,15 @@ REVIEWED_NO_BACKUP_CHECKSUMS = {
     "125_football_fixture_identity.sql": (
         "9037dd6a91aca5c558b82b9aa41165f21bf4fe3f7a4fadfacdb8d3b7b0b91d10"
     ),
+    "126_official_season_retention_access.sql": (
+        "dc3dd7640d261eb625ecb8f4fc8a26c3562a55ffd52b99c2c54fd4d23d695ff8"
+    ),
 }
 REVIEWED_NO_BACKUP_PAIR = [
     "124_official_event_season_retention.sql",
     "125_football_fixture_identity.sql",
 ]
+REVIEWED_NO_BACKUP_ACL = ["126_official_season_retention_access.sql"]
 NO_BACKUP_REHEARSAL_FIELD = "no_backup_migration_rehearsal"
 
 
@@ -58,17 +62,17 @@ def _verify_no_backup_authorization(record: dict[str, Any]) -> None:
         _refuse("No-backup release requires a passed isolated migration transaction rehearsal")
 
 
-def _verify_124_125_rehearsal(
+def _verify_no_backup_rehearsal(
     record: dict[str, Any],
     pending: list[str],
     target_sha: str,
     evidence_directory: Path | None,
 ) -> None:
     if record.get("migration_copy_dry_run") != "passed":
-        _refuse("Migrations 124/125 require a passed isolated PostgreSQL migration copy rehearsal")
+        _refuse("Reviewed migrations require a passed isolated PostgreSQL migration copy rehearsal")
     manifest = record.get(NO_BACKUP_REHEARSAL_FIELD)
     if not isinstance(manifest, dict) or manifest.get("status") != "passed":
-        _refuse("Migrations 124/125 require structured no-backup PostgreSQL rehearsal evidence")
+        _refuse("Reviewed migrations require structured no-backup PostgreSQL rehearsal evidence")
     if evidence_directory is None:
         _refuse("No-backup rehearsal evidence directory is unavailable")
     report_name = manifest.get("report_path")
@@ -103,9 +107,7 @@ def _verify_124_125_rehearsal(
         _refuse("No-backup migration rehearsal target SHA does not match the release target SHA")
     if manifest.get("pending_migrations") != pending or report.get("pending_migrations") != pending:
         _refuse("No-backup rehearsal pending migration set does not match the release plan")
-    expected_checksums = {
-        name: REVIEWED_NO_BACKUP_CHECKSUMS[name] for name in REVIEWED_NO_BACKUP_PAIR
-    }
+    expected_checksums = {name: REVIEWED_NO_BACKUP_CHECKSUMS[name] for name in pending}
     if manifest.get("sha256") != expected_checksums:
         _refuse("No-backup rehearsal checksums do not match the reviewed migration set")
     if report.get("migration_sha256") != expected_checksums:
@@ -142,6 +144,28 @@ def _verify_124_125_rehearsal(
         and results["skipped"] == 0
     ):
         _refuse("No-backup rehearsal must record executed passing tests with no failures or skips")
+    if pending == REVIEWED_NO_BACKUP_ACL:
+        role = report.get("application_role")
+        if (
+            not isinstance(role, dict)
+            or role.get("name") != "fqp"
+            or role.get("superuser") is not False
+            or role.get("owns_retention_table") is not False
+        ):
+            _refuse(
+                "ACL repair rehearsal must use the restricted non-owner application runtime role"
+            )
+        if any(
+            report.get(field) != "passed"
+            for field in (
+                "application_role_acl",
+                "application_business_paths",
+                "acl_rollback_verified",
+            )
+        ):
+            _refuse(
+                "ACL repair requires runtime grants, application business paths and ACL rollback proof"
+            )
 
 
 def _validate_no_backup(
@@ -155,12 +179,12 @@ def _validate_no_backup(
     if pending == ["123_football_history_odds_invalid_timezone.sql"]:
         _verify_pinned_sql(project_root, pending)
         return
-    if pending == REVIEWED_NO_BACKUP_PAIR:
+    if pending in (REVIEWED_NO_BACKUP_PAIR, REVIEWED_NO_BACKUP_ACL):
         _verify_pinned_sql(project_root, pending)
-        _verify_124_125_rehearsal(record, pending, target_sha, evidence_directory)
+        _verify_no_backup_rehearsal(record, pending, target_sha, evidence_directory)
         return
     _refuse(
-        "No-backup release is restricted to the pinned migration 123 or the exact reviewed 124+125 pair"
+        "No-backup release is restricted to pinned migration123, the reviewed124+125 pair, or ACL repair126"
     )
 
 

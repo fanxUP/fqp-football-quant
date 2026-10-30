@@ -2,7 +2,7 @@
 
 import json
 import os
-from contextlib import closing, nullcontext
+from contextlib import closing, contextmanager, nullcontext
 from datetime import date
 from pathlib import Path
 from uuid import uuid4
@@ -10,7 +10,7 @@ from uuid import uuid4
 import psycopg2
 import pytest
 from psycopg2 import sql
-from psycopg2.errors import CheckViolation, LockNotAvailable
+from psycopg2.errors import CheckViolation, InsufficientPrivilege, LockNotAvailable
 from psycopg2.extensions import parse_dsn
 
 from scripts import audit_official_history, official_storage
@@ -18,6 +18,7 @@ from scripts.jobs import reconcile_event_seasons as reconcile
 
 ROOT = Path(__file__).resolve().parents[2]
 MIGRATION = ROOT / "sql/124_official_event_season_retention.sql"
+ACCESS_MIGRATION = ROOT / "sql/126_official_season_retention_access.sql"
 
 
 @pytest.fixture
@@ -348,3 +349,221 @@ def test_migration_lock_timeout_rolls_back_new_table_and_keeps_original_gate(dat
             )
             assert "outside selected event season" in cur.fetchone()[0]
         locker.rollback()
+
+
+@pytest.fixture
+def application_database(database):
+    """Match production: migration owner differs from the restricted app role."""
+    conn = database
+    migrate(conn)
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT rolsuper,rolcreatedb,rolcreaterole,rolbypassrls,"
+            "pg_has_role('fqp','postgres','MEMBER') FROM pg_roles WHERE rolname='fqp'"
+        )
+        assert cur.fetchone() == (False, False, False, False, False)
+        cur.execute("SELECT current_schema()")
+        schema = cur.fetchone()[0]
+        cur.execute(sql.SQL("GRANT USAGE ON SCHEMA {} TO fqp").format(sql.Identifier(schema)))
+        # These existing objects already have runtime grants on the server.
+        cur.execute(
+            "GRANT SELECT,INSERT,UPDATE ON official_matches,official_event_season_targets TO fqp"
+        )
+        cur.execute("GRANT USAGE,SELECT ON SEQUENCE official_matches_id_seq TO fqp")
+        cur.execute("SELECT has_table_privilege('fqp','official_event_season_retention','SELECT')")
+        assert cur.fetchone() == (False,)
+    conn.commit()
+    return conn
+
+
+@contextmanager
+def application_role(conn):
+    conn.rollback()
+    with conn.cursor() as cur:
+        cur.execute("SET ROLE fqp")
+        cur.execute("SELECT current_user")
+        assert cur.fetchone() == ("fqp",)
+    conn.commit()
+    try:
+        yield conn
+    finally:
+        conn.rollback()
+        with conn.cursor() as cur:
+            cur.execute("RESET ROLE")
+        conn.commit()
+
+
+def apply_access(conn):
+    with conn.cursor() as cur:
+        cur.execute(ACCESS_MIGRATION.read_text())
+
+
+def test_runtime_role_can_refresh_retention_and_store_matches(application_database, monkeypatch):
+    from scripts.official_season_retention import load_retained_season_windows
+
+    conn = application_database
+    with application_role(conn):
+        # Reproduce the real production failure before applying the repair.
+        with pytest.raises(InsufficientPrivilege, match="official_event_season_retention"):
+            load_retained_season_windows(conn)
+    apply_access(conn)
+    conn.commit()
+    monkeypatch.setattr(reconcile, "get_db", lambda: nullcontext(conn))
+    with application_role(conn):
+        for today in (date(2026, 1, 1), date(2026, 1, 2), date(2026, 1, 1)):
+            summary = reconcile._persist_targets(
+                targets={"联赛": target()}, today=today, dry_run=False
+            )
+            assert summary["retained_window_count"] == 1
+            assert summary["matches_deleted"] == 0
+        with conn.cursor() as cur:
+            cur.execute("SELECT as_of_date FROM official_event_season_retention")
+            assert cur.fetchall() == [(date(2026, 1, 2),)]
+        preview = reconcile._persist_targets(
+            targets={"联赛": target("2026/2027", "2026-08-01", "2027-05-31")},
+            today=date(2026, 10, 30),
+            dry_run=True,
+        )
+        assert preview["retained_window_count"] == 2
+        with conn.cursor() as cur:
+            cur.execute("SELECT season_name FROM official_event_season_retention")
+            assert cur.fetchall() == [("2025/2026",)]
+        rows = [match("2026-05-31", 1)]
+        assert official_storage.store_matches(conn, rows) == {
+            "inserted": 1,
+            "updated": 0,
+            "errors": [],
+        }
+        assert official_storage.store_matches(conn, rows) == {
+            "inserted": 0,
+            "updated": 1,
+            "errors": [],
+        }
+        outside = official_storage.store_matches(conn, [match("2026-06-01", 2)])
+        assert outside["inserted"] == 0
+        assert outside["errors"][0]["error"] == "outside retained event seasons"
+        # Direct SQL must still be checked by the invoker-rights trigger.
+        with pytest.raises(CheckViolation, match="outside retained event seasons"):
+            insert_match(conn, "2026-06-01", 2)
+    with conn.cursor() as cur:
+        cur.execute("SELECT source_match_id FROM official_matches")
+        assert cur.fetchall() == [("1",)]
+
+
+def test_access_migration_preserves_rows_owner_and_gate_and_is_idempotent(application_database):
+    from scripts.official_season_retention import retain_season_windows
+
+    conn = application_database
+    retain_season_windows(conn, [dict(target(), league_name="联赛", as_of_date="2026-01-01")])
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT relowner,relacl FROM pg_class WHERE oid='official_event_season_retention'::regclass"
+        )
+        owner, _ = cur.fetchone()
+        cur.execute(
+            "SELECT pg_get_functiondef('enforce_official_event_season_target()'::regprocedure)"
+        )
+        gate = cur.fetchone()[0]
+        cur.execute("SELECT * FROM official_event_season_retention")
+        retained = cur.fetchall()
+    insert_match(conn, "2026-05-31", 1)
+    conn.commit()
+    for _ in range(2):
+        apply_access(conn)
+        with conn.cursor() as cur:
+            cur.execute("SHOW lock_timeout")
+            assert cur.fetchone() == ("2s",)
+            cur.execute("SHOW statement_timeout")
+            assert cur.fetchone() == ("30s",)
+        conn.commit()
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT relowner FROM pg_class WHERE oid='official_event_season_retention'::regclass"
+        )
+        assert cur.fetchone() == (owner,)
+        cur.execute(
+            "SELECT pg_get_functiondef('enforce_official_event_season_target()'::regprocedure)"
+        )
+        assert cur.fetchone() == (gate,)
+        cur.execute("SELECT source_match_id FROM official_matches")
+        assert cur.fetchall() == [("1",)]
+        cur.execute("SELECT * FROM official_event_season_retention")
+        assert cur.fetchall() == retained
+        for privilege in (
+            "SELECT",
+            "INSERT",
+            "UPDATE",
+            "DELETE",
+            "TRUNCATE",
+            "REFERENCES",
+            "TRIGGER",
+        ):
+            cur.execute(
+                "SELECT has_table_privilege('fqp','official_event_season_retention',%s)",
+                (privilege,),
+            )
+            assert cur.fetchone() == (privilege in ("SELECT", "INSERT", "UPDATE"),)
+        cur.execute(
+            "SELECT has_table_privilege('fqp','official_event_season_retention','SELECT WITH GRANT OPTION')"
+        )
+        assert cur.fetchone() == (False,)
+
+
+def test_access_migration_rollback_restores_original_acl(application_database):
+    conn = application_database
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT relacl FROM pg_class WHERE oid='official_event_season_retention'::regclass"
+        )
+        before = cur.fetchone()
+    conn.commit()
+    apply_access(conn)
+    with conn.cursor() as cur:
+        cur.execute("SELECT has_table_privilege('fqp','official_event_season_retention','SELECT')")
+        assert cur.fetchone() == (True,)
+    conn.rollback()
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT relacl FROM pg_class WHERE oid='official_event_season_retention'::regclass"
+        )
+        assert cur.fetchone() == before
+    with application_role(conn):
+        with pytest.raises(InsufficientPrivilege):
+            with conn.cursor() as cur:
+                cur.execute("SELECT count(*) FROM official_event_season_retention")
+
+
+def test_runtime_refresh_failure_rolls_back_both_window_tables(application_database, monkeypatch):
+    conn = application_database
+    apply_access(conn)
+    with conn.cursor() as cur:
+        cur.execute("ALTER TABLE official_event_season_targets ADD CHECK (league_name <> '故障')")
+    conn.commit()
+    monkeypatch.setattr(reconcile, "get_db", lambda: nullcontext(conn))
+    with application_role(conn):
+        with pytest.raises(CheckViolation):
+            reconcile._persist_targets(
+                targets={"联赛": target(), "故障": target()}, today=date(2026, 1, 1), dry_run=False
+            )
+        for table in ("official_event_season_targets", "official_event_season_retention"):
+            with conn.cursor() as cur:
+                cur.execute(sql.SQL("SELECT count(*) FROM {}").format(sql.Identifier(table)))
+                assert cur.fetchone() == (0,)
+
+
+@pytest.mark.parametrize(
+    "statement",
+    [
+        "DELETE FROM official_event_season_retention",
+        "TRUNCATE official_event_season_retention",
+        "ALTER TABLE official_event_season_retention ADD COLUMN forbidden TEXT",
+    ],
+)
+def test_runtime_role_cannot_delete_truncate_or_alter_retention(application_database, statement):
+    conn = application_database
+    apply_access(conn)
+    conn.commit()
+    with application_role(conn):
+        with pytest.raises(InsufficientPrivilege):
+            with conn.cursor() as cur:
+                cur.execute(statement)

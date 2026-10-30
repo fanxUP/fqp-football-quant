@@ -17,6 +17,7 @@ MIGRATIONS_124_125 = [
     "124_official_event_season_retention.sql",
     "125_football_fixture_identity.sql",
 ]
+MIGRATION_126 = ["126_official_season_retention_access.sql"]
 
 
 def _write_report(directory: Path, report: dict) -> str:
@@ -25,12 +26,13 @@ def _write_report(directory: Path, report: dict) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def rehearsal_record(directory: Path) -> dict:
-    checksums = {name: policy.REVIEWED_NO_BACKUP_CHECKSUMS[name] for name in MIGRATIONS_124_125}
+def rehearsal_record(directory: Path, pending=None) -> dict:
+    pending = MIGRATIONS_124_125 if pending is None else pending
+    checksums = {name: policy.REVIEWED_NO_BACKUP_CHECKSUMS[name] for name in pending}
     report = {
         "status": "passed",
         "target_sha": TARGET_SHA,
-        "pending_migrations": MIGRATIONS_124_125,
+        "pending_migrations": pending,
         "migration_sha256": checksums,
         "verified_at": datetime.now(UTC).isoformat(),
         "database": {
@@ -45,6 +47,13 @@ def rehearsal_record(directory: Path) -> dict:
         "timeouts": {"lock_seconds": 2, "statement_seconds": 30},
         "test_results": {"passed": 1, "failed": 0, "skipped": 0},
     }
+    if pending == MIGRATION_126:
+        report.update(
+            application_role={"name": "fqp", "superuser": False, "owns_retention_table": False},
+            application_role_acl="passed",
+            application_business_paths="passed",
+            acl_rollback_verified="passed",
+        )
     evidence_sha256 = _write_report(directory, report)
     return {
         "target_sha": TARGET_SHA,
@@ -54,7 +63,7 @@ def rehearsal_record(directory: Path) -> dict:
         "no_backup_reason": "Explicit operator preference; both additive migrations were rehearsed in isolation.",
         "no_backup_migration_rehearsal": {
             "status": "passed",
-            "pending_migrations": MIGRATIONS_124_125,
+            "pending_migrations": pending,
             "sha256": checksums,
             "report_path": "no-backup-migration-rehearsal.json",
             "evidence_sha256": evidence_sha256,
@@ -265,3 +274,55 @@ def test_other_pending_migrations_still_require_a_recent_verified_backup(tmp_pat
 
 def test_no_pending_migrations_need_no_backup_evidence():
     validate({}, [])
+
+
+def test_no_backup_allows_pinned_acl_repair_with_runtime_role_evidence(tmp_path):
+    validate(rehearsal_record(tmp_path, MIGRATION_126), MIGRATION_126, evidence_directory=tmp_path)
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("application_role_acl", "not_run"),
+        ("application_business_paths", "not_run"),
+        ("acl_rollback_verified", "not_run"),
+        ("application_role", {"name": "postgres", "superuser": True, "owns_retention_table": True}),
+        ("application_role", {"name": "fqp", "superuser": False, "owns_retention_table": True}),
+        ("application_role", {"name": "fqp", "superuser": True, "owns_retention_table": False}),
+        ("application_role", None),
+    ],
+)
+def test_acl_repair_requires_restricted_runtime_role_and_rollback_proof(field, value, tmp_path):
+    record = rehearsal_record(tmp_path, MIGRATION_126)
+    report_path = tmp_path / record["no_backup_migration_rehearsal"]["report_path"]
+    report = json.loads(report_path.read_text())
+    report[field] = value
+    record["no_backup_migration_rehearsal"]["evidence_sha256"] = _write_report(tmp_path, report)
+    with pytest.raises(SystemExit, match="runtime|ACL|application"):
+        validate(record, MIGRATION_126, evidence_directory=tmp_path)
+
+
+@pytest.mark.parametrize(
+    "pending",
+    [
+        [*MIGRATIONS_124_125, *MIGRATION_126],
+        [*MIGRATION_126, "127_unreviewed.sql"],
+    ],
+)
+def test_acl_repair_cannot_expand_no_backup_migration_set(tmp_path, pending):
+    with pytest.raises(SystemExit, match="restricted|reviewed"):
+        validate(rehearsal_record(tmp_path, MIGRATION_126), pending, evidence_directory=tmp_path)
+
+
+def test_acl_repair_sql_change_is_rejected(tmp_path):
+    (tmp_path / "sql").mkdir()
+    (tmp_path / "sql" / MIGRATION_126[0]).write_text(
+        "GRANT ALL ON ALL TABLES IN SCHEMA public TO fqp;"
+    )
+    with pytest.raises(SystemExit, match="checksum"):
+        validate(
+            rehearsal_record(tmp_path, MIGRATION_126),
+            MIGRATION_126,
+            project_root=tmp_path,
+            evidence_directory=tmp_path,
+        )
