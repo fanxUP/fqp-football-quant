@@ -312,8 +312,11 @@ def parse_local_official_history_text(
             kickoff_time = (
                 f"{match_date}T{match_time}"
                 if match_date and match_time and "T" not in match_time
-                else match_time or (f"{match_date}T00:00:00" if match_date else "")
+                else match_time
             )
+            # A result date is not an exact kickoff. Keep the result available
+            # for an existing identity without overwriting its real schedule
+            # or creating a new match at an invented midnight.
             if league_name and home_team_name and away_team_name and kickoff_time:
                 matches.append(
                     {

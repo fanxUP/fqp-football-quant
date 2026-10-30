@@ -1,21 +1,13 @@
 {
   "schema_version": 4,
-  "task_id": "FIVE-SEASON-RETENTION-ACL-20261030",
-  "objective": "Preserve the offline inventory slice and repair application retention-table ACL using an additive migration, restricted-role PostgreSQL regressions and a checksum-pinned no-backup release exception.",
+  "task_id": "FIVE-SEASON-SAMPLE-20261030",
+  "objective": "Reconcile official EPL historical scope against existing shared history and remove invented midnight kickoffs from the saved-result importer.",
   "allowed_paths": [
     ".vibe/SCOPE_LOCK.yaml",
     ".vibe/CHANGE_BUDGET.yaml",
-    "scripts/football_pool_notice.py",
-    "tests/test_scripts/test_football_pool_notice.py",
-    "docs/football-pool.md",
-    "docs/official-season-retention.md",
-    "docs/football-fixture-identity.md",
-    "sql/126_official_season_retention_access.sql",
-    "tests/test_computation/test_event_season_retention_postgres.py",
-    "ops/server/release_migration_policy.py",
-    "tests/test_local/test_release_migration_policy.py",
-    "ops/server/deploy.sh",
-    "ops/server/README.md"
+    "scripts/official_history_importer.py",
+    "tests/test_scripts/test_official_history_importer.py",
+    "docs/official-season-retention.md"
   ],
   "protected_paths": [
     "sql/**",
@@ -26,11 +18,6 @@
     "scripts/training_manifest.py",
     "scripts/mle_trainer.py"
   ],
-  "approved_protected_paths": [
-    "sql/126_official_season_retention_access.sql",
-    "ops/server/release_migration_policy.py",
-    "ops/server/deploy.sh",
-    "ops/server/README.md"
-  ],
-  "notes": "Single existing main checkout. Preserve the preceding 7-path offline inventory/parser work. Add only runtime SELECT/INSERT/UPDATE for the retention table; immutable migrations124/125, ownership and delete rights stay unchanged. Rehearse in a disposable local database, test actual fqp role and transactional ACL rollback. Prepare the narrow no-backup release evidence path; no production import, automatic cleanup, backup, commit, push or deployment in this development slice."
+  "approved_protected_paths": [],
+  "notes": "Existing main only. This reviewed importer precision slice may be committed, pushed and released with current CI and release evidence under the user’s standing authorization. No schema/dependency/API/model changes or backups. Separate additive retention/pilot operations use an external plan, runtime fqp transaction, strict source-ID/date+code collision checks and explicit rollback/read verification; neither parser-only dry-run nor internally committing storage is represented as atomic rehearsal."
 }

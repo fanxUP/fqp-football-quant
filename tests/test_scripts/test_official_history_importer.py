@@ -1,6 +1,9 @@
 import json
 from unittest.mock import MagicMock
 
+import pytest
+
+from scripts import official_history_importer
 from scripts.official_history_importer import (
     derive_business_date_from_match_date,
     extract_official_result_payloads,
@@ -300,8 +303,87 @@ def test_parses_uniform_result_row_with_ticket_business_date_and_sections_scores
     )
 
     assert history["rejected"] == []
-    assert history["matches"][0]["business_date"] == "2026-07-09"
-    assert history["matches"][0]["official_match_code"] == "周四203"
-    assert history["matches"][0]["source_match_id"] == "2040456"
+    assert history["matches"] == []
+    assert history["results"][0]["_business_date"] == "2026-07-09"
+    assert history["results"][0]["_match_code"] == "周四203"
+    assert history["results"][0]["_source_match_id"] == "2040456"
     assert history["results"][0]["score_result"] == "2:0"
     assert history["results"][0]["half_full_result"] == "3-3"
+
+
+def _uniform_history_payload():
+    return {
+        "value": {
+            "matchResult": [
+                {
+                    "matchId": 2040456,
+                    "matchNumStr": "周四203",
+                    "matchDate": "2026-07-10",
+                    "leagueName": "欧罗巴联赛",
+                    "allHomeTeam": "斯普利特海杜克",
+                    "allAwayTeam": "日利纳",
+                    "sectionsNo1": "1:0",
+                    "sectionsNo999": "2:0",
+                    "poolStatus": "Payout",
+                }
+            ]
+        }
+    }
+
+
+@pytest.mark.parametrize("clock", [None, "", "   "])
+def test_date_only_history_keeps_result_without_inventing_midnight(clock):
+    payload = _uniform_history_payload()
+    payload["value"]["matchResult"][0]["matchTime"] = clock
+
+    history = parse_local_official_history_text(json.dumps(payload), "/tmp/date-only.json")
+
+    assert history["matches"] == []
+    assert history["rejected"] == []
+    assert history["results"][0]["_source_match_id"] == "2040456"
+    assert history["results"][0]["score_result"] == "2:0"
+    assert history["results"][0]["raw_json"]["matchTime"] == clock
+
+
+def test_explicit_midnight_is_a_valid_history_kickoff():
+    payload = _uniform_history_payload()
+    payload["value"]["matchResult"][0]["matchTime"] = "00:00"
+
+    history = parse_local_official_history_text(json.dumps(payload), "/tmp/midnight.json")
+
+    assert history["matches"][0]["kickoff_time"] == "2026-07-10T00:00"
+
+
+@pytest.mark.parametrize("existing_id", [42, None])
+def test_date_only_import_preserves_schedule_or_reports_unresolved(
+    monkeypatch, tmp_path, existing_id
+):
+    artifact = tmp_path / "date-only.json"
+    artifact.write_text(json.dumps(_uniform_history_payload()))
+    conn = MagicMock()
+    conn.__enter__.return_value = conn
+    conn.cursor.return_value.__enter__.return_value.fetchone.return_value = (
+        (existing_id,) if existing_id else None
+    )
+    monkeypatch.setattr(official_history_importer, "get_db", lambda: conn)
+    matches = MagicMock()
+    results = MagicMock(return_value={"inserted": 1, "updated": 0, "errors": []})
+    receipt = MagicMock()
+    monkeypatch.setattr(official_history_importer, "store_matches", matches)
+    monkeypatch.setattr(official_history_importer, "store_results", results)
+    monkeypatch.setattr(official_history_importer, "record_official_collection_status", receipt)
+
+    report = official_history_importer.import_local_official_results_file(str(artifact))
+
+    matches.assert_not_called()
+    assert report["matches_found"] == report["matches_inserted"] == report["matches_updated"] == 0
+    if existing_id:
+        assert report["status"] == "ok"
+        assert report["results_matched"] == 1
+        assert results.call_args.args[1][0]["match_id"] == existing_id
+    else:
+        results.assert_not_called()
+        assert report["status"] == "partial"
+        assert report["unresolved_match_identities"] == ["2026-07-09/周四203"]
+        assert report["results_matched"] == report["results_inserted"] == 0
+    assert receipt.call_args.kwargs["status"] == report["status"]
