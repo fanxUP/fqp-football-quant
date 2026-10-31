@@ -12,6 +12,9 @@ from pathlib import Path
 from typing import Any, NoReturn
 
 REVIEWED_NO_BACKUP_CHECKSUMS = {
+    "127_football_fixture_seasons.sql": (
+        "7c0c61920f62680e3f4951e5dd98dd57a9588f12315df1e64c570f69d725023c"
+    ),
     "123_football_history_odds_invalid_timezone.sql": (
         "ba62d08357813c093a5304d9143c2e2c5e0295f010e4338afeb4d4ca65911744"
     ),
@@ -25,6 +28,7 @@ REVIEWED_NO_BACKUP_CHECKSUMS = {
         "dc3dd7640d261eb625ecb8f4fc8a26c3562a55ffd52b99c2c54fd4d23d695ff8"
     ),
 }
+REVIEWED_NO_BACKUP_SEASONS = ["127_football_fixture_seasons.sql"]
 REVIEWED_NO_BACKUP_PAIR = [
     "124_official_event_season_retention.sql",
     "125_football_fixture_identity.sql",
@@ -167,6 +171,29 @@ def _verify_no_backup_rehearsal(
                 "ACL repair requires runtime grants, application business paths and ACL rollback proof"
             )
 
+    if pending == REVIEWED_NO_BACKUP_SEASONS:
+        role = report.get("application_role")
+        if (
+            not isinstance(role, dict)
+            or role.get("name") != "fqp"
+            or role.get("superuser") is not False
+            or role.get("owns_season_identity_tables") is not False
+        ):
+            _refuse(
+                "Season identity rehearsal must use the restricted non-owner application runtime role"
+            )
+        if any(
+            report.get(field) != "passed"
+            for field in (
+                "application_role_acl",
+                "application_business_paths",
+                "acl_rollback_verified",
+            )
+        ):
+            _refuse(
+                "Season identity requires application ACL, business paths and ACL rollback proof"
+            )
+
 
 def _validate_no_backup(
     record: dict[str, Any],
@@ -179,12 +206,12 @@ def _validate_no_backup(
     if pending == ["123_football_history_odds_invalid_timezone.sql"]:
         _verify_pinned_sql(project_root, pending)
         return
-    if pending in (REVIEWED_NO_BACKUP_PAIR, REVIEWED_NO_BACKUP_ACL):
+    if pending in (REVIEWED_NO_BACKUP_PAIR, REVIEWED_NO_BACKUP_ACL, REVIEWED_NO_BACKUP_SEASONS):
         _verify_pinned_sql(project_root, pending)
         _verify_no_backup_rehearsal(record, pending, target_sha, evidence_directory)
         return
     _refuse(
-        "No-backup release is restricted to pinned migration123, the reviewed124+125 pair, or ACL repair126"
+        "No-backup release is restricted to pinned migration123, the reviewed124+125 pair, ACL repair126, or season identity127"
     )
 
 

@@ -326,3 +326,112 @@ def test_acl_repair_sql_change_is_rejected(tmp_path):
             project_root=tmp_path,
             evidence_directory=tmp_path,
         )
+
+
+MIGRATION_127 = ["127_football_fixture_seasons.sql"]
+
+
+def season_rehearsal_record(directory):
+    # The helper needs a report before the new checksum is implemented (RED).
+    pending = MIGRATION_127
+    report = {
+        "status": "passed",
+        "target_sha": TARGET_SHA,
+        "pending_migrations": pending,
+        "migration_sha256": {
+            pending[0]: "7c0c61920f62680e3f4951e5dd98dd57a9588f12315df1e64c570f69d725023c"
+        },
+        "verified_at": datetime.now(UTC).isoformat(),
+        "database": {
+            "disposable": True,
+            "postgres_major": 16,
+            "fixture_kind": "synthetic_schema_fixture",
+            "production_data_copy": False,
+        },
+        "existing_rows_preserved": "passed",
+        "constraints_and_triggers_verified": "passed",
+        "transaction_rollback_verified": "passed",
+        "timeouts": {"lock_seconds": 2, "statement_seconds": 30},
+        "test_results": {"passed": 1, "failed": 0, "skipped": 0},
+        "application_role": {
+            "name": "fqp",
+            "superuser": False,
+            "owns_season_identity_tables": False,
+        },
+        "application_role_acl": "passed",
+        "application_business_paths": "passed",
+        "acl_rollback_verified": "passed",
+    }
+    digest = _write_report(directory, report)
+    return {
+        "target_sha": TARGET_SHA,
+        "migration_copy_dry_run": "passed",
+        "migration_transaction_dry_run": "passed",
+        "no_backup_authorized": True,
+        "no_backup_reason": "Explicit no-backup instruction; additive127 independently rehearsed.",
+        "no_backup_migration_rehearsal": {
+            "status": "passed",
+            "pending_migrations": pending,
+            "sha256": report["migration_sha256"],
+            "report_path": "no-backup-migration-rehearsal.json",
+            "evidence_sha256": digest,
+        },
+    }
+
+
+def test_season_127_allows_only_pinned_sql_and_full_runtime_rehearsal(tmp_path):
+    validate(season_rehearsal_record(tmp_path), MIGRATION_127, evidence_directory=tmp_path)
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("application_role_acl", "not_run"),
+        ("application_business_paths", "not_run"),
+        ("acl_rollback_verified", "not_run"),
+        (
+            "application_role",
+            {"name": "postgres", "superuser": True, "owns_season_identity_tables": True},
+        ),
+        (
+            "application_role",
+            {"name": "fqp", "superuser": False, "owns_season_identity_tables": True},
+        ),
+        ("application_role", None),
+    ],
+)
+def test_season_127_rejects_missing_runtime_role_or_acl_proof(tmp_path, field, value):
+    record = season_rehearsal_record(tmp_path)
+    report_path = tmp_path / record["no_backup_migration_rehearsal"]["report_path"]
+    report = json.loads(report_path.read_text())
+    report[field] = value
+    record["no_backup_migration_rehearsal"]["evidence_sha256"] = _write_report(tmp_path, report)
+    with pytest.raises(SystemExit, match="runtime|ACL|application"):
+        validate(record, MIGRATION_127, evidence_directory=tmp_path)
+
+
+@pytest.mark.parametrize(
+    "pending",
+    [
+        MIGRATION_127 + MIGRATION_126,
+        MIGRATION_126 + MIGRATION_127,
+        MIGRATION_127 + ["128_unknown.sql"],
+    ],
+)
+def test_season_127_never_allows_extra_migrations(tmp_path, pending):
+    with pytest.raises(SystemExit, match="restricted|reviewed"):
+        validate(season_rehearsal_record(tmp_path), pending, evidence_directory=tmp_path)
+
+
+def test_season_127_sql_tampering_refused(tmp_path):
+    (tmp_path / "sql").mkdir()
+    (tmp_path / "sql" / MIGRATION_127[0]).write_text(
+        "GRANT ALL ON ALL TABLES IN SCHEMA public TO fqp;"
+    )
+    with pytest.raises(SystemExit, match="checksum"):
+        validate(
+            season_rehearsal_record(tmp_path),
+            MIGRATION_127,
+            project_root=tmp_path,
+            evidence_directory=tmp_path,
+        )

@@ -1,6 +1,20 @@
 # 体彩跨玩法比赛身份
 
-本批为五赛季回填的第二个开发切片，已随`fafb0d0`于2026-10-30 18:12（北京时间）部署到100.121.47.26，125迁移已应用；尚未执行五季业务回填。第一批多季保留及部署后发现的应用权限缺口见 [official-season-retention.md](official-season-retention.md)。
+125共同身份已部署；随后已完成已核实的竞彩历史小批回填，但五季完整回填尚未完成。第一批多季保留及部署后发现的应用权限缺口见 [official-season-retention.md](official-season-retention.md)。
+
+## 官方跨年赛季与明确成员（127，本地开发，未部署）
+
+新增`football_competition_season_sources`保存现有`competition_seasons`对应的官方赛事/赛季命名空间、计划起止和证据；新增`football_fixture_seasons`关联125的共同比赛。`football_fixture_season_catalog`只投影明确绑定，旧自然年/世界杯标签关系不自动成为可信归属。它们仍在原PostgreSQL，复用原赛事/赛季/比赛，不复制历史事实。
+
+全局`seasons`的旧日期/名称保持原样；新建赛事专用季时全局日期留空，权威计划日期取赛事来源关系。计划边界不是实际首末开球，也不是逐场归属证明：延期到范围外但有明确来源成员仍可接收；只有日期/名称相近不创建成员。旧119事实和已冻结模型不变，尚未接入训练或页面展示。
+
+操作入口`python -m scripts.football_season_identity --input material.json`默认离线预览，不连接数据库。`--mode rehearse`执行真实DML后回滚，`--mode apply`单次提交，使用显式环境`DATABASE_URL`。单批最多500个已存在的共同比赛；没有自动重试、后台采集或定时导入。事务失败调用方必须回滚；CLI始终回滚未提交内容并关闭连接。
+
+输入含`competition_code`（已有规范代码）、`season_code`（赛事专用代码，如`premier-league:2024-2025`）、`season_name`、`boundary_document`、`member_documents`、`members`。每份document保存`url`、带时区的`captured_at`、原始字符串`body`及其UTF-8字节`sha256`；边界取官方uniform联赛`getMatchResultV1.qry`的`seasonStartDate/seasonEndDate`，不可误取查询`startDate/endDate`。每个member为`fixture_id`、`jc_match_id`，必须出现在同一来源赛季响应的逐场`gmMatchId`中，并与已有125 `sporttery/jc.matchId`绑定一致。仅边界响应允许无成员；传统独有场次不能伪造JC ID，应在另一个有明确来源证据的适配器接入。
+
+SHA和URL用于保留和校验材料，不独立证明官方真实性或人工选择的规范赛事映射；生产操作仍需复核真实来源及规范目标。旧官方边界响应有时不回显赛事/季ID，此时保留`binding_basis=request_parameters_only`与空的`response_id_echo`，只作计划边界证据；不冒充响应回显或逐场证明。逐场响应必须同时回显赛事和季ID且与查询一致。复用规范季前检查名称一致且未被另一赛事使用，错误旧行拒绝接入，不自动修名。证据一律标记历史赛前不可用。新关系禁止UPDATE/DELETE/TRUNCATE，已有错误或来源修订应先停止消费并核对引用，不能自动覆盖。数据库约束也校验逐场来源指向同一个fixture；受限fqp仅获得新表SELECT/INSERT及序列用量，不获得旧来源表UPDATE权限。导入函数拒绝autocommit连接，保持整批原子性。
+
+本地验证采用独立loopback测试库和真实08/125/127迁移，覆盖受限fqp、回滚、幂等、冲突、来源命名空间、并发锁、不可变性和旧行保全。生产迁移、无备份发布脚本证据和五季逐场写入尚待执行，不得将本地验证当线上完成。
 
 同一真实比赛可同时进入竞彩足球、14场胜负彩、任九、6场半全场和4场进球。没有竞彩编号的传统足彩比赛，也应能保存和关联。禁止为满足原有外键而伪造竞彩行。
 

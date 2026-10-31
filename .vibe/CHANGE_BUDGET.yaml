@@ -1,10 +1,10 @@
 {
   "schema_version": 4,
-  "task_id": "HISTORY-IDENTITY-20261030",
-  "max_files_changed": 7,
-  "max_new_files": 0,
+  "task_id": "FIXTURE-SEASON-RELEASE-20261031",
+  "max_files_changed": 12,
+  "max_new_files": 4,
   "max_new_dependencies": 0,
-  "max_schema_migrations": 0,
+  "max_schema_migrations": 1,
   "max_public_api_changes": 0,
   "declared_public_api_changes": 0,
   "regression_budget": {
@@ -12,5 +12,5 @@
     "new_lint_errors": 0,
     "new_type_errors": 0
   },
-  "notes": "Bounded identity writer + existing historical reference reader; reuse 125 schema and existing API. No five-season bulk import or frozen model re-run."
+  "notes": "8 implementation paths plus4 existing release policy/docs/tests paths. One additive127 migration, no backups/new dependencies/API. Production material append is separate controlled transaction."
 }
