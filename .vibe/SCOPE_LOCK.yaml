@@ -1,25 +1,21 @@
 {
   "schema_version": 4,
-  "task_id": "FIXTURE-SEASON-RELEASE-20261031",
-  "objective": "Evidence-backed competition-specific season boundaries and explicit shared-fixture membership; preserve legacy seasons and historical facts.",
+  "task_id": "FIXTURE-SEASON-CONSUMER-20261031",
+  "objective": "Expose explicit fixture season membership through the existing historical reference and match-detail panel; preserve unverified source labels and immutable history.",
   "allowed_paths": [
     ".vibe/SCOPE_LOCK.yaml",
     ".vibe/CHANGE_BUDGET.yaml",
-    "sql/127_football_fixture_seasons.sql",
-    "scripts/football_season_identity.py",
-    "tests/test_computation/test_football_season_identity.py",
-    "tests/test_computation/test_football_season_identity_postgres.py",
-    "docs/football-fixture-identity.md",
-    ".github/workflows/ci.yml",
-    "ops/server/release_migration_policy.py",
-    "ops/server/deploy.sh",
-    "ops/server/README.md",
-    "tests/test_local/test_release_migration_policy.py"
+    "scripts/football_history_storage.py",
+    "tests/test_computation/test_football_fixture_identity_postgres.py",
+    "tests/test_data_sources/titan007/test_history_backfill.py",
+    "apps/frontend/src/core/types.ts",
+    "apps/frontend/src/shared/components/HistoryReferencePanel.tsx",
+    "apps/frontend/src/shared/components/HistoryReferencePanel.test.tsx",
+    "docs/football-fixture-identity.md"
   ],
   "protected_paths": [
     "ops/**",
-    "sql/0*",
-    "sql/1[012][0-6]*",
+    "sql/**",
     "**/package*.json",
     "requirements*.txt",
     "scripts/football_history_training.py",
@@ -27,10 +23,6 @@
     "scripts/training_manifest.py",
     "scripts/mle_trainer.py"
   ],
-  "approved_protected_paths": [
-    "ops/server/release_migration_policy.py",
-    "ops/server/deploy.sh",
-    "ops/server/README.md"
-  ],
-  "notes": "main only. Continue preserved8-path implementation with4 existing release paths. Explicit user no-backup policy, pinned127 only; verified rollout and fixed material append after actual CI. No frozen model changes or legacy row rewriting."
+  "approved_protected_paths": [],
+  "notes": "main only; single writer. Existing127 already deployed; no migration/data writes/backups/retraining. One additive response field, no new route. League-center season catalog is a subsequent slice."
 }

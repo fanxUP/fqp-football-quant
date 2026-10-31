@@ -197,8 +197,10 @@ def pg():
     with conn.cursor() as cur:
         cur.execute(sql.SQL("create schema {}").format(sql.Identifier(schema)))
         cur.execute(sql.SQL("set search_path to {},public").format(sql.Identifier(schema)))
-        cur.execute("create table teams(id bigint primary key)")
-        cur.execute("insert into teams values (10),(20)")
+        cur.execute(
+            (Path(__file__).resolve().parents[3] / "sql/08_season_team_database.sql").read_text()
+        )
+        cur.execute("insert into teams(id) values (10),(20)")
         cur.execute(
             "create table official_matches(id bigint primary key,source_match_id text,home_team_name text,away_team_name text,kickoff_time timestamp)"
         )
@@ -215,6 +217,7 @@ def pg():
         identity = migration.with_name("125_football_fixture_identity.sql").read_text()
         cur.execute(identity.split("ALTER TABLE football_pool_issue_matches", 1)[0])
         cur.execute("GRANT SELECT ON football_fixtures,football_fixture_source_links TO fqp")
+        cur.execute(migration.with_name("127_football_fixture_seasons.sql").read_text())
     conn.commit()
     try:
         yield conn
@@ -416,15 +419,19 @@ def test_training_candidates_cli_exports_verified_manifest_without_overwriting(p
 def _publish_research_inputs(pg):
     """Real 118/119 structures plus a tiny official-score cohort, in a private schema."""
     with pg.cursor() as cur:
-        cur.execute("ALTER TABLE teams ADD COLUMN team_name_cn text")
         cur.execute("UPDATE teams SET team_name_cn=CASE id WHEN 10 THEN '甲' ELSE '乙' END")
         cur.execute("ALTER TABLE official_matches ADD COLUMN match_status text")
         cur.execute(
             "CREATE TABLE official_results(id bigint PRIMARY KEY,match_id bigint UNIQUE REFERENCES official_matches(id),"
             "full_home_goals int,full_away_goals int,official_publish_time timestamp)"
         )
-        cur.execute("CREATE TABLE competition_seasons(id bigint PRIMARY KEY)")
-        cur.execute("INSERT INTO competition_seasons VALUES (1)")
+        cur.execute(
+            "INSERT INTO competitions(id,competition_code,competition_type) VALUES (1,'research-fixed','league')"
+        )
+        cur.execute(
+            "INSERT INTO seasons(id,season_code,season_name) VALUES (1,'research-fixed:2026-2027','2026-2027')"
+        )
+        cur.execute("INSERT INTO competition_seasons(id,competition_id,season_id) VALUES (1,1,1)")
         root = Path(__file__).resolve().parents[3]
         cur.execute((root / "sql/118_league_reference_data.sql").read_text())
         cur.execute(
@@ -550,7 +557,7 @@ def test_history_research_ambiguous_official_team_names_are_not_silently_selecte
 
     bid, rid = _publish_research_inputs(pg)
     with pg.cursor() as cur:
-        cur.execute("INSERT INTO teams VALUES (30,'甲')")
+        cur.execute("INSERT INTO teams(id,team_name_cn) VALUES (30,'甲')")
     pg.commit()
     history, official = load_history_official_inputs(
         pg, batch_id=bid, reference_batch_id=rid, **_training_scope()

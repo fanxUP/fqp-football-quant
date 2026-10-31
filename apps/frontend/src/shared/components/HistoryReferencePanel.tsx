@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../../core/apiClient';
-import type { HistoryDomain, HistoryReference } from '../../core/types';
+import type { FixtureSeasonReference, HistoryDomain, HistoryReference } from '../../core/types';
 import useManualEvidence from '../../pages/useManualEvidence';
 import ReadEvidenceStatus from '../../pages/ReadEvidenceStatus';
 import { formatTimestamp } from '../utils';
@@ -20,6 +20,46 @@ const text = (value: unknown) => typeof value === 'string' && value.trim() ? val
 const sideLabel = (value: string | null) => value === 'home' ? '主队' : value === 'away' ? '客队' : '归属未知';
 const basisLabel = (value: string) => ({ source_full: '来源完整日期', inferred_year: '年份推定', unresolved: '时间待确认' })[value] ?? '时间依据未知';
 
+function validSeason(season: HistoryReference['fixture_season']) {
+  if (season == null) return true;
+  return typeof season === 'object' && !Array.isArray(season)
+    && [season.fixture_id, season.competition_id, season.competition_season_id, season.season_id].every(id => Number.isSafeInteger(id) && id > 0)
+    && [season.competition_code, season.season_code, season.season_name, season.source_timezone, season.source_name, season.source_competition_id, season.source_season_id].every(value => typeof value === 'string' && value.trim())
+    && (season.competition_name === null || typeof season.competition_name === 'string')
+    && [season.planned_start_date, season.planned_end_date].every(value => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value))
+    && season.planned_start_date <= season.planned_end_date
+    && [season.boundary_evidence, season.membership_evidence].every(proof => proof && typeof proof === 'object' && !Array.isArray(proof)
+      && [proof.url, proof.sha256, proof.captured_at].every(value => value === null || typeof value === 'string'));
+}
+
+function sourceUrl(value: string | null) {
+  try {
+    const url = new URL(value ?? '');
+    return url.protocol === 'https:' && url.hostname === 'webapi.sporttery.cn' && !url.username && !url.password && !url.port ? url.href : null;
+  } catch { return null; }
+}
+
+function FixtureSeason({ season }: { season: FixtureSeasonReference | null | undefined }) {
+  if (!season) return <p className="be-note">赛事赛季待核实：尚无明确的逐场归属，不按开球日期或来源旧标签推定。</p>;
+  const boundaryUrl = sourceUrl(season.boundary_evidence.url);
+  const memberUrl = sourceUrl(season.membership_evidence.url);
+  return <section aria-label="赛事赛季归属">
+    <p><strong>已核实赛季：{season.competition_name || season.competition_code} · {season.season_name}</strong></p>
+    <p className="be-note">官方计划范围：{season.planned_start_date} 至 {season.planned_end_date}（{season.source_timezone}）；延期比赛按明确成员归属。</p>
+    <details>
+      <summary style={{ minHeight: 44, alignContent: 'center', cursor: 'pointer' }}>查看赛季归属依据</summary>
+      <p className="be-note">来源 {season.source_name} · 来源赛事 {season.source_competition_id} · 来源赛季 {season.source_season_id}</p>
+      <div className="be-match-meta">
+        {boundaryUrl && <a href={boundaryUrl} target="_blank" rel="noopener noreferrer">赛季边界来源</a>}
+        {memberUrl && <a href={memberUrl} target="_blank" rel="noopener noreferrer">逐场归属来源</a>}
+      </div>
+      <p className="be-note">边界证据采集：{formatTimestamp(season.boundary_evidence.captured_at)} · 逐场证据采集：{formatTimestamp(season.membership_evidence.captured_at)}</p>
+      <p className="be-note">边界材料 SHA256：{season.boundary_evidence.sha256 ?? '未知'}<br />逐场材料 SHA256：{season.membership_evidence.sha256 ?? '未知'}</p>
+      <p className="be-note">证据采集时间不代表历史公布时间，赛季归属不证明当时可用于赛前预测。</p>
+    </details>
+  </section>;
+}
+
 function HistoryRows({ matchId, domain, offset, batchRef, onPage }: {
   matchId: number; domain: HistoryDomain; offset: number;
   batchRef: { current: number | undefined }; onPage: (offset: number) => void;
@@ -38,6 +78,7 @@ function HistoryRows({ matchId, domain, offset, batchRef, onPage }: {
       || (data.status === 'available' && (!data.batch || !data.source_match))) {
       throw new Error('历史参考与所选比赛、批次或分页不一致');
     }
+    if (!validSeason(data.fixture_season)) throw new Error('历史参考与所选比赛、批次或分页不一致');
     return data;
   });
   // A late response from an unmounted query cannot replace the pinned batch.
@@ -69,10 +110,12 @@ function HistoryRows({ matchId, domain, offset, batchRef, onPage }: {
   }
   return <>
     <ReadEvidenceStatus resource={resource} label="刷新历史参考" note="接收时间不代表来源公布时间" />
+    {data && <FixtureSeason season={data.fixture_season} />}
     {data?.status === 'unmatched' && <p>该比赛尚无经过核实的历史资料映射，不能据此判断来源没有数据。</p>}
     {data?.status === 'ambiguous' && <p>该比赛对应多个来源身份，待核实后展示历史资料。</p>}
     {data?.status === 'available' && data.batch && data.source_match && <>
-      <p className="be-note">来源 {data.batch.source_name} · 批次 {data.batch.id} · 来源比赛 {data.source_match.id} · {data.source_match.home_name ?? '主队未知'} / {data.source_match.away_name ?? '客队未知'} · 赛季 {data.source_match.season ?? '未知'}</p>
+      <p className="be-note">来源 {data.batch.source_name} · 批次 {data.batch.id} · 来源比赛 {data.source_match.id} · {data.source_match.home_name ?? '主队未知'} / {data.source_match.away_name ?? '客队未知'}</p>
+      <p className="be-note">来源赛季原文（未核实）：{data.source_match.season ?? '未知'}</p>
       <p className="be-note">原记录开球 {formatTimestamp(data.source_match.kickoff_at)} · 入库 {formatTimestamp(data.batch.imported_at)} · 来源公布/采集时间未知</p>
       <p className="be-note">该批次覆盖：{DOMAINS.map(item => `${item.label} ${data.counts[item.key] ?? 0}`).join(' · ')}</p>
       {data.rows.length === 0 ? <p>所选批次暂无{DOMAINS.find(item => item.key === domain)?.label}记录，采集覆盖未知。</p> : <ul style={{ listStyle: 'none', padding: 0 }}>

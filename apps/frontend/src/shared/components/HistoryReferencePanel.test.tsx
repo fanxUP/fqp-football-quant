@@ -25,7 +25,7 @@ it('renders real zero, unknown season and independent acquisition limits', async
   render(<HistoryReferencePanel matchId={90} />);
   await screen.findByText('射正');
   expect(screen.getByText('主 0 · 客 —')).toBeInTheDocument();
-  expect(screen.getByText(/赛季 未知/)).toBeInTheDocument();
+  expect(screen.getByText(/来源赛季原文（未核实）：未知/)).toBeInTheDocument();
   expect(screen.getByText(/来源公布\/采集时间未知/)).toBeInTheDocument();
   expect(screen.getByText(/可读走势不证明当时已经公布/)).toBeInTheDocument();
 });
@@ -117,4 +117,62 @@ it('rejects malformed coverage counts without crashing the page', async () => {
   mocks.history.mockResolvedValueOnce(fixture({ counts: null as unknown as HistoryReference['counts'] }));
   render(<HistoryReferencePanel matchId={90} />);
   expect(await screen.findByRole('alert')).toHaveTextContent('历史参考与所选比赛、批次或分页不一致');
+});
+
+const season = {
+  fixture_id: 12, competition_id: 55, competition_season_id: 80, season_id: 2,
+  competition_code: 'premier-league', competition_name: '英格兰超级联赛',
+  season_code: 'premier-league:2024-2025', season_name: '2024-2025',
+  planned_start_date: '2024-08-16', planned_end_date: '2025-05-26', source_timezone: 'Asia/Shanghai',
+  source_name: 'sporttery', source_competition_id: '72', source_season_id: '11817',
+  boundary_evidence: { url: 'https://webapi.sporttery.cn/season', captured_at: '2026-10-30T12:00:00+00:00', sha256: 'a'.repeat(64) },
+  membership_evidence: { url: 'https://webapi.sporttery.cn/members', captured_at: '2026-10-30T12:00:00+00:00', sha256: 'b'.repeat(64) },
+};
+
+it('shows the explicit competition season separately from unverified source text', async () => {
+  const data = fixture({ fixture_season: season });
+  data.source_match!.season = '2026世界杯';
+  mocks.history.mockResolvedValueOnce(data);
+  render(<HistoryReferencePanel matchId={90} />);
+  expect(await screen.findByText('已核实赛季：英格兰超级联赛 · 2024-2025')).toBeInTheDocument();
+  expect(screen.getByText(/官方计划范围：2024-08-16 至 2025-05-26/)).toBeInTheDocument();
+  expect(screen.getByText(/来源赛季原文（未核实）：2026世界杯/)).toBeInTheDocument();
+  fireEvent.click(screen.getByText('查看赛季归属依据'));
+  expect(screen.getByRole('link', { name: '逐场归属来源' })).toHaveAttribute('href', season.membership_evidence.url);
+  expect(screen.getByRole('link', { name: '赛季边界来源' })).toHaveAttribute('href', season.boundary_evidence.url);
+  expect(screen.getByText(/证据采集时间不代表历史公布时间/)).toBeInTheDocument();
+});
+
+it('shows confirmed season even when historical reference is unmatched', async () => {
+  mocks.history.mockResolvedValueOnce(fixture({ fixture_season: season, status: 'unmatched', batch: null, source_match: null, rows: [], counts: {}, total: 0, has_more: false }));
+  render(<HistoryReferencePanel matchId={90} />);
+  expect(await screen.findByText('已核实赛季：英格兰超级联赛 · 2024-2025')).toBeInTheDocument();
+  expect(screen.getByText(/尚无经过核实的历史资料映射/)).toBeInTheDocument();
+});
+
+it.each([null, undefined])('keeps missing season pending, including older server responses (%s)', async fixture_season => {
+  const data = fixture({ fixture_season });
+  data.source_match!.season = '2026世界杯';
+  mocks.history.mockResolvedValueOnce(data);
+  render(<HistoryReferencePanel matchId={90} />);
+  expect(await screen.findByText(/赛事赛季待核实/)).toBeInTheDocument();
+  expect(screen.queryByText(/已核实赛季：/)).not.toBeInTheDocument();
+});
+
+it('rejects malformed season metadata without crashing the page', async () => {
+  mocks.history.mockResolvedValueOnce(fixture({ fixture_season: { ...season, membership_evidence: null } as unknown as typeof season }));
+  render(<HistoryReferencePanel matchId={90} />);
+  expect(await screen.findByRole('alert')).toHaveTextContent('历史参考与所选比赛、批次或分页不一致');
+});
+
+it('never makes non-official or executable evidence URLs clickable', async () => {
+  mocks.history.mockResolvedValueOnce(fixture({ fixture_season: { ...season,
+    boundary_evidence: { ...season.boundary_evidence, url: 'javascript:alert(1)' },
+    membership_evidence: { ...season.membership_evidence, url: 'https://webapi.sporttery.cn.evil.invalid/' },
+  } }));
+  render(<HistoryReferencePanel matchId={90} />);
+  await screen.findByText('已核实赛季：英格兰超级联赛 · 2024-2025');
+  fireEvent.click(screen.getByText('查看赛季归属依据'));
+  expect(screen.queryByRole('link', { name: '逐场归属来源' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('link', { name: '赛季边界来源' })).not.toBeInTheDocument();
 });

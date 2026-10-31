@@ -114,15 +114,22 @@ def official(conn, source="9001", code="周五001", league="固定样本联赛")
 @pytest.fixture
 def history_ready(ready):
     with ready.cursor() as cur:
-        cur.execute("CREATE TABLE teams(id bigint PRIMARY KEY)")
-        cur.execute("INSERT INTO teams VALUES (10),(20)")
+        cur.execute((ROOT / "sql/08_season_team_database.sql").read_text())
+        cur.execute("INSERT INTO teams(id) VALUES (10),(20)")
         cur.execute((ROOT / "sql/119_football_history_backfill.sql").read_text())
+        cur.execute((ROOT / "sql/127_football_fixture_seasons.sql").read_text())
     ready.commit()
     return ready
 
 
 def history_pair(
-    conn, *, links=None, kickoff="2026-10-30T12:00:00Z", publish=True, competing_fk=False
+    conn,
+    *,
+    links=None,
+    kickoff="2026-10-30T12:00:00Z",
+    publish=True,
+    competing_fk=False,
+    source_season=None,
 ):
     from psycopg2.extras import Json
 
@@ -147,12 +154,13 @@ def history_pair(
             link_type="history2",
         )
         cur.execute(
-            """INSERT INTO football_history_matches(batch_id,source_match_id,source_competition_id,kickoff_at,match_status,source_home_team_id,source_away_team_id,home_name,away_name,home_goals,away_goals,source_metadata,official_match_id) VALUES (%s,5001,36,%s,'finished',10,20,'主1','客1',2,1,%s,%s)""",
+            """INSERT INTO football_history_matches(batch_id,source_match_id,source_competition_id,kickoff_at,match_status,source_home_team_id,source_away_team_id,home_name,away_name,home_goals,away_goals,source_metadata,official_match_id,source_season) VALUES (%s,5001,36,%s,'finished',10,20,'主1','客1',2,1,%s,%s,%s)""",
             (
                 bid,
                 kickoff,
                 Json(dict(lottery_links=links if links is not None else [link])),
                 old_fk,
+                source_season,
             ),
         )
         cur.execute(
@@ -165,6 +173,154 @@ def history_pair(
             cur.execute("UPDATE football_history_batches SET state='published' WHERE id=%s", (bid,))
     conn.commit()
     return mid, bid
+
+
+def history_season(conn, fid, jc_match_id="9001"):
+    from scripts.football_season_identity import import_season
+    from tests.test_computation.test_football_season_identity import document, material
+
+    with conn.cursor() as cur:
+        cur.execute(
+            "INSERT INTO competitions(competition_code,competition_name_cn,competition_type) VALUES ('premier-league','英格兰超级联赛','league') RETURNING id"
+        )
+        cid = cur.fetchone()[0]
+        cur.execute(
+            "INSERT INTO seasons(season_code,season_name,start_date,end_date) VALUES ('2026','2026世界杯','2026-03-01','2026-07-19') RETURNING id"
+        )
+        sid = cur.fetchone()[0]
+        cur.execute(
+            "INSERT INTO competition_seasons(competition_id,season_id) VALUES (%s,%s)",
+            (cid, sid),
+        )
+    data = material()
+    data.update(
+        members=[dict(fixture_id=fid, jc_match_id=jc_match_id)],
+        member_documents=[document(members=(int(jc_match_id),))],
+    )
+    return import_season(conn, data)
+
+
+def test_history_reads_explicit_season_as_restricted_readonly_without_rewriting_facts(
+    history_ready, monkeypatch
+):
+    from contextlib import contextmanager
+
+    from fastapi.testclient import TestClient
+
+    from apps.backend.src.app import create_app
+    from apps.backend.src.routers import football_history
+    from scripts.football_fixture_identity import link_official_history_fixture
+
+    conn = history_ready
+    mid, bid = history_pair(conn)
+    fid = link_official_history_fixture(conn, mid, batch_id=bid, source_match_id=5001)["fixture_id"]
+    expected = history_season(conn, fid)
+    before = rows(conn, "SELECT to_jsonb(m) FROM football_history_matches m")
+    with conn.cursor() as cur:
+        cur.execute("SELECT current_schema()")
+        schema = cur.fetchone()[0]
+        cur.execute(sql.SQL("GRANT USAGE ON SCHEMA {} TO fqp").format(sql.Identifier(schema)))
+        cur.execute(
+            sql.SQL("GRANT SELECT ON ALL TABLES IN SCHEMA {} TO fqp").format(sql.Identifier(schema))
+        )
+    conn.commit()
+    with conn.cursor() as cur:
+        cur.execute("SET ROLE fqp")
+        cur.execute("SET TRANSACTION READ ONLY")
+        cur.execute("SELECT rolsuper FROM pg_roles WHERE rolname=current_user")
+        assert cur.fetchone() == (False,)
+    data = match_history_reference(conn, mid, batch_id=bid)
+    season = data["fixture_season"]
+    assert data["status"] == "available"
+    assert season["fixture_id"] == fid
+    assert season["competition_season_id"] == expected["competition_season_id"]
+    assert season["competition_code"] == "premier-league"
+    assert season["competition_name"] == "英格兰超级联赛"
+    assert season["season_code"] == "premier-league:2024-2025"
+    assert season["season_name"] == "2024-2025"
+    assert str(season["planned_start_date"]) == "2024-08-16"
+    assert str(season["planned_end_date"]) == "2025-05-26"
+    assert season["source_timezone"] == "Asia/Shanghai"
+    assert (season["source_name"], season["source_competition_id"], season["source_season_id"]) == (
+        "sporttery",
+        "72",
+        "11817",
+    )
+    for key in ("boundary_evidence", "membership_evidence"):
+        assert set(season[key]) == {"url", "sha256", "captured_at"}
+        assert season[key]["url"].startswith("https://webapi.sporttery.cn/")
+        assert len(season[key]["sha256"]) == 64
+    # The fixed kickoff is outside the planned window. Explicit membership,
+    # rather than the date or legacy World Cup relationship, still wins.
+    assert data["source_match"]["season"] is None
+    assert rows(conn, "SELECT to_jsonb(m) FROM football_history_matches m") == before
+    assert rows(conn, "SHOW transaction_read_only") == [("on",)]
+
+    @contextmanager
+    def read_db():
+        yield conn
+
+    monkeypatch.setenv("FQP_AUTH_MODE", "none")
+    monkeypatch.setattr(football_history, "get_db", read_db)
+    response = TestClient(create_app()).get(f"/api/matches/{mid}/history-reference?batch_id={bid}")
+    assert response.status_code == 200
+    public = response.json()["fixture_season"]
+    assert public["planned_start_date"] == "2024-08-16"
+    assert public["planned_end_date"] == "2025-05-26"
+    assert public["membership_evidence"]["captured_at"] == "2026-10-30T12:00:00+00:00"
+    assert rows(conn, "SHOW transaction_read_only") == [("on",)]
+    conn.rollback()
+
+
+@pytest.mark.parametrize("namespace", ["jc.matchId", "uniformMatchId"])
+def test_explicit_season_does_not_require_titan_history_and_never_crosses_namespace(
+    history_ready, namespace
+):
+    conn = history_ready
+    mid = official(conn)
+    fid = rows(conn, "INSERT INTO football_fixtures DEFAULT VALUES RETURNING id")[0][0]
+    rows(
+        conn,
+        "INSERT INTO football_fixture_source_links(source_name,id_system,source_match_id,fixture_id,evidence) VALUES ('sporttery',%s,'9001',%s,'{}') RETURNING fixture_id",
+        (namespace, fid),
+    )
+    if namespace != "jc.matchId":
+        rows(
+            conn,
+            "INSERT INTO football_fixture_source_links(source_name,id_system,source_match_id,fixture_id,evidence) VALUES ('sporttery','jc.matchId','9003',%s,'{}') RETURNING fixture_id",
+            (fid,),
+        )
+    history_season(conn, fid, "9001" if namespace == "jc.matchId" else "9003")
+    conn.commit()
+    data = match_history_reference(conn, mid)
+    assert data["status"] == "unmatched" and data["rows"] == []
+    if namespace == "jc.matchId":
+        assert data["fixture_season"]["season_name"] == "2024-2025"
+    else:
+        assert data["fixture_season"] is None
+
+
+def test_history_never_promotes_raw_source_season_or_planned_boundaries_to_membership(
+    history_ready,
+):
+    from scripts.football_fixture_identity import link_official_history_fixture
+
+    conn = history_ready
+    mid, bid = history_pair(conn, source_season="2026世界杯")
+    link_official_history_fixture(conn, mid, batch_id=bid, source_match_id=5001)
+    # A valid source boundary exists, but only another fixture is a member.
+    other = rows(conn, "INSERT INTO football_fixtures DEFAULT VALUES RETURNING id")[0][0]
+    rows(
+        conn,
+        "INSERT INTO football_fixture_source_links(source_name,id_system,source_match_id,fixture_id,evidence) VALUES ('sporttery','jc.matchId','9003',%s,'{}') RETURNING fixture_id",
+        (other,),
+    )
+    history_season(conn, other, "9003")
+    conn.commit()
+    data = match_history_reference(conn, mid)
+    assert data["status"] == "available"
+    assert data["source_match"]["season"] == "2026世界杯"
+    assert data["fixture_season"] is None
 
 
 def test_history_identity_reads_original_published_facts_and_rolls_back(history_ready):

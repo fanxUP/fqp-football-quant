@@ -5,6 +5,7 @@ from typing import Literal
 from psycopg2.extras import RealDictCursor
 
 from scripts.football_fixture_identity import history_identity_conflicts
+from scripts.football_season_identity import read_fixture_seasons
 
 HistoryDomain = Literal[
     "match_stats", "events", "lineups", "predicted_lineups", "match_injuries", "odds_history"
@@ -53,6 +54,7 @@ def match_history_reference(
         "status": "unmatched",
         "batch": None,
         "source_match": None,
+        "fixture_season": None,
         "counts": {},
         "rows": [],
         "limit": limit,
@@ -66,16 +68,50 @@ def match_history_reference(
         if official is None:
             raise LookupError("所选比赛不存在")
         cur.execute(
-            """SELECT t.source_match_id FROM football_fixture_source_links j
-               JOIN football_fixture_source_links t ON t.fixture_id=j.fixture_id
+            """SELECT j.fixture_id,t.source_match_id FROM football_fixture_source_links j
+               LEFT JOIN football_fixture_source_links t ON t.fixture_id=j.fixture_id
+                 AND t.source_name='titan007' AND t.id_system='matchId'
                WHERE j.source_name='sporttery' AND j.id_system='jc.matchId'
-                 AND j.source_match_id=%s AND t.source_name='titan007'
-                 AND t.id_system='matchId'""",
+                 AND j.source_match_id=%s""",
             (official["source_match_id"],),
         )
         linked = cur.fetchone()
         source_id = None
         if linked is not None:
+            seasons = read_fixture_seasons(conn, [linked["fixture_id"]])
+            if seasons:
+                season = seasons[0]
+                result["fixture_season"] = {
+                    **{
+                        key: season[key]
+                        for key in (
+                            "fixture_id",
+                            "competition_id",
+                            "competition_season_id",
+                            "season_id",
+                            "competition_code",
+                            "season_code",
+                            "season_name",
+                            "planned_start_date",
+                            "planned_end_date",
+                            "source_timezone",
+                            "source_competition_id",
+                            "source_season_id",
+                        )
+                    },
+                    "competition_name": season["competition_name_cn"],
+                    "source_name": season["season_source_name"],
+                    **{
+                        target: {
+                            key: season[source].get(key) for key in ("url", "sha256", "captured_at")
+                        }
+                        for target, source in (
+                            ("boundary_evidence", "season_evidence"),
+                            ("membership_evidence", "membership_evidence"),
+                        )
+                    },
+                }
+        if linked is not None and linked["source_match_id"] is not None:
             raw = linked["source_match_id"]
             if not (
                 raw.isascii()

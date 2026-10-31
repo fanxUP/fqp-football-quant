@@ -1688,12 +1688,23 @@ export interface DashboardResponse<T> {
 }
 /** Research-only history; resolved timeline columns deliberately remain separate from raw JSON. */
 export type HistoryDomain = 'match_stats' | 'events' | 'lineups' | 'predicted_lineups' | 'match_injuries' | 'odds_history';
+export interface FixtureSeasonReference {
+  fixture_id: number; competition_id: number; competition_season_id: number; season_id: number;
+  competition_code: string; competition_name: string | null;
+  season_code: string; season_name: string;
+  planned_start_date: string; planned_end_date: string; source_timezone: string;
+  source_name: string; source_competition_id: string; source_season_id: string;
+  boundary_evidence: { url: string | null; sha256: string | null; captured_at: string | null };
+  membership_evidence: { url: string | null; sha256: string | null; captured_at: string | null };
+}
 export interface HistoryReference {
   match_id: number;
   domain: HistoryDomain;
   status: 'available' | 'unmatched' | 'ambiguous';
   batch: { id: number; source_name: string; imported_at: string; content_sha256: string; normalization_version: string } | null;
   source_match: { id: number; home_name: string | null; away_name: string | null; kickoff_at: string; season: string | null; status: string } | null;
+  /** Optional during frontend/backend rollout; absence never falls back to source text. */
+  fixture_season?: FixtureSeasonReference | null;
   counts: Partial<Record<HistoryDomain, number>>;
   rows: {
     key: string; side: 'home' | 'away' | null; origin: string; value: Record<string, unknown>;
