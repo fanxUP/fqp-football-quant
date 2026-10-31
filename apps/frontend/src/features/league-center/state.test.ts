@@ -2,6 +2,18 @@ import { describe, expect, it } from 'vitest';
 import { eventCenterHash, readEventCenterState } from './state';
 
 describe('league URL state', () => {
+  it('roundtrips the verified dataset and namespaced canonical competition', () => {
+    const state = readEventCenterState('#/events?view=league&dataset=verified&competition=sporttery:c4169e38cdfd&competition_season_id=42&tab=fixtures');
+    expect(state).toMatchObject({ dataset: 'verified', competition: 'sporttery:c4169e38cdfd', warning: null });
+    expect(readEventCenterState(eventCenterHash(state))).toEqual(state);
+  });
+  it('keeps an unselected verified catalog independent of the old default competition', () => {
+    expect(readEventCenterState('#/events?view=league&dataset=verified')).toMatchObject({ dataset: 'verified', competition: '', seasonId: null, tab: 'fixtures' });
+  });
+  it('warns on unknown datasets and duplicate dataset fields', () => {
+    expect(readEventCenterState('#/events?view=league&dataset=other').warning).not.toBeNull();
+    expect(readEventCenterState('#/events?view=league&dataset=verified&dataset=reference').warning).not.toBeNull();
+  });
   it('keeps the existing official entry as default', () => {
     expect(readEventCenterState('#/events').view).toBe('official');
   });

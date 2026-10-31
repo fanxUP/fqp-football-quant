@@ -226,4 +226,66 @@ describe('LeagueCenter integration (isolated fixed samples only)', () => {
     expect(within(row).queryByRole('link')).not.toBeInTheDocument();
     expect(within(row).getByText('竞彩映射待核实')).toBeInTheDocument();
   });
+  it('offers a distinct verified subset, clears old filters and exposes its planned dates', async () => {
+    const s = source();
+    const verifiedSeason = { ...structuredClone(season), dataset: 'verified' as const,
+      evidence: { ...evidence, sourceName: '中国体育彩票', completeness: 'partial' as const, asOf: null, batchId: null },
+      coverage: { teams: null, expectedTeams: null, fixtures: 1, expectedFixtures: null }, overview: null, standings: {}, teams: [], rounds: [],
+      seasonIdentity: { label: '2024-2025', sourceSeasonId: '11817', plannedStartDate: '2024-08-16', plannedEndDate: '2025-05-26', timeZone: 'Asia/Shanghai' } };
+    vi.mocked(s.catalog).mockImplementation(async dataset => dataset === 'verified' ? { dataset, status: 'connected', competitions: [{ code: 'sporttery:c4169e38cdfd', name: '英超', country: '英格兰', seasons: [{ id: 80, label: '2024-2025', isCurrent: false }] }] } : source().catalog());
+    vi.mocked(s.season).mockImplementation(async (id, dataset) => dataset === 'verified' ? { ...verifiedSeason, competitionSeasonId: id } : structuredClone(season));
+    vi.mocked(s.fixtures).mockImplementation(async query => ({ ...structuredClone(fixtures), competitionSeasonId: query.competitionSeasonId, dataset: query.dataset, evidence: query.dataset === 'verified' ? verifiedSeason.evidence : evidence }));
+    render(<Harness dataSource={s} />);
+    await screen.findByRole('button', { name: '查看球队 测试主队' });
+    fireEvent.change(screen.getByLabelText('数据范围'), { target: { value: 'verified' } });
+    expect(await screen.findByText(/计划赛季：2024-08-16 至 2025-05-26/)).toBeInTheDocument();
+    await screen.findByText('0 : 0');
+    expect(window.location.hash).toContain('dataset=verified');
+    expect(window.location.hash).toContain('competition=sporttery%3Ac4169e38cdfd');
+    expect(s.season).toHaveBeenLastCalledWith(80, 'verified');
+    expect(s.fixtures).toHaveBeenLastCalledWith(expect.objectContaining({ dataset: 'verified', batchId: undefined, offset: 0, teamId: null, roundId: null }));
+    expect(screen.getAllByText(/仅含已核实逐场赛季归属的竞彩比赛/).length).toBeGreaterThan(0);
+    expect(screen.queryByRole('button', { name: '查看球队 测试主队' })).not.toBeInTheDocument();
+  });
+  it('rejects a reference-only season response in the verified dataset', async () => {
+    window.history.replaceState(null, '', '#/events?view=league&dataset=verified&competition=premier-league&competition_season_id=42');
+    const s = source();
+    vi.mocked(s.catalog).mockResolvedValue({ ...await s.catalog(), dataset: 'verified' });
+    render(<Harness dataSource={s} />);
+    expect(await screen.findByRole('alert')).toHaveTextContent('返回资料与所选数据范围不一致');
+    expect(screen.queryByText('0 : 0')).not.toBeInTheDocument();
+  });
+
+  it('ignores a late reference season after switching to an empty verified catalog', async () => {
+    const s = source(); let resolveOld!: (data: LeagueSeasonData) => void;
+    vi.mocked(s.season).mockImplementationOnce(() => new Promise(resolve => { resolveOld = resolve; }));
+    vi.mocked(s.catalog).mockImplementation(async dataset => dataset === 'verified' ? { dataset, status: 'not_connected', competitions: [] } : source().catalog());
+    render(<Harness dataSource={s} />);
+    await waitFor(() => expect(s.season).toHaveBeenCalledWith(42));
+    fireEvent.change(screen.getByLabelText('数据范围'), { target: { value: 'verified' } });
+    await waitFor(() => expect(screen.getByText('数据未接入')).toBeInTheDocument());
+    await act(async () => resolveOld(structuredClone(season)));
+    expect(screen.queryByRole('button', { name: '查看球队 测试主队' })).not.toBeInTheDocument();
+    expect(s.fixtures).not.toHaveBeenCalled();
+    expect(window.location.hash).not.toContain('competition_season_id');
+  });
+  it('rejects reference fixtures returned to a verified season', async () => {
+    const s = source();
+    window.history.replaceState(null, '', '#/events?view=league&dataset=verified&competition=premier-league&competition_season_id=42');
+    vi.mocked(s.catalog).mockResolvedValue({ ...await s.catalog(), dataset: 'verified' });
+    vi.mocked(s.season).mockResolvedValue({ ...structuredClone(season), dataset: 'verified', evidence: { ...evidence, batchId: null } });
+    render(<Harness dataSource={s} />);
+    expect(await screen.findByRole('alert')).toHaveTextContent('返回赛程与所选数据范围不一致');
+    expect(screen.queryByText('0 : 0')).not.toBeInTheDocument();
+  });
+  it('keeps an explicit unknown verified season without substituting another year', async () => {
+    const s = source();
+    window.history.replaceState(null, '', '#/events?view=league&dataset=verified&competition=premier-league&competition_season_id=999');
+    vi.mocked(s.catalog).mockResolvedValue({ ...await s.catalog(), dataset: 'verified' });
+    render(<Harness dataSource={s} />);
+    expect(await screen.findByText('链接中的赛季暂无覆盖')).toBeInTheDocument();
+    expect(s.season).not.toHaveBeenCalled();
+    expect(window.location.hash).toContain('competition_season_id=999');
+  });
+
 });

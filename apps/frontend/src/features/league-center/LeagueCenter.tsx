@@ -5,7 +5,7 @@ import TeamName from '../../shared/components/TeamName';
 import Skeleton from '../../shared/components/Skeleton';
 import { sharedLeagueSource } from './dataSource';
 import type { EventCenterState } from './state';
-import type { LeagueDataSource, LeagueEvidence, LeagueFixtureQuery, LeagueSeasonData, LeagueStanding, StandingScope } from './types';
+import type { LeagueDataSource, LeagueDataset, LeagueEvidence, LeagueFixtureQuery, LeagueSeasonData, LeagueStanding, StandingScope } from './types';
 import './LeagueCenter.css';
 
 type Change = (patch: Partial<EventCenterState>, replace?: boolean) => void;
@@ -47,7 +47,7 @@ function Evidence({ value }: { value: LeagueEvidence }) {
     来源：{value.sourceName ?? '未知'} · 数据截止：{time(value.asOf) ?? '未知'}（北京时间）
     {' · '}{value.completeness === 'complete' ? '完整批次' : value.completeness === 'partial' ? '部分覆盖' : '暂无覆盖'}
     {value.batchId && <> · 批次：<span className="fqp-mono">{value.batchId}</span></>}
-    {value.stale && <strong className="lc-warning"> · 已过期</strong>}
+    {value.stale && <strong className="lc-warning"> · {value.asOf ? '已过期' : '时效待核实'}</strong>}
   </p>;
 }
 function ReadStatus({ error, hasData }: { error: string | null; hasData: boolean }) {
@@ -72,28 +72,46 @@ function DeferredFeatures() {
 export default function LeagueCenter({ source = sharedLeagueSource, state, onChange }: {
   source?: LeagueDataSource; state: EventCenterState; onChange: Change;
 }) {
-  const directory = useLeagueRead(source.catalog);
-  const competition = directory.data?.competitions.find(item => item.code === state.competition);
+  return <LeagueDirectory key={state.dataset} source={source} state={state} onChange={onChange} />;
+}
+
+function LeagueDirectory({ source, state, onChange }: { source: LeagueDataSource; state: EventCenterState; onChange: Change }) {
+  const loadCatalog = useCallback(async () => {
+    const result = await (state.dataset === 'verified' ? source.catalog('verified') : source.catalog());
+    if ((result.dataset ?? 'reference') !== state.dataset) throw new Error('返回目录与所选数据范围不一致');
+    return result;
+  }, [source, state.dataset]);
+  const directory = useLeagueRead(loadCatalog);
+  const competition = directory.data?.competitions.find(item => item.code === state.competition)
+    ?? (state.dataset === 'verified' && state.competition === '' && directory.data?.competitions.length === 1 ? directory.data.competitions[0] : undefined);
   const currentSeasons = competition?.seasons.filter(item => item.isCurrent) ?? [];
   const defaultSeason = currentSeasons.length === 1 ? currentSeasons[0] : competition?.seasons.length === 1 ? competition.seasons[0] : undefined;
   const selectedSeason = state.seasonId === null ? defaultSeason : competition?.seasons.find(item => item.id === state.seasonId);
   useEffect(() => {
-    if (state.seasonId === null && selectedSeason) onChange({ seasonId: selectedSeason.id, warning: state.warning }, true);
-  }, [state.seasonId, state.warning, selectedSeason?.id, onChange]);
+    if (competition && (state.competition !== competition.code || (state.seasonId === null && selectedSeason))) {
+      onChange({ competition: competition.code, ...(state.seasonId === null && selectedSeason ? { seasonId: selectedSeason.id } : {}), warning: state.warning }, true);
+    }
+  }, [state.competition, competition?.code, state.seasonId, state.warning, selectedSeason?.id, onChange]);
   const resetSeason = () => onChange({ seasonId: null, teamId: null, page: 1, roundId: null, status: 'all', scope: 'all' });
 
   return <div className="lc-page">
     <PageHeader title="赛事中心" subtitle="联赛资料 · 赛季事实、积分形势与赛程赛果" />
+    <label>数据范围<select aria-label="数据范围" value={state.dataset} onChange={e => {
+      const dataset = e.target.value as LeagueDataset;
+      onChange({ dataset, competition: dataset === 'verified' ? '' : 'premier-league', seasonId: null,
+        tab: dataset === 'verified' ? 'fixtures' : 'standings', teamId: null, page: 1, roundId: null, status: 'all', scope: 'all' });
+    }}><option value="reference">联赛资料</option><option value="verified">竞彩 · 已核实赛季归属</option></select></label>
+    {state.dataset === 'verified' && <p className="lc-help">仅含已核实逐场赛季归属的竞彩比赛；不代表全联赛或全部传统足彩赛事。没有完整积分榜、球员或规范球队资料时保留未知。</p>}
     {state.warning && <p role="alert" className="lc-warning">{state.warning}</p>}
     <ReadStatus error={directory.error} hasData={!!directory.data} />
     {directory.loading && !directory.data ? <div role="status" aria-label="加载联赛目录"><Skeleton variant="card" height={120} /></div> : <>
       <div className="lc-toolbar">
-        <label>联赛<select value={competition ? state.competition : ''} disabled={!directory.data?.competitions.length}
+        <label>联赛<select aria-label="联赛" value={competition?.code ?? ''} disabled={!directory.data?.competitions.length}
           onChange={e => onChange({ competition: e.target.value, seasonId: null, teamId: null, page: 1, roundId: null, status: 'all', scope: 'all' })}>
           {!competition && <option value="">请选择联赛</option>}
           {directory.data?.competitions.map(item => <option value={item.code} key={item.code}>{item.name} · {item.country}</option>)}
         </select></label>
-        <label>赛季<select value={selectedSeason?.id ?? ''} disabled={!competition?.seasons.length}
+        <label>赛季<select aria-label="赛季" value={selectedSeason?.id ?? ''} disabled={!competition?.seasons.length}
           onChange={e => onChange({ seasonId: e.target.value ? Number(e.target.value) : null, teamId: null, page: 1, roundId: null, status: 'all', scope: 'all' })}>
           {!selectedSeason && <option value="">{competition?.seasons.length ? '请选择赛季' : '赛季待接入'}</option>}
           {competition?.seasons.map(item => <option key={item.id} value={item.id}>{item.label}{item.isCurrent ? ' · 当前赛季' : ''}</option>)}
@@ -101,7 +119,7 @@ export default function LeagueCenter({ source = sharedLeagueSource, state, onCha
         <span className="lc-connection">{directory.data?.status === 'connected' ? '共享资料' : '数据未接入'}</span>
         <button type="button" disabled={directory.loading} onClick={directory.refresh}>刷新联赛目录</button>
       </div>
-      {!directory.data ? null : !competition ? <Notice title="链接中的联赛尚未配置">请选择已配置联赛。</Notice>
+      {!directory.data ? null : !competition ? <Notice title={state.competition ? "链接中的联赛尚未配置" : "请选择联赛"}>请选择已配置联赛。</Notice>
         : state.seasonId !== null && !selectedSeason ? <Notice title="链接中的赛季暂无覆盖">
           未自动替换为其他赛季。<button type="button" onClick={resetSeason}>返回可用赛季</button>
         </Notice>
@@ -123,10 +141,11 @@ export default function LeagueCenter({ source = sharedLeagueSource, state, onCha
 
 function SeasonContent({ source, seasonId, state, onChange }: { source: LeagueDataSource; seasonId: number; state: EventCenterState; onChange: Change }) {
   const loader = useCallback(async () => {
-    const result = await source.season(seasonId);
+    const result = await (state.dataset === 'verified' ? source.season(seasonId, 'verified') : source.season(seasonId));
+    if ((result.dataset ?? 'reference') !== state.dataset) throw new Error('返回资料与所选数据范围不一致');
     if (result.competitionSeasonId !== seasonId) throw new Error('返回资料与所选赛季不一致');
     return result;
-  }, [source, seasonId]);
+  }, [source, seasonId, state.dataset]);
   const resource = useLeagueRead(loader);
   const data = resource.data;
   const openTeam = (teamId: number) => onChange({ tab: 'teams', teamId, page: 1, roundId: null, status: 'all' });
@@ -136,6 +155,7 @@ function SeasonContent({ source, seasonId, state, onChange }: { source: LeagueDa
     <ReadStatus error={resource.error} hasData={!!data} />
     {resource.loading && !data && <div role="status" aria-label="加载赛季资料"><Skeleton variant="card" height={160} /></div>}
     {data && <>
+      {data.seasonIdentity && <p className="lc-help">计划赛季：{data.seasonIdentity.plannedStartDate} 至 {data.seasonIdentity.plannedEndDate}（{data.seasonIdentity.timeZone}）。逐场归属以明确证据为准，延期越界不自动移出赛季。</p>}
       <Evidence value={data.evidence} />
       <p className="lc-coverage">球队覆盖：{shown(data.coverage.teams)} / {data.coverage.expectedTeams ?? '未知'} · 赛程覆盖：{shown(data.coverage.fixtures)} / {data.coverage.expectedFixtures ?? '未知'}。覆盖未知时不代表全联赛。</p>
       <div className="lc-overview" aria-label="联赛概览">
@@ -193,15 +213,15 @@ function Teams({ source, data, state, onChange, openTeam }: { source: LeagueData
 }
 
 function Fixtures({ source, data, state, onChange, teamId }: { source: LeagueDataSource; data: LeagueSeasonData; state: EventCenterState; onChange: Change; teamId: number | null }) {
-  const query: LeagueFixtureQuery = { competitionSeasonId: data.competitionSeasonId, batchId: data.evidence.batchId ?? undefined, roundId: state.roundId, status: state.status, teamId, limit: PAGE_SIZE, offset: (state.page - 1) * PAGE_SIZE };
+  const query: LeagueFixtureQuery = { ...(state.dataset === 'verified' ? { dataset: state.dataset } : {}), competitionSeasonId: data.competitionSeasonId, batchId: data.evidence.batchId ?? undefined, roundId: state.roundId, status: state.status, teamId, limit: PAGE_SIZE, offset: (state.page - 1) * PAGE_SIZE };
   if (query.roundId !== null && !data.rounds.some(round => round.id === query.roundId)) return <Notice title="所选轮次暂无覆盖"><button type="button" onClick={() => onChange({ roundId: null, page: 1 })}>查看全部轮次</button></Notice>;
   if (!Number.isSafeInteger(query.offset)) return <Notice title="赛程页码超出范围"><button type="button" onClick={() => onChange({ page: 1 })}>返回第一页</button></Notice>;
   return <div className="lc-fixtures">
     <div className="lc-fixture-filters">
-      <label>轮次<select value={state.roundId ?? ''} onChange={e => onChange({ roundId: e.target.value || null, page: 1 })}>
+      <label>轮次<select aria-label="轮次" value={state.roundId ?? ''} onChange={e => onChange({ roundId: e.target.value || null, page: 1 })}>
         <option value="">全部轮次</option>{data.rounds.map(round => <option key={round.id} value={round.id}>{round.label}</option>)}
       </select></label>
-      <label>赛程状态<select value={state.status} onChange={e => onChange({ status: e.target.value as EventCenterState['status'], page: 1 })}>
+      <label>赛程状态<select aria-label="赛程状态" value={state.status} onChange={e => onChange({ status: e.target.value as EventCenterState['status'], page: 1 })}>
         <option value="all">全部状态</option><option value="finished">已结束</option><option value="upcoming">未开赛</option><option value="postponed">已延期</option>
       </select></label>
     </div>
@@ -211,10 +231,11 @@ function Fixtures({ source, data, state, onChange, teamId }: { source: LeagueDat
 function FixtureResults({ source, query, page, onChange }: { source: LeagueDataSource; query: LeagueFixtureQuery; page: number; onChange: Change }) {
   const loader = useCallback(async () => {
     const result = await source.fixtures(query);
+    if ((result.dataset ?? 'reference') !== (query.dataset ?? 'reference')) throw new Error('返回赛程与所选数据范围不一致');
     if (result.competitionSeasonId !== query.competitionSeasonId) throw new Error('返回赛程与所选赛季不一致');
     if (query.batchId && result.evidence.batchId !== query.batchId) throw new Error('返回赛程与所选资料批次不一致');
     return result;
-  }, [source, query.competitionSeasonId, query.batchId, query.roundId, query.status, query.teamId, query.limit, query.offset]);
+  }, [source, query.dataset, query.competitionSeasonId, query.batchId, query.roundId, query.status, query.teamId, query.limit, query.offset]);
   const resource = useLeagueRead(loader);
   const result = resource.data;
   const pages = result ? Math.max(1, Math.ceil(result.total / PAGE_SIZE)) : 1;
@@ -224,7 +245,7 @@ function FixtureResults({ source, query, page, onChange }: { source: LeagueDataS
     {resource.loading && !result && <div role="status" aria-label="加载赛程"><Skeleton variant="card" height={180} /></div>}
     {result && <>
       <Evidence value={result.evidence} />
-      <p className="lc-help">开球时间为北京时间。联赛资料包含非竞彩比赛；仅已核实关联的官方比赛可进入现有分析。</p>
+      <p className="lc-help">{query.dataset === 'verified' ? '开球时间为北京时间。仅含已核实逐场赛季归属的竞彩比赛；比分只展示已确认结果，不补算联赛积分。' : '开球时间为北京时间。联赛资料包含非竞彩比赛；仅已核实关联的官方比赛可进入现有分析。'}</p>
       {page > pages ? <Notice title="该页超出当前赛程范围"><button type="button" onClick={() => onChange({ page: 1 })}>返回第一页</button></Notice>
         : result.rows.length === 0 ? <Notice title="当前筛选暂无赛程">可以切换轮次或状态查看。</Notice>
         : <ul className="lc-fixture-list">{result.rows.map(match => {

@@ -3,8 +3,8 @@ import type { LeagueDataSource } from './types';
 
 /** Same-origin shared PostgreSQL reads through the ordinary session-auth API client. */
 export const sharedLeagueSource: LeagueDataSource = {
-  catalog: () => api.leagues.catalog(),
-  season: id => api.leagues.season(id),
+  catalog: dataset => api.leagues.catalog(dataset),
+  season: (id, dataset) => api.leagues.season(id, dataset),
   fixtures: query => api.leagues.fixtures(query),
 };
 

@@ -671,10 +671,11 @@ export const api = {
 
   // Shared, read-only supplementary league data. Browsing never collects data.
   leagues: {
-    catalog: () => request<import('../features/league-center/types').LeagueCatalog>('/api/league-data/catalog'),
-    season: (id: number) => request<import('../features/league-center/types').LeagueSeasonData>(`/api/league-data/seasons/${id}`),
+    catalog: (dataset?: import('../features/league-center/types').LeagueDataset) => request<import('../features/league-center/types').LeagueCatalog>(`/api/league-data/catalog${qs({ dataset: dataset === 'verified' ? dataset : undefined })}`),
+    season: (id: number, dataset?: import('../features/league-center/types').LeagueDataset) => request<import('../features/league-center/types').LeagueSeasonData>(`/api/league-data/seasons/${id}${qs({ dataset: dataset === 'verified' ? dataset : undefined })}`),
     fixtures: (query: import('../features/league-center/types').LeagueFixtureQuery) =>
       request<import('../features/league-center/types').LeagueFixturePage>(`/api/league-data/seasons/${query.competitionSeasonId}/fixtures${qs({
+        dataset: query.dataset === 'verified' ? query.dataset : undefined,
         round_id: query.roundId ?? undefined, status: query.status, team_id: query.teamId ?? undefined,
         limit: query.limit, offset: query.offset, batch_id: query.batchId,
       })}`),

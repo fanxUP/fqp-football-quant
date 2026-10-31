@@ -297,7 +297,11 @@ def import_season(conn, data, *, dry_run=False):
             raise
 
 
-def league_catalog(conn):
+def league_catalog(conn, *, dataset="reference"):
+    if dataset not in ("reference", "verified"):
+        raise ValueError("联赛资料范围无效")
+    if dataset == "verified":
+        return _verified_catalog(conn)
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
             """SELECT DISTINCT ON (b.competition_season_id) b.competition_season_id,
@@ -417,7 +421,11 @@ def _form(cur, batch, team_ids, scope):
     return forms
 
 
-def league_season(conn, season_id):
+def league_season(conn, season_id, *, dataset="reference"):
+    if dataset not in ("reference", "verified"):
+        raise ValueError("联赛资料范围无效")
+    if dataset == "verified":
+        return _verified_season_data(conn, season_id)
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         batch = _batch(cur, season_id)
         quality = batch["quality"]
@@ -496,16 +504,30 @@ def league_season(conn, season_id):
 
 
 def league_fixtures(
-    conn, season_id, *, round_id=None, status="all", team_id=None, limit=20, offset=0, batch_id=None
+    conn,
+    season_id,
+    *,
+    round_id=None,
+    status="all",
+    team_id=None,
+    limit=20,
+    offset=0,
+    batch_id=None,
+    dataset="reference",
 ):
     if (
-        status not in ("all", "finished", "upcoming", "postponed")
+        dataset not in ("reference", "verified")
+        or status not in ("all", "finished", "upcoming", "postponed")
         or type(limit) is not int
         or not 1 <= limit <= 100
         or type(offset) is not int
         or offset < 0
     ):
         raise ValueError("赛程筛选或分页参数无效")
+    if dataset == "verified":
+        if batch_id is not None or round_id is not None or team_id is not None:
+            raise ValueError("核实归属赛程不支持联赛资料批次、轮次或规范球队筛选")
+        return _verified_fixtures(conn, season_id, status=status, limit=limit, offset=offset)
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         batch = _batch(cur, season_id, batch_id)
         if team_id is not None and team_id not in batch["quality"]["team_ids"]:
@@ -546,3 +568,150 @@ def league_fixtures(
             for row in rows
         ],
     }
+
+
+# This subset joins immutable, explicit memberships, never the planned dates or
+# provider season labels. Source IDs are meaningful only in their namespaces.
+_VERIFIED_SEASONS = """FROM football_competition_season_sources s
+    JOIN competition_seasons cs ON cs.id=s.competition_season_id
+    JOIN competitions c ON c.id=cs.competition_id
+    JOIN seasons y ON y.id=cs.season_id
+    WHERE s.source_name='sporttery' AND s.id_system='uniform.leagueId+seasonId'
+      AND c.competition_type='league' AND NOT COALESCE(c.is_cup,false)"""
+_VERIFIED_FIXTURES = """FROM football_fixture_season_catalog m
+    JOIN football_fixture_source_links j ON j.fixture_id=m.fixture_id
+      AND j.source_name='sporttery' AND j.id_system='jc.matchId'
+    JOIN official_matches o ON o.source_match_id=j.source_match_id AND o.sport_type='football'
+    LEFT JOIN official_results r ON r.match_id=o.id
+    WHERE m.competition_season_id=%s AND m.season_source_name='sporttery'
+      AND m.season_id_system='uniform.leagueId+seasonId'"""
+_CONFIRMED_SCORE = (
+    """r.result_status='confirmed' AND r.full_home_goals>=0 AND r.full_away_goals>=0"""
+)
+_VERIFIED_STATUS = f"""CASE WHEN {_CONFIRMED_SCORE} THEN 'finished'
+    WHEN o.match_status IN ('scheduled','live','finished','postponed','cancelled') THEN o.match_status
+    ELSE 'unknown' END"""
+
+
+def _verified_evidence():
+    # Neither the membership capture nor this request time is the official facts'
+    # publication/as-of time. No reference batch or full-league claim is invented.
+    return dict(
+        sourceName="中国体育彩票（已核实竞彩归属）",
+        asOf=None,
+        batchId=None,
+        completeness="partial",
+        stale=True,
+    )
+
+
+def _verified_catalog(conn):
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            "SELECT s.competition_season_id,c.competition_code,c.competition_name_cn,c.country,y.season_name "
+            + _VERIFIED_SEASONS
+            + " ORDER BY c.competition_code,y.season_name DESC,s.competition_season_id"
+        )
+        records = cur.fetchall()
+    competitions = {}
+    for row in records:
+        item = competitions.setdefault(
+            row["competition_code"],
+            dict(
+                code=row["competition_code"],
+                name=row["competition_name_cn"],
+                country=row["country"] or "未知",
+                seasons=[],
+            ),
+        )
+        item["seasons"].append(
+            dict(id=row["competition_season_id"], label=row["season_name"], isCurrent=False)
+        )
+    return dict(
+        dataset="verified",
+        status="connected" if records else "not_connected",
+        competitions=list(competitions.values()),
+    )
+
+
+def _verified_season(cur, season_id):
+    cur.execute(
+        "SELECT s.source_season_id,s.planned_start_date,s.planned_end_date,s.source_timezone,y.season_name "
+        + _VERIFIED_SEASONS
+        + " AND s.competition_season_id=%s",
+        (season_id,),
+    )
+    row = cur.fetchone()
+    if row is None:
+        raise LookupError("所选赛季尚无已核实的体彩赛季来源")
+    return row
+
+
+def _verified_season_data(conn, season_id):
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        season = _verified_season(cur, season_id)
+        cur.execute("SELECT count(*) AS total " + _VERIFIED_FIXTURES, (season_id,))
+        count = cur.fetchone()["total"]
+    return dict(
+        dataset="verified",
+        competitionSeasonId=season_id,
+        evidence=_verified_evidence(),
+        coverage=dict(teams=None, expectedTeams=None, fixtures=count, expectedFixtures=None),
+        overview=None,
+        standings={},
+        teams=[],
+        rounds=[],
+        seasonIdentity=dict(
+            label=season["season_name"],
+            sourceSeasonId=season["source_season_id"],
+            plannedStartDate=season["planned_start_date"].isoformat(),
+            plannedEndDate=season["planned_end_date"].isoformat(),
+            timeZone=season["source_timezone"],
+        ),
+    )
+
+
+def _verified_fixtures(conn, season_id, *, status, limit, offset):
+    where = _VERIFIED_FIXTURES
+    values = [season_id]
+    if status != "all":
+        where += " AND (" + _VERIFIED_STATUS + ")=%s"
+        values.append("scheduled" if status == "upcoming" else status)
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        _verified_season(cur, season_id)
+        cur.execute("SELECT count(*) AS total " + where, values)
+        total = cur.fetchone()["total"]
+        cur.execute(
+            "SELECT m.fixture_id,o.id AS official_id,o.home_team_name,o.away_team_name,"
+            "o.kickoff_time AT TIME ZONE 'Asia/Shanghai' AS kickoff,"
+            + _VERIFIED_STATUS
+            + " AS status,CASE WHEN "
+            + _CONFIRMED_SCORE
+            + " THEN r.full_home_goals END AS home_goals,CASE WHEN "
+            + _CONFIRMED_SCORE
+            + " THEN r.full_away_goals END AS away_goals "
+            + where
+            + " ORDER BY o.kickoff_time,m.fixture_id LIMIT %s OFFSET %s",
+            [*values, limit, offset],
+        )
+        rows = cur.fetchall()
+    return dict(
+        dataset="verified",
+        competitionSeasonId=season_id,
+        evidence=_verified_evidence(),
+        total=total,
+        rows=[
+            dict(
+                id=f"fqp:fixture:{row['fixture_id']}",
+                home=dict(id=None, name=row["home_team_name"], manager=None, stadium=None),
+                away=dict(id=None, name=row["away_team_name"], manager=None, stadium=None),
+                kickoff=row["kickoff"].isoformat(),
+                roundId=None,
+                status=row["status"],
+                homeGoals=row["home_goals"],
+                awayGoals=row["away_goals"],
+                officialMatch=dict(id=row["official_id"], verification="verified"),
+            )
+            for row in rows
+        ],
+    )

@@ -1,4 +1,5 @@
 /** Shared UI read contract. Canonical IDs come from FQP, never provider IDs or array positions. */
+export type LeagueDataset = 'reference' | 'verified';
 export type StandingScope = 'all' | 'home' | 'away' | 'form';
 export type FixtureFilter = 'all' | 'finished' | 'upcoming' | 'postponed';
 export interface LeagueEvidence {
@@ -9,6 +10,7 @@ export interface LeagueEvidence {
   stale: boolean;
 }
 export interface LeagueCatalog {
+  dataset?: LeagueDataset;
   status: 'connected' | 'not_connected';
   competitions: {
     code: string;
@@ -38,6 +40,8 @@ export interface LeagueStanding {
   note: string | null;
 }
 export interface LeagueSeasonData {
+  dataset?: LeagueDataset;
+  seasonIdentity?: { label: string; sourceSeasonId: string; plannedStartDate: string; plannedEndDate: string; timeZone: string };
   competitionSeasonId: number;
   evidence: LeagueEvidence;
   coverage: { teams: number | null; expectedTeams: number | null; fixtures: number | null; expectedFixtures: number | null };
@@ -55,8 +59,8 @@ export interface LeagueSeasonData {
 }
 export interface LeagueFixture {
   id: string; // namespaced reference ID; never used as official match ID
-  home: LeagueTeam;
-  away: LeagueTeam;
+  home: Omit<LeagueTeam, 'id'> & { id: number | null };
+  away: Omit<LeagueTeam, 'id'> & { id: number | null };
   kickoff: string | null;
   roundId: string | null;
   status: 'scheduled' | 'live' | 'finished' | 'postponed' | 'cancelled' | 'unknown';
@@ -65,6 +69,7 @@ export interface LeagueFixture {
   officialMatch: { id: number; verification: 'verified' | 'pending' } | null;
 }
 export interface LeagueFixtureQuery {
+  dataset?: LeagueDataset;
   competitionSeasonId: number;
   batchId?: string; // freeze pagination to the selected season resource's revision
   roundId: string | null;
@@ -74,6 +79,7 @@ export interface LeagueFixtureQuery {
   offset: number;
 }
 export interface LeagueFixturePage {
+  dataset?: LeagueDataset;
   competitionSeasonId: number;
   evidence: LeagueEvidence;
   total: number; // exact filtered count, not returned row count
@@ -81,7 +87,7 @@ export interface LeagueFixturePage {
 }
 /** Future implementation reads shared FQP APIs only; it must not collect data from the page. */
 export interface LeagueDataSource {
-  catalog: () => Promise<LeagueCatalog>;
-  season: (competitionSeasonId: number) => Promise<LeagueSeasonData>;
+  catalog: (dataset?: LeagueDataset) => Promise<LeagueCatalog>;
+  season: (competitionSeasonId: number, dataset?: LeagueDataset) => Promise<LeagueSeasonData>;
   fixtures: (query: LeagueFixtureQuery) => Promise<LeagueFixturePage>;
 }

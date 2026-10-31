@@ -1066,3 +1066,176 @@ def test_migration_lock_timeout_rolls_back_partial_structure(database):
             (schema,),
         ) == [(0,)]
         locker.rollback()
+
+
+@pytest.fixture
+def verified_league(history_ready):
+    from scripts.football_fixture_identity import link_official_history_fixture
+
+    conn = history_ready
+    mid, bid = history_pair(conn)
+    fid = link_official_history_fixture(conn, mid, batch_id=bid, source_match_id=5001)["fixture_id"]
+    csid = history_season(conn, fid)["competition_season_id"]
+    # Same clock/league and same-number foreign namespaces do not prove membership.
+    extra = official(conn, source="9002", code="周五002")
+    foreign = rows(conn, "INSERT INTO football_fixtures DEFAULT VALUES RETURNING id")[0][0]
+    rows(
+        conn,
+        "INSERT INTO football_fixture_source_links VALUES ('sporttery','uniformMatchId','9002',%s,'{}',now()) RETURNING fixture_id",
+        (foreign,),
+    )
+    rows(
+        conn,
+        """INSERT INTO football_fixture_seasons(fixture_id,season_source_id,source_name,match_id_system,source_match_id,evidence)
+        SELECT %s,season_source_id,'sporttery','uniformMatchId','9002',evidence FROM football_fixture_seasons
+        WHERE fixture_id=%s RETURNING fixture_id""",
+        (foreign, fid),
+    )
+    conn.commit()
+    return conn, csid, mid, fid, extra
+
+
+def test_verified_league_uses_explicit_members_outside_window_and_preserves_facts(verified_league):
+    from scripts.league_reference_storage import league_catalog, league_fixtures, league_season
+
+    conn, csid, mid, fid, _ = verified_league
+    before = rows(conn, "SELECT to_jsonb(o) FROM official_matches o ORDER BY id")
+    directory = league_catalog(conn, dataset="verified")
+    assert directory["dataset"] == "verified"
+    assert directory["competitions"][0]["seasons"] == [
+        dict(id=csid, label="2024-2025", isCurrent=False)
+    ]
+    season = league_season(conn, csid, dataset="verified")
+    assert season["coverage"] == dict(
+        teams=None, expectedTeams=None, fixtures=1, expectedFixtures=None
+    )
+    assert season["overview"] is None and season["standings"] == {} and season["teams"] == []
+    assert season["seasonIdentity"]["plannedEndDate"] == "2025-05-26"
+    assert season["evidence"]["asOf"] is None and season["evidence"]["batchId"] is None
+    result = league_fixtures(conn, csid, dataset="verified")
+    assert result["total"] == 1 and len(result["rows"]) == 1
+    row = result["rows"][0]
+    assert row["id"] == f"fqp:fixture:{fid}"
+    assert row["officialMatch"] == dict(id=mid, verification="verified")
+    assert row["home"] == dict(id=None, name="主1", manager=None, stadium=None)
+    assert row["status"] == "finished" and (row["homeGoals"], row["awayGoals"]) == (2, 1)
+    assert datetime.fromisoformat(row["kickoff"]) == datetime.fromisoformat(
+        "2026-10-30T20:00:00+08:00"
+    )
+    assert rows(conn, "SELECT to_jsonb(o) FROM official_matches o ORDER BY id") == before
+
+
+@pytest.mark.parametrize(
+    "query,total",
+    [
+        ({}, 1),
+        ({"status": "finished"}, 1),
+        ({"status": "upcoming"}, 0),
+        ({"limit": 1, "offset": 1}, 1),
+    ],
+)
+def test_verified_league_filters_and_exact_total(verified_league, query, total):
+    from scripts.league_reference_storage import league_fixtures
+
+    conn, csid, *_ = verified_league
+    result = league_fixtures(conn, csid, dataset="verified", **query)
+    assert result["total"] == total
+    assert len(result["rows"]) == (0 if query.get("offset") or total == 0 else 1)
+
+
+@pytest.mark.parametrize("match_status", ["scheduled", "finished", "postponed", "live", "unknown"])
+def test_verified_league_pending_results_never_show_confirmed_score(verified_league, match_status):
+    from scripts.league_reference_storage import league_fixtures
+
+    conn, csid, mid, *_ = verified_league
+    rows(
+        conn,
+        "UPDATE official_results SET result_status='pending' WHERE match_id=%s RETURNING id",
+        (mid,),
+    )
+    rows(
+        conn,
+        "UPDATE official_matches SET match_status=%s WHERE id=%s RETURNING id",
+        (match_status, mid),
+    )
+    result = league_fixtures(conn, csid, dataset="verified")
+    assert result["rows"][0]["homeGoals"] is None
+    assert result["rows"][0]["awayGoals"] is None
+    assert result["rows"][0]["status"] == match_status
+
+
+def test_verified_league_boundary_only_empty_season_is_not_inferred(verified_league):
+    from scripts.football_season_identity import import_season
+    from scripts.league_reference_storage import league_catalog, league_fixtures, league_season
+    from tests.test_computation.test_football_season_identity import document, material
+
+    conn, *_ = verified_league
+    data = material()
+    data.update(
+        season_code="premier-league:2023-2024",
+        season_name="2023-2024",
+        boundary_document=document(season=10906),
+        members=[],
+        member_documents=[],
+    )
+    # Fixed evidence window is deliberately the same: dates never create a member.
+    csid = import_season(conn, data)["competition_season_id"]
+    conn.commit()
+    directory = league_catalog(conn, dataset="verified")
+    assert len(directory["competitions"][0]["seasons"]) == 2
+    assert league_season(conn, csid, dataset="verified")["coverage"]["fixtures"] == 0
+    assert league_fixtures(conn, csid, dataset="verified")["rows"] == []
+    with pytest.raises(LookupError):
+        league_season(conn, 999999, dataset="verified")
+
+
+def test_verified_league_runs_as_restricted_readonly_and_serializes_via_api(
+    verified_league, monkeypatch
+):
+    from contextlib import contextmanager
+
+    from fastapi.testclient import TestClient
+
+    from apps.backend.src.app import create_app
+    from apps.backend.src.routers import league_data
+
+    conn, csid, mid, *_ = verified_league
+    with conn.cursor() as cur:
+        cur.execute("SELECT current_schema()")
+        schema = cur.fetchone()[0]
+        cur.execute(sql.SQL("GRANT USAGE ON SCHEMA {} TO fqp").format(sql.Identifier(schema)))
+        cur.execute(
+            sql.SQL("GRANT SELECT ON ALL TABLES IN SCHEMA {} TO fqp").format(sql.Identifier(schema))
+        )
+    conn.commit()
+    with conn.cursor() as cur:
+        cur.execute("SET ROLE fqp")
+        cur.execute("SET TRANSACTION READ ONLY")
+
+    @contextmanager
+    def read_db():
+        yield conn
+
+    monkeypatch.setenv("FQP_AUTH_MODE", "none")
+    monkeypatch.setattr(league_data, "get_db", read_db)
+    client = TestClient(create_app())
+    assert client.get("/api/league-data/catalog?dataset=verified").json()["dataset"] == "verified"
+    detail = client.get(f"/api/league-data/seasons/{csid}?dataset=verified")
+    assert detail.status_code == 200
+    assert detail.json()["seasonIdentity"]["plannedEndDate"] == "2025-05-26"
+    result = client.get(f"/api/league-data/seasons/{csid}/fixtures?dataset=verified&limit=1")
+    assert result.status_code == 200 and result.json()["rows"][0]["officialMatch"]["id"] == mid
+    assert rows(conn, "SHOW transaction_read_only") == [("on",)]
+    assert rows(conn, "SHOW statement_timeout") == [("5s",)]
+    assert rows(conn, "SHOW lock_timeout") == [("2s",)]
+    assert rows(conn, "SELECT rolsuper FROM pg_roles WHERE rolname=current_user") == [(False,)]
+    conn.rollback()
+
+
+@pytest.mark.parametrize("key,value", [("batch_id", 1), ("team_id", 1), ("round_id", "r1")])
+def test_verified_league_rejects_reference_filters(verified_league, key, value):
+    from scripts.league_reference_storage import league_fixtures
+
+    conn, csid, *_ = verified_league
+    with pytest.raises(ValueError):
+        league_fixtures(conn, csid, dataset="verified", **{key: value})

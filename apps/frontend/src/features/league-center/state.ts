@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { FixtureFilter, StandingScope } from './types';
+import type { FixtureFilter, LeagueDataset, StandingScope } from './types';
 
 export interface EventCenterState {
   view: 'official' | 'league';
+  dataset: LeagueDataset;
   competition: string;
   seasonId: number | null;
   tab: 'standings' | 'fixtures' | 'teams';
@@ -36,14 +37,16 @@ export function readEventCenterState(hash = window.location.hash): EventCenterSt
   const token = (key: string, fallback: string | null) => {
     const raw = single(key);
     if (raw === null) return fallback;
-    if (/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/.test(raw)) return raw;
+    if ((key === 'competition' ? /^[a-zA-Z0-9][a-zA-Z0-9_:-]{0,63}$/ : /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/).test(raw)) return raw;
     invalid = true; return fallback;
   };
+  const dataset = choice('dataset', ['reference', 'verified'], 'reference');
   const state: EventCenterState = {
+    dataset,
     view: choice('view', ['official', 'league'], 'official'),
-    competition: token('competition', 'premier-league')!,
+    competition: token('competition', dataset === 'verified' ? '' : 'premier-league')!,
     seasonId: integer('competition_season_id', null),
-    tab: choice('tab', ['standings', 'fixtures', 'teams'], 'standings'),
+    tab: choice('tab', ['standings', 'fixtures', 'teams'], dataset === 'verified' ? 'fixtures' : 'standings'),
     scope: choice('scope', ['all', 'home', 'away', 'form'], 'all'),
     status: choice('status', ['all', 'finished', 'upcoming', 'postponed'], 'all'),
     roundId: token('round', null), teamId: integer('team_id', null), page: integer('page', 1)!, warning: null,
@@ -55,9 +58,10 @@ export function eventCenterHash(state: EventCenterState): string {
   const params = new URLSearchParams();
   if (state.view === 'league') {
     params.set('view', 'league');
-    if (state.competition !== 'premier-league') params.set('competition', state.competition);
+    if (state.dataset === 'verified') params.set('dataset', state.dataset);
+    if (state.competition && (state.dataset === 'verified' || state.competition !== 'premier-league')) params.set('competition', state.competition);
     if (state.seasonId !== null) params.set('competition_season_id', String(state.seasonId));
-    if (state.tab !== 'standings') params.set('tab', state.tab);
+    if (state.tab !== (state.dataset === 'verified' ? 'fixtures' : 'standings')) params.set('tab', state.tab);
     if (state.scope !== 'all') params.set('scope', state.scope);
     if (state.status !== 'all') params.set('status', state.status);
     if (state.roundId !== null) params.set('round', state.roundId);

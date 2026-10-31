@@ -23,4 +23,15 @@ describe('shared PostgreSQL league adapter', () => {
     await expect(sharedLeagueSource.catalog()).rejects.toThrow('联赛读取失败');
     expect(fetch).toHaveBeenCalledTimes(1);
   });
+  it('carries the verified read scope through every existing endpoint', async () => {
+    const fetch = vi.fn().mockImplementation(async () => new Response('{}', { status: 200 }));
+    vi.stubGlobal('fetch', fetch);
+    await sharedLeagueSource.catalog('verified');
+    await sharedLeagueSource.season(80, 'verified');
+    await sharedLeagueSource.fixtures({ dataset: 'verified', competitionSeasonId: 80, roundId: null, status: 'finished', teamId: null, limit: 20, offset: 20 });
+    const urls = fetch.mock.calls.map(call => new URL(String(call[0]), 'http://localhost'));
+    expect(urls.every(url => url.searchParams.get('dataset') === 'verified')).toBe(true);
+    expect(urls[2].searchParams.has('batch_id')).toBe(false);
+  });
+
 });
