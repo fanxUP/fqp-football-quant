@@ -206,6 +206,59 @@ def test_legacy_type_repair_rejects_old_partial_snapshot_contract() -> None:
         _validate_plan({"contract": "sporttery-legacy-pool-issue-type-repair/v1"})
 
 
+def test_legacy_type_repair_matches_actual_kickoff_across_business_day_boundary() -> None:
+    from scripts.traditional_history_type_repair import _verify_official_match_rows
+
+    class Cursor:
+        rows: list[tuple[object, ...]]
+
+        def execute(self, query: str, params: tuple[list[int]]) -> None:
+            assert params == ([701],)
+            self.rows = (
+                [(701, "主队", "客队", "2026-10-27", "2026-10-26")]
+                if "kickoff_time" in query
+                else [(701, "主队", "客队", "2026-10-26")]
+            )
+
+        def fetchall(self) -> list[tuple[object, ...]]:
+            return self.rows
+
+    member = {
+        "match_id": 701,
+        "home_team_name": "主队",
+        "away_team_name": "客队",
+        "kickoff_date": None,
+        "kickoff_time": "2026-10-27 00:00:00",
+    }
+
+    _verify_official_match_rows(Cursor(), "26127", [member])
+
+
+def test_legacy_type_repair_rejects_business_date_when_actual_kickoff_date_differs() -> None:
+    from scripts.traditional_history_type_repair import _verify_official_match_rows
+
+    class Cursor:
+        rows = [(701, "主队", "客队", "2026-10-28", "2026-10-27")]
+
+        def execute(self, query: str, params: tuple[list[int]]) -> None:
+            assert "kickoff_time" in query
+            assert params == ([701],)
+
+        def fetchall(self) -> list[tuple[object, ...]]:
+            return self.rows
+
+    member = {
+        "match_id": 701,
+        "home_team_name": "主队",
+        "away_team_name": "客队",
+        "kickoff_date": None,
+        "kickoff_time": "2026-10-27 00:00:00",
+    }
+
+    with pytest.raises(ValueError, match="official-match link differs from its slot identity"):
+        _verify_official_match_rows(Cursor(), "26127", [member])
+
+
 def test_apply_target_must_be_loopback(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("DATABASE_URL", "postgresql://fqp:secret@db.example.invalid:5432/fqp")
     monkeypatch.delenv("PGHOSTADDR", raising=False)

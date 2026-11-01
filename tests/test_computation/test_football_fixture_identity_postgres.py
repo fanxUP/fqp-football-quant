@@ -1407,8 +1407,8 @@ def test_legacy_type_repair_uses_old_kickoff_date_when_migration_column_is_empty
             """INSERT INTO official_matches(
                    business_date,official_match_code,source_match_id,league_name,
                    home_team_name,away_team_name,kickoff_time
-               ) VALUES ('2026-10-27','周二998','legacy-26127-slot1','固定联赛',
-                         '主1','客1','2026-10-27 00:00:00') RETURNING id"""
+               ) VALUES ('2026-10-26','周一998','legacy-26127-slot1','固定联赛',
+                         '主1','客1','2026-10-27 00:45:00') RETURNING id"""
         )
         official_match_id = cur.fetchone()[0]
         cur.execute(

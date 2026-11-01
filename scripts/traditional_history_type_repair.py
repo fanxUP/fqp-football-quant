@@ -608,11 +608,17 @@ def _verify_official_match_rows(cur, issue_no: str, members: list[dict[str, Any]
     if not ids:
         return
     cur.execute(
-        """SELECT id,home_team_name,away_team_name,business_date::text
+        """SELECT id,home_team_name,away_team_name,
+                  kickoff_time::date::text,business_date::text
            FROM official_matches WHERE id=ANY(%s) ORDER BY id""",
         (ids,),
     )
-    matches = {int(row[0]): row[1:] for row in cur.fetchall()}
+    # Sporttery's business_date follows the match-code day (for example,
+    # Wednesday's slate can contain a Thursday 00:45 kickoff). Pool identity
+    # uses the actual kickoff calendar date when it is available.
+    matches = {
+        int(row[0]): (row[1], row[2], row[3] or row[4]) for row in cur.fetchall()
+    }
     if set(matches) != set(ids):
         raise ValueError(f"issue {issue_no} references a missing official match")
     for member in members:
