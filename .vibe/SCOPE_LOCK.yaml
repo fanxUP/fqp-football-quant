@@ -5,6 +5,7 @@
   "allowed_paths": [
     ".vibe/SCOPE_LOCK.yaml",
     ".vibe/CHANGE_BUDGET.yaml",
+    ".github/workflows/ci.yml",
     "scripts/football_season_identity.py",
     "tests/test_computation/test_football_season_identity.py",
     "tests/test_computation/test_football_season_identity_postgres.py",
@@ -21,5 +22,5 @@
     "scripts/mle_trainer.py"
   ],
   "approved_protected_paths": [],
-  "notes": "main only, one writer. Six existing paths; no new schema, public API, dependencies, legacy rewrites or model changes. Implementation/local validation only; official GET evidence captured separately. Production writes require exact reviewed material and fresh admission evidence."
+  "notes": "main only, one writer. Seven existing paths: six reviewed importer paths plus a narrow CI compatibility fix for a PostgreSQL client/server version mismatch. No new schema, public API, dependencies, legacy rewrites or model changes. Official GET evidence captured separately. Production writes require exact reviewed material and fresh admission evidence."
 }
