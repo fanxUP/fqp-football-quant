@@ -1,16 +1,16 @@
 {
   "schema_version": 4,
-  "task_id": "LEAGUE-VERIFIED-SEASON-20261031",
-  "max_files_changed": 15,
+  "task_id": "OLD-SEASON-MEMBERSHIP-20261101",
+  "max_files_changed": 6,
   "max_new_files": 0,
   "max_new_dependencies": 0,
   "max_schema_migrations": 0,
-  "max_public_api_changes": 3,
-  "declared_public_api_changes": 3,
+  "max_public_api_changes": 0,
+  "declared_public_api_changes": 0,
   "regression_budget": {
     "new_test_failures": 0,
     "new_lint_errors": 0,
     "new_type_errors": 0
   },
-  "notes": "Add optional dataset=verified to the three existing league GET endpoints, preserving default reference responses. Fifteen existing paths; no routes, schema, packages or writes."
+  "notes": "Existing importer accepts exact match-head membership proof while retaining league boundary validation and existing transaction/identity checks. Six existing paths, no migrations, routes or packages."
 }

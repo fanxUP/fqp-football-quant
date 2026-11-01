@@ -14,7 +14,7 @@ from psycopg2.errors import InsufficientPrivilege, RaiseException, UniqueViolati
 from psycopg2.extensions import parse_dsn
 
 from scripts.football_season_identity import import_season, main, read_fixture_seasons
-from tests.test_computation.test_football_season_identity import document, material
+from tests.test_computation.test_football_season_identity import document, head_document, material
 
 ROOT = Path(__file__).resolve().parents[2]
 MIGRATION = ROOT / "sql/127_football_fixture_seasons.sql"
@@ -130,6 +130,116 @@ def test_new_cross_year_season_has_no_fabricated_shared_dates(ready):
         ready,
         "SELECT start_date,end_date FROM seasons WHERE season_code='premier-league:2025-2026'",
     ) == [(None, None)]
+
+
+def test_match_head_evidence_rehearsal_commit_idempotence_and_readonly_consumer(ready):
+    data = material()
+    data["member_documents"] = [head_document()]
+    original = rows(ready, "SELECT to_jsonb(s) FROM seasons s ORDER BY id")
+    assert import_season(ready, data)["new_memberships"] == 1
+    ready.rollback()
+    assert rows(ready, "SELECT count(*) FROM football_fixture_seasons") == [(0,)]
+    assert import_season(ready, data)["new_memberships"] == 1
+    ready.commit()
+    assert import_season(ready, data)["new_memberships"] == 0
+    ready.rollback()
+    with ready.cursor() as cur:
+        cur.execute("SET TRANSACTION READ ONLY")
+    found = read_fixture_seasons(ready, [1, 2, 3])
+    assert len(found) == 1 and found[0]["source_season_id"] == "11817"
+    proof = rows(ready, "SELECT evidence FROM football_fixture_seasons WHERE fixture_id=1")[0][0]
+    assert proof["binding_basis"] == "explicit_match_head"
+    assert proof["sporttery_match_id"] == "101" and proof["uniform_match_id"] == "5001"
+    assert proof["historical_prematch_eligible"] is False
+    assert rows(ready, "SELECT to_jsonb(s) FROM seasons s ORDER BY id") == original
+
+
+def test_match_head_never_bypasses_existing_shared_fixture_binding(ready):
+    data = material()
+    data["member_documents"] = [head_document(mid=102)]
+    data["members"] = [dict(fixture_id=1, jc_match_id="102")]
+    with pytest.raises(ValueError, match="existing shared fixture"):
+        import_season(ready, data)
+    ready.rollback()
+    assert rows(ready, "SELECT count(*) FROM football_fixture_seasons") == [(0,)]
+    assert rows(ready, "SELECT count(*) FROM football_competition_season_sources") == [(0,)]
+
+
+@pytest.mark.parametrize(
+    ("uniform_id", "fixture_id", "conflict"),
+    [(5001, 1, False), (5002, 2, False), (5001, 2, True), (5002, 1, True)],
+)
+def test_match_head_checks_existing_uniform_namespace_both_directions(
+    ready, uniform_id, fixture_id, conflict
+):
+    with ready.cursor() as cur:
+        cur.execute("RESET ROLE")
+        cur.execute(
+            "INSERT INTO football_fixture_source_links(source_name,id_system,source_match_id,fixture_id,evidence) VALUES ('sporttery','uniformMatchId',%s,%s,'{}')",
+            (str(uniform_id), fixture_id),
+        )
+        cur.execute("SET ROLE fqp")
+    ready.commit()
+    data = material()
+    data["member_documents"] = [head_document()]
+    if conflict:
+        with pytest.raises(ValueError, match="uniform match identity conflicts"):
+            import_season(ready, data)
+        ready.rollback()
+        assert rows(ready, "SELECT count(*) FROM football_fixture_seasons") == [(0,)]
+    else:
+        assert import_season(ready, data)["new_memberships"] == 1
+
+
+@pytest.mark.parametrize("head_first", [False, True])
+def test_mixed_document_order_cannot_hide_known_uniform_identity_conflict(ready, head_first):
+    with ready.cursor() as cur:
+        cur.execute("RESET ROLE")
+        cur.execute(
+            "INSERT INTO football_fixture_source_links(source_name,id_system,source_match_id,fixture_id,evidence) VALUES ('sporttery','uniformMatchId','5002',1,'{}')"
+        )
+        cur.execute("SET ROLE fqp")
+    ready.commit()
+    data = material()
+    docs = [document(), head_document()]
+    data["member_documents"] = list(reversed(docs)) if head_first else docs
+    with pytest.raises(ValueError, match="uniform match identity conflicts"):
+        import_season(ready, data)
+    ready.rollback()
+    assert rows(ready, "SELECT count(*) FROM football_fixture_seasons") == [(0,)]
+    assert rows(ready, "SELECT count(*) FROM football_competition_season_sources") == [(0,)]
+
+
+def test_separate_batches_cannot_reuse_recorded_head_uniform_identity_for_other_fixture(ready):
+    first = material()
+    first["member_documents"] = [head_document()]
+    assert import_season(ready, first)["new_memberships"] == 1
+    ready.commit()
+    second = material()
+    second["member_documents"] = [head_document(mid=102)]
+    second["members"] = [dict(fixture_id=2, jc_match_id="102")]
+    with pytest.raises(ValueError, match="recorded head uniform identity conflicts"):
+        import_season(ready, second)
+    ready.rollback()
+    found = read_fixture_seasons(ready, [1, 2])
+    assert len(found) == 1 and found[0]["fixture_id"] == 1
+    assert rows(
+        ready, "SELECT count(*) FROM football_fixture_source_links WHERE id_system='uniformMatchId'"
+    ) == [(1,)]
+
+
+def test_committed_head_identity_cannot_change_uniform_for_same_fixture(ready):
+    first = material()
+    first["member_documents"] = [head_document()]
+    assert import_season(ready, first)["new_memberships"] == 1
+    ready.commit()
+    changed = material()
+    changed["member_documents"] = [head_document(uniform_match=5002)]
+    with pytest.raises(ValueError, match="recorded head uniform identity conflicts"):
+        import_season(ready, changed)
+    ready.rollback()
+    found = read_fixture_seasons(ready, [1])
+    assert found[0]["membership_evidence"]["uniform_match_id"] == "5001"
 
 
 def test_second_member_failure_rolls_back_first_and_season(ready):

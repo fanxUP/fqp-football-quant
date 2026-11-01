@@ -19,6 +19,7 @@ import psycopg2
 from psycopg2.extras import Json, RealDictCursor
 
 _PATH = "/gateway/uniform/football/league/getMatchResultV1.qry"
+_HEAD_PATH = "/gateway/uniform/football/getMatchHeadV1.qry"
 _SOURCE = "sporttery"
 _SYSTEM = "uniform.leagueId+seasonId"
 _MAX_MEMBERS = 500
@@ -31,7 +32,7 @@ def _identifier(value) -> str:
     return text
 
 
-def _document(doc: dict) -> tuple[dict, dict, tuple[str, str]]:
+def _document(doc: dict, *, member: bool = False) -> tuple[dict, dict, tuple[str, str]]:
     try:
         body = doc["body"]
         if not isinstance(body, str) or len(body.encode()) > 8_000_000:
@@ -39,17 +40,18 @@ def _document(doc: dict) -> tuple[dict, dict, tuple[str, str]]:
         if hashlib.sha256(body.encode()).hexdigest() != doc["sha256"]:
             raise ValueError("Source body SHA-256 mismatch")
         url = urlsplit(doc["url"])
+        is_head = member and url.path == _HEAD_PATH
         if (
             url.scheme != "https"
             or url.netloc != "webapi.sporttery.cn"
-            or url.path != _PATH
+            or url.path not in ((_PATH, _HEAD_PATH) if member else (_PATH,))
             or url.fragment
         ):
             raise ValueError("Unsupported official season endpoint")
         query = parse_qs(url.query, keep_blank_values=True)
-        if any(len(query.get(k, [])) != 1 for k in ("uniformLeagueId", "seasonId")):
+        fields = ("sportteryMatchId", "source") if is_head else ("uniformLeagueId", "seasonId")
+        if any(len(query.get(k, [])) != 1 for k in fields):
             raise ValueError("Missing or repeated source namespace")
-        key = tuple(_identifier(query[k][0]) for k in ("uniformLeagueId", "seasonId"))
         captured = datetime.fromisoformat(doc["captured_at"])
         if captured.tzinfo is None:
             raise ValueError("Source capture time requires timezone")
@@ -57,6 +59,14 @@ def _document(doc: dict) -> tuple[dict, dict, tuple[str, str]]:
         if payload.get("success") is not True or str(payload.get("errorCode")) != "0":
             raise ValueError("Official response is not successful")
         value = payload["value"]
+        if is_head:
+            mid = _identifier(query["sportteryMatchId"][0])
+            if query["source"] != ["web"] or _identifier(value["sportteryMatchId"]) != mid:
+                raise ValueError("Response/query match namespace mismatch")
+            key = tuple(_identifier(value[k]) for k in ("uniformLeagueId", "seasonId"))
+            uniform_match = _identifier(value["uniformMatchId"])
+        else:
+            key = tuple(_identifier(query[k][0]) for k in ("uniformLeagueId", "seasonId"))
         for field, expected in zip(("uniformLeagueId", "seasonId"), key, strict=True):
             if field in value and _identifier(value[field]) != expected:
                 raise ValueError("Response/query season namespace mismatch")
@@ -70,6 +80,12 @@ def _document(doc: dict) -> tuple[dict, dict, tuple[str, str]]:
             if all(field in value for field in ("uniformLeagueId", "seasonId"))
             else "request_parameters_only",
         )
+        if is_head:
+            evidence.update(
+                binding_basis="explicit_match_head",
+                sporttery_match_id=mid,
+                uniform_match_id=uniform_match,
+            )
         return value, evidence, (key[0], key[1])
     except (KeyError, TypeError, AttributeError) as exc:
         raise ValueError("Malformed official season material") from exc
@@ -105,13 +121,24 @@ def prepare_import(material: dict) -> dict:
             raise ValueError("Season import scope exceeds bounded batch")
         proofs: dict[str, dict] = {}
         for doc in documents:
-            value, proof, document_key = _document(doc)
+            value, proof, document_key = _document(doc, member=True)
             if (
                 document_key != key
                 or _identifier(value["seasonId"]) != key[1]
                 or _identifier(value["uniformLeagueId"]) != key[0]
             ):
                 raise ValueError("Member document belongs to another season/competition")
+            if proof["binding_basis"] == "explicit_match_head":
+                mid = proof["sporttery_match_id"]
+                previous = proofs.get(mid)
+                if previous is not None and previous["binding_basis"] == "explicit_match_head":
+                    if previous["uniform_match_id"] != proof["uniform_match_id"]:
+                        raise ValueError("Conflicting official head uniform match identities")
+                else:
+                    # Never let a league document mask a supplied head identity.
+                    # Head evidence must reach the shared-uniform conflict check.
+                    proofs[mid] = proof
+                continue
             for group in value.get("matchList", []):
                 for row in group.get("subMatchList", []):
                     # Some official league fixtures are not sold as JC.
@@ -120,7 +147,7 @@ def prepare_import(material: dict) -> dict:
                         continue
                     mid = _identifier(row["gmMatchId"])
                     proofs.setdefault(mid, dict(**proof, gm_match_id=mid))
-        seen_fixtures, seen_source, selected = set(), set(), []
+        seen_fixtures, seen_source, seen_uniform, selected = set(), set(), set(), []
         for item in members:
             fid = int(_identifier(item["fixture_id"]))
             mid = _identifier(item["jc_match_id"])
@@ -128,6 +155,12 @@ def prepare_import(material: dict) -> dict:
                 raise ValueError("Duplicate selected fixture/source membership")
             if mid not in proofs:
                 raise ValueError("No explicit source season member; dates/names are insufficient")
+            proof = proofs[mid]
+            if proof["binding_basis"] == "explicit_match_head":
+                uniform = proof["uniform_match_id"]
+                if uniform in seen_uniform:
+                    raise ValueError("Selected head uniform identity maps to multiple fixtures")
+                seen_uniform.add(uniform)
             seen_fixtures.add(fid)
             seen_source.add(mid)
             selected.append(dict(fixture_id=fid, jc_match_id=mid, evidence=proofs[mid]))
@@ -231,6 +264,25 @@ def import_season(conn, material: dict) -> dict:
             )
             if cur.fetchone() != (fid,):
                 raise ValueError("Selected JC source does not identify the existing shared fixture")
+            proof = member["evidence"]
+            if proof["binding_basis"] == "explicit_match_head":
+                uniform = proof["uniform_match_id"]
+                cur.execute(
+                    "SELECT source_match_id,fixture_id FROM football_fixture_source_links WHERE source_name=%s AND id_system='uniformMatchId' AND (source_match_id=%s OR fixture_id=%s)",
+                    (_SOURCE, uniform, fid),
+                )
+                if any(row != (uniform, fid) for row in cur.fetchall()):
+                    raise ValueError(
+                        "Official head uniform match identity conflicts with shared links"
+                    )
+                cur.execute(
+                    "SELECT evidence->>'uniform_match_id',fixture_id FROM football_fixture_seasons WHERE source_name=%s AND evidence->>'binding_basis'='explicit_match_head' AND (fixture_id=%s OR evidence->>'uniform_match_id'=%s)",
+                    (_SOURCE, fid, uniform),
+                )
+                if any(row != (uniform, fid) for row in cur.fetchall()):
+                    raise ValueError(
+                        "Previously recorded head uniform identity conflicts with fixture"
+                    )
             cur.execute(
                 "SELECT season_source_id,source_name,match_id_system,source_match_id FROM football_fixture_seasons WHERE fixture_id=%s",
                 (fid,),

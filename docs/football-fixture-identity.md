@@ -12,7 +12,15 @@
 
 操作入口`python -m scripts.football_season_identity --input material.json`默认离线预览，不连接数据库。`--mode rehearse`执行真实DML后回滚，`--mode apply`单次提交，使用显式环境`DATABASE_URL`。单批最多500个已存在的共同比赛；没有自动重试、后台采集或定时导入。事务失败调用方必须回滚；CLI始终回滚未提交内容并关闭连接。
 
-输入含`competition_code`（已有规范代码）、`season_code`（赛事专用代码，如`premier-league:2024-2025`）、`season_name`、`boundary_document`、`member_documents`、`members`。每份document保存`url`、带时区的`captured_at`、原始字符串`body`及其UTF-8字节`sha256`；边界取官方uniform联赛`getMatchResultV1.qry`的`seasonStartDate/seasonEndDate`，不可误取查询`startDate/endDate`。每个member为`fixture_id`、`jc_match_id`，必须出现在同一来源赛季响应的逐场`gmMatchId`中，并与已有125 `sporttery/jc.matchId`绑定一致。仅边界响应允许无成员；传统独有场次不能伪造JC ID，应在另一个有明确来源证据的适配器接入。
+输入含`competition_code`（已有规范代码）、`season_code`（赛事专用代码，如`premier-league:2024-2025`）、`season_name`、`boundary_document`、`member_documents`、`members`。每份document保存`url`、带时区的`captured_at`、原始字符串`body`及其UTF-8字节`sha256`；边界取官方uniform联赛`getMatchResultV1.qry`的`seasonStartDate/seasonEndDate`，不可误取查询`startDate/endDate`。每个member为`fixture_id`、`jc_match_id`，必须有同一来源赛季的明确逐场证明，并与已有125 `sporttery/jc.matchId`绑定一致。
+
+`member_documents`支持两种官方原文：联赛响应的逐场`gmMatchId`，以及`getMatchHeadV1.qry?source=web&sportteryMatchId=...`详情。详情必须回显相同的`sportteryMatchId`、明确的`uniformLeagueId/seasonId`及有效`uniformMatchId`；赛事和赛季必须与边界来源一致，重复/缺失查询参数、其他域名或无时区采集时间均拒绝。详情证明按`explicit_match_head`记录，不伪称包含`gmMatchId`，也不能作为边界文档。每批最多60份成员原文、500个已存在共同身份；逐场详情宜分50场一批。采集时间是本次取证时间，`historical_prematch_eligible=false`，不会把历史排名作为赛前特征。这样旧季联赛接口不再提供成员列表时，仍可逐场核实，不靠日期猜归属。
+
+仅边界响应允许无成员；传统独有场次不能伪造JC ID，应在另一个有明确来源证据的适配器接入。
+
+写入详情证明前，还双向核对已有`sporttery/uniformMatchId`绑定：该统一比赛ID不能指向别的fixture，该fixture也不能已有另一个统一比赛ID。同一JC的所有详情必须给出相同的统一比赛ID；混合联赛和详情原文时保留详情证明，不因文档顺序漏查已提供的身份矛盾。没有这种来源绑定时仍可接受明确的JC证明，不因此虚构或自动补写统一比赛ID；已知冲突则拒绝，避免把身份矛盾带入赛季目录。
+
+同批选中的不同fixture不能共用一个详情统一比赛ID，跨批也核对127中已记录的详情证明。该查询沿用127导入器串行锁及8秒超时，不合并取消后重售的竞彩条目，不创建新来源绑定；冲突留待逐场核实。
 
 SHA和URL用于保留和校验材料，不独立证明官方真实性或人工选择的规范赛事映射；生产操作仍需复核真实来源及规范目标。旧官方边界响应有时不回显赛事/季ID，此时保留`binding_basis=request_parameters_only`与空的`response_id_echo`，只作计划边界证据；不冒充响应回显或逐场证明。逐场响应必须同时回显赛事和季ID且与查询一致。复用规范季前检查名称一致且未被另一赛事使用，错误旧行拒绝接入，不自动修名。证据一律标记历史赛前不可用。新关系禁止UPDATE/DELETE/TRUNCATE，已有错误或来源修订应先停止消费并核对引用，不能自动覆盖。数据库约束也校验逐场来源指向同一个fixture；受限fqp仅获得新表SELECT/INSERT及序列用量，不获得旧来源表UPDATE权限。导入函数拒绝autocommit连接，保持整批原子性。
 

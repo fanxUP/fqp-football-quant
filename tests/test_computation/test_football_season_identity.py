@@ -36,6 +36,155 @@ def material():
     )
 
 
+def head_document(*, mid=101, season=11817, league=72, uniform_match=5001):
+    body = json.dumps(
+        dict(
+            success=True,
+            errorCode="0",
+            value=dict(
+                sportteryMatchId=mid,
+                seasonId=season,
+                uniformLeagueId=league,
+                uniformMatchId=uniform_match,
+            ),
+        )
+    )
+    return dict(
+        url=f"https://webapi.sporttery.cn/gateway/uniform/football/getMatchHeadV1.qry?source=web&sportteryMatchId={mid}",
+        captured_at="2026-11-01T00:00:00Z",
+        sha256=hashlib.sha256(body.encode()).hexdigest(),
+        body=body,
+    )
+
+
+def test_head_explicit_membership_with_boundary_without_echo():
+    data = material()
+    boundary = data["boundary_document"]
+    payload = json.loads(boundary["body"])
+    del payload["value"]["seasonId"], payload["value"]["uniformLeagueId"]
+    boundary["body"] = json.dumps(payload)
+    boundary["sha256"] = hashlib.sha256(boundary["body"].encode()).hexdigest()
+    data["member_documents"] = [head_document()]
+    original = copy.deepcopy(data)
+    plan = prepare_import(data)
+    assert plan["evidence"]["binding_basis"] == "request_parameters_only"
+    proof = plan["members"][0]["evidence"]
+    assert proof["sporttery_match_id"] == "101"
+    assert proof["uniform_match_id"] == "5001"
+    assert proof["binding_basis"] == "explicit_match_head"
+    assert proof["historical_prematch_eligible"] is False
+    assert "gm_match_id" not in proof
+    assert data == original
+
+
+@pytest.mark.parametrize(
+    "kind",
+    [
+        "wrong_season",
+        "wrong_league",
+        "wrong_match",
+        "missing_match",
+        "missing_uniform",
+        "missing_season",
+        "duplicate_query",
+        "missing_source",
+        "wrong_source",
+        "bad_host",
+        "bad_hash",
+        "naive_capture",
+        "failed",
+        "boundary_head",
+        "missing_proof",
+    ],
+)
+def test_invalid_head_never_promotes_membership(kind):
+    data = material()
+    doc = head_document()
+    data["member_documents"] = [doc]
+    payload = json.loads(doc["body"])
+    if kind in ("wrong_season", "wrong_league", "wrong_match"):
+        field = {
+            "wrong_season": "seasonId",
+            "wrong_league": "uniformLeagueId",
+            "wrong_match": "sportteryMatchId",
+        }[kind]
+        payload["value"][field] = 999
+    elif kind.startswith("missing_") and kind not in ("missing_source", "missing_proof"):
+        field = {
+            "missing_match": "sportteryMatchId",
+            "missing_uniform": "uniformMatchId",
+            "missing_season": "seasonId",
+        }[kind]
+        del payload["value"][field]
+    elif kind == "duplicate_query":
+        doc["url"] += "&sportteryMatchId=101"
+    elif kind == "missing_source":
+        doc["url"] = doc["url"].replace("source=web&", "")
+    elif kind == "wrong_source":
+        doc["url"] = doc["url"].replace("source=web", "source=other")
+    elif kind == "bad_host":
+        doc["url"] = doc["url"].replace("webapi.sporttery.cn", "evil.invalid")
+    elif kind == "naive_capture":
+        doc["captured_at"] = "2026-11-01T00:00:00"
+    elif kind == "failed":
+        payload["success"] = False
+    elif kind == "boundary_head":
+        data["boundary_document"] = doc
+    elif kind == "missing_proof":
+        data["members"][0]["jc_match_id"] = "102"
+    doc["body"] = json.dumps(payload)
+    doc["sha256"] = hashlib.sha256(doc["body"].encode()).hexdigest()
+    if kind == "bad_hash":
+        doc["body"] += " "
+    with pytest.raises(ValueError):
+        prepare_import(data)
+
+
+def test_mixed_head_and_league_documents_preserve_each_evidence_kind():
+    data = material()
+    data["member_documents"] = [document(), head_document(mid=102)]
+    data["members"].append(dict(fixture_id=2, jc_match_id="102"))
+    proofs = {r["jc_match_id"]: r["evidence"] for r in prepare_import(data)["members"]}
+    assert proofs["101"]["gm_match_id"] == "101"
+    assert proofs["102"]["sporttery_match_id"] == "102"
+
+
+@pytest.mark.parametrize("head_first", [False, True])
+def test_head_proof_is_preserved_in_mixed_documents_regardless_of_order(head_first):
+    data = material()
+    docs = [document(), head_document()]
+    data["member_documents"] = list(reversed(docs)) if head_first else docs
+    proof = prepare_import(data)["members"][0]["evidence"]
+    assert proof["binding_basis"] == "explicit_match_head"
+    assert proof["uniform_match_id"] == "5001"
+
+
+@pytest.mark.parametrize("second_uniform", [5001, 5002])
+def test_all_head_identities_for_same_jc_must_agree(second_uniform):
+    data = material()
+    data["member_documents"] = [head_document(), head_document(uniform_match=second_uniform)]
+    if second_uniform == 5002:
+        with pytest.raises(ValueError, match="Conflicting official head uniform"):
+            prepare_import(data)
+    else:
+        assert prepare_import(data)["members"][0]["evidence"]["uniform_match_id"] == "5001"
+
+
+@pytest.mark.parametrize("second_uniform", [5001, 5002])
+def test_selected_distinct_fixtures_cannot_share_one_head_uniform_identity(second_uniform):
+    data = material()
+    data["member_documents"] = [
+        head_document(),
+        head_document(mid=102, uniform_match=second_uniform),
+    ]
+    data["members"].append(dict(fixture_id=2, jc_match_id="102"))
+    if second_uniform == 5001:
+        with pytest.raises(ValueError, match="Selected head uniform identity"):
+            prepare_import(data)
+    else:
+        assert len(prepare_import(data)["members"]) == 2
+
+
 def test_explicit_member_outside_planned_dates_is_retained():
     plan = prepare_import(material())
     assert plan["planned_end_date"] == "2025-05-26"
