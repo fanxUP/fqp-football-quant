@@ -383,21 +383,18 @@
   "external_ci": {
     "status": "passed",
     "task_id": "P128-TRADITIONAL-FOOTBALL-CATALOG",
-    "verified_at": "2026-11-01T20:17:56+00:00",
-    "head_sha": "8b6bd977fe0345345f77af7d28b753a7ab75bcd9",
-    "run_id": "41345100495",
+    "verified_at": "2026-11-01T20:40:26+00:00",
+    "head_sha": "608cf1920709157b70401a3cc10d2a389b116c2d",
+    "run_id": "41347252667",
     "checks": {
       "test": "passed",
       "lint-and-typecheck": "passed"
     },
-    "summary": "Exact-SHA GitHub CI on main@8b6bd977fe0345345f77af7d28b753a7ab75bcd9 passed both the full test and lint-and-typecheck jobs."
+    "summary": "Exact-SHA GitHub CI on main@608cf1920709157b70401a3cc10d2a389b116c2d passed both the full test and lint-and-typecheck jobs; the application-code diff matches the reviewed 8b6bd97 tree."
   },
   "quality_gate": {
-    "status": "BLOCKED",
-    "checked_at": "2026-11-02T04:29:46.614710+08:00",
-    "failures": [
-      "A128-LOCAL-CATALOG_stale",
-      "reviews"
-    ]
+    "status": "READY_TO_MERGE",
+    "checked_at": "2026-11-02T04:40:10.756269+08:00",
+    "failures": []
   }
 }
