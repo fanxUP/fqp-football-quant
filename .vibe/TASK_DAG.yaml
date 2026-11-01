@@ -7,7 +7,7 @@
       "acceptance_id": "A128-LOCAL-CATALOG",
       "depends_on": [],
       "kind": "additive_schema_and_import_pipeline",
-      "status": "IN_PROGRESS",
+      "status": "DONE",
       "files": [
         "apps/frontend/src/core/types.ts",
         "apps/frontend/src/features/pool/PoolFixtureCatalog.tsx",

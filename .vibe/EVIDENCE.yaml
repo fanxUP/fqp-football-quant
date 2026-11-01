@@ -162,13 +162,13 @@
       "status": "PASS",
       "command": "/bin/bash /private/tmp/fqp-p128-final-verify-20261102.sh",
       "exit_code": 0,
-      "summary": "sets/radar-gHSAJbDR.js                       5.29 kB │ gzip:   2.31 kB\ndist/assets/ModulesPage-DlngoA0A.js                 5.44 kB │ gzip:   1.88 kB\ndist/assets/axisAlignTicks-Cq4bKvYc.js              5.67 kB │ gzip:   2.50 kB\ndist/assets/scatter-GX9F4nE6.js                     6.39 kB │ gzip:   2.45 kB\ndist/assets/install-CWJREfL_.js                     6.55 kB │ gzip:   2.67 kB\ndist/assets/heatmap-C6hVjCpv.js                     6.57 kB │ gzip:   2.79 kB\ndist/assets/points-Bk4o0kJr.js                      7.52 kB │ gzip:   2.96 kB\ndist/assets/jsx-runtime-CIxEorsV.js                 7.89 kB │ gzip:   2.98 kB\ndist/assets/OddsMovementPage-g-mA7ZRX.js            8.84 kB │ gzip:   3.59 kB\ndist/assets/MatchesPage-DkGkwshX.js                 9.64 kB │ gzip:   3.85 kB\ndist/assets/ExecutionCenter-BoVw_7Tz.js            11.50 kB │ gzip:   4.22 kB\ndist/assets/AgentPanel-J2cF-GT3.js                 11.55 kB │ gzip:   3.61 kB\ndist/assets/DataHealthPage-DGhP2EnU.js             11.71 kB │ gzip:   4.33 kB\ndist/assets/UpsetsPage-CqQNntLK.js                 11.74 kB │ gzip:   3.78 kB\ndist/assets/visualization-B1kHCqG-.js              12.19 kB │ gzip:   4.08 kB\ndist/assets/RosterEvidencePanel-Ci9N7nWC.js        13.40 kB │ gzip:   4.98 kB\ndist/assets/pie-CrbRJEEF.js                        15.15 kB │ gzip:   6.36 kB\ndist/assets/MatchDetailPage-BVdmUz0B.js            15.24 kB │ gzip:   5.58 kB\ndist/assets/axisHelper-DEUVdXih.js                 15.42 kB │ gzip:   5.61 kB\ndist/assets/DashboardPage-BWwic3PN.js              18.57 kB │ gzip:   6.25 kB\ndist/assets/NewsIntelligencePage-Cseg6fmu.js       18.79 kB │ gzip:   5.92 kB\ndist/assets/AgentWorkspacePage-q2ZhGX6I.js         19.40 kB │ gzip:   6.46 kB\ndist/assets/BacktestPage--EKxypIz.js               19.78 kB │ gzip:   7.23 kB\ndist/assets/line-DgZ4oTdw.js                       20.02 kB │ gzip:   8.17 kB\ndist/assets/scaleRawExtentInfo-DpJKVGD1.js         20.21 kB │ gzip:   8.13 kB\ndist/assets/bar-CfizbZkM.js                        22.01 kB │ gzip:   8.44 kB\ndist/assets/installSimple-D1zSL3pa.js              22.31 kB │ gzip:   8.01 kB\ndist/assets/PoolPage-xiAFxvOv.js                   22.80 kB │ gzip:   7.64 kB\ndist/assets/ModelProvidersPage-IvYYIXsZ.js         26.82 kB │ gzip:   8.72 kB\ndist/assets/ReviewsPage-Cs7IJneZ.js                27.32 kB │ gzip:   8.85 kB\ndist/assets/EventsPage-DF0ynbzE.js                 28.66 kB │ gzip:   9.08 kB\ndist/assets/MatchDetailDrawer-CMSYRiwS.js          30.25 kB │ gzip:   7.86 kB\ndist/assets/ModelsPage-CyshzH8S.js                 45.88 kB │ gzip:  14.00 kB\ndist/assets/AnalysisPage-DeUWYfrJ.js               58.54 kB │ gzip:  16.24 kB\ndist/assets/BettingCenterPage-Bg00JpHe.js          60.05 kB │ gzip:  16.90 kB\ndist/assets/TeamLogo-vNhV2TGg.js                   63.04 kB │ gzip:  12.92 kB\ndist/assets/chartRuntime-BAVq9Qo-.js              164.83 kB │ gzip:  53.72 kB\ndist/assets/LightweightLineChart-DABhYzBb.js      166.38 kB │ gzip:  54.51 kB\ndist/assets/index-BAnLzona.js                     259.29 kB │ gzip:  84.26 kB\ndist/assets/SeriesData-B6NLPcGc.js                345.26 kB │ gzip: 116.97 kB\ndist/assets/PitchScene-DkQpyFsD.js                943.55 kB │ gzip: 250.06 kB\n\n✓ built in 7.85s\nchanged_files=18\nPASS: scope\nfiles_changed: 18/18\nnew_files: 6/6\nnew_dependencies_heuristic: 0/0\nschema_migration_files: 1/1\ndeclared_public_api_changes: 2/2\nPASS: change budget\n\u001b[33m[PLUGIN_TIMINGS] \u001b[0mYour build spent significant time in plugins. Here is a breakdown:\n  - vite:css (52%)\n  - vite:css-post (37%)\n  - vite:prepare-out-dir (5%)\nSee https://rolldown.rs/reference/InputOptions.checks#plugintimings for more details.\n\n[plugin builtin:vite-reporter] \n(!) Some chunks are larger than 500 kB after minification. Consider:\n- Using dynamic import() to code-split the application\n- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting\n- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.\n",
+      "summary": ":   1.77 kB\ndist/assets/constants-GCdYie87.js                   4.37 kB │ gzip:   2.15 kB\ndist/assets/SettingsPage-Cs7BUYEM.js                4.56 kB │ gzip:   1.64 kB\ndist/assets/MatchEvidence-DME9VWqp.js               4.86 kB │ gzip:   2.10 kB\ndist/assets/radar-gHSAJbDR.js                       5.29 kB │ gzip:   2.31 kB\ndist/assets/ModulesPage-DlngoA0A.js                 5.44 kB │ gzip:   1.88 kB\ndist/assets/axisAlignTicks-Cq4bKvYc.js              5.67 kB │ gzip:   2.50 kB\ndist/assets/scatter-GX9F4nE6.js                     6.39 kB │ gzip:   2.45 kB\ndist/assets/install-CWJREfL_.js                     6.55 kB │ gzip:   2.67 kB\ndist/assets/heatmap-C6hVjCpv.js                     6.57 kB │ gzip:   2.79 kB\ndist/assets/points-Bk4o0kJr.js                      7.52 kB │ gzip:   2.96 kB\ndist/assets/jsx-runtime-CIxEorsV.js                 7.89 kB │ gzip:   2.98 kB\ndist/assets/OddsMovementPage-g-mA7ZRX.js            8.84 kB │ gzip:   3.59 kB\ndist/assets/MatchesPage-DkGkwshX.js                 9.64 kB │ gzip:   3.85 kB\ndist/assets/ExecutionCenter-BoVw_7Tz.js            11.50 kB │ gzip:   4.22 kB\ndist/assets/AgentPanel-J2cF-GT3.js                 11.55 kB │ gzip:   3.61 kB\ndist/assets/DataHealthPage-DGhP2EnU.js             11.71 kB │ gzip:   4.33 kB\ndist/assets/UpsetsPage-CqQNntLK.js                 11.74 kB │ gzip:   3.78 kB\ndist/assets/visualization-B1kHCqG-.js              12.19 kB │ gzip:   4.08 kB\ndist/assets/RosterEvidencePanel-Ci9N7nWC.js        13.40 kB │ gzip:   4.98 kB\ndist/assets/pie-CrbRJEEF.js                        15.15 kB │ gzip:   6.36 kB\ndist/assets/MatchDetailPage-BVdmUz0B.js            15.24 kB │ gzip:   5.58 kB\ndist/assets/axisHelper-DEUVdXih.js                 15.42 kB │ gzip:   5.61 kB\ndist/assets/DashboardPage-BWwic3PN.js              18.57 kB │ gzip:   6.25 kB\ndist/assets/NewsIntelligencePage-Cseg6fmu.js       18.79 kB │ gzip:   5.92 kB\ndist/assets/AgentWorkspacePage-q2ZhGX6I.js         19.40 kB │ gzip:   6.46 kB\ndist/assets/BacktestPage--EKxypIz.js               19.78 kB │ gzip:   7.23 kB\ndist/assets/line-DgZ4oTdw.js                       20.02 kB │ gzip:   8.17 kB\ndist/assets/scaleRawExtentInfo-DpJKVGD1.js         20.21 kB │ gzip:   8.13 kB\ndist/assets/bar-CfizbZkM.js                        22.01 kB │ gzip:   8.44 kB\ndist/assets/installSimple-D1zSL3pa.js              22.31 kB │ gzip:   8.01 kB\ndist/assets/PoolPage-xiAFxvOv.js                   22.80 kB │ gzip:   7.64 kB\ndist/assets/ModelProvidersPage-IvYYIXsZ.js         26.82 kB │ gzip:   8.72 kB\ndist/assets/ReviewsPage-Cs7IJneZ.js                27.32 kB │ gzip:   8.85 kB\ndist/assets/EventsPage-DF0ynbzE.js                 28.66 kB │ gzip:   9.08 kB\ndist/assets/MatchDetailDrawer-CMSYRiwS.js          30.25 kB │ gzip:   7.86 kB\ndist/assets/ModelsPage-CyshzH8S.js                 45.88 kB │ gzip:  14.00 kB\ndist/assets/AnalysisPage-DeUWYfrJ.js               58.54 kB │ gzip:  16.24 kB\ndist/assets/BettingCenterPage-Bg00JpHe.js          60.05 kB │ gzip:  16.90 kB\ndist/assets/TeamLogo-vNhV2TGg.js                   63.04 kB │ gzip:  12.92 kB\ndist/assets/chartRuntime-BAVq9Qo-.js              164.83 kB │ gzip:  53.72 kB\ndist/assets/LightweightLineChart-DABhYzBb.js      166.38 kB │ gzip:  54.51 kB\ndist/assets/index-BAnLzona.js                     259.29 kB │ gzip:  84.26 kB\ndist/assets/SeriesData-B6NLPcGc.js                345.26 kB │ gzip: 116.97 kB\ndist/assets/PitchScene-DkQpyFsD.js                943.55 kB │ gzip: 250.06 kB\n\n✓ built in 9.78s\nchanged_files=20\nPASS: scope\nfiles_changed: 20/20\nnew_files: 6/6\nnew_dependencies_heuristic: 0/0\nschema_migration_files: 1/1\ndeclared_public_api_changes: 2/2\nPASS: change budget\n[plugin builtin:vite-reporter] \n(!) Some chunks are larger than 500 kB after minification. Consider:\n- Using dynamic import() to code-split the application\n- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting\n- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.\n",
       "timed_out": false,
       "environment": "unknown",
-      "revision": "b49a0e44aeddb1cf0d174642c70f4826ac57178f",
-      "dirty_tree": true,
-      "tree_fingerprint": "6bed3e7786f8fd889617b4d0161815a89b4f1af956fc0ce8cd4e790c2282467d",
-      "verified_at": "2026-11-02T02:26:52.131937+08:00"
+      "revision": "93bd24f3538f99b6e10b3d723081a59af46d61cc",
+      "dirty_tree": false,
+      "tree_fingerprint": "e35a9646e48976972f779781a0b917560f9fc682c2fb78d4b46b2a0ed0e30720",
+      "verified_at": "2026-11-02T03:17:09.326596+08:00"
     }
   },
   "upstream_evidence": {
@@ -334,6 +334,12 @@
       "task_id": "P128-TRADITIONAL-FOOTBALL-CATALOG",
       "reviewed_at": "2026-11-02T02:31:23+08:00",
       "summary": "Independent read-only review confirms migration 128 checksum pin alignment, least-privilege fqp ledger SELECT, real restricted-role importer coverage, and rollback test preserves pre-existing ledger while removing migration 128 atomically. No blocking findings."
+    },
+    "ci_fixture_followup": {
+      "status": "PASS",
+      "task_id": "P128-TRADITIONAL-FOOTBALL-CATALOG",
+      "reviewed_at": "2026-11-02T03:17:25+08:00",
+      "summary": "Independent read-only review of the two CI fixture corrections passed: pool schema loads migration 128 in order, and observation kickoff assertions use execution-relative future time while retaining cutoff boundary coverage."
     }
   },
   "security": {
@@ -345,34 +351,35 @@
   "migration": {
     "status": "PASS",
     "task_id": "P128-TRADITIONAL-FOOTBALL-CATALOG",
-    "summary": "Migration 128 independent review and local synthetic PostgreSQL 16 transaction, rollback, data-preservation, and restricted-runtime-role checks passed. This status records migration review/local rehearsal only; the target-SHA-bound release rehearsal remains separately pending. No production migration was run."
+    "summary": "Migration 128 passed independent review and local synthetic PostgreSQL transaction, rollback, data-preservation, and restricted-runtime-role checks. Target-SHA-bound PostgreSQL 16 release rehearsal passed for 93bd24f; production migration has not yet been run."
   },
   "release_migration_rehearsal": {
-    "status": "PENDING",
+    "status": "passed",
     "task_id": "P128-TRADITIONAL-FOOTBALL-CATALOG",
-    "candidate_sha": "4251750e09743a4d831fe6eeda0253dc254c09b3",
-    "report_path": "/Volumes/Nas/FQP/release-evidence/P128-4251750/no-backup-migration-rehearsal.json",
-    "summary": "The isolated rehearsal passed for candidate 4251750; regenerate and bind the release rehearsal to the final corrected target SHA before deployment."
+    "candidate_sha": "93bd24f3538f99b6e10b3d723081a59af46d61cc",
+    "report_path": "/Volumes/Nas/FQP/release-evidence/P128-93bd24f/no-backup-migration-rehearsal.json",
+    "report_sha256": "16398b81d65b792c154e19d420746cd54fd732c8ce6633ee4aa2c0f7a25e49cf",
+    "pending_migrations": [
+      "128_traditional_history_facts.sql"
+    ],
+    "summary": "Disposable PostgreSQL 16 synthetic-schema rehearsal passed 1/1 with zero skips; exact target SHA, pinned migration checksum, existing-row preservation, constraints/triggers, rollback, and restricted fqp catalog/import paths verified."
   },
   "external_ci": {
-    "status": "failed",
+    "status": "passed",
     "task_id": "P128-TRADITIONAL-FOOTBALL-CATALOG",
-    "verified_at": "2026-11-02T02:59:39+08:00",
-    "head_sha": "4251750e09743a4d831fe6eeda0253dc254c09b3",
-    "run_id": "41338346976",
+    "verified_at": "2026-11-01T19:10:02Z",
+    "head_sha": "93bd24f3538f99b6e10b3d723081a59af46d61cc",
+    "run_id": "41339474399",
     "checks": {
-      "lint-and-typecheck": "passed",
-      "test": "failed"
+      "test": "passed",
+      "lint-and-typecheck": "passed"
     },
-    "summary": "Exact-SHA GitHub CI for candidate 4251750 failed: 3484 passed, 39 failed, 25 skipped. Failures were an expired fixed kickoff date in observed-pipeline tests and a pool test schema fixture that omitted migration 128. Corrections are in progress; no release."
+    "summary": "Exact-SHA GitHub CI on main@93bd24f completed successfully; both full test and lint/typecheck jobs passed."
   },
   "quality_gate": {
-    "status": "BLOCKED",
-    "checked_at": "2026-11-02T02:59:39+08:00",
-    "failures": [
-      "Exact-SHA GitHub CI test job failed for candidate 4251750; test-fixture corrections must pass on the final target SHA.",
-      "Target-SHA-bound no-backup release rehearsal must be regenerated for the final target SHA."
-    ],
-    "summary": "No production change. The candidate CI failure is understood and the two test-fixture corrections are in progress."
+    "status": "PENDING_LIVE_CHECK",
+    "checked_at": "2026-11-02T03:17:25+08:00",
+    "failures": [],
+    "summary": "Current-source local acceptance, independent reviews, exact-main CI, and target-bound migration rehearsal are green. Re-run the live V4 gate against the final committed main SHA before production release."
   }
 }
