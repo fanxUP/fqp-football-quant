@@ -616,9 +616,7 @@ def _verify_official_match_rows(cur, issue_no: str, members: list[dict[str, Any]
     # Sporttery's business_date follows the match-code day (for example,
     # Wednesday's slate can contain a Thursday 00:45 kickoff). Pool identity
     # uses the actual kickoff calendar date when it is available.
-    matches = {
-        int(row[0]): (row[1], row[2], row[3] or row[4]) for row in cur.fetchall()
-    }
+    matches = {int(row[0]): (row[1], row[2], row[3] or row[4]) for row in cur.fetchall()}
     if set(matches) != set(ids):
         raise ValueError(f"issue {issue_no} references a missing official match")
     for member in members:
