@@ -169,6 +169,15 @@
       "dirty_tree": false,
       "tree_fingerprint": "e35a9646e48976972f779781a0b917560f9fc682c2fb78d4b46b2a0ed0e30720",
       "verified_at": "2026-11-02T03:17:09.326596+08:00"
+    },
+    "A128-CROSS-DAY-REPAIR": {
+      "status": "PASS",
+      "command": ".venv/bin/ruff check and format check on three changed files; .venv/bin/python -m pytest -q tests/test_jobs/test_traditional_history_import.py; isolated PostgreSQL legacy_type_repair tests; exact-head GitHub CI run 41345100495",
+      "exit_code": 0,
+      "revision": "8b6bd977fe0345345f77af7d28b753a7ab75bcd9",
+      "dirty_tree": false,
+      "summary": "Cross-midnight type-repair regression: 17 focused unit tests passed, 10 isolated PostgreSQL legacy-type-repair tests passed, and exact-head GitHub CI passed both full test and lint-and-typecheck jobs. The failed production attempt had fully rolled back; no backfill rows were written.",
+      "verified_at": "2026-11-01T20:17:56+00:00"
     }
   },
   "upstream_evidence": {
@@ -340,6 +349,13 @@
       "task_id": "P128-TRADITIONAL-FOOTBALL-CATALOG",
       "reviewed_at": "2026-11-02T03:17:25+08:00",
       "summary": "Independent read-only review of the two CI fixture corrections passed: pool schema loads migration 128 in order, and observation kickoff assertions use execution-relative future time while retaining cutoff boundary coverage."
+    },
+    "cross_day_type_repair": {
+      "status": "PASS",
+      "task_id": "P128-TRADITIONAL-FOOTBALL-CATALOG",
+      "review_mode": "independent read-only",
+      "recorded_at": "2026-11-01T20:17:56+00:00",
+      "summary": "Independent review confirmed verification uses actual kickoff calendar date, still validates both team names and date, and has no migration or write-path change. The review follow-up identified the wrong-actual-date/business-date-matches case; an explicit rejection regression was added and passed. No blocker remains."
     }
   },
   "security": {
@@ -367,14 +383,14 @@
   "external_ci": {
     "status": "passed",
     "task_id": "P128-TRADITIONAL-FOOTBALL-CATALOG",
-    "verified_at": "2026-11-01T19:10:02Z",
-    "head_sha": "93bd24f3538f99b6e10b3d723081a59af46d61cc",
-    "run_id": "41339474399",
+    "verified_at": "2026-11-01T20:17:56+00:00",
+    "head_sha": "8b6bd977fe0345345f77af7d28b753a7ab75bcd9",
+    "run_id": "41345100495",
     "checks": {
       "test": "passed",
       "lint-and-typecheck": "passed"
     },
-    "summary": "Exact-SHA GitHub CI on main@93bd24f completed successfully; both full test and lint/typecheck jobs passed."
+    "summary": "Exact-SHA GitHub CI on main@8b6bd977fe0345345f77af7d28b753a7ab75bcd9 passed both the full test and lint-and-typecheck jobs."
   },
   "quality_gate": {
     "status": "READY_TO_MERGE",
