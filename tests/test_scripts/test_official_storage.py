@@ -190,5 +190,5 @@ def test_pool_match_storage_uses_shared_identity_and_caller_transaction(monkeypa
     assert query.count("%s") == len(params)
     assert params[2] == 7
     assert params[7].isoformat() == "2026-07-22T00:00:00"
-    assert params[15:17] == (81, "linked")
+    assert params[26:28] == (81, "linked")
     conn.commit.assert_not_called()

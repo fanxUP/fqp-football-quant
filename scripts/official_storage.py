@@ -641,6 +641,8 @@ def store_pool_issue(
     total_matches: int | None,
     official_status: str | None,
     raw_json: dict | None = None,
+    source_game_no: int | None = None,
+    source_game_no_source: str | None = None,
 ) -> int | None:
     """Insert or update a football pool issue (期号). Returns the issue ID."""
     now_ts = _now()
@@ -652,12 +654,19 @@ def store_pool_issue(
         cur.execute(
             """
             INSERT INTO football_pool_issues
-                (issue_no, game_type, source_game_type, sale_start_time, sale_stop_time,
+                (issue_no, game_type, source_game_type, source_game_no, source_game_no_source,
+                 sale_start_time, sale_stop_time,
                  total_matches, official_status, raw_hash, raw_json,
                  created_at, updated_at)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb, %s,%s)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb, %s,%s)
             ON CONFLICT (game_type, issue_no) DO UPDATE SET
                 source_game_type = EXCLUDED.source_game_type,
+                source_game_no = COALESCE(
+                    EXCLUDED.source_game_no,football_pool_issues.source_game_no
+                ),
+                source_game_no_source = COALESCE(
+                    EXCLUDED.source_game_no_source,football_pool_issues.source_game_no_source
+                ),
                 sale_start_time = EXCLUDED.sale_start_time,
                 sale_stop_time = EXCLUDED.sale_stop_time,
                 total_matches = EXCLUDED.total_matches,
@@ -671,6 +680,8 @@ def store_pool_issue(
                 issue_no,
                 game_type,
                 game_type,
+                source_game_no,
+                source_game_no_source,
                 sale_start,
                 sale_stop,
                 total_matches,
@@ -713,19 +724,256 @@ def store_pool_issue_matches(
                 cur, m, game_type=game_type, issue_no=issue_no, source_game_type=source_game_type
             )
             kickoff = pool_time(m.get("kickoff_time"))
+            kickoff_precision = m.get("kickoff_time_precision") or "unknown"
+            kickoff_date = m.get("kickoff_date") or (kickoff.date() if kickoff else None)
+            if isinstance(kickoff_date, date):
+                kickoff_date = kickoff_date.isoformat()
             cur.execute(
                 """INSERT INTO football_pool_issue_matches
                     (issue_id,match_order,match_id,source_match_id,league_name,
-                     home_team_name,away_team_name,kickoff_time,
+                     home_team_name,away_team_name,kickoff_time,kickoff_date,
+                     kickoff_time_precision,kickoff_evidence,
+                     source_full_home_goals,source_full_away_goals,
+                     source_half_home_goals,source_half_away_goals,
+                     source_product_result_code,source_result_semantics_key,
+                     source_result_source,source_result_evidence,
                      home_win_prob,draw_prob,away_win_prob,upset_score,
                      public_heat_home,public_heat_draw,public_heat_away,
                      fixture_id,identity_status,identity_evidence,source_raw_json)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                 ON CONFLICT (issue_id,match_order) DO UPDATE SET
                     match_id=EXCLUDED.match_id,source_match_id=EXCLUDED.source_match_id,
                     league_name=EXCLUDED.league_name,
                     home_team_name=EXCLUDED.home_team_name,away_team_name=EXCLUDED.away_team_name,
-                    kickoff_time=EXCLUDED.kickoff_time,
+                    kickoff_time=CASE
+                        WHEN EXCLUDED.kickoff_time_precision='unknown'
+                            AND EXCLUDED.kickoff_date IS NULL
+                        THEN football_pool_issue_matches.kickoff_time
+                        WHEN EXCLUDED.kickoff_time_precision='date_only'
+                            AND football_pool_issue_matches.kickoff_time_precision IN ('minute','second')
+                            AND COALESCE(
+                                football_pool_issue_matches.kickoff_date,
+                                football_pool_issue_matches.kickoff_time::date
+                            )=EXCLUDED.kickoff_date
+                        THEN football_pool_issue_matches.kickoff_time
+                        WHEN EXCLUDED.kickoff_time_precision='date_only'
+                            AND football_pool_issue_matches.kickoff_time_precision IN ('minute','second')
+                            AND COALESCE(
+                                football_pool_issue_matches.kickoff_date,
+                                football_pool_issue_matches.kickoff_time::date
+                            )<>EXCLUDED.kickoff_date
+                        THEN NULL
+                        ELSE EXCLUDED.kickoff_time END,
+                    kickoff_date=COALESCE(
+                        EXCLUDED.kickoff_date,football_pool_issue_matches.kickoff_date
+                    ),
+                    kickoff_time_precision=CASE
+                        WHEN EXCLUDED.kickoff_time_precision='unknown'
+                            AND EXCLUDED.kickoff_date IS NULL
+                        THEN football_pool_issue_matches.kickoff_time_precision
+                        WHEN EXCLUDED.kickoff_time_precision='date_only'
+                            AND football_pool_issue_matches.kickoff_time_precision IN ('minute','second')
+                            AND COALESCE(
+                                football_pool_issue_matches.kickoff_date,
+                                football_pool_issue_matches.kickoff_time::date
+                            )=EXCLUDED.kickoff_date
+                        THEN football_pool_issue_matches.kickoff_time_precision
+                        ELSE EXCLUDED.kickoff_time_precision END,
+                    kickoff_evidence=CASE
+                        WHEN EXCLUDED.kickoff_evidence='{}'::jsonb
+                        THEN football_pool_issue_matches.kickoff_evidence
+                        WHEN EXCLUDED.kickoff_time_precision='date_only'
+                            AND football_pool_issue_matches.kickoff_time_precision IN ('minute','second')
+                            AND COALESCE(
+                                football_pool_issue_matches.kickoff_date,
+                                football_pool_issue_matches.kickoff_time::date
+                            )=EXCLUDED.kickoff_date
+                        THEN jsonb_set(
+                            football_pool_issue_matches.kickoff_evidence,
+                            '{source_observations}',
+                            CASE
+                                WHEN COALESCE(
+                                    football_pool_issue_matches.kickoff_evidence->'source_observations',
+                                    '[]'::jsonb
+                                ) @> jsonb_build_array(jsonb_build_object(
+                                    'kickoff_date',EXCLUDED.kickoff_date,
+                                    'precision',EXCLUDED.kickoff_time_precision,
+                                    'evidence',EXCLUDED.kickoff_evidence
+                                ))
+                                THEN COALESCE(
+                                    football_pool_issue_matches.kickoff_evidence->'source_observations',
+                                    '[]'::jsonb
+                                )
+                                ELSE COALESCE(
+                                    football_pool_issue_matches.kickoff_evidence->'source_observations',
+                                    '[]'::jsonb
+                                ) || jsonb_build_array(jsonb_build_object(
+                                    'kickoff_date',EXCLUDED.kickoff_date,
+                                    'precision',EXCLUDED.kickoff_time_precision,
+                                    'evidence',EXCLUDED.kickoff_evidence
+                                ))
+                            END,
+                            true
+                        )
+                        WHEN EXCLUDED.kickoff_time_precision='date_only'
+                            AND football_pool_issue_matches.kickoff_time_precision IN ('minute','second')
+                            AND COALESCE(
+                                football_pool_issue_matches.kickoff_date,
+                                football_pool_issue_matches.kickoff_time::date
+                            )<>EXCLUDED.kickoff_date
+                        THEN jsonb_set(
+                            jsonb_set(
+                                EXCLUDED.kickoff_evidence,
+                                '{superseded_exact_kickoffs}',
+                                COALESCE(
+                                    football_pool_issue_matches.kickoff_evidence->'superseded_exact_kickoffs',
+                                    '[]'::jsonb
+                                ) || COALESCE(
+                                    EXCLUDED.kickoff_evidence->'superseded_exact_kickoffs',
+                                    '[]'::jsonb
+                                ) || jsonb_build_array(jsonb_build_object(
+                                    'kickoff_time',football_pool_issue_matches.kickoff_time,
+                                    'kickoff_date',COALESCE(
+                                        football_pool_issue_matches.kickoff_date,
+                                        football_pool_issue_matches.kickoff_time::date
+                                    ),
+                                    'precision',football_pool_issue_matches.kickoff_time_precision,
+                                    'evidence',football_pool_issue_matches.kickoff_evidence
+                                        - 'superseded_exact_kickoffs' - 'source_observations'
+                                )),
+                                true
+                            ),
+                            '{source_observations}',
+                            COALESCE(
+                                football_pool_issue_matches.kickoff_evidence->'source_observations',
+                                '[]'::jsonb
+                            ) || COALESCE(
+                                EXCLUDED.kickoff_evidence->'source_observations',
+                                '[]'::jsonb
+                            ),
+                            true
+                        )
+                        WHEN EXCLUDED.kickoff_time_precision='date_only'
+                            AND football_pool_issue_matches.kickoff_time_precision='date_only'
+                            AND COALESCE(
+                                football_pool_issue_matches.kickoff_date,
+                                football_pool_issue_matches.kickoff_time::date
+                            ) IS DISTINCT FROM EXCLUDED.kickoff_date
+                        THEN jsonb_set(
+                            jsonb_set(
+                                EXCLUDED.kickoff_evidence,
+                                '{superseded_exact_kickoffs}',
+                                COALESCE(
+                                    football_pool_issue_matches.kickoff_evidence->'superseded_exact_kickoffs',
+                                    '[]'::jsonb
+                                ) || COALESCE(
+                                    EXCLUDED.kickoff_evidence->'superseded_exact_kickoffs',
+                                    '[]'::jsonb
+                                ),
+                                true
+                            ),
+                            '{source_observations}',
+                            CASE
+                                WHEN (
+                                    COALESCE(
+                                        football_pool_issue_matches.kickoff_evidence->'source_observations',
+                                        '[]'::jsonb
+                                    ) || COALESCE(
+                                        EXCLUDED.kickoff_evidence->'source_observations',
+                                        '[]'::jsonb
+                                    )
+                                ) @> jsonb_build_array(jsonb_build_object(
+                                    'kickoff_date',COALESCE(
+                                        football_pool_issue_matches.kickoff_date,
+                                        football_pool_issue_matches.kickoff_time::date
+                                    ),
+                                    'precision',football_pool_issue_matches.kickoff_time_precision,
+                                    'evidence',football_pool_issue_matches.kickoff_evidence
+                                        - 'superseded_exact_kickoffs' - 'source_observations'
+                                ))
+                                THEN COALESCE(
+                                    football_pool_issue_matches.kickoff_evidence->'source_observations',
+                                    '[]'::jsonb
+                                ) || COALESCE(
+                                    EXCLUDED.kickoff_evidence->'source_observations',
+                                    '[]'::jsonb
+                                )
+                                ELSE COALESCE(
+                                    football_pool_issue_matches.kickoff_evidence->'source_observations',
+                                    '[]'::jsonb
+                                ) || COALESCE(
+                                    EXCLUDED.kickoff_evidence->'source_observations',
+                                    '[]'::jsonb
+                                ) || jsonb_build_array(jsonb_build_object(
+                                    'kickoff_date',COALESCE(
+                                        football_pool_issue_matches.kickoff_date,
+                                        football_pool_issue_matches.kickoff_time::date
+                                    ),
+                                    'precision',football_pool_issue_matches.kickoff_time_precision,
+                                    'evidence',football_pool_issue_matches.kickoff_evidence
+                                        - 'superseded_exact_kickoffs' - 'source_observations'
+                                ))
+                            END,
+                            true
+                        )
+                        WHEN EXCLUDED.kickoff_time_precision='date_only'
+                            AND football_pool_issue_matches.kickoff_time_precision='date_only'
+                            AND (
+                                football_pool_issue_matches.kickoff_evidence ? 'superseded_exact_kickoffs'
+                                OR football_pool_issue_matches.kickoff_evidence ? 'source_observations'
+                                OR EXCLUDED.kickoff_evidence ? 'superseded_exact_kickoffs'
+                                OR EXCLUDED.kickoff_evidence ? 'source_observations'
+                            )
+                        THEN EXCLUDED.kickoff_evidence || jsonb_build_object(
+                            'superseded_exact_kickoffs',
+                            COALESCE(
+                                football_pool_issue_matches.kickoff_evidence->'superseded_exact_kickoffs',
+                                '[]'::jsonb
+                            ) || COALESCE(
+                                EXCLUDED.kickoff_evidence->'superseded_exact_kickoffs',
+                                '[]'::jsonb
+                            ),
+                            'source_observations',
+                            COALESCE(
+                                football_pool_issue_matches.kickoff_evidence->'source_observations',
+                                '[]'::jsonb
+                            ) || COALESCE(
+                                EXCLUDED.kickoff_evidence->'source_observations',
+                                '[]'::jsonb
+                            )
+                        )
+                        ELSE EXCLUDED.kickoff_evidence END,
+                    source_full_home_goals=COALESCE(
+                        EXCLUDED.source_full_home_goals,
+                        football_pool_issue_matches.source_full_home_goals
+                    ),
+                    source_full_away_goals=COALESCE(
+                        EXCLUDED.source_full_away_goals,
+                        football_pool_issue_matches.source_full_away_goals
+                    ),
+                    source_half_home_goals=COALESCE(
+                        EXCLUDED.source_half_home_goals,
+                        football_pool_issue_matches.source_half_home_goals
+                    ),
+                    source_half_away_goals=COALESCE(
+                        EXCLUDED.source_half_away_goals,
+                        football_pool_issue_matches.source_half_away_goals
+                    ),
+                    source_product_result_code=COALESCE(
+                        EXCLUDED.source_product_result_code,
+                        football_pool_issue_matches.source_product_result_code
+                    ),
+                    source_result_semantics_key=COALESCE(
+                        EXCLUDED.source_result_semantics_key,
+                        football_pool_issue_matches.source_result_semantics_key
+                    ),
+                    source_result_source=COALESCE(
+                        EXCLUDED.source_result_source,
+                        football_pool_issue_matches.source_result_source
+                    ),
+                    source_result_evidence=CASE WHEN EXCLUDED.source_result_evidence='{}'::jsonb
+                        THEN football_pool_issue_matches.source_result_evidence
+                        ELSE EXCLUDED.source_result_evidence END,
                     home_win_prob=EXCLUDED.home_win_prob,draw_prob=EXCLUDED.draw_prob,
                     away_win_prob=EXCLUDED.away_win_prob,upset_score=EXCLUDED.upset_score,
                     public_heat_home=EXCLUDED.public_heat_home,
@@ -741,6 +989,17 @@ def store_pool_issue_matches(
                     m.get("home_team_name"),
                     m.get("away_team_name"),
                     kickoff.replace(tzinfo=None) if kickoff else None,
+                    kickoff_date,
+                    kickoff_precision,
+                    Json(m.get("kickoff_evidence") or {}),
+                    m.get("source_full_home_goals"),
+                    m.get("source_full_away_goals"),
+                    m.get("source_half_home_goals"),
+                    m.get("source_half_away_goals"),
+                    m.get("source_product_result_code"),
+                    m.get("source_result_semantics_key"),
+                    m.get("source_result_source"),
+                    Json(m.get("source_result_evidence") or {}),
                     m.get("home_win_prob"),
                     m.get("draw_prob"),
                     m.get("away_win_prob"),

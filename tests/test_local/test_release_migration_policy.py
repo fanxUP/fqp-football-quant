@@ -18,6 +18,7 @@ MIGRATIONS_124_125 = [
     "125_football_fixture_identity.sql",
 ]
 MIGRATION_126 = ["126_official_season_retention_access.sql"]
+MIGRATION_128 = ["128_traditional_history_facts.sql"]
 
 
 def _write_report(directory: Path, report: dict) -> str:
@@ -274,6 +275,90 @@ def test_other_pending_migrations_still_require_a_recent_verified_backup(tmp_pat
 
 def test_no_pending_migrations_need_no_backup_evidence():
     validate({}, [])
+
+
+def traditional_facts_rehearsal_record(directory: Path) -> dict:
+    pending = MIGRATION_128
+    checksum = hashlib.sha256((ROOT / "sql" / pending[0]).read_bytes()).hexdigest()
+    checksums = {pending[0]: checksum}
+    report = {
+        "status": "passed",
+        "target_sha": TARGET_SHA,
+        "pending_migrations": pending,
+        "migration_sha256": checksums,
+        "verified_at": datetime.now(UTC).isoformat(),
+        "database": {
+            "disposable": True,
+            "postgres_major": 16,
+            "fixture_kind": "synthetic_schema_fixture",
+            "production_data_copy": False,
+        },
+        "existing_rows_preserved": "passed",
+        "constraints_and_triggers_verified": "passed",
+        "transaction_rollback_verified": "passed",
+        "timeouts": {"lock_seconds": 2, "statement_seconds": 30},
+        "test_results": {"passed": 1, "failed": 0, "skipped": 0},
+        "application_role": {"name": "fqp", "superuser": False},
+        "application_role_catalog_access": "passed",
+        "application_catalog_read_path": "passed",
+        "application_import_write_path": "passed",
+    }
+    evidence_sha256 = _write_report(directory, report)
+    return {
+        "target_sha": TARGET_SHA,
+        "migration_copy_dry_run": "passed",
+        "migration_transaction_dry_run": "passed",
+        "no_backup_authorized": True,
+        "no_backup_reason": "Explicit operator preference; migration 128 was rehearsed in isolation.",
+        "no_backup_migration_rehearsal": {
+            "status": "passed",
+            "pending_migrations": pending,
+            "sha256": checksums,
+            "report_path": "no-backup-migration-rehearsal.json",
+            "evidence_sha256": evidence_sha256,
+        },
+    }
+
+
+def test_no_backup_allows_only_pinned_128_with_application_role_rehearsal(tmp_path):
+    validate(
+        traditional_facts_rehearsal_record(tmp_path),
+        MIGRATION_128,
+        evidence_directory=tmp_path,
+    )
+
+
+@pytest.mark.parametrize(
+    "pending",
+    [
+        ["128_traditional_history_facts.sql", "127_football_fixture_seasons.sql"],
+        ["128_unreviewed.sql"],
+    ],
+)
+def test_no_backup_128_rejects_other_migration_sets(pending, tmp_path):
+    record = traditional_facts_rehearsal_record(tmp_path)
+    record["no_backup_migration_rehearsal"]["pending_migrations"] = pending
+    with pytest.raises(SystemExit, match="restricted|reviewed|allowlist"):
+        validate(record, pending, evidence_directory=tmp_path)
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("application_role_catalog_access", "failed"),
+        ("application_catalog_read_path", "not_run"),
+        ("application_import_write_path", "not_run"),
+        ("application_role", {"name": "postgres", "superuser": True}),
+    ],
+)
+def test_no_backup_128_requires_runtime_role_catalog_and_import_paths(field, value, tmp_path):
+    record = traditional_facts_rehearsal_record(tmp_path)
+    report_path = tmp_path / record["no_backup_migration_rehearsal"]["report_path"]
+    report = json.loads(report_path.read_text())
+    report[field] = value
+    record["no_backup_migration_rehearsal"]["evidence_sha256"] = _write_report(tmp_path, report)
+    with pytest.raises(SystemExit, match="application|runtime"):
+        validate(record, MIGRATION_128, evidence_directory=tmp_path)
 
 
 def test_no_backup_allows_pinned_acl_repair_with_runtime_role_evidence(tmp_path):

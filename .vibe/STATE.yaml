@@ -1,10 +1,10 @@
 {
-  "state": "READY_TO_MERGE",
+  "state": "REVIEWING",
   "last_transition": {
-    "from": "REVIEWING",
-    "to": "READY_TO_MERGE",
-    "at": "2026-10-24T19:07:15.374046+08:00",
-    "reason": "V4 quality gate passed; final local evidence, independent review, migration rehearsal, and exact submitted SHA CI are green."
+    "from": "VERIFYING",
+    "to": "REVIEWING",
+    "at": "2026-11-02T02:31:23.500562+08:00",
+    "reason": "A128 本地代码与隔离迁移验收通过，最新独立代码/迁移审查通过；目标SHA绑定的发布演练和GitHub main CI仍待完成。"
   },
   "blocked_reason": null
 }

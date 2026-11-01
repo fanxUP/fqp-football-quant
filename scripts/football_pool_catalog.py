@@ -7,7 +7,7 @@ from dates or from the old single-season retention windows.
 
 from __future__ import annotations
 
-from datetime import date, datetime, time, timedelta
+from datetime import date, datetime
 from typing import Any
 
 from scripts.football_fixture_identity import TRADITIONAL_MATCH_COUNTS
@@ -19,6 +19,14 @@ def _iso(value: Any) -> str | None:
     return instant.isoformat() if instant else None
 
 
+def _day_iso(value: Any) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.date().isoformat()
+    return value.isoformat() if hasattr(value, "isoformat") else str(value)
+
+
 def _summary(row: tuple) -> dict:
     (
         iid,
@@ -26,6 +34,8 @@ def _summary(row: tuple) -> dict:
         game,
         total,
         source_game,
+        source_game_no,
+        source_game_no_source,
         raw,
         stored,
         linked,
@@ -33,6 +43,8 @@ def _summary(row: tuple) -> dict:
         conflict,
         unique,
         orders,
+        first_date,
+        last_date,
         first,
         last,
     ) = row
@@ -41,6 +53,8 @@ def _summary(row: tuple) -> dict:
         "id": iid,
         "issue_no": number,
         "game_type": game,
+        "source_game_no": source_game_no,
+        "source_game_no_source": source_game_no_source,
         "total_matches": total,
         "expected_matches": expected,
         "stored_matches": stored,
@@ -52,6 +66,8 @@ def _summary(row: tuple) -> dict:
         "catalogue_complete": source_game == game
         and total == expected
         and orders == list(range(1, expected + 1)),
+        "first_kickoff_date": _day_iso(first_date),
+        "last_kickoff_date": _day_iso(last_date),
         "first_kickoff": _iso(first),
         "last_kickoff": _iso(last),
         **sale_window(raw or {}),
@@ -61,8 +77,10 @@ def _summary(row: tuple) -> dict:
 # Aggregate only the bounded page, not every issue or a multi-million-row fact
 # table. COUNT(DISTINCT fixture_id) is per issue, not across the page's games.
 _SUMMARY_SQL = """
-SELECT i.id,i.issue_no,i.game_type,i.total_matches,i.source_game_type,i.raw_json,
-       s.stored,s.linked,s.pending,s.conflict,s.unique_fixtures,s.orders,s.first,s.last
+SELECT i.id,i.issue_no,i.game_type,i.total_matches,i.source_game_type,
+       i.source_game_no,i.source_game_no_source,i.raw_json,
+       s.stored,s.linked,s.pending,s.conflict,s.unique_fixtures,s.orders,
+       s.first_date,s.last_date,s.first,s.last
 FROM page i CROSS JOIN LATERAL (
     SELECT count(*) AS stored,
            count(*) FILTER (WHERE identity_status='linked') AS linked,
@@ -70,7 +88,10 @@ FROM page i CROSS JOIN LATERAL (
            count(*) FILTER (WHERE identity_status='conflict') AS conflict,
            count(DISTINCT fixture_id) AS unique_fixtures,
            array_agg(match_order ORDER BY match_order) AS orders,
-           min(kickoff_time) AS first,max(kickoff_time) AS last
+           min(COALESCE(kickoff_date,kickoff_time::date)) AS first_date,
+           max(COALESCE(kickoff_date,kickoff_time::date)) AS last_date,
+           min(kickoff_time) FILTER (WHERE kickoff_time_precision IN ('minute','second')) AS first,
+           max(kickoff_time) FILTER (WHERE kickoff_time_precision IN ('minute','second')) AS last
     FROM football_pool_fixture_catalog WHERE issue_id=i.id
 ) s ORDER BY i.issue_no DESC,i.id DESC
 """
@@ -97,11 +118,11 @@ def read_pool_catalog(
         params.append(issue_no)
     date_clauses = []
     if date_from:
-        date_clauses.append("m.kickoff_time >= %s")
-        params.append(datetime.combine(date_from, time.min))
+        date_clauses.append("COALESCE(m.kickoff_date,m.kickoff_time::date) >= %s")
+        params.append(date_from)
     if date_to:
-        date_clauses.append("m.kickoff_time < %s")
-        params.append(datetime.combine(date_to + timedelta(days=1), time.min))
+        date_clauses.append("COALESCE(m.kickoff_date,m.kickoff_time::date) <= %s")
+        params.append(date_to)
     if date_clauses:
         clauses.append(
             "EXISTS (SELECT 1 FROM football_pool_issue_matches m WHERE m.issue_id=i.id AND "
@@ -135,7 +156,12 @@ def read_pool_catalog_issue(conn: Any, issue_id: int) -> dict | None:
             return None
         cur.execute(
             """SELECT match_order,fixture_id,official_match_id,identity_status,
-                      identity_evidence->>'reason',league_name,home_team_name,away_team_name,kickoff_time
+                      identity_evidence->>'reason',league_name,home_team_name,away_team_name,
+                      kickoff_time,kickoff_date,kickoff_time_precision,
+                      source_full_home_goals,source_full_away_goals,
+                      source_half_home_goals,source_half_away_goals,
+                      source_product_result_code,source_result_semantics_key,
+                      source_result_source
                FROM football_pool_fixture_catalog WHERE issue_id=%s ORDER BY match_order""",
             (issue_id,),
         )
@@ -149,8 +175,36 @@ def read_pool_catalog_issue(conn: Any, issue_id: int) -> dict | None:
                 "league": league or "",
                 "home_team": home or "",
                 "away_team": away or "",
-                "kickoff": _iso(kickoff),
+                "kickoff": _iso(kickoff) if precision in {"minute", "second"} else None,
+                "kickoff_date": _day_iso(kickoff_date) or _day_iso(kickoff),
+                "kickoff_time_precision": precision,
+                "source_full_home_goals": full_home,
+                "source_full_away_goals": full_away,
+                "source_half_home_goals": half_home,
+                "source_half_away_goals": half_away,
+                "source_product_result_code": result_code,
+                "source_result_semantics_key": result_semantics,
+                "source_result_source": result_source,
             }
-            for order, fid, official_id, status, reason, league, home, away, kickoff in cur.fetchall()
+            for (
+                order,
+                fid,
+                official_id,
+                status,
+                reason,
+                league,
+                home,
+                away,
+                kickoff,
+                kickoff_date,
+                precision,
+                full_home,
+                full_away,
+                half_home,
+                half_away,
+                result_code,
+                result_semantics,
+                result_source,
+            ) in cur.fetchall()
         ]
     return {"issue": _summary(header), "fixtures": fixtures, "season_status": "pending"}

@@ -1148,6 +1148,20 @@ def parse_traditional_lottery_response(
                 block_reason = block_reason or "duplicate_fixture_slots"
         matches = []
         for i, m in enumerate(match_list):
+            raw_start_time = str(m.get("startTime") or "").strip()
+            parsed_kickoff = pool_time(raw_start_time)
+            time_precision = "unknown"
+            if parsed_kickoff:
+                if re.fullmatch(r"\d{4}-\d{2}-\d{2}", raw_start_time):
+                    time_precision = "date_only"
+                elif re.search(
+                    r"\d{2}:\d{2}:\d{2}(?:[.,]\d+)?(?:Z|[+-]\d{2}:?\d{2})?$",
+                    raw_start_time,
+                ):
+                    time_precision = "second"
+                elif re.search(r"\d{2}:\d{2}(?:Z|[+-]\d{2}:?\d{2})?$", raw_start_time):
+                    time_precision = "minute"
+            precise_kickoff = time_precision in {"minute", "second"}
             matches.append(
                 {
                     "match_order": i + 1,
@@ -1162,9 +1176,18 @@ def parse_traditional_lottery_response(
                     "away_team_name": m.get("guestTeamAllName")
                     or m.get("guestTeamName")
                     or m.get("awayTeam", ""),
+                    "kickoff_date": parsed_kickoff.date().isoformat() if parsed_kickoff else None,
                     "kickoff_time": (
-                        kickoff.isoformat() if (kickoff := pool_time(m.get("startTime"))) else None
+                        parsed_kickoff.isoformat() if parsed_kickoff and precise_kickoff else None
                     ),
+                    "kickoff_time_precision": time_precision,
+                    "kickoff_evidence": {
+                        "source": "sporttery_live_draw",
+                        "field": "startTime",
+                        "raw_value": raw_start_time,
+                    }
+                    if raw_start_time
+                    else {},
                     "home_win_prob": m.get("homeWinProb"),
                     "draw_prob": m.get("drawProb"),
                     "away_win_prob": m.get("awayWinProb"),
@@ -1184,6 +1207,8 @@ def parse_traditional_lottery_response(
             {
                 "game_type": game_type,
                 "issue_no": issue_no,
+                "source_game_no": game_code,
+                "source_game_no_source": "sporttery_live_draw",
                 "sale_start": sale_start,
                 "sale_stop": sale_stop,
                 "total_matches": len(match_list) if shape_verified else None,
@@ -1237,6 +1262,8 @@ def crawl_traditional_lottery() -> dict[str, Any]:
                     total_matches=pool["total_matches"],
                     official_status=pool["official_status"],
                     raw_json=pool.get("raw_json"),
+                    source_game_no=pool.get("source_game_no"),
+                    source_game_no_source=pool.get("source_game_no_source"),
                 )
                 if issue_id:
                     total_issues += 1

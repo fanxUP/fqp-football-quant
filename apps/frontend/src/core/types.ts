@@ -807,6 +807,8 @@ export interface PoolCatalogFilters {
 }
 export interface PoolCatalogIssue extends PoolIssue {
   game_type: PoolGameType;
+  source_game_no?: number | null;
+  source_game_no_source?: string | null;
   expected_matches: number;
   total_matches: number | null;
   stored_matches: number;
@@ -816,6 +818,8 @@ export interface PoolCatalogIssue extends PoolIssue {
   unique_fixtures: number;
   source_verified: boolean;
   catalogue_complete: boolean;
+  first_kickoff_date?: string | null;
+  last_kickoff_date?: string | null;
   first_kickoff: string | null;
   last_kickoff: string | null;
 }
@@ -837,6 +841,15 @@ export interface PoolCatalogDetail {
     home_team: string;
     away_team: string;
     kickoff: string | null;
+    kickoff_date?: string | null;
+    kickoff_time_precision?: 'unknown' | 'date_only' | 'minute' | 'second';
+    source_full_home_goals?: number | null;
+    source_full_away_goals?: number | null;
+    source_half_home_goals?: number | null;
+    source_half_away_goals?: number | null;
+    source_product_result_code?: string | null;
+    source_result_semantics_key?: string | null;
+    source_result_source?: string | null;
   }[];
 }
 export interface PoolParameters {

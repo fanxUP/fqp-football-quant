@@ -22,6 +22,31 @@ const errorMessage = (error: unknown) => error instanceof Error ? error.message 
 const formatTime = (value: string | null) => value ? new Intl.DateTimeFormat('zh-CN', {
   timeZone: 'Asia/Shanghai', month: '2-digit', day: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false,
 }).format(new Date(value)) : '待核实';
+const formatDate = (value: string | null | undefined) => value ? new Intl.DateTimeFormat('zh-CN', {
+  timeZone: 'Asia/Shanghai', month: '2-digit', day: '2-digit', year: 'numeric',
+}).format(new Date(`${value}T00:00:00+08:00`)) : '待核实';
+const formatKickoff = (dateValue: string | null | undefined, timeValue: string | null, precision?: string) => {
+  if ((precision === 'minute' || precision === 'second') && timeValue) return formatTime(timeValue);
+  return formatDate(dateValue ?? timeValue?.slice(0, 10));
+};
+const SOURCE_LABELS: Record<string, string> = {
+  sporttery_history_api: '体彩官方历史接口',
+  sporttery_live_draw: '体彩实时接口',
+};
+const formatSourceResult = (fixture: PoolCatalogDetail['fixtures'][number]) => {
+  const parts: string[] = [];
+  if (fixture.source_full_home_goals != null && fixture.source_full_away_goals != null) {
+    parts.push(`全场 ${fixture.source_full_home_goals}:${fixture.source_full_away_goals}`);
+  }
+  if (fixture.source_half_home_goals != null && fixture.source_half_away_goals != null) {
+    parts.push(`半场 ${fixture.source_half_home_goals}:${fixture.source_half_away_goals}`);
+  }
+  if (fixture.source_product_result_code) {
+    parts.push(`玩法码 ${fixture.source_product_result_code}`);
+  }
+  const source = fixture.source_result_source ? SOURCE_LABELS[fixture.source_result_source] ?? fixture.source_result_source : '';
+  return parts.length ? `${parts.join(' · ')}${source ? ` · ${source}` : ''}` : '尚未回填';
+};
 
 export default function PoolFixtureCatalog() {
   const [query, setQuery] = useState<PoolCatalogFilters>({ limit: 20, offset: 0 });
@@ -96,12 +121,12 @@ export default function PoolFixtureCatalog() {
         {page.issues.length === 0 ? <p className="pool-catalog__empty">暂无符合条件的已采集期次。可调整条件；尚未采集不代表官方没有安排。</p> :
           <div className="pool-catalog__table-scroll" role="region" aria-label="官方期次列表" tabIndex={0}>
             <table className="fqp-table">
-              <thead><tr><th scope="col">玩法 / 期号</th><th scope="col">选场材料</th><th scope="col">比赛身份</th><th scope="col">开球 / 销售状态</th><th scope="col">详情</th></tr></thead>
+              <thead><tr><th scope="col">玩法 / 期号</th><th scope="col">选场材料</th><th scope="col">比赛身份</th><th scope="col">比赛日期 / 销售状态</th><th scope="col">详情</th></tr></thead>
               <tbody>{page.issues.map(issue => <tr key={issue.id} aria-selected={selected?.id === issue.id}>
                 <td>{GAME_LABELS[issue.game_type]}<br /><strong>{issue.issue_no}</strong></td>
                 <td>{issue.stored_matches} / {issue.expected_matches} 场<br /><small>{issue.catalogue_complete ? '场序齐全' : '场序或来源待核实'}</small></td>
                 <td><span className="pool-catalog__linked">已关联 {issue.linked_matches}</span><br />待核实 {issue.pending_matches} · <span className={issue.conflict_matches ? 'pool-catalog__warning' : ''}>冲突 {issue.conflict_matches}</span></td>
-                <td>{formatTime(issue.first_kickoff)}<br /><small>{STATES[issue.state ?? 'unknown'] ?? '销售状态待核实'}</small></td>
+                <td>{formatDate(issue.first_kickoff_date ?? issue.first_kickoff?.slice(0, 10))}<br /><small>{STATES[issue.state ?? 'unknown'] ?? '销售状态待核实'}</small></td>
                 <td><button type="button" className="fqp-btn" aria-label={`查看${GAME_LABELS[issue.game_type]}第${issue.issue_no}期`} aria-pressed={selected?.id === issue.id} onClick={() => void openIssue(issue)}>查看比赛</button></td>
               </tr>)}</tbody>
             </table>
@@ -118,15 +143,16 @@ export default function PoolFixtureCatalog() {
       {detailLoading && <p role="status">正在加载全期比赛…</p>}
       {detailError && <div role="alert" className="pool-catalog__warning">比赛列表加载失败：{detailError} <button type="button" className="fqp-btn" onClick={() => void openIssue(selected)}>重试比赛列表</button></div>}
       {detail && <>
-        <p>全期 {detail.issue.stored_matches} 条选场记录 · {detail.issue.unique_fixtures} 个已关联比赛身份 · 停售时间：{formatTime(detail.issue.sale_stop)}</p>
+        <p>来源玩法号：{detail.issue.source_game_no ?? '待核实'} · 全期 {detail.issue.stored_matches} 条选场记录 · {detail.issue.unique_fixtures} 个已关联比赛身份 · 停售时间：{formatTime(detail.issue.sale_stop)}</p>
         {!detail.issue.catalogue_complete && <p className="pool-catalog__warning">场序或玩法来源尚未核实完整；以下保留已采集材料。</p>}
         <p className="pool-catalog__hint">无竞彩关联的传统足彩比赛也会保留。身份已关联不代表赛季、赛果或预测数据已齐全。6场半全场和4场进球当前提供选场查询。</p>
         {detail.fixtures.length === 0 ? <p className="pool-catalog__empty">该期尚未采集到比赛材料。</p> :
           <div className="pool-catalog__table-scroll" role="region" aria-label="全期比赛列表" tabIndex={0}>
-            <table className="fqp-table"><thead><tr><th scope="col">场序</th><th scope="col">联赛 / 对阵</th><th scope="col">开球（北京时间）</th><th scope="col">统一身份</th><th scope="col">竞彩关联</th></tr></thead>
+            <table className="fqp-table"><thead><tr><th scope="col">场序</th><th scope="col">联赛 / 对阵</th><th scope="col">开球日期 / 时间（北京时间）</th><th scope="col">来源赛果（本玩法口径）</th><th scope="col">统一身份</th><th scope="col">竞彩关联</th></tr></thead>
               <tbody>{detail.fixtures.map(fixture => <tr key={fixture.match_order}>
                 <td>{fixture.match_order}</td><td><small>{fixture.league || '联赛待核实'}</small><br />{fixture.home_team || '主队待核实'} vs {fixture.away_team || '客队待核实'}</td>
-                <td>{formatTime(fixture.kickoff)}</td>
+                <td>{formatKickoff(fixture.kickoff_date, fixture.kickoff, fixture.kickoff_time_precision)}{fixture.kickoff_time_precision === 'date_only' && <><br /><small>来源只提供日期</small></>}{fixture.kickoff_time_precision === 'unknown' && <><br /><small>时刻精度待核实</small></>}</td>
+                <td>{formatSourceResult(fixture)}{fixture.source_result_semantics_key && <><br /><small>{fixture.source_result_semantics_key}</small></>}</td>
                 <td><span className={fixture.identity_status === 'linked' ? 'pool-catalog__linked' : 'pool-catalog__warning'}>{fixture.identity_status === 'linked' ? `已关联 · 比赛 #${fixture.fixture_id}` : fixture.identity_status === 'conflict' ? '关联冲突' : '待核实'}</span>
                   {fixture.identity_status !== 'linked' && <><br /><small>{REASONS[fixture.identity_reason ?? ''] ?? '身份关联材料待核实'}</small></>}</td>
                 <td>{fixture.official_match_id == null ? '无竞彩关联' : `竞彩 #${fixture.official_match_id}`}</td>

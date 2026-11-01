@@ -1,5 +1,6 @@
 """Opt-in source identity/membership checks, isolated loopback PostgreSQL only."""
 
+import hashlib
 import os
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
@@ -18,11 +19,14 @@ from psycopg2.errors import (
     UniqueViolation,
 )
 from psycopg2.extensions import parse_dsn
+from psycopg2.extras import Json
 
 from scripts.football_history_storage import match_history_reference
 from scripts.football_pool_catalog import read_pool_catalog, read_pool_catalog_issue
 from scripts.official_crawler import parse_traditional_lottery_response
 from scripts.official_storage import store_pool_issue, store_pool_issue_matches
+from scripts.traditional_history_import import apply_issue_batch, load_issue_batch
+from tests.test_jobs.test_traditional_history_import import _write_inputs
 
 ROOT = Path(__file__).resolve().parents[2]
 MIGRATION = ROOT / "sql/125_football_fixture_identity.sql"
@@ -70,6 +74,12 @@ def migrate(conn):
 @pytest.fixture
 def ready(database):
     migrate(database)
+    with database.cursor() as cur:
+        cur.execute(
+            "CREATE TABLE local_schema_migrations(filename TEXT PRIMARY KEY, checksum_sha256 TEXT)"
+        )
+        cur.execute((ROOT / "sql/128_traditional_history_facts.sql").read_text())
+    database.commit()
     return database
 
 
@@ -90,8 +100,11 @@ def fixture_row(n=1, **changes):
         home_team_name=f"主{n}",
         away_team_name=f"客{n}",
         kickoff_time="2026-10-30T20:00:00+08:00",
+        kickoff_time_precision="minute",
     )
     row.update(changes)
+    if row["kickoff_time"] is None and "kickoff_time_precision" not in changes:
+        row["kickoff_time_precision"] = "unknown"
     return row
 
 
@@ -566,7 +579,11 @@ def test_history_identity_invalid_scope_has_no_side_effects(history_ready, bad):
 def test_migration_keeps_existing_ids_results_and_saved_plan(database):
     conn = database
     mid = official(conn)
-    issue = store_pool_issue(conn, "26001", "t14c", None, None, 14, "unknown", {})
+    issue = rows(
+        conn,
+        """INSERT INTO football_pool_issues(issue_no,game_type,total_matches,official_status)
+           VALUES ('26001','t14c',14,'unknown') RETURNING id""",
+    )[0][0]
     rows(
         conn,
         "INSERT INTO football_pool_issue_matches(issue_id,match_order,match_id) VALUES (%s,1,%s) RETURNING id",
@@ -584,17 +601,23 @@ def test_migration_keeps_existing_ids_results_and_saved_plan(database):
         (issue,),
     )
     conn.commit()
-    before = {
-        table: rows(conn, f"SELECT * FROM {table}")
-        for table in (
-            "official_matches",
-            "official_results",
-            "football_pool_issues",
-            "football_pool_combinations",
-        )
+    preserved_queries = {
+        "official_matches": "SELECT * FROM official_matches",
+        "official_results": "SELECT * FROM official_results",
+        "football_pool_issues": """SELECT id,issue_no,game_type,sale_start_time,
+            sale_stop_time,total_matches,official_status,raw_hash,raw_json
+            FROM football_pool_issues""",
+        "football_pool_combinations": "SELECT * FROM football_pool_combinations",
     }
+    before = {table: rows(conn, query) for table, query in preserved_queries.items()}
     migrate(conn)
-    assert before == {table: rows(conn, f"SELECT * FROM {table}") for table in before}
+    with conn.cursor() as cur:
+        cur.execute(
+            "CREATE TABLE local_schema_migrations(filename TEXT PRIMARY KEY, checksum_sha256 TEXT)"
+        )
+        cur.execute((ROOT / "sql/128_traditional_history_facts.sql").read_text())
+    conn.commit()
+    assert before == {table: rows(conn, query) for table, query in preserved_queries.items()}
     assert rows(
         conn, "SELECT issue_id,match_id,fixture_id,identity_status FROM football_pool_issue_matches"
     ) == [(issue, mid, None, "pending")]
@@ -682,6 +705,1028 @@ def test_catalog_date_filter_is_beijing_half_open_and_keeps_whole_issue(ready):
     assert detail["fixtures"][0]["kickoff"] == "2026-10-30T00:00:00+08:00"
     assert detail["fixtures"][-1]["kickoff"] == "2026-10-31T00:00:00+08:00"
     assert read_pool_catalog(conn, date_from=date(2026, 11, 1))["total"] == 0
+
+
+def _seed_traditional_import_fill(conn, tmp_path):
+    from scripts.traditional_history_import import MIGRATION
+
+    _register_traditional_import_migration(conn, MIGRATION)
+
+    issue_id = store_pool_issue(
+        conn,
+        "21062",
+        "bqc6",
+        "2021-06-02 20:00:00",
+        "2021-06-04 22:00:00",
+        6,
+        "unknown",
+        {"legacy": "preserve-header"},
+    )
+    members = [
+        fixture_row(
+            order,
+            match_order=order,
+            home_team_name=f"主队{order}",
+            away_team_name=f"客队{order}",
+            league_name="国际赛",
+            kickoff_time="2021-06-05 00:00:00",
+            kickoff_time_precision="unknown",
+            source_match_id=None,
+            source_ids={},
+            raw_json={"legacy": f"preserve-member-{order}"},
+            home_win_prob=0.4,
+        )
+        for order in range(1, 7)
+    ]
+    store_pool_issue_matches(conn, issue_id, members)
+    with conn.cursor() as cur:
+        cur.execute(
+            "UPDATE football_pool_issues SET source_game_type=NULL WHERE id=%s",
+            (issue_id,),
+        )
+        cur.execute(
+            "UPDATE football_pool_issue_matches SET kickoff_date=NULL WHERE issue_id=%s",
+            (issue_id,),
+        )
+        cur.execute(
+            "SELECT id,match_id,fixture_id,kickoff_time,home_win_prob "
+            "FROM football_pool_issue_matches WHERE issue_id=%s ORDER BY match_order",
+            (issue_id,),
+        )
+        before_members = cur.fetchall()
+    conn.commit()
+
+    preview, manifest, summary = _write_inputs(
+        tmp_path,
+        readiness="candidate_fill_exact_existing_issue",
+        production_state="existing_issue_matches_source_api",
+    )
+    batch = load_issue_batch(preview, manifest, summary, kind="fill", limit=10)
+    return issue_id, before_members, batch
+
+
+def test_date_only_update_preserves_or_archives_prior_precise_kickoff(ready):
+    issue_id = put(
+        ready,
+        [
+            fixture_row(
+                1,
+                kickoff_time="2026-10-30 20:30:00",
+                kickoff_date="2026-10-30",
+                kickoff_time_precision="minute",
+                kickoff_evidence={"source": "minute_schedule", "precision": "minute"},
+            )
+        ],
+    )
+
+    same_date = fixture_row(
+        1,
+        kickoff_time=None,
+        kickoff_date="2026-10-30",
+        kickoff_time_precision="date_only",
+        kickoff_evidence={"source": "history_api", "precision": "date_only"},
+    )
+    store_pool_issue_matches(ready, issue_id, [same_date])
+    row = rows(
+        ready,
+        "SELECT kickoff_time::text,kickoff_date::text,kickoff_time_precision,kickoff_evidence "
+        "FROM football_pool_issue_matches WHERE issue_id=%s",
+        (issue_id,),
+    )[0]
+    assert row[:3] == ("2026-10-30 20:30:00", "2026-10-30", "minute")
+    assert row[3]["source"] == "minute_schedule"
+    assert row[3]["source_observations"][-1]["evidence"]["source"] == "history_api"
+    store_pool_issue_matches(ready, issue_id, [same_date])
+    row = rows(
+        ready,
+        "SELECT kickoff_evidence FROM football_pool_issue_matches WHERE issue_id=%s",
+        (issue_id,),
+    )[0][0]
+    assert row["source_observations"] == [
+        {
+            "kickoff_date": "2026-10-30",
+            "precision": "date_only",
+            "evidence": {"source": "history_api", "precision": "date_only"},
+        }
+    ]
+
+    changed_date = fixture_row(
+        1,
+        kickoff_time=None,
+        kickoff_date="2026-11-01",
+        kickoff_time_precision="date_only",
+        kickoff_evidence={"source": "rescheduled_history_api", "precision": "date_only"},
+    )
+    store_pool_issue_matches(ready, issue_id, [changed_date])
+    row = rows(
+        ready,
+        "SELECT kickoff_time::text,kickoff_date::text,kickoff_time_precision,kickoff_evidence "
+        "FROM football_pool_issue_matches WHERE issue_id=%s",
+        (issue_id,),
+    )[0]
+    assert row[:3] == (None, "2026-11-01", "date_only")
+    assert row[3]["source"] == "rescheduled_history_api"
+    archived = row[3]["superseded_exact_kickoffs"][-1]
+    assert archived["kickoff_time"] == "2026-10-30T20:30:00"
+    assert archived["evidence"]["source"] == "minute_schedule"
+    assert row[3]["source_observations"] == [
+        {
+            "kickoff_date": "2026-10-30",
+            "precision": "date_only",
+            "evidence": {"source": "history_api", "precision": "date_only"},
+        }
+    ]
+
+    store_pool_issue_matches(ready, issue_id, [changed_date])
+    refreshed = rows(
+        ready,
+        "SELECT kickoff_evidence FROM football_pool_issue_matches WHERE issue_id=%s",
+        (issue_id,),
+    )[0][0]
+    assert refreshed["superseded_exact_kickoffs"] == row[3]["superseded_exact_kickoffs"]
+    assert refreshed["source_observations"] == row[3]["source_observations"]
+
+    later_date = fixture_row(
+        1,
+        kickoff_time=None,
+        kickoff_date="2026-11-02",
+        kickoff_time_precision="date_only",
+        kickoff_evidence={"source": "second_reschedule_api", "precision": "date_only"},
+    )
+    store_pool_issue_matches(ready, issue_id, [later_date])
+    row = rows(
+        ready,
+        "SELECT kickoff_evidence FROM football_pool_issue_matches WHERE issue_id=%s",
+        (issue_id,),
+    )[0][0]
+    assert row["superseded_exact_kickoffs"] == refreshed["superseded_exact_kickoffs"]
+    assert row["source_observations"][-1] == {
+        "kickoff_date": "2026-11-01",
+        "precision": "date_only",
+        "evidence": {
+            key: value
+            for key, value in refreshed.items()
+            if key not in {"superseded_exact_kickoffs", "source_observations"}
+        },
+    }
+    assert all(
+        "superseded_exact_kickoffs" not in observation["evidence"]
+        and "source_observations" not in observation["evidence"]
+        for observation in row["source_observations"]
+    )
+    assert all(
+        "superseded_exact_kickoffs" not in archived["evidence"]
+        and "source_observations" not in archived["evidence"]
+        for archived in row["superseded_exact_kickoffs"]
+    )
+
+    store_pool_issue_matches(ready, issue_id, [later_date])
+    repeated = rows(
+        ready,
+        "SELECT kickoff_evidence FROM football_pool_issue_matches WHERE issue_id=%s",
+        (issue_id,),
+    )[0][0]
+    assert repeated == row
+
+
+def _register_traditional_import_migration(conn, migration):
+    with conn.cursor() as cur:
+        cur.execute(
+            "CREATE TABLE IF NOT EXISTS local_schema_migrations("
+            "filename TEXT PRIMARY KEY, checksum_sha256 TEXT)"
+        )
+        cur.execute(
+            "INSERT INTO local_schema_migrations(filename,checksum_sha256) VALUES (%s,%s)",
+            (migration.name, hashlib.sha256(migration.read_bytes()).hexdigest()),
+        )
+    conn.commit()
+
+
+def _issue_repair_header(conn, issue_id):
+    row = rows(
+        conn,
+        """SELECT id,game_type,source_game_type,issue_no,total_matches,
+                  sale_start_time::text,sale_stop_time::text,md5(raw_json::text),
+                  (SELECT count(*) FROM football_pool_combinations c WHERE c.issue_id=i.id)::int,
+                  source_game_no,source_game_no_source,raw_json,official_status,
+                  prize_pool_estimate::text,raw_hash
+           FROM football_pool_issues i WHERE id=%s""",
+        (issue_id,),
+    )[0]
+    return {
+        "id": row[0],
+        "game_type": row[1],
+        "source_game_type": row[2],
+        "issue_no": row[3],
+        "total_matches": row[4],
+        "sale_start_time": row[5],
+        "sale_stop_time": row[6],
+        "raw_json_md5": row[7],
+        "saved_combinations": row[8],
+        "source_game_no": row[9],
+        "source_game_no_source": row[10],
+        "raw_json": row[11],
+        "official_status": row[12],
+        "prize_pool_estimate": row[13],
+        "raw_hash": row[14],
+    }
+
+
+def _issue_repair_members(conn, issue_id):
+    return rows(
+        conn,
+        """SELECT id,match_order,match_id,fixture_id,identity_status,source_match_id,
+                  league_name,home_team_name,away_team_name,kickoff_time::text,
+                  kickoff_date::text,kickoff_time_precision,kickoff_evidence,
+                  source_full_home_goals,source_full_away_goals,
+                  source_half_home_goals,source_half_away_goals,
+                  source_product_result_code,source_result_semantics_key,
+                  source_result_source,source_result_evidence,
+                  home_win_prob,draw_prob,away_win_prob,upset_score,
+                  public_heat_home,public_heat_draw,public_heat_away,
+                  identity_evidence,source_raw_json,md5(source_raw_json::text)
+           FROM football_pool_issue_matches WHERE issue_id=%s ORDER BY match_order""",
+        (issue_id,),
+    )
+
+
+def _member_repair_document(row):
+    return dict(
+        membership_id=row[0],
+        match_order=row[1],
+        match_id=row[2],
+        fixture_id=row[3],
+        identity_status=row[4],
+        source_match_id=row[5],
+        league_name=row[6],
+        home_team_name=row[7],
+        away_team_name=row[8],
+        kickoff_time=row[9],
+        kickoff_date=row[10],
+        kickoff_time_precision=row[11],
+        kickoff_evidence=row[12] or {},
+        source_full_home_goals=row[13],
+        source_full_away_goals=row[14],
+        source_half_home_goals=row[15],
+        source_half_away_goals=row[16],
+        source_product_result_code=row[17],
+        source_result_semantics_key=row[18],
+        source_result_source=row[19],
+        source_result_evidence=row[20] or {},
+        home_win_prob=str(row[21]) if row[21] is not None else None,
+        draw_prob=str(row[22]) if row[22] is not None else None,
+        away_win_prob=str(row[23]) if row[23] is not None else None,
+        upset_score=str(row[24]) if row[24] is not None else None,
+        public_heat_home=str(row[25]) if row[25] is not None else None,
+        public_heat_draw=str(row[26]) if row[26] is not None else None,
+        public_heat_away=str(row[27]) if row[27] is not None else None,
+        identity_evidence=row[28] or {},
+        source_raw_json=row[29] or {},
+        source_raw_md5=row[30],
+    )
+
+
+def _seed_legacy_issue_type_repair(
+    conn,
+    *,
+    donor_payload=False,
+    donor_conflict=False,
+    canonical_invalid_match_link=False,
+    reclass_invalid_match_link=False,
+):
+    from scripts.traditional_history_import import MIGRATION
+    from scripts.traditional_history_type_repair import seal_plan
+
+    _register_traditional_import_migration(conn, MIGRATION)
+    # Model rows that were created before migration 125 introduced the
+    # append-only revision trigger. Keep the trigger enabled during the repair
+    # itself so the canonical membership updates still produce revision proof.
+    with conn.cursor() as cur:
+        cur.execute("DROP TRIGGER record_pool_fixture_revision ON football_pool_issue_matches")
+    operations = []
+    donor_ids = {}
+    canonical_id = None
+    canonical_members = None
+    official_ids = {}
+    for issue_num in range(26127, 26152):
+        issue_no = str(issue_num)
+        donor_id = store_pool_issue(
+            conn,
+            issue_no,
+            "bqc6",
+            "2026-10-25 20:00:00",
+            "2026-10-27 17:30:00",
+            14,
+            "closed",
+            {"legacy_issue": issue_no},
+        )
+        donor_ids[issue_no] = donor_id
+        rows(
+            conn,
+            "UPDATE football_pool_issues SET source_game_type=NULL WHERE id=%s RETURNING id",
+            (donor_id,),
+        )
+        donor_members = []
+        for order in range(1, 15):
+            match_id = None
+            if issue_no == "26151" and order <= 10:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """INSERT INTO official_matches(business_date,official_match_code,source_match_id,
+                            league_name,home_team_name,away_team_name,kickoff_time)
+                            VALUES ('2026-10-27',%s,%s,'固定联赛',%s,%s,'2026-10-27 00:00:00') RETURNING id""",
+                        (f"周二{order:03d}", f"200000{order}", f"主{order}", f"客{order}"),
+                    )
+                    official_match_id = cur.fetchone()[0]
+                    official_ids[order] = official_match_id
+                    if not canonical_invalid_match_link:
+                        match_id = official_match_id
+            donor_payload_fields = {}
+            if issue_no == "26151" and order == 1 and donor_payload:
+                donor_payload_fields = {
+                    "home_win_prob": 0.67,
+                    "public_heat_home": 0.21,
+                    "source_full_home_goals": 2,
+                    "source_product_result_code": "2",
+                    "source_result_semantics_key": "sporttery_game_no_90",
+                    "source_result_source": "sporttery_history_api",
+                    "source_result_evidence": {"source": "legacy_api", "result": "2"},
+                }
+            donor_members.append(
+                fixture_row(
+                    order,
+                    match_order=order,
+                    home_team_name=f"主{order}",
+                    away_team_name=f"客{order}",
+                    league_name="固定联赛",
+                    kickoff_time="2026-10-27 00:00:00",
+                    source_match_id=None,
+                    match_id=match_id,
+                    raw_json={"legacy_member": f"{issue_no}/{order}"},
+                    **donor_payload_fields,
+                )
+            )
+        store_pool_issue_matches(conn, donor_id, donor_members)
+        if issue_no == "26127" and reclass_invalid_match_link:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """INSERT INTO official_matches(
+                           business_date,official_match_code,source_match_id,
+                           league_name,home_team_name,away_team_name,kickoff_time
+                       ) VALUES ('2026-10-27','周二999','reclass-bad-26127',
+                           '固定联赛','错误主队','客1','2026-10-27 00:00:00')
+                       RETURNING id"""
+                )
+                wrong_official_id = cur.fetchone()[0]
+            rows(
+                conn,
+                "UPDATE football_pool_issue_matches SET match_id=%s "
+                "WHERE issue_id=%s AND match_order=1 RETURNING id",
+                (wrong_official_id, donor_id),
+            )
+        if issue_no == "26151" and not canonical_invalid_match_link:
+            # The legacy bqc6 header lacks a trusted source type, so the normal
+            # writer correctly refuses to attach matches. These IDs model the
+            # already existing, independently audited production references.
+            with conn.cursor() as cur:
+                cur.executemany(
+                    "UPDATE football_pool_issue_matches SET match_id=%s "
+                    "WHERE issue_id=%s AND match_order=%s",
+                    [(official_ids[order], donor_id, order) for order in range(1, 11)],
+                )
+        donor_header = _issue_repair_header(conn, donor_id)
+        donor_roster = [
+            _member_repair_document(row) for row in _issue_repair_members(conn, donor_id)
+        ]
+        source_roster = [
+            {
+                "match_order": order,
+                "home_team_name": f"主{order}",
+                "away_team_name": f"客{order}",
+                "kickoff_date": "2026-10-27",
+            }
+            for order in range(1, 15)
+        ]
+        if issue_no == "26151":
+            canonical_id = store_pool_issue(
+                conn,
+                issue_no,
+                "t14c",
+                "2026-10-25 20:00:00",
+                "2026-10-27 17:30:00",
+                14,
+                "closed",
+                {"canonical_issue": issue_no},
+            )
+            rows(
+                conn,
+                "UPDATE football_pool_issues SET source_game_type='t14c' WHERE id=%s RETURNING id",
+                (canonical_id,),
+            )
+            # Seed the canonical slots as pre-125 rows without running identity
+            # resolution: otherwise the helper would discover and attach the
+            # donor's exact official-match links before the merge is exercised.
+            with conn.cursor() as cur:
+                cur.executemany(
+                    """INSERT INTO football_pool_issue_matches
+                        (issue_id,match_order,league_name,home_team_name,away_team_name,
+                         kickoff_time,kickoff_date,kickoff_time_precision,home_win_prob,
+                         public_heat_home,source_raw_json)
+                       VALUES (%s,%s,'固定联赛',%s,%s,'2026-10-27 00:00:00',
+                               '2026-10-27','minute',%s,%s,
+                               jsonb_build_object('canonical_member',%s))""",
+                    [
+                        (
+                            canonical_id,
+                            order,
+                            f"主{order}",
+                            f"客{order}",
+                            (
+                                0.44
+                                if issue_no == "26151" and order == 1 and donor_conflict
+                                else None
+                                if issue_no == "26151" and order == 1 and donor_payload
+                                else 0.42
+                            ),
+                            None,
+                            str(order),
+                        )
+                        for order in range(1, 15)
+                    ],
+                )
+            if canonical_invalid_match_link:
+                rows(
+                    conn,
+                    "UPDATE football_pool_issue_matches SET match_id=%s "
+                    "WHERE issue_id=%s AND match_order=1 RETURNING id",
+                    (official_ids[2], canonical_id),
+                )
+            canonical_members = [
+                _member_repair_document(row) for row in _issue_repair_members(conn, canonical_id)
+            ]
+            operations.append(
+                {
+                    "operation": "merge_duplicate_into_canonical",
+                    "issue_no": issue_no,
+                    "legacy_issue_id": donor_id,
+                    "canonical_issue_id": canonical_id,
+                    "source_game_no": 90,
+                    "source_game_no_source": "sporttery_history_api",
+                    "expected_legacy_header": donor_header,
+                    "expected_canonical_header": _issue_repair_header(conn, canonical_id),
+                    "expected_legacy_roster": donor_roster,
+                    "expected_canonical_roster": canonical_members,
+                    "expected_source_roster": source_roster,
+                }
+            )
+        else:
+            operations.append(
+                {
+                    "operation": "reclassify_header",
+                    "issue_no": issue_no,
+                    "legacy_issue_id": donor_id,
+                    "source_game_no": 90,
+                    "source_game_no_source": "sporttery_history_api",
+                    "expected_legacy_header": donor_header,
+                    "expected_legacy_roster": donor_roster,
+                    "expected_source_roster": source_roster,
+                }
+            )
+    with conn.cursor() as cur:
+        cur.execute(
+            "CREATE TRIGGER record_pool_fixture_revision AFTER INSERT OR UPDATE "
+            "ON football_pool_issue_matches FOR EACH ROW "
+            "EXECUTE FUNCTION record_pool_fixture_revision()"
+        )
+    conn.commit()
+    plan = seal_plan(
+        {
+            "contract": "sporttery-legacy-pool-issue-type-repair/v2",
+            "member_snapshot_schema": "football-pool-issue-member/v2",
+            "source_server_sha": "b49a0e44aeddb1cf0d174642c70f4826ac57178f",
+            "source_inventory_sha256": "a" * 64,
+            "source_preview_sha256": "b" * 64,
+            "issues": operations,
+        }
+    )
+    return plan, donor_ids, canonical_id, canonical_members, official_ids
+
+
+def test_legacy_type_repair_preserves_issue_ids_and_transfers_match_links(ready):
+    from scripts.traditional_history_import import MIGRATION
+    from scripts.traditional_history_type_repair import apply_issue_type_repair
+
+    conn = ready
+    plan, donor_ids, canonical_id, canonical_members, official_ids = _seed_legacy_issue_type_repair(
+        conn
+    )
+
+    result = apply_issue_type_repair(conn, plan)
+    conn.commit()
+
+    assert result == {
+        "reclassified_issues": 24,
+        "merged_duplicate_issues": 1,
+        "deleted_duplicate_members": 14,
+        "transferred_match_links": 10,
+        "already_repaired_issues": 0,
+    }
+    assert rows(
+        conn,
+        "SELECT id,game_type,source_game_type,source_game_no,source_game_no_source "
+        "FROM football_pool_issues WHERE issue_no='26127'",
+    ) == [(donor_ids["26127"], "t14c", "t14c", 90, "sporttery_history_api")]
+    assert rows(
+        conn,
+        "SELECT id,game_type,source_game_type FROM football_pool_issues WHERE issue_no='26151'",
+    ) == [(canonical_id, "t14c", "t14c")]
+    assert rows(
+        conn,
+        "SELECT count(*) FROM football_pool_issues WHERE game_type='bqc6' AND issue_no BETWEEN '26127' AND '26151'",
+    ) == [(0,)]
+    assert rows(
+        conn,
+        "SELECT count(*) FROM football_pool_issue_matches WHERE issue_id=%s",
+        (donor_ids["26127"],),
+    ) == [(14,)]
+    assert [
+        row[0]
+        for row in rows(
+            conn,
+            "SELECT id FROM football_pool_issue_matches WHERE issue_id=%s ORDER BY match_order",
+            (canonical_id,),
+        )
+    ] == [row["membership_id"] for row in canonical_members]
+    assert rows(
+        conn,
+        "SELECT count(*) FROM football_pool_issue_matches WHERE issue_id=%s AND match_id IS NOT NULL",
+        (canonical_id,),
+    ) == [(10,)]
+    assert rows(conn, "SELECT count(*) FROM official_matches") == [(10,)]
+    assert rows(
+        conn,
+        "SELECT count(*) FROM football_pool_issue_matches WHERE issue_id=%s AND home_win_prob=0.42",
+        (canonical_id,),
+    ) == [(14,)]
+    assert rows(
+        conn,
+        "SELECT raw_json->'legacy_issue_type_repair'->>'plan_sha256' FROM football_pool_issues WHERE id=%s",
+        (canonical_id,),
+    ) == [(plan["plan_sha256"],)]
+    assert set(official_ids.values()) == {
+        row[0]
+        for row in rows(
+            conn,
+            "SELECT match_id FROM football_pool_issue_matches WHERE issue_id=%s AND match_id IS NOT NULL",
+            (canonical_id,),
+        )
+    }
+
+    conn.commit()
+    repeated = apply_issue_type_repair(conn, plan)
+    conn.commit()
+    assert repeated == {
+        "reclassified_issues": 0,
+        "merged_duplicate_issues": 0,
+        "deleted_duplicate_members": 0,
+        "transferred_match_links": 0,
+        "already_repaired_issues": 25,
+    }
+    assert MIGRATION.exists()
+
+
+def test_legacy_type_repair_transfers_and_archives_donor_payload(ready):
+    from scripts.traditional_history_type_repair import apply_issue_type_repair
+
+    conn = ready
+    plan, _, canonical_id, _, _ = _seed_legacy_issue_type_repair(conn, donor_payload=True)
+
+    apply_issue_type_repair(conn, plan)
+    conn.commit()
+
+    merged = rows(
+        conn,
+        """SELECT home_win_prob,public_heat_home,source_full_home_goals,
+                  source_product_result_code,source_result_evidence,source_raw_json
+           FROM football_pool_issue_matches WHERE issue_id=%s AND match_order=1""",
+        (canonical_id,),
+    )[0]
+    assert (float(merged[0]), float(merged[1]), *merged[2:4]) == (0.67, 0.21, 2, "2")
+    assert merged[4] == {"source": "legacy_api", "result": "2"}
+    preserved = merged[5]["legacy_issue_type_repair"]["preserved_donor_member"]
+    assert float(preserved["home_win_prob"]) == 0.67
+    assert preserved["source_full_home_goals"] == 2
+    assert preserved["source_raw_json"] == {"legacy_member": "26151/1"}
+
+
+def test_legacy_type_repair_refuses_conflicting_donor_model_values(ready):
+    from scripts.traditional_history_type_repair import apply_issue_type_repair
+
+    conn = ready
+    plan, donor_ids, _, _, _ = _seed_legacy_issue_type_repair(
+        conn, donor_payload=True, donor_conflict=True
+    )
+
+    with pytest.raises(ValueError, match="conflicting home_win_prob"):
+        apply_issue_type_repair(conn, plan)
+    conn.rollback()
+    assert rows(
+        conn,
+        "SELECT game_type FROM football_pool_issues WHERE id=%s",
+        (donor_ids["26151"],),
+    ) == [("bqc6",)]
+    assert rows(
+        conn,
+        "SELECT count(*) FROM football_pool_issue_matches WHERE issue_id=%s",
+        (donor_ids["26151"],),
+    ) == [(14,)]
+
+
+def test_legacy_type_repair_rejects_invalid_canonical_only_match_link(ready):
+    from scripts.traditional_history_type_repair import apply_issue_type_repair
+
+    conn = ready
+    plan, donor_ids, canonical_id, _, official_ids = _seed_legacy_issue_type_repair(
+        conn, canonical_invalid_match_link=True
+    )
+    conn.commit()
+
+    with pytest.raises(ValueError, match="official-match link differs from its slot identity"):
+        apply_issue_type_repair(conn, plan)
+    conn.rollback()
+    assert rows(
+        conn,
+        "SELECT game_type FROM football_pool_issues WHERE id=%s",
+        (donor_ids["26151"],),
+    ) == [("bqc6",)]
+    assert rows(
+        conn,
+        "SELECT match_id FROM football_pool_issue_matches WHERE issue_id=%s AND match_order=1",
+        (donor_ids["26151"],),
+    ) == [(None,)]
+    assert rows(
+        conn,
+        "SELECT match_id FROM football_pool_issue_matches WHERE issue_id=%s AND match_order=1",
+        (canonical_id,),
+    ) == [(official_ids[2],)]
+
+
+def test_legacy_type_repair_rejects_invalid_reclassification_match_link(ready):
+    from scripts.traditional_history_type_repair import apply_issue_type_repair
+
+    conn = ready
+    plan, donor_ids, _, _, _ = _seed_legacy_issue_type_repair(conn, reclass_invalid_match_link=True)
+    issue_id = donor_ids["26127"]
+
+    with pytest.raises(ValueError, match="official-match link differs from its slot identity"):
+        apply_issue_type_repair(conn, plan)
+    conn.rollback()
+    assert rows(
+        conn,
+        "SELECT game_type FROM football_pool_issues WHERE id=%s",
+        (issue_id,),
+    ) == [("bqc6",)]
+    assert (
+        rows(
+            conn,
+            "SELECT match_id FROM football_pool_issue_matches WHERE issue_id=%s AND match_order=1",
+            (issue_id,),
+        )[0][0]
+        is not None
+    )
+
+
+def test_legacy_type_repair_uses_old_kickoff_date_when_migration_column_is_empty(ready):
+    from scripts.traditional_history_type_repair import apply_issue_type_repair, seal_plan
+
+    conn = ready
+    plan, donor_ids, _, _, _ = _seed_legacy_issue_type_repair(conn)
+    issue_id = donor_ids["26127"]
+    with conn.cursor() as cur:
+        cur.execute(
+            """INSERT INTO official_matches(
+                   business_date,official_match_code,source_match_id,league_name,
+                   home_team_name,away_team_name,kickoff_time
+               ) VALUES ('2026-10-27','周二998','legacy-26127-slot1','固定联赛',
+                         '主1','客1','2026-10-27 00:00:00') RETURNING id"""
+        )
+        official_match_id = cur.fetchone()[0]
+        cur.execute(
+            """UPDATE football_pool_issue_matches
+               SET match_id=%s,kickoff_date=NULL,kickoff_time_precision='unknown'
+               WHERE issue_id=%s AND match_order=1""",
+            (official_match_id, issue_id),
+        )
+
+    operation = next(issue for issue in plan["issues"] if issue["issue_no"] == "26127")
+    operation["expected_legacy_roster"] = [
+        _member_repair_document(row) for row in _issue_repair_members(conn, issue_id)
+    ]
+    plan = seal_plan(plan)
+    conn.commit()
+
+    result = apply_issue_type_repair(conn, plan)
+    conn.commit()
+
+    assert result["reclassified_issues"] == 24
+    assert rows(
+        conn,
+        "SELECT game_type,source_game_no FROM football_pool_issues WHERE id=%s",
+        (issue_id,),
+    ) == [("t14c", 90)]
+
+
+def test_legacy_type_repair_rejects_changed_archived_donor_receipt(ready):
+    from scripts.traditional_history_type_repair import apply_issue_type_repair
+
+    conn = ready
+    plan, _, canonical_id, _, _ = _seed_legacy_issue_type_repair(conn)
+    apply_issue_type_repair(conn, plan)
+    conn.commit()
+    rows(
+        conn,
+        """UPDATE football_pool_issue_matches
+           SET source_raw_json=jsonb_set(source_raw_json,
+             '{legacy_issue_type_repair,preserved_donor_member,home_team_name}',
+             '"tampered"'::jsonb)
+           WHERE issue_id=%s AND match_order=1 RETURNING id""",
+        (canonical_id,),
+    )
+    conn.commit()
+
+    with pytest.raises(ValueError, match="canonical member state changed after repair"):
+        apply_issue_type_repair(conn, plan)
+    conn.rollback()
+
+
+def test_legacy_type_repair_rejects_post_merge_canonical_member_drift(ready):
+    from scripts.traditional_history_type_repair import apply_issue_type_repair
+
+    conn = ready
+    plan, _, canonical_id, _, _ = _seed_legacy_issue_type_repair(conn)
+    apply_issue_type_repair(conn, plan)
+    conn.commit()
+    rows(
+        conn,
+        "UPDATE football_pool_issue_matches SET home_win_prob=0.41 "
+        "WHERE issue_id=%s AND match_order=2 RETURNING id",
+        (canonical_id,),
+    )
+    conn.commit()
+
+    with pytest.raises(ValueError, match="canonical member state changed after repair"):
+        apply_issue_type_repair(conn, plan)
+    conn.rollback()
+
+
+def test_legacy_type_repair_rejects_post_reclass_header_drift(ready):
+    from scripts.traditional_history_type_repair import apply_issue_type_repair
+
+    conn = ready
+    plan, donor_ids, _, _, _ = _seed_legacy_issue_type_repair(conn)
+    apply_issue_type_repair(conn, plan)
+    conn.commit()
+    rows(
+        conn,
+        "UPDATE football_pool_issues SET official_status='tampered' WHERE id=%s RETURNING id",
+        (donor_ids["26127"],),
+    )
+    conn.commit()
+
+    with pytest.raises(ValueError, match="repaired header field official_status changed"):
+        apply_issue_type_repair(conn, plan)
+    conn.rollback()
+
+
+def test_legacy_type_repair_aborts_entire_batch_on_stale_roster(ready):
+    from scripts.traditional_history_type_repair import apply_issue_type_repair, seal_plan
+
+    conn = ready
+    plan, donor_ids, _, _, _ = _seed_legacy_issue_type_repair(conn)
+    tampered = dict(plan)
+    tampered["issues"] = [dict(issue) for issue in plan["issues"]]
+    tampered["issues"][10]["expected_legacy_roster"] = [
+        dict(member) for member in tampered["issues"][10]["expected_legacy_roster"]
+    ]
+    tampered["issues"][10]["expected_legacy_roster"][0]["home_team_name"] = "来源变化"
+    tampered = seal_plan({key: value for key, value in tampered.items() if key != "plan_sha256"})
+
+    with pytest.raises(ValueError, match="roster differs"):
+        apply_issue_type_repair(conn, tampered)
+    conn.rollback()
+    assert rows(
+        conn,
+        "SELECT game_type FROM football_pool_issues WHERE id=%s",
+        (donor_ids["26127"],),
+    ) == [("bqc6",)]
+    assert rows(conn, "SELECT count(*) FROM official_matches") == [(10,)]
+
+
+def test_legacy_type_duplicate_merge_refuses_saved_combinations(ready):
+    from scripts.traditional_history_type_repair import apply_issue_type_repair
+
+    conn = ready
+    plan, donor_ids, _, _, _ = _seed_legacy_issue_type_repair(conn)
+    rows(
+        conn,
+        "INSERT INTO football_pool_combinations(issue_id,combination_json) VALUES (%s,'{}') RETURNING id",
+        (donor_ids["26151"],),
+    )
+    conn.commit()
+
+    with pytest.raises(ValueError, match="saved combinations"):
+        apply_issue_type_repair(conn, plan)
+    conn.rollback()
+    assert rows(
+        conn,
+        "SELECT game_type FROM football_pool_issues WHERE id=%s",
+        (donor_ids["26127"],),
+    ) == [("bqc6",)]
+
+
+def test_traditional_new_import_inserts_and_rejects_changed_receipt_content(ready, tmp_path):
+    from scripts.traditional_history_import import MIGRATION
+
+    conn = ready
+    _register_traditional_import_migration(conn, MIGRATION)
+    preview, manifest, summary = _write_inputs(tmp_path)
+    batch = load_issue_batch(preview, manifest, summary, kind="new", limit=10)
+
+    first = apply_issue_batch(conn, batch)
+    conn.commit()
+    assert first == {"inserted_issues": 1, "inserted_members": 6, "already_imported_issues": 0}
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT id,source_game_type,source_game_no,source_game_no_source,total_matches "
+            "FROM football_pool_issues WHERE game_type='bqc6' AND issue_no='21062'"
+        )
+        header = cur.fetchone()
+        cur.execute(
+            """SELECT id,match_order,match_id,fixture_id,kickoff_time,kickoff_date,
+                      kickoff_time_precision,source_full_home_goals,source_product_result_code
+               FROM football_pool_issue_matches WHERE issue_id=%s ORDER BY match_order""",
+            (header[0],),
+        )
+        members = cur.fetchall()
+    assert header[1:] == ("bqc6", 98, "sporttery_history_api", 6)
+    assert len(members) == 6
+    assert [member[1] for member in members] == list(range(1, 7))
+    assert all(member[2:5] == (None, None, None) for member in members)
+    assert all(member[5].isoformat() == "2021-06-05" for member in members)
+    assert all(member[6] == "date_only" for member in members)
+    assert members[0][7:] == (None, "*,*")
+
+    conn.commit()
+    repeated = apply_issue_batch(conn, batch)
+    conn.commit()
+    assert repeated == {"inserted_issues": 0, "inserted_members": 0, "already_imported_issues": 1}
+
+    with conn.cursor() as cur:
+        cur.execute(
+            "UPDATE football_pool_issue_matches SET home_win_prob=0.5 "
+            "WHERE issue_id=%s AND match_order=2",
+            (header[0],),
+        )
+    conn.commit()
+    with pytest.raises(ValueError, match="members were modified"):
+        apply_issue_batch(conn, batch)
+    conn.rollback()
+
+
+@pytest.mark.parametrize("drift", ("raw_json", "raw_hash"))
+def test_traditional_new_import_rejects_issue_header_evidence_drift(ready, tmp_path, drift):
+    from scripts.traditional_history_import import MIGRATION, _pool_raw_hash
+
+    conn = ready
+    _register_traditional_import_migration(conn, MIGRATION)
+    preview, manifest, summary = _write_inputs(tmp_path)
+    batch = load_issue_batch(preview, manifest, summary, kind="new", limit=10)
+    apply_issue_batch(conn, batch)
+    conn.commit()
+    issue = batch["issues"][0]
+    issue_id = rows(
+        conn,
+        "SELECT id FROM football_pool_issues WHERE game_type=%s AND issue_no=%s",
+        (issue["game_type"], issue["issue_no"]),
+    )[0][0]
+    if drift == "raw_json":
+        changed_raw = dict(issue["raw_json"])
+        changed_raw["unexpected_header_evidence"] = "changed"
+        changed_hash = _pool_raw_hash(changed_raw)
+    else:
+        changed_raw = issue["raw_json"]
+        changed_hash = "0" * 32
+    rows(
+        conn,
+        "UPDATE football_pool_issues SET raw_json=%s,raw_hash=%s WHERE id=%s RETURNING id",
+        (Json(changed_raw), changed_hash, issue_id),
+    )
+    conn.commit()
+
+    with pytest.raises(ValueError, match="header was modified"):
+        apply_issue_batch(conn, batch)
+    conn.rollback()
+
+
+def test_traditional_fill_preserves_legacy_ids_links_and_probabilities(ready, tmp_path):
+    conn = ready
+    issue_id, before_members, batch = _seed_traditional_import_fill(conn, tmp_path)
+
+    result = apply_issue_batch(conn, batch)
+    conn.commit()
+
+    assert result == {"filled_issues": 1, "filled_members": 6, "already_filled_issues": 0}
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT id,source_game_type,source_game_no,source_game_no_source,raw_json->>'legacy' "
+            "FROM football_pool_issues WHERE id=%s",
+            (issue_id,),
+        )
+        assert cur.fetchone() == (
+            issue_id,
+            "bqc6",
+            98,
+            "sporttery_history_api",
+            "preserve-header",
+        )
+        cur.execute(
+            """SELECT id,match_id,fixture_id,kickoff_time,kickoff_date,
+                      kickoff_time_precision,home_win_prob,source_match_id,
+                      source_full_home_goals,source_product_result_code,
+                      source_raw_json->>'legacy'
+               FROM football_pool_issue_matches WHERE issue_id=%s ORDER BY match_order""",
+            (issue_id,),
+        )
+        after = cur.fetchall()
+    for original, updated in zip(before_members, after, strict=True):
+        assert updated[:4] == original[:4]
+        assert updated[4].isoformat() == "2021-06-05"
+        assert updated[5] == "date_only"
+        assert float(updated[6]) == float(original[4])
+        assert updated[10].startswith("preserve-member-")
+    assert after[0][8] is None and after[0][9] == "*,*"
+    assert after[1][8] == 0 and after[1][9] == "1,0"
+
+    conn.commit()
+    repeated = apply_issue_batch(conn, batch)
+    conn.commit()
+    assert repeated == {"filled_issues": 0, "filled_members": 0, "already_filled_issues": 1}
+
+
+@pytest.mark.parametrize("drift", ("raw_json", "raw_hash", "prize_pool_estimate"))
+def test_traditional_fill_rejects_issue_header_evidence_drift(ready, tmp_path, drift):
+    from scripts.traditional_history_import import _pool_raw_hash
+
+    conn = ready
+    issue_id, _, batch = _seed_traditional_import_fill(conn, tmp_path)
+    apply_issue_batch(conn, batch)
+    conn.commit()
+    (raw,) = rows(conn, "SELECT raw_json FROM football_pool_issues WHERE id=%s", (issue_id,))[0]
+    if drift == "raw_json":
+        raw = dict(raw)
+        raw["unexpected_header_evidence"] = "changed"
+        raw_hash = _pool_raw_hash(raw)
+    elif drift == "prize_pool_estimate":
+        raw_hash = _pool_raw_hash(raw)
+        rows(
+            conn,
+            "UPDATE football_pool_issues SET prize_pool_estimate=100 WHERE id=%s RETURNING id",
+            (issue_id,),
+        )
+    else:
+        raw_hash = "0" * 32
+    if drift != "prize_pool_estimate":
+        rows(
+            conn,
+            "UPDATE football_pool_issues SET raw_json=%s,raw_hash=%s WHERE id=%s RETURNING id",
+            (Json(raw), raw_hash, issue_id),
+        )
+    conn.commit()
+
+    with pytest.raises(ValueError, match="header was modified after import"):
+        apply_issue_batch(conn, batch)
+    conn.rollback()
+
+
+def test_traditional_fill_rechecks_all_slots_before_any_write(ready, tmp_path):
+    conn = ready
+    issue_id, _, batch = _seed_traditional_import_fill(conn, tmp_path)
+    with conn.cursor() as cur:
+        cur.execute(
+            "UPDATE football_pool_issue_matches SET away_team_name='changed' "
+            "WHERE issue_id=%s AND match_order=6",
+            (issue_id,),
+        )
+    conn.commit()
+
+    with pytest.raises(ValueError, match="away team differs"):
+        apply_issue_batch(conn, batch)
+    conn.rollback()
+    assert rows(
+        conn,
+        "SELECT source_game_no FROM football_pool_issues WHERE id=%s",
+        (issue_id,),
+    ) == [(None,)]
 
 
 def test_catalog_pagination_exact_issue_and_no_double_counted_headers(ready):

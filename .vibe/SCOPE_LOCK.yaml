@@ -1,27 +1,49 @@
 {
   "schema_version": 4,
-  "task_id": "OLD-SEASON-MEMBERSHIP-20261101",
-  "objective": "Accept explicit official match-head season evidence in the existing bounded season importer; preserve boundaries, source IDs and immutable historical facts.",
+  "task_id": "P128-TRADITIONAL-FOOTBALL-CATALOG",
+  "objective": "Build an official, date-accurate catalog and bounded backfill path for the four traditional Sporttery products without inventing kickoff times or JC identities.",
   "allowed_paths": [
-    ".vibe/SCOPE_LOCK.yaml",
+    "apps/frontend/src/core/types.ts",
+    "apps/frontend/src/features/pool/PoolFixtureCatalog.tsx",
+    "docs/project-reliability-improvements.md",
+    "ops/server/README.md",
+    "ops/server/deploy.sh",
+    "ops/server/release_migration_policy.py",
+    "scripts/football_pool_catalog.py",
+    "scripts/official_crawler.py",
+    "scripts/official_storage.py",
+    "scripts/traditional_history_import.py",
+    "scripts/traditional_history_type_repair.py",
+    "sql/128_traditional_history_facts.sql",
+    "tests/test_computation/test_football_fixture_identity_postgres.py",
+    "tests/test_computation/test_no_backup_traditional_history_migration_postgres.py",
+    "tests/test_jobs/test_traditional_history_import.py",
+    "tests/test_local/test_release_migration_policy.py",
+    "tests/test_local/test_vibe_quality_gate.py",
+    "tests/test_scripts/test_official_storage.py",
+    ".vibe/BASELINE.yaml",
     ".vibe/CHANGE_BUDGET.yaml",
-    ".github/workflows/ci.yml",
-    "scripts/ci/init_observation_test_db.sh",
-    "scripts/football_season_identity.py",
-    "tests/test_computation/test_football_season_identity.py",
-    "tests/test_computation/test_football_season_identity_postgres.py",
-    "docs/football-fixture-identity.md"
+    ".vibe/SCOPE_LOCK.yaml",
+    ".vibe/STATE.yaml",
+    ".vibe/TASK_DAG.yaml",
+    ".vibe/PLAN.md",
+    ".vibe/ACCEPTANCE.md",
+    ".vibe/QUALITY_GATE.md",
+    ".vibe/config.yaml",
+    ".vibe/EVIDENCE.yaml",
+    ".vibe/quality_gate.py"
   ],
   "protected_paths": [
     "ops/**",
     "sql/**",
     "**/package*.json",
-    "requirements*.txt",
-    "scripts/football_history_training.py",
-    "scripts/football_history_prospective.py",
-    "scripts/training_manifest.py",
-    "scripts/mle_trainer.py"
+    "requirements*.txt"
   ],
-  "approved_protected_paths": [],
-  "notes": "main only, one writer. Eight existing paths: six reviewed importer paths plus two narrow CI fixture compatibility fixes for a PostgreSQL client/server version mismatch. No new schema, public API, dependencies, legacy rewrites or model changes. Official GET evidence captured separately. Production writes require exact reviewed material and fresh admission evidence."
+  "approved_protected_paths": [
+    "ops/server/README.md",
+    "ops/server/deploy.sh",
+    "ops/server/release_migration_policy.py",
+    "sql/128_traditional_history_facts.sql"
+  ],
+  "notes": "One branch only: main. Migration 128 is additive and pinned for the user-authorized no-backup release path. No historical fixture/JC identity, season, official_results, model probability or prediction is fabricated or overwritten. Production type repair and import are separate post-migration transactions and require a fresh production inventory."
 }

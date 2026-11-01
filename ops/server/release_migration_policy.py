@@ -27,6 +27,9 @@ REVIEWED_NO_BACKUP_CHECKSUMS = {
     "126_official_season_retention_access.sql": (
         "dc3dd7640d261eb625ecb8f4fc8a26c3562a55ffd52b99c2c54fd4d23d695ff8"
     ),
+    "128_traditional_history_facts.sql": (
+        "072bb16f074926911fdcb5972575dc95795e26e096c079dec1a558a64cddd9d2"
+    ),
 }
 REVIEWED_NO_BACKUP_SEASONS = ["127_football_fixture_seasons.sql"]
 REVIEWED_NO_BACKUP_PAIR = [
@@ -34,6 +37,7 @@ REVIEWED_NO_BACKUP_PAIR = [
     "125_football_fixture_identity.sql",
 ]
 REVIEWED_NO_BACKUP_ACL = ["126_official_season_retention_access.sql"]
+REVIEWED_NO_BACKUP_TRADITIONAL_FACTS = ["128_traditional_history_facts.sql"]
 NO_BACKUP_REHEARSAL_FIELD = "no_backup_migration_rehearsal"
 
 
@@ -194,6 +198,28 @@ def _verify_no_backup_rehearsal(
                 "Season identity requires application ACL, business paths and ACL rollback proof"
             )
 
+    if pending == REVIEWED_NO_BACKUP_TRADITIONAL_FACTS:
+        role = report.get("application_role")
+        if (
+            not isinstance(role, dict)
+            or role.get("name") != "fqp"
+            or role.get("superuser") is not False
+        ):
+            _refuse(
+                "Traditional history rehearsal must use the restricted non-superuser fqp application role"
+            )
+        if any(
+            report.get(field) != "passed"
+            for field in (
+                "application_role_catalog_access",
+                "application_catalog_read_path",
+                "application_import_write_path",
+            )
+        ):
+            _refuse(
+                "Traditional history requires runtime-role catalog access, catalog read and import write proof"
+            )
+
 
 def _validate_no_backup(
     record: dict[str, Any],
@@ -206,12 +232,17 @@ def _validate_no_backup(
     if pending == ["123_football_history_odds_invalid_timezone.sql"]:
         _verify_pinned_sql(project_root, pending)
         return
-    if pending in (REVIEWED_NO_BACKUP_PAIR, REVIEWED_NO_BACKUP_ACL, REVIEWED_NO_BACKUP_SEASONS):
+    if pending in (
+        REVIEWED_NO_BACKUP_PAIR,
+        REVIEWED_NO_BACKUP_ACL,
+        REVIEWED_NO_BACKUP_SEASONS,
+        REVIEWED_NO_BACKUP_TRADITIONAL_FACTS,
+    ):
         _verify_pinned_sql(project_root, pending)
         _verify_no_backup_rehearsal(record, pending, target_sha, evidence_directory)
         return
     _refuse(
-        "No-backup release is restricted to pinned migration123, the reviewed124+125 pair, ACL repair126, or season identity127"
+        "No-backup release is restricted to pinned migration123, the reviewed124+125 pair, ACL repair126, season identity127, or traditional history facts128"
     )
 
 

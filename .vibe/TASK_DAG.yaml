@@ -1,7 +1,43 @@
 {
   "schema_version": 4,
-  "current_task": "P106-MANIFEST-PERSISTENCE",
+  "current_task": "P128-TRADITIONAL-FOOTBALL-CATALOG",
   "tasks": {
+    "P128-TRADITIONAL-FOOTBALL-CATALOG": {
+      "title": "Build the official traditional football pool catalog and safe history importer",
+      "acceptance_id": "A128-LOCAL-CATALOG",
+      "depends_on": [],
+      "kind": "additive_schema_and_import_pipeline",
+      "status": "DONE",
+      "files": [
+        "apps/frontend/src/core/types.ts",
+        "apps/frontend/src/features/pool/PoolFixtureCatalog.tsx",
+        "docs/project-reliability-improvements.md",
+        "ops/server/README.md",
+        "ops/server/deploy.sh",
+        "ops/server/release_migration_policy.py",
+        "scripts/football_pool_catalog.py",
+        "scripts/official_crawler.py",
+        "scripts/official_storage.py",
+        "scripts/traditional_history_import.py",
+        "scripts/traditional_history_type_repair.py",
+        "sql/128_traditional_history_facts.sql",
+        "tests/test_computation/test_football_fixture_identity_postgres.py",
+        "tests/test_computation/test_no_backup_traditional_history_migration_postgres.py",
+        "tests/test_jobs/test_traditional_history_import.py",
+        "tests/test_local/test_release_migration_policy.py",
+        "tests/test_local/test_vibe_quality_gate.py",
+        "tests/test_scripts/test_official_storage.py"
+      ],
+      "definition_of_done": [
+        "The four Sporttery products share the official issue/match catalog while preserving source game numbers, source result semantics, and kickoff date precision.",
+        "Migration 128 is additive, preserves legacy rows and permissions, and is pinned to its reviewed SQL checksum in the no-backup release policy.",
+        "Type repair and historical import are explicit, bounded, idempotent, and require exact evidence; ambiguous candidate keys remain blocked.",
+        "Fixed-sample and isolated PostgreSQL regression, frontend tests/typecheck/build, lint, format, syntax and scope/budget checks pass.",
+        "Before production data writes, release migration 128 alone, then refresh the production inventory and regenerate the repair/import manifests."
+      ]
+    }
+  },
+  "completed_history": {
     "P106-DERIVED-OUTPUT-GROUP-COUNTS": {
       "title": "Count persisted primary and derived prediction groups consistently",
       "acceptance_id": "A106-OUTPUT-GROUP-COUNTS",

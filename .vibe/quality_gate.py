@@ -35,22 +35,63 @@ def fail(message: str) -> int:
     return 1
 
 
-def check_rows_error(rows: Any, expected_checks: set[str]) -> str | None:
-    if not isinstance(rows, list) or not rows or any(not isinstance(row, dict) for row in rows):
-        return "GitHub reported no checks; refusing to infer success"
-    if any(not isinstance(row.get("name"), str) or not row["name"] for row in rows):
-        return "GitHub returned a check without a valid name"
-    names = {row["name"] for row in rows}
-    missing = sorted(expected_checks - names)
+def main_ref_error(
+    current_branch: str, required_branch: str, head_sha: str, remote_sha: str
+) -> str | None:
+    if required_branch != "main":
+        return "single-branch policy requires main as the release branch"
+    if current_branch != required_branch:
+        return f"checkout must be on {required_branch}; got {current_branch or '<detached>'}"
+    if not head_sha or remote_sha != head_sha:
+        return "GitHub main does not point to the exact local release commit"
+    return None
+
+
+def select_main_ci_run(
+    runs: Any, head_sha: str, branch: str, workflow_name: str
+) -> tuple[dict[str, Any] | None, str | None]:
+    if not isinstance(runs, list) or any(not isinstance(run, dict) for run in runs):
+        return None, "GitHub returned an invalid CI run list"
+    matching = [
+        run
+        for run in runs
+        if run.get("headSha") == head_sha
+        and run.get("headBranch") == branch
+        and run.get("event") == "push"
+        and run.get("workflowName") == workflow_name
+    ]
+    if not matching:
+        return None, f"no {workflow_name} push CI run exists for {branch}@{head_sha}"
+    latest = max(matching, key=lambda run: str(run.get("createdAt", "")))
+    if latest.get("status") != "completed" or latest.get("conclusion") != "success":
+        return None, (
+            "latest matching main CI run is not successful "
+            f"(status={latest.get('status', '<missing>')}, "
+            f"conclusion={latest.get('conclusion', '<missing>')})"
+        )
+    if not isinstance(latest.get("databaseId"), int):
+        return None, "GitHub returned a matching CI run without a valid database ID"
+    return latest, None
+
+
+def check_job_results(jobs: Any, expected_checks: set[str]) -> str | None:
+    if not isinstance(jobs, list) or not jobs or any(not isinstance(job, dict) for job in jobs):
+        return "GitHub reported no CI jobs; refusing to infer success"
+    if any(not isinstance(job.get("name"), str) or not job["name"] for job in jobs):
+        return "GitHub returned a CI job without a valid name"
+    by_name = {job["name"]: job for job in jobs}
+    missing = sorted(expected_checks - by_name.keys())
     if missing:
         return "configured GitHub checks are missing: " + ", ".join(missing)
     not_passed = sorted(
-        f"{row['name']} ({row.get('bucket', '<missing>')})"
-        for row in rows
-        if row.get("bucket") != "pass"
+        f"{name} (status={by_name[name].get('status', '<missing>')}, "
+        f"conclusion={by_name[name].get('conclusion', '<missing>')})"
+        for name in expected_checks
+        if by_name[name].get("status") != "completed"
+        or by_name[name].get("conclusion") != "success"
     )
     if not_passed:
-        return "GitHub checks are not green: " + ", ".join(not_passed)
+        return "configured GitHub checks are not green: " + ", ".join(not_passed)
     return None
 
 
@@ -95,9 +136,12 @@ def main() -> int:
     if not engine.is_absolute():
         engine = (repo / engine).resolve()
     repository = policy.get("repository")
-    pull_request = policy.get("pull_request")
-    if not repository or not isinstance(pull_request, int):
-        return fail("configure the GitHub repository and pull request in .vibe/config.yaml")
+    required_branch = policy.get("required_branch")
+    workflow_name = policy.get("required_workflow")
+    if not repository or not isinstance(required_branch, str) or not workflow_name:
+        return fail(
+            "configure the GitHub repository, required main branch and workflow in .vibe/config.yaml"
+        )
     if not sys.flags.isolated or not sys.flags.no_site or not sys.flags.dont_write_bytecode:
         return fail("launch with an isolated interpreter: python3 -I -S -B .vibe/quality_gate.py")
     gh = shutil.which("gh")
@@ -152,76 +196,90 @@ def main() -> int:
     head = run(["git", "rev-parse", "HEAD"], repo)
     if branch.returncode or head.returncode:
         return fail("cannot determine the current branch and revision")
-    pr = run(
+    head_sha = head.stdout.strip()
+    ref = run(
         [
             gh_cli,
-            "pr",
-            "view",
-            str(pull_request),
-            "--repo",
-            repository,
-            "--json",
-            "state,headRefName,baseRefName,headRefOid",
+            "api",
+            f"repos/{repository}/git/ref/heads/{required_branch}",
+            "--jq",
+            ".object.sha",
         ],
         repo,
     )
-    if pr.returncode:
-        return fail("cannot read the selected GitHub pull request; check gh authentication")
+    if ref.returncode:
+        return fail("cannot read the configured GitHub main ref; check gh authentication")
+    ref_error = main_ref_error(branch.stdout.strip(), required_branch, head_sha, ref.stdout.strip())
+    if ref_error:
+        return fail(ref_error)
+    runs_result = run(
+        [
+            gh_cli,
+            "run",
+            "list",
+            "--repo",
+            repository,
+            "--branch",
+            required_branch,
+            "--commit",
+            head_sha,
+            "--json",
+            "databaseId,headSha,headBranch,event,status,conclusion,workflowName,createdAt",
+            "--limit",
+            "100",
+        ],
+        repo,
+    )
+    if runs_result.returncode:
+        return fail("cannot read GitHub Actions runs for the current main commit")
     try:
-        pr_data = json.loads(pr.stdout)
+        runs = json.loads(runs_result.stdout)
     except json.JSONDecodeError:
-        return fail("GitHub returned invalid PR metadata")
-    if pr_data.get("state") != "OPEN" or pr_data.get("baseRefName") != "main":
-        return fail("the selected PR must be open and target main")
-    if (
-        pr_data.get("headRefName") != branch.stdout.strip()
-        or pr_data.get("headRefOid") != head.stdout.strip()
-    ):
-        return fail("the selected PR head does not match this checkout")
+        return fail("GitHub returned invalid Actions run data")
 
     expected_checks = set(policy.get("required_checks", []))
     if not expected_checks:
         return fail("configure the project-required GitHub checks in .vibe/config.yaml")
-    checks = run(
-        [gh_cli, "pr", "checks", str(pull_request), "--repo", repository, "--json", "name,bucket"],
-        repo,
-    )
-    if checks.returncode:
-        return fail(f"GitHub checks are not all green (gh exit {checks.returncode})")
-    try:
-        rows = json.loads(checks.stdout)
-    except json.JSONDecodeError:
-        return fail("GitHub returned invalid check data")
-    check_error = check_rows_error(rows, expected_checks)
-    if check_error:
-        return fail(check_error)
-    final_pr = run(
+    selected_run, run_error = select_main_ci_run(runs, head_sha, required_branch, workflow_name)
+    if run_error or not selected_run:
+        return fail(run_error or "GitHub has no matching main CI run")
+    jobs_result = run(
         [
             gh_cli,
-            "pr",
+            "run",
             "view",
-            str(pull_request),
+            str(selected_run["databaseId"]),
             "--repo",
             repository,
             "--json",
-            "state,headRefName,baseRefName,headRefOid",
+            "jobs",
         ],
         repo,
     )
-    if final_pr.returncode:
-        return fail("cannot re-read the selected PR after checking its CI status")
+    if jobs_result.returncode:
+        return fail("cannot read jobs for the latest matching main CI run")
     try:
-        final_pr_data = json.loads(final_pr.stdout)
+        jobs_data = json.loads(jobs_result.stdout)
     except json.JSONDecodeError:
-        return fail("GitHub returned invalid final PR metadata")
-    if (
-        final_pr_data.get("state") != "OPEN"
-        or final_pr_data.get("baseRefName") != "main"
-        or final_pr_data.get("headRefName") != branch.stdout.strip()
-        or final_pr_data.get("headRefOid") != head.stdout.strip()
-        or final_pr_data.get("headRefOid") != pr_data.get("headRefOid")
-    ):
-        return fail("PR head or base changed while checking CI; re-run the preflight")
+        return fail("GitHub returned invalid CI job data")
+    if not isinstance(jobs_data, dict):
+        return fail("GitHub returned invalid CI job data")
+    jobs = jobs_data.get("jobs")
+    check_error = check_job_results(jobs, expected_checks)
+    if check_error:
+        return fail(check_error)
+    final_ref = run(
+        [
+            gh_cli,
+            "api",
+            f"repos/{repository}/git/ref/heads/{required_branch}",
+            "--jq",
+            ".object.sha",
+        ],
+        repo,
+    )
+    if final_ref.returncode or final_ref.stdout.strip() != head_sha:
+        return fail("GitHub main changed while checking CI; re-run the preflight")
     final_branch = run(["git", "branch", "--show-current"], repo)
     final_head = run(["git", "rev-parse", "HEAD"], repo)
     final_dirty = run(["git", "status", "--porcelain"], repo)
@@ -235,7 +293,7 @@ def main() -> int:
     ):
         return fail("local branch, revision, or worktree changed during preflight; re-run it")
     print(
-        "PASS: required reviews, security, migration, task acceptance, and configured live PR checks"
+        "PASS: required reviews, security, migration, task acceptance, and configured live main CI checks"
     )
 
     # Execute a clean temporary copy so modified or stale __pycache__ files beside
