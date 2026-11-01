@@ -1,7 +1,7 @@
 {
   "schema_version": 4,
   "task_id": "OLD-SEASON-MEMBERSHIP-20261101",
-  "max_files_changed": 7,
+  "max_files_changed": 8,
   "max_new_files": 0,
   "max_new_dependencies": 0,
   "max_schema_migrations": 0,
@@ -12,5 +12,5 @@
     "new_lint_errors": 0,
     "new_type_errors": 0
   },
-  "notes": "Existing importer accepts exact match-head membership proof while retaining league boundary validation and existing transaction/identity checks. One narrowly scoped CI compatibility fix removes the PostgreSQL 17+ transaction_timeout SET emitted by the hosted pg_dump client before loading the PostgreSQL 16 fixture. Seven existing paths total; no migrations, routes or packages."
+  "notes": "Existing importer accepts exact match-head membership proof while retaining league boundary validation and existing transaction/identity checks. Two CI fixture paths remove the PostgreSQL 17+ transaction_timeout SET emitted by the hosted pg_dump client before loading PostgreSQL 16 clones. Eight existing paths total; no migrations, routes or packages."
 }

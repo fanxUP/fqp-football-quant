@@ -126,7 +126,10 @@ CREATE ROLE fqp_observation_test LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE
 SQL
 
 createdb --owner=fqp_observation_test fqp_observation_test
+# ubuntu-latest may provide a newer pg_dump client than the PostgreSQL 16 fixture.
+# PostgreSQL 17+ emits transaction_timeout, which PostgreSQL 16 cannot parse.
 pg_dump --schema-only --no-owner --no-privileges \
+  | sed '/^SET transaction_timeout = 0;$/d' \
   | PGUSER=fqp_observation_test PGDATABASE=fqp_observation_test \
     psql -X -v ON_ERROR_STOP=1
 
