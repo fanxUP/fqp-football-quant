@@ -22,7 +22,9 @@ connect = obs.connect
 pg = obs.pg
 match_id = obs.match_id
 match = players.match
-KICKOFF = datetime(2026, 11, 1, 12, tzinfo=UTC)
+# Keep the fixture kickoff ahead of wall-clock time so cutoff validation remains
+# meaningful after the originally fixed 2026 test date has passed.
+KICKOFF = datetime.now(UTC) + timedelta(days=2)
 
 
 def context(match):

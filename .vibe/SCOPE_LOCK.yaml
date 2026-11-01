@@ -17,6 +17,8 @@
     "sql/128_traditional_history_facts.sql",
     "tests/test_computation/test_football_fixture_identity_postgres.py",
     "tests/test_computation/test_no_backup_traditional_history_migration_postgres.py",
+    "tests/test_computation/test_pool_postgres.py",
+    "tests/test_computation/test_observed_pipeline_postgres.py",
     "tests/test_jobs/test_traditional_history_import.py",
     "tests/test_local/test_release_migration_policy.py",
     "tests/test_local/test_vibe_quality_gate.py",
@@ -45,5 +47,5 @@
     "ops/server/release_migration_policy.py",
     "sql/128_traditional_history_facts.sql"
   ],
-  "notes": "One branch only: main. Migration 128 is additive and pinned for the user-authorized no-backup release path. No historical fixture/JC identity, season, official_results, model probability or prediction is fabricated or overwritten. Production type repair and import are separate post-migration transactions and require a fresh production inventory."
+  "notes": "One branch only: main. Migration 128 is additive and pinned for the user-authorized no-backup release path. The first exact-SHA CI run exposed two existing database test-fixture gaps: the pool fixture omitted migration 128 and the observed-pipeline kickoff fixture expired. These two existing tests are included to keep the full CI reliable. No historical fixture/JC identity, season, official_results, model probability or prediction is fabricated or overwritten. Production type repair and import are separate post-migration transactions and require a fresh production inventory."
 }

@@ -1,10 +1,10 @@
 {
-  "state": "REVIEWING",
+  "state": "VERIFYING",
   "last_transition": {
-    "from": "VERIFYING",
-    "to": "REVIEWING",
-    "at": "2026-11-02T02:31:23.500562+08:00",
-    "reason": "A128 本地代码与隔离迁移验收通过，最新独立代码/迁移审查通过；目标SHA绑定的发布演练和GitHub main CI仍待完成。"
+    "from": "IMPLEMENTING",
+    "to": "VERIFYING",
+    "at": "2026-11-02T02:59:59.665975+08:00",
+    "reason": "The 16 pool PostgreSQL regressions pass with migration 128 included; the expired-kickoff fixture is now relative to execution time. Static, format, scope, and budget checks pass; exact-main CI must validate both fixes."
   },
   "blocked_reason": null
 }

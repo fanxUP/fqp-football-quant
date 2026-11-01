@@ -14,7 +14,7 @@
 
 ## 顺序与验收
 
-1. 本地实现及固定样本/隔离 PostgreSQL/前端回归：已完成，详见`plans/local-football-data-integration-20261029/traditional-catalog-20261101/RESULT.md`。
+1. 本地实现及固定样本/隔离 PostgreSQL/前端回归：已完成，详见`plans/local-football-data-integration-20261029/traditional-catalog-20261101/RESULT.md`。首个精确提交 CI 又暴露两个既有 PostgreSQL 夹具问题：pool 测试夹具未加载迁移128、观测截止时间测试使用已过期的固定开球日；已将这两处修复纳入本批验收范围。
 2. 独立代码、迁移和安全只读审查；形成目标提交并让 GitHub `main` 的 `CI` 工作流在该提交上通过。
 3. 生成与目标提交绑定的新鲜发布证据，只部署迁移128；不把旧生产快照或演练当作生产执行证明。
 4. 迁移后重新只读读取生产期次、成员和引用，重新生成类型修复计划及API完整导入清单。

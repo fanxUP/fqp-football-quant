@@ -1,7 +1,7 @@
 {
   "schema_version": 4,
   "task_id": "P128-TRADITIONAL-FOOTBALL-CATALOG",
-  "max_files_changed": 18,
+  "max_files_changed": 20,
   "max_new_files": 6,
   "max_new_dependencies": 0,
   "max_schema_migrations": 1,
@@ -12,5 +12,5 @@
     "new_lint_errors": 0,
     "new_type_errors": 0
   },
-  "notes": "The approved traditional-pool catalog task spans two additive catalog response contracts, one additive migration 128, official parser/storage, bounded repair/import CLIs, UI, release policy and focused regression coverage. Exact scope is pinned in SCOPE_LOCK.yaml; no new packages or branches."
+  "notes": "The approved traditional-pool catalog task spans two additive catalog response contracts, one additive migration 128, official parser/storage, bounded repair/import CLIs, UI, release policy and focused regression coverage. The first exact-SHA CI run also required fixing two existing database test fixtures: include migration 128 for pool storage tests and use a future-relative kickoff for cutoff tests. Exact scope is pinned in SCOPE_LOCK.yaml; no new packages or branches."
 }

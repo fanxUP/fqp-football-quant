@@ -350,19 +350,29 @@
   "release_migration_rehearsal": {
     "status": "PENDING",
     "task_id": "P128-TRADITIONAL-FOOTBALL-CATALOG",
-    "summary": "Generate structured no-backup release rehearsal evidence after the final target commit exists; bind it to that exact SHA and migration 128 checksum before production apply."
+    "candidate_sha": "4251750e09743a4d831fe6eeda0253dc254c09b3",
+    "report_path": "/Volumes/Nas/FQP/release-evidence/P128-4251750/no-backup-migration-rehearsal.json",
+    "summary": "The isolated rehearsal passed for candidate 4251750; regenerate and bind the release rehearsal to the final corrected target SHA before deployment."
   },
   "external_ci": {
-    "status": "pending",
+    "status": "failed",
     "task_id": "P128-TRADITIONAL-FOOTBALL-CATALOG",
-    "summary": "GitHub main push CI must pass on the exact release commit; no target commit exists yet."
+    "verified_at": "2026-11-02T02:59:39+08:00",
+    "head_sha": "4251750e09743a4d831fe6eeda0253dc254c09b3",
+    "run_id": "41338346976",
+    "checks": {
+      "lint-and-typecheck": "passed",
+      "test": "failed"
+    },
+    "summary": "Exact-SHA GitHub CI for candidate 4251750 failed: 3484 passed, 39 failed, 25 skipped. Failures were an expired fixed kickoff date in observed-pipeline tests and a pool test schema fixture that omitted migration 128. Corrections are in progress; no release."
   },
   "quality_gate": {
     "status": "BLOCKED",
-    "checked_at": "2026-11-02T02:31:50+08:00",
+    "checked_at": "2026-11-02T02:59:39+08:00",
     "failures": [
-      "No final target commit exists; exact-SHA GitHub CI and the release migration rehearsal are pending."
+      "Exact-SHA GitHub CI test job failed for candidate 4251750; test-fixture corrections must pass on the final target SHA.",
+      "Target-SHA-bound no-backup release rehearsal must be regenerated for the final target SHA."
     ],
-    "summary": "Local implementation, isolated migration rehearsal, security review, and independent code/migration review pass. The current code has not been committed, so exact-SHA GitHub CI and the separate target-SHA-bound release rehearsal remain pending."
+    "summary": "No production change. The candidate CI failure is understood and the two test-fixture corrections are in progress."
   }
 }

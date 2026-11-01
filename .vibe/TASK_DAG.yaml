@@ -7,7 +7,7 @@
       "acceptance_id": "A128-LOCAL-CATALOG",
       "depends_on": [],
       "kind": "additive_schema_and_import_pipeline",
-      "status": "DONE",
+      "status": "IN_PROGRESS",
       "files": [
         "apps/frontend/src/core/types.ts",
         "apps/frontend/src/features/pool/PoolFixtureCatalog.tsx",
@@ -23,6 +23,8 @@
         "sql/128_traditional_history_facts.sql",
         "tests/test_computation/test_football_fixture_identity_postgres.py",
         "tests/test_computation/test_no_backup_traditional_history_migration_postgres.py",
+        "tests/test_computation/test_pool_postgres.py",
+        "tests/test_computation/test_observed_pipeline_postgres.py",
         "tests/test_jobs/test_traditional_history_import.py",
         "tests/test_local/test_release_migration_policy.py",
         "tests/test_local/test_vibe_quality_gate.py",
@@ -33,6 +35,7 @@
         "Migration 128 is additive, preserves legacy rows and permissions, and is pinned to its reviewed SQL checksum in the no-backup release policy.",
         "Type repair and historical import are explicit, bounded, idempotent, and require exact evidence; ambiguous candidate keys remain blocked.",
         "Fixed-sample and isolated PostgreSQL regression, frontend tests/typecheck/build, lint, format, syntax and scope/budget checks pass.",
+        "The full CI pool fixture includes migration 128; observation cutoff fixtures remain valid across calendar dates.",
         "Before production data writes, release migration 128 alone, then refresh the production inventory and regenerate the repair/import manifests."
       ]
     }
