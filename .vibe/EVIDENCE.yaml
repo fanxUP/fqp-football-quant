@@ -377,9 +377,8 @@
     "summary": "Exact-SHA GitHub CI on main@93bd24f completed successfully; both full test and lint/typecheck jobs passed."
   },
   "quality_gate": {
-    "status": "PENDING_LIVE_CHECK",
-    "checked_at": "2026-11-02T03:17:25+08:00",
-    "failures": [],
-    "summary": "Current-source local acceptance, independent reviews, exact-main CI, and target-bound migration rehearsal are green. Re-run the live V4 gate against the final committed main SHA before production release."
+    "status": "READY_TO_MERGE",
+    "checked_at": "2026-11-02T03:30:14.045148+08:00",
+    "failures": []
   }
 }
