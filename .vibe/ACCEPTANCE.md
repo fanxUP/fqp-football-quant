@@ -1,6 +1,20 @@
 # 项目验收记录
 
-当前工作项：`P128-TRADITIONAL-FOOTBALL-CATALOG`，本地验收 ID 为 A128-LOCAL-CATALOG。历史验收记录保留在下方。
+当前工作项：`P129-TRADITIONAL-SLOT-IDENTITY`，本地验收 ID 为 A129-TRADITIONAL-SLOT-IDENTITY。历史验收记录保留在下方。
+
+## A129-TRADITIONAL-SLOT-IDENTITY — 显式传统场次身份关联
+
+- 调用方逐个声明玩法、期号和场序；数据库重新锁定并核对对应官方历史行。
+- 仅将来源明确、已完赛、比分完整且对阵、赛事、日期、全场比分、半场比分一致的传统场次关联到一个共享 fixture。
+- 只写入 `traditional.{game_type}.{issue_no}.matchOrder` 来源键；取消销售 JC ID 既不作为来源键，也不绑定到补赛。
+- 取消/未赛、缺字段、跨槽证据冲突、来源键指向不同 fixture、身份已分叉时，在任何业务写入前拒绝。
+- 成功事务可重复调用且不重复插入；会员更新由现有不可变修订触发器留痕；调用方回滚后 fixture、来源键、会员和修订均无净变化。
+- P128 普通导入路径与其 `pending` 行为保持不变；无 schema migration、依赖、模型、API、生产数据写入或备份。
+- 使用固定样本和隔离 PostgreSQL 验证成功、幂等、取消拦截、冲突拦截、来源键碰撞及回滚；未完成验证前不进入生产执行。
+- 本地验收：8 项 P129 专项用例通过，身份模块共 100/100 通过；Ruff、格式、compileall、diff、V4 scope/budget 全部通过。
+- 修正来源校验以匹配 P128 实际存储格式：兼容 P128 新导入与 fill 两种命名空间回执格式，核对 issue/member 导入回执、原始对阵/日期/全半场比分和结果码；不要求 `source_result_evidence` 含并不存在的 source 字段。
+- 只在一次性本地 PostgreSQL 容器演练；未连接生产数据库、未写生产记录、未创建备份、未提交/推送/部署。生产应用仍须单独做新鲜只读预检和有界执行。
+- 独立只读复核最初发现 P128 fill 回执布局不兼容；修复后复核通过，未发现遗留问题。
 
 ## A128-LOCAL-CATALOG — 四种传统足彩官方期次目录与回填准备
 

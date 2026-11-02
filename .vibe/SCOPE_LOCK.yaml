@@ -1,14 +1,26 @@
 {
   "schema_version": 4,
-  "task_id": "P128-TRADITIONAL-FOOTBALL-CATALOG",
-  "objective": "Build an official, date-accurate catalog and bounded backfill path for the four traditional Sporttery products without inventing kickoff times or JC identities.",
+  "task_id": "P129-TRADITIONAL-SLOT-IDENTITY",
+  "objective": "Add an explicit, evidence-bound write path to group completed Sporttery traditional issue slots into one shared fixture while preserving cancelled JC IDs as non-identities.",
   "allowed_paths": [
+    ".vibe/ACCEPTANCE.md",
+    ".vibe/BASELINE.yaml",
+    ".vibe/CHANGE_BUDGET.yaml",
+    ".vibe/EVIDENCE.yaml",
+    ".vibe/PLAN.md",
+    ".vibe/QUALITY_GATE.md",
+    ".vibe/SCOPE_LOCK.yaml",
+    ".vibe/STATE.yaml",
+    ".vibe/TASK_DAG.yaml",
+    ".vibe/config.yaml",
+    ".vibe/quality_gate.py",
     "apps/frontend/src/core/types.ts",
     "apps/frontend/src/features/pool/PoolFixtureCatalog.tsx",
     "docs/project-reliability-improvements.md",
     "ops/server/README.md",
     "ops/server/deploy.sh",
     "ops/server/release_migration_policy.py",
+    "scripts/football_fixture_identity.py",
     "scripts/football_pool_catalog.py",
     "scripts/official_crawler.py",
     "scripts/official_storage.py",
@@ -17,23 +29,12 @@
     "sql/128_traditional_history_facts.sql",
     "tests/test_computation/test_football_fixture_identity_postgres.py",
     "tests/test_computation/test_no_backup_traditional_history_migration_postgres.py",
-    "tests/test_computation/test_pool_postgres.py",
     "tests/test_computation/test_observed_pipeline_postgres.py",
+    "tests/test_computation/test_pool_postgres.py",
     "tests/test_jobs/test_traditional_history_import.py",
     "tests/test_local/test_release_migration_policy.py",
     "tests/test_local/test_vibe_quality_gate.py",
-    "tests/test_scripts/test_official_storage.py",
-    ".vibe/BASELINE.yaml",
-    ".vibe/CHANGE_BUDGET.yaml",
-    ".vibe/SCOPE_LOCK.yaml",
-    ".vibe/STATE.yaml",
-    ".vibe/TASK_DAG.yaml",
-    ".vibe/PLAN.md",
-    ".vibe/ACCEPTANCE.md",
-    ".vibe/QUALITY_GATE.md",
-    ".vibe/config.yaml",
-    ".vibe/EVIDENCE.yaml",
-    ".vibe/quality_gate.py"
+    "tests/test_scripts/test_official_storage.py"
   ],
   "protected_paths": [
     "ops/**",
@@ -47,5 +48,5 @@
     "ops/server/release_migration_policy.py",
     "sql/128_traditional_history_facts.sql"
   ],
-  "notes": "One branch only: main. Migration 128 is additive and pinned for the user-authorized no-backup release path. The first exact-SHA CI run exposed two existing database test-fixture gaps: the pool fixture omitted migration 128 and the observed-pipeline kickoff fixture expired. These two existing tests are included to keep the full CI reliable. No historical fixture/JC identity, season, official_results, model probability or prediction is fabricated or overwritten. Production type repair and import are separate post-migration transactions and require a fresh production inventory."
+  "notes": "Single main branch only. P128 importer behavior remains unchanged and continues to leave unspecified fixture identities pending. P129 adds a separate explicit operation for a caller-supplied set of official completed source slots; no JC aliases, season assignment, prediction changes, schema migrations, dependencies, backups or production writes."
 }

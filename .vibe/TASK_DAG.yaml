@@ -1,6 +1,6 @@
 {
   "schema_version": 4,
-  "current_task": "P128-TRADITIONAL-FOOTBALL-CATALOG",
+  "current_task": "P129-TRADITIONAL-SLOT-IDENTITY",
   "tasks": {
     "P128-TRADITIONAL-FOOTBALL-CATALOG": {
       "title": "Build the official traditional football pool catalog and safe history importer",
@@ -37,6 +37,27 @@
         "Fixed-sample and isolated PostgreSQL regression, frontend tests/typecheck/build, lint, format, syntax and scope/budget checks pass.",
         "The full CI pool fixture includes migration 128; observation cutoff fixtures remain valid across calendar dates.",
         "Before production data writes, release migration 128 alone, then refresh the production inventory and regenerate the repair/import manifests."
+      ]
+    },
+    "P129-TRADITIONAL-SLOT-IDENTITY": {
+      "title": "Explicitly link completed traditional Sporttery issue slots to shared fixtures",
+      "acceptance_id": "A129-TRADITIONAL-SLOT-IDENTITY",
+      "depends_on": [
+        "P128-TRADITIONAL-FOOTBALL-CATALOG"
+      ],
+      "kind": "bounded_identity_write_path",
+      "status": "DONE",
+      "files": [
+        "scripts/football_fixture_identity.py",
+        "tests/test_computation/test_football_fixture_identity_postgres.py"
+      ],
+      "definition_of_done": [
+        "A caller must name the exact product, issue and slot for every member; all rows must be official Sporttery history rows with matching teams, date and full/half-time results.",
+        "Cancelled/unplayed, incomplete, conflicting or already-divergent identities are rejected before writes.",
+        "The operation binds only typed traditional issue-slot source IDs, preserves legacy/cancelled JC values as evidence, and never creates a jc.matchId, official result, season membership or prediction.",
+        "The transaction is idempotent and records revisions; rollback leaves no fixture, source-link or membership changes.",
+        "Focused isolated PostgreSQL regressions and static checks pass; P128 automatic import behavior remains unchanged.",
+        "Production application requires a fresh read-only inventory and a separately bounded operation."
       ]
     }
   },

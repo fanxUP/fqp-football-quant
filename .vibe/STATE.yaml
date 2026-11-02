@@ -3,8 +3,8 @@
   "last_transition": {
     "from": "VERIFYING",
     "to": "REVIEWING",
-    "at": "2026-11-02T03:17:25.163594+08:00",
-    "reason": "Exact-main CI run 41339474399 passed both jobs; current-source local acceptance was refreshed successfully; independent application/migration/security reviews and exact-target no-backup PostgreSQL rehearsal pass. Production schema and business rows remain unchanged pending release."
+    "at": "2026-11-03T02:29:17.168379+08:00",
+    "reason": "P129 100项隔离PostgreSQL、静态/范围预算门禁及独立复审均通过，进入发布质量门禁。"
   },
   "blocked_reason": null
 }
