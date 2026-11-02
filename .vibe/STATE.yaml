@@ -1,5 +1,5 @@
 {
-  "state": "READY_TO_MERGE",
+  "state": "DONE",
   "workflow_id": "P130-HISTORY-FILL-LIVE-DRAW",
   "previous_workflow": {
     "task_id": "P129-TRADITIONAL-SLOT-IDENTITY",
@@ -8,9 +8,9 @@
   },
   "blocked_reason": null,
   "last_transition": {
-    "from": "REVIEWING",
-    "to": "READY_TO_MERGE",
-    "at": "2026-11-03T05:27:55.309555+08:00",
-    "reason": "P130质量门禁READY_TO_MERGE，214项整组回归、最终专项幂等回归、静态检查和独立复审均通过"
+    "from": "VERIFIED",
+    "to": "DONE",
+    "at": "2026-11-03T05:51:08.176132+08:00",
+    "reason": "P130 release verification evidence recorded; no production data writes or backup"
   }
 }

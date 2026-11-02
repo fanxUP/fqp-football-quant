@@ -455,7 +455,18 @@
       "test": "passed",
       "lint-and-typecheck": "passed"
     },
-    "summary": "Exact deployed main SHA passed both GitHub Actions CI jobs."
+    "summary": "Exact deployed main SHA passed both GitHub Actions CI jobs.",
+    "p130_live_draw_fill": {
+      "status": "passed",
+      "head_sha": "8ce2a5e2bdd6bb2677d7fcac3ab4c5e32b205981",
+      "run_id": 41528647349,
+      "url": "https://github.com/fanxUP/fqp-football-quant/actions/runs/41528647349",
+      "checks": {
+        "lint-and-typecheck": "passed",
+        "test": "passed"
+      },
+      "summary": "Exact main head passed both GitHub Actions jobs; lint-and-typecheck 3m10s, full test 8m15s."
+    }
   },
   "quality_gate": {
     "status": "READY_TO_MERGE",
@@ -587,5 +598,44 @@
       "model_inputs_or_predictions_written": false
     },
     "detailed_record": "plans/local-football-data-integration-20261029/CHECKPOINT.md"
+  },
+  "release_preflight": {
+    "status": "passed",
+    "task_id": "P130-HISTORY-FILL-LIVE-DRAW",
+    "target_sha": "8ce2a5e2bdd6bb2677d7fcac3ab4c5e32b205981",
+    "report_path": "/Volumes/Nas/FQP/release-evidence/P130-8ce2a5e/production-preflight.json",
+    "verified_at": "2026-11-02T21:46:56+00:00",
+    "pending_migrations": [],
+    "backup_created": false,
+    "production_data_written": false
+  },
+  "deployment_verification": {
+    "status": "passed",
+    "task_id": "P130-HISTORY-FILL-LIVE-DRAW",
+    "target_sha": "8ce2a5e2bdd6bb2677d7fcac3ab4c5e32b205981",
+    "verified_at": "2026-11-02T21:49:40+00:00",
+    "report_path": "/Volumes/Nas/FQP/release-evidence/P130-8ce2a5e/production-postdeploy.json",
+    "release_marker": "8ce2a5e2bdd6bb2677d7fcac3ab4c5e32b205981-20261102T214839Z-5dec0cd6-5a6c-4dfb-9fff-532642525de4-d",
+    "services": {
+      "fqp-backend": "active",
+      "fqp-scheduler": "active",
+      "fqp-worker": "active",
+      "nginx": "active",
+      "postgresql": "active"
+    },
+    "http": {
+      "/": 200,
+      "/health/ready": 200,
+      "/api/auth/release": 200,
+      "/api/auth/me": 401,
+      "/api/pool/catalog?limit=1": 401
+    },
+    "backend_error_log_entries_last_10m": 0,
+    "pending_migrations": [],
+    "backup_created": false,
+    "production_data_written": false,
+    "temporary_sudoers_removed": true,
+    "visudo_validation_after_removal": "passed",
+    "admin_nopasswd_sudo": "denied"
   }
 }
