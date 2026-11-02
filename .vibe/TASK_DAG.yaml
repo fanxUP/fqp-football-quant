@@ -46,18 +46,19 @@
         "P128-TRADITIONAL-FOOTBALL-CATALOG"
       ],
       "kind": "bounded_identity_write_path",
-      "status": "DONE",
+      "status": "IN_PROGRESS",
       "files": [
         "scripts/football_fixture_identity.py",
         "tests/test_computation/test_football_fixture_identity_postgres.py"
       ],
       "definition_of_done": [
-        "A caller must name the exact product, issue and slot for every member; all rows must be official Sporttery history rows with matching teams, date and full/half-time results.",
+        "A caller must name the exact product, issue and slot for every member; official Sporttery team, date, full score, result code and import receipts must match exactly.",
+        "If an official halftime field is '{}', accept a secondary half score only from the reviewed P128 500.com manifest SHA-256 b637cdd2943e1e5a1ba10844af7a0d2ed9bba8f154f735a9b476f63d48a6ada8 and exact canonical source-row SHA-256 81c3009ce7f1fb2a36c3b5393f64bceb2e3c5fbac5015602fd75a8b4a0413f87; accept both P128 new and fill evidence envelopes, and reject altered IDs, page hashes, teams or ambiguous identities.",
         "Cancelled/unplayed, incomplete, conflicting or already-divergent identities are rejected before writes.",
         "The operation binds only typed traditional issue-slot source IDs, preserves legacy/cancelled JC values as evidence, and never creates a jc.matchId, official result, season membership or prediction.",
         "The transaction is idempotent and records revisions; rollback leaves no fixture, source-link or membership changes.",
         "Focused isolated PostgreSQL regressions and static checks pass; P128 automatic import behavior remains unchanged.",
-        "Production application requires a fresh read-only inventory and a separately bounded operation."
+        "After exact-head CI and independent read-only review, fresh read-only production evidence must still match issue 22036 BQC6/5, R9/6 and T14C/6 before one SERIALIZABLE application and independent readback; no backup or other production fields change."
       ]
     }
   },

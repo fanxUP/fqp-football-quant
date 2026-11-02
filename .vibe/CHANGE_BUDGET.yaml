@@ -12,5 +12,5 @@
     "new_lint_errors": 0,
     "new_type_errors": 0
   },
-  "notes": "Focused explicit identity-write helper and isolated PostgreSQL regression only. No automatic importer change, SQL migration, external API, backup or production application."
+  "notes": "P129 correction is limited to the explicit identity helper, focused isolated PostgreSQL regressions, and existing V4 plan/evidence files. When official halftime is blank, it accepts only the reviewed hash-pinned P128 500.com manifest and exact canonical source-row digest 81c3009ce7f1fb2a36c3b5393f64bceb2e3c5fbac5015602fd75a8b4a0413f87; supports both P128 new and fill result-evidence shapes. No automatic importer change, SQL migration, dependency or public API. Production scope is only the fresh-verified issue 22036 BQC6/5, R9/6 and T14C/6 identity association, with no backup and no other business-field changes."
 }

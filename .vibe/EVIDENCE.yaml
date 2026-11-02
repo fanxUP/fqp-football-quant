@@ -181,33 +181,33 @@
     },
     "A129-ISOLATED-POSTGRES": {
       "status": "PASS",
-      "command": "env FQP_HISTORY_TEST_DSN=postgresql://postgres@127.0.0.1:60791/fqp_history_test_p129_20261103 .venv/bin/python -m pytest -q tests/test_computation/test_football_fixture_identity_postgres.py",
+      "command": "FQP_HISTORY_TEST_DSN=<localhost-only disposable PostgreSQL> .venv/bin/python -m pytest -q tests/test_computation/test_football_fixture_identity_postgres.py",
       "exit_code": 0,
-      "summary": "============================= test session starts ==============================\nplatform darwin -- Python 3.14.6, pytest-9.1.1, pluggy-1.7.0\nrootdir: /Volumes/Nas/FQP/code\nconfigfile: pyproject.toml\nplugins: mock-3.15.1, cov-7.1.0, asyncio-1.4.0, anyio-4.15.1, platformdirs-4.13.5\nasyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function\ncollected 100 items\n\ntests/test_computation/test_football_fixture_identity_postgres.py ...... [  6%]\n........................................................................ [ 78%]\n......................                                                   [100%]\n\n======================== 100 passed in 60.12s (0:01:00) ========================\n",
+      "summary": "Final formatted worktree run after the numeric-string correction: collected 124 items; 124 passed in 43.47s. Covers P128 new/fill evidence envelopes, canonical decimal string and integer handling with boolean/float/non-digit/leading-zero rejection, exact canonical source-row digest binding, tampered ID/page hash/team IDs rejection, rollback and identity boundaries.",
       "timed_out": false,
-      "environment": "unknown",
-      "revision": "96bb2af4cb3afff8d66473bc554bbb437a963710",
+      "environment": "local isolated PostgreSQL",
+      "revision": "4e2c986ebdda8ffff0c48bf481771808b759ffb8",
       "dirty_tree": true,
-      "tree_fingerprint": "cb23b16d18b849feb21b1b8213ef2297e66f0dfaf76c92c34fc529e5f5214f52",
-      "verified_at": "2026-11-03T02:28:32.880715+08:00"
+      "tree_fingerprint": "67e4e9acd676eecc4fddfb20db53a4be3af5097fc989dc50332de6dbd3c96dca",
+      "verified_at": "2026-11-03T03:32:59.179836+08:00"
     },
     "A129-STATIC": {
       "status": "PASS",
-      "command": "sh -c '.venv/bin/ruff check scripts/football_fixture_identity.py tests/test_computation/test_football_fixture_identity_postgres.py && .venv/bin/ruff format --check scripts/football_fixture_identity.py tests/test_computation/test_football_fixture_identity_postgres.py && .venv/bin/python -m compileall -q scripts/football_fixture_identity.py tests/test_computation/test_football_fixture_identity_postgres.py && git diff --check && python3 -I -S -B /Users/estefan-macworkstation/.remote-vibe-coding/engine/vibe.py --repo . scope check && python3 -I -S -B /Users/estefan-macworkstation/.remote-vibe-coding/engine/vibe.py --repo . budget check'",
+      "command": "Ruff check/format; mypy scripts/football_fixture_identity.py --explicit-package-bases; compileall; git diff --check; V4 scope/budget; recompute pinned manifest and canonical row hashes",
       "exit_code": 0,
-      "summary": "All checks passed!\n2 files already formatted\nchanged_files=2\nPASS: scope\nfiles_changed: 2/9\nnew_files: 0/0\nnew_dependencies_heuristic: 0/0\nschema_migration_files: 0/0\ndeclared_public_api_changes: 0/0\nPASS: change budget\n",
+      "summary": "Ruff clean; 2 files formatted; mypy Success: no issues found; compileall/diff clean; scope passed at 2/9 business files with 0 new files/dependencies/migrations/public API; change budget passed; P128 full manifest and target-row SHA-256 recomputed and matched.",
       "timed_out": false,
-      "environment": "unknown",
-      "revision": "96bb2af4cb3afff8d66473bc554bbb437a963710",
+      "environment": "local isolated PostgreSQL",
+      "revision": "4e2c986ebdda8ffff0c48bf481771808b759ffb8",
       "dirty_tree": true,
-      "tree_fingerprint": "cb23b16d18b849feb21b1b8213ef2297e66f0dfaf76c92c34fc529e5f5214f52",
-      "verified_at": "2026-11-03T02:28:42.253159+08:00"
+      "tree_fingerprint": "67e4e9acd676eecc4fddfb20db53a4be3af5097fc989dc50332de6dbd3c96dca",
+      "verified_at": "2026-11-03T03:32:59.180273+08:00"
     },
     "A129-TRADITIONAL-SLOT-IDENTITY": {
-      "status": "PASS",
+      "status": "IN_PROGRESS",
       "command": "python3 -c 'import json; e=json.load(open(\".vibe/EVIDENCE.yaml\")); a=e[\"acceptance\"]; assert all(a[k][\"status\"]==\"PASS\" and a[k][\"exit_code\"]==0 for k in (\"A129-ISOLATED-POSTGRES\",\"A129-STATIC\")); assert e[\"reviews\"][\"p129_traditional_identity\"][\"status\"]==\"PASS\"; print(\"A129 regression, static checks, and independent review are PASS\")'",
-      "exit_code": 0,
-      "summary": "A129 regression, static checks, and independent review are PASS\n",
+      "exit_code": null,
+      "summary": "Local 124-item isolated PostgreSQL regression, static/scope/budget checks pass and final independent read-only review is PASS. Exact-head CI, deployment and fresh production association/readback remain pending. The earlier candidate production transaction rolled back with zero writes.",
       "timed_out": false,
       "environment": "unknown",
       "revision": "96bb2af4cb3afff8d66473bc554bbb437a963710",
@@ -396,8 +396,8 @@
     "p129_traditional_identity": {
       "status": "PASS",
       "review_mode": "independent read-only",
-      "reviewed_at": "2026-11-03T02:16:51.666816+08:00",
-      "summary": "初审发现 P128 fill 嵌套回执不兼容；已修复并新增 fill 形状隔离 PostgreSQL 回归。复核确认 new/fill 两种格式均正确提取，取消场次、来源键、旧竞彩编号、幂等和事务回滚边界保持安全；无未解决 findings。"
+      "reviewed_at": "2026-11-03T03:32:59.180295+08:00",
+      "summary": "Fresh review of corrected code PASS. Confirmed P128 new/fill evidence envelopes and strict integer/string normalization; fixed source-row SHA binds the accepted 500.com record to the reviewed manifest; tampered source ID/page hash/team IDs are rejected. Previous findings closed; no blocker/major; 9-file budget respected; no migration/dependency/API."
     }
   },
   "security": {
@@ -423,20 +423,29 @@
     "summary": "Disposable PostgreSQL 16 synthetic-schema rehearsal passed 1/1 with zero skips; exact target SHA, pinned migration checksum, existing-row preservation, constraints/triggers, rollback, and restricted fqp catalog/import paths verified."
   },
   "external_ci": {
-    "status": "passed",
+    "status": "pending",
     "task_id": "P129-TRADITIONAL-SLOT-IDENTITY",
-    "verified_at": "2026-11-03T02:46:01+08:00",
-    "head_sha": "11e2d3bccb869d5e9aa9eba34a2aafeff766c104",
-    "run_id": "41501128554",
-    "checks": {
-      "test": "passed",
-      "lint-and-typecheck": "passed"
+    "required": "new exact-head GitHub CI for corrected code",
+    "previous_run": {
+      "status": "passed",
+      "head_sha": "11e2d3bccb869d5e9aa9eba34a2aafeff766c104",
+      "run_id": "41501128554",
+      "checks": {
+        "test": "passed",
+        "lint-and-typecheck": "passed"
+      }
     },
-    "summary": "Exact main push CI 41501128554 passed both full test (8m26s) and lint-and-typecheck jobs. This is the P129 code commit; the following commit records release-gate evidence only."
+    "summary": "Earlier P129 CI does not include current local correction; require test and lint-and-typecheck on the exact new commit."
   },
   "quality_gate": {
-    "status": "READY_TO_MERGE",
-    "checked_at": "2026-11-03T02:45:40.385074+08:00",
-    "failures": []
+    "status": "BLOCKED",
+    "checked_at": "2026-11-03T03:33:27.502888+08:00",
+    "failures": [
+      "workflow_state_not_reviewing",
+      "A128-LOCAL-CATALOG_stale",
+      "P129-TRADITIONAL-SLOT-IDENTITY_incomplete",
+      "A129-TRADITIONAL-SLOT-IDENTITY_failed",
+      "reviews"
+    ]
   }
 }

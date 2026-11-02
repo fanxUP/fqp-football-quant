@@ -2103,6 +2103,284 @@ def test_explicit_traditional_slot_group_accepts_p128_fill_evidence_shape(ready)
     )
 
 
+def _p129_500com_half_score_supplement():
+    return {
+        "source": "500.com_wanchang_exact_fixture_reconciliation",
+        "contract": "sporttery-half-score-secondary-supplement/v1",
+        "source_file": "https://live.500.com/wanchang.php?e=2022-04-06",
+        "source_table": "wanchang.php historical finished-score row",
+        "api_result_code": "3",
+        "identity_checks": {
+            "event_date_and_official_full_score_exact": True,
+            "finished_source_record_has_valid_half_score": True,
+            "official_away_team_exact_or_same_unique_titan_id": True,
+            "official_home_team_exact_or_same_unique_titan_id": True,
+            "only_one_source_fixture_matches_date_direction_and_full_score": True,
+        },
+        "manifest_sha256": "b637cdd2943e1e5a1ba10844af7a0d2ed9bba8f154f735a9b476f63d48a6ada8",
+        "source_match_id": 984924,
+        "source_updated_at": "2026-11-02T11:20:51+08:00",
+        "sporttery_match_id": None,
+        "source_titan_match_id": None,
+        "secondary_source_records": [
+            {
+                "league": "英超",
+                "source": "500.com",
+                "away_team": "埃弗顿",
+                "home_team": "伯恩利",
+                "event_date": "2022-04-07",
+                "full_score": [3, 2],
+                "half_score": [1, 2],
+                "source_url": "https://live.500.com/wanchang.php?e=2022-04-06",
+                "page_sha256": "64d5ee7ba3b807d37abdc40c76ab0ffe7b7d13dacd4218160b3ade44e9ab5d95",
+                "kickoff_time": "02:30",
+                "away_identity": {
+                    "method": "same_unique_titan_team_id",
+                    "source_name": "埃弗顿",
+                    "official_name": "埃弗顿",
+                    "source_titan_team_ids": [31],
+                    "official_titan_team_ids": [31],
+                },
+                "home_identity": {
+                    "method": "same_unique_titan_team_id",
+                    "source_name": "伯恩利",
+                    "official_name": "伯恩利",
+                    "source_titan_team_ids": [46],
+                    "official_titan_team_ids": [46],
+                },
+                "source_match_id": 984924,
+                "requested_page_date": "2022-04-06",
+                "titan_match_ids_cross_checked": [],
+                "titan_half_scores_cross_checked": [],
+            }
+        ],
+        "api_full_score_source_text": "3:2",
+        "api_half_score_source_text": "{}",
+        "secondary_half_score_source_text": "1:2",
+        "production_evidence_half_score_source_text": "{}",
+    }
+
+
+def _attach_p129_500com_half_score_supplement(
+    conn,
+    game_type,
+    order,
+    *,
+    mutate=None,
+    mutate_primary=None,
+    fill_result_shape=False,
+    source_numeric_strings=True,
+):
+    from psycopg2.extras import Json
+
+    issue_id = put_traditional_history_slot(conn, game_type, "22036", order, half=(1, 2))
+    supplement = _p129_500com_half_score_supplement()
+    if mutate:
+        mutate(supplement)
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT id,source_raw_json FROM football_pool_issue_matches "
+            "WHERE issue_id=%s AND match_order=%s",
+            (issue_id, order),
+        )
+        membership_id, source_raw = cur.fetchone()
+        source_raw["half_score_source_text"] = "{}"
+        primary_evidence = {
+            "source": "sporttery_history_api",
+            "issue_no": "22036",
+            "game_no": "90" if source_numeric_strings else 90,
+            "match_num": str(order) if source_numeric_strings else order,
+            "full_score_source_text": "3:2",
+            "half_score_source_text": "{}",
+            "product_result_code_source_text": "3",
+        }
+        if mutate_primary:
+            mutate_primary(primary_evidence)
+        if fill_result_shape:
+            result_evidence = {
+                "sporttery_history_import": {
+                    "receipt": source_raw["import_receipt"],
+                    "evidence": primary_evidence,
+                }
+            }
+        else:
+            result_evidence = primary_evidence
+        result_evidence["fivehundredcom_half_score_supplement_20261102"] = supplement
+        cur.execute(
+            "UPDATE football_pool_issue_matches SET source_raw_json=%s,source_result_evidence=%s "
+            "WHERE id=%s",
+            (
+                Json(source_raw),
+                Json(result_evidence),
+                membership_id,
+            ),
+        )
+
+
+@pytest.mark.parametrize("fill_result_shape", [False, True], ids=["new_import", "fill_import"])
+@pytest.mark.parametrize(
+    "source_numeric_strings", [False, True], ids=["json_integers", "source_strings"]
+)
+def test_explicit_traditional_slot_group_accepts_pinned_500com_half_score_evidence(
+    ready, fill_result_shape, source_numeric_strings
+):
+    from scripts.football_fixture_identity import link_traditional_issue_slot_group
+
+    conn = ready
+    put_traditional_history_slot(conn, "bqc6", "22036", 5)
+    _attach_p129_500com_half_score_supplement(
+        conn,
+        "r9",
+        6,
+        fill_result_shape=fill_result_shape,
+        source_numeric_strings=source_numeric_strings,
+    )
+    _attach_p129_500com_half_score_supplement(
+        conn,
+        "t14c",
+        6,
+        fill_result_shape=fill_result_shape,
+        source_numeric_strings=source_numeric_strings,
+    )
+
+    linked = link_traditional_issue_slot_group(
+        conn,
+        [
+            {"game_type": "bqc6", "issue_no": "22036", "match_order": 5},
+            {"game_type": "r9", "issue_no": "22036", "match_order": 6},
+            {"game_type": "t14c", "issue_no": "22036", "match_order": 6},
+        ],
+    )
+
+    assert linked["identity_status"] == "linked"
+    assert linked["updated_memberships"] == 3
+    assert rows(
+        conn,
+        "SELECT count(*),count(DISTINCT fixture_id),min(identity_status) "
+        "FROM football_pool_issue_matches",
+    ) == [(3, 1, "linked")]
+    assert rows(
+        conn,
+        "SELECT count(*) FROM football_fixture_source_links WHERE id_system='jc.matchId'",
+    ) == [(0,)]
+
+
+def _tamper_p129_source_match_id(supplement):
+    supplement["source_match_id"] = 984925
+    supplement["secondary_source_records"][0]["source_match_id"] = 984925
+
+
+def _tamper_p129_page_hash(supplement):
+    supplement["secondary_source_records"][0]["page_sha256"] = "f" * 64
+
+
+def _tamper_p129_team_ids(supplement):
+    identity = supplement["secondary_source_records"][0]["home_identity"]
+    identity["source_titan_team_ids"] = [999]
+    identity["official_titan_team_ids"] = [999]
+
+
+@pytest.mark.parametrize("fill_result_shape", [False, True], ids=["new_import", "fill_import"])
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        lambda supplement: supplement.update(manifest_sha256="0" * 64),
+        lambda supplement: supplement["identity_checks"].update(
+            only_one_source_fixture_matches_date_direction_and_full_score=False
+        ),
+        lambda supplement: supplement["secondary_source_records"][0].update(
+            home_team="A different team"
+        ),
+        _tamper_p129_source_match_id,
+        _tamper_p129_page_hash,
+        _tamper_p129_team_ids,
+    ],
+    ids=[
+        "unapproved_manifest",
+        "ambiguous_source",
+        "team_mismatch",
+        "source_match_id_with_pinned_manifest_claim",
+        "page_hash_with_pinned_manifest_claim",
+        "team_ids_with_pinned_manifest_claim",
+    ],
+)
+def test_explicit_traditional_slot_group_rejects_tampered_500com_half_score_evidence(
+    ready, mutate, fill_result_shape
+):
+    from scripts.football_fixture_identity import link_traditional_issue_slot_group
+
+    conn = ready
+    put_traditional_history_slot(conn, "bqc6", "22036", 5)
+    _attach_p129_500com_half_score_supplement(
+        conn, "r9", 6, mutate=mutate, fill_result_shape=fill_result_shape
+    )
+    _attach_p129_500com_half_score_supplement(conn, "t14c", 6)
+
+    with pytest.raises(ValueError, match="traditional_slot_source_evidence_mismatch"):
+        link_traditional_issue_slot_group(
+            conn,
+            [
+                {"game_type": "bqc6", "issue_no": "22036", "match_order": 5},
+                {"game_type": "r9", "issue_no": "22036", "match_order": 6},
+                {"game_type": "t14c", "issue_no": "22036", "match_order": 6},
+            ],
+        )
+
+    assert rows(conn, "SELECT count(*) FROM football_fixtures") == [(0,)]
+    assert rows(conn, "SELECT count(*) FROM football_fixture_source_links") == [(0,)]
+    assert rows(
+        conn,
+        "SELECT count(*) FROM football_pool_issue_matches "
+        "WHERE fixture_id IS NOT NULL OR identity_status<>'pending'",
+    ) == [(0,)]
+
+
+@pytest.mark.parametrize("fill_result_shape", [False, True], ids=["new_import", "fill_import"])
+@pytest.mark.parametrize(
+    ("field", "bad_value"),
+    [
+        ("game_no", True),
+        ("game_no", "90x"),
+        ("match_num", 6.0),
+        ("match_num", "06"),
+    ],
+    ids=["boolean_game_no", "nondigit_game_no", "float_match_num", "leading_zero_match_num"],
+)
+def test_explicit_traditional_slot_group_rejects_noncanonical_primary_numbers(
+    ready, fill_result_shape, field, bad_value
+):
+    from scripts.football_fixture_identity import link_traditional_issue_slot_group
+
+    conn = ready
+    put_traditional_history_slot(conn, "bqc6", "22036", 5)
+    _attach_p129_500com_half_score_supplement(
+        conn,
+        "r9",
+        6,
+        fill_result_shape=fill_result_shape,
+        mutate_primary=lambda evidence: evidence.update({field: bad_value}),
+    )
+    _attach_p129_500com_half_score_supplement(conn, "t14c", 6, fill_result_shape=fill_result_shape)
+
+    with pytest.raises(ValueError, match="traditional_slot_source_evidence_mismatch"):
+        link_traditional_issue_slot_group(
+            conn,
+            [
+                {"game_type": "bqc6", "issue_no": "22036", "match_order": 5},
+                {"game_type": "r9", "issue_no": "22036", "match_order": 6},
+                {"game_type": "t14c", "issue_no": "22036", "match_order": 6},
+            ],
+        )
+
+    assert rows(conn, "SELECT count(*) FROM football_fixtures") == [(0,)]
+    assert rows(conn, "SELECT count(*) FROM football_fixture_source_links") == [(0,)]
+    assert rows(
+        conn,
+        "SELECT count(*) FROM football_pool_issue_matches "
+        "WHERE fixture_id IS NOT NULL OR identity_status<>'pending'",
+    ) == [(0,)]
+
+
 def test_explicit_traditional_slot_group_rollback_leaves_pending_rows_and_no_fixture(ready):
     from scripts.football_fixture_identity import link_traditional_issue_slot_group
 
