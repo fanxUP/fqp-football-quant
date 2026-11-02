@@ -205,15 +205,15 @@
     },
     "A129-TRADITIONAL-SLOT-IDENTITY": {
       "status": "PASS",
-      "command": "124-item isolated PostgreSQL regression + static/scope/budget + independent read-only review + exact-head GitHub Actions CI 41511126788",
+      "command": "124-item isolated PostgreSQL regression + static/scope/budget + independent review + exact-head CI + production deploy + bounded SERIALIZABLE identity write + independent read-only readback",
       "exit_code": 0,
-      "summary": "Code release acceptance PASS: 124/124 isolated PostgreSQL regressions; Ruff/mypy/compileall/scope/budget PASS; independent review PASS; exact current main CI passed test and lint-and-typecheck (https://github.com/fanxUP/fqp-football-quant/actions/runs/41511126788). This does not claim production identity links have been written; the separately authorized post-deployment 3-slot operation remains pending.",
+      "summary": "P129 complete. Local 124/124 isolated PostgreSQL regressions, static/scope/budget and independent review passed; exact deployed SHA CI 41517635062 passed both required jobs (https://github.com/fanxUP/fqp-football-quant/actions/runs/41517635062). SHA 919994697c735820f2b767e98cba7b95d264be28 deployed without DB migration or backup. The three freshly revalidated issue 22036 slots BQC6/5, R9/6 and T14C/6 were linked in one SERIALIZABLE transaction to fixture 2469; three typed source links and memberships independently read back, match_id remains NULL, JC aliases=0, no official result/season/model write. Production details are recorded in plans/local-football-data-integration-20261029/CHECKPOINT.md.",
       "timed_out": false,
-      "environment": "local isolated PostgreSQL, static analysis, independent review, GitHub Actions",
-      "revision": "4c204479284b9bf55429742b98a5dd135e86bec8",
-      "dirty_tree": false,
+      "environment": "local isolated PostgreSQL, GitHub Actions, production 100.121.47.26",
+      "revision": "919994697c735820f2b767e98cba7b95d264be28",
+      "dirty_tree": true,
       "tree_fingerprint": "67e4e9acd676eecc4fddfb20db53a4be3af5097fc989dc50332de6dbd3c96dca",
-      "verified_at": "2026-11-03T03:49:02.282793+08:00"
+      "verified_at": "2026-11-03T04:38:18.043209+08:00"
     }
   },
   "upstream_evidence": {
@@ -425,18 +425,144 @@
   "external_ci": {
     "status": "passed",
     "task_id": "P129-TRADITIONAL-SLOT-IDENTITY",
-    "head_sha": "04cedc80e9867604e502126566ab0293fc1b3f2b",
-    "run_id": "41515677848",
-    "url": "https://github.com/fanxUP/fqp-football-quant/actions/runs/41515677848",
+    "head_sha": "919994697c735820f2b767e98cba7b95d264be28",
+    "run_id": "41517635062",
+    "url": "https://github.com/fanxUP/fqp-football-quant/actions/runs/41517635062",
     "checks": {
       "test": "passed",
       "lint-and-typecheck": "passed"
     },
-    "summary": "Exact-head GitHub push CI for the corrected P129 code and current control records passed both required jobs."
+    "summary": "Exact deployed main SHA passed both GitHub Actions CI jobs."
   },
   "quality_gate": {
     "status": "READY_TO_MERGE",
     "checked_at": "2026-11-03T04:15:43.212409+08:00",
     "failures": []
+  },
+  "production_operation": {
+    "status": "PASS",
+    "verified_at": "2026-11-03T04:38:18.043209+08:00",
+    "server": "100.121.47.26",
+    "deployed_sha": "919994697c735820f2b767e98cba7b95d264be28",
+    "release_id": "919994697c735820f2b767e98cba7b95d264be28-20261102T203137Z-6bc559a8-c9a8-43c4-b319-650d11eefe99-d",
+    "deployment": {
+      "exit_code": 0,
+      "mode": "--apply-no-backup",
+      "pending_migrations": [],
+      "backup_created": false,
+      "services": {
+        "fqp-backend": "active",
+        "fqp-scheduler": "active",
+        "fqp-worker": "active",
+        "nginx": "active",
+        "postgresql": "active"
+      },
+      "readiness_http": 200,
+      "protected_route_without_session_http": 401,
+      "temporary_sudoers_removed": true,
+      "visudo_validation_after_cleanup": "PASS",
+      "note": "First attempt rolled back before migration due to a missing exact temporary sudo command; nginx was restored and the same target then deployed successfully. No migration or identity write occurred during the failed attempt."
+    },
+    "preflight": {
+      "read_only": true,
+      "issue_no": "22036",
+      "slots": [
+        {
+          "game_type": "bqc6",
+          "match_order": 5
+        },
+        {
+          "game_type": "r9",
+          "match_order": 6
+        },
+        {
+          "game_type": "t14c",
+          "match_order": 6
+        }
+      ],
+      "event": {
+        "league": "英超",
+        "home": "伯恩利",
+        "away": "埃弗顿",
+        "kickoff_date": "2022-04-07",
+        "full_score": "3:2",
+        "half_score": "1:2"
+      },
+      "all_pending": true,
+      "all_fixture_id_null": true,
+      "all_match_id_null": true
+    },
+    "transaction": {
+      "isolation": "SERIALIZABLE",
+      "lock_timeout": "2s",
+      "statement_timeout": "8s",
+      "fixture_id": 2469,
+      "inserted_fixture": true,
+      "inserted_source_links": 3,
+      "updated_memberships": 3,
+      "before_counts": {
+        "fixtures": 1216,
+        "source_links": 2395,
+        "memberships": 39552,
+        "revisions": 48132
+      },
+      "after_counts": {
+        "fixtures": 1217,
+        "source_links": 2398,
+        "memberships": 39552,
+        "revisions": 48135
+      }
+    },
+    "independent_readback": {
+      "read_only": true,
+      "status": "PASS",
+      "fixture_id": 2469,
+      "membership_ids": [
+        34876,
+        47629,
+        61363
+      ],
+      "linked_slots": [
+        {
+          "game_type": "bqc6",
+          "issue_no": "22036",
+          "match_order": 5
+        },
+        {
+          "game_type": "r9",
+          "issue_no": "22036",
+          "match_order": 6
+        },
+        {
+          "game_type": "t14c",
+          "issue_no": "22036",
+          "match_order": 6
+        }
+      ],
+      "source_links": [
+        {
+          "id_system": "traditional.bqc6.22036.matchOrder",
+          "source_match_id": "5"
+        },
+        {
+          "id_system": "traditional.r9.22036.matchOrder",
+          "source_match_id": "6"
+        },
+        {
+          "id_system": "traditional.t14c.22036.matchOrder",
+          "source_match_id": "6"
+        }
+      ],
+      "jc_aliases": 0,
+      "match_id_values": [
+        null,
+        null,
+        null
+      ],
+      "official_results_written": false,
+      "season_memberships_written": false,
+      "model_inputs_or_predictions_written": false
+    },
+    "detailed_record": "plans/local-football-data-integration-20261029/CHECKPOINT.md"
   }
 }

@@ -1,10 +1,10 @@
 {
-  "state": "READY_TO_DEPLOY",
+  "state": "DONE",
   "last_transition": {
-    "from": "READY_TO_MERGE",
-    "to": "READY_TO_DEPLOY",
-    "at": "2026-11-03T04:15:54.857208+08:00",
-    "reason": "部署目标无SQL/依赖变更，生产只读迁移计划无待执行项，受保护接口与健康探针符合预期。"
+    "from": "VERIFIED",
+    "to": "DONE",
+    "at": "2026-11-03T04:38:41.279038+08:00",
+    "reason": "P129代码修正、精确CI/独立审查、部署、生产三槽身份关联和回读均完成；生产证据已写入项目检查点。"
   },
   "blocked_reason": null
 }

@@ -11,10 +11,10 @@
 - 成功事务可重复调用且不重复插入；会员更新由现有不可变修订触发器留痕；调用方回滚后 fixture、来源键、会员和修订均无净变化。
 - P128 普通导入路径与其 `pending` 行为保持不变；无 schema migration、依赖、模型或公开 API 变化。
 - 使用固定样本和隔离 PostgreSQL 验证官方半场、哈希固定的补充半场、P128 new/fill 两种回执形状、固定清单行摘要绑定、来源 ID/页面摘要/球队 ID 篡改拒绝、取消拦截、冲突拦截、幂等及回滚。
-- P129 已发布版本在生产预检中拒绝了真实 P128 补充半场证据，事务安全回滚、业务写入0；本地修正版的隔离 PostgreSQL 回归 124/124、静态检查及 scope/budget 已通过；独立只读复核通过；提交 `4c204479284b9bf55429742b98a5dd135e86bec8` 的精确 SHA CI `41511126788` 两个 job 均通过。该代码验收不表示生产场次已关联；部署和三槽独立生产操作仍须单独记录。
+- P129 修正版隔离 PostgreSQL 回归 124/124、静态检查、scope/budget、独立只读复核均通过；代码提交 `4c204479284b9bf55429742b98a5dd135e86bec8` 的精确 CI `41511126788` 通过，最终部署提交 `919994697c735820f2b767e98cba7b95d264be28` 的精确 CI `41517635062` 两个 job 也通过。
 - 修正来源校验以匹配 P128 实际存储格式：兼容 P128 新导入与 fill 两种命名空间回执格式，核对 issue/member 导入回执、原始对阵/日期/全半场比分和结果码；补充半场必须来自清单中的精确 500.com 来源行 SHA-256 `81c3009ce7f1fb2a36c3b5393f64bceb2e3c5fbac5015602fd75a8b4a0413f87`，不接受只自报全清单哈希的篡改行。
-- P129 代码验收以本地固定样本/隔离 PostgreSQL、静态检查、独立只读复核、精确 SHA CI 通过为准；随后单独部署并做服务/受保护路径 smoke。
-- 部署后只在三槽新鲜只读事实仍完全匹配时，以一个 SERIALIZABLE 有界事务关联 BQC6/5、R9/6、T14C/6，并独立核对同一 fixture、三条 typed source links、无 JC alias/赛季/模型/结果写入；不创建数据库备份。生产写入证据单独保存在项目检查点，不把它混入代码合并验收。
+- 部署目标 `919994697c735820f2b767e98cba7b95d264be28` 已发布到 `100.121.47.26`；无待迁移 SQL、无数据库备份，backend/scheduler/worker/nginx/PostgreSQL 均 active，readiness HTTP 200，未登录保护路由 HTTP 401。一次发布尝试因临时 sudo 白名单缺少精确命令而由发布脚本回滚；root 恢复 nginx 后补齐最小临时规则并重试成功。临时 sudoers、发布证据临时文件与验证脚本均已清理。
+- 新鲜只读复核后，期次 22036 的 BQC6/5、R9/6、T14C/6 在一个 SERIALIZABLE 事务中关联至 fixture `2469`；3 条会员为 `linked`，3 条 typed source links 指向同一 fixture，会员 `match_id` 均为 NULL，JC alias 数为 0。关联后独立只读回读通过；fixtures 1216→1217、source links 2395→2398、memberships 保持 39552、revisions 48132→48135。仅新增共享 fixture 身份，不写官方赛果、赛季成员、模型输入或预测；未创建备份。完整生产证据见 `plans/local-football-data-integration-20261029/CHECKPOINT.md`。
 - 独立只读复核发现并促成修正 P128 fill 回执布局、补充行摘要绑定及真实字符串字段解析；最终复核 PASS，无未解决 findings。
 
 ## A128-LOCAL-CATALOG — 四种传统足彩官方期次目录与回填准备
