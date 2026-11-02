@@ -1,10 +1,16 @@
 {
-  "state": "DONE",
-  "last_transition": {
-    "from": "VERIFIED",
-    "to": "DONE",
-    "at": "2026-11-03T04:38:41.279038+08:00",
-    "reason": "P129代码修正、精确CI/独立审查、部署、生产三槽身份关联和回读均完成；生产证据已写入项目检查点。"
+  "state": "READY_TO_MERGE",
+  "workflow_id": "P130-HISTORY-FILL-LIVE-DRAW",
+  "previous_workflow": {
+    "task_id": "P129-TRADITIONAL-SLOT-IDENTITY",
+    "state": "DONE",
+    "completed_at": "2026-11-03T04:38:41.279038+08:00"
   },
-  "blocked_reason": null
+  "blocked_reason": null,
+  "last_transition": {
+    "from": "REVIEWING",
+    "to": "READY_TO_MERGE",
+    "at": "2026-11-03T05:27:55.309555+08:00",
+    "reason": "P130质量门禁READY_TO_MERGE，214项整组回归、最终专项幂等回归、静态检查和独立复审均通过"
+  }
 }

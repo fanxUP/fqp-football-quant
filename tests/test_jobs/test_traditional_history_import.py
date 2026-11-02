@@ -10,6 +10,8 @@ import pytest
 
 from scripts.traditional_history_import import (
     _local_database_parameters,
+    _pool_raw_hash,
+    _prepare_fill_header,
     _prepare_fill_member,
     apply_issue_batch,
     load_issue_batch,
@@ -365,6 +367,86 @@ def test_fill_rejects_live_team_or_date_drift(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="away team differs"):
         _prepare_fill_member(existing, source)
+
+
+def _live_draw_fill_header(source_namespace: str = "sporttery_live_draw"):
+    raw = {"source": "sporttery_live_draw", "legacy_capture": "retain"}
+    existing = {
+        "id": 812,
+        "game_type": "bqc6",
+        "issue_no": "26218",
+        "source_game_type": "bqc6",
+        "source_game_no": 98,
+        "source_game_no_source": source_namespace,
+        "sale_start_time": "2026-10-28 20:00:00",
+        "sale_stop_time": "2026-11-01 21:30:00",
+        "total_matches": 6,
+        "official_status": "closed",
+        "prize_pool_estimate": None,
+        "raw_json": raw,
+        "raw_hash": _pool_raw_hash(raw),
+    }
+    issue = {
+        "game_type": "bqc6",
+        "issue_no": "26218",
+        "source_game_type": "bqc6",
+        "source_game_no": 98,
+        "source_game_no_source": "sporttery_history_api",
+        "sale_start_time": "2026-10-28 20:00:00",
+        "sale_stop_time": "2026-11-01 21:30:00",
+        "total_matches": 6,
+        "raw_json": {
+            "source": "sporttery_history_api",
+            "import_receipt": {"contract": "sporttery-traditional-history-import/v1"},
+        },
+    }
+    return existing, issue
+
+
+def test_fill_accepts_same_game_no_live_source_and_preserves_its_namespace() -> None:
+    existing, issue = _live_draw_fill_header()
+
+    updates = _prepare_fill_header(existing, issue)
+
+    assert "source_game_no_source" not in updates
+    marker = updates["raw_json"]["traditional_history_import"]
+    assert marker["evidence"]["source"] == "sporttery_history_api"
+    assert marker["receipt"] == issue["raw_json"]["import_receipt"]
+    assert marker["header_state_sha256"]
+    assert updates["raw_json"]["source"] == "sporttery_live_draw"
+    assert updates["raw_json"]["legacy_capture"] == "retain"
+
+
+def test_fill_rejects_unrecognized_existing_source_namespace() -> None:
+    existing, issue = _live_draw_fill_header("unreviewed_source")
+
+    with pytest.raises(ValueError, match="source_game_no_source conflicts"):
+        _prepare_fill_header(existing, issue)
+
+
+def test_fill_rejects_live_source_with_different_game_no() -> None:
+    existing, issue = _live_draw_fill_header()
+    issue["source_game_no"] = 90
+
+    with pytest.raises(ValueError, match="source_game_no conflicts"):
+        _prepare_fill_header(existing, issue)
+
+
+def test_fill_rejects_live_source_without_a_known_game_no() -> None:
+    existing, issue = _live_draw_fill_header()
+    existing["source_game_no"] = None
+    issue["source_game_no"] = None
+
+    with pytest.raises(ValueError, match="source_game_no is missing"):
+        _prepare_fill_header(existing, issue)
+
+
+def test_fill_rejects_non_history_namespace_for_live_draw_source() -> None:
+    existing, issue = _live_draw_fill_header()
+    issue["source_game_no_source"] = "unreviewed_source"
+
+    with pytest.raises(ValueError, match="source_game_no_source conflicts"):
+        _prepare_fill_header(existing, issue)
 
 
 def test_apply_rejects_unbounded_or_mixed_operation_batches_before_database_access() -> None:

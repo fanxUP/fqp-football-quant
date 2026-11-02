@@ -756,9 +756,25 @@ def _prepare_fill_header(existing: dict[str, Any], issue: dict[str, Any]) -> dic
         raise ValueError(f"existing {label} source game type conflicts")
     if existing.get("total_matches") != issue["total_matches"]:
         raise ValueError(f"existing {label} slot count differs from the history API")
+    if existing.get("source_game_no_source") == "sporttery_live_draw" and (
+        existing.get("source_game_no") is None or issue.get("source_game_no") is None
+    ):
+        raise ValueError(f"existing {label} source_game_no is missing; cannot verify its identity")
     for field in ("source_game_no", "source_game_no_source"):
         current = existing.get(field)
         if current is not None and current != issue[field]:
+            # A live draw and its finalized history record are two observations
+            # of the same official gameNo. Keep the original header namespace;
+            # the history API is recorded as supplemental import evidence below.
+            if (
+                field == "source_game_no_source"
+                and current == "sporttery_live_draw"
+                and issue.get("source_game_no_source") == "sporttery_history_api"
+                and existing.get("source_game_no") is not None
+                and issue.get("source_game_no") is not None
+                and existing.get("source_game_no") == issue.get("source_game_no")
+            ):
+                continue
             raise ValueError(f"existing {label} {field} conflicts with the history API")
     for field in ("sale_start_time", "sale_stop_time"):
         current = existing.get(field)

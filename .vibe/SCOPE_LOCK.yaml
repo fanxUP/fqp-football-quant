@@ -1,40 +1,20 @@
 {
   "schema_version": 4,
-  "task_id": "P129-TRADITIONAL-SLOT-IDENTITY",
-  "objective": "Add an explicit, evidence-bound write path to group completed Sporttery traditional issue slots into one shared fixture; use a secondary half-score only from the reviewed, hash-pinned P128 manifest when the official source field is blank.",
+  "task_id": "P130-HISTORY-FILL-LIVE-DRAW",
+  "objective": "Allow exact same-gameNo official-history fill for existing live-draw issues while preserving original live-source identity and all pre-existing business fields.",
   "allowed_paths": [
     ".vibe/ACCEPTANCE.md",
     ".vibe/BASELINE.yaml",
     ".vibe/CHANGE_BUDGET.yaml",
     ".vibe/EVIDENCE.yaml",
     ".vibe/PLAN.md",
-    ".vibe/QUALITY_GATE.md",
     ".vibe/SCOPE_LOCK.yaml",
     ".vibe/STATE.yaml",
     ".vibe/TASK_DAG.yaml",
     ".vibe/config.yaml",
-    ".vibe/quality_gate.py",
-    "apps/frontend/src/core/types.ts",
-    "apps/frontend/src/features/pool/PoolFixtureCatalog.tsx",
-    "docs/project-reliability-improvements.md",
-    "ops/server/README.md",
-    "ops/server/deploy.sh",
-    "ops/server/release_migration_policy.py",
-    "scripts/football_fixture_identity.py",
-    "scripts/football_pool_catalog.py",
-    "scripts/official_crawler.py",
-    "scripts/official_storage.py",
     "scripts/traditional_history_import.py",
-    "scripts/traditional_history_type_repair.py",
-    "sql/128_traditional_history_facts.sql",
-    "tests/test_computation/test_football_fixture_identity_postgres.py",
-    "tests/test_computation/test_no_backup_traditional_history_migration_postgres.py",
-    "tests/test_computation/test_observed_pipeline_postgres.py",
-    "tests/test_computation/test_pool_postgres.py",
     "tests/test_jobs/test_traditional_history_import.py",
-    "tests/test_local/test_release_migration_policy.py",
-    "tests/test_local/test_vibe_quality_gate.py",
-    "tests/test_scripts/test_official_storage.py"
+    "tests/test_computation/test_football_fixture_identity_postgres.py"
   ],
   "protected_paths": [
     "ops/**",
@@ -42,11 +22,6 @@
     "**/package*.json",
     "requirements*.txt"
   ],
-  "approved_protected_paths": [
-    "ops/server/README.md",
-    "ops/server/deploy.sh",
-    "ops/server/release_migration_policy.py",
-    "sql/128_traditional_history_facts.sql"
-  ],
-  "notes": "Single main branch only. P128 importer behavior remains unchanged and continues to leave unspecified fixture identities pending. P129 adds a separate explicit operation for caller-supplied official completed source slots. A blank official halftime can be supported only by the reviewed P128 500.com manifest SHA-256 b637cdd2943e1e5a1ba10844af7a0d2ed9bba8f154f735a9b476f63d48a6ada8 and exact source-row SHA-256 81c3009ce7f1fb2a36c3b5393f64bceb2e3c5fbac5015602fd75a8b4a0413f87; support both reviewed P128 new and fill result-evidence shapes. After fresh read-only confirmation, the sole production batch is issue 22036 BQC6/5, R9/6 and T14C/6 in one SERIALIZABLE transaction. Never add a JC alias, official result, season, model input or prediction; no migration, dependency or backup."
+  "approved_protected_paths": [],
+  "notes": "Single main branch only. Permit sporttery_live_draw as the pre-existing issue namespace only when the official history gameNo matches; preserve that namespace and retain official history as supplemental evidence. Unknown/mismatched source namespaces and any identity/result conflict remain blocked. No migration, dependency, public API or production write."
 }

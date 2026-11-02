@@ -788,7 +788,7 @@ def test_catalog_date_filter_is_beijing_half_open_and_keeps_whole_issue(ready):
     assert read_pool_catalog(conn, date_from=date(2026, 11, 1))["total"] == 0
 
 
-def _seed_traditional_import_fill(conn, tmp_path):
+def _seed_traditional_import_fill(conn, tmp_path, live_draw_source=False):
     from scripts.traditional_history_import import MIGRATION
 
     _register_traditional_import_migration(conn, MIGRATION)
@@ -825,6 +825,14 @@ def _seed_traditional_import_fill(conn, tmp_path):
             "UPDATE football_pool_issues SET source_game_type=NULL WHERE id=%s",
             (issue_id,),
         )
+        if live_draw_source:
+            cur.execute(
+                """UPDATE football_pool_issues
+                   SET source_game_type='bqc6',source_game_no=98,
+                       source_game_no_source='sporttery_live_draw'
+                   WHERE id=%s""",
+                (issue_id,),
+            )
         cur.execute(
             "UPDATE football_pool_issue_matches SET kickoff_date=NULL WHERE issue_id=%s",
             (issue_id,),
@@ -1715,8 +1723,11 @@ def test_traditional_fill_preserves_legacy_ids_links_and_probabilities(ready, tm
 
     result = apply_issue_batch(conn, batch)
     conn.commit()
+    repeated = apply_issue_batch(conn, batch)
+    conn.commit()
 
     assert result == {"filled_issues": 1, "filled_members": 6, "already_filled_issues": 0}
+    assert repeated == {"filled_issues": 0, "filled_members": 0, "already_filled_issues": 1}
     with conn.cursor() as cur:
         cur.execute(
             "SELECT id,source_game_type,source_game_no,source_game_no_source,raw_json->>'legacy' "
@@ -1748,10 +1759,44 @@ def test_traditional_fill_preserves_legacy_ids_links_and_probabilities(ready, tm
     assert after[0][8] is None and after[0][9] == "*,*"
     assert after[1][8] == 0 and after[1][9] == "1,0"
 
+
+def test_traditional_fill_adds_history_to_live_draw_issue_without_replacing_origin(ready, tmp_path):
+    conn = ready
+    issue_id, before_members, batch = _seed_traditional_import_fill(
+        conn, tmp_path, live_draw_source=True
+    )
+
+    result = apply_issue_batch(conn, batch)
     conn.commit()
     repeated = apply_issue_batch(conn, batch)
     conn.commit()
+
+    assert result == {"filled_issues": 1, "filled_members": 6, "already_filled_issues": 0}
     assert repeated == {"filled_issues": 0, "filled_members": 0, "already_filled_issues": 1}
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT source_game_no,source_game_no_source,raw_json "
+            "FROM football_pool_issues WHERE id=%s",
+            (issue_id,),
+        )
+        game_no, source_namespace, raw = cur.fetchone()
+        cur.execute(
+            """SELECT id,match_id,fixture_id,kickoff_time,home_win_prob,
+                      source_full_home_goals,source_product_result_code,
+                      source_result_source,source_raw_json->>'legacy'
+               FROM football_pool_issue_matches WHERE issue_id=%s ORDER BY match_order""",
+            (issue_id,),
+        )
+        after = cur.fetchall()
+    assert (game_no, source_namespace) == (98, "sporttery_live_draw")
+    marker = raw["traditional_history_import"]
+    assert marker["evidence"]["source"] == "sporttery_history_api"
+    assert marker["receipt"]["contract"] == "sporttery-traditional-history-import/v1"
+    for original, updated in zip(before_members, after, strict=True):
+        assert updated[:4] == original[:4]
+        assert float(updated[4]) == float(original[4])
+        assert updated[8].startswith("preserve-member-")
+        assert updated[7] == "sporttery_history_api"
 
 
 @pytest.mark.parametrize("drift", ("raw_json", "raw_hash", "prize_pool_estimate"))

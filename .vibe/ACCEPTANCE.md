@@ -1,3 +1,14 @@
+# A130 — 实时来源期次的历史赛果补全
+
+- 对 `sporttery_live_draw` 期次，只在存储 gameNo、玩法、期号、销售窗口、场次数与历史 API 完全相符时允许 `fill`。
+- 对所有槽逐一重新核验场序、主客队、比赛日期及已有赛果；任何冲突都在写入前拒绝。
+- 期次 `source_game_no_source` 保持 `sporttery_live_draw`；官方历史 API 来源和导入回执作为补充证据合并保存，不覆盖既有原始记录。
+- 成功补录只填空缺官方事实，保留 membership ID、`match_id`、`fixture_id`、身份状态、赔率/模型字段和既有精确开球证据；重复执行不产生新变化。
+- 隔离 PostgreSQL 回归覆盖成功、幂等和冲突拒绝；定向单元、静态检查和项目质量门禁通过。
+- 不修改迁移、公开 API、生产数据库或服务配置；P128/P129 验收保持为历史记录。
+
+# 历史验收记录
+
 # 项目验收记录
 
 当前工作项：`P129-TRADITIONAL-SLOT-IDENTITY`，本地验收 ID 为 A129-TRADITIONAL-SLOT-IDENTITY。历史验收记录保留在下方。

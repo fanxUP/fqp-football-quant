@@ -1,6 +1,6 @@
 {
   "schema_version": 4,
-  "current_task": "P129-TRADITIONAL-SLOT-IDENTITY",
+  "current_task": "P130-HISTORY-FILL-LIVE-DRAW",
   "acceptance": {
     "A121": {
       "status": "PASS",
@@ -214,6 +214,23 @@
       "dirty_tree": true,
       "tree_fingerprint": "67e4e9acd676eecc4fddfb20db53a4be3af5097fc989dc50332de6dbd3c96dca",
       "verified_at": "2026-11-03T04:38:18.043209+08:00"
+    },
+    "A130-HISTORY-FILL-LIVE-DRAW": {
+      "status": "PASS",
+      "task_id": "P130-HISTORY-FILL-LIVE-DRAW",
+      "command": "Disposable PostgreSQL 16 tmpfs container bound to 127.0.0.1; create test role fqp; .venv/bin/python -m pytest -q tests/test_jobs/test_traditional_history_import.py tests/test_computation/test_football_fixture_identity_postgres.py tests/test_local/test_release_migration_policy.py tests/test_local/test_vibe_quality_gate.py tests/test_scripts/test_official_storage.py",
+      "exit_code": 0,
+      "summary": "Full configured regression passed 214/214 in 63.02s with 0 skips on the final importer implementation. After the independent review requested a dedicated live-draw idempotency assertion, the exact PostgreSQL case was rerun on the final test tree and passed 1/1; it verifies first fill plus same-batch replay (0 additional fills, 1 already-filled issue). The isolated database used PostgreSQL 16 tmpfs and a loopback-only published port; its fqp test role/container were removed after each run.",
+      "static_checks": {
+        "ruff_check": "PASS: All checks passed!",
+        "ruff_format_check": "PASS: 3 files already formatted",
+        "compileall": "PASS",
+        "git_diff_check": "PASS",
+        "scope": "PASS: 3 business paths changed",
+        "change_budget": "PASS: 3/12 paths; 0 new files, dependencies, migrations, or public API changes"
+      },
+      "tree_fingerprint": "7e40881d5097662fe3b0da88ce9cc02f77fdce5d626f4d5b6a6ea2cf6abe6ca7",
+      "verified_at": "2026-11-03T05:26:47.743498+08:00"
     }
   },
   "upstream_evidence": {
@@ -398,6 +415,12 @@
       "review_mode": "independent read-only",
       "reviewed_at": "2026-11-03T03:32:59.180295+08:00",
       "summary": "Fresh review of corrected code PASS. Confirmed P128 new/fill evidence envelopes and strict integer/string normalization; fixed source-row SHA binds the accepted 500.com record to the reviewed manifest; tampered source ID/page hash/team IDs are rejected. Previous findings closed; no unresolved findings; 9-file budget respected; no migration/dependency/API."
+    },
+    "p130_live_draw_fill": {
+      "status": "PASS",
+      "review_mode": "independent read-only",
+      "reviewed_at": "2026-11-03T05:26:47.743498+08:00",
+      "summary": "Independent read-only review found no blocking or major issues. One minor request for an explicit live-draw idempotency assertion was addressed and confirmed closed. Reviewer did not modify files or run tests."
     }
   },
   "security": {
@@ -436,7 +459,7 @@
   },
   "quality_gate": {
     "status": "READY_TO_MERGE",
-    "checked_at": "2026-11-03T04:15:43.212409+08:00",
+    "checked_at": "2026-11-03T05:27:47.961580+08:00",
     "failures": []
   },
   "production_operation": {
