@@ -1,10 +1,10 @@
 {
-  "state": "REVIEWING",
+  "state": "READY_TO_MERGE",
   "last_transition": {
-    "from": "VERIFYING",
-    "to": "REVIEWING",
-    "at": "2026-11-03T02:29:17.168379+08:00",
-    "reason": "P129 100项隔离PostgreSQL、静态/范围预算门禁及独立复审均通过，进入发布质量门禁。"
+    "from": "REVIEWING",
+    "to": "READY_TO_MERGE",
+    "at": "2026-11-03T02:45:41.321932+08:00",
+    "reason": "P129本地回归、独立审查及精确SHA的GitHub CI通过；历史P128验收证据已由本次完整CI重新核实。"
   },
   "blocked_reason": null
 }
