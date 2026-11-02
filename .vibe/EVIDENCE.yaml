@@ -425,20 +425,18 @@
   "external_ci": {
     "status": "passed",
     "task_id": "P129-TRADITIONAL-SLOT-IDENTITY",
-    "head_sha": "4c204479284b9bf55429742b98a5dd135e86bec8",
-    "run_id": "41511126788",
-    "url": "https://github.com/fanxUP/fqp-football-quant/actions/runs/41511126788",
+    "head_sha": "04cedc80e9867604e502126566ab0293fc1b3f2b",
+    "run_id": "41515677848",
+    "url": "https://github.com/fanxUP/fqp-football-quant/actions/runs/41515677848",
     "checks": {
       "test": "passed",
       "lint-and-typecheck": "passed"
     },
-    "summary": "Exact-head GitHub push CI passed both required jobs for the corrected P129 code."
+    "summary": "Exact-head GitHub push CI for the corrected P129 code and current control records passed both required jobs."
   },
   "quality_gate": {
-    "status": "PENDING",
-    "checked_at": "2026-11-03T04:01:05.156201+08:00",
-    "failures": [
-      "rerun after removing false-positive review wording"
-    ]
+    "status": "READY_TO_MERGE",
+    "checked_at": "2026-11-03T04:15:43.212409+08:00",
+    "failures": []
   }
 }
