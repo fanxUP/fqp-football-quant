@@ -1,16 +1,17 @@
 {
-  "state": "DONE",
-  "workflow_id": "P130-HISTORY-FILL-LIVE-DRAW",
+  "state": "READY_TO_MERGE",
+  "workflow_id": "P131-TRADITIONAL-SUPPLEMENT-RECEIPT-ALLOWLIST",
   "previous_workflow": {
-    "task_id": "P129-TRADITIONAL-SLOT-IDENTITY",
+    "task_id": "P130-HISTORY-FILL-LIVE-DRAW",
     "state": "DONE",
-    "completed_at": "2026-11-03T04:38:41.279038+08:00"
+    "archive": ".vibe/archive/workflow-p130-done-2026-11-03",
+    "archive_manifest_sha256": "4c3344cb045743753f3a7a0ceea4d4b6e223b76cae479bcc0150ad0336ba5cb4"
   },
   "blocked_reason": null,
   "last_transition": {
-    "from": "VERIFIED",
-    "to": "DONE",
-    "at": "2026-11-03T05:51:08.176132+08:00",
-    "reason": "P130 release verification evidence recorded; no production data writes or backup"
+    "from": "REVIEWING",
+    "to": "READY_TO_MERGE",
+    "at": "2026-11-03T07:25:57.472935+08:00",
+    "reason": "P131 acceptance, independent review, security, migration scope and V4 merge gate pass; exact main CI remains required"
   }
 }

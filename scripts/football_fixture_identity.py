@@ -9,6 +9,8 @@ from __future__ import annotations
 import hashlib
 import json
 from datetime import date
+from functools import lru_cache
+from pathlib import Path
 from typing import Any
 
 from psycopg2.extras import Json
@@ -17,18 +19,127 @@ from scripts.pool_issue_state import pool_time
 
 TRADITIONAL_MATCH_COUNTS = {"t14c": 14, "r9": 14, "bqc6": 6, "jq4": 4}
 IDENTITY_LOCK = 1263554640
-FIVEHUNDRED_HALF_SCORE_SUPPLEMENT_KEY = "fivehundredcom_half_score_supplement_20261102"
-# SHA-256 of the reviewed 753-row P128 public-source manifest. Any later
-# supplement batch must be reviewed and pinned separately before acceptance.
-FIVEHUNDRED_HALF_SCORE_SUPPLEMENT_SHA256 = (
-    "b637cdd2943e1e5a1ba10844af7a0d2ed9bba8f154f735a9b476f63d48a6ada8"
+TRADITIONAL_HALF_SCORE_SUPPLEMENT_CONTRACT = "sporttery-half-score-secondary-supplement/v1"
+TRADITIONAL_HALF_SCORE_SUPPLEMENT_ALLOWLIST_SHA256 = (
+    "a10fe86c2d6fb024165e8575e4133b4636159d7a9c0442fb80aae7311649a27e"
 )
-# SHA-256 of the exact canonical secondary-source row for the approved
-# Burnley-Everton fixture within that manifest. The manifest digest alone is a
-# claim in JSON evidence; this row digest binds the accepted identity facts.
-FIVEHUNDRED_HALF_SCORE_RECORD_SHA256 = (
-    "81c3009ce7f1fb2a36c3b5393f64bceb2e3c5fbac5015602fd75a8b4a0413f87"
+TRADITIONAL_HALF_SCORE_PRODUCTION_AGGREGATE_SHA256 = (
+    "5fc23958340da4b4e3f0e1a72181f56a5e1d6164270abc7742a1e083d6c95777"
 )
+TRADITIONAL_HALF_SCORE_CORE_FIELDS = frozenset(
+    {
+        "contract",
+        "source",
+        "source_file",
+        "source_table",
+        "source_match_id",
+        "source_titan_match_id",
+        "source_updated_at",
+        "manifest_sha256",
+        "sporttery_match_id",
+        "api_full_score_source_text",
+        "api_half_score_source_text",
+        "api_result_code",
+        "secondary_half_score_source_text",
+        "identity_checks",
+    }
+)
+TRADITIONAL_HALF_SCORE_OPTIONAL_FIELDS = frozenset(
+    {"production_evidence_half_score_source_text", "secondary_source_records"}
+)
+
+
+@lru_cache(maxsize=1)
+def _traditional_half_score_supplement_allowlist() -> dict[tuple, dict]:
+    """Load only the reviewed, source-pinned P128 half-score receipts."""
+    path = Path(__file__).with_name("data") / "traditional_half_score_supplement_allowlist.json"
+    try:
+        raw = path.read_bytes()
+        if hashlib.sha256(raw).hexdigest() != TRADITIONAL_HALF_SCORE_SUPPLEMENT_ALLOWLIST_SHA256:
+            return {}
+        document = json.loads(raw)
+    except OSError, json.JSONDecodeError:
+        return {}
+    if (
+        not isinstance(document, dict)
+        or document.get("schema_version") != 1
+        or document.get("record_count") != 4557
+        or document.get("production_core_aggregate_sha256")
+        != TRADITIONAL_HALF_SCORE_PRODUCTION_AGGREGATE_SHA256
+        or not isinstance(document.get("records"), list)
+        or len(document["records"]) != 4557
+    ):
+        return {}
+
+    entries: dict[tuple, dict] = {}
+    required = {
+        "evidence_key",
+        "game_type",
+        "issue_no",
+        "match_order",
+        "manifest_sha256",
+        "core_receipt_sha256",
+        "half_score",
+        "event_facts",
+    }
+    allowed = required | {
+        "secondary_source_records_sha256",
+        "production_evidence_half_score_source_text",
+    }
+    for record in document["records"]:
+        if not isinstance(record, dict) or not required <= record.keys() or record.keys() - allowed:
+            return {}
+        evidence_key = record["evidence_key"]
+        game_type = record["game_type"]
+        issue_no = record["issue_no"]
+        match_order = record["match_order"]
+        manifest_sha256 = record["manifest_sha256"]
+        half_score = record["half_score"]
+        event_facts = record["event_facts"]
+        if (
+            not isinstance(evidence_key, str)
+            or not evidence_key
+            or game_type not in TRADITIONAL_MATCH_COUNTS
+            or not isinstance(issue_no, str)
+            or not issue_no.isascii()
+            or not issue_no.isdecimal()
+            or str(int(issue_no)) != issue_no
+            or type(match_order) is not int
+            or not 1 <= match_order <= TRADITIONAL_MATCH_COUNTS[game_type]
+            or not _valid_sha256(manifest_sha256)
+            or not _valid_sha256(record["core_receipt_sha256"])
+            or not isinstance(half_score, list)
+            or len(half_score) != 2
+            or any(type(value) is not int or value < 0 for value in half_score)
+            or not isinstance(event_facts, dict)
+            or set(event_facts)
+            != {"home_team_name", "away_team_name", "kickoff_date", "full_score", "half_score"}
+            or not isinstance(event_facts.get("home_team_name"), str)
+            or not event_facts["home_team_name"]
+            or not isinstance(event_facts.get("away_team_name"), str)
+            or not event_facts["away_team_name"]
+            or not isinstance(event_facts.get("kickoff_date"), str)
+            or not isinstance(event_facts.get("full_score"), list)
+            or len(event_facts["full_score"]) != 2
+            or any(type(value) is not int or value < 0 for value in event_facts["full_score"])
+            or event_facts["half_score"] != half_score
+        ):
+            return {}
+        try:
+            date.fromisoformat(event_facts["kickoff_date"])
+        except ValueError:
+            return {}
+        optional_hash = record.get("secondary_source_records_sha256")
+        optional_half = record.get("production_evidence_half_score_source_text")
+        if optional_hash is not None and not _valid_sha256(optional_hash):
+            return {}
+        if optional_half is not None and not isinstance(optional_half, str):
+            return {}
+        key = (evidence_key, game_type, issue_no, match_order, manifest_sha256)
+        if key in entries:
+            return {}
+        entries[key] = record
+    return entries
 
 
 def traditional_source_ids(raw: dict) -> dict[str, str]:
@@ -108,21 +219,48 @@ def _traditional_half_score_supplement_matches(
     half_score: tuple[int, int],
     result_code: str,
 ) -> bool:
-    """Accept only the reviewed P128 500.com batch for missing API HT scores."""
+    """Accept only an exact receipt and slot in the reviewed P128 allowlist."""
     if not isinstance(result_evidence, dict) or source_facts.get("half_score_source_text") != "{}":
         return False
     primary_evidence = _traditional_primary_result_evidence(result_evidence)
     if not isinstance(primary_evidence, dict):
         return False
-    supplement = result_evidence.get(FIVEHUNDRED_HALF_SCORE_SUPPLEMENT_KEY)
-    if not isinstance(supplement, dict):
+
+    containers = [result_evidence]
+    imported = result_evidence.get("sporttery_history_import")
+    if isinstance(imported, dict):
+        nested_evidence = imported.get("evidence")
+        if isinstance(nested_evidence, dict) and nested_evidence is not result_evidence:
+            containers.append(nested_evidence)
+    supplements = [
+        (key, value)
+        for container in containers
+        for key, value in container.items()
+        if isinstance(key, str)
+        and isinstance(value, dict)
+        and value.get("contract") == TRADITIONAL_HALF_SCORE_SUPPLEMENT_CONTRACT
+    ]
+    if len(supplements) != 1:
         return False
+    evidence_key, supplement = supplements[0]
+    manifest_sha256 = supplement.get("manifest_sha256")
+    if not _valid_sha256(manifest_sha256):
+        return False
+    allowlist_key = (evidence_key, game_type, issue_no, match_order, manifest_sha256)
+    accepted = _traditional_half_score_supplement_allowlist().get(allowlist_key)
+    if accepted is None:
+        return False
+
+    event_facts = accepted["event_facts"]
     if (
-        supplement.get("contract") != "sporttery-half-score-secondary-supplement/v1"
-        or supplement.get("source") != "500.com_wanchang_exact_fixture_reconciliation"
-        or supplement.get("manifest_sha256") != FIVEHUNDRED_HALF_SCORE_SUPPLEMENT_SHA256
-        or supplement.get("sporttery_match_id") is not None
-        or supplement.get("source_titan_match_id") is not None
+        not TRADITIONAL_HALF_SCORE_CORE_FIELDS <= supplement.keys()
+        or supplement.keys()
+        - TRADITIONAL_HALF_SCORE_CORE_FIELDS
+        - TRADITIONAL_HALF_SCORE_OPTIONAL_FIELDS
+        or _canonical_json_sha256(
+            {field: supplement[field] for field in TRADITIONAL_HALF_SCORE_CORE_FIELDS}
+        )
+        != accepted["core_receipt_sha256"]
         or primary_evidence.get("source") != "sporttery_history_api"
         or primary_evidence.get("issue_no") != issue_no
         or not _traditional_source_integer_matches(primary_evidence.get("game_no"), source_game_no)
@@ -134,81 +272,30 @@ def _traditional_half_score_supplement_matches(
         or supplement.get("api_full_score_source_text")
         != source_facts.get("full_score_source_text")
         or supplement.get("api_half_score_source_text") != "{}"
-        or supplement.get("production_evidence_half_score_source_text") != "{}"
         or supplement.get("api_result_code") != result_code
-        or _traditional_source_score(supplement.get("secondary_half_score_source_text"))
-        != half_score
+        or accepted["half_score"] != list(half_score)
+        or event_facts["home_team_name"] != home
+        or event_facts["away_team_name"] != away
+        or event_facts["kickoff_date"] != kickoff_date.isoformat()
+        or event_facts["full_score"] != list(full_score)
+        or event_facts["half_score"] != list(half_score)
     ):
         return False
 
+    if "production_evidence_half_score_source_text" in supplement and supplement[
+        "production_evidence_half_score_source_text"
+    ] != accepted.get("production_evidence_half_score_source_text"):
+        return False
+    if "secondary_source_records" in supplement and (
+        accepted.get("secondary_source_records_sha256")
+        != _canonical_json_sha256(supplement["secondary_source_records"])
+    ):
+        return False
     checks = supplement.get("identity_checks")
-    expected_checks = {
-        "event_date_and_official_full_score_exact",
-        "finished_source_record_has_valid_half_score",
-        "official_away_team_exact_or_same_unique_titan_id",
-        "official_home_team_exact_or_same_unique_titan_id",
-        "only_one_source_fixture_matches_date_direction_and_full_score",
-    }
-    if (
-        not isinstance(checks, dict)
-        or set(checks) != expected_checks
-        or any(checks.get(name) is not True for name in expected_checks)
-    ):
-        return False
-
-    records = supplement.get("secondary_source_records")
-    if not isinstance(records, list) or len(records) != 1:
-        return False
-    record = records[0]
-    if not isinstance(record, dict):
-        return False
-    if _canonical_json_sha256(record) != FIVEHUNDRED_HALF_SCORE_RECORD_SHA256:
-        return False
-    source_match_id = supplement.get("source_match_id")
-    if (
-        not isinstance(source_match_id, int)
-        or isinstance(source_match_id, bool)
-        or source_match_id <= 0
-    ):
-        return False
-    source_file = supplement.get("source_file")
-    if (
-        supplement.get("source_table") != "wanchang.php historical finished-score row"
-        or not isinstance(source_file, str)
-        or not source_file.startswith("https://live.500.com/wanchang.php?e=")
-        or record.get("source_url") != source_file
-        or record.get("source") != "500.com"
-        or record.get("league") != league
-        or record.get("home_team") != home
-        or record.get("away_team") != away
-        or record.get("event_date") != kickoff_date.isoformat()
-        or record.get("full_score") != list(full_score)
-        or record.get("half_score") != list(half_score)
-        or not _valid_sha256(record.get("page_sha256"))
-        or record.get("source_match_id") != source_match_id
-    ):
-        return False
-
-    def unique_team_identity(identity: Any, team: str) -> bool:
-        if not isinstance(identity, dict):
-            return False
-        source_ids = identity.get("source_titan_team_ids")
-        official_ids = identity.get("official_titan_team_ids")
-        if not isinstance(source_ids, list) or len(source_ids) != 1:
-            return False
-        source_id = source_ids[0]
-        return (
-            identity.get("method") == "same_unique_titan_team_id"
-            and identity.get("source_name") == team
-            and identity.get("official_name") == team
-            and isinstance(source_id, int)
-            and not isinstance(source_id, bool)
-            and source_id > 0
-            and official_ids == source_ids
-        )
-
-    return unique_team_identity(record.get("home_identity"), home) and unique_team_identity(
-        record.get("away_identity"), away
+    return (
+        isinstance(checks, dict)
+        and bool(checks)
+        and all(value is True for value in checks.values())
     )
 
 

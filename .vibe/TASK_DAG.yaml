@@ -1,24 +1,26 @@
 {
   "schema_version": 4,
-  "current_task": "P130-HISTORY-FILL-LIVE-DRAW",
+  "current_task": "P131-TRADITIONAL-SUPPLEMENT-RECEIPT-ALLOWLIST",
   "tasks": {
-    "P130-HISTORY-FILL-LIVE-DRAW": {
-      "title": "Allow exact official history fill for existing live-draw issues",
-      "acceptance_id": "A130-HISTORY-FILL-LIVE-DRAW",
-      "depends_on": [],
-      "kind": "bounded_data_import_correctness",
+    "P131-TRADITIONAL-SUPPLEMENT-RECEIPT-ALLOWLIST": {
+      "title": "Allow exact P128 half-score supplement receipts in traditional fixture linking",
+      "acceptance_id": "A131-TRADITIONAL-SUPPLEMENT-RECEIPT-ALLOWLIST",
+      "depends_on": [
+        "P130-HISTORY-FILL-LIVE-DRAW"
+      ],
+      "kind": "bounded_identity_evidence_allowlist",
       "status": "DONE",
       "files": [
-        "scripts/traditional_history_import.py",
-        "tests/test_jobs/test_traditional_history_import.py",
+        "scripts/football_fixture_identity.py",
+        "scripts/data/traditional_half_score_supplement_allowlist.json",
         "tests/test_computation/test_football_fixture_identity_postgres.py"
       ],
       "definition_of_done": [
-        "Allow source_game_no_source=sporttery_live_draw only when its stored gameNo equals the official history API gameNo; preserve the existing header namespace.",
-        "Merge history import receipts/evidence into existing raw fields; fill only null facts and preserve all identities and model fields.",
-        "Reject mismatched gameNo/source namespace, date, roster, result and existing-value conflicts before any write; remain serializable and idempotent.",
-        "Focused unit and isolated PostgreSQL regressions plus lint, format, compile, scope and budget checks pass.",
-        "No migration, dependency, public API or production DML is part of code acceptance."
+        "Accept only the 4,557 complete P128 secondary-half-score receipts whose production core receipt aggregate exactly matches the retained raw manifest rows.",
+        "Pin the exact evidence key, manifest SHA-256, typed traditional issue slot, canonical receipt digest, half score, and existing official primary-source facts; reject unknown or modified evidence.",
+        "Preserve the existing single 500.com row verification and keep all unknown/missing manifests blocked.",
+        "Fixed-sample and isolated PostgreSQL regressions cover a newly allowlisted source, tampered receipt, unknown manifest/key, and unchanged identity-link side effects.",
+        "No migration, dependency, public API, production write, push, merge, or deploy is part of this task."
       ]
     }
   },
@@ -127,6 +129,25 @@
         "The transaction is idempotent and records revisions; rollback leaves no fixture, source-link or membership changes.",
         "Focused isolated PostgreSQL regressions and static checks pass; P128 automatic import behavior remains unchanged.",
         "Push the corrected implementation to the sole main branch; exact-head GitHub CI and independent read-only review pass. This code acceptance does not claim production identities were written; the separately authorized post-deployment data operation is recorded in the plan checkpoint."
+      ]
+    },
+    "P130-HISTORY-FILL-LIVE-DRAW": {
+      "title": "Allow exact official history fill for existing live-draw issues",
+      "acceptance_id": "A130-HISTORY-FILL-LIVE-DRAW",
+      "depends_on": [],
+      "kind": "bounded_data_import_correctness",
+      "status": "DONE",
+      "files": [
+        "scripts/traditional_history_import.py",
+        "tests/test_jobs/test_traditional_history_import.py",
+        "tests/test_computation/test_football_fixture_identity_postgres.py"
+      ],
+      "definition_of_done": [
+        "Allow source_game_no_source=sporttery_live_draw only when its stored gameNo equals the official history API gameNo; preserve the existing header namespace.",
+        "Merge history import receipts/evidence into existing raw fields; fill only null facts and preserve all identities and model fields.",
+        "Reject mismatched gameNo/source namespace, date, roster, result and existing-value conflicts before any write; remain serializable and idempotent.",
+        "Focused unit and isolated PostgreSQL regressions plus lint, format, compile, scope and budget checks pass.",
+        "No migration, dependency, public API or production DML is part of code acceptance."
       ]
     }
   }

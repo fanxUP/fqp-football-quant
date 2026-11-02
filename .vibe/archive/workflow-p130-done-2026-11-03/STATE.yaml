@@ -1,0 +1,16 @@
+{
+  "state": "DONE",
+  "workflow_id": "P130-HISTORY-FILL-LIVE-DRAW",
+  "previous_workflow": {
+    "task_id": "P129-TRADITIONAL-SLOT-IDENTITY",
+    "state": "DONE",
+    "completed_at": "2026-11-03T04:38:41.279038+08:00"
+  },
+  "blocked_reason": null,
+  "last_transition": {
+    "from": "VERIFIED",
+    "to": "DONE",
+    "at": "2026-11-03T05:51:08.176132+08:00",
+    "reason": "P130 release verification evidence recorded; no production data writes or backup"
+  }
+}

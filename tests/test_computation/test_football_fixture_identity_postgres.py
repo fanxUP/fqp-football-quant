@@ -1,6 +1,7 @@
 """Opt-in source identity/membership checks, isolated loopback PostgreSQL only."""
 
 import hashlib
+import json
 import os
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
@@ -117,6 +118,11 @@ def traditional_history_slot(
     half=(1, 2),
     result_code="3",
     source_match_id=None,
+    league_name="英超",
+    home_team_name="伯恩利",
+    away_team_name="埃弗顿",
+    kickoff_date="2022-04-07",
+    half_score_source_text=None,
 ):
     source_game_no = {"t14c": 90, "r9": 90, "bqc6": 98, "jq4": 94}[game_type]
     source_raw = {
@@ -124,13 +130,19 @@ def traditional_history_slot(
         "source_game_no": source_game_no,
         "issue_no": issue_no,
         "match_num": match_order,
-        "league_name": "英超",
-        "home_team_name": "伯恩利",
-        "away_team_name": "埃弗顿",
-        "kickoff_date": "2022-04-07",
+        "league_name": league_name,
+        "home_team_name": home_team_name,
+        "away_team_name": away_team_name,
+        "kickoff_date": kickoff_date,
         "kickoff_time_precision": "date_only",
         "full_score_source_text": f"{full[0]}:{full[1]}" if full else "*",
-        "half_score_source_text": f"{half[0]}:{half[1]}" if half else "",
+        "half_score_source_text": (
+            half_score_source_text
+            if half_score_source_text is not None
+            else f"{half[0]}:{half[1]}"
+            if half
+            else ""
+        ),
         "product_result_code_source_text": result_code,
         "import_receipt": {
             "contract": "sporttery-traditional-history-import/v1",
@@ -144,11 +156,11 @@ def traditional_history_slot(
         source_match_id=source_match_id,
         source_ids={},
         raw_json=source_raw,
-        league_name="英超",
-        home_team_name="伯恩利",
-        away_team_name="埃弗顿",
+        league_name=league_name,
+        home_team_name=home_team_name,
+        away_team_name=away_team_name,
         kickoff_time=None,
-        kickoff_date="2022-04-07",
+        kickoff_date=kickoff_date,
         kickoff_time_precision="date_only",
         source_full_home_goals=full[0] if full is not None else None,
         source_full_away_goals=full[1] if full is not None else None,
@@ -2204,6 +2216,190 @@ def _p129_500com_half_score_supplement():
         "secondary_half_score_source_text": "1:2",
         "production_evidence_half_score_source_text": "{}",
     }
+
+
+def _seed_p131_openligadb_identity_group(
+    conn, *, mutate_supplement=None, evidence_key=None, omit_optional=False
+):
+    from copy import deepcopy
+
+    sample = json.loads(
+        (ROOT / "scripts/data/traditional_half_score_supplement_allowlist.json").read_text()
+    )["verification_example"]
+    supplement = deepcopy(sample["supplement"])
+    if omit_optional:
+        supplement.pop("production_evidence_half_score_source_text", None)
+        supplement.pop("secondary_source_records", None)
+    if mutate_supplement:
+        mutate_supplement(supplement)
+    products = [
+        ("jq4", "21109", 1, "{}"),
+        ("r9", "21109", 7, "4:0"),
+        ("t14c", "21109", 7, "4:0"),
+    ]
+    for game_type, issue_no, match_order, source_half in products:
+        put_traditional_history_slot(
+            conn,
+            game_type,
+            issue_no,
+            match_order,
+            full=(7, 0),
+            half=(4, 0),
+            result_code="3＋,0",
+            league_name="德甲",
+            home_team_name="拜仁慕尼黑",
+            away_team_name="波鸿",
+            kickoff_date="2021-09-18",
+            half_score_source_text=source_half,
+        )
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT id,source_raw_json FROM football_pool_issue_matches "
+            "WHERE issue_id=(SELECT id FROM football_pool_issues "
+            "WHERE game_type='jq4' AND issue_no='21109') AND match_order=1"
+        )
+        membership_id, source_raw = cur.fetchone()
+        primary = {
+            "source": "sporttery_history_api",
+            "issue_no": "21109",
+            "game_no": 94,
+            "match_num": 1,
+            "full_score_source_text": "7:0",
+            "half_score_source_text": "{}",
+            "product_result_code_source_text": "3＋,0",
+        }
+        result_evidence = {
+            "sporttery_history_import": {
+                "receipt": source_raw["import_receipt"],
+                "evidence": primary,
+            },
+            evidence_key or sample["evidence_key"]: supplement,
+        }
+        cur.execute(
+            "UPDATE football_pool_issue_matches SET source_result_evidence=%s WHERE id=%s",
+            (Json(result_evidence), membership_id),
+        )
+    return [
+        {"game_type": game_type, "issue_no": issue_no, "match_order": match_order}
+        for game_type, issue_no, match_order, _ in products
+    ]
+
+
+def test_p131_static_allowlist_is_pinned_and_has_unique_slots(monkeypatch):
+    import scripts.football_fixture_identity as identity
+
+    entries = identity._traditional_half_score_supplement_allowlist()
+    assert len(entries) == 4557
+    assert len(entries) == len(set(entries))
+
+    identity._traditional_half_score_supplement_allowlist.cache_clear()
+    monkeypatch.setattr(identity, "TRADITIONAL_HALF_SCORE_SUPPLEMENT_ALLOWLIST_SHA256", "0" * 64)
+    assert identity._traditional_half_score_supplement_allowlist() == {}
+    identity._traditional_half_score_supplement_allowlist.cache_clear()
+
+
+def test_explicit_traditional_slot_group_accepts_pinned_p131_openligadb_receipt(ready):
+    from scripts.football_fixture_identity import link_traditional_issue_slot_group
+
+    conn = ready
+    slots = _seed_p131_openligadb_identity_group(conn)
+
+    linked = link_traditional_issue_slot_group(conn, slots)
+
+    assert linked["identity_status"] == "linked"
+    assert linked["updated_memberships"] == 3
+    assert rows(
+        conn,
+        "SELECT count(*),count(DISTINCT fixture_id),min(identity_status) "
+        "FROM football_pool_issue_matches",
+    ) == [(3, 1, "linked")]
+    assert rows(
+        conn,
+        "SELECT count(*) FROM football_fixture_source_links WHERE id_system='jc.matchId'",
+    ) == [(0,)]
+
+
+def test_explicit_traditional_slot_group_accepts_legacy_p131_receipt_without_optional_fields(ready):
+    from scripts.football_fixture_identity import link_traditional_issue_slot_group
+
+    conn = ready
+    slots = _seed_p131_openligadb_identity_group(conn, omit_optional=True)
+
+    linked = link_traditional_issue_slot_group(conn, slots)
+
+    assert linked["identity_status"] == "linked"
+    assert linked["updated_memberships"] == 3
+    assert rows(
+        conn,
+        "SELECT count(*),count(DISTINCT fixture_id),min(identity_status) "
+        "FROM football_pool_issue_matches",
+    ) == [(3, 1, "linked")]
+
+
+def test_explicit_traditional_slot_group_rejects_p131_receipt_reused_for_another_event(ready):
+    from scripts.football_fixture_identity import link_traditional_issue_slot_group
+
+    conn = ready
+    slots = _seed_p131_openligadb_identity_group(conn)
+    with conn.cursor() as cur:
+        cur.execute(
+            "UPDATE football_pool_issue_matches SET home_team_name='伪造球队',"
+            "source_raw_json=jsonb_set(source_raw_json,'{home_team_name}','\"伪造球队\"') "
+            "WHERE issue_id=(SELECT id FROM football_pool_issues "
+            "WHERE game_type='jq4' AND issue_no='21109') AND match_order=1"
+        )
+
+    with pytest.raises(ValueError, match="traditional_slot_source_evidence_mismatch"):
+        link_traditional_issue_slot_group(conn, slots)
+
+    assert rows(conn, "SELECT count(*) FROM football_fixtures") == [(0,)]
+    assert rows(conn, "SELECT count(*) FROM football_fixture_source_links") == [(0,)]
+
+
+@pytest.mark.parametrize(
+    "tamper,evidence_key",
+    [
+        ("core", None),
+        ("source_record", None),
+        ("manifest_type", None),
+        (None, "unreviewed_supplement_key"),
+    ],
+    ids=[
+        "core-receipt-tampered",
+        "known-key-is-not-enough",
+        "invalid-manifest-type",
+        "unknown-evidence-key",
+    ],
+)
+def test_explicit_traditional_slot_group_rejects_unpinned_p131_receipt(ready, tamper, evidence_key):
+    from scripts.football_fixture_identity import link_traditional_issue_slot_group
+
+    conn = ready
+
+    def mutate(receipt):
+        if tamper == "core":
+            receipt["source_match_id"] = 999999
+        elif tamper == "source_record":
+            receipt["secondary_source_records"][0]["source_match_id"] = 999999
+        elif tamper == "manifest_type":
+            receipt["manifest_sha256"] = ["not", "hashable"]
+
+    slots = _seed_p131_openligadb_identity_group(
+        conn,
+        mutate_supplement=mutate if tamper is not None else None,
+        evidence_key=evidence_key,
+    )
+
+    with pytest.raises(ValueError, match="traditional_slot_source_evidence_mismatch"):
+        link_traditional_issue_slot_group(conn, slots)
+
+    assert rows(conn, "SELECT count(*) FROM football_fixtures") == [(0,)]
+    assert rows(conn, "SELECT count(*) FROM football_fixture_source_links") == [(0,)]
+    assert rows(
+        conn,
+        "SELECT count(*) FROM football_pool_issue_matches "
+        "WHERE fixture_id IS NOT NULL OR identity_status<>'pending'",
+    ) == [(0,)]
 
 
 def _attach_p129_500com_half_score_supplement(

@@ -1,219 +1,30 @@
 {
   "schema_version": 4,
-  "current_task": "P130-HISTORY-FILL-LIVE-DRAW",
+  "current_task": "P131-TRADITIONAL-SUPPLEMENT-RECEIPT-ALLOWLIST",
   "acceptance": {
-    "A121": {
+    "A131-TRADITIONAL-SUPPLEMENT-RECEIPT-ALLOWLIST": {
       "status": "PASS",
-      "command": "bash /private/tmp/fqp-p121-final-verify.sh",
+      "command": "Ephemeral isolated PostgreSQL 17 (loopback only; temporary fqp NOLOGIN role); pytest -q tests/test_computation/test_football_fixture_identity_postgres.py",
       "exit_code": 0,
-      "summary": "============================= test session starts ==============================\nplatform darwin -- Python 3.14.6, pytest-9.1.1, pluggy-1.7.0\nrootdir: /Volumes/Nas/FQP/worktrees/p106-observed-maher-spf\nconfigfile: pyproject.toml\nplugins: mock-3.15.1, cov-7.1.0, asyncio-1.4.0, anyio-4.15.1, platformdirs-4.13.5\nasyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function\ncollected 85 items\n\ntests/test_scripts/test_run_model_prediction.py ........................ [ 28%]\n........                                                                 [ 37%]\ntests/test_computation/test_prediction_semantics.py .................... [ 61%]\n...............................                                          [ 97%]\ntests/test_features/test_build_weather_features.py ..                    [100%]\n\n============================== 85 passed in 2.60s ==============================\n============================= test session starts ==============================\nplatform linux -- Python 3.14.9, pytest-9.1.1, pluggy-1.7.0\nrootdir: /workspace\nconfigfile: pyproject.toml\nplugins: anyio-4.15.1\ncollected 32 items\n\ntests/test_computation/test_prediction_input_runtime_postgres.py ....... [ 21%]\n.........................                                                [100%]\n\n============================== 32 passed in 5.96s ==============================\nAll checks passed!\n7 files already formatted\nWARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.\n",
+      "summary": "133 passed in 82.55s. Includes exact OpenLigaDB receipt acceptance, legacy omission of optional fields, tamper/unknown-key/type rejection, event-fact mismatch rejection with zero fixture/source-link writes, existing 500.com coverage, and previous identity/transaction regressions.",
       "timed_out": false,
-      "environment": "unknown",
-      "revision": "96c5f9526e08db1f33317194c3f1df3cc666b58e",
+      "environment": "Disposable Docker PostgreSQL 17 container with no volume, loopback port only; container removed after test.",
+      "revision": "8d9f0f3d775d038e24aae557beb3704328f0ff55",
       "dirty_tree": true,
-      "tree_fingerprint": "7824cb1118d3225e83e49a76a882e2e4abdb623cc539c931fac4b90a43bf6c7d",
-      "verified_at": "2026-10-22T20:26:43.082601+08:00"
+      "tree_fingerprint": "6e8e411a2fe364063bfd1fae51412173a63f94cac1ed4ddfc37d02da9b15b4c4",
+      "verified_at": "2026-11-03T07:22:47.391210+08:00"
     },
-    "A121-LOCAL-TESTS": {
+    "A131-STATIC-SCOPE": {
       "status": "PASS",
-      "command": "/Volumes/Nas/FQP/code/.venv/bin/python -m pytest -q tests/test_computation/test_prediction_input_runtime_postgres.py tests/test_scripts/test_run_model_prediction.py tests/test_computation/test_prediction_semantics.py tests/test_features/test_build_weather_features.py",
+      "command": "ruff check; ruff format --check; python -m py_compile; git diff --check; vibe scope check; vibe budget check",
       "exit_code": 0,
-      "summary": "============================= test session starts ==============================\nplatform darwin -- Python 3.14.6, pytest-9.1.1, pluggy-1.7.0\nrootdir: /Volumes/Nas/FQP/worktrees/p106-observed-maher-spf\nconfigfile: pyproject.toml\nplugins: mock-3.15.1, cov-7.1.0, asyncio-1.4.0, anyio-4.15.1, platformdirs-4.13.5\nasyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function\ncollected 117 items\n\ntests/test_computation/test_prediction_input_runtime_postgres.py ...ssss [  5%]\nsssssssssssssssssssssssss                                                [ 27%]\ntests/test_scripts/test_run_model_prediction.py ........................ [ 47%]\n........                                                                 [ 54%]\ntests/test_computation/test_prediction_semantics.py .................... [ 71%]\n...............................                                          [ 98%]\ntests/test_features/test_build_weather_features.py ..                    [100%]\n\n======================== 88 passed, 29 skipped in 1.00s ========================\n",
+      "summary": "Ruff passed; both files formatted; compile and diff checks passed; scope changed_files=3; budget 3/3 files, 1/1 new file, 0 dependencies, 0 migrations, 0 public API changes.",
       "timed_out": false,
-      "environment": "unknown",
-      "revision": "b4a376880da19e7154986d051796c982d164455e",
+      "environment": "Local isolated checkout",
+      "revision": "8d9f0f3d775d038e24aae557beb3704328f0ff55",
       "dirty_tree": true,
-      "tree_fingerprint": "d5d0c4dd90ef68ba554c1085542dad68732be5988632d678e1de6256a7c11530",
-      "verified_at": "2026-10-22T19:10:43.601709+08:00"
-    },
-    "A121-LOCAL-STATIC": {
-      "status": "PASS",
-      "command": "bash -lc '/Volumes/Nas/FQP/code/.venv/bin/ruff check scripts/maher_goal_rate_runtime.py scripts/observed_maher_shadow.py scripts/features/build_weather_features.py scripts/jobs/run_model_prediction.py scripts/prediction_input_revisions.py scripts/prediction_input_runtime.py tests/test_computation/test_prediction_input_runtime_postgres.py && /Volumes/Nas/FQP/code/.venv/bin/ruff format --check scripts/maher_goal_rate_runtime.py scripts/observed_maher_shadow.py scripts/features/build_weather_features.py scripts/jobs/run_model_prediction.py scripts/prediction_input_revisions.py scripts/prediction_input_runtime.py tests/test_computation/test_prediction_input_runtime_postgres.py && /Volumes/Nas/FQP/code/.venv/bin/python -m compileall -q scripts/maher_goal_rate_runtime.py scripts/observed_maher_shadow.py scripts/features/build_weather_features.py scripts/jobs/run_model_prediction.py scripts/prediction_input_revisions.py scripts/prediction_input_runtime.py tests/test_computation/test_prediction_input_runtime_postgres.py && git diff --check'",
-      "exit_code": 0,
-      "summary": "All checks passed!\n7 files already formatted\n",
-      "timed_out": false,
-      "environment": "unknown",
-      "revision": "b4a376880da19e7154986d051796c982d164455e",
-      "dirty_tree": true,
-      "tree_fingerprint": "d5d0c4dd90ef68ba554c1085542dad68732be5988632d678e1de6256a7c11530",
-      "verified_at": "2026-10-22T19:10:51.888318+08:00"
-    },
-    "A105-WEATHER": {
-      "status": "PASS",
-      "command": "/Volumes/Nas/FQP/code/.venv/bin/python -m pytest -q tests/test_jobs/test_run_scheduler.py tests/test_jobs/test_collect_weather.py tests/test_api/test_ops.py",
-      "exit_code": 0,
-      "summary": "============================= test session starts ==============================\nplatform darwin -- Python 3.14.6, pytest-9.1.1, pluggy-1.7.0\nrootdir: /Volumes/Nas/FQP/worktrees/p121-weather-cadence\nconfigfile: pyproject.toml\nplugins: mock-3.15.1, cov-7.1.0, asyncio-1.4.0, anyio-4.15.1, platformdirs-4.13.5\nasyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function\ncollected 70 items\n\ntests/test_jobs/test_run_scheduler.py .................................. [ 48%]\n................                                                         [ 71%]\ntests/test_jobs/test_collect_weather.py .                                [ 72%]\ntests/test_api/test_ops.py ...................                           [100%]\n\n============================== 70 passed in 2.16s ==============================\n",
-      "timed_out": false,
-      "environment": "unknown",
-      "revision": "ce6d76a8717d784ddd29e9b0684294358b6059aa",
-      "dirty_tree": true,
-      "tree_fingerprint": "9c268670b6ee0aa92c5317cc95fae4936bdd5f98a99ce543d26e220cbd2e19c4",
-      "verified_at": "2026-10-23T04:48:07.160634+08:00"
-    },
-    "A105-WEATHER-STATIC": {
-      "status": "PASS",
-      "command": "sh -c '/Volumes/Nas/FQP/code/.venv/bin/ruff check scripts/weather_schedule.py scripts/jobs/collect_weather.py scripts/jobs/run_scheduler.py apps/backend/src/services/pipeline_status.py tests/test_jobs/test_run_scheduler.py && /Volumes/Nas/FQP/code/.venv/bin/ruff format --check scripts/weather_schedule.py scripts/jobs/collect_weather.py scripts/jobs/run_scheduler.py apps/backend/src/services/pipeline_status.py tests/test_jobs/test_run_scheduler.py && /Volumes/Nas/FQP/code/.venv/bin/python -m compileall -q scripts/weather_schedule.py scripts/jobs/collect_weather.py scripts/jobs/run_scheduler.py apps/backend/src/services/pipeline_status.py tests/test_jobs/test_run_scheduler.py && git diff --check && python3 /Users/estefan-macworkstation/.remote-vibe-coding/engine/vibe.py --repo . scope check && python3 /Users/estefan-macworkstation/.remote-vibe-coding/engine/vibe.py --repo . budget check'",
-      "exit_code": 0,
-      "summary": "All checks passed!\n5 files already formatted\nchanged_files=5\nPASS: scope\nfiles_changed: 5/5\nnew_files: 1/1\nnew_dependencies_heuristic: 0/0\nschema_migration_files: 0/0\ndeclared_public_api_changes: 0/0\nPASS: change budget\n",
-      "timed_out": false,
-      "environment": "unknown",
-      "revision": "ce6d76a8717d784ddd29e9b0684294358b6059aa",
-      "dirty_tree": true,
-      "tree_fingerprint": "9c268670b6ee0aa92c5317cc95fae4936bdd5f98a99ce543d26e220cbd2e19c4",
-      "verified_at": "2026-10-23T04:48:10.642380+08:00"
-    },
-    "A105-WEATHER-REFORMATTED": {
-      "status": "PASS",
-      "command": "/Volumes/Nas/FQP/code/.venv/bin/python -m pytest -q tests/test_jobs/test_run_scheduler.py tests/test_jobs/test_collect_weather.py tests/test_api/test_ops.py",
-      "exit_code": 0,
-      "summary": "============================= test session starts ==============================\nplatform darwin -- Python 3.14.6, pytest-9.1.1, pluggy-1.7.0\nrootdir: /Volumes/Nas/FQP/worktrees/p121-weather-cadence\nconfigfile: pyproject.toml\nplugins: mock-3.15.1, cov-7.1.0, asyncio-1.4.0, anyio-4.15.1, platformdirs-4.13.5\nasyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function\ncollected 70 items\n\ntests/test_jobs/test_run_scheduler.py .................................. [ 48%]\n................                                                         [ 71%]\ntests/test_jobs/test_collect_weather.py .                                [ 72%]\ntests/test_api/test_ops.py ...................                           [100%]\n\n============================== 70 passed in 2.73s ==============================\n",
-      "timed_out": false,
-      "environment": "unknown",
-      "revision": "c62456b57114b14f3e16920bda8da8e2af90eeb4",
-      "dirty_tree": true,
-      "tree_fingerprint": "cba95e274a9358a4e2750fdff7e2b22fce59c8a74b5baa709e12ab21c517d3b8",
-      "verified_at": "2026-10-23T03:24:45.016574+08:00"
-    },
-    "A105-WEATHER-STATIC-REFORMATTED": {
-      "status": "PASS",
-      "command": "sh -c '/Volumes/Nas/FQP/code/.venv/bin/ruff check scripts/weather_schedule.py scripts/jobs/run_scheduler.py apps/backend/src/services/pipeline_status.py tests/test_jobs/test_run_scheduler.py && /Volumes/Nas/FQP/code/.venv/bin/ruff format --check scripts/weather_schedule.py scripts/jobs/run_scheduler.py apps/backend/src/services/pipeline_status.py tests/test_jobs/test_run_scheduler.py && /Volumes/Nas/FQP/code/.venv/bin/python -m compileall -q scripts/weather_schedule.py scripts/jobs/run_scheduler.py apps/backend/src/services/pipeline_status.py tests/test_jobs/test_run_scheduler.py && git diff --check && python3 /Users/estefan-macworkstation/.remote-vibe-coding/engine/vibe.py --repo . scope check && python3 /Users/estefan-macworkstation/.remote-vibe-coding/engine/vibe.py --repo . budget check'",
-      "exit_code": 0,
-      "summary": "All checks passed!\n4 files already formatted\nchanged_files=4\nPASS: scope\nfiles_changed: 4/4\nnew_files: 1/1\nnew_dependencies_heuristic: 0/0\nschema_migration_files: 0/0\ndeclared_public_api_changes: 0/0\nPASS: change budget\n",
-      "timed_out": false,
-      "environment": "unknown",
-      "revision": "c62456b57114b14f3e16920bda8da8e2af90eeb4",
-      "dirty_tree": true,
-      "tree_fingerprint": "cba95e274a9358a4e2750fdff7e2b22fce59c8a74b5baa709e12ab21c517d3b8",
-      "verified_at": "2026-10-23T03:24:57.405157+08:00"
-    },
-    "A105-WEATHER-FINAL-TEST": {
-      "status": "PASS",
-      "command": "/Volumes/Nas/FQP/code/.venv/bin/python -m pytest -q tests/test_jobs/test_run_scheduler.py tests/test_jobs/test_collect_weather.py tests/test_api/test_ops.py",
-      "exit_code": 0,
-      "summary": "============================= test session starts ==============================\nplatform darwin -- Python 3.14.6, pytest-9.1.1, pluggy-1.7.0\nrootdir: /Volumes/Nas/FQP/worktrees/p121-weather-cadence\nconfigfile: pyproject.toml\nplugins: mock-3.15.1, cov-7.1.0, asyncio-1.4.0, anyio-4.15.1, platformdirs-4.13.5\nasyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function\ncollected 70 items\n\ntests/test_jobs/test_run_scheduler.py .................................. [ 48%]\n................                                                         [ 71%]\ntests/test_jobs/test_collect_weather.py .                                [ 72%]\ntests/test_api/test_ops.py ...................                           [100%]\n\n============================== 70 passed in 3.04s ==============================\n",
-      "timed_out": false,
-      "environment": "unknown",
-      "revision": "c62456b57114b14f3e16920bda8da8e2af90eeb4",
-      "dirty_tree": true,
-      "tree_fingerprint": "5662cca9f3408b8cd2afaa72f2ae3d14050a391fde3201877fb6d9632a5dbcee",
-      "verified_at": "2026-10-23T03:27:29.672570+08:00"
-    },
-    "A105-WEATHER-REVIEW-FIX-REGRESSION": {
-      "status": "PASS",
-      "command": "/Volumes/Nas/FQP/code/.venv/bin/python -m pytest -q tests/test_jobs/test_run_scheduler.py tests/test_jobs/test_collect_weather.py tests/test_api/test_ops.py",
-      "exit_code": 0,
-      "summary": "============================= test session starts ==============================\nplatform darwin -- Python 3.14.6, pytest-9.1.1, pluggy-1.7.0\nrootdir: /Volumes/Nas/FQP/worktrees/p121-weather-cadence\nconfigfile: pyproject.toml\nplugins: mock-3.15.1, cov-7.1.0, asyncio-1.4.0, anyio-4.15.1, platformdirs-4.13.5\nasyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function\ncollected 70 items\n\ntests/test_jobs/test_run_scheduler.py .................................. [ 48%]\n................                                                         [ 71%]\ntests/test_jobs/test_collect_weather.py .                                [ 72%]\ntests/test_api/test_ops.py ...................                           [100%]\n\n============================== 70 passed in 2.58s ==============================\n",
-      "timed_out": false,
-      "environment": "unknown",
-      "revision": "c62456b57114b14f3e16920bda8da8e2af90eeb4",
-      "dirty_tree": true,
-      "tree_fingerprint": "9c268670b6ee0aa92c5317cc95fae4936bdd5f98a99ce543d26e220cbd2e19c4",
-      "verified_at": "2026-10-23T03:30:23.118463+08:00"
-    },
-    "A105-WEATHER-REVIEW-FIX-STATIC": {
-      "status": "PASS",
-      "command": "sh -c '/Volumes/Nas/FQP/code/.venv/bin/ruff check scripts/weather_schedule.py scripts/jobs/collect_weather.py scripts/jobs/run_scheduler.py apps/backend/src/services/pipeline_status.py tests/test_jobs/test_run_scheduler.py && /Volumes/Nas/FQP/code/.venv/bin/ruff format --check scripts/weather_schedule.py scripts/jobs/collect_weather.py scripts/jobs/run_scheduler.py apps/backend/src/services/pipeline_status.py tests/test_jobs/test_run_scheduler.py && /Volumes/Nas/FQP/code/.venv/bin/python -m compileall -q scripts/weather_schedule.py scripts/jobs/collect_weather.py scripts/jobs/run_scheduler.py apps/backend/src/services/pipeline_status.py tests/test_jobs/test_run_scheduler.py && git diff --check && python3 /Users/estefan-macworkstation/.remote-vibe-coding/engine/vibe.py --repo . scope check && python3 /Users/estefan-macworkstation/.remote-vibe-coding/engine/vibe.py --repo . budget check'",
-      "exit_code": 0,
-      "summary": "All checks passed!\n5 files already formatted\nchanged_files=5\nPASS: scope\nfiles_changed: 5/5\nnew_files: 1/1\nnew_dependencies_heuristic: 0/0\nschema_migration_files: 0/0\ndeclared_public_api_changes: 0/0\nPASS: change budget\n",
-      "timed_out": false,
-      "environment": "unknown",
-      "revision": "c62456b57114b14f3e16920bda8da8e2af90eeb4",
-      "dirty_tree": true,
-      "tree_fingerprint": "9c268670b6ee0aa92c5317cc95fae4936bdd5f98a99ce543d26e220cbd2e19c4",
-      "verified_at": "2026-10-23T03:30:31.454852+08:00"
-    },
-    "A106-OUTPUT-GROUP-COUNTS": {
-      "status": "PASS",
-      "command": ".venv/bin/python -m pytest tests/test_scripts/test_derived_play_predictions.py tests/test_scripts/test_run_model_prediction.py -q",
-      "exit_code": 0,
-      "summary": "============================= test session starts ==============================\nplatform darwin -- Python 3.14.6, pytest-9.1.1, pluggy-1.7.0\nrootdir: /Volumes/Nas/FQP/worktrees/p106-training-manifest-persistence\nconfigfile: pyproject.toml\nplugins: mock-3.15.1, cov-7.1.0, asyncio-1.4.0, anyio-4.15.1\nasyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function\ncollected 61 items\n\ntests/test_scripts/test_derived_play_predictions.py ........             [ 13%]\ntests/test_scripts/test_run_model_prediction.py ........................ [ 52%]\n.............................                                            [100%]\n\n=============================== warnings summary ===============================\n.venv/lib/python3.14/site-packages/fastapi/testclient.py:1\n  /Volumes/Nas/FQP/worktrees/p106-training-manifest-persistence/.venv/lib/python3.14/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.\n    from starlette.testclient import TestClient as TestClient  # noqa\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n======================== 61 passed, 1 warning in 1.90s =========================\n",
-      "timed_out": false,
-      "environment": "unknown",
-      "revision": "57f79eb5e4bc98597017906cd6a1fc677f65bbe8",
-      "dirty_tree": false,
-      "tree_fingerprint": "2de90395bde4eeea09747c5e4715c590e59aaabb662c342bfe7ce3b87d796aef",
-      "verified_at": "2026-10-24T19:05:25.437042+08:00"
-    },
-    "A106-LOCAL-STATIC": {
-      "status": "PASS",
-      "command": "/bin/sh -c '/Volumes/Nas/FQP/code/.venv/bin/ruff check scripts/derived_play_predictions.py scripts/jobs/run_model_prediction.py tests/test_scripts/test_derived_play_predictions.py tests/test_scripts/test_run_model_prediction.py && /Volumes/Nas/FQP/code/.venv/bin/ruff format --check scripts/derived_play_predictions.py scripts/jobs/run_model_prediction.py tests/test_scripts/test_derived_play_predictions.py tests/test_scripts/test_run_model_prediction.py && /Volumes/Nas/FQP/code/.venv/bin/mypy scripts/jobs/run_model_prediction.py scripts/derived_play_predictions.py --explicit-package-bases && /Volumes/Nas/FQP/code/.venv/bin/python -m compileall -q scripts/derived_play_predictions.py scripts/jobs/run_model_prediction.py && git diff --check && python3 /Users/estefan-macworkstation/.remote-vibe-coding/engine/vibe.py --repo . scope check && python3 /Users/estefan-macworkstation/.remote-vibe-coding/engine/vibe.py --repo . budget check'",
-      "exit_code": 0,
-      "summary": "All checks passed!\n4 files already formatted\napps/backend/src/db.py:100: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]\nSuccess: no issues found in 2 source files\nchanged_files=4\nPASS: scope\nfiles_changed: 4/4\nnew_files: 0/0\nnew_dependencies_heuristic: 0/0\nschema_migration_files: 0/0\ndeclared_public_api_changes: 0/0\nPASS: change budget\n",
-      "timed_out": false,
-      "environment": "unknown",
-      "revision": "0cc569321205a29a984329cdc9639e4643b11071",
-      "dirty_tree": true,
-      "tree_fingerprint": "6624d6f5e05e1a377c54faea82849168079f6e019550f665fc8c3d905378a7d9",
-      "verified_at": "2026-10-24T15:05:09.680241+08:00"
-    },
-    "A106-05": {
-      "status": "PASS",
-      "command": "/private/tmp/fqp-p106-manifest-persistence-verify-20261024.sh",
-      "exit_code": 0,
-      "summary": "============================= test session starts ==============================\nplatform darwin -- Python 3.14.6, pytest-9.1.1, pluggy-1.7.0\nrootdir: /Volumes/Nas/FQP/worktrees/p106-training-manifest-persistence\nconfigfile: pyproject.toml\nplugins: mock-3.15.1, cov-7.1.0, asyncio-1.4.0, anyio-4.15.1\nasyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function\ncollected 113 items\n\ntests/test_scripts/test_model_prediction_run_identity.py ..........      [  8%]\ntests/test_scripts/test_mle_trainer.py ...........                       [ 18%]\ntests/test_scripts/test_run_model_prediction.py ........................ [ 39%]\n.............................                                            [ 65%]\ntests/test_scripts/test_derived_play_predictions.py ........             [ 72%]\ntests/test_computation/test_prediction_run_postgres.py sssssssssssssssss [ 87%]\nssssssssssss                                                             [ 98%]\ntests/test_sql/test_model_training_manifest_schema.py ..                 [100%]\n\n=============================== warnings summary ===============================\n.venv/lib/python3.14/site-packages/fastapi/testclient.py:1\n  /Volumes/Nas/FQP/worktrees/p106-training-manifest-persistence/.venv/lib/python3.14/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.\n    from starlette.testclient import TestClient as TestClient  # noqa\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n================== 84 passed, 29 skipped, 1 warning in 0.95s ===================\nCREATE DATABASE\n============================= test session starts ==============================\nplatform darwin -- Python 3.14.6, pytest-9.1.1, pluggy-1.7.0\nrootdir: /Volumes/Nas/FQP/worktrees/p106-training-manifest-persistence\nconfigfile: pyproject.toml\nplugins: mock-3.15.1, cov-7.1.0, asyncio-1.4.0, anyio-4.15.1\nasyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function\ncollected 29 items\n\ntests/test_computation/test_prediction_run_postgres.py ................. [ 58%]\n............                                                             [100%]\n\n=============================== warnings summary ===============================\n.venv/lib/python3.14/site-packages/fastapi/testclient.py:1\n  /Volumes/Nas/FQP/worktrees/p106-training-manifest-persistence/.venv/lib/python3.14/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.\n    from starlette.testclient import TestClient as TestClient  # noqa\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n======================== 29 passed, 1 warning in 6.80s =========================\nCREATE DATABASE\nRole: postgres; pending migrations: ['112_model_training_manifest.sql']\nRead-only migration plan complete\nApplying 112_model_training_manifest.sql\nMigration apply complete\nAll checks passed!\n10 files already formatted\napps/backend/src/db.py:100: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]\nSuccess: no issues found in 5 source files\nchanged_files=11\nPASS: scope\nfiles_changed: 11/12\nnew_files: 3/3\nnew_dependencies_heuristic: 0/0\nschema_migration_files: 1/1\ndeclared_public_api_changes: 0/0\nPASS: change budget\ntest: regression=0/0\nlint: regression=0/0\ntypecheck: regression=0/0\nPASS: regression budget\n",
-      "timed_out": false,
-      "environment": "unknown",
-      "revision": "57f79eb5e4bc98597017906cd6a1fc677f65bbe8",
-      "dirty_tree": true,
-      "tree_fingerprint": "2de90395bde4eeea09747c5e4715c590e59aaabb662c342bfe7ce3b87d796aef",
-      "verified_at": "2026-10-24T19:06:03.641785+08:00"
-    },
-    "A128-LOCAL-CATALOG": {
-      "status": "PASS",
-      "command": "GitHub Actions CI 41511126788 on main@4c204479284b9bf55429742b98a5dd135e86bec8; full regression plus lint/typecheck",
-      "exit_code": 0,
-      "summary": "Exact current main commit CI passed both required jobs: test and lint-and-typecheck (https://github.com/fanxUP/fqp-football-quant/actions/runs/41511126788); the full regression job includes P128 catalog/import behavior.",
-      "timed_out": false,
-      "environment": "GitHub Actions",
-      "revision": "4c204479284b9bf55429742b98a5dd135e86bec8",
-      "dirty_tree": false,
-      "tree_fingerprint": "67e4e9acd676eecc4fddfb20db53a4be3af5097fc989dc50332de6dbd3c96dca",
-      "verified_at": "2026-11-03T03:49:02.282793+08:00"
-    },
-    "A128-CROSS-DAY-REPAIR": {
-      "status": "PASS",
-      "command": ".venv/bin/ruff check and format check on three changed files; .venv/bin/python -m pytest -q tests/test_jobs/test_traditional_history_import.py; isolated PostgreSQL legacy_type_repair tests; exact-head GitHub CI run 41345100495",
-      "exit_code": 0,
-      "revision": "8b6bd977fe0345345f77af7d28b753a7ab75bcd9",
-      "dirty_tree": false,
-      "summary": "Cross-midnight type-repair regression: 17 focused unit tests passed, 10 isolated PostgreSQL legacy-type-repair tests passed, and exact-head GitHub CI passed both full test and lint-and-typecheck jobs. The failed production attempt had fully rolled back; no backfill rows were written.",
-      "verified_at": "2026-11-01T20:17:56+00:00"
-    },
-    "A129-ISOLATED-POSTGRES": {
-      "status": "PASS",
-      "command": "FQP_HISTORY_TEST_DSN=<localhost-only disposable PostgreSQL> .venv/bin/python -m pytest -q tests/test_computation/test_football_fixture_identity_postgres.py",
-      "exit_code": 0,
-      "summary": "Final formatted worktree run after the numeric-string correction: collected 124 items; 124 passed in 43.47s. Covers P128 new/fill evidence envelopes, canonical decimal string and integer handling with boolean/float/non-digit/leading-zero rejection, exact canonical source-row digest binding, tampered ID/page hash/team IDs rejection, rollback and identity boundaries.",
-      "timed_out": false,
-      "environment": "local isolated PostgreSQL",
-      "revision": "4c204479284b9bf55429742b98a5dd135e86bec8",
-      "dirty_tree": true,
-      "tree_fingerprint": "67e4e9acd676eecc4fddfb20db53a4be3af5097fc989dc50332de6dbd3c96dca",
-      "verified_at": "2026-11-03T03:49:02.282793+08:00"
-    },
-    "A129-STATIC": {
-      "status": "PASS",
-      "command": "Ruff check/format; mypy scripts/football_fixture_identity.py --explicit-package-bases; compileall; git diff --check; V4 scope/budget; recompute pinned manifest and canonical row hashes",
-      "exit_code": 0,
-      "summary": "Ruff clean; 2 files formatted; mypy Success: no issues found; compileall/diff clean; scope passed at 2/9 business files with 0 new files/dependencies/migrations/public API; change budget passed; P128 full manifest and target-row SHA-256 recomputed and matched.",
-      "timed_out": false,
-      "environment": "local isolated PostgreSQL",
-      "revision": "4c204479284b9bf55429742b98a5dd135e86bec8",
-      "dirty_tree": true,
-      "tree_fingerprint": "67e4e9acd676eecc4fddfb20db53a4be3af5097fc989dc50332de6dbd3c96dca",
-      "verified_at": "2026-11-03T03:49:02.282793+08:00"
-    },
-    "A129-TRADITIONAL-SLOT-IDENTITY": {
-      "status": "PASS",
-      "command": "124-item isolated PostgreSQL regression + static/scope/budget + independent review + exact-head CI + production deploy + bounded SERIALIZABLE identity write + independent read-only readback",
-      "exit_code": 0,
-      "summary": "P129 complete. Local 124/124 isolated PostgreSQL regressions, static/scope/budget and independent review passed; exact deployed SHA CI 41517635062 passed both required jobs (https://github.com/fanxUP/fqp-football-quant/actions/runs/41517635062). SHA 919994697c735820f2b767e98cba7b95d264be28 deployed without DB migration or backup. The three freshly revalidated issue 22036 slots BQC6/5, R9/6 and T14C/6 were linked in one SERIALIZABLE transaction to fixture 2469; three typed source links and memberships independently read back, match_id remains NULL, JC aliases=0, no official result/season/model write. Production details are recorded in plans/local-football-data-integration-20261029/CHECKPOINT.md.",
-      "timed_out": false,
-      "environment": "local isolated PostgreSQL, GitHub Actions, production 100.121.47.26",
-      "revision": "919994697c735820f2b767e98cba7b95d264be28",
-      "dirty_tree": true,
-      "tree_fingerprint": "67e4e9acd676eecc4fddfb20db53a4be3af5097fc989dc50332de6dbd3c96dca",
-      "verified_at": "2026-11-03T04:38:18.043209+08:00"
+      "tree_fingerprint": "6e8e411a2fe364063bfd1fae51412173a63f94cac1ed4ddfc37d02da9b15b4c4",
+      "verified_at": "2026-11-03T07:22:47.391210+08:00"
     },
     "A130-HISTORY-FILL-LIVE-DRAW": {
       "status": "PASS",
@@ -231,6 +42,77 @@
       },
       "tree_fingerprint": "7e40881d5097662fe3b0da88ce9cc02f77fdce5d626f4d5b6a6ea2cf6abe6ca7",
       "verified_at": "2026-11-03T05:26:47.743498+08:00"
+    }
+  },
+  "reviews": {
+    "status": "PASS",
+    "application_code": {
+      "status": "PASS",
+      "reviewer": "independent read-only review agent",
+      "summary": "Independent review confirmed the 4,557-row allowlist mapping and aggregate. The optional-field omission finding was closed by a positive PostgreSQL regression and reviewer confirmation; no unresolved major findings.",
+      "revision": "8d9f0f3d775d038e24aae557beb3704328f0ff55",
+      "tree_fingerprint": "6e8e411a2fe364063bfd1fae51412173a63f94cac1ed4ddfc37d02da9b15b4c4",
+      "verified_at": "2026-11-03T07:22:47.391210+08:00"
+    },
+    "v4_migration": {
+      "status": "PASS",
+      "task_id": "P128-TRADITIONAL-FOOTBALL-CATALOG",
+      "reviewed_at": "2026-11-02T02:31:23+08:00",
+      "summary": "Independent read-only review confirms migration 128 checksum pin alignment, least-privilege fqp ledger SELECT, real restricted-role importer coverage, and rollback test preserves pre-existing ledger while removing migration 128 atomically. No blocking findings."
+    }
+  },
+  "quality_gate": {
+    "status": "READY_TO_MERGE",
+    "checked_at": "2026-11-03T07:25:47.253084+08:00",
+    "failures": []
+  },
+  "production": {
+    "status": "NOT_TOUCHED",
+    "database_writes": 0,
+    "deployments": 0,
+    "backups_created": 0
+  },
+  "security": {
+    "status": "PASS",
+    "task_id": "P131-TRADITIONAL-SUPPLEMENT-RECEIPT-ALLOWLIST",
+    "summary": "Strict local security review: the new static allowlist contains public historical match/source identifiers and no credentials; the linker loads a pinned local file only; hashes, slot keys and event facts fail closed; no shell execution, SQL construction, authorization, dependency, schema, network or permission changes.",
+    "checks": {
+      "credentials": "PASS: no secrets or credentials found in new allowlist",
+      "injection": "PASS: no SQL or shell construction added",
+      "authz": "PASS: no authentication or authorization changes",
+      "filesystem": "PASS: fixed repository-relative read; SHA-256 pin; missing/corrupt file fails closed",
+      "supply_chain": "PASS: no dependency changes"
+    },
+    "reviewer": "local security-gate review",
+    "verified_at": "2026-11-03T07:24:54.937315+08:00"
+  },
+  "migration": {
+    "status": "NOT_APPLICABLE",
+    "database_migrations": 0,
+    "dependency_migrations": 0,
+    "summary": "P131 changes only Python verification logic, one static evidence file and regression coverage; no SQL or schema change."
+  },
+  "external_ci": {
+    "status": "passed",
+    "task_id": "P129-TRADITIONAL-SLOT-IDENTITY",
+    "head_sha": "919994697c735820f2b767e98cba7b95d264be28",
+    "run_id": "41517635062",
+    "url": "https://github.com/fanxUP/fqp-football-quant/actions/runs/41517635062",
+    "checks": {
+      "test": "passed",
+      "lint-and-typecheck": "passed"
+    },
+    "summary": "Exact deployed main SHA passed both GitHub Actions CI jobs.",
+    "p130_live_draw_fill": {
+      "status": "passed",
+      "head_sha": "8ce2a5e2bdd6bb2677d7fcac3ab4c5e32b205981",
+      "run_id": 41528647349,
+      "url": "https://github.com/fanxUP/fqp-football-quant/actions/runs/41528647349",
+      "checks": {
+        "lint-and-typecheck": "passed",
+        "test": "passed"
+      },
+      "summary": "Exact main head passed both GitHub Actions jobs; lint-and-typecheck 3m10s, full test 8m15s."
     }
   },
   "upstream_evidence": {
@@ -383,57 +265,6 @@
       "failures": []
     }
   },
-  "reviews": {
-    "status": "PASS",
-    "application_code": {
-      "status": "PASS",
-      "task_id": "P128-TRADITIONAL-FOOTBALL-CATALOG",
-      "reviewed_at": "2026-11-02T02:31:23+08:00",
-      "summary": "Independent read-only review of latest diff: new/fill header and member idempotency, old kickoff-date fallback, official match links, and exact import receipts. No blocking findings."
-    },
-    "v4_migration": {
-      "status": "PASS",
-      "task_id": "P128-TRADITIONAL-FOOTBALL-CATALOG",
-      "reviewed_at": "2026-11-02T02:31:23+08:00",
-      "summary": "Independent read-only review confirms migration 128 checksum pin alignment, least-privilege fqp ledger SELECT, real restricted-role importer coverage, and rollback test preserves pre-existing ledger while removing migration 128 atomically. No blocking findings."
-    },
-    "ci_fixture_followup": {
-      "status": "PASS",
-      "task_id": "P128-TRADITIONAL-FOOTBALL-CATALOG",
-      "reviewed_at": "2026-11-02T03:17:25+08:00",
-      "summary": "Independent read-only review of the two CI fixture corrections passed: pool schema loads migration 128 in order, and observation kickoff assertions use execution-relative future time while retaining cutoff boundary coverage."
-    },
-    "cross_day_type_repair": {
-      "status": "PASS",
-      "task_id": "P128-TRADITIONAL-FOOTBALL-CATALOG",
-      "review_mode": "independent read-only",
-      "recorded_at": "2026-11-02T04:30:54+08:00",
-      "summary": "Independent read-only review confirmed that type repair validates actual kickoff calendar dates and both team names. A follow-up rejection regression for a wrong actual date when business_date happens to match was added and passed. This fix changes no schema, write policy, permissions, or external calls; no unresolved review findings."
-    },
-    "p129_traditional_identity": {
-      "status": "PASS",
-      "review_mode": "independent read-only",
-      "reviewed_at": "2026-11-03T03:32:59.180295+08:00",
-      "summary": "Fresh review of corrected code PASS. Confirmed P128 new/fill evidence envelopes and strict integer/string normalization; fixed source-row SHA binds the accepted 500.com record to the reviewed manifest; tampered source ID/page hash/team IDs are rejected. Previous findings closed; no unresolved findings; 9-file budget respected; no migration/dependency/API."
-    },
-    "p130_live_draw_fill": {
-      "status": "PASS",
-      "review_mode": "independent read-only",
-      "reviewed_at": "2026-11-03T05:26:47.743498+08:00",
-      "summary": "Independent read-only review found no blocking or major issues. One minor request for an explicit live-draw idempotency assertion was addressed and confirmed closed. Reviewer did not modify files or run tests."
-    }
-  },
-  "security": {
-    "status": "PASS",
-    "task_id": "P128-TRADITIONAL-FOOTBALL-CATALOG",
-    "reviewed_at": "2026-11-02T02:31:23+08:00",
-    "summary": "Strict local static security review: writes require explicit --apply and loopback/local socket DATABASE_URL; service/hostaddr overrides are rejected; SQL values are parameterized and dynamic column names are fixed internal fields; migration grants only ledger SELECT to existing non-superuser fqp; deploy shell quotes inputs and uses pinned checksums/evidence. PostgreSQL rehearsal used disposable container with loopback-only port, no volume; no production connection or secrets exposed."
-  },
-  "migration": {
-    "status": "PASS",
-    "task_id": "P128-TRADITIONAL-FOOTBALL-CATALOG",
-    "summary": "Migration 128 passed independent review and local synthetic PostgreSQL transaction, rollback, data-preservation, and restricted-runtime-role checks. Target-SHA-bound PostgreSQL 16 release rehearsal passed for 93bd24f; production migration has not yet been run."
-  },
   "release_migration_rehearsal": {
     "status": "passed",
     "task_id": "P128-TRADITIONAL-FOOTBALL-CATALOG",
@@ -444,34 +275,6 @@
       "128_traditional_history_facts.sql"
     ],
     "summary": "Disposable PostgreSQL 16 synthetic-schema rehearsal passed 1/1 with zero skips; exact target SHA, pinned migration checksum, existing-row preservation, constraints/triggers, rollback, and restricted fqp catalog/import paths verified."
-  },
-  "external_ci": {
-    "status": "passed",
-    "task_id": "P129-TRADITIONAL-SLOT-IDENTITY",
-    "head_sha": "919994697c735820f2b767e98cba7b95d264be28",
-    "run_id": "41517635062",
-    "url": "https://github.com/fanxUP/fqp-football-quant/actions/runs/41517635062",
-    "checks": {
-      "test": "passed",
-      "lint-and-typecheck": "passed"
-    },
-    "summary": "Exact deployed main SHA passed both GitHub Actions CI jobs.",
-    "p130_live_draw_fill": {
-      "status": "passed",
-      "head_sha": "8ce2a5e2bdd6bb2677d7fcac3ab4c5e32b205981",
-      "run_id": 41528647349,
-      "url": "https://github.com/fanxUP/fqp-football-quant/actions/runs/41528647349",
-      "checks": {
-        "lint-and-typecheck": "passed",
-        "test": "passed"
-      },
-      "summary": "Exact main head passed both GitHub Actions jobs; lint-and-typecheck 3m10s, full test 8m15s."
-    }
-  },
-  "quality_gate": {
-    "status": "READY_TO_MERGE",
-    "checked_at": "2026-11-03T05:27:47.961580+08:00",
-    "failures": []
   },
   "production_operation": {
     "status": "PASS",

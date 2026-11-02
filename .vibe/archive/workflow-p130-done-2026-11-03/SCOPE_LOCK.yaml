@@ -1,0 +1,27 @@
+{
+  "schema_version": 4,
+  "task_id": "P130-HISTORY-FILL-LIVE-DRAW",
+  "objective": "Allow exact same-gameNo official-history fill for existing live-draw issues while preserving original live-source identity and all pre-existing business fields.",
+  "allowed_paths": [
+    ".vibe/ACCEPTANCE.md",
+    ".vibe/BASELINE.yaml",
+    ".vibe/CHANGE_BUDGET.yaml",
+    ".vibe/EVIDENCE.yaml",
+    ".vibe/PLAN.md",
+    ".vibe/SCOPE_LOCK.yaml",
+    ".vibe/STATE.yaml",
+    ".vibe/TASK_DAG.yaml",
+    ".vibe/config.yaml",
+    "scripts/traditional_history_import.py",
+    "tests/test_jobs/test_traditional_history_import.py",
+    "tests/test_computation/test_football_fixture_identity_postgres.py"
+  ],
+  "protected_paths": [
+    "ops/**",
+    "sql/**",
+    "**/package*.json",
+    "requirements*.txt"
+  ],
+  "approved_protected_paths": [],
+  "notes": "Single main branch only. Permit sporttery_live_draw as the pre-existing issue namespace only when the official history gameNo matches; preserve that namespace and retain official history as supplemental evidence. Unknown/mismatched source namespaces and any identity/result conflict remain blocked. No migration, dependency, public API or production write."
+}

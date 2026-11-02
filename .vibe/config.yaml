@@ -4,9 +4,9 @@
     "command_timeout_seconds": 900
   },
   "commands": {
-    "test": ".venv/bin/python -m pytest -q tests/test_jobs/test_traditional_history_import.py tests/test_computation/test_football_fixture_identity_postgres.py tests/test_local/test_release_migration_policy.py tests/test_local/test_vibe_quality_gate.py tests/test_scripts/test_official_storage.py",
-    "lint": ".venv/bin/ruff check .vibe/quality_gate.py scripts/traditional_history_import.py tests/test_jobs/test_traditional_history_import.py tests/test_computation/test_football_fixture_identity_postgres.py",
-    "typecheck": "npm --prefix apps/frontend run typecheck"
+    "test": ".venv/bin/python -m pytest -q tests/test_computation/test_football_fixture_identity_postgres.py",
+    "lint": ".venv/bin/ruff check scripts/football_fixture_identity.py tests/test_computation/test_football_fixture_identity_postgres.py",
+    "typecheck": null
   },
   "paths": {
     "dependency_files": [

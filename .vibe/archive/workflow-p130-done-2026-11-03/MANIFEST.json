@@ -1,0 +1,65 @@
+{
+  "archive_format": 1,
+  "archived_at": "2026-11-03",
+  "reason": "Preserve the terminal P130 V4 workflow byte-for-byte before starting a separate P131 workflow instance.",
+  "prior_workflow": "P130-HISTORY-FILL-LIVE-DRAW",
+  "prior_state": "DONE",
+  "files": [
+    {
+      "path": "ACCEPTANCE.md",
+      "sha256": "c57867b3f5a8fd246132ccdd6156330cba5a10970a275450612f63d999744217"
+    },
+    {
+      "path": "BASELINE.yaml",
+      "sha256": "f456f273ea3452e06ebde04af8f92e4ba6f6193a534dc25e62fc8a09b75daa9f"
+    },
+    {
+      "path": "CHANGE_BUDGET.yaml",
+      "sha256": "0df8166b2bdd8c191c915c4e23f5537cba1574864e951f675510d6de4b1e0c4a"
+    },
+    {
+      "path": "DESIGN.md",
+      "sha256": "5a9ea7306d276b7374dd3e28b53dab676668a664f11fdca1b5659cd83c1a099c"
+    },
+    {
+      "path": "EVIDENCE.yaml",
+      "sha256": "933ae54ff97fe0f3d5a6dcc0eaa9890e8d16fd8d49ebf5d9270a957023b2b7e8"
+    },
+    {
+      "path": "PLAN.md",
+      "sha256": "6ce6ea0067810b4ba39390f09839f86572b1b0750784fd9640e366b89a9e550a"
+    },
+    {
+      "path": "QUALITY_GATE.md",
+      "sha256": "0f4f0cfc5bd66ba09792655aa45f17507be375f744125eeaf0bc7003b8b5cf3b"
+    },
+    {
+      "path": "SCOPE_LOCK.yaml",
+      "sha256": "30e02c787e5e03b3b03ae54062c889d84a14b3b72a3e8a401f8a076feb5bb9d8"
+    },
+    {
+      "path": "STATE.yaml",
+      "sha256": "59aa52239de350e41d00619510f73f0f66d7ab2d2d2541dbc5aa285c4359c4db"
+    },
+    {
+      "path": "TASK_DAG.yaml",
+      "sha256": "a7c97bff5488b85f517b393f41b2a685c3c7c2092b604347dc9e1fd4dbd4a807"
+    },
+    {
+      "path": "config.yaml",
+      "sha256": "bec831f3a26f00a7b49c05ea2c08944d6b891ccf95f07c7309cefc3a2658ed81"
+    },
+    {
+      "path": "engine-lock.json",
+      "sha256": "d6248de04ddb2e172a226a3b3b4f29e4826bca7c7f1a9e44fbbcb8f98eedf42e"
+    },
+    {
+      "path": "quality_gate.py",
+      "sha256": "33667a89aad2f3a7dc08fb32ac0dbe7d32513fea7df118526193b292c07cb191"
+    },
+    {
+      "path": "verify_migration.py",
+      "sha256": "d14b14b400d20c1b5f437c788c1da65e59df1c82f33370a80a5483498d77c772"
+    }
+  ]
+}
