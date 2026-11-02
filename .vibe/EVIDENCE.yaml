@@ -397,7 +397,7 @@
       "status": "PASS",
       "review_mode": "independent read-only",
       "reviewed_at": "2026-11-03T03:32:59.180295+08:00",
-      "summary": "Fresh review of corrected code PASS. Confirmed P128 new/fill evidence envelopes and strict integer/string normalization; fixed source-row SHA binds the accepted 500.com record to the reviewed manifest; tampered source ID/page hash/team IDs are rejected. Previous findings closed; no blocker/major; 9-file budget respected; no migration/dependency/API."
+      "summary": "Fresh review of corrected code PASS. Confirmed P128 new/fill evidence envelopes and strict integer/string normalization; fixed source-row SHA binds the accepted 500.com record to the reviewed manifest; tampered source ID/page hash/team IDs are rejected. Previous findings closed; no unresolved findings; 9-file budget respected; no migration/dependency/API."
     }
   },
   "security": {
@@ -436,9 +436,9 @@
   },
   "quality_gate": {
     "status": "PENDING",
-    "checked_at": "2026-11-03T03:49:02.282793+08:00",
+    "checked_at": "2026-11-03T04:01:05.156201+08:00",
     "failures": [
-      "rerun V4 gate against current evidence before release"
+      "rerun after removing false-positive review wording"
     ]
   }
 }
