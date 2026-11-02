@@ -46,7 +46,7 @@
         "P128-TRADITIONAL-FOOTBALL-CATALOG"
       ],
       "kind": "bounded_identity_write_path",
-      "status": "IN_PROGRESS",
+      "status": "DONE",
       "files": [
         "scripts/football_fixture_identity.py",
         "tests/test_computation/test_football_fixture_identity_postgres.py"
@@ -58,7 +58,7 @@
         "The operation binds only typed traditional issue-slot source IDs, preserves legacy/cancelled JC values as evidence, and never creates a jc.matchId, official result, season membership or prediction.",
         "The transaction is idempotent and records revisions; rollback leaves no fixture, source-link or membership changes.",
         "Focused isolated PostgreSQL regressions and static checks pass; P128 automatic import behavior remains unchanged.",
-        "After exact-head CI and independent read-only review, fresh read-only production evidence must still match issue 22036 BQC6/5, R9/6 and T14C/6 before one SERIALIZABLE application and independent readback; no backup or other production fields change."
+        "Push the corrected implementation to the sole main branch; exact-head GitHub CI and independent read-only review pass. This code acceptance does not claim production identities were written; the separately authorized post-deployment data operation is recorded in the plan checkpoint."
       ]
     }
   },

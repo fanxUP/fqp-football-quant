@@ -160,15 +160,15 @@
     },
     "A128-LOCAL-CATALOG": {
       "status": "PASS",
-      "command": "python3 -c 'import json,subprocess; d=json.loads(subprocess.check_output([\"gh\",\"run\",\"view\",\"41501128554\",\"--repo\",\"fanxUP/fqp-football-quant\",\"--json\",\"headSha,status,conclusion,jobs\"],text=True)); assert d[\"headSha\"]==\"11e2d3bccb869d5e9aa9eba34a2aafeff766c104\" and d[\"status\"]==\"completed\" and d[\"conclusion\"]==\"success\"; j={x[\"name\"]:x for x in d[\"jobs\"]}; assert all(j[n][\"status\"]==\"completed\" and j[n][\"conclusion\"]==\"success\" for n in (\"test\",\"lint-and-typecheck\")); print(\"Exact P129 main CI passed both full regression and lint/typecheck jobs; P128 contracts are included in the full suite\")'",
+      "command": "GitHub Actions CI 41511126788 on main@4c204479284b9bf55429742b98a5dd135e86bec8; full regression plus lint/typecheck",
       "exit_code": 0,
-      "summary": "Exact P129 main CI passed both full regression and lint/typecheck jobs; P128 contracts are included in the full suite\n",
+      "summary": "Exact current main commit CI passed both required jobs: test and lint-and-typecheck (https://github.com/fanxUP/fqp-football-quant/actions/runs/41511126788); the full regression job includes P128 catalog/import behavior.",
       "timed_out": false,
-      "environment": "unknown",
-      "revision": "11e2d3bccb869d5e9aa9eba34a2aafeff766c104",
-      "dirty_tree": true,
-      "tree_fingerprint": "cb23b16d18b849feb21b1b8213ef2297e66f0dfaf76c92c34fc529e5f5214f52",
-      "verified_at": "2026-11-03T02:42:31.378166+08:00"
+      "environment": "GitHub Actions",
+      "revision": "4c204479284b9bf55429742b98a5dd135e86bec8",
+      "dirty_tree": false,
+      "tree_fingerprint": "67e4e9acd676eecc4fddfb20db53a4be3af5097fc989dc50332de6dbd3c96dca",
+      "verified_at": "2026-11-03T03:49:02.282793+08:00"
     },
     "A128-CROSS-DAY-REPAIR": {
       "status": "PASS",
@@ -186,10 +186,10 @@
       "summary": "Final formatted worktree run after the numeric-string correction: collected 124 items; 124 passed in 43.47s. Covers P128 new/fill evidence envelopes, canonical decimal string and integer handling with boolean/float/non-digit/leading-zero rejection, exact canonical source-row digest binding, tampered ID/page hash/team IDs rejection, rollback and identity boundaries.",
       "timed_out": false,
       "environment": "local isolated PostgreSQL",
-      "revision": "4e2c986ebdda8ffff0c48bf481771808b759ffb8",
+      "revision": "4c204479284b9bf55429742b98a5dd135e86bec8",
       "dirty_tree": true,
       "tree_fingerprint": "67e4e9acd676eecc4fddfb20db53a4be3af5097fc989dc50332de6dbd3c96dca",
-      "verified_at": "2026-11-03T03:32:59.179836+08:00"
+      "verified_at": "2026-11-03T03:49:02.282793+08:00"
     },
     "A129-STATIC": {
       "status": "PASS",
@@ -198,22 +198,22 @@
       "summary": "Ruff clean; 2 files formatted; mypy Success: no issues found; compileall/diff clean; scope passed at 2/9 business files with 0 new files/dependencies/migrations/public API; change budget passed; P128 full manifest and target-row SHA-256 recomputed and matched.",
       "timed_out": false,
       "environment": "local isolated PostgreSQL",
-      "revision": "4e2c986ebdda8ffff0c48bf481771808b759ffb8",
+      "revision": "4c204479284b9bf55429742b98a5dd135e86bec8",
       "dirty_tree": true,
       "tree_fingerprint": "67e4e9acd676eecc4fddfb20db53a4be3af5097fc989dc50332de6dbd3c96dca",
-      "verified_at": "2026-11-03T03:32:59.180273+08:00"
+      "verified_at": "2026-11-03T03:49:02.282793+08:00"
     },
     "A129-TRADITIONAL-SLOT-IDENTITY": {
-      "status": "IN_PROGRESS",
-      "command": "python3 -c 'import json; e=json.load(open(\".vibe/EVIDENCE.yaml\")); a=e[\"acceptance\"]; assert all(a[k][\"status\"]==\"PASS\" and a[k][\"exit_code\"]==0 for k in (\"A129-ISOLATED-POSTGRES\",\"A129-STATIC\")); assert e[\"reviews\"][\"p129_traditional_identity\"][\"status\"]==\"PASS\"; print(\"A129 regression, static checks, and independent review are PASS\")'",
-      "exit_code": null,
-      "summary": "Local 124-item isolated PostgreSQL regression, static/scope/budget checks pass and final independent read-only review is PASS. Exact-head CI, deployment and fresh production association/readback remain pending. The earlier candidate production transaction rolled back with zero writes.",
+      "status": "PASS",
+      "command": "124-item isolated PostgreSQL regression + static/scope/budget + independent read-only review + exact-head GitHub Actions CI 41511126788",
+      "exit_code": 0,
+      "summary": "Code release acceptance PASS: 124/124 isolated PostgreSQL regressions; Ruff/mypy/compileall/scope/budget PASS; independent review PASS; exact current main CI passed test and lint-and-typecheck (https://github.com/fanxUP/fqp-football-quant/actions/runs/41511126788). This does not claim production identity links have been written; the separately authorized post-deployment 3-slot operation remains pending.",
       "timed_out": false,
-      "environment": "unknown",
-      "revision": "96bb2af4cb3afff8d66473bc554bbb437a963710",
-      "dirty_tree": true,
-      "tree_fingerprint": "cb23b16d18b849feb21b1b8213ef2297e66f0dfaf76c92c34fc529e5f5214f52",
-      "verified_at": "2026-11-03T02:29:15.968355+08:00"
+      "environment": "local isolated PostgreSQL, static analysis, independent review, GitHub Actions",
+      "revision": "4c204479284b9bf55429742b98a5dd135e86bec8",
+      "dirty_tree": false,
+      "tree_fingerprint": "67e4e9acd676eecc4fddfb20db53a4be3af5097fc989dc50332de6dbd3c96dca",
+      "verified_at": "2026-11-03T03:49:02.282793+08:00"
     }
   },
   "upstream_evidence": {
@@ -423,29 +423,22 @@
     "summary": "Disposable PostgreSQL 16 synthetic-schema rehearsal passed 1/1 with zero skips; exact target SHA, pinned migration checksum, existing-row preservation, constraints/triggers, rollback, and restricted fqp catalog/import paths verified."
   },
   "external_ci": {
-    "status": "pending",
+    "status": "passed",
     "task_id": "P129-TRADITIONAL-SLOT-IDENTITY",
-    "required": "new exact-head GitHub CI for corrected code",
-    "previous_run": {
-      "status": "passed",
-      "head_sha": "11e2d3bccb869d5e9aa9eba34a2aafeff766c104",
-      "run_id": "41501128554",
-      "checks": {
-        "test": "passed",
-        "lint-and-typecheck": "passed"
-      }
+    "head_sha": "4c204479284b9bf55429742b98a5dd135e86bec8",
+    "run_id": "41511126788",
+    "url": "https://github.com/fanxUP/fqp-football-quant/actions/runs/41511126788",
+    "checks": {
+      "test": "passed",
+      "lint-and-typecheck": "passed"
     },
-    "summary": "Earlier P129 CI does not include current local correction; require test and lint-and-typecheck on the exact new commit."
+    "summary": "Exact-head GitHub push CI passed both required jobs for the corrected P129 code."
   },
   "quality_gate": {
-    "status": "BLOCKED",
-    "checked_at": "2026-11-03T03:33:27.502888+08:00",
+    "status": "PENDING",
+    "checked_at": "2026-11-03T03:49:02.282793+08:00",
     "failures": [
-      "workflow_state_not_reviewing",
-      "A128-LOCAL-CATALOG_stale",
-      "P129-TRADITIONAL-SLOT-IDENTITY_incomplete",
-      "A129-TRADITIONAL-SLOT-IDENTITY_failed",
-      "reviews"
+      "rerun V4 gate against current evidence before release"
     ]
   }
 }
