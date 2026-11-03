@@ -85,5 +85,23 @@
     "P133_result": "/Volumes/Nas/FQP/plans/local-football-data-integration-20261029/P133-RESULT-20261103.json",
     "P134_result": "/Volumes/Nas/FQP/plans/local-football-data-integration-20261029/P134-RESULT-20261103.json",
     "P135_score_gap_analysis": "/Volumes/Nas/FQP/plans/local-football-data-integration-20261029/P135-SCORE-GAP-ANALYSIS-20261103.json"
+  },
+  "external_ci": {
+    "status": "passed",
+    "workflow": "CI",
+    "run_id": 41578484357,
+    "run_number": 374,
+    "run_url": "https://github.com/fanxUP/fqp-football-quant/actions/runs/41578484357",
+    "revision": "513f98adb0601e2f86b919473591993497da932c",
+    "completed_at": "2026-11-03T12:42:18+08:00",
+    "checks": {
+      "test": "passed",
+      "lint-and-typecheck": "passed"
+    },
+    "test_details": {
+      "pytest_collected": 3657,
+      "prediction_input_no_skipped_suite_passed": 294,
+      "coverage": "70%"
+    }
   }
 }
