@@ -128,6 +128,7 @@ def traditional_history_slot(
     away_team_name="埃弗顿",
     kickoff_date="2022-04-07",
     half_score_source_text=None,
+    sporttery_match_id=None,
 ):
     source_game_no = {"t14c": 90, "r9": 90, "bqc6": 98, "jq4": 94}[game_type]
     source_raw = {
@@ -149,6 +150,7 @@ def traditional_history_slot(
             else ""
         ),
         "product_result_code_source_text": result_code,
+        **({"sporttery_match_id": sporttery_match_id} if sporttery_match_id else {}),
         "import_receipt": {
             "contract": "sporttery-traditional-history-import/v1",
             "issue_sha256": "a" * 64,
@@ -2821,6 +2823,471 @@ def test_explicit_traditional_slot_group_links_completed_products_without_jc_ali
     assert rows(conn, "SELECT count(*) FROM football_fixtures") == [(1,)]
     assert rows(conn, "SELECT count(*) FROM football_fixture_source_links") == [(3,)]
     assert rows(conn, "SELECT count(*) FROM football_pool_fixture_revisions") == [(6,)]
+
+
+def test_direct_sporttery_match_id_links_one_exact_historical_slot_idempotently(ready):
+    from scripts.football_fixture_identity import (
+        link_traditional_issue_slot_by_match_id,
+    )
+
+    conn = ready
+    official_id = rows(
+        conn,
+        """INSERT INTO official_matches(
+               business_date,official_match_code,source_match_id,league_name,
+               home_team_name,away_team_name,kickoff_time
+           ) VALUES ('2022-04-07','周四001','9001','英超','伯恩利','埃弗顿',
+                    '2022-04-07 15:00:00') RETURNING id""",
+    )[0][0]
+    rows(
+        conn,
+        """INSERT INTO official_results(
+               match_id,full_home_goals,full_away_goals,half_home_goals,
+               half_away_goals,result_status
+           ) VALUES (%s,3,2,1,2,'confirmed') RETURNING match_id""",
+        (official_id,),
+    )
+    issue_id = put_traditional_history_slot(
+        conn,
+        "bqc6",
+        "22036",
+        1,
+        source_match_id="9001",
+        sporttery_match_id="9001",
+    )
+    slot = {
+        "game_type": "bqc6",
+        "issue_no": "22036",
+        "match_order": 1,
+        "sporttery_match_id": "9001",
+        "source_row_sha256": "c" * 64,
+        "manifest_sha256": "b" * 64,
+    }
+
+    linked = link_traditional_issue_slot_by_match_id(conn, slot)
+
+    assert linked["identity_status"] == "linked"
+    assert linked["official_match_id"] == official_id
+    assert linked["updated_memberships"] == 1
+    assert linked["inserted_source_links"] == 2
+    assert linked["evidence"]["method"] == "verified_traditional_issue_slot_direct_match_id"
+    assert rows(
+        conn,
+        "SELECT identity_status,fixture_id,match_id FROM football_pool_issue_matches",
+    ) == [("linked", linked["fixture_id"], official_id)]
+    catalog = read_pool_catalog_issue(conn, issue_id)
+    assert catalog["fixtures"][0]["fixture_id"] == linked["fixture_id"]
+    assert catalog["fixtures"][0]["official_match_id"] == official_id
+
+    replay = link_traditional_issue_slot_by_match_id(conn, slot)
+
+    assert replay["fixture_id"] == linked["fixture_id"]
+    assert replay["updated_memberships"] == 0
+    assert replay["inserted_source_links"] == 0
+    assert rows(conn, "SELECT count(*) FROM football_fixtures") == [(1,)]
+
+
+def test_direct_sporttery_match_id_link_rejects_mismatch_before_any_identity_write(ready):
+    from scripts.football_fixture_identity import (
+        link_traditional_issue_slot_by_match_id,
+    )
+
+    conn = ready
+    official_id = rows(
+        conn,
+        """INSERT INTO official_matches(
+               business_date,official_match_code,source_match_id,league_name,
+               home_team_name,away_team_name,kickoff_time
+           ) VALUES ('2022-04-07','周四001','9001','英超','伯恩利','埃弗顿',
+                    '2022-04-07 15:00:00') RETURNING id""",
+    )[0][0]
+    rows(
+        conn,
+        """INSERT INTO official_results(
+               match_id,full_home_goals,full_away_goals,half_home_goals,
+               half_away_goals,result_status
+           ) VALUES (%s,3,2,1,1,'confirmed') RETURNING match_id""",
+        (official_id,),
+    )
+    put_traditional_history_slot(
+        conn,
+        "bqc6",
+        "22036",
+        1,
+        source_match_id="9001",
+        sporttery_match_id="9001",
+    )
+
+    with pytest.raises(ValueError, match="official_match_facts_mismatch"):
+        link_traditional_issue_slot_by_match_id(
+            conn,
+            {
+                "game_type": "bqc6",
+                "issue_no": "22036",
+                "match_order": 1,
+                "sporttery_match_id": "9001",
+                "source_row_sha256": "c" * 64,
+                "manifest_sha256": "b" * 64,
+            },
+        )
+
+    assert rows(conn, "SELECT count(*) FROM football_fixtures") == [(0,)]
+    assert rows(conn, "SELECT count(*) FROM football_fixture_source_links") == [(0,)]
+    assert rows(
+        conn,
+        "SELECT identity_status,fixture_id,match_id FROM football_pool_issue_matches",
+    ) == [("pending", None, None)]
+
+
+def test_direct_sporttery_match_id_must_come_from_the_imported_source_row(ready):
+    from scripts.football_fixture_identity import (
+        link_traditional_issue_slot_by_match_id,
+    )
+
+    conn = ready
+    put_traditional_history_slot(
+        conn,
+        "bqc6",
+        "22036",
+        1,
+        source_match_id="9001",
+        sporttery_match_id="9001",
+    )
+
+    with pytest.raises(
+        ValueError, match="traditional_slot_direct_sporttery_source_evidence_mismatch"
+    ):
+        link_traditional_issue_slot_by_match_id(
+            conn,
+            {
+                "game_type": "bqc6",
+                "issue_no": "22036",
+                "match_order": 1,
+                "sporttery_match_id": "9002",
+                "source_row_sha256": "c" * 64,
+                "manifest_sha256": "b" * 64,
+            },
+        )
+
+    assert rows(conn, "SELECT count(*) FROM football_fixtures") == [(0,)]
+    assert rows(conn, "SELECT count(*) FROM football_fixture_source_links") == [(0,)]
+    assert rows(
+        conn,
+        "SELECT identity_status,fixture_id,match_id FROM football_pool_issue_matches",
+    ) == [("pending", None, None)]
+
+
+@pytest.mark.parametrize(
+    ("mutation_sql", "changed_value"),
+    [
+        ("UPDATE official_matches SET league_name=%s WHERE id=%s", "西甲"),
+        ("UPDATE official_matches SET home_team_name=%s WHERE id=%s", "另一主队"),
+        ("UPDATE official_matches SET away_team_name=%s WHERE id=%s", "另一客队"),
+        ("UPDATE official_matches SET kickoff_time=%s WHERE id=%s", "2022-04-08 15:00:00"),
+        ("UPDATE official_results SET full_home_goals=%s WHERE match_id=%s", 4),
+    ],
+    ids=["league", "home-team", "away-team", "kickoff-date", "full-score"],
+)
+def test_direct_sporttery_match_id_rejects_each_official_fact_mismatch(
+    ready, mutation_sql, changed_value
+):
+    from scripts.football_fixture_identity import (
+        link_traditional_issue_slot_by_match_id,
+    )
+
+    conn = ready
+    official_id = rows(
+        conn,
+        """INSERT INTO official_matches(
+               business_date,official_match_code,source_match_id,league_name,
+               home_team_name,away_team_name,kickoff_time
+           ) VALUES ('2022-04-07','周四001','9001','英超','伯恩利','埃弗顿',
+                    '2022-04-07 15:00:00') RETURNING id""",
+    )[0][0]
+    rows(
+        conn,
+        """INSERT INTO official_results(
+               match_id,full_home_goals,full_away_goals,half_home_goals,
+               half_away_goals,result_status
+           ) VALUES (%s,3,2,1,2,'confirmed') RETURNING match_id""",
+        (official_id,),
+    )
+    put_traditional_history_slot(
+        conn,
+        "bqc6",
+        "22036",
+        1,
+        source_match_id="9001",
+        sporttery_match_id="9001",
+    )
+    with conn.cursor() as cur:
+        cur.execute(mutation_sql, (changed_value, official_id))
+
+    with pytest.raises(ValueError, match="official_match_facts_mismatch"):
+        link_traditional_issue_slot_by_match_id(
+            conn,
+            {
+                "game_type": "bqc6",
+                "issue_no": "22036",
+                "match_order": 1,
+                "sporttery_match_id": "9001",
+                "source_row_sha256": "c" * 64,
+                "manifest_sha256": "b" * 64,
+            },
+        )
+
+    assert rows(conn, "SELECT count(*) FROM football_fixtures") == [(0,)]
+    assert rows(conn, "SELECT count(*) FROM football_fixture_source_links") == [(0,)]
+    assert rows(
+        conn,
+        "SELECT identity_status,fixture_id,match_id FROM football_pool_issue_matches",
+    ) == [("pending", None, None)]
+
+
+@pytest.mark.parametrize(
+    ("stored_source_match_id", "stored_source_row_sha256"),
+    [("9002", "c" * 64), ("9001", "d" * 64)],
+    ids=["typed-column-mismatch", "import-receipt-mismatch"],
+)
+def test_direct_sporttery_match_id_requires_matching_column_and_import_receipt(
+    ready, stored_source_match_id, stored_source_row_sha256
+):
+    from scripts.football_fixture_identity import link_traditional_issue_slot_by_match_id
+
+    conn = ready
+    issue_id = put_traditional_history_slot(
+        conn,
+        "bqc6",
+        "22036",
+        1,
+        source_match_id=stored_source_match_id,
+        sporttery_match_id="9001",
+    )
+    if stored_source_row_sha256 != "c" * 64:
+        rows(
+            conn,
+            """UPDATE football_pool_issue_matches
+               SET source_raw_json=jsonb_set(source_raw_json,
+                   '{import_receipt,source_row_sha256}',to_jsonb(%s::text),false)
+               WHERE issue_id=%s RETURNING id""",
+            (stored_source_row_sha256, issue_id),
+        )
+
+    with pytest.raises(
+        ValueError, match="traditional_slot_direct_sporttery_source_evidence_mismatch"
+    ):
+        link_traditional_issue_slot_by_match_id(
+            conn,
+            {
+                "game_type": "bqc6",
+                "issue_no": "22036",
+                "match_order": 1,
+                "sporttery_match_id": "9001",
+                "source_row_sha256": "c" * 64,
+                "manifest_sha256": "b" * 64,
+            },
+        )
+
+    assert rows(conn, "SELECT count(*) FROM football_fixtures") == [(0,)]
+    assert rows(conn, "SELECT count(*) FROM football_fixture_source_links") == [(0,)]
+    assert rows(
+        conn,
+        "SELECT identity_status,fixture_id,match_id FROM football_pool_issue_matches",
+    ) == [("pending", None, None)]
+
+
+@pytest.mark.parametrize(
+    "official_match_exists",
+    [False, True],
+    ids=["missing-official-match", "missing-official-result"],
+)
+def test_direct_sporttery_match_id_rejects_missing_official_match_or_result(
+    ready, official_match_exists
+):
+    from scripts.football_fixture_identity import link_traditional_issue_slot_by_match_id
+
+    conn = ready
+    if official_match_exists:
+        official(conn, source="9001")
+    put_traditional_history_slot(
+        conn,
+        "bqc6",
+        "22036",
+        1,
+        source_match_id="9001",
+        sporttery_match_id="9001",
+    )
+
+    with pytest.raises(ValueError, match="direct_sporttery_match_id_not_unique_official_match"):
+        link_traditional_issue_slot_by_match_id(
+            conn,
+            {
+                "game_type": "bqc6",
+                "issue_no": "22036",
+                "match_order": 1,
+                "sporttery_match_id": "9001",
+                "source_row_sha256": "c" * 64,
+                "manifest_sha256": "b" * 64,
+            },
+        )
+
+    assert rows(conn, "SELECT count(*) FROM football_fixtures") == [(0,)]
+    assert rows(conn, "SELECT count(*) FROM football_fixture_source_links") == [(0,)]
+    assert rows(
+        conn,
+        "SELECT identity_status,fixture_id,match_id FROM football_pool_issue_matches",
+    ) == [("pending", None, None)]
+
+
+def test_direct_sporttery_match_id_requires_confirmed_official_result(ready):
+    from scripts.football_fixture_identity import link_traditional_issue_slot_by_match_id
+
+    conn = ready
+    official_id = rows(
+        conn,
+        """INSERT INTO official_matches(
+               business_date,official_match_code,source_match_id,league_name,
+               home_team_name,away_team_name,kickoff_time
+           ) VALUES ('2022-04-07','周四001','9001','英超','伯恩利','埃弗顿',
+                    '2022-04-07 15:00:00') RETURNING id""",
+    )[0][0]
+    rows(
+        conn,
+        """INSERT INTO official_results(
+               match_id,full_home_goals,full_away_goals,half_home_goals,
+               half_away_goals,result_status
+           ) VALUES (%s,3,2,1,2,'pending') RETURNING match_id""",
+        (official_id,),
+    )
+    put_traditional_history_slot(
+        conn,
+        "bqc6",
+        "22036",
+        1,
+        source_match_id="9001",
+        sporttery_match_id="9001",
+    )
+
+    with pytest.raises(ValueError, match="direct_sporttery_match_id_requires_confirmed_result"):
+        link_traditional_issue_slot_by_match_id(
+            conn,
+            {
+                "game_type": "bqc6",
+                "issue_no": "22036",
+                "match_order": 1,
+                "sporttery_match_id": "9001",
+                "source_row_sha256": "c" * 64,
+                "manifest_sha256": "b" * 64,
+            },
+        )
+
+    assert rows(conn, "SELECT count(*) FROM football_fixtures") == [(0,)]
+    assert rows(conn, "SELECT count(*) FROM football_fixture_source_links") == [(0,)]
+    assert rows(
+        conn,
+        "SELECT identity_status,fixture_id,match_id FROM football_pool_issue_matches",
+    ) == [("pending", None, None)]
+
+
+def test_direct_sporttery_match_id_replay_accepts_matching_canonical_alias(ready):
+    from scripts.football_fixture_identity import (
+        link_traditional_issue_slot_by_match_id,
+        link_traditional_issue_slot_group,
+    )
+
+    conn = ready
+    official_id = rows(
+        conn,
+        """INSERT INTO official_matches(
+               business_date,official_match_code,source_match_id,league_name,
+               home_team_name,away_team_name,kickoff_time
+           ) VALUES ('2022-04-07','周四001','9001','英超','伯恩利','埃弗顿',
+                    '2022-04-07 15:00:00') RETURNING id""",
+    )[0][0]
+    rows(
+        conn,
+        """INSERT INTO official_results(
+               match_id,full_home_goals,full_away_goals,half_home_goals,
+               half_away_goals,result_status
+           ) VALUES (%s,3,2,1,2,'confirmed') RETURNING match_id""",
+        (official_id,),
+    )
+    slots = [
+        {"game_type": "r9", "issue_no": "22036", "match_order": 6},
+        {"game_type": "t14c", "issue_no": "22036", "match_order": 6},
+    ]
+    for slot in slots:
+        put_traditional_history_slot(
+            conn,
+            **slot,
+            source_match_id="9001",
+            sporttery_match_id="9001",
+            league_name="英超",
+            home_team_name="伯恩利",
+            away_team_name="埃弗顿",
+            kickoff_date="2022-04-07",
+        )
+    initial = link_traditional_issue_slot_group(conn, slots)
+    alias_fixture_id = initial["fixture_id"]
+    canonical_fixture_id = rows(conn, "INSERT INTO football_fixtures DEFAULT VALUES RETURNING id")[
+        0
+    ][0]
+    event_signature = {
+        "league_name": "英超",
+        "home_team_name": "伯恩利",
+        "away_team_name": "埃弗顿",
+        "kickoff_date": "2022-04-07",
+        "full_score": [3, 2],
+        "half_score": [1, 2],
+    }
+    rows(
+        conn,
+        """INSERT INTO football_fixture_source_links
+           (source_name,id_system,source_match_id,fixture_id,evidence)
+           VALUES ('sporttery','jc.matchId','9001',%s,%s) RETURNING fixture_id""",
+        (canonical_fixture_id, Json({"event_signature": event_signature})),
+    )
+    rows(
+        conn,
+        """INSERT INTO football_fixture_identity_aliases
+           (alias_fixture_id,canonical_fixture_id,source_match_id,evidence)
+           VALUES (%s,%s,'9001',%s) RETURNING alias_fixture_id""",
+        (
+            alias_fixture_id,
+            canonical_fixture_id,
+            Json(
+                {
+                    "contract": "football-fixture-alias/v1",
+                    "basis": "direct_sporttery_match_id",
+                    "source_match_id": "9001",
+                    "candidate_snapshot_sha256": "a" * 64,
+                }
+            ),
+        ),
+    )
+    conn.commit()
+
+    replay = link_traditional_issue_slot_by_match_id(
+        conn,
+        {
+            "game_type": "r9",
+            "issue_no": "22036",
+            "match_order": 6,
+            "sporttery_match_id": "9001",
+            "source_row_sha256": "c" * 64,
+            "manifest_sha256": "b" * 64,
+        },
+    )
+
+    assert replay["fixture_id"] == canonical_fixture_id
+    assert replay["official_match_id"] == official_id
+    assert replay["updated_memberships"] == 0
+    assert replay["inserted_source_links"] == 0
+    assert rows(
+        conn,
+        "SELECT fixture_id,match_id,identity_status FROM football_pool_issue_matches "
+        "WHERE issue_id=(SELECT id FROM football_pool_issues WHERE game_type='r9' AND issue_no='22036')",
+    ) == [(alias_fixture_id, None, "linked")]
 
 
 def test_explicit_traditional_slot_group_replay_normalizes_an_existing_alias(ready):

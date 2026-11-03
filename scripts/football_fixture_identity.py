@@ -496,12 +496,21 @@ def _bind_fixture(cur, keys, names, exact, evidence, official_id):
     )
 
 
-def link_traditional_issue_slot_group(conn, slots: list[dict[str, Any]]) -> dict[str, Any]:
-    """Explicitly link verified completed Sporttery product slots to one fixture.
+def link_traditional_issue_slot_group(
+    conn,
+    slots: list[dict[str, Any]],
+    *,
+    direct_sporttery_match_id: str | None = None,
+    expected_source_row_sha256: str | None = None,
+    expected_manifest_sha256: str | None = None,
+) -> dict[str, Any]:
+    """Link verified completed Sporttery product slots to one fixture.
 
-    The caller owns commit/rollback. This operation never treats a legacy JC ID
-    as a source key and never assigns an official match or season. Its savepoint
-    guarantees all-or-none behavior even if a later membership update fails.
+    The multi-product path uses exact shared event facts and never assigns an
+    official match or season. The singleton path is only available through
+    ``link_traditional_issue_slot_by_match_id`` and assigns an official match
+    only after exact direct-ID and result-fact validation. The caller owns
+    commit/rollback; the savepoint keeps each operation all-or-none.
     """
     if conn.autocommit:
         raise ValueError("Traditional fixture linking requires a transaction")
@@ -513,7 +522,13 @@ def link_traditional_issue_slot_group(conn, slots: list[dict[str, Any]]) -> dict
         with conn.cursor() as cur:
             cur.execute("SET LOCAL lock_timeout = '2s'")
             cur.execute("SET LOCAL statement_timeout = '8s'")
-        result = _link_traditional_issue_slot_group(conn, slots)
+        result = _link_traditional_issue_slot_group(
+            conn,
+            slots,
+            direct_sporttery_match_id=direct_sporttery_match_id,
+            expected_source_row_sha256=expected_source_row_sha256,
+            expected_manifest_sha256=expected_manifest_sha256,
+        )
         with conn.cursor() as cur:
             cur.execute(
                 "SELECT set_config('lock_timeout',%s,true),set_config('statement_timeout',%s,true)",
@@ -528,13 +543,73 @@ def link_traditional_issue_slot_group(conn, slots: list[dict[str, Any]]) -> dict
         raise
 
 
-def _link_traditional_issue_slot_group(conn, slots: list[dict[str, Any]]) -> dict[str, Any]:
-    """Validate and write one explicit traditional issue-slot identity group."""
+def link_traditional_issue_slot_by_match_id(conn, slot: dict[str, Any]) -> dict[str, Any]:
+    """Link one completed slot only when its direct Sporttery MatchId is exact."""
+    if not isinstance(slot, dict) or set(slot) != {
+        "game_type",
+        "issue_no",
+        "match_order",
+        "sporttery_match_id",
+        "source_row_sha256",
+        "manifest_sha256",
+    }:
+        raise ValueError("A direct identity slot requires its MatchId and import receipt hashes")
+    match_id = slot["sporttery_match_id"]
+    if (
+        not isinstance(match_id, str)
+        or not match_id.isascii()
+        or not match_id.isdecimal()
+        or str(int(match_id)) != match_id
+        or int(match_id) <= 0
+    ):
+        raise ValueError("Invalid direct Sporttery MatchId")
+    if not _valid_sha256(slot["source_row_sha256"]) or not _valid_sha256(slot["manifest_sha256"]):
+        raise ValueError("Invalid direct Sporttery import receipt hash")
+    return link_traditional_issue_slot_group(
+        conn,
+        [
+            {
+                "game_type": slot["game_type"],
+                "issue_no": slot["issue_no"],
+                "match_order": slot["match_order"],
+            }
+        ],
+        direct_sporttery_match_id=match_id,
+        expected_source_row_sha256=slot["source_row_sha256"],
+        expected_manifest_sha256=slot["manifest_sha256"],
+    )
+
+
+def _link_traditional_issue_slot_group(
+    conn,
+    slots: list[dict[str, Any]],
+    *,
+    direct_sporttery_match_id: str | None = None,
+    expected_source_row_sha256: str | None = None,
+    expected_manifest_sha256: str | None = None,
+) -> dict[str, Any]:
+    """Validate and write one exact traditional identity group or direct slot."""
     source_game_numbers = {"t14c": 90, "r9": 90, "bqc6": 98, "jq4": 94}
-    if not isinstance(slots, list) or len(slots) < 2:
+    if not isinstance(slots, list) or (len(slots) < 2 and direct_sporttery_match_id is None):
         raise ValueError(
             "Traditional fixture linking requires a transaction and at least two slots"
         )
+    if direct_sporttery_match_id is not None and (
+        len(slots) != 1
+        or not isinstance(direct_sporttery_match_id, str)
+        or not direct_sporttery_match_id.isascii()
+        or not direct_sporttery_match_id.isdecimal()
+        or str(int(direct_sporttery_match_id)) != direct_sporttery_match_id
+        or int(direct_sporttery_match_id) <= 0
+    ):
+        raise ValueError("A direct Sporttery MatchId may bind exactly one slot")
+    if direct_sporttery_match_id is not None:
+        if not _valid_sha256(expected_source_row_sha256) or not _valid_sha256(
+            expected_manifest_sha256
+        ):
+            raise ValueError("A direct Sporttery MatchId requires verified import receipt hashes")
+    elif expected_source_row_sha256 is not None or expected_manifest_sha256 is not None:
+        raise ValueError("Import receipt hashes are only valid for a direct Sporttery MatchId")
 
     normalized: list[tuple[str, str, int]] = []
     for slot in slots:
@@ -567,7 +642,8 @@ def _link_traditional_issue_slot_group(conn, slots: list[dict[str, Any]]) -> dic
             cur.execute(
                 """SELECT i.id,i.raw_json,i.issue_no,i.game_type,i.source_game_type,
                           i.source_game_no,i.source_game_no_source,
-                          m.id,m.match_order,m.fixture_id,m.identity_status,m.identity_evidence,
+                          m.id,m.match_order,m.fixture_id,m.match_id,m.source_match_id,
+                          m.identity_status,m.identity_evidence,
                           m.league_name,m.home_team_name,m.away_team_name,m.kickoff_time,
                           m.kickoff_date,m.kickoff_time_precision,
                           m.source_full_home_goals,m.source_full_away_goals,
@@ -595,6 +671,8 @@ def _link_traditional_issue_slot_group(conn, slots: list[dict[str, Any]]) -> dic
                 membership_id,
                 actual_order,
                 old_fixture_id,
+                old_match_id,
+                stored_source_match_id,
                 identity_status,
                 old_identity_evidence,
                 league,
@@ -650,6 +728,17 @@ def _link_traditional_issue_slot_group(conn, slots: list[dict[str, Any]]) -> dic
             source_facts, receipt = _traditional_member_proof(source_raw)
             issue_receipt = _traditional_issue_receipt(issue_raw)
             source_kickoff_evidence = _traditional_kickoff_evidence(kickoff_evidence)
+            if direct_sporttery_match_id is not None and (
+                not isinstance(source_facts, dict)
+                or source_facts.get("sporttery_match_id") != direct_sporttery_match_id
+                or str(stored_source_match_id or "") != direct_sporttery_match_id
+                or not isinstance(receipt, dict)
+                or receipt.get("source_row_sha256") != expected_source_row_sha256
+                or receipt.get("manifest_sha256") != expected_manifest_sha256
+                or not isinstance(issue_receipt, dict)
+                or issue_receipt.get("manifest_sha256") != expected_manifest_sha256
+            ):
+                raise ValueError("traditional_slot_direct_sporttery_source_evidence_mismatch")
             actual_full_score = (int(full_home), int(full_away))
             actual_half_score = (int(half_home), int(half_away))
             source_half_score = (
@@ -718,6 +807,8 @@ def _link_traditional_issue_slot_group(conn, slots: list[dict[str, Any]]) -> dic
                     "issue_id": issue_id,
                     "membership_id": membership_id,
                     "fixture_id": old_fixture_id,
+                    "match_id": old_match_id,
+                    "source_match_id": stored_source_match_id,
                     "identity_status": identity_status,
                     "identity_evidence": old_identity_evidence,
                     "league_name": str(league).strip(),
@@ -731,6 +822,7 @@ def _link_traditional_issue_slot_group(conn, slots: list[dict[str, Any]]) -> dic
                     "source_result_evidence": result_evidence,
                     "kickoff_evidence": kickoff_evidence,
                     "source_import_receipt": receipt,
+                    "sporttery_match_id": direct_sporttery_match_id,
                 }
             )
 
@@ -750,12 +842,75 @@ def _link_traditional_issue_slot_group(conn, slots: list[dict[str, Any]]) -> dic
             raise ValueError("traditional_slots_do_not_match_exact_event_facts")
         for item in verified:
             if item["identity_status"] == "linked" and (
-                item["identity_evidence"].get("method") != "verified_traditional_issue_slots"
+                item["identity_evidence"].get("method")
+                not in {
+                    "verified_traditional_issue_slots",
+                    "verified_traditional_issue_slot_direct_match_id",
+                }
                 or item["identity_evidence"].get("event_signature") != event_signature
             ):
                 raise ValueError("traditional_slot_already_has_another_identity")
 
         names = {key: event_signature[key] for key in signature_fields[:3]}
+        official_match_id = None
+        if direct_sporttery_match_id is not None:
+            cur.execute(
+                """SELECT m.id,m.league_name,m.home_team_name,m.away_team_name,
+                          m.kickoff_time::date,r.full_home_goals,r.full_away_goals,
+                          r.half_home_goals,r.half_away_goals,r.result_status
+                   FROM official_matches m
+                   JOIN official_results r ON r.match_id=m.id
+                   WHERE m.source_match_id=%s
+                   FOR SHARE OF m,r""",
+                (direct_sporttery_match_id,),
+            )
+            official_rows = cur.fetchall()
+            if len(official_rows) != 1:
+                raise ValueError("direct_sporttery_match_id_not_unique_official_match")
+            (
+                official_match_id,
+                official_league,
+                official_home,
+                official_away,
+                official_kickoff_date,
+                official_full_home,
+                official_full_away,
+                official_half_home,
+                official_half_away,
+                official_result_status,
+            ) = official_rows[0]
+            if official_result_status != "confirmed":
+                raise ValueError("direct_sporttery_match_id_requires_confirmed_result")
+            if any(
+                item["identity_status"] == "linked"
+                and item["match_id"] is not None
+                and item["match_id"] != official_match_id
+                for item in verified
+            ):
+                raise ValueError("linked_slot_official_match_id_conflict")
+            if (
+                official_league != names["league_name"]
+                or official_home != names["home_team_name"]
+                or official_away != names["away_team_name"]
+                or official_kickoff_date != date.fromisoformat(event_signature["kickoff_date"])
+                or (official_full_home, official_full_away) != tuple(event_signature["full_score"])
+                or (official_half_home, official_half_away) != tuple(event_signature["half_score"])
+            ):
+                raise ValueError("official_match_facts_mismatch")
+            for item in verified:
+                if item["identity_status"] != "linked" or item["match_id"] is not None:
+                    continue
+                canonical_fixture_id = _canonical_fixture_id(cur, item["fixture_id"])
+                cur.execute(
+                    """SELECT om.id FROM football_fixture_source_links l
+                       JOIN official_matches om ON om.source_match_id=l.source_match_id
+                       WHERE l.fixture_id=%s AND l.source_name='sporttery'
+                         AND l.id_system='jc.matchId'""",
+                    (canonical_fixture_id,),
+                )
+                existing_official_ids = {row[0] for row in cur.fetchall()}
+                if existing_official_ids != {official_match_id}:
+                    raise ValueError("linked_slot_official_match_id_conflict")
         cur.execute(
             """SELECT DISTINCT fixture_id FROM football_pool_issue_matches
                WHERE identity_status='linked' AND league_name=%s AND home_team_name=%s
@@ -790,6 +945,8 @@ def _link_traditional_issue_slot_group(conn, slots: list[dict[str, Any]]) -> dic
             )
             for item in verified
         ]
+        if direct_sporttery_match_id is not None:
+            keys.append(("sporttery", "jc.matchId", direct_sporttery_match_id))
         existing_links = 0
         for source_name, id_system, source_match_id in keys:
             cur.execute(
@@ -809,8 +966,15 @@ def _link_traditional_issue_slot_group(conn, slots: list[dict[str, Any]]) -> dic
         evidence = {
             **names,
             "event_signature": event_signature,
-            "method": "verified_traditional_issue_slots",
+            "method": (
+                "verified_traditional_issue_slot_direct_match_id"
+                if direct_sporttery_match_id is not None
+                else "verified_traditional_issue_slots"
+            ),
             "source": "sporttery_history_api",
+            "sporttery_match_id": direct_sporttery_match_id,
+            "source_row_sha256": expected_source_row_sha256,
+            "manifest_sha256": expected_manifest_sha256,
             "slots": [
                 {
                     "game_type": item["game_type"],
@@ -826,7 +990,7 @@ def _link_traditional_issue_slot_group(conn, slots: list[dict[str, Any]]) -> dic
                 for item in verified
             ],
             "cancelled_jc_ids_linked": False,
-            "official_match_id": None,
+            "official_match_id": official_match_id,
             "season_membership": None,
         }
         binding = _bind_fixture(
@@ -835,7 +999,7 @@ def _link_traditional_issue_slot_group(conn, slots: list[dict[str, Any]]) -> dic
             names,
             exact,
             evidence,
-            None,
+            official_match_id,
         )
         if binding["identity_status"] != "linked":
             raise ValueError(binding["evidence"].get("reason", "traditional_slot_binding_conflict"))
@@ -848,9 +1012,15 @@ def _link_traditional_issue_slot_group(conn, slots: list[dict[str, Any]]) -> dic
                 continue
             cur.execute(
                 """UPDATE football_pool_issue_matches
-                   SET fixture_id=%s,identity_status='linked',identity_evidence=%s
-                   WHERE id=%s AND identity_status='pending' AND fixture_id IS NULL""",
-                (binding["fixture_id"], Json(evidence), item["membership_id"]),
+                   SET fixture_id=%s,match_id=%s,identity_status='linked',identity_evidence=%s
+                   WHERE id=%s AND identity_status='pending' AND fixture_id IS NULL
+                     AND match_id IS NULL""",
+                (
+                    binding["fixture_id"],
+                    official_match_id,
+                    Json(evidence),
+                    item["membership_id"],
+                ),
             )
             if cur.rowcount != 1:
                 raise ValueError("traditional_slot_changed_during_link")
@@ -858,6 +1028,7 @@ def _link_traditional_issue_slot_group(conn, slots: list[dict[str, Any]]) -> dic
 
         return {
             "fixture_id": binding["fixture_id"],
+            "official_match_id": binding["official_match_id"],
             "identity_status": "linked",
             "inserted_fixture": not exact,
             "inserted_source_links": len(keys) - existing_links,
