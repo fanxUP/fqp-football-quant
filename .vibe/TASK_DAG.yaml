@@ -7,7 +7,7 @@
       "acceptance_id": "A137-TITAN-RESULT-FACT-IMPORT",
       "depends_on": [],
       "kind": "bounded_append_only_data_import",
-      "status": "IN_PROGRESS",
+      "status": "DONE",
       "files": [
         "scripts/titan007_result_facts.py",
         "tests/test_scripts/test_titan007_result_facts.py",

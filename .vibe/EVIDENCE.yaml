@@ -3,8 +3,8 @@
   "current_task": "P137-TITAN-RESULT-FACT-IMPORT",
   "acceptance": {
     "A137-TITAN-RESULT-FACT-IMPORT": {
-      "status": "IN_PROGRESS",
-      "local_regression": "71 passed, 0 skipped, against isolated PostgreSQL 16; Ruff check and format (665 files), full Mypy (345 files), scope, budget, and git diff --check passed",
+      "status": "PASS",
+      "local_regression": "71 passed, 0 skipped, against isolated PostgreSQL 16; Ruff lint and format (665 files), full Mypy (345 files), scope, budget, and git diff --check passed",
       "source_readonly_scan": {
         "requested_match_ids": 1085,
         "found": 1085,
@@ -22,9 +22,37 @@
           "history_batch_evidence_missing": 5
         },
         "applied": false,
-        "script_sha256": "5d2e22caabf038354f4170bd9f89fd05aeb4c1e6f56c60913e7aff026b9095e2",
+        "script_sha256": "fdd457664ff3e54cdaf34c3ce9483b2aa452f55b1ffa47c224a065f6d5ba5832",
         "report_sha256": "9ebaf0c89907d5cac67ccb5df0c0700f8b7d1f65a5303d0747dd7b058b426f52",
-        "fresh_preview_required_after_server_sync": true
+        "report_path": "/tmp/fqp-p137-preview-bc14daa.json",
+        "fresh_preview_required_after_server_sync": false
+      },
+      "production_apply": {
+        "input_rows": 1085,
+        "inserted": 1080,
+        "rejected": 5,
+        "rejection_reasons": {
+          "history_batch_evidence_missing": 5
+        },
+        "applied": true,
+        "report_path": "/tmp/fqp-p137-apply-bc14daa.json",
+        "report_sha256": "c86fe4f1f2b278b69d32902ad8938a5dddd3d22cbf19810ef5303ec4b1a1ab83"
+      },
+      "production_readback": {
+        "result_fact_rows": 1080,
+        "unique_titan_ids": 1080,
+        "model_eligible_rows": 1080,
+        "inserted_ids_found": 1080,
+        "excluded_ids_found": 0,
+        "official_result_rows": 4000,
+        "traditional_pool_member_rows": 39552,
+        "health_http": 200,
+        "ready_http": 200,
+        "services_active": [
+          "fqp-backend.service",
+          "fqp-scheduler.service",
+          "fqp-worker.service"
+        ]
       }
     }
   },
@@ -43,17 +71,18 @@
   "quality_gate": {
     "status": "NOT_READY",
     "failures": [
-      "GitHub main CI pending",
-      "eligible production import and post-write integrity check pending"
+      "final acceptance evidence commit and exact-head CI pending"
     ]
   },
   "production": {
-    "status": "PREVIEW_ONLY",
-    "business_data_writes": 0,
+    "status": "APPLIED_AND_READBACK_VERIFIED",
+    "business_data_writes": 1080,
     "result_fact_rows_before": 0,
-    "result_fact_rows_after_preview": 0,
+    "result_fact_rows_after": 1080,
     "official_result_rows_before": 4000,
+    "official_result_rows_after": 4000,
     "traditional_pool_member_rows_before": 39552,
+    "traditional_pool_member_rows_after": 39552,
     "backups_created": 0
   },
   "security": {
@@ -65,8 +94,15 @@
     "database_migrations": 0
   },
   "external_ci": {
-    "status": "PENDING",
+    "status": "passed",
+    "checks": {
+      "lint-and-typecheck": "passed",
+      "test": "passed"
+    },
+    "run_id": 41593089049,
+    "head_sha": "bc14daa8de4b78cacb33e9c29a23c98681c18e17",
     "local_code_sha256": "fdd457664ff3e54cdaf34c3ce9483b2aa452f55b1ffa47c224a065f6d5ba5832",
-    "production_preview_report": "/tmp/fqp-p137-preview-final-v7.json"
+    "production_preview_report": "/tmp/fqp-p137-preview-bc14daa.json",
+    "production_apply_report": "/tmp/fqp-p137-apply-bc14daa.json"
   }
 }

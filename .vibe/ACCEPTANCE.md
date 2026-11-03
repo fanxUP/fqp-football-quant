@@ -9,3 +9,10 @@
 - 隔离 PostgreSQL 回归验证 append-only、权限边界、重放、失败回滚、autocommit 拒绝；固定样本覆盖官方原始载荷语义。SQLite 只读导出防止覆盖源库且原子落包，本地扫描和生产预检保留摘要及拒绝原因。
 - 生产首批导入后结果表数量与 manifest 一致，所有插入行的来源链接、official result、原始记录摘要可追溯；`official_results` 与传统足彩结算列的行数/摘要保持不变。
 - 主线 CI、独立代码/安全审查、V4 scope/budget 与部署后 health/smoke 通过。
+
+## 2026-11-03 验收结果
+
+- P137 完成：固定样本与隔离 PostgreSQL **71/71 通过、0 跳过**；GitHub CI `41593089049` 的 lint/typecheck 与 test 均通过；独立审查及安全审查通过。
+- 生产只读预览 1,085 条中 1,080 条合格；5 条缺少历史批次证据并排除。随后在同一事务中追加 1,080 条，读回全部 1,080 条，均为 model-eligible；排除的 5 个 ID 均未写入。
+- `official_results` 维持 4,000 行，`football_pool_issue_matches` 维持 39,552 行；没有建备份，没有重启服务。
+- 本批结果和 SHA 摘要见 `/Volumes/Nas/FQP/plans/local-football-data-integration-20261029/P137-RESULT-FACT-IMPORT-20261103.md`。本结论不等于五赛季覆盖完整或模型效果提升。
