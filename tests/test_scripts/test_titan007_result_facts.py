@@ -57,7 +57,7 @@ def _raw_row(
         "result_confirmed_at": "2026-11-22T22:00:00",
         "source_published_at": None,
         "raw": (
-            '<tr><td>英超</td><td>'
+            "<tr><td>英超</td><td>"
             f"{date_text}"
             f"</td><td class='style1'>{status}</td>"
             f"<td align='right'>{raw_home}</td>"
@@ -298,7 +298,11 @@ def test_build_titan_result_fact_supports_flat_official_capture_format():
         ({}, {"official_match_id": 9877}, "official_match_identity_mismatch"),
         ({}, {"home_team_name": "曼城"}, "linked_home_team_mismatch"),
         ({}, {"history_content_sha256": "bad"}, "history_batch_evidence_invalid"),
-        ({}, {"history_batch_id": None, "history_content_sha256": None}, "history_batch_evidence_missing"),
+        (
+            {},
+            {"history_batch_id": None, "history_content_sha256": None},
+            "history_batch_evidence_missing",
+        ),
         ({"official_result_raw": None}, {}, "official_result_semantics_missing"),
         (
             {
@@ -454,9 +458,7 @@ def test_apply_cli_requires_explicit_production_target_before_opening_package(mo
     ("user", "database", "is_superuser"),
     [("admin", "fqp", False), ("fqp", "other", False), ("fqp", "fqp", True)],
 )
-def test_apply_cli_rejects_wrong_runtime_role(
-    monkeypatch, tmp_path, user, database, is_superuser
-):
+def test_apply_cli_rejects_wrong_runtime_role(monkeypatch, tmp_path, user, database, is_superuser):
     class Cursor:
         def __enter__(self):
             return self
@@ -480,7 +482,9 @@ def test_apply_cli_rejects_wrong_runtime_role(
             self.closed = True
 
     connection = Connection()
-    monkeypatch.setattr("scripts.titan007_result_facts.psycopg2.connect", lambda *_args, **_kwargs: connection)
+    monkeypatch.setattr(
+        "scripts.titan007_result_facts.psycopg2.connect", lambda *_args, **_kwargs: connection
+    )
     monkeypatch.setenv("DATABASE_URL", "postgresql://unit-test.invalid/fqp")
     monkeypatch.setenv("FQP_RESULT_FACT_IMPORT_TARGET", "production")
     package = tmp_path / "empty.json"

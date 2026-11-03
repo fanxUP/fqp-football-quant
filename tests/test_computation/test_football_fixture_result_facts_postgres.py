@@ -393,7 +393,7 @@ def _titan_source_row(*, match_id="123456", full=(2, 1), half=(1, 0)):
             '<td align="right">阿森纳</td>'
             f'<td onclick="showgoallist({match_id})"><font>{full[0]}</font>-'
             f'<font>{full[1]}</font></td><td align="left">切尔西</td>'
-            f'<td><font>{half[0]}</font>-<font>{half[1]}</font></td></tr>'
+            f"<td><font>{half[0]}</font>-<font>{half[1]}</font></td></tr>"
         ),
     }
 
@@ -510,9 +510,9 @@ def test_titan_import_preview_apply_and_replay_only_append_result_facts(result_r
         "SELECT match_status,score_basis,score_period,full_home_goals,full_away_goals,model_eligible "
         "FROM football_fixture_result_facts",
     ) == [("completed", "on_field", "regulation", 2, 1, True)]
-    assert _rows(conn, "SELECT result_status,full_home_goals,full_away_goals FROM official_results") == [
-        ("confirmed", 2, 1)
-    ]
+    assert _rows(
+        conn, "SELECT result_status,full_home_goals,full_away_goals FROM official_results"
+    ) == [("confirmed", 2, 1)]
     conn.commit()
 
     with conn:
@@ -558,9 +558,7 @@ def test_titan_import_rejects_official_score_conflict_without_writing(result_rea
     assert _rows(conn, "SELECT count(*) FROM football_fixture_result_facts") == [(0,)]
 
 
-def test_titan_import_rolls_back_the_whole_transaction_on_insert_failure(
-    result_ready, monkeypatch
-):
+def test_titan_import_rolls_back_the_whole_transaction_on_insert_failure(result_ready, monkeypatch):
     import scripts.titan007_result_facts as importer
 
     conn = result_ready

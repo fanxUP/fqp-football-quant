@@ -129,7 +129,9 @@ def _kickoff_parts(value: Any) -> tuple[date, str] | None:
     return parsed.date(), parsed.strftime("%H:%M")
 
 
-def _check_raw_date(text: str, actual_date: date, normalized_kickoff: tuple[date, str] | None) -> None:
+def _check_raw_date(
+    text: str, actual_date: date, normalized_kickoff: tuple[date, str] | None
+) -> None:
     cleaned = _plain_text([text])
     full = _FULL_DATE_RE.search(cleaned)
     if full and (full.group("month") or full.group("year")):
@@ -323,7 +325,9 @@ def _as_local_date(value: Any, reason: str) -> date:
     raise ValueError(reason)
 
 
-def _lottery_link_matches(link_evidence: Mapping[str, Any], official_result: Mapping[str, Any]) -> bool:
+def _lottery_link_matches(
+    link_evidence: Mapping[str, Any], official_result: Mapping[str, Any]
+) -> bool:
     lottery_links = link_evidence.get("lottery_links")
     sporttery_match_id = str(official_result.get("sporttery_match_id") or "")
     if not isinstance(lottery_links, list) or not sporttery_match_id:
@@ -344,8 +348,10 @@ def _lottery_link_matches(link_evidence: Mapping[str, Any], official_result: Map
         if (
             _comparison_name(official_result.get("official_home_team_name"))
             and _comparison_name(official_result.get("official_away_team_name"))
-            and _comparison_name(official_result.get("official_home_team_name")) in official_home_names
-            and _comparison_name(official_result.get("official_away_team_name")) in official_away_names
+            and _comparison_name(official_result.get("official_home_team_name"))
+            in official_home_names
+            and _comparison_name(official_result.get("official_away_team_name"))
+            in official_away_names
         ):
             return True
     return False
@@ -458,7 +464,9 @@ def build_titan_result_fact(
     if not isinstance(official_result, Mapping) or not isinstance(link_evidence, Mapping):
         raise ValueError("verified_identity_evidence_missing")
     source_match_id = _id_text(parsed.get("source_match_id"), "source_match_id")
-    official_match_id = _as_int(link_evidence.get("official_match_id"), "official_match_identity_mismatch")
+    official_match_id = _as_int(
+        link_evidence.get("official_match_id"), "official_match_identity_mismatch"
+    )
     if official_result.get("official_match_id") != official_match_id:
         raise ValueError("official_match_identity_mismatch")
 
@@ -532,9 +540,15 @@ def build_titan_result_fact(
         or official_result.get("half_away_goals") != parsed.get("half_score", (None, None))[1]
     ):
         raise ValueError("official_half_score_mismatch")
-    if official_result.get("half_home_goals") is None or official_result.get("half_away_goals") is None:
+    if (
+        official_result.get("half_home_goals") is None
+        or official_result.get("half_away_goals") is None
+    ):
         raise ValueError("official_half_score_missing")
-    if official_result.get("full_home_goals") is None or official_result.get("full_away_goals") is None:
+    if (
+        official_result.get("full_home_goals") is None
+        or official_result.get("full_away_goals") is None
+    ):
         raise ValueError("official_full_score_missing")
     semantics = _official_score_semantics(official_result)
 
@@ -675,7 +689,9 @@ def import_titan_result_rows(
         try:
             parsed = parse_titan_result_row(row)
         except ValueError as exc:
-            decisions.append({"source_match_id": source_id, "status": "rejected", "reason": str(exc)})
+            decisions.append(
+                {"source_match_id": source_id, "status": "rejected", "reason": str(exc)}
+            )
             continue
         seen[parsed["source_match_id"]] += 1
         parsed_rows.append((parsed, row))
@@ -688,12 +704,22 @@ def import_titan_result_rows(
         source_id = parsed["source_match_id"]
         if source_id in duplicated:
             decisions.append(
-                {"source_match_id": source_id, "status": "rejected", "reason": "duplicate_source_record_in_package"}
+                {
+                    "source_match_id": source_id,
+                    "status": "rejected",
+                    "reason": "duplicate_source_record_in_package",
+                }
             )
             continue
         context = contexts.get(source_id)
         if context is None:
-            decisions.append({"source_match_id": source_id, "status": "rejected", "reason": "titan_source_link_missing"})
+            decisions.append(
+                {
+                    "source_match_id": source_id,
+                    "status": "rejected",
+                    "reason": "titan_source_link_missing",
+                }
+            )
             continue
         try:
             fact = build_titan_result_fact(
@@ -703,7 +729,9 @@ def import_titan_result_rows(
                 link_evidence=context["evidence"],
             )
         except (KeyError, TypeError, ValueError) as exc:
-            reason = str(exc) if isinstance(exc, ValueError) else "verified_identity_evidence_invalid"
+            reason = (
+                str(exc) if isinstance(exc, ValueError) else "verified_identity_evidence_invalid"
+            )
             decisions.append({"source_match_id": source_id, "status": "rejected", "reason": reason})
             continue
         accepted.append((fact, row))
@@ -713,7 +741,9 @@ def import_titan_result_rows(
         eligible_ids = sorted(fact["source_match_id"] for fact, _ in accepted)
         locked_contexts = _database_context_for_apply(conn, eligible_ids)
         if set(locked_contexts) != set(eligible_ids):
-            raise RuntimeError("verified source identity changed during import; transaction rolled back")
+            raise RuntimeError(
+                "verified source identity changed during import; transaction rolled back"
+            )
         eligible_id_set = set(eligible_ids)
         source_rows = {
             parsed["source_match_id"]: row
@@ -721,9 +751,7 @@ def import_titan_result_rows(
             if parsed["source_match_id"] in eligible_id_set
         }
         decisions_by_id = {
-            item["source_match_id"]: item
-            for item in decisions
-            if item["status"] == "eligible"
+            item["source_match_id"]: item for item in decisions if item["status"] == "eligible"
         }
         for fact, _ in accepted:
             source_id = fact["source_match_id"]
@@ -736,7 +764,9 @@ def import_titan_result_rows(
                 link_evidence=locked["evidence"],
             )
             if _canonical_json(rechecked) != _canonical_json(fact):
-                raise RuntimeError("verified source facts changed during import; transaction rolled back")
+                raise RuntimeError(
+                    "verified source facts changed during import; transaction rolled back"
+                )
             stored = store_result_fact(conn, fact)
             decision = decisions_by_id[source_id]
             decision.update(
@@ -751,11 +781,15 @@ def import_titan_result_rows(
         "input_rows": len(raw_rows),
         "counts": dict(sorted(counts.items())),
         "rejection_reasons": dict(sorted(reasons.items())),
-        "decisions": sorted(decisions, key=lambda item: (item.get("source_match_id") or "", item["status"])),
+        "decisions": sorted(
+            decisions, key=lambda item: (item.get("source_match_id") or "", item["status"])
+        ),
     }
 
 
-def _database_context_for_apply(conn: Any, source_match_ids: list[str]) -> dict[str, dict[str, Any]]:
+def _database_context_for_apply(
+    conn: Any, source_match_ids: list[str]
+) -> dict[str, dict[str, Any]]:
     """Re-read all evidence rows in the same serializable transaction."""
     if not source_match_ids:
         return {}
@@ -764,7 +798,9 @@ def _database_context_for_apply(conn: Any, source_match_ids: list[str]) -> dict[
         return {str(row["source_match_id"]): dict(row) for row in cur.fetchall()}
 
 
-def read_titan_result_rows(source_db: str | Path, source_match_ids: Iterable[str]) -> tuple[list[dict[str, Any]], list[str]]:
+def read_titan_result_rows(
+    source_db: str | Path, source_match_ids: Iterable[str]
+) -> tuple[list[dict[str, Any]], list[str]]:
     """Read requested rows from SQLite without creating or modifying the cache."""
     ids = sorted({_id_text(value, "source_match_id") for value in source_match_ids})
     if not ids:
@@ -871,7 +907,9 @@ def _build_parser() -> argparse.ArgumentParser:
     commands = parser.add_subparsers(dest="command", required=True)
     export = commands.add_parser("export", help="export only explicitly named Titan match rows")
     export.add_argument("--source-db", required=True)
-    export.add_argument("--match-ids", required=True, help="UTF-8 text file, one positive MatchId per line")
+    export.add_argument(
+        "--match-ids", required=True, help="UTF-8 text file, one positive MatchId per line"
+    )
     export.add_argument("--output", required=True)
     importer = commands.add_parser("import", help="preview or append a verified package")
     importer.add_argument("--input", required=True)
@@ -883,14 +921,20 @@ def _build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
     if args.command == "export":
-        ids = [line.strip() for line in Path(args.match_ids).read_text(encoding="utf-8").splitlines() if line.strip()]
+        ids = [
+            line.strip()
+            for line in Path(args.match_ids).read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
         destination = _export_destination(args.source_db, args.output)
         records, missing = read_titan_result_rows(args.source_db, ids)
         package = {
             "contract": PACKAGE_CONTRACT,
             "source_database": Path(args.source_db).name,
             "source_table": "matches",
-            "requested_ids_sha256": _sha256(sorted({_id_text(value, "source_match_id") for value in ids})),
+            "requested_ids_sha256": _sha256(
+                sorted({_id_text(value, "source_match_id") for value in ids})
+            ),
             "requested_count": len(set(ids)),
             "record_count": len(records),
             "missing_source_ids": missing,
@@ -902,11 +946,23 @@ def main(argv: list[str] | None = None) -> int:
             output,
             compressed=args.output.endswith(".gz"),
         )
-        print(json.dumps({"requested": len(set(ids)), "exported": len(records), "missing": len(missing), "output": args.output}, ensure_ascii=False))
+        print(
+            json.dumps(
+                {
+                    "requested": len(set(ids)),
+                    "exported": len(records),
+                    "missing": len(missing),
+                    "output": args.output,
+                },
+                ensure_ascii=False,
+            )
+        )
         return 0
 
     if args.apply_production and os.environ.get("FQP_RESULT_FACT_IMPORT_TARGET") != "production":
-        raise SystemExit("BLOCKED: set FQP_RESULT_FACT_IMPORT_TARGET=production for an explicit production write")
+        raise SystemExit(
+            "BLOCKED: set FQP_RESULT_FACT_IMPORT_TARGET=production for an explicit production write"
+        )
     dsn = os.environ.get("DATABASE_URL", "").strip()
     if not dsn:
         raise SystemExit("BLOCKED: DATABASE_URL is required; credentials are never printed")
@@ -919,7 +975,9 @@ def main(argv: list[str] | None = None) -> int:
             )
             user, database, is_superuser = cur.fetchone()
         if user != "fqp" or database != "fqp" or is_superuser:
-            raise SystemExit("BLOCKED: result import requires the non-superuser fqp role in the fqp database")
+            raise SystemExit(
+                "BLOCKED: result import requires the non-superuser fqp role in the fqp database"
+            )
         conn.commit()
         with conn:
             report = import_titan_result_rows(conn, package["records"], apply=args.apply_production)

@@ -4,7 +4,7 @@
   "acceptance": {
     "A137-TITAN-RESULT-FACT-IMPORT": {
       "status": "IN_PROGRESS",
-      "local_regression": "70 passed in isolated PostgreSQL; Ruff passed; git diff --check passed",
+      "local_regression": "70 passed, 0 skipped, against isolated PostgreSQL 16; Ruff check and format (665 files) passed; scope, budget, and git diff --check passed",
       "source_readonly_scan": {
         "requested_match_ids": 1085,
         "found": 1085,
@@ -30,7 +30,9 @@
   "reviews": {
     "status": "PASS",
     "application_code": {
-      "status": "PASS"
+      "status": "PASS",
+      "source_sha256": "e9279f940ecd201eb939a5e153be690105610189eb3f4d834080b9aa5a2a337b",
+      "note": "Independent reviewer confirmed the CI format fix is semantics-preserving Ruff formatting only."
     },
     "v4_migration": {
       "status": "PASS",
@@ -63,7 +65,7 @@
   },
   "external_ci": {
     "status": "PENDING",
-    "local_code_sha256": "5d2e22caabf038354f4170bd9f89fd05aeb4c1e6f56c60913e7aff026b9095e2",
+    "local_code_sha256": "e9279f940ecd201eb939a5e153be690105610189eb3f4d834080b9aa5a2a337b",
     "production_preview_report": "/tmp/fqp-p137-preview-final-v7.json"
   }
 }
