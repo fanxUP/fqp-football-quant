@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import os
 import subprocess
 import sys
 from datetime import UTC, datetime
@@ -21,12 +22,57 @@ MIGRATION_126 = ["126_official_season_retention_access.sql"]
 MIGRATION_128 = ["128_traditional_history_facts.sql"]
 MIGRATION_129 = ["129_football_fixture_identity_aliases.sql"]
 MIGRATION_130 = ["130_football_fixture_result_facts.sql"]
+MIGRATION_131 = ["131_prediction_statistics_rollup.sql"]
+
+
+@pytest.fixture(scope="session")
+def migration_131_test_signing_key(tmp_path_factory):
+    key_path = tmp_path_factory.mktemp("migration-131-signer") / "id_ed25519"
+    subprocess.run(
+        [str(policy.TRUSTED_SSH_KEYGEN), "-q", "-t", "ed25519", "-N", "", "-f", str(key_path)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return key_path
+
+
+@pytest.fixture
+def trusted_migration_131_signer(monkeypatch, migration_131_test_signing_key):
+    monkeypatch.setattr(
+        policy,
+        "TRUSTED_NO_BACKUP_SIGNER_PUBLIC_KEY",
+        Path(f"{migration_131_test_signing_key}.pub"),
+    )
+    return migration_131_test_signing_key
 
 
 def _write_report(directory: Path, report: dict) -> str:
     path = directory / "no-backup-migration-rehearsal.json"
     path.write_text(json.dumps(report, sort_keys=True) + "\n")
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _write_signed_report(directory: Path, report: dict, signing_key: Path) -> str:
+    digest = _write_report(directory, report)
+    report_path = directory / "no-backup-migration-rehearsal.json"
+    Path(f"{report_path}.sig").unlink(missing_ok=True)
+    subprocess.run(
+        [
+            str(policy.TRUSTED_SSH_KEYGEN),
+            "-Y",
+            "sign",
+            "-f",
+            str(signing_key),
+            "-n",
+            policy.NO_BACKUP_SIGNING_NAMESPACE,
+            str(report_path),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return digest
 
 
 def rehearsal_record(directory: Path, pending=None) -> dict:
@@ -586,6 +632,315 @@ def result_fact_rehearsal_record(directory: Path) -> dict:
             "evidence_sha256": digest,
         },
     }
+
+
+def prediction_statistics_rehearsal_record(directory: Path, signing_key: Path) -> dict:
+    checksums = {
+        MIGRATION_131[0]: ("a98300da5bfa7ec8b1e1c21cabec83ec580a4346cb6e6835707d831706c55b1f")
+    }
+    report = {
+        "status": "passed",
+        "target_sha": TARGET_SHA,
+        "pending_migrations": MIGRATION_131,
+        "migration_sha256": checksums,
+        "down_migration_sha256": {
+            "131_prediction_statistics_rollup.down.sql": (
+                "2b99a556dccf22e7ae181cd9a8bb9232385338483f3bf91180839e6a0329e4c3"
+            )
+        },
+        "verified_at": datetime.now(UTC).isoformat(),
+        "database": {
+            "disposable": True,
+            "postgres_major": 16,
+            "fixture_kind": "targeted_production_schema_data_copy",
+            "production_data_copy": True,
+            "production_copy_at": datetime.now(UTC).isoformat(),
+            "schema_sha256": "a" * 64,
+            "source_revision": "4a7a37aa57b885cc3ae332731b6a6e273dd49bff",
+            "tables": {
+                "official_matches": {
+                    "source_rows": 4050,
+                    "copied_rows": 4050,
+                    "copy_mode": "full",
+                },
+                "model_predictions": {
+                    "source_rows_estimate": 15577300,
+                    "copied_rows": 100,
+                    "copy_mode": "indexed_match_sample",
+                    "sample_match_ids": [101, 102],
+                },
+                "model_prediction_groups": {
+                    "source_rows_estimate": 186979,
+                    "copied_rows": 20,
+                    "copy_mode": "matched_sample",
+                    "sample_match_ids": [101, 102],
+                },
+                "model_prediction_group_options": {
+                    "source_rows_estimate": 1225921,
+                    "copied_rows": 40,
+                    "copy_mode": "matched_sample",
+                    "sample_match_ids": [101, 102],
+                },
+                "model_prediction_runs": {
+                    "source_rows": 485,
+                    "copied_rows": 485,
+                    "copy_mode": "full",
+                },
+                "model_versions": {
+                    "source_rows": 66,
+                    "copied_rows": 66,
+                    "copy_mode": "full",
+                },
+            },
+        },
+        "existing_rows_preserved": "passed",
+        "constraints_and_triggers_verified": "passed",
+        "transaction_rollback_verified": "passed",
+        "source_trigger_invalidation": "passed",
+        "dirty_queue_seed_matches": 4050,
+        "migration_up_seconds": 3.2,
+        "migration_down_seconds": 0.4,
+        "migration_lock_wait_ms": 4,
+        "batch_refresh_seconds": 1.2,
+        "batch_refresh_rows_read": 870,
+        "timeouts": {"lock_seconds": 2, "statement_seconds": 30},
+        "test_results": {"passed": 1, "failed": 0, "skipped": 0},
+        "application_role": {
+            "name": "fqp",
+            "superuser": False,
+            "owns_rollup_tables": False,
+        },
+        "application_role_acl": "passed",
+        "runtime_trigger_write_and_read": "passed",
+        "down_migration_source_preservation": "passed",
+        "down_migration_reapplication": "passed",
+    }
+    digest = _write_signed_report(directory, report, signing_key)
+    return {
+        "target_sha": TARGET_SHA,
+        "migration_copy_dry_run": "passed",
+        "migration_transaction_dry_run": "passed",
+        "no_backup_authorized": True,
+        "no_backup_reason": (
+            "Explicit operator preference; migration 131 is limited to rebuildable "
+            "derived statistics and is rehearsed against a targeted current production copy."
+        ),
+        "no_backup_migration_rehearsal": {
+            "status": "passed",
+            "pending_migrations": MIGRATION_131,
+            "sha256": checksums,
+            "report_path": "no-backup-migration-rehearsal.json",
+            "evidence_sha256": digest,
+        },
+    }
+
+
+def _update_signed_rehearsal(tmp_path: Path, record: dict, report: dict, signing_key: Path) -> dict:
+    record["no_backup_migration_rehearsal"]["evidence_sha256"] = _write_signed_report(
+        tmp_path, report, signing_key
+    )
+    return record
+
+
+def test_no_backup_allows_only_pinned_131_with_targeted_production_copy(
+    tmp_path, trusted_migration_131_signer
+):
+    validate(
+        prediction_statistics_rehearsal_record(tmp_path, trusted_migration_131_signer),
+        MIGRATION_131,
+        evidence_directory=tmp_path,
+    )
+
+
+def test_no_backup_131_signature_verification_ignores_path_ssh_keygen(
+    tmp_path, monkeypatch, trusted_migration_131_signer
+):
+    record = prediction_statistics_rehearsal_record(tmp_path, trusted_migration_131_signer)
+    marker = tmp_path / "path-ssh-keygen-was-used"
+    fake_ssh_keygen = tmp_path / "ssh-keygen"
+    fake_ssh_keygen.write_text(f"#!/bin/sh\ntouch '{marker}'\nexit 1\n")
+    fake_ssh_keygen.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{tmp_path}{os.pathsep}{os.environ.get('PATH', '')}")
+
+    validate(record, MIGRATION_131, evidence_directory=tmp_path)
+
+    assert not marker.exists()
+
+
+def test_no_backup_131_rejects_unsigned_rehearsal_report(tmp_path, trusted_migration_131_signer):
+    record = prediction_statistics_rehearsal_record(tmp_path, trusted_migration_131_signer)
+    Path(f"{tmp_path / 'no-backup-migration-rehearsal.json'}.sig").unlink()
+    with pytest.raises(SystemExit, match="signed report"):
+        validate(record, MIGRATION_131, evidence_directory=tmp_path)
+
+
+def test_no_backup_131_rejects_tampered_rehearsal_signature(tmp_path, trusted_migration_131_signer):
+    record = prediction_statistics_rehearsal_record(tmp_path, trusted_migration_131_signer)
+    Path(f"{tmp_path / 'no-backup-migration-rehearsal.json'}.sig").write_text("invalid")
+    with pytest.raises(SystemExit, match="signature is invalid"):
+        validate(record, MIGRATION_131, evidence_directory=tmp_path)
+
+
+def test_no_backup_131_rejects_mixed_migration_sets(tmp_path, trusted_migration_131_signer):
+    record = prediction_statistics_rehearsal_record(tmp_path, trusted_migration_131_signer)
+    with pytest.raises(SystemExit, match="restricted|reviewed"):
+        validate(record, [*MIGRATION_130, *MIGRATION_131], evidence_directory=tmp_path)
+
+
+def test_no_backup_131_rejects_synthetic_only_rehearsal(tmp_path, trusted_migration_131_signer):
+    record = prediction_statistics_rehearsal_record(tmp_path, trusted_migration_131_signer)
+    report_path = tmp_path / record["no_backup_migration_rehearsal"]["report_path"]
+    report = json.loads(report_path.read_text())
+    report["database"]["fixture_kind"] = "synthetic_schema_fixture"
+    report["database"]["production_data_copy"] = False
+    record = _update_signed_rehearsal(tmp_path, record, report, trusted_migration_131_signer)
+    with pytest.raises(SystemExit, match="fixture and production-copy scope"):
+        validate(record, MIGRATION_131, evidence_directory=tmp_path)
+
+
+def test_no_backup_131_requires_every_migration_source_table(
+    tmp_path, trusted_migration_131_signer
+):
+    record = prediction_statistics_rehearsal_record(tmp_path, trusted_migration_131_signer)
+    report_path = tmp_path / record["no_backup_migration_rehearsal"]["report_path"]
+    report = json.loads(report_path.read_text())
+    del report["database"]["tables"]["model_prediction_group_options"]
+    record = _update_signed_rehearsal(tmp_path, record, report, trusted_migration_131_signer)
+    with pytest.raises(SystemExit, match="missing a required production table copy"):
+        validate(record, MIGRATION_131, evidence_directory=tmp_path)
+
+
+def test_no_backup_131_bounds_indexed_production_sample_size(
+    tmp_path, trusted_migration_131_signer
+):
+    record = prediction_statistics_rehearsal_record(tmp_path, trusted_migration_131_signer)
+    report_path = tmp_path / record["no_backup_migration_rehearsal"]["report_path"]
+    report = json.loads(report_path.read_text())
+    report["database"]["tables"]["model_predictions"]["copied_rows"] = (
+        policy.MAX_PRODUCTION_SAMPLE_ROWS_PER_TABLE + 1
+    )
+    record = _update_signed_rehearsal(tmp_path, record, report, trusted_migration_131_signer)
+    with pytest.raises(SystemExit, match="indexed production prediction sample"):
+        validate(record, MIGRATION_131, evidence_directory=tmp_path)
+
+
+def test_no_backup_131_bounds_number_of_sample_matches(tmp_path, trusted_migration_131_signer):
+    record = prediction_statistics_rehearsal_record(tmp_path, trusted_migration_131_signer)
+    report_path = tmp_path / record["no_backup_migration_rehearsal"]["report_path"]
+    report = json.loads(report_path.read_text())
+    match_ids = list(range(1, policy.MAX_PRODUCTION_SAMPLE_MATCHES + 2))
+    report["database"]["tables"]["model_predictions"]["sample_match_ids"] = match_ids
+    report["database"]["tables"]["model_prediction_groups"]["sample_match_ids"] = match_ids
+    report["database"]["tables"]["model_prediction_group_options"]["sample_match_ids"] = match_ids
+    record = _update_signed_rehearsal(tmp_path, record, report, trusted_migration_131_signer)
+    with pytest.raises(SystemExit, match="indexed production prediction sample"):
+        validate(record, MIGRATION_131, evidence_directory=tmp_path)
+
+
+def test_no_backup_131_requires_exact_official_match_copy_and_seed_count(
+    tmp_path, trusted_migration_131_signer
+):
+    record = prediction_statistics_rehearsal_record(tmp_path, trusted_migration_131_signer)
+    report_path = tmp_path / record["no_backup_migration_rehearsal"]["report_path"]
+    report = json.loads(report_path.read_text())
+    report["database"]["tables"]["official_matches"]["copied_rows"] -= 1
+    record = _update_signed_rehearsal(tmp_path, record, report, trusted_migration_131_signer)
+    with pytest.raises(SystemExit, match="complete official_matches copy"):
+        validate(record, MIGRATION_131, evidence_directory=tmp_path)
+
+
+def test_no_backup_131_requires_a_recent_production_copy(tmp_path, trusted_migration_131_signer):
+    record = prediction_statistics_rehearsal_record(tmp_path, trusted_migration_131_signer)
+    report_path = tmp_path / record["no_backup_migration_rehearsal"]["report_path"]
+    report = json.loads(report_path.read_text())
+    report["database"]["production_copy_at"] = "2020-01-01T00:00:00+00:00"
+    record = _update_signed_rehearsal(tmp_path, record, report, trusted_migration_131_signer)
+    with pytest.raises(SystemExit, match="last 24 hours"):
+        validate(record, MIGRATION_131, evidence_directory=tmp_path)
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("application_role_acl", "not_run"),
+        ("source_trigger_invalidation", "not_run"),
+        ("runtime_trigger_write_and_read", "not_run"),
+        ("down_migration_source_preservation", "not_run"),
+        ("down_migration_reapplication", "not_run"),
+        ("migration_up_seconds", -1),
+        ("migration_lock_wait_ms", True),
+        ("batch_refresh_rows_read", 0),
+        ("dirty_queue_seed_matches", 4049),
+        (
+            "down_migration_sha256",
+            {"131_prediction_statistics_rollup.down.sql": "0" * 64},
+        ),
+        (
+            "application_role",
+            {"name": "fqp", "superuser": True, "owns_rollup_tables": False},
+        ),
+        (
+            "application_role",
+            {"name": "fqp", "superuser": False, "owns_rollup_tables": True},
+        ),
+    ],
+)
+def test_no_backup_131_requires_runtime_and_rollback_proof(
+    tmp_path, field, value, trusted_migration_131_signer
+):
+    record = prediction_statistics_rehearsal_record(tmp_path, trusted_migration_131_signer)
+    report_path = tmp_path / record["no_backup_migration_rehearsal"]["report_path"]
+    report = json.loads(report_path.read_text())
+    report[field] = value
+    record = _update_signed_rehearsal(tmp_path, record, report, trusted_migration_131_signer)
+    with pytest.raises(SystemExit):
+        validate(record, MIGRATION_131, evidence_directory=tmp_path)
+
+
+def test_no_backup_131_rejects_up_migration_tampering(tmp_path, trusted_migration_131_signer):
+    (tmp_path / "sql").mkdir()
+    (tmp_path / "sql" / MIGRATION_131[0]).write_text("DROP TABLE model_predictions;")
+    with pytest.raises(SystemExit, match="checksum"):
+        validate(
+            prediction_statistics_rehearsal_record(tmp_path, trusted_migration_131_signer),
+            MIGRATION_131,
+            project_root=tmp_path,
+            evidence_directory=tmp_path,
+        )
+
+
+def test_no_backup_131_rejects_down_migration_tampering(tmp_path, trusted_migration_131_signer):
+    down_dir = tmp_path / "sql" / "down"
+    down_dir.mkdir(parents=True)
+    (tmp_path / "sql" / MIGRATION_131[0]).write_bytes(
+        (ROOT / "sql" / MIGRATION_131[0]).read_bytes()
+    )
+    (down_dir / "131_prediction_statistics_rollup.down.sql").write_text(
+        "DROP TABLE official_matches;"
+    )
+    with pytest.raises(SystemExit, match="checksum"):
+        validate(
+            prediction_statistics_rehearsal_record(tmp_path, trusted_migration_131_signer),
+            MIGRATION_131,
+            project_root=tmp_path,
+            evidence_directory=tmp_path,
+        )
+
+
+def test_no_backup_131_policy_file_accepts_signed_production_rehearsal(
+    tmp_path, trusted_migration_131_signer
+):
+    evidence_path = tmp_path / "release-evidence.json"
+    evidence_path.write_text(
+        json.dumps(prediction_statistics_rehearsal_record(tmp_path, trusted_migration_131_signer))
+    )
+    policy.validate_release_file(
+        evidence_path,
+        "--apply-no-backup",
+        MIGRATION_131,
+        TARGET_SHA,
+        project_root=ROOT,
+    )
 
 
 def test_no_backup_allows_only_pinned_130_with_result_fact_runtime_rehearsal(tmp_path):

@@ -12,7 +12,7 @@
   "last_transition": {
     "from": "VERIFYING",
     "to": "REVIEWING",
-    "at": "2026-11-04T00:00:56.740183+08:00",
-    "reason": "Independent aggregate review is recorded; continue exact-head CI and production-copy rehearsal."
+    "at": "2026-11-04T02:00:05.244386+08:00",
+    "reason": "Final independent review passed for the signed migration-131 gate. Full local candidate validation passed on the current 57-path tree, including the PATH-injection test; exact-head CI is the active next task. The production-copy rehearsal remains pending after the read-only attempt was stopped for storage I/O pressure."
   }
 }

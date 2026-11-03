@@ -1,6 +1,6 @@
 {
   "schema_version": 4,
-  "current_task": "P107-131-COPY-REHEARSAL",
+  "current_task": "P107-EXACT-HEAD-CI",
   "tasks": {
     "P107-LOCAL-CANDIDATE-VALIDATION": {
       "title": "Run current aggregate Python, PostgreSQL, frontend and static regressions",
@@ -22,11 +22,11 @@
         "P107-LOCAL-CANDIDATE-VALIDATION"
       ],
       "kind": "external_ci",
-      "status": "DONE",
+      "status": "IN_PROGRESS",
       "definition_of_done": [
-        "Only the 54 mapped P107/P138 paths and reviewed V4 control/evidence files are committed; uv.lock is not staged.",
+        "Only the 54 mapped P107/P138 paths, three scoped P107 release-gate paths, and reviewed V4 control/evidence files are committed; uv.lock is not staged.",
         "GitHub main push CI passes for the exact local HEAD.",
-        "Review, security and migration evidence are recorded for this candidate."
+        "Review, security, migration and no-backup policy evidence are recorded for this candidate, including the production-host signature requirement."
       ]
     },
     "P107-131-COPY-REHEARSAL": {
@@ -36,11 +36,11 @@
         "P107-EXACT-HEAD-CI"
       ],
       "kind": "production_data_copy_rehearsal",
-      "status": "IN_PROGRESS",
+      "status": "TODO",
       "definition_of_done": [
-        "Use an isolated current production schema/data copy; do not write production data during rehearsal.",
+        "Use an isolated current production schema copy with all official matches, runs and model versions plus indexed match-scoped prediction/group/option samples; do not full-dump unrelated large tables or write production data.",
         "Record existing source counts, queued match count, lock wait, batch duration and fqp grants.",
-        "Verify migration up/down behavior and recovery without destructive loss of source rows."
+        "Verify migration up/down behavior and recovery without destructive loss of source rows; abort production reads if storage pressure rises materially above baseline."
       ]
     },
     "P107-RELEASE-NATURAL-OBSERVATION": {

@@ -19,6 +19,8 @@
     "apps/frontend/src/features/model-research/ModelResearchPanel.tsx",
     "apps/frontend/src/pages/ModelsPage.test.tsx",
     "apps/frontend/src/pages/ModelsPage.tsx",
+    "ops/server/deploy.sh",
+    "ops/server/release_migration_policy.py",
     "scripts/derived_play_predictions.py",
     "scripts/feature_batch_storage.py",
     "scripts/feature_importance.py",
@@ -55,6 +57,7 @@
     "tests/test_scripts/test_model_performance.py",
     "tests/test_scripts/test_run_model_prediction.py",
     "tests/test_sql/test_dashboard_prediction_count.py",
+    "tests/test_local/test_release_migration_policy.py",
     "tests/test_upset/test_review_storage.py",
     "uv.lock"
   ],
@@ -62,7 +65,8 @@
     "apps/**",
     "scripts/**",
     "tests/**",
-    "sql/**"
+    "sql/**",
+    "ops/server/**"
   ],
   "approved_protected_paths": [
     "apps/backend/src/routers/predictions.py",
@@ -82,6 +86,8 @@
     "apps/frontend/src/features/model-research/ModelResearchPanel.tsx",
     "apps/frontend/src/pages/ModelsPage.test.tsx",
     "apps/frontend/src/pages/ModelsPage.tsx",
+    "ops/server/deploy.sh",
+    "ops/server/release_migration_policy.py",
     "scripts/derived_play_predictions.py",
     "scripts/feature_batch_storage.py",
     "scripts/feature_importance.py",
@@ -118,7 +124,8 @@
     "tests/test_scripts/test_model_performance.py",
     "tests/test_scripts/test_run_model_prediction.py",
     "tests/test_sql/test_dashboard_prediction_count.py",
+    "tests/test_local/test_release_migration_policy.py",
     "tests/test_upset/test_review_storage.py"
   ],
-  "notes": "The 54 mapped P107/P138 paths include three required regression files revealed by exact-head CI. The unowned uv.lock is preserved locally and explicitly ignored by the candidate scope; never modify or stage it."
+  "notes": "The 54 mapped P107/P138 paths include three required regression files revealed by exact-head CI. Three additional paths narrowly extend P107 scope to enforce the migration-131 no-backup release gate after a current targeted production schema/data-copy rehearsal. The unowned uv.lock is preserved locally and explicitly ignored by the candidate scope; never modify or stage it."
 }
