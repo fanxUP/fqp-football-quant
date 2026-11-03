@@ -48,10 +48,18 @@ def test_actionable_predictions_are_latest_per_match_model_play_and_option(mock_
     assert load_actionable_predictions(conn, recommendation.ALL_MODELS) == []
 
     query = " ".join(cur.execute.call_args.args[0].split())
+    assert "FROM model_prediction_latest_rows" not in query
+    assert "recommendation_matches AS MATERIALIZED" in query
+    assert "FROM recommendation_matches" in query
+    assert "FROM canonical_prediction_rows mp" in query
     assert "DISTINCT ON (" in query
     assert "mp.match_id, mp.model_version_id, mp.play_type, mp.option_code" in query
     assert "mp.predict_time < m.kickoff_time" in query
     assert "mp.validation_status = 'valid'" in query
+    assert "m.sale_status = 'selling'" in query
+    assert "m.sale_stop_time IS NOT NULL" in query
+    assert "m.sale_stop_time > timezone('Asia/Shanghai', statement_timestamp())" in query
+    assert "m.sale_stop_time IS NULL" not in query
     assert "model_independent" in query
     assert "m.kickoff_time > timezone('Asia/Shanghai', statement_timestamp())" in query
     assert "SELECT MAX(predict_time)" not in query

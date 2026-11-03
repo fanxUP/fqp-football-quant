@@ -1,18 +1,18 @@
 {
   "state": "REVIEWING",
-  "workflow_id": "P138-PREDICTION-ODDS-ASOF-CUTOFF",
+  "workflow_id": "P107-AGGREGATE-CANDIDATE-RELEASE-READINESS",
   "previous_workflow": {
-    "task_id": "P137-TITAN-RESULT-FACT-IMPORT",
+    "task_id": "P107-AGGREGATE-SCOPE-RECONCILIATION",
     "state": "DONE",
-    "archive": ".vibe/archive/workflow-p137-done-2026-11-03",
-    "archive_manifest_sha256": "0f673de3733226c51f364a67e4be7f8d38734995a9e74211340aa8cbd1fcf5e6"
+    "archive": ".vibe/archive/workflow-p107-aggregate-scope-reconciliation-2026-11-03",
+    "archive_manifest_sha256": "cfb735cddd7f4dc4431923acc1cf80363e57d0a6f0159f4b1d8727e46a53f8f6"
   },
   "blocked_reason": null,
   "mode": "STANDARD",
   "last_transition": {
     "from": "VERIFYING",
     "to": "REVIEWING",
-    "at": "2026-11-03T16:20:09.537271+08:00",
-    "reason": "P138 implementation is verified locally; final main CI and release readiness remain."
+    "at": "2026-11-04T00:00:56.740183+08:00",
+    "reason": "Independent aggregate review is recorded; continue exact-head CI and production-copy rehearsal."
   }
 }

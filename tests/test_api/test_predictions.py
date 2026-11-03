@@ -146,9 +146,22 @@ class TestPredictionsEndpoint:
         mock_conn.__enter__.return_value = mock_conn
         mock_conn.cursor.return_value.__enter__.return_value = mock_cur
         mock_cur.fetchall.return_value = []
-        mock_cur.fetchone.return_value = (0, 0, None, 0, None)
+        summary = {
+            "total": 0,
+            "positive_ev_count": 0,
+            "avg_confidence": None,
+            "model_count": 0,
+            "latest_predict_time": None,
+        }
+        meta = {"status": "ok", "data_as_of": "2026-11-03T00:00:00+00:00", "is_stale": False}
 
-        with patch("apps.backend.src.routers.predictions.get_db", return_value=mock_conn):
+        with (
+            patch("apps.backend.src.routers.predictions.get_db", return_value=mock_conn),
+            patch(
+                "apps.backend.src.routers.predictions.get_prediction_summary_snapshot",
+                return_value={"summary": summary, "meta": meta},
+            ),
+        ):
             resp = client.get("/api/predictions?limit=10")
         assert resp.status_code == 200
         data = resp.json()
@@ -161,7 +174,9 @@ class TestPredictionsEndpoint:
             "model_count": 0,
             "latest_predict_time": None,
         }
+        assert data["summary_meta"] == meta
         sql = mock_cur.execute.call_args.args[0]
+        assert "recent_seed AS MATERIALIZED" in sql
         assert "mp.predict_time < m.kickoff_time" in sql
         assert "mp.validation_status = 'valid'" in sql
 
@@ -170,9 +185,22 @@ class TestPredictionsEndpoint:
         mock_cur = MagicMock()
         mock_conn.__enter__.return_value = mock_conn
         mock_conn.cursor.return_value.__enter__.return_value = mock_cur
-        mock_cur.fetchone.return_value = (4187, 1632, 0.714, 19, datetime(2025, 1, 1, 10, 0, 0))
+        summary = {
+            "total": 4187,
+            "positive_ev_count": 1632,
+            "avg_confidence": 0.714,
+            "model_count": 19,
+            "latest_predict_time": "2025-01-01T10:00:00",
+        }
+        meta = {"status": "stale", "data_as_of": "2025-01-01T10:00:00+00:00", "is_stale": True}
 
-        with patch("apps.backend.src.routers.predictions.get_db", return_value=mock_conn):
+        with (
+            patch("apps.backend.src.routers.predictions.get_db", return_value=mock_conn),
+            patch(
+                "apps.backend.src.routers.predictions.get_prediction_summary_snapshot",
+                return_value={"summary": summary, "meta": meta},
+            ) as read_snapshot,
+        ):
             response = client.get(
                 "/api/predictions?limit=1&include_summary=false&summary_only=true"
             )
@@ -182,14 +210,110 @@ class TestPredictionsEndpoint:
         assert data["predictions"] == []
         assert data["total"] == 4187
         assert data["summary"]["positive_ev_count"] == 1632
+        assert data["summary_meta"] == meta
         assert mock_cur.execute.call_args_list[0].args == ("SET LOCAL jit = off",)
-        assert len(mock_cur.execute.call_args_list) == 2
-        assert "COUNT(*) AS total" in mock_cur.execute.call_args_list[1].args[0]
-        assert (
-            "SELECT mp.id, mp.match_id, mp.predict_time"
-            not in mock_cur.execute.call_args_list[1].args[0]
-        )
+        assert len(mock_cur.execute.call_args_list) == 1
+        read_snapshot.assert_called_once_with(mock_conn)
         mock_cur.fetchall.assert_not_called()
+
+    def test_global_summary_only_reads_snapshot_instead_of_history_aggregate(self, client):
+        summary = {
+            "total": 4187,
+            "positive_ev_count": 1632,
+            "avg_confidence": 0.714,
+            "model_count": 19,
+            "latest_predict_time": "2026-11-03T10:45:00+00:00",
+        }
+        meta = {
+            "status": "ok",
+            "data_as_of": "2026-11-03T11:00:00+00:00",
+            "last_success_at": "2026-11-03T11:00:02+00:00",
+            "last_attempt_at": "2026-11-03T11:00:02+00:00",
+            "age_seconds": 12,
+            "stale_after_seconds": 2700,
+            "is_stale": False,
+        }
+        mock_conn = MagicMock()
+        mock_conn.__enter__.return_value = mock_conn
+        mock_conn.cursor.return_value.__enter__.return_value = MagicMock()
+
+        with (
+            patch("apps.backend.src.routers.predictions.get_db", return_value=mock_conn),
+            patch(
+                "apps.backend.src.routers.predictions.get_prediction_summary_snapshot",
+                return_value={"summary": summary, "meta": meta},
+            ) as read_snapshot,
+        ):
+            response = client.get("/api/predictions?summary_only=true")
+
+        assert response.status_code == 200
+        assert response.json()["total"] == summary["total"]
+        assert response.json()["summary"] == summary
+        assert response.json()["summary_meta"] == meta
+        read_snapshot.assert_called_once_with(mock_conn)
+        assert mock_conn.cursor.return_value.__enter__.return_value.execute.call_count == 1
+
+    def test_match_scoped_summary_remains_live_and_does_not_read_global_snapshot(self, client):
+        summary = {
+            "total": 3,
+            "positive_ev_count": 2,
+            "avg_confidence": 0.6,
+            "model_count": 1,
+            "latest_predict_time": "2026-11-03T10:45:00+00:00",
+        }
+        mock_conn = MagicMock()
+        mock_conn.__enter__.return_value = mock_conn
+
+        with (
+            patch("apps.backend.src.routers.predictions.get_db", return_value=mock_conn),
+            patch(
+                "apps.backend.src.routers.predictions.get_prediction_summary_snapshot",
+                side_effect=AssertionError("match-scoped summary must not read the global cache"),
+            ),
+            patch(
+                "apps.backend.src.routers.predictions._read_prediction_summary",
+                return_value=summary,
+            ) as read_live,
+        ):
+            response = client.get("/api/predictions?match_id=42&summary_only=true")
+
+        assert response.status_code == 200
+        assert response.json()["summary"] == summary
+        assert response.json()["total"] == summary["total"]
+        assert response.json()["summary_meta"]["status"] == "live"
+        query_ctes, params = read_live.call_args.args[1:]
+        assert "p.match_id = %(match_id)s" in query_ctes
+        assert params == {"match_id": 42, "limit": 20}
+
+    def test_global_list_uses_snapshot_and_keeps_request_query_recent_scoped(self, client):
+        mock_conn = MagicMock()
+        mock_conn.__enter__.return_value = mock_conn
+        cur = mock_conn.cursor.return_value.__enter__.return_value
+        cur.fetchall.return_value = []
+        summary = {
+            "total": 2,
+            "positive_ev_count": 1,
+            "avg_confidence": 0.5,
+            "model_count": 1,
+            "latest_predict_time": "2026-11-03T10:45:00+00:00",
+        }
+        meta = {"status": "stale", "data_as_of": "2026-11-03T09:00:00+00:00", "is_stale": True}
+
+        with (
+            patch("apps.backend.src.routers.predictions.get_db", return_value=mock_conn),
+            patch(
+                "apps.backend.src.routers.predictions.get_prediction_summary_snapshot",
+                return_value={"summary": summary, "meta": meta},
+            ) as read_snapshot,
+        ):
+            response = client.get("/api/predictions?limit=20")
+
+        assert response.status_code == 200
+        assert response.json()["summary"] == summary
+        assert response.json()["summary_meta"] == meta
+        read_snapshot.assert_called_once_with(mock_conn)
+        query = cur.execute.call_args_list[-1].args[0]
+        assert "COUNT(*) FILTER (WHERE mp.ev > 0)" not in query
 
     def test_returns_predictions_with_expected_fields(self, client):
         # Columns: id, match_id, predict_time, model_name, play_type, option_code,
@@ -219,9 +343,22 @@ class TestPredictionsEndpoint:
                 *([None] * 10),
             ),
         ]
-        mock_cur.fetchone.return_value = (4187, 1632, 0.714, 19, now)
+        summary = {
+            "total": 4187,
+            "positive_ev_count": 1632,
+            "avg_confidence": 0.714,
+            "model_count": 19,
+            "latest_predict_time": now.isoformat(),
+        }
+        meta = {"status": "ok", "data_as_of": now.isoformat(), "is_stale": False}
 
-        with patch("apps.backend.src.routers.predictions.get_db", return_value=mock_conn):
+        with (
+            patch("apps.backend.src.routers.predictions.get_db", return_value=mock_conn),
+            patch(
+                "apps.backend.src.routers.predictions.get_prediction_summary_snapshot",
+                return_value={"summary": summary, "meta": meta},
+            ),
+        ):
             resp = client.get("/api/predictions?limit=10")
         assert resp.status_code == 200
         data = resp.json()
@@ -229,6 +366,7 @@ class TestPredictionsEndpoint:
         assert data["summary"]["positive_ev_count"] == 1632
         assert data["summary"]["avg_confidence"] == 0.714
         assert data["summary"]["model_count"] == 19
+        assert data["summary_meta"] == meta
         p = data["predictions"][0]
         assert p["match_id"] == 101
         assert p["model_name"] == "xgboost_v2"
@@ -237,6 +375,131 @@ class TestPredictionsEndpoint:
         assert p["feature_adjusted"] is True
         assert p["ev"] == 0.05
         assert p["home_team"] == "曼联"
+
+    def test_prediction_rows_expose_their_exact_run_aware_group_id(self, client):
+        from uuid import uuid4
+
+        group_id = uuid4()
+        now = datetime(2025, 1, 1, 10, 0, 0)
+        mock_conn = MagicMock()
+        mock_cur = MagicMock()
+        mock_conn.__enter__.return_value = mock_conn
+        mock_conn.cursor.return_value.__enter__.return_value = mock_cur
+        mock_cur.fetchall.return_value = [
+            (
+                7,
+                101,
+                now,
+                "maher_poisson",
+                "spf",
+                "3",
+                0.4,
+                0.4,
+                0.42,
+                2.5,
+                -0.05,
+                0.8,
+                "甲队",
+                "乙队",
+                9,
+                "v2",
+                "statistical",
+                "maher/v2",
+                81,
+                now,
+                "legacy/v1",
+                {"rest": True},
+                91,
+                now,
+                group_id,
+            ),
+        ]
+        mock_cur.fetchone.return_value = (1, 0, 0.8, 1, now)
+
+        with (
+            patch("apps.backend.src.routers.predictions.get_db", return_value=mock_conn),
+            patch(
+                "apps.backend.src.routers.predictions.get_prediction_summary_snapshot",
+                return_value={"summary": None, "meta": {"status": "pending"}},
+            ),
+        ):
+            response = client.get("/api/predictions?limit=1")
+
+        assert response.status_code == 200
+        evidence = response.json()["predictions"][0]["research_evidence"]
+        assert evidence["prediction_group_id"] == str(group_id)
+        query = mock_cur.execute.call_args_list[1].args[0]
+        assert "model_prediction_group_options" in query
+        assert "prediction_id = mp.id" in query
+
+    def test_prediction_group_context_endpoint_returns_only_verified_header(self, client):
+        from uuid import uuid4
+
+        group_id = uuid4()
+        run_id = uuid4()
+        feature_context = {"schema_version": "prediction-feature-context/v1"}
+        group = {
+            "status": "complete",
+            "group_id": group_id,
+            "run_id": run_id,
+            "match_id": 101,
+            "model_version_id": 9,
+            "play_type": "spf",
+            "predict_time": datetime(2025, 1, 1, 10, 0, 0),
+            "feature_context": feature_context,
+        }
+        mock_conn = MagicMock()
+        mock_conn.__enter__.return_value = mock_conn
+
+        with (
+            patch("apps.backend.src.routers.predictions.get_db", return_value=mock_conn),
+            patch(
+                "apps.backend.src.routers.predictions.load_prediction_group_by_id",
+                return_value=group,
+            ) as load_group,
+        ):
+            response = client.get(f"/api/models/prediction-groups/{group_id}/feature-context")
+
+        assert response.status_code == 200
+        assert response.json() == {
+            "group_id": str(group_id),
+            "run_id": str(run_id),
+            "match_id": 101,
+            "model_version_id": 9,
+            "play_type": "spf",
+            "predict_time": "2025-01-01T10:00:00",
+            "context_status": "recorded",
+            "feature_context": feature_context,
+        }
+        load_group.assert_called_once_with(mock_conn, group_id=group_id)
+
+    def test_prediction_group_context_endpoint_reports_missing_manifest_context(self, client):
+        from uuid import uuid4
+
+        group_id = uuid4()
+        group = {
+            "status": "complete",
+            "group_id": group_id,
+            "run_id": uuid4(),
+            "match_id": 101,
+            "model_version_id": 9,
+            "play_type": "spf",
+            "predict_time": datetime(2025, 1, 1, 10, 0, 0),
+        }
+        mock_conn = MagicMock()
+        mock_conn.__enter__.return_value = mock_conn
+        with (
+            patch("apps.backend.src.routers.predictions.get_db", return_value=mock_conn),
+            patch(
+                "apps.backend.src.routers.predictions.load_prediction_group_by_id",
+                return_value=group,
+            ),
+        ):
+            response = client.get(f"/api/models/prediction-groups/{group_id}/feature-context")
+
+        assert response.status_code == 200
+        assert response.json()["context_status"] == "not_recorded"
+        assert response.json()["feature_context"] is None
 
     def test_handles_null_probabilities(self, client):
         now = datetime(2025, 1, 1, 10, 0, 0)
@@ -265,7 +528,13 @@ class TestPredictionsEndpoint:
         ]
         mock_cur.fetchone.return_value = (1, 0, None, 1, now)
 
-        with patch("apps.backend.src.routers.predictions.get_db", return_value=mock_conn):
+        with (
+            patch("apps.backend.src.routers.predictions.get_db", return_value=mock_conn),
+            patch(
+                "apps.backend.src.routers.predictions.get_prediction_summary_snapshot",
+                return_value={"summary": None, "meta": {"status": "pending"}},
+            ),
+        ):
             resp = client.get("/api/predictions?limit=10")
         assert resp.status_code == 200
         p = resp.json()["predictions"][0]

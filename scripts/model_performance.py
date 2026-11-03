@@ -5,8 +5,10 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Any
 
-_PERFORMANCE_HISTORY_SQL = """
-    WITH settled_matches AS MATERIALIZED (
+from scripts.prediction_statistics import canonical_prediction_rows_ctes
+
+_PERFORMANCE_HISTORY_SQL = f"""
+    WITH RECURSIVE settled_matches AS MATERIALIZED (
         SELECT
             m.id AS match_id,
             m.business_date,
@@ -23,6 +25,7 @@ _PERFORMANCE_HISTORY_SQL = """
         WHERE m.business_date >= CURRENT_DATE - %(days)s
           AND r.result_status IN ('final', 'confirmed')
     ),
+    {canonical_prediction_rows_ctes(match_scope="settled_matches")},
     normalized_predictions AS (
         SELECT
             source_mp.id AS prediction_id,
@@ -45,12 +48,7 @@ _PERFORMANCE_HISTORY_SQL = """
             m.total_goals_result,
             m.score_result,
             m.half_full_result
-        FROM (
-            -- An InitPlan supplies the bounded target IDs before legacy
-            -- ranking. A join outside the view cannot impose that bound.
-            SELECT latest.* FROM model_prediction_latest_rows latest
-            WHERE latest.match_id = ANY(ARRAY(SELECT match_id FROM settled_matches))
-        ) source_mp
+        FROM canonical_prediction_rows source_mp
         JOIN model_versions mv ON mv.id = source_mp.model_version_id
         JOIN settled_matches m ON m.match_id = source_mp.match_id
         WHERE source_mp.model_probability IS NOT NULL
@@ -302,8 +300,8 @@ _PERFORMANCE_HISTORY_FROM_SCORED_PICKS_SQL = """
 # Reuse the exact prediction normalization/ranking/scoring CTEs from the
 # response query, stopping before its rolling-window aggregation.
 _REFRESH_SETTLED_PICKS_SQL = (
-    """
-    WITH settled_matches AS MATERIALIZED (
+    f"""
+    WITH RECURSIVE settled_matches AS MATERIALIZED (
         SELECT
             match_id,
             business_date,
@@ -317,6 +315,7 @@ _REFRESH_SETTLED_PICKS_SQL = (
             half_full_result
         FROM model_performance_refresh_settled
     ),
+    {canonical_prediction_rows_ctes(match_scope="settled_matches")},
 """
     + _PERFORMANCE_HISTORY_SQL[
         _PERFORMANCE_HISTORY_SQL.index(

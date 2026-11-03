@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import math
 import re
+from datetime import datetime
 from typing import Any
 
 from scripts.data_contracts import FactStatus
@@ -289,3 +290,113 @@ def load_latest_feature_batch(
         if newest == complete
         else "previous_complete",
     )
+
+
+def load_latest_feature_batch_summary(
+    conn: Any,
+    *,
+    match_id: int,
+    builder_version: str,
+    required_fields: Any,
+    as_of: datetime,
+    feature_schema_version: str = FEATURE_SCHEMA_VERSION,
+) -> dict:
+    """Return a header-only batch summary eligible at an explicit cutoff.
+
+    Unlike ``load_latest_feature_batch``, this function never fetches the feature
+    JSON or its observation values. The stored content hash is reported but not
+    recomputed; callers must not treat the summary as a batch integrity check.
+    """
+    if not isinstance(as_of, datetime) or as_of.tzinfo is None or as_of.utcoffset() is None:
+        raise ValueError("batch summary cutoff requires an aware datetime")
+    fields_hash = _contract(builder_version, required_fields, feature_schema_version)
+    if type(match_id) is not int or match_id <= 0:
+        raise ValueError("batch requires a canonical match")
+    params = dict(
+        match_id=match_id,
+        builder=builder_version,
+        schema=feature_schema_version,
+        fields=_canonical(list(required_fields), MAX_BATCH_BYTES),
+        fields_hash=fields_hash,
+        as_of=as_of,
+    )
+    where = """match_id=%(match_id)s AND builder_version=%(builder)s
+        AND feature_schema_version=%(schema)s AND fields_hash=%(fields_hash)s
+        AND required_fields=%(fields)s::jsonb"""
+    with conn.cursor() as cur:
+        cur.execute(
+            f"""SELECT attempt.id,attempt.status,batch.id,batch.cutoff_id::text,
+                       batch.cutoff_as_of,batch.builder_version,batch.feature_schema_version,
+                       batch.status,batch.content_hash,
+                       COALESCE(jsonb_array_length(batch.required_fields),0)::int,
+                       COALESCE(counts.feature_fields_count,0)::int,
+                       COALESCE(counts.value_fields_count,0)::int,
+                       COALESCE(counts.unknown_fields_count,0)::int
+                FROM (SELECT 1) AS anchor
+                LEFT JOIN LATERAL (
+                    SELECT id,status FROM feature_batches
+                    WHERE {where} AND cutoff_as_of <= %(as_of)s
+                    ORDER BY cutoff_as_of DESC,id DESC LIMIT 1
+                ) AS attempt ON true
+                LEFT JOIN LATERAL (
+                    SELECT id,cutoff_id,cutoff_as_of,builder_version,feature_schema_version,
+                           status,content_hash,required_fields,features
+                    FROM feature_batches
+                    WHERE {where} AND status='complete' AND cutoff_as_of <= %(as_of)s
+                    ORDER BY cutoff_as_of DESC,id DESC LIMIT 1
+                ) AS batch ON true
+                LEFT JOIN LATERAL (
+                    SELECT count(*) AS feature_fields_count,
+                           count(*) FILTER (WHERE item.value->>'fact_status'='value')
+                               AS value_fields_count,
+                           count(*) FILTER (WHERE item.value->>'fact_status'='unknown')
+                               AS unknown_fields_count
+                    FROM json_each(batch.features) AS item(key,value)
+                ) AS counts ON true""",
+            params,
+        )
+        row = cur.fetchone()
+    if row is None:
+        newest, newest_status, batch_row = None, None, None
+    else:
+        newest, newest_status = row[:2]
+        batch_row = row[2:]
+    batch = None
+    if batch_row is not None and batch_row[0] is not None:
+        (
+            batch_id,
+            cutoff_id,
+            cutoff_as_of,
+            batch_builder,
+            schema,
+            status,
+            content_hash,
+            required_count,
+            feature_count,
+            value_count,
+            unknown_count,
+        ) = batch_row
+        batch = {
+            "id": int(batch_id),
+            "cutoff_id": str(cutoff_id),
+            "cutoff_as_of": cutoff_as_of,
+            "builder_version": str(batch_builder),
+            "feature_schema_version": str(schema),
+            "status": str(status),
+            "content_hash": str(content_hash).strip(),
+            "required_fields_count": int(required_count),
+            "feature_fields_count": int(feature_count),
+            "value_fields_count": int(value_count),
+            "unknown_fields_count": int(unknown_count),
+            "metadata_integrity": "stored_hash_not_recomputed",
+        }
+    return {
+        "batch": batch,
+        "newest_attempt_id": int(newest) if newest is not None else None,
+        "newest_attempt_status": str(newest_status) if newest_status is not None else None,
+        "selection_reason": "no_complete_batch"
+        if batch is None
+        else "latest_complete"
+        if newest == batch["id"]
+        else "previous_complete",
+    }

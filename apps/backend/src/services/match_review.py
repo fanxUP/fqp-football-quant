@@ -5,6 +5,8 @@ from __future__ import annotations
 from collections import defaultdict
 from typing import Any
 
+from scripts.prediction_statistics import canonical_prediction_rows_ctes
+
 
 def _as_text(value: Any) -> str | None:
     return (
@@ -40,16 +42,26 @@ def build_match_review_cards(conn: Any, review_date: str) -> list[dict[str, Any]
         match_ids = [row[0] for row in matches]
 
         cur.execute(
-            """SELECT DISTINCT ON (mp.match_id, mv.model_name, mp.play_type, mp.option_code)
-                      mp.match_id, mv.model_name, mp.play_type, mp.option_code, mp.model_probability,
-                      mp.market_probability, mp.ev, mp.confidence_score, mp.predict_time
-               FROM model_prediction_latest_rows mp
-               JOIN model_versions mv ON mv.id = mp.model_version_id
-               JOIN official_matches m ON m.id = mp.match_id
-               WHERE mp.match_id = ANY(%s) AND mp.validation_status = 'valid'
-                 AND mp.predict_time < m.kickoff_time
-               ORDER BY mp.match_id, mv.model_name, mp.play_type, mp.option_code, mp.predict_time DESC, mp.id DESC""",
-            (match_ids,),
+            f"""WITH RECURSIVE review_match_scope AS MATERIALIZED (
+                   SELECT unnest(%(match_ids)s::bigint[]) AS match_id
+               ), {canonical_prediction_rows_ctes(match_scope="review_match_scope")}
+               SELECT DISTINCT ON (
+                          source_mp.match_id, source_mv.model_name,
+                          source_mp.play_type, source_mp.option_code
+                      )
+                      source_mp.match_id, source_mv.model_name, source_mp.play_type,
+                      source_mp.option_code, source_mp.model_probability,
+                      source_mp.market_probability, source_mp.ev,
+                      source_mp.confidence_score, source_mp.predict_time
+               FROM canonical_prediction_rows source_mp
+               JOIN model_versions source_mv ON source_mv.id = source_mp.model_version_id
+               JOIN official_matches source_match ON source_match.id = source_mp.match_id
+               WHERE source_mp.validation_status = 'valid'
+                 AND source_mp.predict_time < source_match.kickoff_time
+               ORDER BY source_mp.match_id, source_mv.model_name,
+                        source_mp.play_type, source_mp.option_code,
+                        source_mp.predict_time DESC, source_mp.id DESC""",
+            {"match_ids": match_ids},
         )
         predictions = cur.fetchall()
 

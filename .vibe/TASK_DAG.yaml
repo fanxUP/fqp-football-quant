@@ -1,27 +1,60 @@
 {
   "schema_version": 4,
-  "current_task": "P138-PREDICTION-ODDS-ASOF-CUTOFF",
+  "current_task": "P107-EXACT-HEAD-CI",
   "tasks": {
-    "P138-PREDICTION-ODDS-ASOF-CUTOFF": {
-      "title": "Fence model odds and handicap reads to the recorded prediction cutoff",
-      "acceptance_id": "A138-PREDICTION-ODDS-ASOF-CUTOFF",
+    "P107-LOCAL-CANDIDATE-VALIDATION": {
+      "title": "Run current aggregate Python, PostgreSQL, frontend and static regressions",
+      "acceptance_id": "A107-LOCAL-CANDIDATE-VALIDATION",
       "depends_on": [],
-      "kind": "bounded_prediction_correctness_fix",
-      "status": "IN_PROGRESS",
-      "files": [
-        "scripts/jobs/run_model_prediction.py",
-        "tests/test_scripts/test_run_model_prediction.py",
-        "tests/test_computation/test_prediction_run_postgres.py",
-        "apps/frontend/src/pages/DashboardPage.test.tsx"
-      ],
+      "kind": "aggregate_regression",
+      "status": "DONE",
       "definition_of_done": [
-        "Every primary odds input row has snapshot_time less than or equal to the same fixed predict_time recorded on its prediction group.",
-        "Every RQSPF handicap input is selected at or before that exact cutoff, with deterministic equal-time ordering.",
-        "If no pre-cutoff odds exist, existing missing-input handling is used; no future fallback or fabricated odds is allowed.",
-        "An isolated PostgreSQL sample verifies before/equal/after snapshots and same-time ID tie-breaking through the prediction query.",
-        "Focused regression and relevant prediction tests pass; Ruff, diff, scope and change budget pass with zero skips in configured tests.",
-        "No schema migration, dependency, public API, model parameter or production data change is included.",
-        "Exact-head CI frontend tests pass without a counter-animation assertion race."
+        "Affected Python/API regressions pass on Python 3.14.",
+        "Prediction statistics and snapshot regressions pass on disposable PostgreSQL 16 with zero skips.",
+        "Affected frontend tests, typecheck and production build pass.",
+        "Ruff, Mypy, Python compileall and git diff check pass."
+      ]
+    },
+    "P107-EXACT-HEAD-CI": {
+      "title": "Commit and verify the exact candidate on GitHub main",
+      "acceptance_id": "A107-EXACT-HEAD-CI",
+      "depends_on": [
+        "P107-LOCAL-CANDIDATE-VALIDATION"
+      ],
+      "kind": "external_ci",
+      "status": "IN_PROGRESS",
+      "definition_of_done": [
+        "Only the 51 mapped product paths and reviewed V4 control/evidence files are committed; uv.lock is not staged.",
+        "GitHub main push CI passes for the exact local HEAD.",
+        "Review, security and migration evidence are recorded for this candidate."
+      ]
+    },
+    "P107-131-COPY-REHEARSAL": {
+      "title": "Rehearse migration 131 against a current production schema/data copy",
+      "acceptance_id": "A107-131-COPY-REHEARSAL",
+      "depends_on": [
+        "P107-EXACT-HEAD-CI"
+      ],
+      "kind": "production_data_copy_rehearsal",
+      "status": "TODO",
+      "definition_of_done": [
+        "Use an isolated current production schema/data copy; do not write production data during rehearsal.",
+        "Record existing source counts, queued match count, lock wait, batch duration and fqp grants.",
+        "Verify migration up/down behavior and recovery without destructive loss of source rows."
+      ]
+    },
+    "P107-RELEASE-NATURAL-OBSERVATION": {
+      "title": "Release the verified candidate and observe natural runtime behavior",
+      "acceptance_id": "A107-RELEASE-NATURAL-OBSERVATION",
+      "depends_on": [
+        "P107-131-COPY-REHEARSAL"
+      ],
+      "kind": "production_release_and_observation",
+      "status": "TODO",
+      "definition_of_done": [
+        "V4 deploy preflight passes and the authorized production release completes.",
+        "Verify service health, API behavior, migration, logs, refresh latency and natural scheduled jobs.",
+        "Keep A107 open until consumer behavior and resource outcomes are observed; do not claim P104 probability use."
       ]
     }
   }

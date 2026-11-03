@@ -22,6 +22,13 @@ def test_confidence_condition_preserves_uncalibrated_group():
     cursor.fetchall.return_value = []
     feature_importance.get_condition_performance(conn, dimension="confidence")
     query = cursor.execute.call_args.args[0]
+    assert "FROM model_prediction_latest_rows" not in query
+    assert "metric_prediction_matches AS MATERIALIZED" in query
+    assert "SELECT DISTINCT match_id FROM latest_metrics" in query
+    assert "FROM canonical_prediction_rows latest" in query
+    assert "latest.play_type = 'spf' AND latest.option_code = '3'" in query
+    assert "mp_home.model_version_id = mem.model_version_id" in query
+    assert "mp_home.predict_time = mem.snapshot_time" in query
     case = re.search(
         r"CASE\s+WHEN mp_home\.confidence_score.*?END AS confidence_range", query, re.S
     )
@@ -179,6 +186,7 @@ class ComparisonConnection:
 class CaptureTrainingCursor:
     def __init__(self) -> None:
         self.query = ""
+        self.params = None
 
     def __enter__(self):
         return self
@@ -406,8 +414,22 @@ def test_feature_training_uses_one_pre_match_snapshot_per_match() -> None:
 
     assert result is None
     query = conn.cursor_instance.query
-    assert "DISTINCT ON (fs.match_id)" in query
-    assert "fs.snapshot_time < m.kickoff_time" in query
+    assert "eligible_training_matches AS MATERIALIZED" in query
+    assert "LIMIT %(max_matches)s" in query
+    assert conn.cursor_instance.params is not None
+    assert (
+        conn.cursor_instance.params["max_matches"] == feature_importance.MAX_FEATURE_MODEL_MATCHES
+    )
+    assert query.index("LIMIT %(max_matches)s") < query.index("CROSS JOIN LATERAL")
+    assert "EXISTS ( SELECT 1 FROM match_feature_snapshots snapshot_exists" in query
+    assert "snapshot_exists.snapshot_time < m.kickoff_time" in query
+    assert "snapshot.snapshot_time < m.kickoff_time" in query
+    assert "ORDER BY snapshot.snapshot_time DESC, snapshot.id DESC LIMIT 1" in query
+    match_cte_start = query.index("eligible_training_matches AS MATERIALIZED")
+    limit_position = query.index("LIMIT %(max_matches)s", match_cte_start)
+    lookup_position = query.index("CROSS JOIN LATERAL", limit_position)
+    assert match_cte_start < limit_position < lookup_position
+    assert "ORDER BY m.business_date DESC, m.id LIMIT %(max_matches)s" in query
 
 
 @pytest.mark.parametrize(

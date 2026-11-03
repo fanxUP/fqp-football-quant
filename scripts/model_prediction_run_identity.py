@@ -6,8 +6,11 @@ import hashlib
 import json
 import math
 from collections.abc import Mapping, Sequence
+from datetime import datetime
 from pathlib import Path
 from typing import Any
+
+from scripts.data_contracts import to_utc
 
 
 def _normalize_json(value: Any) -> Any:
@@ -58,6 +61,148 @@ def _is_sha256(value: Any) -> bool:
         and len(value) == 64
         and all(character in "0123456789abcdef" for character in value)
     )
+
+
+def verify_prediction_feature_context(
+    context: Any,
+    *,
+    match_id: int,
+    model_version_id: int,
+    predict_time: Any,
+    feature_snapshot_id: int | None,
+) -> None:
+    """Validate the run's shared input references without accepting raw features."""
+    context_fields = {
+        "schema_version",
+        "match_id",
+        "model_version_id",
+        "predict_time",
+        "legacy_feature_snapshot_id",
+        "observation_batch",
+        "consumption",
+    }
+    if not isinstance(context, Mapping) or set(context) != context_fields:
+        raise ValueError("prediction feature context has an unsupported shape")
+    if (
+        context.get("schema_version") != "prediction-feature-context/v1"
+        or type(context.get("match_id")) is not int
+        or context.get("match_id") != match_id
+        or type(context.get("model_version_id")) is not int
+        or context.get("model_version_id") != model_version_id
+        or context.get("legacy_feature_snapshot_id") != feature_snapshot_id
+        or (
+            context.get("legacy_feature_snapshot_id") is not None
+            and type(context.get("legacy_feature_snapshot_id")) is not int
+        )
+        or context.get("consumption") != "context_only_not_used_for_probability"
+    ):
+        raise ValueError("prediction feature context does not match its group")
+
+    def parse_context_time(value: Any, label: str) -> datetime:
+        if not isinstance(value, str):
+            raise ValueError(f"prediction feature context {label} is invalid")
+        try:
+            parsed = datetime.fromisoformat(value)
+            return to_utc(parsed, naive_timezone="Asia/Shanghai")
+        except (TypeError, ValueError, OverflowError) as exc:
+            raise ValueError(f"prediction feature context {label} is invalid") from exc
+
+    expected_time = (
+        predict_time.isoformat() if hasattr(predict_time, "isoformat") else str(predict_time)
+    )
+    prediction_cutoff = parse_context_time(expected_time, "group cutoff")
+    if parse_context_time(context.get("predict_time"), "prediction time") != prediction_cutoff:
+        raise ValueError("prediction feature context does not match its group cutoff")
+
+    batch = context.get("observation_batch")
+    batch_fields = {
+        "id",
+        "cutoff_id",
+        "cutoff_as_of",
+        "builder_version",
+        "feature_schema_version",
+        "status",
+        "content_hash",
+        "required_fields_count",
+        "feature_fields_count",
+        "value_fields_count",
+        "unknown_fields_count",
+        "newest_attempt_id",
+        "newest_attempt_status",
+        "selection_reason",
+        "metadata_integrity",
+    }
+    if not isinstance(batch, Mapping) or set(batch) != batch_fields:
+        raise ValueError("prediction feature context batch summary has an unsupported shape")
+    count_fields = (
+        "required_fields_count",
+        "feature_fields_count",
+        "value_fields_count",
+        "unknown_fields_count",
+    )
+    if any(type(batch.get(field)) is not int or batch[field] < 0 for field in count_fields):
+        raise ValueError("prediction feature context batch counts are invalid")
+    if (
+        batch["feature_fields_count"] > batch["required_fields_count"]
+        or batch["value_fields_count"] > batch["feature_fields_count"]
+        or batch["unknown_fields_count"] > batch["feature_fields_count"]
+        or batch["value_fields_count"] + batch["unknown_fields_count"]
+        > batch["feature_fields_count"]
+    ):
+        raise ValueError("prediction feature context batch counts are inconsistent")
+
+    batch_id = batch.get("id")
+    newest_id = batch.get("newest_attempt_id")
+    newest_status = batch.get("newest_attempt_status")
+    if newest_id is not None and (type(newest_id) is not int or newest_id <= 0):
+        raise ValueError("prediction feature context newest attempt ID is invalid")
+    if newest_status not in {None, "running", "partial", "complete"}:
+        raise ValueError("prediction feature context newest attempt status is invalid")
+    if batch_id is None:
+        if (
+            batch.get("status") not in {"no_complete_batch", "read_failed"}
+            or batch.get("selection_reason") != batch.get("status")
+            or any(
+                batch.get(field) is not None
+                for field in (
+                    "cutoff_id",
+                    "cutoff_as_of",
+                    "builder_version",
+                    "feature_schema_version",
+                    "content_hash",
+                )
+            )
+            or batch.get("metadata_integrity")
+            != ("not_applicable" if batch["status"] == "no_complete_batch" else "not_read")
+        ):
+            raise ValueError("prediction feature context missing-batch state is invalid")
+        if any(batch[field] != 0 for field in count_fields):
+            raise ValueError("prediction feature context missing-batch counts are invalid")
+        return
+
+    if (
+        type(batch_id) is not int
+        or batch_id <= 0
+        or type(newest_id) is not int
+        or newest_id <= 0
+        or newest_status not in {"running", "partial", "complete"}
+        or not isinstance(batch.get("cutoff_id"), str)
+        or not batch["cutoff_id"]
+        or not isinstance(batch.get("builder_version"), str)
+        or not batch["builder_version"]
+        or not isinstance(batch.get("feature_schema_version"), str)
+        or not batch["feature_schema_version"]
+        or batch.get("status") != "complete"
+        or not _is_sha256(batch.get("content_hash"))
+        or batch.get("metadata_integrity") != "stored_hash_not_recomputed"
+        or batch.get("selection_reason") not in {"latest_complete", "previous_complete"}
+    ):
+        raise ValueError("prediction feature context complete-batch metadata is invalid")
+    if (newest_id == batch_id) != (batch.get("selection_reason") == "latest_complete"):
+        raise ValueError("prediction feature context selection reason is inconsistent")
+    batch_cutoff = parse_context_time(batch.get("cutoff_as_of"), "batch cutoff")
+    if batch_cutoff > prediction_cutoff:
+        raise ValueError("prediction feature context batch is later than its group cutoff")
 
 
 def verify_prediction_run_manifest(
@@ -198,6 +343,14 @@ def verify_prediction_group_output_manifest(
         or output_manifest.get("probability_vector") != dict(probability_vector)
     ):
         raise ValueError("prediction output manifest does not match its group")
+    if "feature_context" in output_manifest:
+        verify_prediction_feature_context(
+            output_manifest["feature_context"],
+            match_id=match_id,
+            model_version_id=model_version_id,
+            predict_time=output_manifest.get("predict_time"),
+            feature_snapshot_id=output_manifest.get("feature_snapshot_id"),
+        )
     prediction_outputs = output_manifest.get("prediction_outputs")
     if not isinstance(prediction_outputs, list):
         raise ValueError("prediction output manifest options are missing")

@@ -1,7 +1,8 @@
 """Atomic complete batches on explicit, disposable P104 fixtures only."""
 
 from contextlib import closing
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
+from unittest.mock import MagicMock
 
 import psycopg2
 import pytest
@@ -10,6 +11,7 @@ from scripts.data_contracts import FactStatus
 from scripts.feature_batch_storage import (
     load_feature_batch,
     load_latest_feature_batch,
+    load_latest_feature_batch_summary,
     store_feature_batch,
 )
 from scripts.feature_schema import FEATURE_SCHEMA_VERSION
@@ -109,6 +111,83 @@ def test_complete_header_and_values_become_visible_together(pg, connect, match_i
         assert loaded["features"]["temperature_2m"]["value"] == 0
         assert loaded["observations"][0]["revision_id"] == ref["revision_id"]
         assert loaded["cutoff"] == cutoff
+
+
+def test_feature_batch_summary_is_bounded_by_prediction_cutoff(pg, match_id):
+    write(pg, match_id)
+    pg.commit()
+    cutoff = freeze(pg, match_id)
+    batch_id = store(pg, match_id, cutoff)
+    pg.commit()
+
+    before = load_latest_feature_batch_summary(
+        pg,
+        match_id=match_id,
+        builder_version="fixed-weather/v1",
+        required_fields=FIELDS,
+        as_of=cutoff.as_of - timedelta(seconds=1),
+    )
+    at_cutoff = load_latest_feature_batch_summary(
+        pg,
+        match_id=match_id,
+        builder_version="fixed-weather/v1",
+        required_fields=FIELDS,
+        as_of=cutoff.as_of,
+    )
+
+    assert before["batch"] is None
+    assert before["selection_reason"] == "no_complete_batch"
+    assert at_cutoff["batch"] == {
+        "id": batch_id,
+        "cutoff_id": cutoff.id,
+        "cutoff_as_of": cutoff.as_of,
+        "builder_version": "fixed-weather/v1",
+        "feature_schema_version": FEATURE_SCHEMA_VERSION,
+        "status": "complete",
+        "content_hash": at_cutoff["batch"]["content_hash"],
+        "required_fields_count": 2,
+        "feature_fields_count": 2,
+        "value_fields_count": 2,
+        "unknown_fields_count": 0,
+        "metadata_integrity": "stored_hash_not_recomputed",
+    }
+    assert at_cutoff["selection_reason"] == "latest_complete"
+    assert "features" not in at_cutoff["batch"]
+
+
+def test_feature_batch_summary_exposes_headers_without_feature_values():
+    conn = MagicMock()
+    cutoff = datetime(2026, 10, 23, 2, tzinfo=UTC)
+    conn.cursor.return_value.__enter__.return_value.fetchone.return_value = (
+        91,
+        "complete",
+        91,
+        "00000000-0000-0000-0000-000000000091",
+        cutoff,
+        "fixed-weather/v1",
+        FEATURE_SCHEMA_VERSION,
+        "complete",
+        "d" * 64,
+        2,
+        2,
+        2,
+        0,
+    )
+
+    summary = load_latest_feature_batch_summary(
+        conn,
+        match_id=101,
+        builder_version="fixed-weather/v1",
+        required_fields=FIELDS,
+        as_of=cutoff,
+    )
+
+    assert summary["batch"]["id"] == 91
+    assert summary["batch"]["content_hash"] == "d" * 64
+    assert "features" not in summary["batch"]
+    query, params = conn.cursor.return_value.__enter__.return_value.execute.call_args.args
+    assert query.count("cutoff_as_of <= %(as_of)s") == 2
+    assert params["as_of"] == cutoff
 
 
 def test_rolled_back_batch_is_not_visible(pg, connect, match_id):

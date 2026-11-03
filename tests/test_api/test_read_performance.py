@@ -10,7 +10,10 @@ from fastapi.testclient import TestClient
 from psycopg2.errors import QueryCanceled
 
 
-def test_slow_read_returns_unavailable_with_correlated_timing_and_no_sql_leak(monkeypatch, caplog):
+@pytest.mark.parametrize("path", ["/api/predictions", "/api/features/snapshots"])
+def test_slow_read_returns_unavailable_with_correlated_timing_and_no_sql_leak(
+    path, monkeypatch, caplog
+):
     from apps.backend.src import db
     from apps.backend.src.services import read_performance as reads
 
@@ -28,14 +31,15 @@ def test_slow_read_returns_unavailable_with_correlated_timing_and_no_sql_leak(mo
     app = FastAPI()
     app.add_middleware(reads.ReadPerformanceMiddleware)
 
-    @app.get("/api/predictions")
     def slow_read():
         with db.get_db() as connection:
             with connection.cursor() as cursor:
                 cursor.execute("SELECT sensitive_business_data WHERE token=%s", ("private_value",))
 
+    app.add_api_route(path, slow_read, methods=["GET"])
+
     with caplog.at_level("INFO"):
-        response = TestClient(app).get("/api/predictions?ignored=private_value")
+        response = TestClient(app).get(f"{path}?ignored=private_value")
     assert response.status_code == 503
     assert response.json()["code"] == "read_timeout"
     assert response.headers["retry-after"] == "2"

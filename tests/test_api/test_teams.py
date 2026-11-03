@@ -108,7 +108,9 @@ class TestFeaturesSnapshotsEndpoint:
         assert resp.status_code == 200
         data = resp.json()
         assert data["snapshots"] == []
+        assert data["observed_batches"] == []
         assert data["total"] == 0
+        mock_cur.execute.assert_called_once()
 
     def test_returns_snapshots_with_fields(self, client):
         # Columns: id, match_id, snapshot_time, feature_version,
@@ -122,26 +124,43 @@ class TestFeaturesSnapshotsEndpoint:
         mock_cur = MagicMock()
         mock_conn.__enter__.return_value = mock_conn
         mock_conn.cursor.return_value.__enter__.return_value = mock_cur
-        mock_cur.fetchall.return_value = [
-            (
-                1,
-                101,
-                now,
-                "v2.1",
-                201,
-                301,
-                0.85,
-                0.12,
-                3,
-                4,
-                -1,
-                "曼联",
-                "利物浦",
-                "英超",
-                "001",
-                now,
-                "周三001",
-            ),
+        mock_cur.fetchall.side_effect = [
+            [
+                (
+                    1,
+                    101,
+                    now,
+                    "v2.1",
+                    201,
+                    301,
+                    0.85,
+                    0.12,
+                    3,
+                    4,
+                    -1,
+                    "曼联",
+                    "利物浦",
+                    "英超",
+                    "001",
+                    now,
+                    "周三001",
+                ),
+            ],
+            [
+                (
+                    9,
+                    101,
+                    "cutoff-id-9",
+                    now,
+                    "observed_input_v2",
+                    "observed-form/v3",
+                    "complete",
+                    55,
+                    55,
+                    30,
+                    20,
+                ),
+            ],
         ]
 
         with patch("apps.backend.src.routers.teams.get_db", return_value=mock_conn):
@@ -157,6 +176,13 @@ class TestFeaturesSnapshotsEndpoint:
         assert s["data_completeness_score"] == 0.85
         assert s["official_match_code"] == "001"
         assert s["match_num_str"] == "周三001"
+        batch = data["observed_batches"][0]
+        assert batch["match_id"] == 101
+        assert batch["cutoff_as_of"] == now.isoformat()
+        assert batch["required_fields_count"] == 55
+        assert batch["value_fields_count"] == 30
+        assert batch["unknown_fields_count"] == 20
+        assert "DISTINCT ON (fb.match_id)" in mock_cur.execute.call_args.args[0]
 
     def test_handles_null_completeness(self, client):
         now = datetime(2025, 1, 1, 10, 0, 0)
@@ -164,26 +190,29 @@ class TestFeaturesSnapshotsEndpoint:
         mock_cur = MagicMock()
         mock_conn.__enter__.return_value = mock_conn
         mock_conn.cursor.return_value.__enter__.return_value = mock_cur
-        mock_cur.fetchall.return_value = [
-            (
-                1,
-                101,
-                now,
-                "v2.1",
-                201,
-                301,
-                None,
-                None,
-                3,
-                4,
-                -1,
-                "曼联",
-                "利物浦",
-                "英超",
-                "001",
-                now,
-                "周三001",
-            ),
+        mock_cur.fetchall.side_effect = [
+            [
+                (
+                    1,
+                    101,
+                    now,
+                    "v2.1",
+                    201,
+                    301,
+                    None,
+                    None,
+                    3,
+                    4,
+                    -1,
+                    "曼联",
+                    "利物浦",
+                    "英超",
+                    "001",
+                    now,
+                    "周三001",
+                ),
+            ],
+            [],
         ]
 
         with patch("apps.backend.src.routers.teams.get_db", return_value=mock_conn):
@@ -192,6 +221,12 @@ class TestFeaturesSnapshotsEndpoint:
         s = resp.json()["snapshots"][0]
         assert s["data_completeness_score"] is None
         assert s["uncertainty_score"] is None
+
+    def test_snapshot_limit_is_bounded_without_database_access(self, client):
+        with patch("apps.backend.src.routers.teams.get_db") as db:
+            response = client.get("/api/features/snapshots?limit=101")
+        assert response.status_code == 422
+        db.assert_not_called()
 
 
 def test_match_detail_uses_latest_prematch_features_and_all_option_predictions(client):

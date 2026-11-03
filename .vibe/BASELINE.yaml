@@ -1,10 +1,10 @@
 {
-  "git_revision": "33c193295eeebae70938a7a547c16fb9a372caee",
+  "schema_version": 4,
+  "task_id": "P107-AGGREGATE-CANDIDATE-RELEASE-READINESS",
+  "git_revision": "4a7a37aa57b885cc3ae332731b6a6e273dd49bff",
   "branch": "main",
-  "dirty": false,
-  "captured_at": "2026-11-03T16:09:00+08:00",
-  "checks": {
-    "production_reproduction": "run 224063: 451/620 groups contain odds snapshots later than predict_time; maximum +4 seconds; feature snapshots all precede predict_time",
-    "github_ci": "P137 control closeout run 41601202766 completed success for baseline HEAD 33c193295eeebae70938a7a547c16fb9a372caee."
-  }
+  "dirty": true,
+  "preexisting_worktree_changes_preserved": true,
+  "known_scope_limit": "52 V4 business paths: 51 mapped P107/P138 paths plus uv.lock for accounting only; uv.lock must not be staged.",
+  "captured_at": "2026-11-03T23:56:52+08:00"
 }

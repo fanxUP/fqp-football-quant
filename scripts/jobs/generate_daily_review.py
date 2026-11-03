@@ -23,9 +23,23 @@ from scripts.jobs.report_generation import (
     has_completed_report_generation_run,
     upsert_report_generation_run,
 )
+from scripts.prediction_statistics import canonical_prediction_rows_ctes
 from scripts.real_ticket_storage import upsert_daily_review
 from scripts.review_generator import daily_summary
 from scripts.upset.reports import generate_report
+
+DAILY_RECOMMENDED_MATCH_COUNT_SQL = f"""
+    WITH RECURSIVE review_matches AS MATERIALIZED (
+        SELECT id AS match_id, kickoff_time
+        FROM official_matches
+        WHERE business_date = %(review_date)s
+    ), {canonical_prediction_rows_ctes(match_scope="review_matches")}
+    SELECT COUNT(DISTINCT mp.match_id)
+    FROM canonical_prediction_rows mp
+    JOIN review_matches m ON m.match_id = mp.match_id
+    WHERE mp.predict_time < m.kickoff_time
+      AND mp.validation_status = 'valid'
+"""
 
 
 def _yesterday(now: datetime | None = None) -> str:
@@ -115,19 +129,8 @@ def _run_impl(review_date: str | None = None, dry_run: bool = False) -> dict[str
         # 3. Count recommended matches (have predictions)
         with conn.cursor() as cur:
             cur.execute(
-                """
-                WITH review_matches AS MATERIALIZED (
-                    SELECT id, kickoff_time FROM official_matches WHERE business_date = %s
-                )
-                SELECT COUNT(DISTINCT mp.match_id)
-                FROM model_prediction_latest_rows mp
-                JOIN review_matches m ON m.id = mp.match_id
-                -- Bind the date's match IDs before ranking legacy history.
-                WHERE mp.match_id = ANY(ARRAY(SELECT id FROM review_matches))
-                  AND mp.predict_time < m.kickoff_time
-                  AND mp.validation_status = 'valid'
-                """,
-                (date,),
+                DAILY_RECOMMENDED_MATCH_COUNT_SQL,
+                {"review_date": date},
             )
             recommended_count = cur.fetchone()[0] or 0
 

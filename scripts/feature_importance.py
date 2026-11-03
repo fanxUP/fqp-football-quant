@@ -54,6 +54,7 @@ if _PROJECT_ROOT not in sys.path:
     sys.path.insert(0, _PROJECT_ROOT)
 
 MIN_FEATURE_MODEL_MATCHES = explanation_artifact.MIN_FEATURE_MODEL_MATCHES
+MAX_FEATURE_MODEL_MATCHES = 5000
 
 # ---------------------------------------------------------------------------
 # Feature column definitions — must match match_feature_snapshots table
@@ -141,34 +142,51 @@ def _load_training_data(
         y in {0, 1, 2} = {客胜, 平局, 主胜}
     """
     col_refs = ", ".join(f"fs.{c}" for c in FEATURE_COLUMNS)
+    settled_results_ctes = SETTLED_SPF_RESULTS_CTE.strip().lstrip(",").strip()
 
     with conn.cursor() as cur:
         cur.execute(
             f"""
-            WITH latest_feature_snapshots AS (
-                SELECT DISTINCT ON (fs.match_id) fs.*
-                FROM match_feature_snapshots fs
-                JOIN official_matches m ON m.id = fs.match_id
-                WHERE fs.feature_version IN %(feature_versions)s
-                  AND fs.snapshot_time < m.kickoff_time
-                ORDER BY fs.match_id, fs.snapshot_time DESC, fs.id DESC
-            ){SETTLED_SPF_RESULTS_CTE}
+            WITH {settled_results_ctes}, eligible_training_matches AS MATERIALIZED (
+                SELECT m.id AS match_id, m.business_date, m.kickoff_time, m.league_name,
+                       r.actual_result
+                FROM official_matches m
+                JOIN settled_spf_results r ON r.match_id = m.id
+                WHERE EXISTS (
+                    SELECT 1
+                    FROM match_feature_snapshots snapshot_exists
+                    WHERE snapshot_exists.match_id = m.id
+                      AND snapshot_exists.feature_version IN %(feature_versions)s
+                      AND snapshot_exists.snapshot_time < m.kickoff_time
+                )
+                ORDER BY m.business_date DESC, m.id
+                LIMIT %(max_matches)s
+            )
             SELECT
-                fs.match_id,
+                m.match_id,
                 m.league_name,
                 {col_refs},
                 CASE
-                    WHEN r.actual_result = '3' THEN 2
-                    WHEN r.actual_result = '1' THEN 1
+                    WHEN m.actual_result = '3' THEN 2
+                    WHEN m.actual_result = '1' THEN 1
                     ELSE 0
                 END AS label
-            FROM latest_feature_snapshots fs
-            JOIN official_matches m ON m.id = fs.match_id
-            JOIN settled_spf_results r ON r.match_id = fs.match_id
-            ORDER BY m.business_date DESC, fs.match_id
-            LIMIT 5000
+            FROM eligible_training_matches m
+            CROSS JOIN LATERAL (
+                SELECT snapshot.*
+                FROM match_feature_snapshots snapshot
+                WHERE snapshot.match_id = m.match_id
+                  AND snapshot.feature_version IN %(feature_versions)s
+                  AND snapshot.snapshot_time < m.kickoff_time
+                ORDER BY snapshot.snapshot_time DESC, snapshot.id DESC
+                LIMIT 1
+            ) fs
+            ORDER BY m.business_date DESC, m.match_id
         """,
-            {"feature_versions": COMPATIBLE_SNAPSHOT_VERSIONS},
+            {
+                "feature_versions": COMPATIBLE_SNAPSHOT_VERSIONS,
+                "max_matches": MAX_FEATURE_MODEL_MATCHES,
+            },
         )
         rows = cur.fetchall()
 

@@ -6,6 +6,8 @@ import json
 from dataclasses import dataclass
 from typing import Any
 
+from scripts.prediction_statistics import latest_prediction_ctes
+
 
 class InterpretationSourceError(ValueError):
     """Raised when an immutable business source cannot be prepared."""
@@ -66,13 +68,26 @@ def build_pre_match_source(
         )
         odds = cur.fetchall()
         cur.execute(
-            """SELECT DISTINCT ON (mv.model_name, mp.play_type, mp.option_code)
+            f"""WITH RECURSIVE {latest_prediction_ctes(filter_match=True)}, latest_ids AS (
+                   SELECT mapped.prediction_id AS id
+                   FROM latest_groups groups
+                   JOIN model_prediction_group_options mapped ON mapped.group_id = groups.group_id
+                   UNION ALL
+                   SELECT id FROM legacy_latest
+               )
+               SELECT DISTINCT ON (mv.model_name, mp.play_type, mp.option_code)
                       mv.model_name, mp.play_type, mp.option_code, mp.model_probability,
                       mp.market_probability, mp.fair_odds, mp.ev, mp.confidence_score, mp.predict_time
-               FROM model_prediction_latest_rows mp JOIN model_versions mv ON mv.id = mp.model_version_id
-               WHERE mp.match_id = %s AND mp.validation_status = 'valid' AND mp.predict_time < %s
+               FROM latest_ids latest
+               JOIN LATERAL (
+                   SELECT p.* FROM model_predictions p WHERE p.id = latest.id OFFSET 0
+               ) mp ON true
+               JOIN model_versions mv ON mv.id = mp.model_version_id
+               WHERE mp.match_id = %(match_id)s
+                 AND mp.validation_status = 'valid'
+                 AND mp.predict_time < %(kickoff_time)s
                ORDER BY mv.model_name, mp.play_type, mp.option_code, mp.predict_time DESC, mp.id DESC""",
-            (match_id, match[5]),
+            {"match_id": match_id, "kickoff_time": match[5]},
         )
         predictions = cur.fetchall()
     title = f"赛前解读：{match[1] or match_id} {match[3]} vs {match[4]}"

@@ -105,12 +105,14 @@ def list_matches(
 
     with get_db() as conn:
         with conn.cursor() as cur:
-            # A stale selling flag must never expose a settled or already-started match.
+            # A stale selling flag or missing official cutoff must never expose
+            # a match as actionable.
             where_parts = [
                 "m.sale_status = 'selling'",
                 "LOWER(COALESCE(m.match_status, '')) IN ('scheduled', 'selling', 'not_started')",
                 "m.kickoff_time > timezone('Asia/Shanghai', NOW())",
-                "(m.sale_stop_time IS NULL OR m.sale_stop_time > timezone('Asia/Shanghai', NOW()))",
+                "m.sale_stop_time IS NOT NULL",
+                "m.sale_stop_time > timezone('Asia/Shanghai', NOW())",
             ]
             params: dict = {"limit": limit}
 

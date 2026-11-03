@@ -11,7 +11,11 @@ from typing import Any
 from psycopg2 import Binary
 from psycopg2.extras import Json
 
-from scripts.model_prediction_run_identity import canonical_json_bytes, content_sha256
+from scripts.model_prediction_run_identity import (
+    canonical_json_bytes,
+    content_sha256,
+    verify_prediction_feature_context,
+)
 from scripts.model_storage import store_model_prediction
 
 
@@ -205,6 +209,15 @@ def build_prediction_group_payload(
     provenance_status = str(metadata.get("provenance_status") or "incomplete")
     if provenance_status not in {"complete", "incomplete"}:
         raise ValueError("provenance_status must be complete or incomplete")
+    feature_context = metadata.get("feature_context")
+    if feature_context is not None:
+        verify_prediction_feature_context(
+            feature_context,
+            match_id=int(metadata["match_id"]),
+            model_version_id=int(metadata["model_version_id"]),
+            predict_time=predict_time,
+            feature_snapshot_id=metadata.get("feature_snapshot_id"),
+        )
     prediction_outputs = stored_fields
     output_payload = {
         "match_id": int(metadata["match_id"]),
@@ -222,6 +235,8 @@ def build_prediction_group_payload(
         "artifact_identity": artifact_identity,
         "prediction_outputs": prediction_outputs,
     }
+    if feature_context is not None:
+        output_payload["feature_context"] = dict(feature_context)
     output_manifest_canonical = canonical_json_bytes(output_payload)
     return {
         **output_payload,

@@ -1,0 +1,19 @@
+{
+  "schema_version": 4,
+  "current_task": "P107-AGGREGATE-SCOPE-RECONCILIATION",
+  "tasks": {
+    "P107-AGGREGATE-SCOPE-RECONCILIATION": {
+      "title": "Reconcile accumulated P107/P138 scope without enlarging any slice budget",
+      "acceptance_id": "A107-AGGREGATE-SCOPE-RECONCILIATION",
+      "depends_on": [],
+      "kind": "integration_reconciliation",
+      "status": "DONE",
+      "definition_of_done": [
+        "Exact current product-path set is mapped to archived slice ownership, except explicitly identified uv.lock.",
+        "V4 scope and budget pass at 52 files / 5 new / 2 migrations / 0 dependencies / 4 previously declared API changes.",
+        "P107-06C original three-file budget remains unchanged.",
+        "No product code, dependency lock, production database or server is modified."
+      ]
+    }
+  }
+}

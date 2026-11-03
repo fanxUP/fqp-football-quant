@@ -122,7 +122,9 @@ def test_simulator_matches_filters_to_future_sellable_statuses(client):
     assert "sale_status = 'selling'" in sql
     assert "LOWER(COALESCE(m.match_status, '')) IN ('scheduled', 'selling', 'not_started')" in sql
     assert "m.kickoff_time > timezone('Asia/Shanghai', NOW())" in sql
-    assert "m.sale_stop_time IS NULL OR m.sale_stop_time > timezone('Asia/Shanghai', NOW())" in sql
+    assert "m.sale_stop_time IS NOT NULL" in sql
+    assert "m.sale_stop_time > timezone('Asia/Shanghai', NOW())" in sql
+    assert "m.sale_stop_time IS NULL OR" not in sql
 
 
 def test_pool_capabilities_support_current_sporttery_field_names():

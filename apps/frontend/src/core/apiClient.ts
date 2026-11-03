@@ -5,6 +5,7 @@ import type { ModuleCategory, SidebarPanel } from '../panelRegistry';
 import type {
   Team,
   FeatureSnapshot,
+  ObservedFeatureBatchSummary,
   Prediction,
   SimulationTicket,
   Settlement,
@@ -721,14 +722,22 @@ export const api = {
 
   // Feature snapshots
   features: (params?: { match_id?: number; limit?: number }) =>
-    request<{ snapshots: FeatureSnapshot[]; total: number }>(
+    request<{
+      snapshots: FeatureSnapshot[];
+      observed_batches: ObservedFeatureBatchSummary[];
+      total: number;
+    }>(
       `/api/features/snapshots${qs({ match_id: params?.match_id, limit: params?.limit ?? 50 })}`,
     ),
 
   // Predictions
   predictions: (params?: { match_id?: number; limit?: number; include_summary?: boolean; summary_only?: boolean }) =>
-    request<{ predictions: Prediction[]; total: number | null; summary: import('./types').PredictionSummary | null }>(
+    request<{ predictions: Prediction[]; total: number | null; summary: import('./types').PredictionSummary | null; summary_meta: import('./types').PredictionSummaryMeta | null }>(
       `/api/predictions${qs({ match_id: params?.match_id, limit: params?.summary_only ? undefined : (params?.limit ?? 50), include_summary: params?.include_summary === undefined ? undefined : String(params.include_summary), summary_only: params?.summary_only === undefined ? undefined : String(params.summary_only) })}`,
+    ),
+  predictionGroupFeatureContext: (groupId: string) =>
+    request<import('./types').PredictionGroupFeatureContext>(
+      `/api/models/prediction-groups/${encodeURIComponent(groupId)}/feature-context`,
     ),
 
   modelOverview: () =>

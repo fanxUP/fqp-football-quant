@@ -132,6 +132,14 @@ def test_prediction_run_counts_derived_groups_separately_from_option_rows():
     ]
     matrix = score_matrix(1.3, 1.1)
     counts = {}
+    feature_context = {
+        "schema_version": "prediction-feature-context/v1",
+        "match_id": 9,
+        "predict_time": "2026-07-16T14:00:00",
+        "legacy_feature_snapshot_id": 88,
+        "observation_batch": {"status": "no_complete_batch"},
+        "consumption": "context_only_not_used_for_probability",
+    }
 
     with patch("scripts.derived_play_predictions.store_prediction_group") as store:
         option_rows = store_derived_play_predictions(
@@ -148,10 +156,18 @@ def test_prediction_run_counts_derived_groups_separately_from_option_rows():
             predict_time="2026-07-16T14:00:00",
             prediction_run_id="run-id",
             output_group_counts=counts,
+            feature_context=feature_context,
         )
 
     assert option_rows == 14
     assert store.call_count == 7
+    stored_contexts = [call.kwargs["metadata"]["feature_context"] for call in store.call_args_list]
+    assert {context["model_version_id"] for context in stored_contexts} == {1, 2, 3}
+    assert all(
+        {key: value for key, value in context.items() if key != "model_version_id"}
+        == feature_context
+        for context in stored_contexts
+    )
     assert counts["derived"] == {
         "expected": 7,
         "completed": 7,

@@ -9,12 +9,217 @@ import statistics
 import time
 import uuid
 from contextlib import closing, contextmanager, nullcontext
+from datetime import datetime
 from pathlib import Path
 from unittest.mock import MagicMock
 from urllib.parse import urlparse
 
 import pytest
 from psycopg2.errors import LockNotAvailable, RaiseException, StringDataRightTruncation
+
+
+def test_prediction_group_feature_context_is_hashed_and_bound_to_its_cutoff():
+    from scripts.model_prediction_run_storage import build_prediction_group_payload
+
+    match_id = 12
+    predict_time = "2026-10-23T10:00:00"
+    context = {
+        "schema_version": "prediction-feature-context/v1",
+        "match_id": match_id,
+        "model_version_id": 3,
+        "predict_time": predict_time,
+        "legacy_feature_snapshot_id": 77,
+        "observation_batch": {
+            "id": 91,
+            "cutoff_id": "00000000-0000-0000-0000-000000000091",
+            "cutoff_as_of": "2026-10-23T02:00:00+00:00",
+            "builder_version": "observed-cutoff-pilot/v1",
+            "feature_schema_version": "observed-form/v3",
+            "status": "complete",
+            "content_hash": "d" * 64,
+            "required_fields_count": 55,
+            "feature_fields_count": 55,
+            "value_fields_count": 10,
+            "unknown_fields_count": 35,
+            "newest_attempt_id": 91,
+            "newest_attempt_status": "complete",
+            "selection_reason": "latest_complete",
+            "metadata_integrity": "stored_hash_not_recomputed",
+        },
+        "consumption": "context_only_not_used_for_probability",
+    }
+    metadata = {
+        "match_id": match_id,
+        "model_version_id": 3,
+        "play_type": "spf",
+        "predict_time": predict_time,
+        "expected_options": ["3", "1", "0"],
+        "feature_snapshot_id": 77,
+        "feature_context": context,
+    }
+    predictions = [
+        {
+            "match_id": match_id,
+            "model_version_id": 3,
+            "play_type": "spf",
+            "predict_time": predict_time,
+            "option_code": option,
+            "model_probability": probability,
+        }
+        for option, probability in (("3", 0.5), ("1", 0.25), ("0", 0.25))
+    ]
+
+    payload = build_prediction_group_payload(
+        run_id=uuid.uuid4(), metadata=metadata, predictions=predictions
+    )
+
+    assert payload["output_manifest"]["feature_context"] == context
+    assert (
+        payload["output_sha256"] == hashlib.sha256(payload["output_manifest_canonical"]).hexdigest()
+    )
+
+    for status, integrity in (
+        ("no_complete_batch", "not_applicable"),
+        ("read_failed", "not_read"),
+    ):
+        missing_context = {
+            **context,
+            "observation_batch": {
+                "id": None,
+                "cutoff_id": None,
+                "cutoff_as_of": None,
+                "builder_version": None,
+                "feature_schema_version": None,
+                "status": status,
+                "content_hash": None,
+                "required_fields_count": 0,
+                "feature_fields_count": 0,
+                "value_fields_count": 0,
+                "unknown_fields_count": 0,
+                "newest_attempt_id": None,
+                "newest_attempt_status": None,
+                "selection_reason": status,
+                "metadata_integrity": integrity,
+            },
+        }
+        missing_payload = build_prediction_group_payload(
+            run_id=uuid.uuid4(),
+            metadata={**metadata, "feature_context": missing_context},
+            predictions=predictions,
+        )
+        assert missing_payload["output_manifest"]["feature_context"] == missing_context
+
+    for invalid_context in (
+        {**context, "match_id": match_id + 1},
+        {**context, "legacy_feature_snapshot_id": 78},
+        {
+            **context,
+            "observation_batch": {
+                **context["observation_batch"],
+                "cutoff_as_of": "2026-10-23T03:00:00+00:00",
+            },
+        },
+        {**context, "raw_features": {"temperature_2m": 18}},
+    ):
+        with pytest.raises(ValueError):
+            build_prediction_group_payload(
+                run_id=uuid.uuid4(),
+                metadata={**metadata, "feature_context": invalid_context},
+                predictions=predictions,
+            )
+
+
+def test_prediction_batch_summary_uses_only_pre_cutoff_publications(isolated_database):
+    from scripts.feature_batch_storage import load_latest_feature_batch_summary
+
+    conn, _schema_name = isolated_database
+    fields = ["temperature_2m", "precipitation"]
+    fields_json = json.dumps(fields, ensure_ascii=False, separators=(",", ":"))
+    fields_hash = hashlib.sha256(fields_json.encode()).hexdigest()
+    features = json.dumps(
+        {
+            "temperature_2m": {
+                "fact_status": "value",
+                "value": 18,
+                "observation_indexes": [0],
+            },
+            "precipitation": {
+                "fact_status": "unknown",
+                "value": None,
+                "observation_indexes": [1],
+            },
+        },
+        separators=(",", ":"),
+    )
+    with conn.cursor() as cursor:
+        cursor.execute("INSERT INTO official_matches DEFAULT VALUES RETURNING id")
+        match_id = cursor.fetchone()[0]
+        cursor.execute(
+            """CREATE TABLE feature_batches (
+                   id BIGINT PRIMARY KEY,
+                   match_id BIGINT NOT NULL,
+                   cutoff_id UUID NOT NULL,
+                   cutoff_as_of TIMESTAMPTZ NOT NULL,
+                   builder_version VARCHAR(64) NOT NULL,
+                   feature_schema_version VARCHAR(64) NOT NULL,
+                   required_fields JSONB NOT NULL,
+                   fields_hash CHAR(64) NOT NULL,
+                   features JSON NOT NULL,
+                   status VARCHAR(16) NOT NULL,
+                   content_hash CHAR(64) NOT NULL
+               )"""
+        )
+        cursor.executemany(
+            """INSERT INTO feature_batches (
+                   id,match_id,cutoff_id,cutoff_as_of,builder_version,
+                   feature_schema_version,required_fields,fields_hash,features,status,content_hash
+               ) VALUES (%s,%s,%s,%s,'fixed-weather/v1','observed-form/v3',
+                         %s::jsonb,%s,%s::json,%s,%s)""",
+            [
+                (
+                    batch_id,
+                    match_id,
+                    f"00000000-0000-0000-0000-{batch_id:012d}",
+                    cutoff,
+                    fields_json,
+                    fields_hash,
+                    features,
+                    status,
+                    "a" * 64,
+                )
+                for batch_id, cutoff, status in (
+                    (90, "2026-10-23T01:00:00+00:00", "complete"),
+                    (91, "2026-10-23T01:30:00+00:00", "partial"),
+                    (92, "2026-10-23T03:00:00+00:00", "complete"),
+                )
+            ],
+        )
+
+    selected = load_latest_feature_batch_summary(
+        conn,
+        match_id=match_id,
+        builder_version="fixed-weather/v1",
+        required_fields=fields,
+        as_of=datetime.fromisoformat("2026-10-23T02:00:00+00:00"),
+    )
+    absent = load_latest_feature_batch_summary(
+        conn,
+        match_id=match_id,
+        builder_version="fixed-weather/v1",
+        required_fields=fields,
+        as_of=datetime.fromisoformat("2026-10-23T00:30:00+00:00"),
+    )
+
+    assert selected["batch"]["id"] == 90
+    assert selected["newest_attempt_id"] == 91
+    assert selected["newest_attempt_status"] == "partial"
+    assert selected["selection_reason"] == "previous_complete"
+    assert selected["batch"]["feature_fields_count"] == 2
+    assert selected["batch"]["value_fields_count"] == 1
+    assert selected["batch"]["unknown_fields_count"] == 1
+    assert "features" not in selected["batch"]
+    assert absent["batch"] is None
+    assert absent["selection_reason"] == "no_complete_batch"
 
 
 @pytest.mark.parametrize("archive_snapshots", [100, 1000])
@@ -54,8 +259,18 @@ def test_scheduled_count_snapshot_survives_failures_and_reads_without_history_ac
             CROSS JOIN generate_series(1,%s) n CROSS JOIN unnest(ARRAY['3','1','0']) option_code""",
             (archive_snapshots,),
         )
+        # The global canonical-summary refresh relies on the production
+        # identity index from migration 113 when finding latest legacy rows.
+        # Keep this fixture representative instead of benchmarking an
+        # unindexed schema that production is not meant to run.
+        cursor.execute(
+            (Path(__file__).resolve().parents[2] / "sql/113_prediction_read_paths.sql").read_text()
+        )
+        cursor.execute("ANALYZE model_predictions")
+        cursor.execute("ANALYZE official_matches")
         cursor.execute(sql.SQL("GRANT USAGE ON SCHEMA {} TO fqp").format(sql.Identifier(schema)))
-        cursor.execute("GRANT SELECT ON official_matches, model_versions, model_predictions TO fqp")
+        cursor.execute("""GRANT SELECT ON official_matches, model_versions, model_predictions,
+            model_prediction_runs, model_prediction_groups, model_prediction_group_options TO fqp""")
         cursor.execute("GRANT SELECT, INSERT, UPDATE ON ai_job_runs TO fqp")
         cursor.execute("GRANT USAGE ON SEQUENCE ai_job_runs_id_seq TO fqp")
     conn.commit()
@@ -78,12 +293,15 @@ def test_scheduled_count_snapshot_survives_failures_and_reads_without_history_ac
     first = dashboard.get_prediction_count()
     assert first["total"] == 900 * archive_snapshots and first["status"] == "ok"
     assert first["data_as_of"] <= first["last_success_at"]
+    summary_snapshot = counts.get_prediction_summary_snapshot(conn)
+    assert summary_snapshot["meta"]["status"] == "ok"
+    assert summary_snapshot["summary"]["total"] == 600
+    assert summary_snapshot["summary"]["model_count"] == 2
 
     # Reader must work even if its role cannot access any historical predictions.
     with conn.cursor() as cursor:
-        cursor.execute(
-            "REVOKE SELECT ON official_matches, model_versions, model_predictions FROM fqp"
-        )
+        cursor.execute("""REVOKE SELECT ON official_matches, model_versions, model_predictions,
+            model_prediction_runs, model_prediction_groups, model_prediction_group_options FROM fqp""")
     conn.commit()
     samples_ms = []
     for _ in range(30):
@@ -107,21 +325,25 @@ def test_scheduled_count_snapshot_survives_failures_and_reads_without_history_ac
         flush=True,
     )
     with conn.cursor() as cursor:
-        cursor.execute("GRANT SELECT ON official_matches, model_versions, model_predictions TO fqp")
+        cursor.execute("""GRANT SELECT ON official_matches, model_versions, model_predictions,
+            model_prediction_runs, model_prediction_groups, model_prediction_group_options TO fqp""")
     conn.commit()
 
-    original_compute = counts.compute_prediction_count
+    original_compute = counts.compute_prediction_snapshots
 
     def timeout_count(count_conn):
         with count_conn.cursor() as cursor:
             cursor.execute("SET LOCAL statement_timeout = '20ms'")
             cursor.execute("SELECT pg_sleep(0.1)")
 
-    monkeypatch.setattr(counts, "compute_prediction_count", timeout_count)
+    monkeypatch.setattr(counts, "compute_prediction_snapshots", timeout_count)
     with pytest.raises(QueryCanceled):
         counts.refresh_prediction_count()
     failed = dashboard.get_prediction_count()
     assert failed == {**first, "status": "refresh_failed"}
+    failed_summary = counts.get_prediction_summary_snapshot(conn)
+    assert failed_summary["summary"] == summary_snapshot["summary"]
+    assert failed_summary["meta"]["status"] == "refresh_failed"
     with conn.cursor() as cursor:
         cursor.execute("SELECT status FROM ai_job_runs ORDER BY id")
         assert cursor.fetchall() == [("completed",), ("failed",)]
@@ -151,7 +373,7 @@ def test_scheduled_count_snapshot_survives_failures_and_reads_without_history_ac
             (counts.JOB_CODE,),
         )
     conn.commit()
-    monkeypatch.setattr(counts, "compute_prediction_count", original_compute)
+    monkeypatch.setattr(counts, "compute_prediction_snapshots", original_compute)
     assert counts.refresh_prediction_count()["total"] == expected
     assert dashboard.get_prediction_count()["total"] == expected
     assert dashboard.get_prediction_count()["status"] == "ok"
@@ -321,11 +543,11 @@ def test_scoped_jobs_do_not_rank_unrelated_prediction_history(
         query, params = next(
             call.args
             for call in captured_cursor.execute.call_args_list
-            if "model_prediction_latest_rows" in call.args[0]
+            if "FROM canonical_prediction_rows mp" in call.args[0]
         )
         with conn.cursor() as cursor:
             for day, expected in (("2026-10-24", 6), ("2026-10-23", 2), ("2026-10-22", 0)):
-                cursor.execute(query, (day,))
+                cursor.execute(query, {"review_date": day})
                 assert cursor.fetchone() == (expected,)
             cursor.execute("EXPLAIN (ANALYZE, FORMAT JSON) " + query, params)
             plan = cursor.fetchone()[0][0]
@@ -414,9 +636,8 @@ def test_scoped_jobs_do_not_rank_unrelated_prediction_history(
 
 
 @pytest.mark.parametrize("archive_snapshots", [100, 1000])
-@pytest.mark.parametrize("read_kind", ["recent", "summary", "summary_only"])
 def test_recent_predictions_preserve_latest_semantics_without_ranking_archive(
-    isolated_database, monkeypatch, archive_snapshots, read_kind
+    isolated_database, monkeypatch, archive_snapshots
 ):
     from psycopg2 import sql
 
@@ -427,6 +648,7 @@ def test_recent_predictions_preserve_latest_semantics_without_ranking_archive(
         finalize_prediction_run,
         store_prediction_group,
     )
+    from scripts.prediction_statistics import compute_prediction_snapshots, latest_prediction_ctes
 
     conn, schema = isolated_database
     with conn.cursor() as cursor:
@@ -436,16 +658,29 @@ def test_recent_predictions_preserve_latest_semantics_without_ranking_archive(
     capture = MagicMock()
     captured_cursor = capture.cursor.return_value.__enter__.return_value
     captured_cursor.fetchall.return_value = []
-    captured_cursor.fetchone.return_value = (0, 0, None, 0, None)
     monkeypatch.setattr(router, "get_db", lambda: nullcontext(capture))
-    router.list_predictions(match_id=None, limit=200, include_summary=True)
+    monkeypatch.setattr(
+        router,
+        "get_prediction_summary_snapshot",
+        lambda _conn: {
+            "summary": {
+                "total": 0,
+                "positive_ev_count": 0,
+                "avg_confidence": None,
+                "model_count": 0,
+                "latest_predict_time": None,
+            },
+            "meta": {"status": "ok", "is_stale": False},
+        },
+    )
+    snapshot_response = router.list_predictions(
+        match_id=None, limit=200, include_summary=False, summary_only=True
+    )
+    assert snapshot_response["summary"]["total"] == 0
+    assert snapshot_response["summary_meta"]["status"] == "ok"
     read_setting = captured_cursor.execute.call_args_list[0].args
     assert read_setting == ("SET LOCAL jit = off",)
-    summary_query, summary_params = captured_cursor.execute.call_args.args
-    with conn.cursor() as cursor:
-        cursor.execute(*read_setting)
-        cursor.execute(summary_query, summary_params)
-        assert cursor.fetchone() == (0, 0, None, 0, None)
+    assert len(captured_cursor.execute.call_args_list) == 1
     router.list_predictions(match_id=None, limit=200, include_summary=False)
     query, params = captured_cursor.execute.call_args.args
     with conn.cursor() as cursor:
@@ -619,6 +854,39 @@ def test_recent_predictions_preserve_latest_semantics_without_ranking_archive(
         cursor.execute(*read_setting)
         cursor.execute("SET LOCAL ROLE fqp")
 
+    if archive_snapshots == 1000:
+        with conn.cursor() as cursor:
+            cursor.execute("SET LOCAL statement_timeout = '120s'")
+            expected_summary = router._read_prediction_summary(
+                cursor, latest_prediction_ctes(filter_match=False), {}
+            )
+        refreshed = compute_prediction_snapshots(conn)["prediction_summary"]
+        assert {
+            key: refreshed[key]
+            for key in (
+                "total",
+                "positive_ev_count",
+                "avg_confidence",
+                "model_count",
+                "latest_predict_time",
+            )
+        } == expected_summary
+        refresh_seconds = (
+            datetime.fromisoformat(refreshed["computed_at"])
+            - datetime.fromisoformat(refreshed["data_as_of"])
+        ).total_seconds()
+        assert 0 <= refresh_seconds < 120
+        print(
+            json.dumps(
+                {
+                    "prediction_summary_refresh_seconds": refresh_seconds,
+                    "statement_budget_seconds": 120,
+                    "scope": refreshed["scope"],
+                }
+            ),
+            flush=True,
+        )
+
     for match_id, limit in (
         (None, 200),
         (None, 500),
@@ -647,18 +915,13 @@ def test_recent_predictions_preserve_latest_semantics_without_ranking_archive(
         router.list_predictions(
             match_id=match_id,
             limit=limit,
-            include_summary=read_kind == "summary",
-            summary_only=read_kind == "summary_only",
+            include_summary=False,
+            summary_only=False,
         )
-        if read_kind == "summary_only":
-            assert len(captured_cursor.execute.call_args_list) == 2
-            assert "COUNT(*) AS total" in captured_cursor.execute.call_args_list[1].args[0]
         query, params = captured_cursor.execute.call_args.args
         with conn.cursor() as cursor:
             cursor.execute(query, params)
-            actual = (
-                cursor.fetchone() if read_kind in ("summary", "summary_only") else cursor.fetchall()
-            )
+            actual = cursor.fetchall()
             cursor.execute(
                 """SELECT mp.id, mp.predict_time, mp.ev, mp.confidence_score, mv.model_name
                 FROM model_prediction_latest_rows mp
@@ -670,27 +933,9 @@ def test_recent_predictions_preserve_latest_semantics_without_ranking_archive(
                 (match_id, match_id),
             )
             eligible = cursor.fetchall()
-            if read_kind in ("summary", "summary_only"):
-                confidence = [row[3] for row in eligible if row[3] is not None]
-                expected = (
-                    len(eligible),
-                    sum(row[2] is not None and row[2] > 0 for row in eligible),
-                    sum(confidence) / len(confidence) if confidence else None,
-                    len({row[4] for row in eligible}),
-                    max((row[1] for row in eligible), default=None),
-                )
-                assert actual[:2] == expected[:2]
-                if confidence:
-                    assert actual[2] == pytest.approx(expected[2])
-                else:
-                    assert actual[2] is None
-                assert actual[3:] == expected[3:]
-            else:
-                assert len(actual) == min(len(eligible), limit)
-                assert [row[0] for row in actual] == [row[0] for row in eligible[:limit]]
-                assert [(row[2], row[10]) for row in actual] == [
-                    row[1:3] for row in eligible[:limit]
-                ]
+            assert len(actual) == min(len(eligible), limit)
+            assert [row[0] for row in actual] == [row[0] for row in eligible[:limit]]
+            assert [(row[2], row[10]) for row in actual] == [row[1:3] for row in eligible[:limit]]
             if match_id is None and limit == 200:
                 cursor.execute("EXPLAIN (ANALYZE, FORMAT JSON) " + query, params)
                 plan = cursor.fetchone()[0][0]
@@ -712,7 +957,7 @@ def test_recent_predictions_preserve_latest_semantics_without_ranking_archive(
         json.dumps(
             {
                 "archive_rows": 900 * archive_snapshots,
-                "read_kind": read_kind,
+                "read_kind": "recent",
                 "prediction_rows_examined": examined,
                 "execution_time_ms": plan["Execution Time"],
             }
@@ -727,7 +972,7 @@ def test_recent_predictions_preserve_latest_semantics_without_ranking_archive(
             for _ in range(30):
                 started = time.perf_counter()
                 cursor.execute(benchmark_query, benchmark_params)
-                expected_rows = 1 if read_kind in ("summary", "summary_only") else 200
+                expected_rows = 200
                 assert len(cursor.fetchall()) == expected_rows
                 samples_ms.append((time.perf_counter() - started) * 1000)
         ordered = sorted(samples_ms)
@@ -735,7 +980,7 @@ def test_recent_predictions_preserve_latest_semantics_without_ranking_archive(
             json.dumps(
                 {
                     "archive_rows": 900 * archive_snapshots,
-                    "read_kind": read_kind,
+                    "read_kind": "recent",
                     "samples": len(ordered),
                     "cache": "warm",
                     "concurrency": 1,
@@ -3063,7 +3308,7 @@ def test_latest_evaluation_metrics_seek_versions_before_merging_model_names(
     from psycopg2 import sql
 
     from scripts import feature_importance
-    from scripts.model_evaluation_scope import LATEST_METRICS_CTE
+    from scripts.model_evaluation_scope import LATEST_METRICS_CTE, METRIC_HOME_PREDICTIONS_CTE
 
     conn, schema = isolated_database
     reference_cte = """WITH latest_metrics AS (
@@ -3093,6 +3338,8 @@ def test_latest_evaluation_metrics_seek_versions_before_merging_model_names(
             VALUES ('maher_poisson'),('maher_poisson'),('elo_rating')""")
         cursor.execute("""INSERT INTO official_matches(kickoff_time)
             SELECT '2026-10-26 18:00'::timestamp FROM generate_series(1,109)""")
+        cursor.execute("""INSERT INTO official_matches(kickoff_time)
+            SELECT '2026-10-26 18:00'::timestamp FROM generate_series(1,100)""")
         cursor.execute("ALTER TABLE official_matches ADD COLUMN league_name TEXT DEFAULT 'fixture'")
         cursor.execute("UPDATE official_matches SET kickoff_time=NULL WHERE id=106")
         cursor.execute("""INSERT INTO official_results(match_id,result_status,spf_result)
@@ -3104,6 +3351,16 @@ def test_latest_evaluation_metrics_seek_versions_before_merging_model_names(
             SELECT m.id,mv.id,'spf','2026-01-01'::timestamp+n*INTERVAL '1 minute',0.6,1,0.2
             FROM official_matches m CROSS JOIN model_versions mv
             CROSS JOIN generate_series(1,%s) n WHERE m.id<=100""",
+            (archive_snapshots,),
+        )
+        cursor.execute(
+            """INSERT INTO model_predictions
+                (match_id,model_version_id,predict_time,play_type,option_code,
+                 model_probability,market_probability,confidence_score,validation_status)
+            SELECT m.id,mv.id,'2026-01-01'::timestamp+n*INTERVAL '1 minute',
+                   'spf','3',0.5,0.5,NULL,'valid'
+            FROM official_matches m CROSS JOIN model_versions mv
+            CROSS JOIN generate_series(1,%s) n WHERE m.id BETWEEN 110 AND 209""",
             (archive_snapshots,),
         )
         cursor.execute("""INSERT INTO market_efficiency_metrics
@@ -3160,6 +3417,40 @@ def test_latest_evaluation_metrics_seek_versions_before_merging_model_names(
             SELECT match_id,model_version_id,'spf','3',snapshot_time,0.5,0.5,NULL,'valid'
             FROM latest_metrics"""
         )
+        cursor.execute((migrations / "113_prediction_read_paths.sql").read_text())
+        cursor.execute("ANALYZE model_predictions")
+        metric_home_query = (
+            LATEST_METRICS_CTE
+            + METRIC_HOME_PREDICTIONS_CTE
+            + """ SELECT mem.match_id,mem.model_version_id,mp_home.id
+                FROM latest_metrics mem
+                JOIN metric_home_predictions mp_home ON mp_home.match_id=mem.match_id
+                    AND mp_home.model_version_id=mem.model_version_id
+                    AND mp_home.play_type=mem.play_type AND mp_home.option_code='3'
+                    AND mp_home.predict_time=mem.snapshot_time
+                WHERE mem.brier_score IS NOT NULL"""
+        )
+        cursor.execute(metric_home_query)
+        before_invalid = cursor.fetchall()
+        assert any(row[0] == 101 for row in before_invalid)
+        # A newer invalid prediction must shield the older snapshot row for
+        # this metric. The exact metric-time join must not resurrect it.
+        cursor.execute(
+            reference_cte
+            + """ INSERT INTO model_predictions
+                (match_id,model_version_id,predict_time,play_type,option_code,
+                 model_probability,market_probability,confidence_score,validation_status)
+                SELECT match_id,model_version_id,snapshot_time+INTERVAL '1 minute',
+                       'spf','3',0.5,0.5,NULL,'invalid'
+                FROM latest_metrics
+                WHERE match_id=101 AND canonical_model_name='maher_poisson'"""
+        )
+        assert cursor.rowcount == 1
+        cursor.execute("EXPLAIN (ANALYZE, FORMAT JSON) " + metric_home_query)
+        metric_home_plan = cursor.fetchone()[0][0]
+        cursor.execute(metric_home_query)
+        metric_home_rows = cursor.fetchall()
+        assert not any(row[0] == 101 for row in metric_home_rows)
         cursor.execute(sql.SQL("GRANT USAGE ON SCHEMA {} TO fqp").format(sql.Identifier(schema)))
         cursor.execute(
             sql.SQL("GRANT SELECT ON ALL TABLES IN SCHEMA {} TO fqp").format(sql.Identifier(schema))
@@ -3189,13 +3480,23 @@ def test_latest_evaluation_metrics_seek_versions_before_merging_model_names(
     conditions = {}
     for dimension in ("league", "odds_range", "confidence"):
         conditions[dimension] = feature_importance.get_condition_performance(conn, dimension)
-        assert sorted(segment["n"] for segment in conditions[dimension]["segments"]) == [101, 104]
+        assert len(conditions[dimension]["segments"]) == 2
     assert all(
         segment["confidence_range"] == "未校准/未知"
         for segment in conditions["confidence"]["segments"]
     )
     with monkeypatch.context() as oracle:
         oracle.setattr(feature_importance, "_LATEST_METRICS_CTE", reference_cte)
+        oracle.setattr(
+            feature_importance,
+            "METRIC_HOME_PREDICTIONS_CTE",
+            """
+    , metric_home_predictions AS (
+                SELECT latest.* FROM model_prediction_latest_rows latest
+                WHERE latest.match_id = ANY(ARRAY(SELECT match_id FROM latest_metrics))
+                  AND latest.play_type='spf' AND latest.option_code='3'
+            )""",
+        )
         assert feature_importance.get_model_comparison_data(conn) == comparison
         assert feature_importance.get_evaluation_summary(conn) == summary
         for dimension, response in conditions.items():
@@ -3209,14 +3510,32 @@ def test_latest_evaluation_metrics_seek_versions_before_merging_model_names(
             ]
         return own + sum(metric_work(child) for child in node.get("Plans", []))
 
+    def prediction_work(node):
+        own = 0
+        if node.get("Relation Name") == "model_predictions":
+            own = (
+                node["Actual Rows"]
+                + node.get("Rows Removed by Filter", 0)
+                + node.get("Rows Removed by Index Recheck", 0)
+            ) * node["Actual Loops"]
+        return own + sum(prediction_work(child) for child in node.get("Plans", []))
+
     work = metric_work(plan["Plan"])
+    prediction_rows_examined = prediction_work(metric_home_plan["Plan"])
     assert "idx_mem_identity_latest_scored_spf" in json.dumps(plan)
+    assert prediction_rows_examined < 50000, (
+        "metric-home reads must ignore unrelated prediction history"
+    )
+    assert metric_home_plan["Execution Time"] >= 0
     print(
         json.dumps(
             {
                 "metric_archive_rows": archive_snapshots * 300,
+                "prediction_archive_rows": archive_snapshots * 300,
                 "metric_node_rows_examined": work,
                 "execution_time_ms": plan["Execution Time"],
+                "metric_home_prediction_rows_examined": prediction_rows_examined,
+                "metric_home_execution_time_ms": metric_home_plan["Execution Time"],
                 "index_build_ms": build_ms,
                 "index_bytes": index_bytes,
             }
@@ -3578,6 +3897,202 @@ def isolated_database(request):
     yield connection, schema_name
 
 
+def test_recommendation_loader_scopes_canonical_rows_to_selling_matches(
+    isolated_database, monkeypatch
+):
+    from psycopg2 import sql
+
+    from scripts import news_release_gate
+    from scripts.recommendation_prediction_loader import load_actionable_predictions
+
+    conn, schema = isolated_database
+    with conn.cursor() as cursor:
+        cursor.execute("ALTER TABLE official_matches ADD COLUMN sale_status TEXT")
+        cursor.execute("ALTER TABLE official_matches ADD COLUMN sale_stop_time TIMESTAMP")
+        cursor.execute("ALTER TABLE official_matches ADD COLUMN league_name TEXT")
+        cursor.execute(
+            "ALTER TABLE model_versions ADD COLUMN is_active BOOLEAN NOT NULL DEFAULT true"
+        )
+        cursor.execute("""CREATE TABLE prediction_input_dirty_matches (
+            match_id BIGINT PRIMARY KEY,input_version BIGINT NOT NULL)""")
+        cursor.execute("""INSERT INTO model_versions(model_name,is_active) VALUES
+            ('maher_poisson',true),('inactive_model',false),('other_model',true)""")
+        cursor.execute("""INSERT INTO official_matches
+            (kickoff_time,match_status,sale_status,sale_stop_time,home_team_name,away_team_name)
+            SELECT timezone('Asia/Shanghai',statement_timestamp())+INTERVAL '2 days',
+                   'scheduled','selling',
+                   timezone('Asia/Shanghai',statement_timestamp())+INTERVAL '1 day',
+                   'home-'||n,'away-'||n
+            FROM generate_series(1,6) n RETURNING id""")
+        selling_matches = [row[0] for row in cursor.fetchall()]
+        cursor.execute("""INSERT INTO official_matches
+            (kickoff_time,match_status,sale_status,sale_stop_time,home_team_name,away_team_name)
+            SELECT timezone('Asia/Shanghai',statement_timestamp())+INTERVAL '2 days',
+                   'scheduled','closed',
+                   timezone('Asia/Shanghai',statement_timestamp())+INTERVAL '1 day',
+                   'archive-home-'||n,'archive-away-'||n
+            FROM generate_series(1,300) n RETURNING id""")
+        closed_matches = [row[0] for row in cursor.fetchall()]
+        cursor.execute(
+            "UPDATE official_matches SET sale_stop_time=NULL WHERE id=%s",
+            (selling_matches[4],),
+        )
+        cursor.execute(
+            "UPDATE official_matches SET sale_stop_time=timezone('Asia/Shanghai',statement_timestamp())"
+            "-INTERVAL '1 minute' WHERE id=%s",
+            (selling_matches[5],),
+        )
+        cursor.execute(
+            """INSERT INTO model_predictions
+            (match_id,model_version_id,predict_time,play_type,option_code,
+             model_probability,validation_status)
+            SELECT m.id,mv.id,timezone('Asia/Shanghai',statement_timestamp())
+                   - INTERVAL '1 day' + n*INTERVAL '1 second',
+                   'spf','3',0.5,'valid'
+            FROM unnest(%s::bigint[]) m(id)
+            CROSS JOIN model_versions mv
+            CROSS JOIN generate_series(1,1000) n""",
+            (closed_matches,),
+        )
+        assert cursor.rowcount == 900000
+        migrations = Path(__file__).resolve().parents[2] / "sql"
+        cursor.execute((migrations / "113_prediction_read_paths.sql").read_text())
+        cursor.execute("ANALYZE model_predictions")
+        cursor.execute("ANALYZE official_matches")
+        cursor.execute(
+            """INSERT INTO official_odds_snapshots
+            (match_id,play_type,option_code,sp_value,snapshot_time)
+            VALUES (%s,'spf','h',2.2,timezone('Asia/Shanghai',statement_timestamp()))
+            RETURNING id""",
+            (selling_matches[1],),
+        )
+        odds_snapshot_id = cursor.fetchone()[0]
+        cursor.executemany(
+            "INSERT INTO prediction_input_dirty_matches(match_id,input_version) VALUES (%s,7)",
+            [(selling_matches[1],), (selling_matches[2],)],
+        )
+        prediction_specs = [
+            (selling_matches[0], 1, "valid", {"model_independent": True}),
+            (selling_matches[0], 1, "invalid", {"model_independent": True}),
+            (
+                selling_matches[1],
+                1,
+                "valid",
+                {
+                    "model_independent": True,
+                    "input_fence": {
+                        "schema_version": "prediction-input-fence/v1",
+                        "match_id": selling_matches[1],
+                        "input_version": 7,
+                    },
+                },
+            ),
+            (selling_matches[2], 1, "valid", {"model_independent": True}),
+            (selling_matches[3], 2, "valid", {"model_independent": True}),
+            (selling_matches[4], 1, "valid", {"model_independent": True}),
+            (selling_matches[5], 1, "valid", {"model_independent": True}),
+            (closed_matches[0], 1, "valid", {"model_independent": True}),
+        ]
+        prediction_ids = []
+        for index, (match_id, version_id, status, uncertainty) in enumerate(prediction_specs):
+            cursor.execute(
+                """INSERT INTO model_predictions
+                (match_id,model_version_id,odds_snapshot_id,feature_snapshot_id,predict_time,
+                 play_type,option_code,model_probability,market_probability,confidence_score,
+                 risk_score,validation_status,uncertainty_reason)
+                VALUES (%s,%s,%s,7000,timezone('Asia/Shanghai',statement_timestamp())
+                        - INTERVAL '1 hour' + %s*INTERVAL '1 minute',
+                        'spf','3',0.6,0.4,0.7,0.1,%s,%s::jsonb) RETURNING id""",
+                (match_id, version_id, odds_snapshot_id, index, status, json.dumps(uncertainty)),
+            )
+            prediction_ids.append(cursor.fetchone()[0])
+        cursor.execute(
+            """UPDATE model_predictions
+            SET predict_time=timezone('Asia/Shanghai',statement_timestamp())-INTERVAL '2 hours'
+            WHERE id=%s""",
+            (prediction_ids[0],),
+        )
+    conn.commit()
+
+    class CapturingCursor:
+        def __init__(self, cursor, owner):
+            self.cursor = cursor
+            self.owner = owner
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return self.cursor.__exit__(*args)
+
+        def execute(self, statement, parameters=None):
+            self.owner.statement = statement
+            self.owner.parameters = parameters
+            return self.cursor.execute(statement, parameters)
+
+        def fetchall(self):
+            return self.cursor.fetchall()
+
+    class CapturingConnection:
+        def __init__(self, connection):
+            self.connection = connection
+            self.statement = None
+            self.parameters = None
+
+        def cursor(self):
+            return CapturingCursor(self.connection.cursor(), self)
+
+    capture = CapturingConnection(conn)
+    monkeypatch.setattr(news_release_gate, "apply_approved_news_overlay", lambda _conn, rows: rows)
+    with conn.cursor() as cursor:
+        cursor.execute(sql.SQL("GRANT USAGE ON SCHEMA {} TO fqp").format(sql.Identifier(schema)))
+        cursor.execute(
+            sql.SQL("GRANT SELECT ON ALL TABLES IN SCHEMA {} TO fqp").format(sql.Identifier(schema))
+        )
+    conn.commit()
+    with conn.cursor() as cursor:
+        cursor.execute("SET LOCAL ROLE fqp")
+    rows = load_actionable_predictions(capture, ["maher_poisson", "inactive_model"])
+    assert [row[0] for row in rows] == [prediction_ids[2]]
+    # Match 5 has unknown sale cutoff; match 6 is already past its cutoff.
+    # Both predictions remain stored, but neither is actionable.
+    assert prediction_ids[5] not in [row[0] for row in rows]
+    assert prediction_ids[6] not in [row[0] for row in rows]
+    assert len(rows[0]) == 18 and rows[0][1] == selling_matches[1]
+    assert float(rows[0][7]) == pytest.approx(0.32)
+    assert rows[0][10] == odds_snapshot_id
+    query = capture.statement
+    assert "FROM model_prediction_latest_rows" not in query
+    assert "recommendation_matches AS MATERIALIZED" in query
+    assert "FROM canonical_prediction_rows mp" in query
+    with conn.cursor() as cursor:
+        cursor.execute("EXPLAIN (ANALYZE, FORMAT JSON) " + query, capture.parameters)
+        plan = cursor.fetchone()[0][0]
+
+    def prediction_rows_examined(node):
+        own = 0
+        if node.get("Relation Name") == "model_predictions":
+            own = (
+                node["Actual Rows"]
+                + node.get("Rows Removed by Filter", 0)
+                + node.get("Rows Removed by Index Recheck", 0)
+            ) * node["Actual Loops"]
+        return own + sum(prediction_rows_examined(child) for child in node.get("Plans", []))
+
+    examined = prediction_rows_examined(plan["Plan"])
+    print(
+        json.dumps(
+            {
+                "unrelated_prediction_rows": 900000,
+                "prediction_rows_examined": examined,
+                "execution_time_ms": plan["Execution Time"],
+            }
+        ),
+        flush=True,
+    )
+    assert examined < 5000, "recommendation lookup must ignore closed-match prediction history"
+
+
 def test_evaluation_scope_seeks_only_settled_match_histories(isolated_database):
     from scripts.model_evaluation_scope import LATEST_PREDICTIONS_CTE
 
@@ -3767,7 +4282,10 @@ def test_prediction_groups_publish_atomically_and_are_read_group_first(
     isolated_database, monkeypatch
 ):
     from scripts.model_prediction_run_identity import canonical_json_bytes, content_sha256
-    from scripts.model_prediction_run_loader import load_latest_prediction_group
+    from scripts.model_prediction_run_loader import (
+        load_latest_prediction_group,
+        load_prediction_group_by_id,
+    )
     from scripts.model_prediction_run_storage import (
         create_prediction_run,
         finalize_prediction_run,
@@ -3910,6 +4428,31 @@ def test_prediction_groups_publish_atomically_and_are_read_group_first(
         **metadata,
         "artifact_identity": artifact_identity,
         "provenance_status": "complete",
+        "feature_context": {
+            "schema_version": "prediction-feature-context/v1",
+            "match_id": match_id,
+            "model_version_id": model_version_id,
+            "predict_time": "2026-10-23T10:00:00",
+            "legacy_feature_snapshot_id": 77,
+            "observation_batch": {
+                "id": 91,
+                "cutoff_id": "00000000-0000-0000-0000-000000000091",
+                "cutoff_as_of": "2026-10-23T02:00:00+00:00",
+                "builder_version": "observed-cutoff-pilot/v1",
+                "feature_schema_version": "observed-form/v3",
+                "status": "complete",
+                "content_hash": "d" * 64,
+                "required_fields_count": 55,
+                "feature_fields_count": 55,
+                "value_fields_count": 10,
+                "unknown_fields_count": 35,
+                "newest_attempt_id": 91,
+                "newest_attempt_status": "complete",
+                "selection_reason": "latest_complete",
+                "metadata_integrity": "stored_hash_not_recomputed",
+            },
+            "consumption": "context_only_not_used_for_probability",
+        },
     }
     next_predictions = copy.deepcopy(predictions)
     for row, probability in zip(next_predictions, (0.2, 0.3, 0.5), strict=True):
@@ -3950,8 +4493,15 @@ def test_prediction_groups_publish_atomically_and_are_read_group_first(
     assert str(loaded["group_id"]) == str(next_group_id)
     assert str(loaded["group_id"]) != str(group_id)
     assert loaded["status"] == "complete", loaded.get("integrity_error")
+    assert loaded["feature_context"] == next_metadata["feature_context"]
     assert sorted(row["option_code"] for row in loaded["options"]) == ["0", "1", "3"]
     assert loaded["probability_vector"] == {"0": 0.5, "1": 0.3, "3": 0.2}
+
+    loaded_by_id = load_prediction_group_by_id(conn, group_id=next_group_id)
+    assert loaded_by_id is not None
+    assert loaded_by_id["status"] == "complete", loaded_by_id.get("integrity_error")
+    assert str(loaded_by_id["group_id"]) == str(next_group_id)
+    assert loaded_by_id["feature_context"] == next_metadata["feature_context"]
     with conn.cursor() as cursor:
         cursor.execute(
             "SELECT output_manifest, output_manifest_canonical "
@@ -4853,6 +5403,31 @@ def test_prediction_group_publication_checks_all_manifest_fields(
         "feature_snapshot_id": 77,
         "odds_snapshot_ids": {"3": 10, "1": 11, "0": 12},
         "odds_snapshot_times": {},
+        "feature_context": {
+            "schema_version": "prediction-feature-context/v1",
+            "match_id": match_id,
+            "model_version_id": model_version_id,
+            "predict_time": "2026-10-23T10:00:00",
+            "legacy_feature_snapshot_id": 77,
+            "observation_batch": {
+                "id": 91,
+                "cutoff_id": "00000000-0000-0000-0000-000000000091",
+                "cutoff_as_of": "2026-10-23T02:00:00+00:00",
+                "builder_version": "observed-cutoff-pilot/v1",
+                "feature_schema_version": "observed-form/v3",
+                "status": "complete",
+                "content_hash": "d" * 64,
+                "required_fields_count": 55,
+                "feature_fields_count": 55,
+                "value_fields_count": 10,
+                "unknown_fields_count": 35,
+                "newest_attempt_id": 91,
+                "newest_attempt_status": "complete",
+                "selection_reason": "latest_complete",
+                "metadata_integrity": "stored_hash_not_recomputed",
+            },
+            "consumption": "context_only_not_used_for_probability",
+        },
     }
     predictions = [
         {
@@ -4879,6 +5454,7 @@ def test_prediction_group_publication_checks_all_manifest_fields(
         metadata=metadata,
         predictions=predictions,
     )
+    assert payload["output_manifest"]["feature_context"] == metadata["feature_context"]
     assert payload["output_sha256"] == content_sha256(payload["output_manifest"])
     if attack == "predict_time":
         payload["output_manifest"]["predict_time"] = "2026-10-23T11:00:00"
@@ -5849,3 +6425,304 @@ def test_mle_manifest_failure_rolls_back_old_model_deactivation(isolated_databas
         manifest_count = cur.fetchone()[0]
     assert model_rows == [("dixon_coles", True), ("maher_poisson", True)]
     assert manifest_count == 0
+
+
+def test_agent_interpretation_executes_match_scoped_prediction_read(isolated_database):
+    from apps.backend.src.services.agent_interpretation import build_pre_match_source
+
+    conn, _schema_name = isolated_database
+    with conn.cursor() as cursor:
+        cursor.execute(
+            "ALTER TABLE official_matches ADD official_match_code TEXT, "
+            "ADD league_name TEXT, ADD sale_status TEXT"
+        )
+        cursor.execute("ALTER TABLE official_odds_snapshots ADD handicap NUMERIC(10,4)")
+        cursor.execute("INSERT INTO model_versions (model_name) VALUES ('fixture') RETURNING id")
+        model_version_id = cursor.fetchone()[0]
+        cursor.execute(
+            """INSERT INTO official_matches (
+                   kickoff_time,match_status,home_team_name,away_team_name,
+                   official_match_code,league_name,sale_status
+               ) VALUES
+                   ('2026-11-04 20:00','scheduled','target-home','target-away','周三001','联赛','selling'),
+                   ('2026-11-04 21:00','scheduled','other-home','other-away','周三002','联赛','selling')
+               RETURNING id"""
+        )
+        target_match_id, other_match_id = [row[0] for row in cursor.fetchall()]
+        cursor.executemany(
+            """INSERT INTO model_predictions (
+                   match_id,model_version_id,predict_time,play_type,option_code,
+                   model_probability,validation_status,uncertainty_reason
+               ) VALUES (%s,%s,'2026-11-04 18:00','spf',%s,0.333333,'valid',
+                         '{\"model_independent\":true}'::jsonb)""",
+            [
+                (match_id, model_version_id, option)
+                for match_id in (target_match_id, other_match_id)
+                for option in ("3", "1", "0")
+            ],
+        )
+
+    source = build_pre_match_source(conn, target_match_id, None)
+
+    assert '"编号":"周三001"' in source.prompt
+    assert '"编号":"周三002"' not in source.prompt
+    assert source.source_ref == str(target_match_id)
+
+
+def test_match_review_executes_canonical_prediction_read_for_review_match_set(isolated_database):
+    from apps.backend.src.services.match_review import build_match_review_cards
+
+    conn, _schema_name = isolated_database
+    with conn.cursor() as cursor:
+        cursor.execute(
+            "ALTER TABLE official_matches ADD official_match_code TEXT, "
+            "ADD league_name TEXT, ADD sale_stop_time TIMESTAMP"
+        )
+        cursor.execute(
+            "ALTER TABLE official_results ADD rqspf_result TEXT, "
+            "ADD total_goals_result TEXT, ADD score_result TEXT, ADD half_full_result TEXT"
+        )
+        cursor.execute(
+            "ALTER TABLE official_odds_snapshots ADD option_name TEXT, ADD handicap NUMERIC"
+        )
+        cursor.execute(
+            """CREATE TABLE match_review_evidence (
+                   id BIGSERIAL PRIMARY KEY, match_id BIGINT, evidence_phase TEXT,
+                   source_name TEXT, source_url TEXT, published_at TIMESTAMP,
+                   captured_at TIMESTAMP, headline TEXT, summary TEXT, reliability TEXT
+               )"""
+        )
+        cursor.execute("CREATE TABLE upset_events (id BIGSERIAL PRIMARY KEY, match_id BIGINT)")
+        cursor.execute(
+            """CREATE TABLE upset_factor_evidence (
+                   id BIGSERIAL PRIMARY KEY, upset_event_id BIGINT, evidence_phase TEXT,
+                   source_type TEXT, source_reference TEXT, published_at TIMESTAMP,
+                   observed_at TIMESTAMP, factor_value_json JSONB, factor_code TEXT,
+                   verification_status TEXT, available_at TIMESTAMP
+               )"""
+        )
+        cursor.execute(
+            "INSERT INTO model_versions (model_name) VALUES ('review_fixture') RETURNING id"
+        )
+        model_version_id = cursor.fetchone()[0]
+        cursor.execute(
+            """INSERT INTO official_matches (
+                   business_date,kickoff_time,match_status,home_team_name,away_team_name,
+                   official_match_code,league_name
+               ) VALUES
+                   ('2026-08-09','2026-08-09 18:00','finished','home-a','away-a','周日001','联赛'),
+                   ('2026-08-09','2026-08-09 20:00','finished','home-b','away-b','周日002','联赛'),
+                   ('2026-08-10','2026-08-10 18:00','finished','home-outside','away-outside','周一001','联赛')
+               RETURNING id"""
+        )
+        review_match_ids = [row[0] for row in cursor.fetchall()]
+        cursor.executemany(
+            """INSERT INTO official_results (
+                   match_id,full_home_goals,full_away_goals,spf_result,
+                   rqspf_result,total_goals_result,score_result,half_full_result,
+                   result_status,official_publish_time
+               ) VALUES (%s,1,0,'3','3','1','1:0','3-3','confirmed','2026-08-09 22:00')""",
+            [(match_id,) for match_id in review_match_ids],
+        )
+        cursor.executemany(
+            """INSERT INTO model_predictions (
+                   match_id,model_version_id,predict_time,play_type,option_code,
+                   model_probability,validation_status,uncertainty_reason
+               ) VALUES (%s,%s,'2026-08-09 10:00','spf',%s,%s,'valid',
+                         '{"model_independent":true}'::jsonb)""",
+            [
+                (match_id, model_version_id, option, probability)
+                for match_id, probability in zip(review_match_ids, (0.6, 0.5, 0.4), strict=True)
+                for option in ("3", "1", "0")
+            ],
+        )
+
+    cards = build_match_review_cards(conn, "2026-08-09")
+
+    assert [card["matchId"] for card in cards] == review_match_ids[:2]
+    assert [len(card["modelSignals"]) for card in cards] == [3, 3]
+    assert {card["matchId"] for card in cards} == set(review_match_ids[:2])
+
+
+def test_upset_review_prediction_evidence_executes_match_scoped_canonical_read(isolated_database):
+    from scripts.upset.review_storage import _prediction_evidence
+
+    conn, _schema_name = isolated_database
+    with conn.cursor() as cursor:
+        cursor.execute("ALTER TABLE model_versions ADD version TEXT")
+        cursor.execute(
+            """INSERT INTO official_matches (
+                   kickoff_time,match_status,home_team_name,away_team_name
+               ) VALUES
+                   ('2026-08-09 18:00','finished','target-home','target-away'),
+                   ('2026-08-09 18:00','finished','other-home','other-away')
+               RETURNING id"""
+        )
+        target_match_id, other_match_id = [row[0] for row in cursor.fetchall()]
+        cursor.execute(
+            "INSERT INTO model_versions (model_name,version) VALUES ('review_fixture','v1') RETURNING id"
+        )
+        model_version_id = cursor.fetchone()[0]
+        cursor.execute(
+            """INSERT INTO model_predictions (
+                   match_id,model_version_id,predict_time,play_type,option_code,
+                   model_probability,validation_status,uncertainty_reason
+               ) VALUES (%s,%s,'2026-08-09 10:00','spf','3',0.61,'valid',
+                         '{"model_independent":true}'::jsonb)
+               RETURNING id""",
+            (target_match_id, model_version_id),
+        )
+        target_prediction_id = cursor.fetchone()[0]
+        cursor.execute(
+            """INSERT INTO model_predictions (
+                   match_id,model_version_id,predict_time,play_type,option_code,
+                   model_probability,validation_status,uncertainty_reason
+               ) VALUES (%s,%s,'2026-08-09 10:00','spf','3',0.99,'valid',
+                         '{"model_independent":true}'::jsonb)""",
+            (other_match_id, model_version_id),
+        )
+
+    evidence = _prediction_evidence(
+        conn,
+        {
+            "id": 45,
+            "match_id": target_match_id,
+            "primary_play_type": "spf",
+            "kickoff_time": datetime.fromisoformat("2026-08-09T18:00:00"),
+        },
+    )
+
+    assert evidence is not None
+    assert evidence["source_reference"] == f"model_prediction:{target_prediction_id}"
+    assert float(evidence["factor_value_json"]["model_probability"]) == 0.61
+    assert evidence["available_before_kickoff"] is True
+
+
+def test_daily_review_prediction_count_executes_date_scoped_canonical_read(isolated_database):
+    from scripts.jobs.generate_daily_review import DAILY_RECOMMENDED_MATCH_COUNT_SQL
+
+    conn, _schema_name = isolated_database
+    with conn.cursor() as cursor:
+        cursor.execute(
+            """INSERT INTO official_matches (
+                   business_date,kickoff_time,match_status,home_team_name,away_team_name
+               ) VALUES
+                   ('2026-08-09','2026-08-09 18:00','finished','target-valid','away'),
+                   ('2026-08-09','2026-08-09 20:00','finished','target-invalid','away'),
+                   ('2026-08-10','2026-08-10 18:00','finished','outside-date','away')
+               RETURNING id"""
+        )
+        target_valid_id, target_invalid_id, outside_date_id = [row[0] for row in cursor.fetchall()]
+        cursor.execute(
+            "INSERT INTO model_versions (model_name) VALUES ('daily_review') RETURNING id"
+        )
+        model_version_id = cursor.fetchone()[0]
+        cursor.executemany(
+            """INSERT INTO model_predictions (
+                   match_id,model_version_id,predict_time,play_type,option_code,
+                   model_probability,validation_status
+               ) VALUES (%s,%s,'2026-08-09 10:00','spf','3',0.55,%s)""",
+            [
+                (target_valid_id, model_version_id, "valid"),
+                (target_invalid_id, model_version_id, "invalid"),
+                (outside_date_id, model_version_id, "valid"),
+            ],
+        )
+        cursor.execute(DAILY_RECOMMENDED_MATCH_COUNT_SQL, {"review_date": "2026-08-09"})
+        recommended_count = cursor.fetchone()[0]
+
+    assert recommended_count == 1
+
+
+def test_feature_importance_reads_latest_pre_kickoff_snapshots_for_bounded_recent_matches(
+    isolated_database,
+):
+    from psycopg2 import sql
+
+    from scripts.feature_importance import _load_training_data
+    from scripts.feature_schema import COMPATIBLE_SNAPSHOT_VERSIONS, FEATURE_COLUMNS
+
+    conn, _schema_name = isolated_database
+    with conn.cursor() as cursor:
+        cursor.execute("ALTER TABLE official_matches ADD COLUMN league_name TEXT")
+        feature_definitions = sql.SQL(", ").join(
+            sql.SQL("{} DOUBLE PRECISION").format(sql.Identifier(column))
+            for column in FEATURE_COLUMNS
+        )
+        cursor.execute(
+            sql.SQL(
+                """CREATE TABLE match_feature_snapshots (
+                       id BIGSERIAL PRIMARY KEY,
+                       match_id BIGINT NOT NULL,
+                       snapshot_time TIMESTAMP NOT NULL,
+                       feature_version TEXT NOT NULL,
+                       {}
+                   )"""
+            ).format(feature_definitions)
+        )
+        cursor.execute(
+            "CREATE INDEX idx_match_feature_match_snap "
+            "ON match_feature_snapshots(match_id,snapshot_time)"
+        )
+        cursor.execute(
+            """INSERT INTO official_matches (
+                   business_date,kickoff_time,match_status,home_team_name,away_team_name,league_name
+               ) VALUES
+                   ('2026-08-10','2026-08-10 18:00','finished','recent-home','recent-away','league'),
+                   ('2026-08-09','2026-08-09 18:00','finished','older-home','older-away','league')
+               RETURNING id"""
+        )
+        recent_match_id, older_match_id = [row[0] for row in cursor.fetchall()]
+        cursor.executemany(
+            """INSERT INTO official_results (
+                   match_id,official_publish_time,full_home_goals,full_away_goals,
+                   result_status,spf_result
+               ) VALUES (%s,%s,%s,%s,'confirmed',%s)""",
+            [
+                (recent_match_id, "2026-08-10 20:00", 2, 0, "3"),
+                (older_match_id, "2026-08-09 20:00", 1, 1, "1"),
+            ],
+        )
+        first_feature = FEATURE_COLUMNS[0]
+        cursor.executemany(
+            sql.SQL(
+                """INSERT INTO match_feature_snapshots (
+                       match_id,snapshot_time,feature_version,{}
+                   ) VALUES (%s,%s,%s,%s)"""
+            )
+            .format(sql.Identifier(first_feature))
+            .as_string(conn),
+            [
+                (
+                    recent_match_id,
+                    "2026-08-10 17:00",
+                    COMPATIBLE_SNAPSHOT_VERSIONS[0],
+                    10.0,
+                ),
+                (
+                    recent_match_id,
+                    "2026-08-10 16:00",
+                    COMPATIBLE_SNAPSHOT_VERSIONS[0],
+                    5.0,
+                ),
+                (
+                    recent_match_id,
+                    "2026-08-10 19:00",
+                    COMPATIBLE_SNAPSHOT_VERSIONS[0],
+                    99.0,
+                ),
+                (
+                    older_match_id,
+                    "2026-08-09 17:00",
+                    COMPATIBLE_SNAPSHOT_VERSIONS[0],
+                    20.0,
+                ),
+            ],
+        )
+
+    features, labels, match_ids, feature_names = _load_training_data(conn, min_samples=1)
+
+    assert match_ids == [recent_match_id, older_match_id]
+    assert labels.tolist() == [2, 1]
+    assert feature_names == [FEATURE_COLUMNS[0]]
+    assert features[:, 0].tolist() == [10.0, 20.0]

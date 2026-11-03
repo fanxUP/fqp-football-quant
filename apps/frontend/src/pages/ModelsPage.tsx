@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLanguage } from '../app/LanguageContext';
 import { api } from '../core/apiClient';
-import type { EvalModelSummary, ModelPerformanceHistory, Prediction, PredictionSummary } from '../core/types';
+import type { EvalModelSummary, ModelPerformanceHistory, Prediction, PredictionSummary, PredictionSummaryMeta } from '../core/types';
 import { ApiError } from '../core/types';
 import PageHeader from '../shared/components/PageHeader';
 import Card from '../shared/components/Card';
@@ -22,13 +22,32 @@ import './ModelsPage.css';
 
 const EMPTY_HISTORY: ModelPerformanceHistory = { status: 'ok', metric: 'rolling_hit_rate', window: 20, days: 365, points: [], samples: [] };
 
+function summaryStatusText(meta: PredictionSummaryMeta | null, summary: PredictionSummary | null): string {
+  if (meta === null) return '全量统计尚未读取；独立于最近 200 条研究记录。';
+  if (meta.status === 'pending') return '全量统计尚未生成；暂不显示估算值。';
+  if (meta.status === 'unavailable' || summary === null) return '暂无可用的全量预测统计快照；暂不显示估算值。';
+  if (meta.status === 'live') return '当前为单场实时统计。';
+
+  const dataTime = meta.data_as_of
+    ? new Date(meta.data_as_of).toLocaleString('zh-CN', { hour12: false })
+    : '时间未知';
+  const ageMinutes = meta.age_seconds === null ? null : Math.floor(meta.age_seconds / 60);
+  const ageText = ageMinutes === null ? '' : `，约 ${ageMinutes} 分钟前生成`;
+  const staleText = meta.is_stale ? '，已过期' : '';
+  if (meta.status === 'refresh_failed') {
+    return `上次刷新失败，当前保留上次成功数据；数据截至 ${dataTime}${ageText}${staleText}。`;
+  }
+  if (meta.status === 'stale') return `数据截至 ${dataTime}${ageText}，已过期。`;
+  return `数据截至 ${dataTime}${ageText}。`;
+}
+
 export default function ModelsPage() {
   const { translate } = useLanguage();
   const [predictions, setPredictions] = useState<Prediction[]>([]);
   const [summary, setSummary] = useState<PredictionSummary | null>(null);
+  const [summaryMeta, setSummaryMeta] = useState<PredictionSummaryMeta | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [summaryError, setSummaryError] = useState<string | null>(null);
-  const [summaryReceivedAt, setSummaryReceivedAt] = useState<number | null>(null);
   const summaryPending = useRef(false);
   const [evalModels, setEvalModels] = useState<EvalModelSummary[]>([]);
   const [performanceHistory, setPerformanceHistory] = useState<ModelPerformanceHistory>(EMPTY_HISTORY);
@@ -57,11 +76,31 @@ export default function ModelsPage() {
     setSummaryLoading(true); setSummaryError(null);
     api.predictions({ summary_only: true }).then((response) => {
       const value = response.summary;
-      if (!value || [value.total, value.positive_ev_count, value.model_count].some(count => !Number.isSafeInteger(count) || count < 0)
+      const meta = response.summary_meta;
+      const validStatuses = ['ok', 'stale', 'refresh_failed', 'unavailable', 'pending', 'live'];
+      if (!meta || !validStatuses.includes(meta.status)
+        || typeof meta.is_stale !== 'boolean'
+        || (meta.age_seconds !== null && (!Number.isSafeInteger(meta.age_seconds) || meta.age_seconds < 0))
+        || (meta.stale_after_seconds !== null && (!Number.isSafeInteger(meta.stale_after_seconds) || meta.stale_after_seconds < 0))
+        || (meta.data_as_of !== null && typeof meta.data_as_of !== 'string')
+        || (meta.last_success_at !== null && typeof meta.last_success_at !== 'string')
+        || (meta.last_attempt_at !== null && typeof meta.last_attempt_at !== 'string')) {
+        throw new ApiError(502, '全量统计状态格式不正确');
+      }
+      if (value === null) {
+        if (response.total !== null || !['unavailable', 'pending'].includes(meta.status)) {
+          throw new ApiError(502, '全量统计格式或口径不正确');
+        }
+        setSummary(null);
+        setSummaryMeta(meta);
+        return;
+      }
+      if ([value.total, value.positive_ev_count, value.model_count].some(count => !Number.isSafeInteger(count) || count < 0)
         || response.total !== value.total || value.positive_ev_count > value.total || value.model_count > value.total
         || (value.avg_confidence !== null && (!Number.isFinite(value.avg_confidence) || value.avg_confidence < 0 || value.avg_confidence > 1))
-        || (value.latest_predict_time !== null && typeof value.latest_predict_time !== 'string')) throw new ApiError(502, '全量统计格式或口径不正确');
-      setSummary(value); setSummaryReceivedAt(Date.now());
+        || (value.latest_predict_time !== null && typeof value.latest_predict_time !== 'string')
+        || ['unavailable', 'pending'].includes(meta.status)) throw new ApiError(502, '全量统计格式或口径不正确');
+      setSummary(value); setSummaryMeta(meta);
     }).catch(reason => setSummaryError(reason instanceof ApiError ? reason.message : '全量预测统计读取失败，请稍后重试'))
       .finally(() => { summaryPending.current = false; setSummaryLoading(false); });
   }, []);
@@ -110,7 +149,7 @@ export default function ModelsPage() {
       <ModelResearchPanel predictions={predictions} loading={loading} error={error} receivedAt={predictionReceivedAt} total={summary?.total ?? null} onRefresh={loadPredictions} />
       <section aria-label="全量预测统计">
         <button type="button" className="fqp-btn fqp-btn-secondary" onClick={loadSummary} disabled={summaryLoading}>加载全量预测统计</button>
-        <p role="status">{summaryReceivedAt === null ? '全量统计尚未读取；独立于最近 200 条研究记录。' : `全量统计接收于 ${new Date(summaryReceivedAt).toLocaleString('zh-CN', { hour12: false })}；刷新研究记录不会更新此统计。`}</p>
+        <p role="status" aria-atomic="true">{summaryStatusText(summaryMeta, summary)} 刷新最近研究记录不会更新此统计。</p>
         {summaryError && <p role="alert">{summaryError}{summary ? '；保留上次成功的全量统计。' : '；尚无成功统计，指标显示未知。'}</p>}
         <ModelStats summary={summary} loading={summaryLoading && summary === null} />
       </section>

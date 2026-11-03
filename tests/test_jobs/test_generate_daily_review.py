@@ -63,11 +63,15 @@ def test_daily_review_only_counts_prematch_features_and_predictions(mock_conn):
 
     queries = [" ".join(call.args[0].split()) for call in cur.execute.call_args_list]
     feature_query = next(q for q in queries if "FROM match_feature_snapshots fs" in q)
-    prediction_query = next(q for q in queries if "FROM model_prediction_latest_rows mp" in q)
+    prediction_query = next(q for q in queries if "FROM canonical_prediction_rows mp" in q)
     ticket_queries = [q for q in queries if "FROM simulation_tickets" in q]
     error_query = next(q for q in queries if "FROM prediction_error_analysis" in q)
 
     assert "fs.snapshot_time < m.kickoff_time" in feature_query
+    assert "model_prediction_latest_rows" not in prediction_query
+    assert "review_matches AS MATERIALIZED" in prediction_query
+    assert "g.match_id = ANY(ARRAY(SELECT match_id FROM review_matches))" in prediction_query
+    assert "p.match_id = scoped.match_id" in prediction_query
     assert "mp.predict_time < m.kickoff_time" in prediction_query
     assert "mp.validation_status = 'valid'" in prediction_query
     assert ticket_queries

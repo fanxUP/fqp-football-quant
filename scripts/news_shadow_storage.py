@@ -13,13 +13,14 @@ from scripts.news_shadow_model import (
     adjust_probabilities,
     score_prediction,
 )
+from scripts.prediction_statistics import canonical_prediction_rows_ctes
 
 
 def generate_shadow_predictions(conn: Any) -> int:
     with conn.cursor() as cur:
         cur.execute(
-            """
-            WITH latest_feature AS (
+            f"""
+            WITH RECURSIVE latest_feature AS MATERIALIZED (
                 SELECT DISTINCT ON (feature.match_id)
                        feature.match_id, feature.snapshot_id,
                        feature.home_net_impact, feature.away_net_impact,
@@ -30,7 +31,8 @@ def generate_shadow_predictions(conn: Any) -> int:
                 WHERE feature.snapshot_label = 'T45M'
                   AND match.official_match_code IS NOT NULL
                 ORDER BY feature.match_id, snapshot.snapshot_cutoff DESC, snapshot.id DESC
-            ), latest_prediction AS (
+            ), {canonical_prediction_rows_ctes(match_scope="latest_feature", spf_only=True)},
+            latest_prediction AS (
                 SELECT DISTINCT ON (
                            prediction.match_id, prediction.model_version_id,
                            prediction.option_code
@@ -39,12 +41,7 @@ def generate_shadow_predictions(conn: Any) -> int:
                        prediction.option_code, prediction.model_probability,
                        prediction.predict_time, feature.snapshot_id,
                        feature.home_net_impact, feature.away_net_impact
-                FROM (
-                    -- Only matches with eligible news features can contribute.
-                    -- Apply that bound before the view ranks legacy history.
-                    SELECT latest.* FROM model_prediction_latest_rows latest
-                    WHERE latest.match_id = ANY(ARRAY(SELECT match_id FROM latest_feature))
-                ) prediction
+                FROM canonical_prediction_rows prediction
                 JOIN model_versions model ON model.id = prediction.model_version_id
                 JOIN latest_feature feature ON feature.match_id = prediction.match_id
                 WHERE prediction.play_type = 'spf'

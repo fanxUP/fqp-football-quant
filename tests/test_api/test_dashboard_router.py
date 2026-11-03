@@ -186,12 +186,35 @@ def test_count_producer_records_failure_and_releases_its_lock(monkeypatch, failu
             ]
         ),
     )
+    successful_snapshots = {
+        "prediction_count": {
+            "scope": prediction_statistics.COUNT_SCOPE,
+            "total": 0,
+            "data_as_of": datetime.now(UTC).isoformat(),
+            "computed_at": datetime.now(UTC).isoformat(),
+        },
+        "prediction_summary": {
+            "scope": prediction_statistics.PREDICTION_SUMMARY_SCOPE,
+            "total": 0,
+            "positive_ev_count": 0,
+            "avg_confidence": None,
+            "model_count": 0,
+            "latest_predict_time": None,
+            "data_as_of": datetime.now(UTC).isoformat(),
+            "computed_at": datetime.now(UTC).isoformat(),
+        },
+    }
+    monkeypatch.setattr(
+        prediction_statistics,
+        "compute_prediction_snapshots",
+        lambda _conn: successful_snapshots,
+    )
     if failure:
 
         def fail_count(_):
             raise RuntimeError("injected timeout")
 
-        monkeypatch.setattr(prediction_statistics, "compute_prediction_count", fail_count)
+        monkeypatch.setattr(prediction_statistics, "compute_prediction_snapshots", fail_count)
         with pytest.raises(RuntimeError, match="injected timeout"):
             prediction_statistics.refresh_prediction_count()
     else:

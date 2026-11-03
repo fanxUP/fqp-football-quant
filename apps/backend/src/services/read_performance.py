@@ -32,6 +32,7 @@ _BOUNDED_PATHS = {
     "/api/models/predictions",
     "/api/models/overview",
     "/api/teams",
+    "/api/features/snapshots",
     "/api/analysis/evaluation/summary",
     "/api/analysis/evaluation/calibration",
     "/api/analysis/evaluation/by-condition",

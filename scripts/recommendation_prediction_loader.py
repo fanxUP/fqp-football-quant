@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from scripts.prediction_input_fence import CURRENT_PREDICTION_INPUT_SQL
+from scripts.prediction_statistics import canonical_prediction_rows_ctes
 
 
 def load_actionable_predictions(conn: Any, model_names: list[str]) -> list[tuple]:
@@ -12,11 +13,21 @@ def load_actionable_predictions(conn: Any, model_names: list[str]) -> list[tuple
     with conn.cursor() as cur:
         cur.execute(
             f"""
-            WITH latest_prediction_ids AS (
+            WITH RECURSIVE recommendation_matches AS MATERIALIZED (
+                SELECT m.id AS match_id
+                FROM official_matches m
+                WHERE m.sale_status = 'selling'
+                  AND LOWER(COALESCE(m.match_status, ''))
+                      IN ('scheduled', 'selling', 'not_started')
+                  AND m.kickoff_time > timezone('Asia/Shanghai', statement_timestamp())
+                  AND m.sale_stop_time IS NOT NULL
+                  AND m.sale_stop_time > timezone('Asia/Shanghai', statement_timestamp())
+            ), {canonical_prediction_rows_ctes(match_scope="recommendation_matches")},
+            latest_prediction_ids AS (
                 SELECT DISTINCT ON (
                     mp.match_id, mp.model_version_id, mp.play_type, mp.option_code
                 ) mp.id
-                FROM model_prediction_latest_rows mp
+                FROM canonical_prediction_rows mp
                 JOIN official_matches m ON m.id = mp.match_id
                 JOIN model_versions mv ON mv.id = mp.model_version_id
                 WHERE mp.play_type IN ('spf', 'rqspf', 'bf', 'zjq', 'bqc')
@@ -35,8 +46,8 @@ def load_actionable_predictions(conn: Any, model_names: list[str]) -> list[tuple
                   AND LOWER(COALESCE(m.match_status, ''))
                       IN ('scheduled', 'selling', 'not_started')
                   AND m.kickoff_time > timezone('Asia/Shanghai', statement_timestamp())
-                  AND (m.sale_stop_time IS NULL
-                       OR m.sale_stop_time > timezone('Asia/Shanghai', statement_timestamp()))
+                  AND m.sale_stop_time IS NOT NULL
+                  AND m.sale_stop_time > timezone('Asia/Shanghai', statement_timestamp())
                 ORDER BY mp.match_id, mp.model_version_id, mp.play_type,
                          mp.option_code, mp.predict_time DESC, mp.id DESC
             )

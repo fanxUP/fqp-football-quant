@@ -77,15 +77,13 @@ def _metric_prediction_rows_ctes() -> str:
     """
 
 
-METRIC_HOME_PREDICTIONS_CTE = """
+METRIC_HOME_PREDICTIONS_CTE = f"""
+    {_metric_prediction_rows_ctes()}
     , metric_home_predictions AS (
-        -- This small, option-scoped compatibility read already pushes the
-        -- match/option predicate ahead of the view's legacy ranking.
-        -- Do not filter version/time here: a newer version or timestamp must
-        -- still shield an older row that matched the evaluation snapshot.
-        SELECT latest.* FROM model_prediction_latest_rows latest
-        WHERE latest.match_id = ANY(ARRAY(SELECT match_id FROM latest_metrics))
-          AND latest.play_type = 'spf' AND latest.option_code = '3'
+        -- Keep canonical selection ahead of option/version/time matching so
+        -- newer or invalid rows continue to shield older predictions.
+        SELECT latest.* FROM canonical_prediction_rows latest
+        WHERE latest.play_type = 'spf' AND latest.option_code = '3'
     )
 """
 

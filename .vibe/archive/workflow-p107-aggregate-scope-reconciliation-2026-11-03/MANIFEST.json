@@ -1,0 +1,65 @@
+{
+  "archive_format": 1,
+  "archived_at": "2026-11-03",
+  "reason": "Preserve completed aggregate P107/P138 scope reconciliation before starting final candidate verification and release preparation.",
+  "prior_workflow": "P107-AGGREGATE-SCOPE-RECONCILIATION",
+  "prior_state": "DONE",
+  "files": [
+    {
+      "path": "ACCEPTANCE.md",
+      "sha256": "b1270a0b2a99c9c75f3c0eee86907aa7ff588127480abbee88530ef3df8be3a8"
+    },
+    {
+      "path": "BASELINE.yaml",
+      "sha256": "d38913a1950f45c311e677c2ea9d36a9794eb3993a5438a6a54aae3d00288cee"
+    },
+    {
+      "path": "CHANGE_BUDGET.yaml",
+      "sha256": "c6bbda8c95d9e75711099119dfb353c1f6fe83ff2fe09a0454e70573937621ab"
+    },
+    {
+      "path": "DESIGN.md",
+      "sha256": "3178405ac1ef940db896fb6939dea0173f000b3214100306df277e51baaa2767"
+    },
+    {
+      "path": "EVIDENCE.yaml",
+      "sha256": "167e2ee399a3beada3fbb449e16be61c04d0bd77f7517430dfe6fdf77be6f2fc"
+    },
+    {
+      "path": "PLAN.md",
+      "sha256": "85bc57ce0ff905319101ca6f4d833d7fd55034c6da70a133d6ee5ffc6059dcb4"
+    },
+    {
+      "path": "QUALITY_GATE.md",
+      "sha256": "b4c3669f190144f7e95778e22af24b422b9668bf563795449b1714f08f713c9c"
+    },
+    {
+      "path": "SCOPE_LOCK.yaml",
+      "sha256": "3c5ffdc5ea3d21c765bdc2b0022871dad3e4a4c7461af7efb0af8efab8c38234"
+    },
+    {
+      "path": "STATE.yaml",
+      "sha256": "88b354051898f7f1807fb54a866153c1450788ccbdbbb8d1811bbc151ab2783f"
+    },
+    {
+      "path": "TASK_DAG.yaml",
+      "sha256": "2f7163f86e8d7bf70d8c17996bf96ebf4d48a275103acb0ba3632fa967ca1f98"
+    },
+    {
+      "path": "config.yaml",
+      "sha256": "a1676efaa8e8b13c1864ea0e842e2416a12506cbffe7eef2c845d0fbf6d4cd66"
+    },
+    {
+      "path": "engine-lock.json",
+      "sha256": "d6248de04ddb2e172a226a3b3b4f29e4826bca7c7f1a9e44fbbcb8f98eedf42e"
+    },
+    {
+      "path": "quality_gate.py",
+      "sha256": "33667a89aad2f3a7dc08fb32ac0dbe7d32513fea7df118526193b292c07cb191"
+    },
+    {
+      "path": "verify_migration.py",
+      "sha256": "d14b14b400d20c1b5f437c788c1da65e59df1c82f33370a80a5483498d77c772"
+    }
+  ]
+}

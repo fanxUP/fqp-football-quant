@@ -11,7 +11,10 @@ from scripts.agent_storage import finish_job_run, start_job_run
 
 JOB_CODE = "refresh_prediction_count"
 COUNT_SCOPE = "valid_prematch_history_v1"
+PREDICTION_SUMMARY_SCOPE = "canonical_valid_prematch_history_v1"
 MAX_AGE = timedelta(minutes=45)
+DEFAULT_REFRESH_BATCH_SIZE = 500
+MAX_REFRESH_BATCH_SIZE = 1000
 
 
 def latest_prediction_ctes(
@@ -261,18 +264,301 @@ def compute_prediction_count(conn: Any) -> dict[str, Any]:
     }
 
 
-def refresh_prediction_count() -> dict[str, Any]:
-    """Persist a complete snapshot; a failed count leaves prior success intact."""
+def compute_prediction_snapshots(conn: Any) -> dict[str, dict[str, Any]]:
+    """Compute the legacy dashboard count and exact canonical API summary together."""
+    latest_ctes = latest_prediction_ctes(filter_match=False)
+    with conn.cursor() as cur:
+        cur.execute("SET LOCAL jit = off")
+        cur.execute(
+            f"""
+            WITH RECURSIVE {latest_ctes}, latest_ids AS (
+                SELECT mapped.prediction_id AS id FROM latest_groups groups
+                JOIN model_prediction_group_options mapped ON mapped.group_id = groups.group_id
+                UNION ALL
+                SELECT id FROM legacy_latest
+            ), summary_snapshot AS MATERIALIZED (
+                SELECT
+                    COUNT(*) AS total,
+                    COUNT(*) FILTER (WHERE mp.ev > 0) AS positive_ev_count,
+                    AVG(mp.confidence_score) AS avg_confidence,
+                    COUNT(DISTINCT mv.model_name) AS model_count,
+                    MAX(mp.predict_time) AS latest_predict_time
+                FROM latest_ids latest
+                JOIN LATERAL (
+                    SELECT p.* FROM model_predictions p WHERE p.id = latest.id OFFSET 0
+                ) mp ON true
+                JOIN model_versions mv ON mv.id = mp.model_version_id
+                JOIN official_matches m ON m.id = mp.match_id
+                WHERE mp.validation_status = 'valid'
+                  AND mp.predict_time < m.kickoff_time
+            ), prediction_count_snapshot AS MATERIALIZED (
+                SELECT COUNT(*) AS total
+                FROM model_predictions mp
+                JOIN model_versions mv ON mv.id = mp.model_version_id
+                JOIN official_matches m ON m.id = mp.match_id
+                WHERE mp.validation_status = 'valid'
+                  AND mp.predict_time < m.kickoff_time
+            )
+            SELECT summary_snapshot.total,
+                   summary_snapshot.positive_ev_count,
+                   summary_snapshot.avg_confidence,
+                   summary_snapshot.model_count,
+                   summary_snapshot.latest_predict_time,
+                   prediction_count_snapshot.total,
+                   statement_timestamp(),
+                   clock_timestamp()
+            FROM summary_snapshot CROSS JOIN prediction_count_snapshot
+            """
+        )
+        row = cur.fetchone()
+    if row is None:
+        raise RuntimeError("prediction summary query returned no row")
+    (
+        summary_total,
+        positive_ev,
+        confidence,
+        model_count,
+        latest_time,
+        raw_total,
+        data_as_of,
+        computed_at,
+    ) = row
+    data_as_of = data_as_of.astimezone(UTC).isoformat()
+    computed_at = computed_at.astimezone(UTC).isoformat()
+    return {
+        "prediction_count": {
+            "scope": COUNT_SCOPE,
+            "total": int(raw_total),
+            "data_as_of": data_as_of,
+            "computed_at": computed_at,
+        },
+        "prediction_summary": {
+            "scope": PREDICTION_SUMMARY_SCOPE,
+            "total": int(summary_total or 0),
+            "positive_ev_count": int(positive_ev or 0),
+            "avg_confidence": float(confidence) if confidence is not None else None,
+            "model_count": int(model_count or 0),
+            "latest_predict_time": (
+                latest_time.isoformat()
+                if latest_time is not None and hasattr(latest_time, "isoformat")
+                else str(latest_time)
+                if latest_time is not None
+                else None
+            ),
+            "data_as_of": data_as_of,
+            "computed_at": computed_at,
+        },
+    }
+
+
+_REFRESH_PREDICTION_STATISTICS_SQL = f"""
+    WITH RECURSIVE
+    {canonical_prediction_rows_ctes(match_scope="prediction_statistics_refresh_targets")},
+    eligible_canonical_rows AS MATERIALIZED (
+        SELECT p.match_id, mv.model_name, p.ev, p.confidence_score, p.predict_time
+        FROM canonical_prediction_rows p
+        JOIN model_versions mv ON mv.id = p.model_version_id
+        JOIN official_matches m ON m.id = p.match_id
+        WHERE p.validation_status = 'valid'
+          AND p.predict_time < m.kickoff_time
+    ),
+    canonical_rollups AS (
+        SELECT
+            match_id,
+            COUNT(*)::BIGINT AS summary_total,
+            COUNT(*) FILTER (WHERE ev > 0)::BIGINT AS summary_positive_ev_count,
+            COALESCE(SUM(confidence_score), 0::NUMERIC) AS confidence_sum,
+            COUNT(confidence_score)::BIGINT AS confidence_count,
+            ARRAY_AGG(DISTINCT model_name::TEXT ORDER BY model_name::TEXT) AS model_names,
+            MAX(predict_time) AS latest_predict_time
+        FROM eligible_canonical_rows
+        GROUP BY match_id
+    ),
+    raw_rollups AS (
+        SELECT
+            targets.match_id,
+            raw.total AS raw_prediction_total
+        FROM prediction_statistics_refresh_targets targets
+        JOIN official_matches m ON m.id = targets.match_id
+        CROSS JOIN LATERAL (
+            SELECT COUNT(*)::BIGINT AS total
+            FROM model_predictions p
+            JOIN model_versions mv ON mv.id = p.model_version_id
+            WHERE p.match_id = targets.match_id
+              AND p.validation_status = 'valid'
+              AND p.predict_time < m.kickoff_time
+        ) raw
+    )
+    INSERT INTO prediction_statistics_match_rollups (
+        match_id, raw_prediction_total, summary_total, summary_positive_ev_count,
+        confidence_sum, confidence_count, model_names, latest_predict_time, refreshed_at
+    )
+    SELECT
+        targets.match_id,
+        COALESCE(raw.raw_prediction_total, 0),
+        COALESCE(canonical.summary_total, 0),
+        COALESCE(canonical.summary_positive_ev_count, 0),
+        COALESCE(canonical.confidence_sum, 0::NUMERIC),
+        COALESCE(canonical.confidence_count, 0),
+        COALESCE(canonical.model_names, ARRAY[]::TEXT[]),
+        canonical.latest_predict_time,
+        clock_timestamp()
+    FROM prediction_statistics_refresh_targets targets
+    JOIN official_matches m ON m.id = targets.match_id
+    LEFT JOIN raw_rollups raw ON raw.match_id = targets.match_id
+    LEFT JOIN canonical_rollups canonical ON canonical.match_id = targets.match_id
+    ON CONFLICT (match_id) DO UPDATE SET
+        raw_prediction_total = EXCLUDED.raw_prediction_total,
+        summary_total = EXCLUDED.summary_total,
+        summary_positive_ev_count = EXCLUDED.summary_positive_ev_count,
+        confidence_sum = EXCLUDED.confidence_sum,
+        confidence_count = EXCLUDED.confidence_count,
+        model_names = EXCLUDED.model_names,
+        latest_predict_time = EXCLUDED.latest_predict_time,
+        refreshed_at = EXCLUDED.refreshed_at
+"""
+
+_PREDICTION_STATISTICS_SNAPSHOT_SQL = """
+    WITH pending AS MATERIALIZED (
+        SELECT COUNT(*)::BIGINT AS pending_matches
+        FROM prediction_statistics_dirty_matches
+    ), rollups AS MATERIALIZED (
+        SELECT
+            COALESCE(SUM(raw_prediction_total), 0)::BIGINT AS raw_total,
+            COALESCE(SUM(summary_total), 0)::BIGINT AS summary_total,
+            COALESCE(SUM(summary_positive_ev_count), 0)::BIGINT AS positive_ev_count,
+            SUM(confidence_sum) AS confidence_sum,
+            COALESCE(SUM(confidence_count), 0)::BIGINT AS confidence_count,
+            MAX(latest_predict_time) AS latest_predict_time
+        FROM prediction_statistics_match_rollups
+    ), model_count AS MATERIALIZED (
+        SELECT COUNT(DISTINCT names.model_name)::INT AS total
+        FROM prediction_statistics_match_rollups rollup
+        CROSS JOIN LATERAL UNNEST(rollup.model_names) AS names(model_name)
+    )
+    SELECT pending.pending_matches,
+           rollups.raw_total,
+           rollups.summary_total,
+           rollups.positive_ev_count,
+           CASE WHEN rollups.confidence_count > 0
+                THEN rollups.confidence_sum / rollups.confidence_count
+                ELSE NULL END AS avg_confidence,
+           model_count.total,
+           rollups.latest_predict_time,
+           statement_timestamp(),
+           clock_timestamp()
+    FROM pending CROSS JOIN rollups CROSS JOIN model_count
+"""
+
+
+def _refresh_prediction_statistics_batch(
+    conn: Any, *, batch_size: int = DEFAULT_REFRESH_BATCH_SIZE
+) -> dict[str, Any]:
+    """Refresh at most one bounded dirty-match batch; caller owns the job lock."""
+    if type(batch_size) is not int or not 1 <= batch_size <= MAX_REFRESH_BATCH_SIZE:
+        raise ValueError(f"batch_size must be between 1 and {MAX_REFRESH_BATCH_SIZE}")
+
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            CREATE TEMP TABLE prediction_statistics_refresh_targets ON COMMIT DROP AS
+            WITH claimed AS MATERIALIZED (
+                SELECT match_id
+                FROM prediction_statistics_dirty_matches
+                ORDER BY changed_at, match_id
+                LIMIT %(batch_size)s
+                FOR UPDATE SKIP LOCKED
+            ), deleted AS (
+                DELETE FROM prediction_statistics_dirty_matches dirty
+                USING claimed
+                WHERE dirty.match_id = claimed.match_id
+                RETURNING dirty.match_id
+            )
+            SELECT match_id FROM deleted
+            """,
+            {"batch_size": batch_size},
+        )
+        matches_refreshed = max(cur.rowcount, 0)
+        cur.execute(
+            """DELETE FROM prediction_statistics_match_rollups rollup
+               USING prediction_statistics_refresh_targets target
+               WHERE rollup.match_id = target.match_id
+                 AND NOT EXISTS (
+                     SELECT 1 FROM official_matches match
+                     WHERE match.id = target.match_id
+                 )"""
+        )
+        cur.execute(_REFRESH_PREDICTION_STATISTICS_SQL)
+        cur.execute(_PREDICTION_STATISTICS_SNAPSHOT_SQL)
+        row = cur.fetchone()
+
+    if row is None:
+        raise RuntimeError("prediction statistics rollup query returned no row")
+    pending_matches = int(row[0])
+    if pending_matches:
+        return {
+            "status": "partial",
+            "matches_refreshed": matches_refreshed,
+            "pending_matches": pending_matches,
+        }
+
+    data_as_of = row[7].astimezone(UTC).isoformat()
+    computed_at = row[8].astimezone(UTC).isoformat()
+    latest_predict_time = row[6]
+    latest_time = (
+        latest_predict_time.isoformat()
+        if latest_predict_time is not None and hasattr(latest_predict_time, "isoformat")
+        else str(latest_predict_time)
+        if latest_predict_time is not None
+        else None
+    )
+    return {
+        "status": "completed",
+        "matches_refreshed": matches_refreshed,
+        "snapshots": {
+            "prediction_count": {
+                "scope": COUNT_SCOPE,
+                "total": int(row[1]),
+                "data_as_of": data_as_of,
+                "computed_at": computed_at,
+            },
+            "prediction_summary": {
+                "scope": PREDICTION_SUMMARY_SCOPE,
+                "total": int(row[2]),
+                "positive_ev_count": int(row[3]),
+                "avg_confidence": float(row[4]) if row[4] is not None else None,
+                "model_count": int(row[5]),
+                "latest_predict_time": latest_time,
+                "data_as_of": data_as_of,
+                "computed_at": computed_at,
+            },
+        },
+    }
+
+
+def refresh_prediction_count(*, batch_size: int = DEFAULT_REFRESH_BATCH_SIZE) -> dict[str, Any]:
+    """Process a bounded match batch; publish only when every dirty match is current."""
     with get_db() as count_conn:
+        lock_acquired = False
         try:
             with count_conn.cursor() as cur:
                 cur.execute("SET LOCAL statement_timeout = '120s'")
-                cur.execute("SELECT pg_try_advisory_xact_lock(%s, %s)", (913201, 114))
-                if not cur.fetchone()[0]:
+                cur.execute(
+                    """SELECT pg_try_advisory_lock(%s, %s),
+                              to_regclass('prediction_statistics_match_rollups') IS NOT NULL,
+                              to_regclass('local_schema_migrations') IS NOT NULL""",
+                    (913201, 114),
+                )
+                lock_state = cur.fetchone()
+                if not lock_state[0]:
                     return {"status": "skipped", "reason": "refresh_already_running"}
-            # Keep the lock on the count connection while the existing audit
-            # helpers commit on a separate connection. Historical audit records
-            # have no ownership protocol, so do not infer their interruption.
+                lock_acquired = True
+                rollup_schema_ready = len(lock_state) > 1 and bool(lock_state[1])
+                migration_ledger_ready = len(lock_state) > 2 and bool(lock_state[2])
+                if not rollup_schema_ready and migration_ledger_ready:
+                    return {"status": "skipped", "reason": "migration_not_applied"}
+            # A session lock survives the rollup commit and remains held until
+            # the separately committed audit row reaches its terminal state.
             with get_db() as audit_conn:
                 run_id = start_job_run(
                     audit_conn,
@@ -286,19 +572,37 @@ def refresh_prediction_count() -> dict[str, Any]:
                 if run_id is None:
                     raise RuntimeError("prediction count audit record was not created")
                 try:
-                    result = compute_prediction_count(count_conn)
-                    finish_job_run(
-                        audit_conn, run_id, "completed", output_refs={"prediction_count": result}
-                    )
-                    return {"status": "ok", **result}
+                    if rollup_schema_ready:
+                        refresh_result = _refresh_prediction_statistics_batch(
+                            count_conn, batch_size=batch_size
+                        )
+                        count_conn.commit()
+                        if refresh_result["status"] == "partial":
+                            partial_refs = {
+                                "refreshing": True,
+                                "matches_refreshed": refresh_result["matches_refreshed"],
+                                "pending_matches": refresh_result["pending_matches"],
+                            }
+                            finish_job_run(audit_conn, run_id, "partial", output_refs=partial_refs)
+                            return {"status": "refreshing", **partial_refs}
+                        snapshots = refresh_result["snapshots"]
+                    else:
+                        # Older isolated fixtures have no migration ledger. Keep
+                        # their legacy contract; managed databases skip until 131.
+                        snapshots = compute_prediction_snapshots(count_conn)
+                        count_conn.commit()
+                    finish_job_run(audit_conn, run_id, "completed", output_refs=snapshots)
+                    return {"status": "ok", **snapshots["prediction_count"]}
                 except Exception as exc:
                     audit_conn.rollback()
                     finish_job_run(audit_conn, run_id, "failed", error=type(exc).__name__)
                     raise
         finally:
-            # This connection only reads business data. Release its transaction
-            # and advisory lock even on timeout or a failed audit write.
             count_conn.rollback()
+            if lock_acquired:
+                with count_conn.cursor() as cur:
+                    cur.execute("SELECT pg_advisory_unlock(%s, %s)", (913201, 114))
+                    cur.fetchone()
 
 
 def get_prediction_count_snapshot(conn: Any) -> dict[str, Any]:
@@ -343,9 +647,116 @@ def get_prediction_count_snapshot(conn: Any) -> dict[str, Any]:
     status = "stale" if now - data_as_of > MAX_AGE else "ok"
     if attempt_status == "failed":
         status = "refresh_failed"
+    elif attempt_status == "partial":
+        status = "stale"
     return {
         "total": total,
         "status": status,
         "data_as_of": data_as_of.isoformat(),
         "last_success_at": computed_at.isoformat(),
+    }
+
+
+def get_prediction_summary_snapshot(conn: Any, *, now: datetime | None = None) -> dict[str, Any]:
+    """Return the last successful canonical summary with explicit freshness state."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """SELECT completed.output_refs, attempt.status, statement_timestamp(), attempt.created_at
+               FROM (SELECT 1) singleton
+               LEFT JOIN LATERAL (
+                   SELECT output_refs FROM ai_job_runs
+                   WHERE job_code = %(job_code)s AND status = 'completed'
+                   ORDER BY created_at DESC, id DESC LIMIT 1
+               ) completed ON true
+               LEFT JOIN LATERAL (
+                   SELECT status, created_at FROM ai_job_runs WHERE job_code = %(job_code)s
+                   ORDER BY created_at DESC, id DESC LIMIT 1
+               ) attempt ON true""",
+            {"job_code": JOB_CODE},
+        )
+        output, attempt_status, database_now, attempt_at = cur.fetchone()
+    current_time = now or database_now
+    if current_time.tzinfo is None:
+        raise ValueError("summary snapshot clock must be timezone-aware")
+    current_time = current_time.astimezone(UTC)
+    last_attempt_at = (
+        attempt_at.astimezone(UTC).isoformat()
+        if attempt_at is not None and attempt_at.tzinfo is not None
+        else None
+    )
+    empty_meta = {
+        "status": "pending",
+        "data_as_of": None,
+        "last_success_at": None,
+        "last_attempt_at": last_attempt_at,
+        "age_seconds": None,
+        "stale_after_seconds": int(MAX_AGE.total_seconds()),
+        "is_stale": False,
+    }
+    if output is None:
+        if attempt_status in {"failed", "completed"}:
+            empty_meta["status"] = "unavailable"
+        return {"summary": None, "meta": empty_meta}
+
+    snapshot = output.get("prediction_summary") if isinstance(output, dict) else None
+    try:
+        if not isinstance(snapshot, dict) or snapshot.get("scope") != PREDICTION_SUMMARY_SCOPE:
+            raise ValueError("unsupported prediction summary snapshot")
+        total = snapshot["total"]
+        positive_ev_count = snapshot["positive_ev_count"]
+        model_count = snapshot["model_count"]
+        confidence = snapshot["avg_confidence"]
+        latest_predict_time = snapshot["latest_predict_time"]
+        if type(total) is not int or total < 0:
+            raise ValueError("invalid total")
+        if type(positive_ev_count) is not int or not 0 <= positive_ev_count <= total:
+            raise ValueError("invalid positive EV count")
+        if type(model_count) is not int or not 0 <= model_count <= total:
+            raise ValueError("invalid model count")
+        if confidence is not None and (
+            isinstance(confidence, bool)
+            or not isinstance(confidence, (int, float))
+            or not 0 <= confidence <= 1
+        ):
+            raise ValueError("invalid average confidence")
+        if latest_predict_time is not None and not isinstance(latest_predict_time, str):
+            raise ValueError("invalid latest prediction time")
+        data_as_of = datetime.fromisoformat(snapshot["data_as_of"])
+        computed_at = datetime.fromisoformat(snapshot["computed_at"])
+        if data_as_of.tzinfo is None or computed_at.tzinfo is None:
+            raise ValueError("summary timestamps require a timezone")
+        data_as_of, computed_at = data_as_of.astimezone(UTC), computed_at.astimezone(UTC)
+        if data_as_of > computed_at or computed_at > current_time:
+            raise ValueError("invalid summary timestamps")
+    except KeyError, TypeError, ValueError, AttributeError:
+        return {"summary": None, "meta": {**empty_meta, "status": "unavailable"}}
+
+    age_seconds = max(0, int((current_time - data_as_of).total_seconds()))
+    is_stale = age_seconds > MAX_AGE.total_seconds()
+    status = (
+        "refresh_failed"
+        if attempt_status == "failed"
+        else "stale"
+        if attempt_status == "partial"
+        else "stale"
+        if is_stale
+        else "ok"
+    )
+    return {
+        "summary": {
+            "total": total,
+            "positive_ev_count": positive_ev_count,
+            "avg_confidence": float(confidence) if confidence is not None else None,
+            "model_count": model_count,
+            "latest_predict_time": latest_predict_time,
+        },
+        "meta": {
+            "status": status,
+            "data_as_of": data_as_of.isoformat(),
+            "last_success_at": computed_at.isoformat(),
+            "last_attempt_at": last_attempt_at,
+            "age_seconds": age_seconds,
+            "stale_after_seconds": int(MAX_AGE.total_seconds()),
+            "is_stale": is_stale or attempt_status == "partial",
+        },
     }

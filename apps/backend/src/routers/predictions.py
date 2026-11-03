@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Annotated, Any
+from uuid import UUID
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Path, Query
 
 from apps.backend.src.db import get_db
 from apps.backend.src.model_catalog import CATALOG_VERSION, MODEL_CODES, public_metadata
@@ -14,7 +15,12 @@ from scripts.calibration_review import (
     review_calibration_profile,
     review_calibration_trend,
 )
-from scripts.prediction_statistics import latest_prediction_ctes, recent_prediction_rows_ctes
+from scripts.model_prediction_run_loader import load_prediction_group_by_id
+from scripts.prediction_statistics import (
+    get_prediction_summary_snapshot,
+    latest_prediction_ctes,
+    recent_prediction_rows_ctes,
+)
 from scripts.sporttery_sales import get_sporttery_sales_window
 
 router = APIRouter(tags=["predictions"])
@@ -344,22 +350,40 @@ def list_predictions(
     include_summary: bool = True,
     summary_only: bool = False,
 ):
-    """List recent predictions or return only the full-scope summary."""
+    """List recent predictions and optionally attach a cached full-scope summary."""
     summary = None
+    summary_meta = None
     with get_db() as conn:
         with conn.cursor() as cur:
             # JIT compilation dominates these index-seek plans at real catalog
             # sizes. Limit the setting to this read transaction; pooled sessions
             # return to their normal settings on commit/rollback.
             cur.execute("SET LOCAL jit = off")
-            latest_ctes = latest_prediction_ctes(filter_match=match_id is not None)
+            latest_ctes = (
+                latest_prediction_ctes(filter_match=True) if match_id is not None else None
+            )
             params = {"match_id": match_id, "limit": limit}
             if summary_only:
-                summary = _read_prediction_summary(cur, latest_ctes, params)
+                if match_id is None:
+                    snapshot = get_prediction_summary_snapshot(conn)
+                    summary, summary_meta = snapshot["summary"], snapshot["meta"]
+                else:
+                    assert latest_ctes is not None
+                    summary = _read_prediction_summary(cur, latest_ctes, params)
+                    summary_meta = {
+                        "status": "live",
+                        "data_as_of": None,
+                        "last_success_at": None,
+                        "last_attempt_at": None,
+                        "age_seconds": 0,
+                        "stale_after_seconds": None,
+                        "is_stale": False,
+                    }
                 return {
                     "predictions": [],
                     "total": summary["total"] if summary is not None else None,
                     "summary": summary,
+                    "summary_meta": summary_meta,
                 }
             recent_ctes = (
                 f"""
@@ -445,7 +469,7 @@ def list_predictions(
                                OR fs.home_tanking_risk_score IS NOT NULL
                                OR fs.away_tanking_risk_score IS NOT NULL
                                OR fs.tournament_incentive_risk_score IS NOT NULL)
-                   ), od.id, od.snapshot_time
+                   ), od.id, od.snapshot_time, prediction_group.id
                 FROM recent mp
                 JOIN model_versions mv ON mv.id = mp.model_version_id
                 JOIN official_matches m ON m.id = mp.match_id
@@ -459,13 +483,31 @@ def list_predictions(
                      WHEN '3' THEN 'h' WHEN '1' THEN 'd' WHEN '0' THEN 'a'
                      ELSE mp.option_code END ELSE mp.option_code END
                  AND od.snapshot_time <= mp.predict_time
+                LEFT JOIN model_prediction_group_options prediction_group_option
+                  ON prediction_group_option.prediction_id = mp.id
+                LEFT JOIN model_prediction_groups prediction_group
+                  ON prediction_group.id = prediction_group_option.group_id
                 ORDER BY mp.predict_time DESC, mp.ev DESC, mp.id DESC
                 """,
                 {**params, "seed_limit": max(1000, limit * 4)} if match_id is None else params,
             )
             rows = cur.fetchall()
             if include_summary:
-                summary = _read_prediction_summary(cur, latest_ctes, params)
+                if match_id is None:
+                    snapshot = get_prediction_summary_snapshot(conn)
+                    summary, summary_meta = snapshot["summary"], snapshot["meta"]
+                else:
+                    assert latest_ctes is not None
+                    summary = _read_prediction_summary(cur, latest_ctes, params)
+                    summary_meta = {
+                        "status": "live",
+                        "data_as_of": None,
+                        "last_success_at": None,
+                        "last_attempt_at": None,
+                        "age_seconds": 0,
+                        "stale_after_seconds": None,
+                        "is_stale": False,
+                    }
     return {
         "predictions": [
             {
@@ -499,12 +541,49 @@ def list_predictions(
                     ],
                     "odds_snapshot_id": r[22],
                     "odds_snapshot_time": r[23].isoformat() if r[23] else None,
+                    "prediction_group_id": str(r[24]) if len(r) > 24 and r[24] else None,
                 },
             }
             for r in rows
         ],
         "total": summary["total"] if summary is not None else None,
         "summary": summary,
+        "summary_meta": summary_meta,
+    }
+
+
+@router.get("/api/models/prediction-groups/{group_id}/feature-context")
+def get_prediction_group_feature_context(
+    group_id: Annotated[UUID, Path(description="Immutable prediction group ID")],
+):
+    """Return only the integrity-checked input context for one output group."""
+    with get_db() as conn:
+        group = load_prediction_group_by_id(conn, group_id=group_id)
+    if group is None:
+        raise HTTPException(status_code=404, detail="Prediction group not found")
+
+    context = group.get("feature_context") if group.get("status") == "complete" else None
+    context_status = (
+        "invalid_integrity"
+        if group.get("status") != "complete"
+        else "recorded"
+        if context is not None
+        else "not_recorded"
+    )
+    predict_time = group.get("predict_time")
+    return {
+        "group_id": str(group["group_id"]),
+        "run_id": str(group["run_id"]),
+        "match_id": group["match_id"],
+        "model_version_id": group["model_version_id"],
+        "play_type": group["play_type"],
+        "predict_time": predict_time.isoformat()
+        if predict_time is not None and hasattr(predict_time, "isoformat")
+        else str(predict_time)
+        if predict_time is not None
+        else None,
+        "context_status": context_status,
+        "feature_context": context,
     }
 
 

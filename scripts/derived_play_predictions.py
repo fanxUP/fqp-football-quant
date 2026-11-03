@@ -122,6 +122,7 @@ def store_derived_play_predictions(
     prediction_run_id: str | None = None,
     model_artifact_identities: dict[str, dict[str, Any]] | None = None,
     output_group_counts: dict[str, Any] | None = None,
+    feature_context: dict[str, Any] | None = None,
 ) -> int:
     """Store unfiltered model history for every open official derived option."""
     official_odds = _latest_official_odds(conn, match_id, predict_time)
@@ -299,6 +300,16 @@ def store_derived_play_predictions(
                         "odds_snapshot_times": snapshot_times,
                         "feature_snapshot_id": feature_snapshot_id,
                         "input_fence": fence,
+                        **(
+                            {
+                                "feature_context": {
+                                    **feature_context,
+                                    "model_version_id": int(model_version_id),
+                                }
+                            }
+                            if feature_context is not None
+                            else {}
+                        ),
                         "score_matrix": (
                             {"raw": raw_matrix, "adjusted": adjusted_matrix}
                             if adjusted_matrix is not None

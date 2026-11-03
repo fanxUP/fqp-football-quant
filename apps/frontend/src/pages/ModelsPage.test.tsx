@@ -13,6 +13,16 @@ const apiMocks = vi.hoisted(() => ({
   bindings: vi.fn(),
 }));
 
+const freshSummaryMeta = {
+  status: 'ok',
+  data_as_of: '2026-07-14T12:10:00+00:00',
+  last_success_at: '2026-07-14T12:10:02+00:00',
+  last_attempt_at: '2026-07-14T12:10:02+00:00',
+  age_seconds: 18,
+  stale_after_seconds: 2700,
+  is_stale: false,
+};
+
 vi.mock('../core/apiClient', () => ({
   api: {
     predictions: apiMocks.predictions,
@@ -77,6 +87,7 @@ describe('ModelsPage', () => {
         total: 4187, positive_ev_count: 1632, avg_confidence: 0.714,
         model_count: 19, latest_predict_time: '2026-07-14T12:05:00',
       },
+      summary_meta: freshSummaryMeta,
     });
     apiMocks.evaluationSummary.mockResolvedValue({
       status: 'ok',
@@ -202,7 +213,7 @@ describe('ModelsPage', () => {
     fireEvent.click(screen.getByRole('button', { name: '加载全量预测统计' }));
     await screen.findByText(/全量预测统计读取失败/);
     expect(screen.getByRole('button', { name: /Elo 实力评分 · #1/ })).toBeInTheDocument();
-    apiMocks.predictions.mockResolvedValueOnce({ predictions: [], total: 0, summary: { total: 0, positive_ev_count: 0, model_count: 0, avg_confidence: null, latest_predict_time: null } });
+    apiMocks.predictions.mockResolvedValueOnce({ predictions: [], total: 0, summary: { total: 0, positive_ev_count: 0, model_count: 0, avg_confidence: null, latest_predict_time: null }, summary_meta: freshSummaryMeta });
     fireEvent.click(screen.getByRole('button', { name: '加载全量预测统计' }));
     await waitFor(() => expect(within(screen.getByLabelText('预测概览')).getAllByText('0')).toHaveLength(3));
   });
@@ -222,10 +233,33 @@ describe('ModelsPage', () => {
     expect(screen.getByText('4187')).toBeInTheDocument();
   });
 
+  it('全量统计使用后端快照年龄，并在刷新失败时标明保留旧数据', async () => {
+    render(<ModelsPage />);
+    await screen.findByRole('button', { name: /Elo 实力评分 · #1/ });
+    apiMocks.predictions.mockResolvedValueOnce({
+      predictions: [],
+      total: 4187,
+      summary: {
+        total: 4187, positive_ev_count: 1632, avg_confidence: 0.714,
+        model_count: 19, latest_predict_time: '2026-07-14T12:05:00',
+      },
+      summary_meta: {
+        ...freshSummaryMeta,
+        status: 'refresh_failed',
+        age_seconds: 5400,
+        is_stale: true,
+      },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '加载全量预测统计' }));
+    await screen.findByText(/上次刷新失败/);
+    expect(screen.getByText(/数据截至.*已过期/)).toBeInTheDocument();
+    expect(screen.getByText('4187')).toBeInTheDocument();
+  });
+
   it('拒绝错口径统计，并保留最近研究记录', async () => {
     render(<ModelsPage />);
     await screen.findByRole('button', { name: /Elo 实力评分 · #1/ });
-    apiMocks.predictions.mockResolvedValueOnce({ predictions: [], total: 0, summary: { total: 1, positive_ev_count: 0, model_count: 1, avg_confidence: null, latest_predict_time: null } });
+    apiMocks.predictions.mockResolvedValueOnce({ predictions: [], total: 0, summary: { total: 1, positive_ev_count: 0, model_count: 1, avg_confidence: null, latest_predict_time: null }, summary_meta: freshSummaryMeta });
     fireEvent.click(screen.getByRole('button', { name: '加载全量预测统计' }));
     await screen.findByText(/全量统计格式或口径不正确/);
     expect(within(screen.getByLabelText('预测概览')).queryByText('0')).not.toBeInTheDocument();
@@ -243,7 +277,7 @@ describe('ModelsPage', () => {
     expect(apiMocks.predictions.mock.calls.filter(([params]) => params.summary_only === true)).toHaveLength(1);
     fireEvent.click(screen.getByRole('button', { name: '刷新预测记录' }));
     await waitFor(() => expect(apiMocks.predictions).toHaveBeenLastCalledWith({ limit: 200, include_summary: false }));
-    complete({ predictions: [], total: 0, summary: { total: 0, positive_ev_count: 0, model_count: 0, avg_confidence: 0, latest_predict_time: null } });
+    complete({ predictions: [], total: 0, summary: { total: 0, positive_ev_count: 0, model_count: 0, avg_confidence: 0, latest_predict_time: null }, summary_meta: freshSummaryMeta });
     await waitFor(() => expect(button).not.toBeDisabled());
     expect(within(screen.getByLabelText('预测概览')).getByText('0.0%')).toBeInTheDocument();
   });

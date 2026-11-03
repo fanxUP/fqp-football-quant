@@ -1,9 +1,8 @@
-# P138 验收：预测赔率严格按 run 截止时点读取
+# Acceptance: P107 aggregate candidate release readiness
 
-- 每次预测的固定 `predict_time` 作为数据截止时点，不随着批次执行继续后移。
-- SPF/RQSPF 概率输入只允许 `snapshot_time <= predict_time` 的开放赔率快照；同一选项同一快照时刻以较大 `id` 作确定性平局排序。
-- RQSPF 让球值也必须来自该截止时点之前或当时的开放快照；不得从截止之后的行取值。
-- 截止时点前无可用赔率时，继续走已有缺数/跳过处理；不回退到未来快照、不伪造输入。
-- 固定样本单测断言 SQL 参数与过滤边界；隔离 PostgreSQL 回归实际验证早于、恰好等于和晚于 cutoff 的赔率及同秒 ID 平局选择。
-- 只改预测读取和对应单测、隔离 PostgreSQL 回归；不改 schema/迁移、公开 API、依赖，不回填或写生产数据。
-- 主线 CI、独立只读审查、V4 scope/budget 与 diff 检查通过后才进入发布评估。
+- Scope/budget remain exactly 52 counted paths, 51 owned paths, 5 new files, 2 migration files, 0 dependency additions; `uv.lock` is excluded from staging.
+- Current candidate regressions, migration tests on disposable PostgreSQL 16, API tests, frontend tests/typecheck/build, Ruff, Mypy and diff checks pass.
+- Independent full-candidate review, security review and migration review are PASS.
+- GitHub CI passes for the exact `main` commit.
+- Migration 131 passes a current production schema/data-copy rehearsal with preserved source rows, expected grants, bounded locks and an executable recovery plan.
+- Production migration/deployment passes health, critical-path, logs/metrics and natural-run verification. A107 remains incomplete until consumer behavior and resource outcomes are observed.

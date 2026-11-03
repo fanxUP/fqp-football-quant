@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from unittest.mock import MagicMock, patch
 from zoneinfo import ZoneInfo
 
@@ -26,11 +26,88 @@ from scripts.jobs.run_model_prediction import (
     _load_xgboost_shadow_probabilities,
     _now,
     _predict_match_play_type,
+    _run_feature_inputs,
     _run_impl,
     _safe_fair_odds,
     run,
 )
 from scripts.prediction_input_fence import PredictionInputFence
+
+
+def test_run_feature_inputs_selects_only_batches_at_the_shanghai_prediction_cutoff():
+    conn = MagicMock()
+    conn.autocommit = True
+    snapshot = {"id": 88, "feature_version": "v5_player_facts"}
+    cutoff = datetime(2026, 10, 23, 2, tzinfo=UTC)
+    batch = {
+        "id": 91,
+        "cutoff_id": "00000000-0000-0000-0000-000000000091",
+        "cutoff_as_of": cutoff,
+        "builder_version": "observed-cutoff-pilot/v1",
+        "feature_schema_version": "observed-form/v3",
+        "status": "complete",
+        "content_hash": "d" * 64,
+        "required_fields_count": 55,
+        "feature_fields_count": 55,
+        "value_fields_count": 10,
+        "unknown_fields_count": 35,
+        "metadata_integrity": "stored_hash_not_recomputed",
+    }
+    summary = {
+        "batch": batch,
+        "newest_attempt_id": 91,
+        "newest_attempt_status": "complete",
+        "selection_reason": "latest_complete",
+    }
+
+    with (
+        patch(
+            "scripts.jobs.run_model_prediction._latest_feature_snapshot",
+            return_value=snapshot,
+        ),
+        patch(
+            "scripts.jobs.run_model_prediction.load_latest_feature_batch_summary",
+            return_value=summary,
+        ) as load_summary,
+    ):
+        loaded_snapshot, context = _run_feature_inputs(conn, 101, "2026-10-23T10:00:00")
+
+    assert loaded_snapshot is snapshot
+    assert load_summary.call_args.kwargs["as_of"] == cutoff
+    assert context["legacy_feature_snapshot_id"] == 88
+    assert context["observation_batch"]["id"] == 91
+    assert context["observation_batch"]["cutoff_as_of"] == cutoff.isoformat()
+    assert context["consumption"] == "context_only_not_used_for_probability"
+
+
+def test_run_feature_context_read_failure_recovers_savepoint_and_is_explicit():
+    conn = MagicMock()
+    conn.autocommit = False
+    conn.cursor.return_value.__enter__.return_value = MagicMock()
+
+    with (
+        patch(
+            "scripts.jobs.run_model_prediction._latest_feature_snapshot",
+            return_value=None,
+        ),
+        patch(
+            "scripts.jobs.run_model_prediction.load_latest_feature_batch_summary",
+            side_effect=RuntimeError("schema not ready"),
+        ),
+    ):
+        _snapshot, context = _run_feature_inputs(conn, 101, "2026-10-23T10:00:00")
+
+    assert context["observation_batch"]["status"] == "read_failed"
+    assert context["observation_batch"]["selection_reason"] == "read_failed"
+    statements = [
+        call.args[0]
+        for call in conn.cursor.return_value.__enter__.return_value.execute.call_args_list
+    ]
+    assert statements == [
+        "SAVEPOINT fqp_p107_feature_context",
+        "ROLLBACK TO SAVEPOINT fqp_p107_feature_context",
+        "RELEASE SAVEPOINT fqp_p107_feature_context",
+    ]
 
 
 @pytest.fixture(autouse=True)

@@ -6,6 +6,7 @@ from apps.backend.src.services.match_review import build_match_review_cards
 class _Cursor:
     def __init__(self) -> None:
         self._rows: list[tuple] = []
+        self.calls: list[tuple[str, object]] = []
 
     def __enter__(self):
         return self
@@ -13,10 +14,14 @@ class _Cursor:
     def __exit__(self, *_args) -> None:
         return None
 
-    def execute(self, query: str, _params) -> None:
+    def execute(self, query: str, params) -> None:
+        self.calls.append((query, params))
         if "factor_value_json->>'summary'" in query:
             assert "factor_value_json->>'summary' AS summary" in query
-        if "FROM model_prediction_latest_rows" in query:
+        if (
+            "FROM model_prediction_latest_rows" in query
+            or "FROM canonical_prediction_rows" in query
+        ):
             self._rows = [
                 (7, "Elo", "spf", "home_win", 0.62, 0.55, 0.12, 0.78, "2026-08-09T10:00:00")
             ]
@@ -67,6 +72,14 @@ class _Cursor:
 class _Connection:
     def cursor(self):
         return _Cursor()
+
+
+class _RecordingConnection(_Connection):
+    def __init__(self) -> None:
+        self.cursor_instance = _Cursor()
+
+    def cursor(self):
+        return self.cursor_instance
 
 
 def test_match_review_card_combines_official_result_pre_match_signals_and_empty_evidence() -> None:
@@ -130,3 +143,22 @@ def test_match_review_card_combines_official_result_pre_match_signals_and_empty_
             "evidenceStatus": "已收录",
         }
     ]
+
+
+def test_match_review_prediction_read_scopes_canonical_selection_to_review_matches() -> None:
+    conn = _RecordingConnection()
+
+    build_match_review_cards(conn, "2026-08-09")
+
+    query, params = next(
+        (query, params)
+        for query, params in conn.cursor_instance.calls
+        if "model_prediction_latest_rows" in query or "canonical_prediction_rows" in query
+    )
+    assert "model_prediction_latest_rows" not in query
+    assert "review_match_scope AS MATERIALIZED" in query
+    assert "g.match_id = ANY(ARRAY(SELECT match_id FROM review_match_scope))" in query
+    assert "p.match_id = scoped.match_id" in query
+    assert "validation_status = 'valid'" in query
+    assert "predict_time <" in query
+    assert params == {"match_ids": [7]}

@@ -290,9 +290,21 @@ def test_count_lock_keeps_concurrency_control_without_relabeling_unowned_history
 
     def compute(_conn):
         calls.append(True)
-        return fixed
+        return {
+            "prediction_count": fixed,
+            "prediction_summary": {
+                "scope": counts.PREDICTION_SUMMARY_SCOPE,
+                "total": 7,
+                "positive_ev_count": 0,
+                "avg_confidence": None,
+                "model_count": 1,
+                "latest_predict_time": None,
+                "data_as_of": fixed["data_as_of"],
+                "computed_at": fixed["computed_at"],
+            },
+        }
 
-    monkeypatch.setattr(counts, "compute_prediction_count", compute)
+    monkeypatch.setattr(counts, "compute_prediction_snapshots", compute)
     with closing(connect()) as owner:
         with owner.cursor() as cur:
             cur.execute("SELECT pg_advisory_xact_lock(%s,%s)", (913201, 114))

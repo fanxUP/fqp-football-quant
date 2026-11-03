@@ -1,0 +1,10 @@
+{
+  "schema_version": 4,
+  "task_id": "P107-AGGREGATE-SCOPE-RECONCILIATION",
+  "git_revision": "4a7a37aa57b885cc3ae332731b6a6e273dd49bff",
+  "branch": "main",
+  "dirty": true,
+  "preexisting_worktree_changes_preserved": true,
+  "known_scope_limit": "Exact aggregate candidate is 52 V4 business paths; 51 have archived P107/P138 ownership and uv.lock is tolerated only for counting, not staging.",
+  "captured_at": "2026-11-03T23:24:00+08:00"
+}

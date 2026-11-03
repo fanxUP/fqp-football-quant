@@ -1,0 +1,18 @@
+{
+  "state": "DONE",
+  "workflow_id": "P107-AGGREGATE-SCOPE-RECONCILIATION",
+  "previous_workflow": {
+    "task_id": "P107-06C-BOUNDED-FEATURE-IMPORTANCE-READ",
+    "state": "BLOCKED",
+    "archive": ".vibe/archive/workflow-p107-06c-blocked-aggregate-2026-11-03",
+    "archive_manifest_sha256": "1bce18cc5e5828b5b0cfb75bb6eb1dc80b5a9b26e986513dbd439a2c55477931"
+  },
+  "blocked_reason": null,
+  "mode": "STANDARD",
+  "last_transition": {
+    "from": "READY_TO_MERGE",
+    "to": "DONE",
+    "at": "2026-11-03T23:45:02.094787+08:00",
+    "reason": "Aggregate scope reconciliation complete; subsequent code changes require a separate task scope."
+  }
+}

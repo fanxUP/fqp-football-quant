@@ -1,67 +1,79 @@
 {
   "schema_version": 4,
-  "current_task": "P138-PREDICTION-ODDS-ASOF-CUTOFF",
+  "current_task": "P107-AGGREGATE-CANDIDATE-RELEASE-READINESS",
   "acceptance": {
-    "A138-PREDICTION-ODDS-ASOF-CUTOFF": {
-      "status": "PENDING",
-      "reproduction": {
-        "production_run_id": 224063,
-        "groups": 620,
-        "groups_with_post_cutoff_odds": 451,
-        "post_cutoff_option_snapshots": 1353,
-        "maximum_seconds_after_cutoff": 4,
-        "production_query": "read-only repeatable-read transaction, explicitly rolled back"
-      },
-      "local_regression": {
-        "unit_tests": "tests/test_scripts/test_run_model_prediction.py: 60 passed, 0 skipped; initial RED run reproduced missing cutoff on both queries (2 expected failures), then focused RED cases passed after the fix.",
-        "isolated_postgresql_odds": "test_prediction_odds_use_only_rows_at_or_before_fixed_cutoff: 1 passed, 0 skipped; verifies before/equal/after, same-time ID tie-break, and selected input values against a local disposable PostgreSQL 16 database.",
-        "isolated_postgresql_handicap": "test_rqspf_handicap_uses_latest_value_at_or_before_fixed_cutoff: 1 passed, 0 skipped; real query selected cutoff value 1.0 and excluded future 0.5.",
-        "container": "temporary local fqp-p138-test-pg container stopped and removed after tests; no production DB connection.",
-        "static": "Ruff lint and format checks passed for all three paths; scope 3/3, budget 3/3, no migrations/dependencies/API; git diff --check passed.",
-        "frontend_dashboard": "npm --prefix apps/frontend test -- src/pages/DashboardPage.test.tsx: 15 passed, 0 skipped; stabilized the stale-count assertion by waiting for the existing counter effect to render."
-      },
-      "tree_fingerprint": "19c0e8081ebae7b1ea8b5f1f30d94e241a5e4dd54c5c39fcf2567e1f4ddb7f69"
+    "A107-AGGREGATE-CANDIDATE-RELEASE-READINESS": {
+      "status": "PENDING"
+    },
+    "A107-LOCAL-CANDIDATE-VALIDATION": {
+      "status": "PASS",
+      "command": "/bin/sh -c 'set -euo pipefail\nif lsof -nP -iTCP:56857 -sTCP:LISTEN >/dev/null 2>&1; then\n  echo \"Port 56857 is occupied; refusing to use it.\"\n  exit 2\nfi\ndocker run --rm -d --name fqp-p107-candidate-verify-20261104 -e POSTGRES_DB=fqp_audit_test_candidate -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=fqp_test_only -p 127.0.0.1:56857:5432 postgres:16-alpine\ncleanup() { docker stop fqp-p107-candidate-verify-20261104 >/dev/null 2>&1 || true; }\ntrap cleanup EXIT\nattempt=0\nuntil PGPASSWORD=fqp_test_only pg_isready -h 127.0.0.1 -p 56857 -U postgres -d fqp_audit_test_candidate >/dev/null 2>&1; do\n  attempt=$((attempt + 1))\n  if [ \"$attempt\" -ge 30 ]; then\n    docker logs fqp-p107-candidate-verify-20261104\n    exit 3\n  fi\n  sleep 1\ndone\nFQP_AUDIT_TEST_DATABASE_URL=postgresql://postgres:fqp_test_only@127.0.0.1:56857/fqp_audit_test_candidate .venv/bin/python -m pytest -q tests/test_computation/test_prediction_statistics_rollup_postgres.py tests/test_sql/test_dashboard_prediction_count.py\n.venv/bin/python -m pytest -q -m \"not integration\" tests/test_api/test_predictions.py tests/test_api/test_teams.py tests/test_api/test_dashboard_router.py tests/test_api/test_read_performance.py tests/test_api/test_simulator_matches.py tests/test_scripts/test_derived_play_predictions.py tests/test_scripts/test_feature_importance.py tests/test_scripts/test_model_performance.py tests/test_scripts/test_run_model_prediction.py tests/test_jobs/test_generate_daily_review.py tests/test_jobs/test_recommendation_candidate.py tests/test_jobs/test_run_news_shadow_model.py tests/test_upset/test_review_storage.py\nnpm --prefix apps/frontend test -- --run src/features/analysis/FeatureSnapshotPanel.test.tsx src/features/model-research/ModelResearchPanel.test.tsx src/pages/ModelsPage.test.tsx\n.venv/bin/ruff check .\n.venv/bin/ruff format --check .\n.venv/bin/mypy apps/backend/src scripts --explicit-package-bases\n.venv/bin/python -m compileall -q apps/backend/src scripts\nnpm --prefix apps/frontend run typecheck\nnpm --prefix apps/frontend run build\ngit diff --check'",
+      "exit_code": 0,
+      "summary": "        3.65 kB │ gzip:   1.78 kB\ndist/assets/RecommendationDetailPage-BP4SMKGx.js    3.85 kB │ gzip:   1.64 kB\ndist/assets/helper-UvENM29A.js                      4.15 kB │ gzip:   1.77 kB\ndist/assets/constants-GCdYie87.js                   4.37 kB │ gzip:   2.15 kB\ndist/assets/SettingsPage-Cy12jc-c.js                4.56 kB │ gzip:   1.65 kB\ndist/assets/MatchEvidence-ClhM-hvd.js               4.86 kB │ gzip:   2.11 kB\ndist/assets/radar-gHSAJbDR.js                       5.29 kB │ gzip:   2.31 kB\ndist/assets/ModulesPage-DJUjdVjU.js                 5.44 kB │ gzip:   1.88 kB\ndist/assets/axisAlignTicks-Cq4bKvYc.js              5.67 kB │ gzip:   2.50 kB\ndist/assets/scatter-GX9F4nE6.js                     6.39 kB │ gzip:   2.45 kB\ndist/assets/install-CWJREfL_.js                     6.55 kB │ gzip:   2.67 kB\ndist/assets/heatmap-C6hVjCpv.js                     6.57 kB │ gzip:   2.79 kB\ndist/assets/points-Bk4o0kJr.js                      7.52 kB │ gzip:   2.96 kB\ndist/assets/jsx-runtime-CIxEorsV.js                 7.89 kB │ gzip:   2.98 kB\ndist/assets/OddsMovementPage-BV44kBhK.js            8.84 kB │ gzip:   3.60 kB\ndist/assets/MatchesPage-BPtgk7qA.js                 9.64 kB │ gzip:   3.85 kB\ndist/assets/ExecutionCenter-B0q2ycgC.js            11.50 kB │ gzip:   4.22 kB\ndist/assets/AgentPanel-BD5UK2eW.js                 11.55 kB │ gzip:   3.61 kB\ndist/assets/DataHealthPage-BU3A7B2t.js             11.71 kB │ gzip:   4.33 kB\ndist/assets/UpsetsPage-DgxrLo9U.js                 11.74 kB │ gzip:   3.78 kB\ndist/assets/visualization-BdFqTE_4.js              12.19 kB │ gzip:   4.08 kB\ndist/assets/RosterEvidencePanel-Diirtpu0.js        13.40 kB │ gzip:   4.98 kB\ndist/assets/pie-CrbRJEEF.js                        15.15 kB │ gzip:   6.36 kB\ndist/assets/MatchDetailPage-XTJuGiTr.js            15.24 kB │ gzip:   5.58 kB\ndist/assets/axisHelper-DEUVdXih.js                 15.42 kB │ gzip:   5.61 kB\ndist/assets/DashboardPage-Crr7Kee9.js              18.57 kB │ gzip:   6.25 kB\ndist/assets/NewsIntelligencePage-NwRrPs2R.js       18.79 kB │ gzip:   5.93 kB\ndist/assets/AgentWorkspacePage-BtvF7zge.js         19.40 kB │ gzip:   6.46 kB\ndist/assets/BacktestPage-D-3X8Q11.js               19.78 kB │ gzip:   7.23 kB\ndist/assets/line-DgZ4oTdw.js                       20.02 kB │ gzip:   8.17 kB\ndist/assets/scaleRawExtentInfo-DpJKVGD1.js         20.21 kB │ gzip:   8.13 kB\ndist/assets/bar-CfizbZkM.js                        22.01 kB │ gzip:   8.44 kB\ndist/assets/installSimple-D1zSL3pa.js              22.31 kB │ gzip:   8.01 kB\ndist/assets/PoolPage-DNHRq3ti.js                   22.80 kB │ gzip:   7.65 kB\ndist/assets/ModelProvidersPage-COHlw2T3.js         26.82 kB │ gzip:   8.73 kB\ndist/assets/ReviewsPage-DxKtOjgo.js                27.32 kB │ gzip:   8.85 kB\ndist/assets/EventsPage-mrQFL6Vt.js                 28.66 kB │ gzip:   9.09 kB\ndist/assets/MatchDetailDrawer-C2413NxJ.js          30.25 kB │ gzip:   7.86 kB\ndist/assets/ModelsPage-D0AJsTvn.js                 53.12 kB │ gzip:  16.00 kB\ndist/assets/AnalysisPage-BMVhM95I.js               59.79 kB │ gzip:  16.82 kB\ndist/assets/BettingCenterPage-GwtUqLHh.js          60.05 kB │ gzip:  16.90 kB\ndist/assets/TeamLogo-vNhV2TGg.js                   63.04 kB │ gzip:  12.92 kB\ndist/assets/chartRuntime-DYGJzoJX.js              164.83 kB │ gzip:  53.72 kB\ndist/assets/LightweightLineChart-BaAHbm35.js      166.38 kB │ gzip:  54.51 kB\ndist/assets/index-B5WmQDEF.js                     259.40 kB │ gzip:  84.28 kB\ndist/assets/SeriesData-B6NLPcGc.js                345.26 kB │ gzip: 116.97 kB\ndist/assets/PitchScene-DEKloEGv.js                943.55 kB │ gzip: 250.06 kB\n\n✓ built in 2.93s\n[plugin builtin:vite-reporter] \n(!) Some chunks are larger than 500 kB after minification. Consider:\n- Using dynamic import() to code-split the application\n- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting\n- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.\n",
+      "timed_out": false,
+      "environment": "unknown",
+      "revision": "4a7a37aa57b885cc3ae332731b6a6e273dd49bff",
+      "dirty_tree": true,
+      "tree_fingerprint": "216ee2c93fc35e1e8ecd50f03a46a15e63f36b893a78fbe8d964c2081f637ae8",
+      "verified_at": "2026-11-04T00:00:15.126116+08:00",
+      "local_result_summary": {
+        "prediction_statistics_postgres16_and_dashboard_snapshot_tests": "18 passed, 0 skipped",
+        "affected_python_api_and_script_regressions": "204 passed; 1 integration-marked case deselected because PostgreSQL cases were run separately",
+        "frontend_regressions": "28 passed across 3 files",
+        "ruff": "check passed; format check passed for 701 files",
+        "mypy": "345 source files passed",
+        "python_compileall": "passed",
+        "frontend_typecheck_and_build": "passed",
+        "build_note": "Vite warns that PitchScene is 943.55 kB minified; non-blocking, track for bundle optimization.",
+        "git_diff_check": "passed",
+        "production_access": "none"
+      }
     }
   },
   "reviews": {
     "status": "PASS",
     "application_code": {
       "status": "PASS",
-      "note": "Independent read-only review passed. The original MINOR about SQL-shape-only evidence was closed with two real isolated PostgreSQL query samples covering primary odds and RQSPF handicap; no production access."
+      "record": ".vibe/AGGREGATE-INDEPENDENT-REVIEW.md",
+      "note": "Independent read-only review found no blocker, major, or new minor finding; test-only cases were added afterward without changing production behavior."
     },
     "v4_migration": {
       "status": "PASS",
-      "note": "No migration is in scope."
+      "record": ".vibe/AGGREGATE-INDEPENDENT-REVIEW.md",
+      "note": "Review included migration and rollback behavior; final candidate still requires current production copy rehearsal."
+    },
+    "aggregate_scope": {
+      "status": "PASS",
+      "record": "plans/model-modernization-20261016/integrated/P107/06-consumer-acceptance-matrix/AGGREGATE-SCOPE-REVIEW-20261103.md"
+    },
+    "aggregate_review": {
+      "status": "PASS",
+      "record": ".vibe/AGGREGATE-INDEPENDENT-REVIEW.md",
+      "note": "No blocker, major, or new minor findings across 52 counted paths; uv.lock excluded from staging."
     }
-  },
-  "quality_gate": {
-    "status": "NOT_READY",
-    "failures": [
-      "Rerun exact-head CI after stabilizing the existing DashboardPage counter assertion."
-    ]
   },
   "security": {
     "status": "PASS",
-    "note": "No new source, secret, credential, request, permission, or data-write path."
+    "reviewed_at": "2026-11-04T00:02:00+08:00",
+    "note": "Read-only diff review found no new credentials, outbound request path, dependency change, command construction, or user-controlled dynamic SQL. SQL uses fixed migration statements; runtime grants are limited to rollup tables and trigger-function execution, with PUBLIC execute revoked. Isolated PostgreSQL tests verified fqp grants. No production access."
   },
   "migration": {
-    "status": "NOT_APPLICABLE"
+    "status": "PENDING",
+    "note": "Migration 131 has isolated PG16 coverage; current production schema/data-copy rehearsal remains."
   },
   "external_ci": {
-    "status": "pending",
-    "checks": {},
-    "previous_attempts": [
-      {
-        "run_id": 41602957411,
-        "revision": "090984e09cff70466078bf28cbcbae5db9810d24",
-        "status": "failure",
-        "summary": "Frontend DashboardPage stale-count test observed the stale marker before CountUp effect updated the displayed number; the local test now waits for both."
-      }
-    ]
+    "status": "PENDING"
   },
   "production": {
-    "status": "NOT_DEPLOYED",
-    "business_data_writes": 0,
-    "manual_prediction_runs": 0
+    "status": "NOT_ACCESSED",
+    "production_database_access": false,
+    "business_data_writes": 0
+  },
+  "quality_gate": {
+    "status": "BLOCKED",
+    "failures": [
+      "exact-head GitHub CI pending",
+      "production schema/data-copy rehearsal pending"
+    ]
   }
 }

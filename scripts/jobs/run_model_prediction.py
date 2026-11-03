@@ -29,6 +29,7 @@ from scripts.agents.task_queue import finish_tracked_job, start_tracked_job
 from scripts.bayesian_form_model import probabilities_from_team_outcomes
 from scripts.bivariate_poisson_model import bivariate_score_matrix
 from scripts.business_time import business_now
+from scripts.data_contracts import to_utc
 from scripts.derived_play_predictions import store_derived_play_predictions
 from scripts.dixon_coles_model import dixon_coles_matrix
 from scripts.elo_model import run_elo_1x2_prediction
@@ -36,6 +37,8 @@ from scripts.extra_trees_shadow_model import (
     load_probabilities as load_extra_trees_shadow_probabilities,
 )
 from scripts.feature_adjustment import GoalRateAdjustment, adjust_goal_rates
+from scripts.feature_batch_storage import load_latest_feature_batch_summary
+from scripts.feature_schema import FEATURE_COLUMNS, FEATURE_SCHEMA_VERSION
 from scripts.feature_storage import load_latest_match_feature_snapshot
 from scripts.glicko2_model import Glicko2Rating
 from scripts.glicko2_model import predict_1x2 as glicko2_predict_1x2
@@ -79,6 +82,7 @@ from scripts.naive_bayes_shadow_model import (
     load_probabilities as load_naive_bayes_shadow_probabilities,
 )
 from scripts.negative_binomial_model import negative_binomial_score_matrix
+from scripts.observed_feature_pipeline import BUILDER_VERSION as _OBSERVED_FEATURE_BUILDER_VERSION
 from scripts.odds_conversion import (
     full_debias_pipeline,
     normalize_probabilities,
@@ -114,10 +118,13 @@ _PREDICTION_SOURCE_PATHS = (
     "scripts/bayesian_form_model.py",
     "scripts/bivariate_poisson_model.py",
     "scripts/business_time.py",
+    "scripts/data_contracts.py",
     "scripts/dixon_coles_model.py",
     "scripts/elo_model.py",
     "scripts/extra_trees_shadow_model.py",
     "scripts/feature_adjustment.py",
+    "scripts/feature_batch_storage.py",
+    "scripts/feature_schema.py",
     "scripts/feature_storage.py",
     "scripts/glicko2_model.py",
     "scripts/hist_gradient_boosting_shadow_model.py",
@@ -141,6 +148,7 @@ _PREDICTION_SOURCE_PATHS = (
     "scripts/model_prediction_run_identity.py",
     "scripts/model_prediction_run_storage.py",
     "scripts/model_prediction_run_loader.py",
+    "scripts/observed_feature_pipeline.py",
     "scripts/prediction_input_fence.py",
     "scripts/prediction_input_updates.py",
 )
@@ -361,6 +369,103 @@ def _latest_feature_snapshot(
 ) -> dict[str, Any] | None:
     """Use the same complete snapshot schema as storage and training."""
     return load_latest_match_feature_snapshot(conn, match_id, as_of=as_of)
+
+
+def _run_feature_inputs(
+    conn: Any, match_id: int, predict_time: str
+) -> tuple[dict[str, Any] | None, dict[str, Any]]:
+    """Bind the legacy snapshot and eligible P104 batch without consuming P104 values."""
+    snapshot = _latest_feature_snapshot(conn, match_id, as_of=predict_time)
+    try:
+        predict_cutoff = to_utc(
+            datetime.fromisoformat(predict_time), naive_timezone="Asia/Shanghai"
+        )
+    except TypeError, ValueError, OverflowError:
+        batch_state: dict[str, Any] = {
+            "batch": None,
+            "newest_attempt_id": None,
+            "newest_attempt_status": None,
+            "selection_reason": "read_failed",
+        }
+    else:
+        savepoint = "fqp_p107_feature_context"
+        use_savepoint = getattr(conn, "autocommit", False) is not True
+        if use_savepoint:
+            with conn.cursor() as cur:
+                cur.execute(f"SAVEPOINT {savepoint}")
+        try:
+            batch_state = load_latest_feature_batch_summary(
+                conn,
+                match_id=match_id,
+                builder_version=_OBSERVED_FEATURE_BUILDER_VERSION,
+                required_fields=FEATURE_COLUMNS,
+                feature_schema_version=FEATURE_SCHEMA_VERSION,
+                as_of=predict_cutoff,
+            )
+        except Exception as exc:
+            if use_savepoint:
+                with conn.cursor() as cur:
+                    cur.execute(f"ROLLBACK TO SAVEPOINT {savepoint}")
+                    cur.execute(f"RELEASE SAVEPOINT {savepoint}")
+            logger.warning(
+                "P104 batch summary read failed at prediction cutoff %s for match %s (%s)",
+                predict_time,
+                match_id,
+                type(exc).__name__,
+            )
+            batch_state = {
+                "batch": None,
+                "newest_attempt_id": None,
+                "newest_attempt_status": None,
+                "selection_reason": "read_failed",
+            }
+        else:
+            if use_savepoint:
+                with conn.cursor() as cur:
+                    cur.execute(f"RELEASE SAVEPOINT {savepoint}")
+
+    batch = batch_state.get("batch")
+    if batch is None:
+        selection_reason = batch_state.get("selection_reason")
+        read_failed = selection_reason == "read_failed"
+        batch_context = {
+            "id": None,
+            "cutoff_id": None,
+            "cutoff_as_of": None,
+            "builder_version": None,
+            "feature_schema_version": None,
+            "status": "read_failed" if read_failed else "no_complete_batch",
+            "content_hash": None,
+            "required_fields_count": 0,
+            "feature_fields_count": 0,
+            "value_fields_count": 0,
+            "unknown_fields_count": 0,
+            "newest_attempt_id": batch_state.get("newest_attempt_id"),
+            "newest_attempt_status": batch_state.get("newest_attempt_status"),
+            "selection_reason": "read_failed" if read_failed else "no_complete_batch",
+            "metadata_integrity": "not_read" if read_failed else "not_applicable",
+        }
+    else:
+        batch_context = {
+            **batch,
+            "cutoff_as_of": (
+                batch["cutoff_as_of"].isoformat()
+                if hasattr(batch["cutoff_as_of"], "isoformat")
+                else str(batch["cutoff_as_of"])
+            ),
+            "newest_attempt_id": batch_state.get("newest_attempt_id"),
+            "newest_attempt_status": batch_state.get("newest_attempt_status"),
+            "selection_reason": batch_state["selection_reason"],
+        }
+    context = {
+        "schema_version": "prediction-feature-context/v1",
+        "match_id": int(match_id),
+        "predict_time": predict_time,
+        "legacy_feature_snapshot_id": snapshot.get("id") if snapshot else None,
+        "observation_batch": batch_context,
+        "consumption": "context_only_not_used_for_probability",
+    }
+    return snapshot, context
 
 
 def _load_trained_elo_probabilities(
@@ -672,6 +777,11 @@ def _run_impl(
                 match_row[2],
             )
             play_types = available_markets.get(mid, [])
+            run_feature_inputs = (
+                _run_feature_inputs(conn, int(mid), predict_time)
+                if prediction_run_id is not None and play_types
+                else None
+            )
             for play_type in play_types:
                 output_group_counts: dict[str, Any] = {}
                 try:
@@ -689,6 +799,7 @@ def _run_impl(
                         prediction_run_id=prediction_run_id,
                         model_artifact_identities=model_artifact_identities,
                         output_group_counts=output_group_counts,
+                        run_feature_inputs=run_feature_inputs,
                     )
                 except InputUpdateSuperseded, LockNotAvailable:
                     # Other matches remain available. Any already committed
@@ -910,6 +1021,7 @@ def _predict_match_play_type(
     prediction_run_id: uuid.UUID | str | None = None,
     model_artifact_identities: dict[str, dict[str, Any]] | None = None,
     output_group_counts: dict[str, Any] | None = None,
+    run_feature_inputs: tuple[dict[str, Any] | None, dict[str, Any]] | None = None,
 ) -> tuple[int, int]:
     """Run prediction pipeline for a single match + play type.
 
@@ -920,7 +1032,16 @@ def _predict_match_play_type(
         (predictions_count, votes_count)
     """
     input_fence = capture_prediction_input_fence(conn, mid)
-    feature_snapshot = _latest_feature_snapshot(conn, mid, as_of=predict_time)
+    if run_feature_inputs is None:
+        if prediction_run_id is None:
+            feature_snapshot = _latest_feature_snapshot(conn, mid, as_of=predict_time)
+            run_feature_context = None
+        else:
+            feature_snapshot, run_feature_context = _run_feature_inputs(
+                conn, int(mid), predict_time
+            )
+    else:
+        feature_snapshot, run_feature_context = run_feature_inputs
     feature_snapshot_id = feature_snapshot.get("id") if feature_snapshot else None
     model_parameters = model_parameters or {}
     model_artifact_identities = model_artifact_identities or {}
@@ -1187,6 +1308,7 @@ def _predict_match_play_type(
             prediction_run_id=str(prediction_run_id) if prediction_run_id is not None else None,
             model_artifact_identities=model_artifact_identities,
             output_group_counts=output_group_counts,
+            feature_context=run_feature_context,
         )
 
     # 5. Elo model. Cold-start ratings are placeholders and must not become
@@ -1564,6 +1686,16 @@ def _predict_match_play_type(
                     "odds_snapshot_times": snapshot_times,
                     "feature_snapshot_id": feature_snapshot_id,
                     "input_fence": input_payload,
+                    **(
+                        {
+                            "feature_context": {
+                                **run_feature_context,
+                                "model_version_id": int(mv_id),
+                            }
+                        }
+                        if run_feature_context is not None
+                        else {}
+                    ),
                     "score_matrix": (
                         {"raw": raw_matrix, "adjusted": adjusted_matrix}
                         if adjusted_matrix is not None

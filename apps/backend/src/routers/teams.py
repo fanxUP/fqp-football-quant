@@ -191,10 +191,10 @@ def list_active_matches(limit: int = Query(500, ge=1, le=5000)):
 
 @router.get("/api/features/snapshots")
 def list_feature_snapshots(
-    match_id: int | None = Query(None),
-    limit: int = Query(20),
+    match_id: int | None = Query(None, ge=1),
+    limit: int = Query(20, ge=1, le=100),
 ):
-    """List recent feature snapshots, optionally filtered by match."""
+    """List bounded legacy snapshots and their latest observed-input batch."""
     with get_db() as conn:
         with conn.cursor() as cur:
             if match_id:
@@ -231,6 +231,43 @@ def list_feature_snapshots(
                     (limit,),
                 )
             rows = cur.fetchall()
+            match_ids = sorted({int(row[1]) for row in rows})
+            observed_batch_rows = []
+            if match_ids:
+                cur.execute(
+                    """
+                    WITH latest AS (
+                        SELECT DISTINCT ON (fb.match_id)
+                               fb.id, fb.match_id, fb.cutoff_id, fb.cutoff_as_of,
+                               fb.builder_version, fb.feature_schema_version,
+                               fb.required_fields, fb.features, fb.status
+                        FROM feature_batches fb
+                        WHERE fb.match_id = ANY(%s)
+                        ORDER BY fb.match_id, fb.cutoff_as_of DESC, fb.id DESC
+                    )
+                    SELECT latest.id, latest.match_id, latest.cutoff_id::text,
+                           latest.cutoff_as_of, latest.builder_version,
+                           latest.feature_schema_version, latest.status,
+                           jsonb_array_length(latest.required_fields),
+                           COALESCE(field_counts.feature_count, 0),
+                           COALESCE(field_counts.value_fields_count, 0),
+                           COALESCE(field_counts.unknown_fields_count, 0)
+                    FROM latest
+                    LEFT JOIN LATERAL (
+                        SELECT COUNT(*) AS feature_count,
+                               COUNT(*) FILTER (
+                                   WHERE item.value->>'fact_status' = 'value'
+                               ) AS value_fields_count,
+                               COUNT(*) FILTER (
+                                   WHERE item.value->>'fact_status' = 'unknown'
+                               ) AS unknown_fields_count
+                        FROM json_each(latest.features) AS item(key, value)
+                    ) AS field_counts ON TRUE
+                    ORDER BY latest.cutoff_as_of DESC, latest.id DESC
+                    """,
+                    (match_ids,),
+                )
+                observed_batch_rows = cur.fetchall()
     return {
         "snapshots": [
             {
@@ -257,6 +294,22 @@ def list_feature_snapshots(
                 "match_num_str": r[16],
             }
             for r in rows
+        ],
+        "observed_batches": [
+            {
+                "id": r[0],
+                "match_id": r[1],
+                "cutoff_id": r[2],
+                "cutoff_as_of": r[3].isoformat() if hasattr(r[3], "isoformat") else str(r[3]),
+                "builder_version": r[4],
+                "feature_schema_version": r[5],
+                "status": r[6],
+                "required_fields_count": r[7],
+                "feature_fields_count": r[8],
+                "value_fields_count": r[9],
+                "unknown_fields_count": r[10],
+            }
+            for r in observed_batch_rows
         ],
         "total": len(rows),
     }

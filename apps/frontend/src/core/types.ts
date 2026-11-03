@@ -46,6 +46,20 @@ export interface FeatureSnapshot {
   match_num_str: string | null;
 }
 
+export interface ObservedFeatureBatchSummary {
+  id: number;
+  match_id: number;
+  cutoff_id: string;
+  cutoff_as_of: string;
+  builder_version: string;
+  feature_schema_version: string;
+  status: 'running' | 'partial' | 'complete';
+  required_fields_count: number;
+  feature_fields_count: number;
+  value_fields_count: number;
+  unknown_fields_count: number;
+}
+
 // ---- Matches & Events ----
 
 export interface TodayMatch {
@@ -464,6 +478,46 @@ export interface PredictionResearchEvidence {
   feature_categories: string[];
   odds_snapshot_id: number | null;
   odds_snapshot_time: string | null;
+  prediction_group_id?: string | null;
+}
+
+export interface PredictionFeatureContextBatch {
+  id: number | null;
+  cutoff_id: string | null;
+  cutoff_as_of: string | null;
+  builder_version: string | null;
+  feature_schema_version: string | null;
+  status: 'complete' | 'no_complete_batch' | 'read_failed';
+  content_hash: string | null;
+  required_fields_count: number;
+  feature_fields_count: number;
+  value_fields_count: number;
+  unknown_fields_count: number;
+  newest_attempt_id: number | null;
+  newest_attempt_status: 'running' | 'partial' | 'complete' | null;
+  selection_reason: 'latest_complete' | 'previous_complete' | 'no_complete_batch' | 'read_failed';
+  metadata_integrity: 'stored_hash_not_recomputed' | 'not_applicable' | 'not_read';
+}
+
+export interface PredictionFeatureContext {
+  schema_version: 'prediction-feature-context/v1';
+  match_id: number;
+  model_version_id: number;
+  predict_time: string;
+  legacy_feature_snapshot_id: number | null;
+  observation_batch: PredictionFeatureContextBatch;
+  consumption: 'context_only_not_used_for_probability';
+}
+
+export interface PredictionGroupFeatureContext {
+  group_id: string;
+  run_id: string;
+  match_id: number;
+  model_version_id: number;
+  play_type: string;
+  predict_time: string;
+  context_status: 'recorded' | 'not_recorded' | 'invalid_integrity';
+  feature_context: PredictionFeatureContext | null;
 }
 
 export interface Prediction {
@@ -533,6 +587,16 @@ export interface PredictionSummary {
   avg_confidence: number | null;
   model_count: number;
   latest_predict_time: string | null;
+}
+
+export interface PredictionSummaryMeta {
+  status: 'ok' | 'stale' | 'refresh_failed' | 'unavailable' | 'pending' | 'live';
+  data_as_of: string | null;
+  last_success_at: string | null;
+  last_attempt_at: string | null;
+  age_seconds: number | null;
+  stale_after_seconds: number | null;
+  is_stale: boolean;
 }
 
 export interface CalibrationProfile {

@@ -4,8 +4,15 @@
     "command_timeout_seconds": 900
   },
   "commands": {
-    "test": ".venv/bin/python -m pytest -q tests/test_scripts/test_run_model_prediction.py --no-header tests/test_computation/test_prediction_run_postgres.py::test_prediction_odds_use_only_rows_at_or_before_fixed_cutoff",
-    "lint": ".venv/bin/ruff check scripts/jobs/run_model_prediction.py tests/test_scripts/test_run_model_prediction.py",
+    "test": [
+      ".venv/bin/python",
+      "-m",
+      "pytest",
+      "-q",
+      "tests/test_scripts/test_feature_importance.py",
+      "tests/test_computation/test_prediction_run_postgres.py::test_feature_importance_reads_latest_pre_kickoff_snapshots_for_bounded_recent_matches"
+    ],
+    "lint": null,
     "typecheck": null
   },
   "paths": {
@@ -22,7 +29,9 @@
       "**/migrations/**",
       "**/*.sql"
     ],
-    "ignore_untracked": []
+    "ignore_untracked": [
+      "uv.lock"
+    ]
   },
   "quality_gate": {
     "engine_path": "/Users/estefan-macworkstation/.remote-vibe-coding/engine/vibe.py",

@@ -259,12 +259,35 @@ def _materialize_group(conn: Any, group: tuple, rows: list | None = None) -> dic
         "provenance_status": provenance,
         "run_provenance_status": run_provenance,
         **(
+            {"feature_context": output_manifest["feature_context"]}
+            if "feature_context" in output_manifest
+            else {}
+        ),
+        **(
             {"integrity_error": "stored options disagree with the hashed probability vector"}
             if status == "invalid_integrity"
             else {}
         ),
         "options": options,
     }
+
+
+def load_prediction_group_by_id(conn: Any, *, group_id: Any) -> dict[str, Any] | None:
+    """Load one published prediction group and verify its run/group manifests."""
+    with conn.cursor() as cur:
+        cur.execute(
+            f"""SELECT {GROUP_COLUMNS}
+                FROM model_prediction_groups g
+                JOIN model_prediction_runs r ON r.id=g.run_id
+                WHERE g.id=%s AND g.group_status='complete'
+                  AND r.run_status IN ('completed','partial')
+                LIMIT 1""",
+            (str(group_id),),
+        )
+        group = cur.fetchone()
+    if group is None:
+        return None
+    return _materialize_group(conn, group)
 
 
 def load_pool_prediction_groups(

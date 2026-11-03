@@ -8,6 +8,7 @@ from typing import Any
 
 from psycopg2.extras import Json, RealDictCursor
 
+from scripts.prediction_statistics import canonical_prediction_rows_ctes
 from scripts.upset.evidence import evidence_record
 from scripts.upset.review import build_review_payload
 
@@ -144,16 +145,19 @@ def _feature_evidence(conn: Any, event: dict[str, Any]) -> dict[str, Any] | None
 def _prediction_evidence(conn: Any, event: dict[str, Any]) -> dict[str, Any] | None:
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
-            """
+            f"""
+            WITH RECURSIVE upset_match_scope AS MATERIALIZED (
+                SELECT %(match_id)s::bigint AS match_id
+            ), {canonical_prediction_rows_ctes(match_scope="upset_match_scope")}
             SELECT prediction.id, prediction.predict_time, prediction.option_code,
                    prediction.model_probability, prediction.market_probability,
                    prediction.ev, prediction.validation_status,
                    version.model_name, version.version
-            FROM model_prediction_latest_rows prediction
+            FROM canonical_prediction_rows prediction
             JOIN model_versions version ON version.id = prediction.model_version_id
-            WHERE prediction.match_id = %s
-              AND prediction.play_type = %s
-              AND prediction.predict_time < %s
+            WHERE prediction.match_id = %(match_id)s
+              AND prediction.play_type = %(play_type)s
+              AND prediction.predict_time < %(kickoff_time)s
               AND prediction.validation_status = 'valid'
               AND COALESCE(
                     (prediction.uncertainty_reason->>'model_independent')::boolean,
@@ -163,7 +167,11 @@ def _prediction_evidence(conn: Any, event: dict[str, Any]) -> dict[str, Any] | N
                      prediction.model_probability DESC, prediction.id DESC
             LIMIT 1
             """,
-            (event["match_id"], event["primary_play_type"], event["kickoff_time"]),
+            {
+                "match_id": event["match_id"],
+                "play_type": event["primary_play_type"],
+                "kickoff_time": event["kickoff_time"],
+            },
         )
         row = cur.fetchone()
     if not row:
