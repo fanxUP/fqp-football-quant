@@ -16,6 +16,18 @@
       "dirty_tree": true,
       "tree_fingerprint": "9306bc66a06bb9dbfaa66b1a6e95e6d7c0b37f91c96acd5666e062e772a141e6",
       "verified_at": "2026-11-04T00:48:50.403236+08:00"
+    },
+    "A107-EXACT-HEAD-CI": {
+      "status": "PASS",
+      "command": "python3 -c 'import json,subprocess; d=json.loads(subprocess.check_output(['\"'\"'gh'\"'\"','\"'\"'run'\"'\"','\"'\"'view'\"'\"','\"'\"'41678498183'\"'\"','\"'\"'--json'\"'\"','\"'\"'headSha,status,conclusion,jobs'\"'\"'],text=True)); assert d['\"'\"'headSha'\"'\"']=='\"'\"'c3f9d635a426a16b8d77485764d2ca4abfd00145'\"'\"'; assert d['\"'\"'status'\"'\"']=='\"'\"'completed'\"'\"' and d['\"'\"'conclusion'\"'\"']=='\"'\"'success'\"'\"'; assert all(j['\"'\"'conclusion'\"'\"']=='\"'\"'success'\"'\"' for j in d['\"'\"'jobs'\"'\"']); print('\"'\"'PASS: exact-head CI 41678498183, head c3f9d63, all jobs succeeded'\"'\"')'",
+      "exit_code": 0,
+      "summary": "PASS: exact-head CI 41678498183, head c3f9d63, all jobs succeeded\n",
+      "timed_out": false,
+      "environment": "unknown",
+      "revision": "c3f9d635a426a16b8d77485764d2ca4abfd00145",
+      "dirty_tree": false,
+      "tree_fingerprint": "9306bc66a06bb9dbfaa66b1a6e95e6d7c0b37f91c96acd5666e062e772a141e6",
+      "verified_at": "2026-11-04T01:03:19.966231+08:00"
     }
   },
   "reviews": {
@@ -50,7 +62,15 @@
     "note": "Migration 131 has isolated PG16 coverage; current production schema/data-copy rehearsal remains."
   },
   "external_ci": {
-    "status": "PENDING"
+    "status": "PASS",
+    "run_id": 41678498183,
+    "head_sha": "c3f9d635a426a16b8d77485764d2ca4abfd00145",
+    "url": "https://github.com/fanxUP/fqp-football-quant/actions/runs/41678498183",
+    "jobs": {
+      "lint-and-typecheck": "success",
+      "test": "success"
+    },
+    "verified_at": "2026-11-04T01:03:44+08:00"
   },
   "production": {
     "status": "NOT_ACCESSED",
@@ -60,7 +80,6 @@
   "quality_gate": {
     "status": "BLOCKED",
     "failures": [
-      "exact-head GitHub CI pending",
       "production schema/data-copy rehearsal pending"
     ]
   }
