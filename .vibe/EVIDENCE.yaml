@@ -18,12 +18,16 @@
       "verified_at": "2026-11-04T01:58:01.053513+08:00"
     },
     "A107-EXACT-HEAD-CI": {
-      "status": "PENDING",
-      "previous_success": {
-        "run_id": 41680696657,
-        "head_sha": "d7eaf589da609dcdab92f7aefea16441b046ba77",
-        "note": "This successful run covers the base commit only; the current working-tree release-gate changes require a new push CI run."
-      }
+      "status": "PASS",
+      "command": "python3 -c 'import json,subprocess; d=json.loads(subprocess.check_output([\"gh\",\"run\",\"view\",\"41689707607\",\"--repo\",\"fanxUP/fqp-football-quant\",\"--json\",\"headSha,status,conclusion,jobs\"],text=True)); assert d[\"headSha\"]==\"94873b18fa14c6d91f588ccc2fe36633e7e6521d\"; assert d[\"status\"]==\"completed\" and d[\"conclusion\"]==\"success\"; jobs={j[\"name\"]:j for j in d[\"jobs\"]}; assert set((\"lint-and-typecheck\",\"test\")).issubset(jobs); assert all(jobs[n][\"status\"]==\"completed\" and jobs[n][\"conclusion\"]==\"success\" for n in (\"lint-and-typecheck\",\"test\")); print(\"PASS: exact-head CI run 41689707607, both jobs succeeded\")'",
+      "exit_code": 0,
+      "summary": "PASS: exact-head CI run 41689707607, both jobs succeeded\n",
+      "timed_out": false,
+      "environment": "unknown",
+      "revision": "94873b18fa14c6d91f588ccc2fe36633e7e6521d",
+      "dirty_tree": false,
+      "tree_fingerprint": "ba154a93f3a27bc0fb90e241d923738107c8e8fd10db344baadb46afc65a290b",
+      "verified_at": "2026-11-04T02:14:30.552134+08:00"
     }
   },
   "reviews": {
@@ -58,8 +62,16 @@
     "note": "Migration 131 has isolated PG16 coverage; current production schema/data-copy rehearsal remains."
   },
   "external_ci": {
-    "status": "PENDING",
-    "note": "The recorded run is from an earlier commit and is not exact-head evidence for the current uncommitted changes."
+    "status": "passed",
+    "run_id": 41689707607,
+    "head_sha": "94873b18fa14c6d91f588ccc2fe36633e7e6521d",
+    "url": "https://github.com/fanxUP/fqp-football-quant/actions/runs/41689707607",
+    "checks": {
+      "lint-and-typecheck": "passed",
+      "test": "passed"
+    },
+    "verified_at": "2026-11-04T02:14:30+08:00",
+    "note": "This exact-head run passed for the release-gate candidate. The remaining quality-gate blocker is the incomplete production-copy rehearsal."
   },
   "production": {
     "status": "READ_ONLY_COPY_ATTEMPT_ABORTED",
@@ -69,8 +81,7 @@
   },
   "quality_gate": {
     "status": "BLOCKED",
-      "failures": [
-      "exact-head GitHub CI for the current release-gate changes is pending",
+    "failures": [
       "targeted production schema/data-copy rehearsal is incomplete after the read-only attempt was aborted for storage I/O pressure"
     ]
   }

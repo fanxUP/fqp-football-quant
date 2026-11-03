@@ -1,6 +1,6 @@
 {
   "schema_version": 4,
-  "current_task": "P107-EXACT-HEAD-CI",
+  "current_task": "P107-131-COPY-REHEARSAL",
   "tasks": {
     "P107-LOCAL-CANDIDATE-VALIDATION": {
       "title": "Run current aggregate Python, PostgreSQL, frontend and static regressions",
@@ -22,7 +22,7 @@
         "P107-LOCAL-CANDIDATE-VALIDATION"
       ],
       "kind": "external_ci",
-      "status": "IN_PROGRESS",
+      "status": "DONE",
       "definition_of_done": [
         "Only the 54 mapped P107/P138 paths, three scoped P107 release-gate paths, and reviewed V4 control/evidence files are committed; uv.lock is not staged.",
         "GitHub main push CI passes for the exact local HEAD.",
@@ -36,7 +36,7 @@
         "P107-EXACT-HEAD-CI"
       ],
       "kind": "production_data_copy_rehearsal",
-      "status": "TODO",
+      "status": "BLOCKED",
       "definition_of_done": [
         "Use an isolated current production schema copy with all official matches, runs and model versions plus indexed match-scoped prediction/group/option samples; do not full-dump unrelated large tables or write production data.",
         "Record existing source counts, queued match count, lock wait, batch duration and fqp grants.",

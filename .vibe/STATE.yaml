@@ -1,5 +1,5 @@
 {
-  "state": "REVIEWING",
+  "state": "BLOCKED",
   "workflow_id": "P107-AGGREGATE-CANDIDATE-RELEASE-READINESS",
   "previous_workflow": {
     "task_id": "P107-AGGREGATE-SCOPE-RECONCILIATION",
@@ -7,12 +7,12 @@
     "archive": ".vibe/archive/workflow-p107-aggregate-scope-reconciliation-2026-11-03",
     "archive_manifest_sha256": "cfb735cddd7f4dc4431923acc1cf80363e57d0a6f0159f4b1d8727e46a53f8f6"
   },
-  "blocked_reason": null,
+  "blocked_reason": "Exact-head CI run 41689707607 passed for 94873b18. P107 remains blocked before migration rehearsal because the prior read-only production-copy attempt sharply raised storage I/O; wait for a normal baseline before any further production reads.",
   "mode": "STANDARD",
   "last_transition": {
-    "from": "VERIFYING",
-    "to": "REVIEWING",
-    "at": "2026-11-04T02:00:05.244386+08:00",
-    "reason": "Final independent review passed for the signed migration-131 gate. Full local candidate validation passed on the current 57-path tree, including the PATH-injection test; exact-head CI is the active next task. The production-copy rehearsal remains pending after the read-only attempt was stopped for storage I/O pressure."
+    "from": "REVIEWING",
+    "to": "BLOCKED",
+    "at": "2026-11-04T02:14:53.389255+08:00",
+    "reason": "Exact-head CI run 41689707607 passed for 94873b18. P107 remains blocked before migration rehearsal because the prior read-only production-copy attempt sharply raised storage I/O; wait for a normal baseline before any further production reads."
   }
 }
