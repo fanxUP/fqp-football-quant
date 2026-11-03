@@ -1,8 +1,7 @@
-# P137 质量门禁
+# P138 质量门禁
 
-- 始终在唯一 `main` 分支；当前 P136 控制面已哈希归档。
-- 目标回归：Titan 原始 HTML/字段契约和 `football_fixture_result_facts` 隔离 PostgreSQL 测试，零跳过。
-- 固定样本涵盖完整和错误原始行；真实本地 SQLite 仅只读扫描，不触发网络。
-- 无 SQL migration、依赖或公开 API 变更；任何意外写入先停下。
-- 生产导入必须通过新鲜只读预览、官方结果与身份逐行校验、短事务 dry-run 回滚、当前 ACL 确认和独立审查；失败整批回滚，不建备份、不做池结果字段回退。
-- 只有 GitHub main exact-head CI 和服务/只读数据核验全部通过，方可标 DONE。
+- 仅在唯一 `main` 分支直接推进；不新建分支或 worktree。
+- 变更严格限制为 `.vibe` 控制记录以外的预测 job、既有单元测试和隔离 PostgreSQL 回归三个代码路径。
+- RED 单测先证明当前查询未设置 cutoff；GREEN 后单测和隔离 PostgreSQL 真实行选择回归全绿。
+- 无 DB schema/migration、依赖、API、模型参数和生产数据更改；不手动触发生产预测。
+- 主线 exact-head CI、独立只读审查、V4 scope/budget 与 diff 通过后再评估是否发布。

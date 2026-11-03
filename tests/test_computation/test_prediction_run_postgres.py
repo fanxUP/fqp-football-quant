@@ -3320,6 +3320,122 @@ def test_model_overview_aggregates_global_latest_predictions_once(isolated_datab
 # per-option latest/legacy averaging oracle, which allowed cutoff leakage.
 
 
+def test_prediction_odds_use_only_rows_at_or_before_fixed_cutoff(isolated_database, monkeypatch):
+    from scripts.jobs import run_model_prediction as prediction_job
+    from scripts.prediction_input_fence import PredictionInputFence
+
+    conn, _schema = isolated_database
+    cutoff = "2026-10-23 10:00:00"
+    with conn.cursor() as cursor:
+        cursor.execute(
+            """INSERT INTO official_matches (
+                   business_date, kickoff_time, home_team_name, away_team_name
+               ) VALUES ('2026-10-23', %s, 'Home', 'Away') RETURNING id""",
+            (cutoff,),
+        )
+        match_id = cursor.fetchone()[0]
+        cursor.executemany(
+            """INSERT INTO official_odds_snapshots (
+                   match_id, play_type, option_code, sp_value, snapshot_time, is_open
+               ) VALUES (%s, 'spf', %s, %s, %s, true)""",
+            [
+                (match_id, "h", 2.1, "2026-10-23 09:59:59"),
+                (match_id, "d", 3.2, cutoff),
+                (match_id, "a", 3.6, cutoff),
+                (match_id, "a", 3.7, cutoff),
+                (match_id, "a", 9.0, "2026-10-23 10:00:01"),
+            ],
+        )
+
+    monkeypatch.setattr(
+        prediction_job,
+        "capture_prediction_input_fence",
+        lambda _conn, requested_match_id: PredictionInputFence(requested_match_id, None),
+    )
+    monkeypatch.setattr(prediction_job, "_latest_feature_snapshot", lambda *_a, **_k: None)
+    selected_odds: dict[str, float] = {}
+
+    class SelectedOdds(Exception):
+        pass
+
+    def capture_selected_odds(odds: dict[str, float]) -> dict[str, float]:
+        selected_odds.update(odds)
+        raise SelectedOdds
+
+    monkeypatch.setattr(prediction_job, "normalize_probabilities", capture_selected_odds)
+    with pytest.raises(SelectedOdds):
+        prediction_job._predict_match_play_type(
+            conn,
+            match_id,
+            "Home",
+            "Away",
+            "spf",
+            {"market_baseline": 1},
+            -0.08,
+            None,
+            cutoff,
+        )
+
+    assert selected_odds == {"3": 2.1, "1": 3.2, "0": 3.7}
+
+
+def test_rqspf_handicap_uses_latest_value_at_or_before_fixed_cutoff(isolated_database, monkeypatch):
+    from scripts.jobs import run_model_prediction as prediction_job
+    from scripts.prediction_input_fence import PredictionInputFence
+
+    conn, _schema = isolated_database
+    cutoff = "2026-10-23 10:00:00"
+    with conn.cursor() as cursor:
+        cursor.execute("ALTER TABLE official_odds_snapshots ADD COLUMN handicap NUMERIC(5,2)")
+        cursor.execute(
+            """INSERT INTO official_matches (
+                   business_date, kickoff_time, home_team_name, away_team_name
+               ) VALUES ('2026-10-23', %s, 'Home', 'Away') RETURNING id""",
+            (cutoff,),
+        )
+        match_id = cursor.fetchone()[0]
+        cursor.executemany(
+            """INSERT INTO official_odds_snapshots (
+                   match_id, play_type, option_code, sp_value, snapshot_time, is_open, handicap
+               ) VALUES (%s, 'rqspf', %s, %s, %s, true, %s)""",
+            [
+                (match_id, "h", 2.1, "2026-10-23 09:59:59", None),
+                (match_id, "d", 3.2, cutoff, 1.0),
+                (match_id, "a", 3.6, cutoff, None),
+                (match_id, "d", 9.0, "2026-10-23 10:00:01", 0.5),
+            ],
+        )
+
+    monkeypatch.setattr(
+        prediction_job,
+        "capture_prediction_input_fence",
+        lambda _conn, requested_match_id: PredictionInputFence(requested_match_id, None),
+    )
+    monkeypatch.setattr(prediction_job, "_latest_feature_snapshot", lambda *_a, **_k: None)
+
+    class SelectedHandicap(Exception):
+        pass
+
+    def capture_handicap(_model_name: str, _play_type: str, handicap: float | None) -> bool:
+        raise SelectedHandicap(handicap)
+
+    monkeypatch.setattr(prediction_job, "supports_market", capture_handicap)
+    with pytest.raises(SelectedHandicap) as captured:
+        prediction_job._predict_match_play_type(
+            conn,
+            match_id,
+            "Home",
+            "Away",
+            "rqspf",
+            {"maher_poisson": 1},
+            -0.08,
+            None,
+            cutoff,
+        )
+
+    assert captured.value.args == (1.0,)
+
+
 @pytest.fixture
 def isolated_database(request):
     dsn = os.environ.get("FQP_P106_TEST_DATABASE_URL", "").strip()

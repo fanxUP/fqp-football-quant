@@ -1,11 +1,10 @@
 {
-  "git_revision": "7bfb272f72d525262cf6268564ad70c5be598c99",
+  "git_revision": "33c193295eeebae70938a7a547c16fb9a372caee",
   "branch": "main",
-  "dirty": true,
-  "captured_at": "2026-11-03T13:40:00+08:00",
+  "dirty": false,
+  "captured_at": "2026-11-03T16:09:00+08:00",
   "checks": {
-    "P136_application_revision": "7bfb272f72d525262cf6268564ad70c5be598c99",
-    "P136_archived_manifest_sha256": "c97bf69c3479351883eb86cb633baa824524b73b46ca3495fa64f9f5aa95c619",
-    "production_readonly_inventory": "1085 Titan source links; 0 result facts; 4000 official results; 39552 traditional members; read-only SQL transaction rolled back"
+    "production_reproduction": "run 224063: 451/620 groups contain odds snapshots later than predict_time; maximum +4 seconds; feature snapshots all precede predict_time",
+    "github_ci": "P137 control closeout run 41601202766 completed success for baseline HEAD 33c193295eeebae70938a7a547c16fb9a372caee."
   }
 }

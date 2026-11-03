@@ -1,7 +1,16 @@
-# P137 设计：可信结果事实的最小导入
+# P138 设计：固定 cutoff 的赔率快照
 
-读取边界：Titan SQLite `mode=ro`, `query_only=ON`；原始 HTML 只解析，不执行。只有生产中已存在唯一 Titan MatchId → fixture → official match 的链路可被考虑。官方来源的已确认全场与半场比分作为语义校验；任一不一致即排除，不用模糊队名/日期匹配。
+## 根因
 
-事实写入：将精确校验过的来源行作为 `source_payload`，保存 Titan 比赛 ID、实际日期、比分和 P136 事实字段。发布时间保持 NULL。若未确认精确开球时区，`kickoff_time_precision=date_only`、`actual_kickoff_at=NULL`。写入使用受限 runtime role、事务级 lock/statement timeout 和单事务 all-or-nothing。
+`run_model_prediction._run_impl()` 固定记录批次 `predict_time`，但单场计算读取赔率时只按 match/play type/open 过滤并取最新行；RQSPF 让球查询也没有时间条件。因此在耗时约 1–2 分钟的任务中，计算后半段会选到任务开始时点之后新采集的赔率。生产 run `224063` 已复现：620 个输出组中 451 个组、1,353 个赔率选项时点晚于 `predict_time`，最晚 4 秒。特征快照查询本身已有 `as_of=predict_time`。
 
-不会用规范化得分推断延期、取消、提前结束或点球/加时语义；P137 仅导入 `完场` 原文一致且与体彩 `confirmed` 赛果全/半场完全一致的样本。其他项输出分类报告，等待单独证据，不静默丢失。
+`prediction-input-fence/v1` 是并发更新版本栅栏，不是 P104 观测版本证明；其 `input_version=null` 可表示当前尚无更新头，不能单独据此判泄漏。此次缺陷是可证实的赔率时间越界。
+
+## 修正
+
+- 沿用本次 run 已冻结的 `predict_time`，为主赔率读取增加 `snapshot_time <= predict_time`。
+- 用同一 cutoff 限制 RQSPF handicap 行。
+- 排序固定为 `snapshot_time DESC, id DESC`，保留最新合格行并消除同秒不确定性。
+- cutoff 后才到达的快照只供下一次 run 使用。截止前无赔率则继续使用当前已有的缺数处理。
+
+不改变 `predict_time` 定义、任务调度、预测模型、DB schema、官方结算和历史结果。

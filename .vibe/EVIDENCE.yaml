@@ -1,108 +1,58 @@
 {
   "schema_version": 4,
-  "current_task": "P137-TITAN-RESULT-FACT-IMPORT",
+  "current_task": "P138-PREDICTION-ODDS-ASOF-CUTOFF",
   "acceptance": {
-    "A137-TITAN-RESULT-FACT-IMPORT": {
-      "status": "PASS",
-      "tree_fingerprint": "e115da6c445c9fb2d5f2768234efcbddbf36f9cff48acdbec7bde2efef2f6b7d",
-      "local_regression": "71 passed, 0 skipped, against isolated PostgreSQL 16; Ruff lint and format (665 files), full Mypy (345 files), scope, budget, and git diff --check passed",
-      "source_readonly_scan": {
-        "requested_match_ids": 1085,
-        "found": 1085,
-        "parsed": 1085,
-        "rejected": 0,
-        "source_database": "/Volumes/Nas/足球数据/data/titan007.db",
-        "match_id_manifest_sha256": "fc6431069d068f5b1c7df854d7191edfd3f4443fd04ab7a22052d9ed1238b6fa",
-        "source_package_sha256": "b272fc213a2aaa1736b8a78fbb6d9376bc07f0ed8bd2a343707b19051a3f9e59"
+    "A138-PREDICTION-ODDS-ASOF-CUTOFF": {
+      "status": "PENDING",
+      "reproduction": {
+        "production_run_id": 224063,
+        "groups": 620,
+        "groups_with_post_cutoff_odds": 451,
+        "post_cutoff_option_snapshots": 1353,
+        "maximum_seconds_after_cutoff": 4,
+        "production_query": "read-only repeatable-read transaction, explicitly rolled back"
       },
-      "production_readonly_preview": {
-        "input_rows": 1085,
-        "eligible": 1080,
-        "rejected": 5,
-        "rejection_reasons": {
-          "history_batch_evidence_missing": 5
-        },
-        "applied": false,
-        "script_sha256": "fdd457664ff3e54cdaf34c3ce9483b2aa452f55b1ffa47c224a065f6d5ba5832",
-        "report_sha256": "9ebaf0c89907d5cac67ccb5df0c0700f8b7d1f65a5303d0747dd7b058b426f52",
-        "report_path": "/tmp/fqp-p137-preview-bc14daa.json",
-        "fresh_preview_required_after_server_sync": false
+      "local_regression": {
+        "unit_tests": "tests/test_scripts/test_run_model_prediction.py: 60 passed, 0 skipped; initial RED run reproduced missing cutoff on both queries (2 expected failures), then focused RED cases passed after the fix.",
+        "isolated_postgresql_odds": "test_prediction_odds_use_only_rows_at_or_before_fixed_cutoff: 1 passed, 0 skipped; verifies before/equal/after, same-time ID tie-break, and selected input values against a local disposable PostgreSQL 16 database.",
+        "isolated_postgresql_handicap": "test_rqspf_handicap_uses_latest_value_at_or_before_fixed_cutoff: 1 passed, 0 skipped; real query selected cutoff value 1.0 and excluded future 0.5.",
+        "container": "temporary local fqp-p138-test-pg container stopped and removed after tests; no production DB connection.",
+        "static": "Ruff lint and format checks passed for all three paths; scope 3/3, budget 3/3, no migrations/dependencies/API; git diff --check passed."
       },
-      "production_apply": {
-        "input_rows": 1085,
-        "inserted": 1080,
-        "rejected": 5,
-        "rejection_reasons": {
-          "history_batch_evidence_missing": 5
-        },
-        "applied": true,
-        "report_path": "/tmp/fqp-p137-apply-bc14daa.json",
-        "report_sha256": "c86fe4f1f2b278b69d32902ad8938a5dddd3d22cbf19810ef5303ec4b1a1ab83"
-      },
-      "production_readback": {
-        "result_fact_rows": 1080,
-        "unique_titan_ids": 1080,
-        "model_eligible_rows": 1080,
-        "inserted_ids_found": 1080,
-        "excluded_ids_found": 0,
-        "official_result_rows": 4000,
-        "traditional_pool_member_rows": 39552,
-        "health_http": 200,
-        "ready_http": 200,
-        "services_active": [
-          "fqp-backend.service",
-          "fqp-scheduler.service",
-          "fqp-worker.service"
-        ]
-      }
+      "tree_fingerprint": "19c0e8081ebae7b1ea8b5f1f30d94e241a5e4dd54c5c39fcf2567e1f4ddb7f69"
     }
   },
   "reviews": {
     "status": "PASS",
     "application_code": {
       "status": "PASS",
-      "source_sha256": "fdd457664ff3e54cdaf34c3ce9483b2aa452f55b1ffa47c224a065f6d5ba5832",
-      "note": "Independent reviewer passed latest Mypy package-typing fix and confirmed nonempty-record/missing-ID manifest test uses the exporter canonical hash."
+      "note": "Independent read-only review passed. The original MINOR about SQL-shape-only evidence was closed with two real isolated PostgreSQL query samples covering primary odds and RQSPF handicap; no production access."
     },
     "v4_migration": {
       "status": "PASS",
-      "note": "Independent review and scope audit confirm no SQL or DDL changes."
+      "note": "No migration is in scope."
     }
   },
   "quality_gate": {
-    "status": "READY_TO_MERGE",
-    "checked_at": "2026-11-03T16:02:11.349094+08:00",
-    "failures": []
-  },
-  "production": {
-    "status": "APPLIED_AND_READBACK_VERIFIED",
-    "business_data_writes": 1080,
-    "result_fact_rows_before": 0,
-    "result_fact_rows_after": 1080,
-    "official_result_rows_before": 4000,
-    "official_result_rows_after": 4000,
-    "traditional_pool_member_rows_before": 39552,
-    "traditional_pool_member_rows_after": 39552,
-    "backups_created": 0
+    "status": "NOT_READY",
+    "failures": [
+      "P138 changes are not yet on main; exact-head CI and main quality gate pending."
+    ]
   },
   "security": {
     "status": "PASS",
-    "note": "STRICT review: no credential literals/output, no shell execution, parameterized database values, read-only SQLite source, explicit non-superuser/target/apply guards, and writes restricted to append-only P136 result facts."
+    "note": "No new source, secret, credential, request, permission, or data-write path."
   },
   "migration": {
-    "status": "NOT_APPLICABLE",
-    "database_migrations": 0
+    "status": "NOT_APPLICABLE"
   },
   "external_ci": {
-    "status": "passed",
-    "checks": {
-      "lint-and-typecheck": "passed",
-      "test": "passed"
-    },
-    "run_id": 41595553805,
-    "head_sha": "dde19135db0fc413cef9e76e105d2b9da2ca1fe9",
-    "local_code_sha256": "fdd457664ff3e54cdaf34c3ce9483b2aa452f55b1ffa47c224a065f6d5ba5832",
-    "production_preview_report": "/tmp/fqp-p137-preview-bc14daa.json",
-    "production_apply_report": "/tmp/fqp-p137-apply-bc14daa.json"
+    "status": "pending",
+    "checks": {}
+  },
+  "production": {
+    "status": "NOT_DEPLOYED",
+    "business_data_writes": 0,
+    "manual_prediction_runs": 0
   }
 }

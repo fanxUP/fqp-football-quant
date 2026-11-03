@@ -962,9 +962,10 @@ def _predict_match_play_type(
             FROM official_odds_snapshots
             WHERE match_id = %s AND play_type = %s
               AND is_open = true
-            ORDER BY snapshot_time DESC
+              AND snapshot_time <= %s
+            ORDER BY snapshot_time DESC, id DESC
             """,
-            (mid, play_type),
+            (mid, play_type, predict_time),
         )
         odds_rows = cur.fetchall()
 
@@ -1004,8 +1005,9 @@ def _predict_match_play_type(
             cur.execute(
                 "SELECT handicap FROM official_odds_snapshots "
                 "WHERE match_id = %s AND play_type = 'rqspf' AND handicap IS NOT NULL "
-                "ORDER BY snapshot_time DESC LIMIT 1",
-                (mid,),
+                "AND snapshot_time <= %s "
+                "ORDER BY snapshot_time DESC, id DESC LIMIT 1",
+                (mid, predict_time),
             )
             row = cur.fetchone()
             if row and row[0] is not None:

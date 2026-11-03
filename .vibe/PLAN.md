@@ -1,21 +1,7 @@
-# P137 计划：Titan 实际赛果校验与共享事实导入
+# P138 计划：修复预测赔率时点越界
 
-## 目标
-
-从本地 Titan 赛事库中，只选取已绑定共享 fixture、原始 HTML 与规范化字段在明确版本化名称规则下相符、且与生产官方已确认赛果一致的比赛结果；通过 P136 追加式结果事实层导入，并保留不合格行的排除原因。不得修改官方结算、传统足彩槽位结果或既有预测数据。
-
-## 实施顺序
-
-1. RED：固定 HTML 样本覆盖 MatchId、状态、主客队、比分、半场比分、日期、空字段、畸形行和冲突拒绝。
-2. GREEN：新增只读 SQLite 解析/导出及数据库验收/写入路径；只接受生产已有 `titan007/matchId` 绑定，核验发布历史批次、已 Settled 官方比赛、Sporttery 原始 MatchId/全半场比分/确认派彩和官方90分钟规则证据。
-3. Apply：使用生产 `fqp` 应用角色，在一个短事务内重新校验链接与 official_results 后追加 facts；任一行冲突则整批回滚。首轮只使用可信且自洽的行，其余保留排除清单。
-4. 验收：本地固定样本与隔离 PostgreSQL 测试、静态/安全/scope/budget、独立只读审查、主线 CI、部署后只读服务核验与数据读回。
-
-## 明确边界
-
-- 不新增数据库迁移，不增加依赖，不接触体彩结算字段和模型参数。
-- 不把 `updated_at` 或 `result_confirmed_at` 当作来源发布时间；没有可证发布时间时写 NULL。
-- 旧采集派生出的 `home_score_rt` 不足以证明常规时间；只有与对应 体彩官方已确认比赛结果的全/半场比分、身份与来源记录严格一致时，才按其官方结算语义分类。
-- 实际比赛日期由 Titan 原始行/规范字段交叉验证；延期赛不使用原彩票排期冒充实际日期。精确时区未证实时仅存日期精度。
-- 只追加 `football_fixture_result_facts`。不能回填、更新或删除 `official_results`、传统玩法比分或已发布历史。
-- 本轮不声称五赛季覆盖完整，也不声称模型效果已通过；P137 只完成结果事实导入这一前置数据切片。
+1. 在现有 `test_run_model_prediction.py` 增加 RED 查询回归；在 `test_prediction_run_postgres.py` 增加真实隔离数据库样本，覆盖 cutoff 前、等于、之后及同秒 ID 平局。
+2. 在 `scripts/jobs/run_model_prediction.py` 两条 odds 查询加 `snapshot_time <= predict_time`，并用 `id DESC` 稳定同一时刻排序。
+3. 跑 60 项预测 job 单测、隔离 PostgreSQL 精确样本、Ruff 与格式/diff/scope/budget 检查。
+4. 核对精确主线 CI 和独立审查；发布前只读确认生产服务/DB负载及计划。无 migration，无生产业务写入；本任务不手动触发生产预测。
+5. 如后续部署获准，待自然任务后只读验证新 run 所有 odds 快照时点均不晚于 cutoff；不得把旧 run 标为修复后结果。

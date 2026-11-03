@@ -1,18 +1,18 @@
 {
-  "state": "DONE",
-  "workflow_id": "P137-TITAN-RESULT-FACT-IMPORT",
+  "state": "REVIEWING",
+  "workflow_id": "P138-PREDICTION-ODDS-ASOF-CUTOFF",
   "previous_workflow": {
-    "task_id": "P136-FOOTBALL-RESULT-FACT-LAYER",
+    "task_id": "P137-TITAN-RESULT-FACT-IMPORT",
     "state": "DONE",
-    "archive": ".vibe/archive/workflow-p136-done-2026-11-03",
-    "archive_manifest_sha256": "c97bf69c3479351883eb86cb633baa824524b73b46ca3495fa64f9f5aa95c619"
+    "archive": ".vibe/archive/workflow-p137-done-2026-11-03",
+    "archive_manifest_sha256": "0f673de3733226c51f364a67e4be7f8d38734995a9e74211340aa8cbd1fcf5e6"
   },
   "blocked_reason": null,
   "mode": "STANDARD",
   "last_transition": {
-    "from": "READY_TO_MERGE",
-    "to": "DONE",
-    "at": "2026-11-03T16:08:10.169565+08:00",
-    "reason": "P137 acceptance and production readback are complete; no pool settlement fields were changed and no backup was created."
+    "from": "VERIFYING",
+    "to": "REVIEWING",
+    "at": "2026-11-03T16:20:09.537271+08:00",
+    "reason": "P138 implementation is verified locally; final main CI and release readiness remain."
   }
 }

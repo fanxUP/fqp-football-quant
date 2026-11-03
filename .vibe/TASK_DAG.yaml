@@ -1,34 +1,26 @@
 {
   "schema_version": 4,
-  "current_task": "P137-TITAN-RESULT-FACT-IMPORT",
+  "current_task": "P138-PREDICTION-ODDS-ASOF-CUTOFF",
   "tasks": {
-    "P137-TITAN-RESULT-FACT-IMPORT": {
-      "title": "Validate and import source-backed Titan match result facts",
-      "acceptance_id": "A137-TITAN-RESULT-FACT-IMPORT",
+    "P138-PREDICTION-ODDS-ASOF-CUTOFF": {
+      "title": "Fence model odds and handicap reads to the recorded prediction cutoff",
+      "acceptance_id": "A138-PREDICTION-ODDS-ASOF-CUTOFF",
       "depends_on": [],
-      "kind": "bounded_append_only_data_import",
-      "status": "DONE",
+      "kind": "bounded_prediction_correctness_fix",
+      "status": "IN_PROGRESS",
       "files": [
-        "scripts/titan007_result_facts.py",
-        "tests/test_scripts/test_titan007_result_facts.py",
-        "tests/test_computation/test_football_fixture_result_facts_postgres.py",
-        "docs/football-fixture-identity.md"
+        "scripts/jobs/run_model_prediction.py",
+        "tests/test_scripts/test_run_model_prediction.py",
+        "tests/test_computation/test_prediction_run_postgres.py"
       ],
       "definition_of_done": [
-        "Only exact existing titan007/matchId fixture bindings are used.",
-        "Source raw HTML and normalized match fields agree exactly.",
-        "Official confirmed match identity and full/half scores agree before write.",
-        "Only P136 result-fact table is appended in one rollback-safe transaction.",
-        "Fixed sample and isolated PostgreSQL tests, CI, review and production readback pass."
+        "Every primary odds input row has snapshot_time less than or equal to the same fixed predict_time recorded on its prediction group.",
+        "Every RQSPF handicap input is selected at or before that exact cutoff, with deterministic equal-time ordering.",
+        "If no pre-cutoff odds exist, existing missing-input handling is used; no future fallback or fabricated odds is allowed.",
+        "An isolated PostgreSQL sample verifies before/equal/after snapshots and same-time ID tie-breaking through the prediction query.",
+        "Focused regression and relevant prediction tests pass; Ruff, diff, scope and change budget pass with zero skips in configured tests.",
+        "No schema migration, dependency, public API, model parameter or production data change is included."
       ]
-    }
-  },
-  "completed_history": {
-    "P136-FOOTBALL-RESULT-FACT-LAYER": {
-      "status": "DONE",
-      "revision": "7bfb272f72d525262cf6268564ad70c5be598c99",
-      "archive": ".vibe/archive/workflow-p136-done-2026-11-03",
-      "archive_manifest_sha256": "c97bf69c3479351883eb86cb633baa824524b73b46ca3495fa64f9f5aa95c619"
     }
   }
 }

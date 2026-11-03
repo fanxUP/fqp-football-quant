@@ -434,6 +434,68 @@ def test_prediction_skips_match_without_official_odds():
     store_vote.assert_not_called()
 
 
+def test_prediction_odds_query_is_bounded_by_fixed_run_cutoff():
+    conn = MagicMock()
+    cursor = conn.cursor.return_value.__enter__.return_value
+    cursor.fetchall.return_value = []
+    cutoff = "2026-10-23T10:00:00"
+
+    with patch("scripts.jobs.run_model_prediction._latest_feature_snapshot", return_value=None):
+        _predict_match_play_type(
+            conn,
+            101,
+            "主队",
+            "客队",
+            "spf",
+            {"market_baseline": 1},
+            -0.08,
+            None,
+            cutoff,
+        )
+
+    odds_query = next(
+        call
+        for call in cursor.execute.call_args_list
+        if "FROM official_odds_snapshots" in call.args[0]
+    )
+    assert "snapshot_time <= %s" in " ".join(odds_query.args[0].split())
+    assert odds_query.args[1] == (101, "spf", cutoff)
+
+
+def test_rqspf_handicap_query_uses_the_same_fixed_run_cutoff():
+    conn = MagicMock()
+    cursor = conn.cursor.return_value.__enter__.return_value
+    cursor.fetchall.return_value = [
+        (11, "h", 2.1, "2026-10-23T09:59:00"),
+        (12, "d", 3.2, "2026-10-23T09:59:00"),
+        (13, "a", 3.6, "2026-10-23T09:59:00"),
+    ]
+    cursor.fetchone.return_value = (0.0,)
+    cutoff = "2026-10-23T10:00:00"
+
+    with patch("scripts.jobs.run_model_prediction._latest_feature_snapshot", return_value=None):
+        _predict_match_play_type(
+            conn,
+            101,
+            "主队",
+            "客队",
+            "rqspf",
+            {},
+            -0.08,
+            None,
+            cutoff,
+        )
+
+    handicap_query = next(
+        call for call in cursor.execute.call_args_list if "handicap IS NOT NULL" in call.args[0]
+    )
+    assert "snapshot_time <= %s" in " ".join(handicap_query.args[0].split())
+    assert "ORDER BY snapshot_time DESC, id DESC LIMIT 1" in " ".join(
+        handicap_query.args[0].split()
+    )
+    assert handicap_query.args[1] == (101, cutoff)
+
+
 def test_prediction_counts_missing_odds_as_skipped_expected_group():
     output_group_counts = {}
 
