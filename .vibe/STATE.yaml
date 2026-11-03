@@ -1,5 +1,5 @@
 {
-  "state": "REVIEWING",
+  "state": "DEPLOYING",
   "workflow_id": "P136-FOOTBALL-RESULT-FACT-LAYER",
   "previous_workflow": {
     "task_id": "P132-TRADITIONAL-FIXTURE-ALIASES",
@@ -10,9 +10,9 @@
   "blocked_reason": null,
   "mode": "STANDARD",
   "last_transition": {
-    "from": "VERIFYING",
-    "to": "REVIEWING",
-    "at": "2026-11-03T12:29:33.088337+08:00",
-    "reason": "Implementation verified; independent read-only application and migration reviews recorded."
+    "from": "READY_TO_DEPLOY",
+    "to": "DEPLOYING",
+    "at": "2026-11-03T13:01:16.166456+08:00",
+    "reason": "Beginning the authorized no-backup release for append-only migration 130 after the strict V4 gate passed."
   }
 }

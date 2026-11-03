@@ -31,12 +31,9 @@
     }
   },
   "quality_gate": {
-    "status": "BLOCKED",
-    "checked_at": "2026-11-03T12:08:21.875532+08:00",
-    "failures": [
-      "workflow_state_not_reviewing",
-      "P136-FOOTBALL-RESULT-FACT-LAYER_incomplete"
-    ]
+    "status": "READY_TO_MERGE",
+    "checked_at": "2026-11-03T13:00:43.750134+08:00",
+    "failures": []
   },
   "production": {
     "status": "NOT_TOUCHED",
