@@ -1,3 +1,9 @@
-# P131 质量门禁
+# P132 质量门禁
 
-实现须满足固定白名单摘要、来源字段精确匹配、未知证据 fail closed、全组原子拒绝。使用固定样本与隔离 PostgreSQL 回归；执行相关 Ruff/格式/编译和 V4 scope/budget。若之后进入合并/发布阶段，再按项目质量门禁执行独立复核及精确提交 CI。
+- 当前唯一分支必须是 `main`，工作区无未解释改动。
+- `vibe scope check`、`vibe budget check` 通过。
+- 固定样本与隔离 PostgreSQL 验证迁移前后 view 契约及应用角色权限。
+- SQL 129 在 disposable PostgreSQL 上按生产迁移器事务执行、回滚，并证明旧目录数据不变。
+- migration policy 对 129 精确 SHA、生效顺序、近期演练报告和无备份授权作 fail-closed 校验。
+- 安全审查、独立只读代码审查、main 精确提交 CI 均通过后才能发布。
+- 部署后确认服务健康、迁移已应用、alias 表仍为空；不得把 P133 数据写入当作本批已完成。

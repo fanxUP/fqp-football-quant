@@ -1,6 +1,6 @@
 {
   "schema_version": 4,
-  "current_task": "P131-TRADITIONAL-SUPPLEMENT-RECEIPT-ALLOWLIST",
+  "current_task": "P132-TRADITIONAL-FIXTURE-ALIASES",
   "tasks": {
     "P131-TRADITIONAL-SUPPLEMENT-RECEIPT-ALLOWLIST": {
       "title": "Allow exact P128 half-score supplement receipts in traditional fixture linking",
@@ -21,6 +21,34 @@
         "Preserve the existing single 500.com row verification and keep all unknown/missing manifests blocked.",
         "Fixed-sample and isolated PostgreSQL regressions cover a newly allowlisted source, tampered receipt, unknown manifest/key, and unchanged identity-link side effects.",
         "No migration, dependency, public API, production write, push, merge, or deploy is part of this task."
+      ]
+    },
+    "P132-TRADITIONAL-FIXTURE-ALIASES": {
+      "title": "Add evidence-backed canonical aliases for duplicate traditional fixtures",
+      "acceptance_id": "A132-TRADITIONAL-FIXTURE-ALIASES",
+      "depends_on": [
+        "P131-TRADITIONAL-SUPPLEMENT-RECEIPT-ALLOWLIST"
+      ],
+      "kind": "additive_identity_alias_schema_and_read_path",
+      "status": "IN_PROGRESS",
+      "files": [
+        "scripts/football_fixture_identity.py",
+        "sql/129_football_fixture_identity_aliases.sql",
+        "tests/test_computation/test_football_fixture_identity_postgres.py",
+        "tests/test_computation/test_pool_postgres.py",
+        "tests/test_local/test_release_migration_policy.py",
+        "ops/server/release_migration_policy.py",
+        "ops/server/README.md",
+        "docs/football-fixture-identity.md"
+      ],
+      "definition_of_done": [
+        "Provide a single-level, append-only fixture alias table with evidence, direct canonical jc.matchId binding, foreign keys, cycle/chain prevention, and restricted fqp read/insert permissions.",
+        "Project canonical fixture_id and its official_match_id through the existing football_pool_fixture_catalog without changing its output column order, names, types, or row count.",
+        "Normalize aliases in the identity linker so a future exact source link cannot create a second identity or false conflict.",
+        "Fixed-sample and isolated PostgreSQL regressions cover valid alias reads, source/canonical mismatch, alias/canonical uniqueness, chains, immutability, permissions, view compatibility, and unchanged no-alias behavior.",
+        "Migration 129 is additive, uses 2-second lock and 30-second statement timeouts, is included in deployment no-backup evidence policy, and passes a disposable PostgreSQL migration rehearsal.",
+        "The deployment installs an empty alias table only; no production alias rows are written in this task. Production alias application is a separate preflighted transaction.",
+        "Exact main CI, scope/budget, security, migration, and independent review gates pass; no branches beyond main, no dependencies, no production data backup, and no model/prediction writes."
       ]
     }
   },

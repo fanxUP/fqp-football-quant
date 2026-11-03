@@ -1,0 +1,65 @@
+{
+  "archive_format": 1,
+  "archived_at": "2026-11-03",
+  "reason": "Preserve the completed P131 V4 workflow before starting the next bounded identity task.",
+  "prior_workflow": "P131-TRADITIONAL-SUPPLEMENT-RECEIPT-ALLOWLIST",
+  "prior_state": "DONE",
+  "files": [
+    {
+      "path": "ACCEPTANCE.md",
+      "sha256": "ca40e0c0b27ec2fd54709029c470b3ba0e8493c4a3408fa672fad09c7c7ddb3a"
+    },
+    {
+      "path": "BASELINE.yaml",
+      "sha256": "83ee0fde47bba0616a7de04833d914220ffcc2afdf83fd8c9da6548ceae5f27d"
+    },
+    {
+      "path": "CHANGE_BUDGET.yaml",
+      "sha256": "cfcc9800f80884a2bfc9c10d68bdfbb6ec450d01fb03a8404eedfe9725910776"
+    },
+    {
+      "path": "DESIGN.md",
+      "sha256": "4fc2fffc95cf915b63b55300bb2ffca2007d7aeda46b9e43e8f1278b75a4fdab"
+    },
+    {
+      "path": "EVIDENCE.yaml",
+      "sha256": "4ef99bcfad5265b034538fa5813b35eb20234a6b39ed3b309050e417abba2134"
+    },
+    {
+      "path": "PLAN.md",
+      "sha256": "028e321fe53293655767948bba833d3a747b2b627a00535de3aef792eed6cf08"
+    },
+    {
+      "path": "QUALITY_GATE.md",
+      "sha256": "2d5c7e91910820e0de86ad6395ea7793ebf3c01a235f3c1e9040e142f49ef3e0"
+    },
+    {
+      "path": "SCOPE_LOCK.yaml",
+      "sha256": "8e79218f697ecbf259301563bff5bc69dd07356ef29b3b907ed6c24072c6276c"
+    },
+    {
+      "path": "STATE.yaml",
+      "sha256": "358e02642fa8e797b669dffb7306787299c0e04c7059155327fec7b13ce94fa7"
+    },
+    {
+      "path": "TASK_DAG.yaml",
+      "sha256": "e38118fe181e5a0a4389ca6c66b58c04d47dbc69129b7a137156bbed9db3cca6"
+    },
+    {
+      "path": "config.yaml",
+      "sha256": "554f9b17813aaba7543d12fef149383591b06a62d1f1691da80b9d424e66df76"
+    },
+    {
+      "path": "engine-lock.json",
+      "sha256": "d6248de04ddb2e172a226a3b3b4f29e4826bca7c7f1a9e44fbbcb8f98eedf42e"
+    },
+    {
+      "path": "quality_gate.py",
+      "sha256": "33667a89aad2f3a7dc08fb32ac0dbe7d32513fea7df118526193b292c07cb191"
+    },
+    {
+      "path": "verify_migration.py",
+      "sha256": "d14b14b400d20c1b5f437c788c1da65e59df1c82f33370a80a5483498d77c772"
+    }
+  ]
+}

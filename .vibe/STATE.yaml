@@ -1,17 +1,17 @@
 {
-  "state": "READY_TO_MERGE",
-  "workflow_id": "P131-TRADITIONAL-SUPPLEMENT-RECEIPT-ALLOWLIST",
+  "state": "REVIEWING",
+  "workflow_id": "P132-TRADITIONAL-FIXTURE-ALIASES",
   "previous_workflow": {
-    "task_id": "P130-HISTORY-FILL-LIVE-DRAW",
+    "task_id": "P131-TRADITIONAL-SUPPLEMENT-RECEIPT-ALLOWLIST",
     "state": "DONE",
-    "archive": ".vibe/archive/workflow-p130-done-2026-11-03",
-    "archive_manifest_sha256": "4c3344cb045743753f3a7a0ceea4d4b6e223b76cae479bcc0150ad0336ba5cb4"
+    "archive": ".vibe/archive/workflow-p131-done-2026-11-03",
+    "archive_manifest_sha256": "8c693bb8fc55de98a69f457e8d376a1ae0de3629c2770b7fe45dba53207e81e5"
   },
   "blocked_reason": null,
   "last_transition": {
-    "from": "REVIEWING",
-    "to": "READY_TO_MERGE",
-    "at": "2026-11-03T07:25:57.472935+08:00",
-    "reason": "P131 acceptance, independent review, security, migration scope and V4 merge gate pass; exact main CI remains required"
+    "from": "VERIFYING",
+    "to": "REVIEWING",
+    "at": "2026-11-03T09:20:40.480346+08:00",
+    "reason": "P132 independent review passed; release gate remains blocked until exact-head CI and production schema rollout are authorized and verified."
   }
 }

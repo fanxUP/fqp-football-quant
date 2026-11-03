@@ -1,11 +1,16 @@
 {
   "schema_version": 4,
-  "task_id": "P131-TRADITIONAL-SUPPLEMENT-RECEIPT-ALLOWLIST",
-  "objective": "Expand P129 half-score identity evidence acceptance only for exact, locally retained P128 supplement receipts that independently hash-match production.",
+  "task_id": "P132-TRADITIONAL-FIXTURE-ALIASES",
+  "objective": "Add an additive evidence-backed canonical alias layer for duplicate traditional fixture rows and expose canonical identity through existing catalog reads.",
   "allowed_paths": [
     "scripts/football_fixture_identity.py",
-    "scripts/data/traditional_half_score_supplement_allowlist.json",
-    "tests/test_computation/test_football_fixture_identity_postgres.py"
+    "sql/129_football_fixture_identity_aliases.sql",
+    "tests/test_computation/test_football_fixture_identity_postgres.py",
+    "tests/test_computation/test_pool_postgres.py",
+    "tests/test_local/test_release_migration_policy.py",
+    "ops/server/release_migration_policy.py",
+    "ops/server/README.md",
+    "docs/football-fixture-identity.md"
   ],
   "protected_paths": [
     "ops/**",
@@ -13,6 +18,10 @@
     "**/package*.json",
     "requirements*.txt"
   ],
-  "approved_protected_paths": [],
-  "notes": "Single main branch only. Strict static allowlist limited to 4,557 exact production receipt rows verified against P128 raw manifests. Keep unknown digest/key/facts blocked. No migrations, dependencies, public API, or production DML."
+  "approved_protected_paths": [
+    "sql/129_football_fixture_identity_aliases.sql",
+    "ops/server/release_migration_policy.py",
+    "ops/server/README.md"
+  ],
+  "notes": "Single main branch. Migration 129 is allowed only with disposable isolation rehearsal and exact hash policy. Do not write production alias data in this task."
 }

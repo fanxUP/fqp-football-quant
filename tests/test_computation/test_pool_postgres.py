@@ -41,6 +41,7 @@ def database(isolated_database):  # noqa: F811
         cur.execute((ROOT / "sql/117_pool_identity_and_snapshots.sql").read_text())
         cur.execute((ROOT / "sql/125_football_fixture_identity.sql").read_text())
         cur.execute((ROOT / "sql/128_traditional_history_facts.sql").read_text())
+        cur.execute((ROOT / "sql/129_football_fixture_identity_aliases.sql").read_text())
     conn.commit()
     return conn, schema
 

@@ -1,0 +1,444 @@
+{
+  "schema_version": 4,
+  "current_task": "P131-TRADITIONAL-SUPPLEMENT-RECEIPT-ALLOWLIST",
+  "acceptance": {
+    "A131-TRADITIONAL-SUPPLEMENT-RECEIPT-ALLOWLIST": {
+      "status": "PASS",
+      "command": "Ephemeral isolated PostgreSQL 17 (loopback only; temporary fqp NOLOGIN role); pytest -q tests/test_computation/test_football_fixture_identity_postgres.py",
+      "exit_code": 0,
+      "summary": "133 passed in 82.55s. Includes exact OpenLigaDB receipt acceptance, legacy omission of optional fields, tamper/unknown-key/type rejection, event-fact mismatch rejection with zero fixture/source-link writes, existing 500.com coverage, and previous identity/transaction regressions.",
+      "timed_out": false,
+      "environment": "Disposable Docker PostgreSQL 17 container with no volume, loopback port only; container removed after test.",
+      "revision": "8d9f0f3d775d038e24aae557beb3704328f0ff55",
+      "dirty_tree": true,
+      "tree_fingerprint": "6e8e411a2fe364063bfd1fae51412173a63f94cac1ed4ddfc37d02da9b15b4c4",
+      "verified_at": "2026-11-03T07:22:47.391210+08:00"
+    },
+    "A131-STATIC-SCOPE": {
+      "status": "PASS",
+      "command": "ruff check; ruff format --check; python -m py_compile; git diff --check; vibe scope check; vibe budget check",
+      "exit_code": 0,
+      "summary": "Ruff passed; both files formatted; compile and diff checks passed; scope changed_files=3; budget 3/3 files, 1/1 new file, 0 dependencies, 0 migrations, 0 public API changes.",
+      "timed_out": false,
+      "environment": "Local isolated checkout",
+      "revision": "8d9f0f3d775d038e24aae557beb3704328f0ff55",
+      "dirty_tree": true,
+      "tree_fingerprint": "6e8e411a2fe364063bfd1fae51412173a63f94cac1ed4ddfc37d02da9b15b4c4",
+      "verified_at": "2026-11-03T07:22:47.391210+08:00"
+    },
+    "A130-HISTORY-FILL-LIVE-DRAW": {
+      "status": "PASS",
+      "task_id": "P130-HISTORY-FILL-LIVE-DRAW",
+      "command": "Disposable PostgreSQL 16 tmpfs container bound to 127.0.0.1; create test role fqp; .venv/bin/python -m pytest -q tests/test_jobs/test_traditional_history_import.py tests/test_computation/test_football_fixture_identity_postgres.py tests/test_local/test_release_migration_policy.py tests/test_local/test_vibe_quality_gate.py tests/test_scripts/test_official_storage.py",
+      "exit_code": 0,
+      "summary": "Full configured regression passed 214/214 in 63.02s with 0 skips on the final importer implementation. After the independent review requested a dedicated live-draw idempotency assertion, the exact PostgreSQL case was rerun on the final test tree and passed 1/1; it verifies first fill plus same-batch replay (0 additional fills, 1 already-filled issue). The isolated database used PostgreSQL 16 tmpfs and a loopback-only published port; its fqp test role/container were removed after each run.",
+      "static_checks": {
+        "ruff_check": "PASS: All checks passed!",
+        "ruff_format_check": "PASS: 3 files already formatted",
+        "compileall": "PASS",
+        "git_diff_check": "PASS",
+        "scope": "PASS: 3 business paths changed",
+        "change_budget": "PASS: 3/12 paths; 0 new files, dependencies, migrations, or public API changes"
+      },
+      "tree_fingerprint": "7e40881d5097662fe3b0da88ce9cc02f77fdce5d626f4d5b6a6ea2cf6abe6ca7",
+      "verified_at": "2026-11-03T05:26:47.743498+08:00"
+    }
+  },
+  "reviews": {
+    "status": "PASS",
+    "application_code": {
+      "status": "PASS",
+      "reviewer": "independent read-only review agent",
+      "summary": "Independent review confirmed the 4,557-row allowlist mapping and aggregate. The optional-field omission finding was closed by a positive PostgreSQL regression and reviewer confirmation; no unresolved major findings.",
+      "revision": "8d9f0f3d775d038e24aae557beb3704328f0ff55",
+      "tree_fingerprint": "6e8e411a2fe364063bfd1fae51412173a63f94cac1ed4ddfc37d02da9b15b4c4",
+      "verified_at": "2026-11-03T07:22:47.391210+08:00"
+    },
+    "v4_migration": {
+      "status": "PASS",
+      "task_id": "P128-TRADITIONAL-FOOTBALL-CATALOG",
+      "reviewed_at": "2026-11-02T02:31:23+08:00",
+      "summary": "Independent read-only review confirms migration 128 checksum pin alignment, least-privilege fqp ledger SELECT, real restricted-role importer coverage, and rollback test preserves pre-existing ledger while removing migration 128 atomically. No blocking findings."
+    }
+  },
+  "quality_gate": {
+    "status": "READY_TO_MERGE",
+    "checked_at": "2026-11-03T07:25:47.253084+08:00",
+    "failures": []
+  },
+  "production": {
+    "status": "NOT_TOUCHED",
+    "database_writes": 0,
+    "deployments": 0,
+    "backups_created": 0
+  },
+  "security": {
+    "status": "PASS",
+    "task_id": "P131-TRADITIONAL-SUPPLEMENT-RECEIPT-ALLOWLIST",
+    "summary": "Strict local security review: the new static allowlist contains public historical match/source identifiers and no credentials; the linker loads a pinned local file only; hashes, slot keys and event facts fail closed; no shell execution, SQL construction, authorization, dependency, schema, network or permission changes.",
+    "checks": {
+      "credentials": "PASS: no secrets or credentials found in new allowlist",
+      "injection": "PASS: no SQL or shell construction added",
+      "authz": "PASS: no authentication or authorization changes",
+      "filesystem": "PASS: fixed repository-relative read; SHA-256 pin; missing/corrupt file fails closed",
+      "supply_chain": "PASS: no dependency changes"
+    },
+    "reviewer": "local security-gate review",
+    "verified_at": "2026-11-03T07:24:54.937315+08:00"
+  },
+  "migration": {
+    "status": "NOT_APPLICABLE",
+    "database_migrations": 0,
+    "dependency_migrations": 0,
+    "summary": "P131 changes only Python verification logic, one static evidence file and regression coverage; no SQL or schema change."
+  },
+  "external_ci": {
+    "status": "passed",
+    "task_id": "P129-TRADITIONAL-SLOT-IDENTITY",
+    "head_sha": "919994697c735820f2b767e98cba7b95d264be28",
+    "run_id": "41517635062",
+    "url": "https://github.com/fanxUP/fqp-football-quant/actions/runs/41517635062",
+    "checks": {
+      "test": "passed",
+      "lint-and-typecheck": "passed"
+    },
+    "summary": "Exact deployed main SHA passed both GitHub Actions CI jobs.",
+    "p130_live_draw_fill": {
+      "status": "passed",
+      "head_sha": "8ce2a5e2bdd6bb2677d7fcac3ab4c5e32b205981",
+      "run_id": 41528647349,
+      "url": "https://github.com/fanxUP/fqp-football-quant/actions/runs/41528647349",
+      "checks": {
+        "lint-and-typecheck": "passed",
+        "test": "passed"
+      },
+      "summary": "Exact main head passed both GitHub Actions jobs; lint-and-typecheck 3m10s, full test 8m15s."
+    }
+  },
+  "upstream_evidence": {
+    "P104-SALE-STATUS-CORRECTION": {
+      "merged_commit": "a141a4df383ae3bf587b8ebd20cb288f6dbf1282",
+      "acceptance": {
+        "A104-SALE-STATUS-REGRESSION": {
+          "status": "PASS",
+          "command": "/private/tmp/fqp-p104-pytest-wrapper -m pytest -q tests/test_scripts/test_official_crawler.py",
+          "exit_code": 0,
+          "summary": "============================= test session starts ==============================\nplatform darwin -- Python 3.14.6, pytest-9.1.1, pluggy-1.7.0\nrootdir: /Volumes/Nas/FQP/worktrees/p104-sale-status-mapping\nconfigfile: pyproject.toml\nplugins: anyio-4.15.1\ncollected 20 items\n\ntests/test_scripts/test_official_crawler.py ....................         [100%]\n\n============================== 20 passed in 0.12s ==============================\n",
+          "timed_out": false,
+          "environment": "unknown",
+          "revision": "c62456b57114b14f3e16920bda8da8e2af90eeb4",
+          "dirty_tree": true,
+          "tree_fingerprint": "c2b54ecec603ccbff61f13e7ea3ae9f4773b4e7d8ccb30c3dd4ddcdc46c06184",
+          "verified_at": "2026-10-23T04:09:35.049155+08:00"
+        },
+        "A104-SALE-STATUS-STATIC": {
+          "status": "PASS",
+          "command": "/bin/sh -c '.venv/bin/ruff check scripts/official_crawler.py tests/test_scripts/test_official_crawler.py && .venv/bin/ruff format --check scripts/official_crawler.py tests/test_scripts/test_official_crawler.py && .venv/bin/python3.14 -m compileall -q scripts/official_crawler.py tests/test_scripts/test_official_crawler.py && git diff --check && python3 /Users/estefan-macworkstation/.remote-vibe-coding/engine/vibe.py --repo . scope check && python3 /Users/estefan-macworkstation/.remote-vibe-coding/engine/vibe.py --repo . budget check && echo \"PASS: Ruff, format, compileall, diff, V4 scope/budget\"'",
+          "exit_code": 0,
+          "summary": "All checks passed!\n2 files already formatted\nchanged_files=2\nPASS: scope\nfiles_changed: 2/2\nnew_files: 0/0\nnew_dependencies_heuristic: 0/0\nschema_migration_files: 0/0\ndeclared_public_api_changes: 0/0\nPASS: change budget\nPASS: Ruff, format, compileall, diff, V4 scope/budget\n",
+          "timed_out": false,
+          "environment": "unknown",
+          "revision": "c62456b57114b14f3e16920bda8da8e2af90eeb4",
+          "dirty_tree": true,
+          "tree_fingerprint": "c2b54ecec603ccbff61f13e7ea3ae9f4773b4e7d8ccb30c3dd4ddcdc46c06184",
+          "verified_at": "2026-10-23T04:09:38.194565+08:00"
+        },
+        "A104-SALE-STATUS": {
+          "status": "PASS",
+          "command": ".venv/bin/python3.14 /private/tmp/fqp-p104-acceptance.py",
+          "exit_code": 0,
+          "summary": "A104-SALE-STATUS local acceptance PASS: 20 parser regressions, strict official/legacy status handling, pool fail-closed, static/scope/budget, and current source fingerprint.\n",
+          "timed_out": false,
+          "environment": "unknown",
+          "revision": "c62456b57114b14f3e16920bda8da8e2af90eeb4",
+          "dirty_tree": true,
+          "tree_fingerprint": "c2b54ecec603ccbff61f13e7ea3ae9f4773b4e7d8ccb30c3dd4ddcdc46c06184",
+          "verified_at": "2026-10-23T04:09:49.581023+08:00"
+        }
+      },
+      "reviews": {
+        "A104-SALE-STATUS-INDEPENDENT": {
+          "status": "PASS",
+          "reviewed_at": "2026-10-23T04:11:58+08:00",
+          "summary": "Independent read-only review confirms official status handling, fail-closed pool and snapshot behavior, legacy alias coverage, and workflow/archive documentation are aligned. No new findings."
+        },
+        "status": "PASS",
+        "application_code": {
+          "status": "PASS",
+          "review_id": "A104-SALE-STATUS-INDEPENDENT",
+          "reviewed_at": "2026-10-23T04:11:58+08:00",
+          "summary": "Independent read-only review confirms official status handling, fail-closed pool and snapshot behavior, legacy alias coverage, and workflow/archive documentation are aligned. No new findings."
+        },
+        "v4_migration": {
+          "status": "PASS",
+          "reviewed_at": "2026-10-23T04:36:25+08:00",
+          "summary": "Read-only migration impact review found no SQL migration, schema, ORM, or database contract changes; migration is not applicable. The V4 archive/control verifier passed (9 archived files, 8 controls, 14 pinned engine sources)."
+        }
+      },
+      "security": {
+        "status": "PASS",
+        "reviewed_at": "2026-10-23T04:36:25+08:00",
+        "mode": "read-only review",
+        "findings": [],
+        "summary": "Reviewed the exact PR diff: no credentials, SQL/command/path construction, authorization changes, unsafe shell, permission changes, public exposure, or dependency changes. The change only tightens official sales-status parsing and closes unknown/non-selling market and odds-snapshot paths."
+      },
+      "migration": {
+        "status": "NOT_APPLICABLE",
+        "reviewed_at": "2026-10-23T04:36:25+08:00",
+        "summary": "No migration or database schema changes are included in this PR."
+      },
+      "external_ci": {
+        "status": "passed",
+        "verified_at": "2026-10-23T04:35:08+08:00",
+        "head_sha": "7fdbe23e494a59ae7db5cf8944e4ea4e00329549",
+        "run_id": "39849341438",
+        "checks": {
+          "test": "passed",
+          "lint-and-typecheck": "passed"
+        },
+        "summary": "Both configured GitHub CI checks passed on the original PR head; the preflight will also require fresh live checks on the final head."
+      }
+    }
+  },
+  "previous_task_evidence": {
+    "reviews": {
+      "P105-WEATHER": {
+        "status": "PASS",
+        "review_mode": "independent read-only",
+        "findings": [],
+        "summary": "Initial MAJOR/MINOR findings and the residual request-budget documentation mismatch were closed. Final review confirmed explicit Asia/Shanghai scheduling with an override regression, cadence-derived operations copy, and a 300/day successful-request baseline with a 900/day retry upper bound.",
+        "recorded_at": "2026-10-23T03:33:15+08:00"
+      },
+      "status": "PASS",
+      "application_code": {
+        "status": "PASS",
+        "review_id": "A106-DERIVED-OUTPUT-GROUP-COUNTS",
+        "reviewed_at": "2026-10-24T15:05:52.065978+08:00",
+        "summary": "Independent read-only review closed the prior MAJOR; expected groups are preregistered from the full official odds set, and the interruption regression exercises the real producer and outer run aggregation."
+      },
+      "v4_migration": {
+        "status": "PASS",
+        "reviewed_at": "2026-10-23T04:36:25+08:00",
+        "summary": "Read-only migration impact review found no SQL migration, schema, ORM, or database contract changes; migration is not applicable. The V4 archive/control verifier passed (9 archived files, 8 controls, 14 pinned engine sources)."
+      },
+      "A106-DERIVED-OUTPUT-GROUP-COUNTS": {
+        "status": "PASS",
+        "review_mode": "independent read-only",
+        "findings": [],
+        "summary": "复审确认完整 official_odds 在写入前登记全部派生组；首组输入更新中断后 7 个 BF/BQC/ZJQ 组均进入 expected/skipped。真实 producer 回归覆盖此路径；没有阻塞合并的问题。",
+        "reviewed_at": "2026-10-24T15:05:52.065978+08:00"
+      },
+      "A106-05": {
+        "status": "PASS",
+        "review_mode": "independent read-only",
+        "findings": [],
+        "reviewed_at": "2026-10-24T18:58:07.388834+08:00",
+        "summary": "独立复审确认训练数组与清单来自同一物化数据集；训练版本、清单和活动切换同事务提交；迁移 112 的 append-only、完整性检查、模型版本外键和 fqp 权限符合设计。预测清单缺失/损坏时来源 incomplete，不阻断普通预测。复审确认损坏 canonical bytes 与 fqp 实际权限两项 PostgreSQL 回归有效；未发现阻断项或重大项。"
+      }
+    },
+    "security": {
+      "status": "PASS",
+      "reviewed_at": "2026-10-24T18:58:07.388834+08:00",
+      "mode": "exact diff and migration review",
+      "findings": [],
+      "summary": "检查本轮业务代码和 SQL 112：新增数据库值使用参数绑定，动态 SQL 标识符由 %I 引用；无凭据、外部网络调用、危险 shell、公开 API 或依赖变化。应用角色仅 SELECT/INSERT，实际 PostgreSQL 回归拒绝 UPDATE/DELETE。"
+    },
+    "migration": {
+      "status": "PASS",
+      "reviewed_at": "2026-10-24T18:58:07.388834+08:00",
+      "summary": "SQL 112 为加法迁移：锁超时 2s、语句超时 15s，新增 append-only 清单表、FK 到 model_versions，不回填历史模型。已将 schema 副本克隆自应用 111 的 fqp_p106_rehearsal，生产迁移器只计划 112 并成功应用；账本 checksum 为 bdb25a0d292585da9a00f957b704401efce4279ea0d898cb7e237b82536da907。演练核验模型版本 1、manifest 0、FK 1、fqp SELECT/INSERT=true 且 UPDATE/DELETE=false。恢复策略为回滚应用版本并保留兼容的新增表；不执行破坏性 down migration。"
+    },
+    "external_ci": {
+      "status": "passed",
+      "verified_at": "2026-10-24T19:06:34.474853+08:00",
+      "head_sha": "57f79eb5e4bc98597017906cd6a1fc677f65bbe8",
+      "run_id": "40088045663",
+      "checks": {
+        "test": "passed",
+        "lint-and-typecheck": "passed"
+      },
+      "summary": "PR #36 的 test 与 lint-and-typecheck 均在精确提交 57f79eb5e4bc98597017906cd6a1fc677f65bbe8 上通过。"
+    },
+    "quality_gate": {
+      "status": "READY_TO_MERGE",
+      "checked_at": "2026-10-24T19:07:10.566880+08:00",
+      "failures": []
+    }
+  },
+  "release_migration_rehearsal": {
+    "status": "passed",
+    "task_id": "P128-TRADITIONAL-FOOTBALL-CATALOG",
+    "candidate_sha": "93bd24f3538f99b6e10b3d723081a59af46d61cc",
+    "report_path": "/Volumes/Nas/FQP/release-evidence/P128-93bd24f/no-backup-migration-rehearsal.json",
+    "report_sha256": "16398b81d65b792c154e19d420746cd54fd732c8ce6633ee4aa2c0f7a25e49cf",
+    "pending_migrations": [
+      "128_traditional_history_facts.sql"
+    ],
+    "summary": "Disposable PostgreSQL 16 synthetic-schema rehearsal passed 1/1 with zero skips; exact target SHA, pinned migration checksum, existing-row preservation, constraints/triggers, rollback, and restricted fqp catalog/import paths verified."
+  },
+  "production_operation": {
+    "status": "PASS",
+    "verified_at": "2026-11-03T04:38:18.043209+08:00",
+    "server": "100.121.47.26",
+    "deployed_sha": "919994697c735820f2b767e98cba7b95d264be28",
+    "release_id": "919994697c735820f2b767e98cba7b95d264be28-20261102T203137Z-6bc559a8-c9a8-43c4-b319-650d11eefe99-d",
+    "deployment": {
+      "exit_code": 0,
+      "mode": "--apply-no-backup",
+      "pending_migrations": [],
+      "backup_created": false,
+      "services": {
+        "fqp-backend": "active",
+        "fqp-scheduler": "active",
+        "fqp-worker": "active",
+        "nginx": "active",
+        "postgresql": "active"
+      },
+      "readiness_http": 200,
+      "protected_route_without_session_http": 401,
+      "temporary_sudoers_removed": true,
+      "visudo_validation_after_cleanup": "PASS",
+      "note": "First attempt rolled back before migration due to a missing exact temporary sudo command; nginx was restored and the same target then deployed successfully. No migration or identity write occurred during the failed attempt."
+    },
+    "preflight": {
+      "read_only": true,
+      "issue_no": "22036",
+      "slots": [
+        {
+          "game_type": "bqc6",
+          "match_order": 5
+        },
+        {
+          "game_type": "r9",
+          "match_order": 6
+        },
+        {
+          "game_type": "t14c",
+          "match_order": 6
+        }
+      ],
+      "event": {
+        "league": "英超",
+        "home": "伯恩利",
+        "away": "埃弗顿",
+        "kickoff_date": "2022-04-07",
+        "full_score": "3:2",
+        "half_score": "1:2"
+      },
+      "all_pending": true,
+      "all_fixture_id_null": true,
+      "all_match_id_null": true
+    },
+    "transaction": {
+      "isolation": "SERIALIZABLE",
+      "lock_timeout": "2s",
+      "statement_timeout": "8s",
+      "fixture_id": 2469,
+      "inserted_fixture": true,
+      "inserted_source_links": 3,
+      "updated_memberships": 3,
+      "before_counts": {
+        "fixtures": 1216,
+        "source_links": 2395,
+        "memberships": 39552,
+        "revisions": 48132
+      },
+      "after_counts": {
+        "fixtures": 1217,
+        "source_links": 2398,
+        "memberships": 39552,
+        "revisions": 48135
+      }
+    },
+    "independent_readback": {
+      "read_only": true,
+      "status": "PASS",
+      "fixture_id": 2469,
+      "membership_ids": [
+        34876,
+        47629,
+        61363
+      ],
+      "linked_slots": [
+        {
+          "game_type": "bqc6",
+          "issue_no": "22036",
+          "match_order": 5
+        },
+        {
+          "game_type": "r9",
+          "issue_no": "22036",
+          "match_order": 6
+        },
+        {
+          "game_type": "t14c",
+          "issue_no": "22036",
+          "match_order": 6
+        }
+      ],
+      "source_links": [
+        {
+          "id_system": "traditional.bqc6.22036.matchOrder",
+          "source_match_id": "5"
+        },
+        {
+          "id_system": "traditional.r9.22036.matchOrder",
+          "source_match_id": "6"
+        },
+        {
+          "id_system": "traditional.t14c.22036.matchOrder",
+          "source_match_id": "6"
+        }
+      ],
+      "jc_aliases": 0,
+      "match_id_values": [
+        null,
+        null,
+        null
+      ],
+      "official_results_written": false,
+      "season_memberships_written": false,
+      "model_inputs_or_predictions_written": false
+    },
+    "detailed_record": "plans/local-football-data-integration-20261029/CHECKPOINT.md"
+  },
+  "release_preflight": {
+    "status": "passed",
+    "task_id": "P130-HISTORY-FILL-LIVE-DRAW",
+    "target_sha": "8ce2a5e2bdd6bb2677d7fcac3ab4c5e32b205981",
+    "report_path": "/Volumes/Nas/FQP/release-evidence/P130-8ce2a5e/production-preflight.json",
+    "verified_at": "2026-11-02T21:46:56+00:00",
+    "pending_migrations": [],
+    "backup_created": false,
+    "production_data_written": false
+  },
+  "deployment_verification": {
+    "status": "passed",
+    "task_id": "P130-HISTORY-FILL-LIVE-DRAW",
+    "target_sha": "8ce2a5e2bdd6bb2677d7fcac3ab4c5e32b205981",
+    "verified_at": "2026-11-02T21:49:40+00:00",
+    "report_path": "/Volumes/Nas/FQP/release-evidence/P130-8ce2a5e/production-postdeploy.json",
+    "release_marker": "8ce2a5e2bdd6bb2677d7fcac3ab4c5e32b205981-20261102T214839Z-5dec0cd6-5a6c-4dfb-9fff-532642525de4-d",
+    "services": {
+      "fqp-backend": "active",
+      "fqp-scheduler": "active",
+      "fqp-worker": "active",
+      "nginx": "active",
+      "postgresql": "active"
+    },
+    "http": {
+      "/": 200,
+      "/health/ready": 200,
+      "/api/auth/release": 200,
+      "/api/auth/me": 401,
+      "/api/pool/catalog?limit=1": 401
+    },
+    "backend_error_log_entries_last_10m": 0,
+    "pending_migrations": [],
+    "backup_created": false,
+    "production_data_written": false,
+    "temporary_sudoers_removed": true,
+    "visudo_validation_after_removal": "passed",
+    "admin_nopasswd_sudo": "denied"
+  }
+}

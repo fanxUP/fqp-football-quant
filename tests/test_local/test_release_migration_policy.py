@@ -19,6 +19,7 @@ MIGRATIONS_124_125 = [
 ]
 MIGRATION_126 = ["126_official_season_retention_access.sql"]
 MIGRATION_128 = ["128_traditional_history_facts.sql"]
+MIGRATION_129 = ["129_football_fixture_identity_aliases.sql"]
 
 
 def _write_report(directory: Path, report: dict) -> str:
@@ -54,6 +55,13 @@ def rehearsal_record(directory: Path, pending=None) -> dict:
             application_role_acl="passed",
             application_business_paths="passed",
             acl_rollback_verified="passed",
+        )
+    if pending == MIGRATION_129:
+        report.update(
+            application_role={"name": "fqp", "superuser": False, "owns_alias_table": False},
+            application_role_acl="passed",
+            application_alias_insert_and_read_path="passed",
+            application_alias_rollback_verified="passed",
         )
     evidence_sha256 = _write_report(directory, report)
     return {
@@ -93,6 +101,14 @@ def test_no_backup_allows_only_the_pinned_124_125_pair_with_full_rehearsal(tmp_p
     )
 
 
+def test_no_backup_allows_only_the_pinned_129_alias_migration_with_runtime_role_evidence(tmp_path):
+    validate(
+        rehearsal_record(tmp_path, pending=MIGRATION_129),
+        MIGRATION_129,
+        evidence_directory=tmp_path,
+    )
+
+
 def test_release_policy_cli_verifies_sibling_report_hash(tmp_path):
     evidence_path = tmp_path / "release-evidence.json"
     evidence_path.write_text(json.dumps(rehearsal_record(tmp_path)))
@@ -122,6 +138,7 @@ def test_release_policy_cli_verifies_sibling_report_hash(tmp_path):
         list(reversed(MIGRATIONS_124_125)),
         [*MIGRATIONS_124_125, "126_unreviewed.sql"],
         ["126_unreviewed.sql"],
+        [*MIGRATION_129, *MIGRATION_128],
     ],
 )
 def test_no_backup_rejects_any_migration_set_other_than_exact_reviewed_pair(pending, tmp_path):

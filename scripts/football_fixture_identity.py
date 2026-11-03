@@ -404,10 +404,32 @@ def resolve_pool_fixture(
     )
 
 
+def _canonical_fixture_id(cur, fixture_id: int) -> int:
+    """Resolve one verified single-level alias to its canonical fixture."""
+    cur.execute(
+        """SELECT canonical_fixture_id FROM football_fixture_identity_aliases
+           WHERE alias_fixture_id=%s""",
+        (fixture_id,),
+    )
+    row = cur.fetchone()
+    return row[0] if row else fixture_id
+
+
+def _fixture_identity_group(cur, fixture_id: int) -> set[int]:
+    """Return a canonical fixture and its direct aliases for conflict checks."""
+    canonical_id = _canonical_fixture_id(cur, fixture_id)
+    cur.execute(
+        """SELECT alias_fixture_id FROM football_fixture_identity_aliases
+           WHERE canonical_fixture_id=%s""",
+        (canonical_id,),
+    )
+    return {canonical_id, *(row[0] for row in cur.fetchall())}
+
+
 def _bind_fixture(cur, keys, names, exact, evidence, official_id):
     """Bind under IDENTITY_LOCK; every caller applies its own source proof first."""
     fields = tuple(names)
-    candidates = set(exact)
+    candidates = {_canonical_fixture_id(cur, fixture_id) for fixture_id in exact}
     for source, system, sid in keys:
         cur.execute(
             """SELECT fixture_id FROM football_fixture_source_links
@@ -416,15 +438,16 @@ def _bind_fixture(cur, keys, names, exact, evidence, official_id):
         )
         bound = cur.fetchone()
         if bound:
-            candidates.add(bound[0])
+            candidates.add(_canonical_fixture_id(cur, bound[0]))
     if len(candidates) > 1:
         return _pending("conflicting_fixture_bindings", conflict=True)
     fixture_id = next(iter(candidates), None)
     if fixture_id is not None:
+        equivalent_fixture_ids = _fixture_identity_group(cur, fixture_id)
         cur.execute(
             """SELECT source_name,id_system,source_match_id,evidence FROM football_fixture_source_links
-               WHERE fixture_id=%s""",
-            (fixture_id,),
+               WHERE fixture_id=ANY(%s)""",
+            (sorted(equivalent_fixture_ids),),
         )
         for source, system, sid, old_evidence in cur.fetchall():
             if any(src == source and k == system and value != sid for src, k, value in keys):
@@ -443,8 +466,8 @@ def _bind_fixture(cur, keys, names, exact, evidence, official_id):
         # must still protect it, even after that membership has been replaced.
         cur.execute(
             """SELECT material_json FROM football_pool_fixture_revisions
-               WHERE fixture_id=%s""",
-            (fixture_id,),
+               WHERE fixture_id=ANY(%s)""",
+            (sorted(equivalent_fixture_ids),),
         )
         for (material,) in cur.fetchall():
             if any(
@@ -750,7 +773,12 @@ def _link_traditional_issue_slot_group(conn, slots: list[dict[str, Any]]) -> dic
             ),
         )
         exact = {result[0] for result in cur.fetchall()}
-        exact.update(item["fixture_id"] for item in verified if item["fixture_id"] is not None)
+        exact = {_canonical_fixture_id(cur, fixture_id) for fixture_id in exact}
+        exact.update(
+            _canonical_fixture_id(cur, item["fixture_id"])
+            for item in verified
+            if item["fixture_id"] is not None
+        )
         if len(exact) > 1:
             raise ValueError("conflicting_traditional_slot_fixture_bindings")
 
@@ -774,7 +802,7 @@ def _link_traditional_issue_slot_group(conn, slots: list[dict[str, Any]]) -> dic
                 if existing[1].get("event_signature") != event_signature:
                     raise ValueError("source_event_signature_conflict")
                 existing_links += 1
-                exact.add(existing[0])
+                exact.add(_canonical_fixture_id(cur, existing[0]))
         if len(exact) > 1:
             raise ValueError("conflicting_traditional_slot_fixture_bindings")
 
@@ -815,7 +843,7 @@ def _link_traditional_issue_slot_group(conn, slots: list[dict[str, Any]]) -> dic
         updated = 0
         for item in verified:
             if item["identity_status"] == "linked":
-                if item["fixture_id"] != binding["fixture_id"]:
+                if _canonical_fixture_id(cur, item["fixture_id"]) != binding["fixture_id"]:
                     raise ValueError("conflicting_traditional_slot_fixture_bindings")
                 continue
             cur.execute(

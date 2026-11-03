@@ -7,6 +7,8 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
 from datetime import datetime
 from pathlib import Path
+from threading import Event
+from time import monotonic, sleep
 from uuid import uuid4
 
 import psycopg2
@@ -79,7 +81,10 @@ def ready(database):
         cur.execute(
             "CREATE TABLE local_schema_migrations(filename TEXT PRIMARY KEY, checksum_sha256 TEXT)"
         )
+        cur.execute((ROOT / "sql/08_season_team_database.sql").read_text())
+        cur.execute((ROOT / "sql/127_football_fixture_seasons.sql").read_text())
         cur.execute((ROOT / "sql/128_traditional_history_facts.sql").read_text())
+        cur.execute((ROOT / "sql/129_football_fixture_identity_aliases.sql").read_text())
     database.commit()
     return database
 
@@ -217,13 +222,59 @@ def official(conn, source="9001", code="周五001", league="固定样本联赛")
     )[0][0]
 
 
+def create_valid_fixture_alias(
+    conn, source_match_id="9001", issue_no="26001", *, insert_alias=True
+):
+    official(conn, source=source_match_id)
+    canonical = rows(conn, "INSERT INTO football_fixtures DEFAULT VALUES RETURNING id")[0][0]
+    alias = rows(conn, "INSERT INTO football_fixtures DEFAULT VALUES RETURNING id")[0][0]
+    rows(
+        conn,
+        """INSERT INTO football_fixture_source_links
+           (source_name,id_system,source_match_id,fixture_id,evidence)
+           VALUES ('sporttery','jc.matchId',%s,%s,'{}'),
+                  ('sporttery','traditional.t14c.'||%s||'.matchOrder','1',%s,'{}')
+           RETURNING source_match_id""",
+        (source_match_id, canonical, issue_no, alias),
+    )
+    issue = store_pool_issue(conn, issue_no, "t14c", None, None, 14, "finished", {})
+    membership_id = rows(
+        conn,
+        """INSERT INTO football_pool_issue_matches
+           (issue_id,match_order,league_name,home_team_name,away_team_name,
+            source_result_source,fixture_id,identity_status,identity_evidence)
+           VALUES (%s,1,'英超','主1','客1','sporttery_history_api',%s,'linked','{}')
+           RETURNING id""",
+        (issue, alias),
+    )[0][0]
+    if insert_alias:
+        rows(
+            conn,
+            """INSERT INTO football_fixture_identity_aliases
+               (alias_fixture_id,canonical_fixture_id,source_match_id,evidence)
+               VALUES (%s,%s,%s,%s) RETURNING alias_fixture_id""",
+            (
+                alias,
+                canonical,
+                source_match_id,
+                Json(
+                    {
+                        "contract": "football-fixture-alias/v1",
+                        "basis": "direct_sporttery_match_id",
+                        "source_match_id": source_match_id,
+                        "candidate_snapshot_sha256": "a" * 64,
+                    }
+                ),
+            ),
+        )
+    return canonical, alias, issue, membership_id
+
+
 @pytest.fixture
 def history_ready(ready):
     with ready.cursor() as cur:
-        cur.execute((ROOT / "sql/08_season_team_database.sql").read_text())
         cur.execute("INSERT INTO teams(id) VALUES (10),(20)")
         cur.execute((ROOT / "sql/119_football_history_backfill.sql").read_text())
-        cur.execute((ROOT / "sql/127_football_fixture_seasons.sql").read_text())
     ready.commit()
     return ready
 
@@ -709,6 +760,7 @@ def test_migration_keeps_existing_ids_results_and_saved_plan(database):
             "CREATE TABLE local_schema_migrations(filename TEXT PRIMARY KEY, checksum_sha256 TEXT)"
         )
         cur.execute((ROOT / "sql/128_traditional_history_facts.sql").read_text())
+        cur.execute((ROOT / "sql/129_football_fixture_identity_aliases.sql").read_text())
     conn.commit()
     assert before == {table: rows(conn, query) for table, query in preserved_queries.items()}
     assert rows(
@@ -1912,6 +1964,706 @@ def test_catalog_preserves_unverified_legacy_missing_identity_and_conflicts(read
     assert read_pool_catalog_issue(conn, 999999) is None
 
 
+def test_fixture_alias_projects_canonical_fixture_and_official_match_without_changing_rows(ready):
+    conn = ready
+    mid = official(conn)
+    canonical = rows(conn, "INSERT INTO football_fixtures DEFAULT VALUES RETURNING id")[0][0]
+    alias = rows(conn, "INSERT INTO football_fixtures DEFAULT VALUES RETURNING id")[0][0]
+    rows(
+        conn,
+        """INSERT INTO football_fixture_source_links
+           (source_name,id_system,source_match_id,fixture_id,evidence)
+           VALUES ('sporttery','jc.matchId','9001',%s,%s),
+                  ('sporttery','traditional.t14c.26001.matchOrder','1',%s,%s)
+           RETURNING source_match_id""",
+        (
+            canonical,
+            Json({"home_team_name": "主1", "away_team_name": "客1"}),
+            alias,
+            Json({"home_team_name": "主1", "away_team_name": "客1"}),
+        ),
+    )
+    issue = store_pool_issue(conn, "26001", "t14c", None, None, 1, "finished", {})
+    rows(
+        conn,
+        """INSERT INTO football_pool_issue_matches
+           (issue_id,match_order,league_name,home_team_name,away_team_name,
+            source_result_source,fixture_id,identity_status,identity_evidence)
+           VALUES (%s,1,'英超','主1','客1','sporttery_history_api',%s,'linked','{}')
+           RETURNING id""",
+        (issue, alias),
+    )
+    before_rows = rows(conn, "SELECT count(*) FROM football_pool_fixture_catalog")
+
+    rows(
+        conn,
+        """INSERT INTO football_fixture_identity_aliases
+           (alias_fixture_id,canonical_fixture_id,source_match_id,evidence)
+           VALUES (%s,%s,'9001',%s) RETURNING alias_fixture_id""",
+        (
+            alias,
+            canonical,
+            Json(
+                {
+                    "contract": "football-fixture-alias/v1",
+                    "basis": "direct_sporttery_match_id",
+                    "source_match_id": "9001",
+                    "candidate_snapshot_sha256": "a" * 64,
+                }
+            ),
+        ),
+    )
+
+    assert rows(conn, "SELECT count(*) FROM football_pool_fixture_catalog") == before_rows
+    detail = read_pool_catalog_issue(conn, issue)
+    assert detail["fixtures"][0]["fixture_id"] == canonical
+    assert detail["fixtures"][0]["official_match_id"] == mid
+
+
+def test_fixture_alias_rejects_mismatched_official_identity_and_alias_chains(ready):
+    conn = ready
+    official(conn, source="9001", code="周五001")
+    official(conn, source="9002", code="周五002")
+    canonical1 = rows(conn, "INSERT INTO football_fixtures DEFAULT VALUES RETURNING id")[0][0]
+    canonical2 = rows(conn, "INSERT INTO football_fixtures DEFAULT VALUES RETURNING id")[0][0]
+    alias1 = rows(conn, "INSERT INTO football_fixtures DEFAULT VALUES RETURNING id")[0][0]
+    alias2 = rows(conn, "INSERT INTO football_fixtures DEFAULT VALUES RETURNING id")[0][0]
+    rows(
+        conn,
+        """INSERT INTO football_fixture_source_links
+           (source_name,id_system,source_match_id,fixture_id,evidence)
+           VALUES ('sporttery','jc.matchId','9001',%s,'{}'),
+                  ('sporttery','jc.matchId','9002',%s,'{}'),
+                  ('sporttery','traditional.t14c.26001.matchOrder','1',%s,'{}'),
+                  ('sporttery','traditional.t14c.26001.matchOrder','2',%s,'{}')
+           RETURNING source_match_id""",
+        (canonical1, canonical2, alias1, alias2),
+    )
+    issue = store_pool_issue(conn, "26001", "t14c", None, None, 1, "finished", {})
+    rows(
+        conn,
+        """INSERT INTO football_pool_issue_matches
+           (issue_id,match_order,league_name,home_team_name,away_team_name,
+            source_result_source,fixture_id,identity_status,identity_evidence)
+           VALUES (%s,1,'英超','主1','客1','sporttery_history_api',%s,'linked','{}')
+           RETURNING id""",
+        (issue, alias1),
+    )
+    conn.commit()
+    evidence = Json(
+        {
+            "contract": "football-fixture-alias/v1",
+            "basis": "direct_sporttery_match_id",
+            "source_match_id": "9001",
+            "candidate_snapshot_sha256": "a" * 64,
+        }
+    )
+    with pytest.raises(RaiseException, match="canonical|MatchId"):
+        rows(
+            conn,
+            """INSERT INTO football_fixture_identity_aliases
+               (alias_fixture_id,canonical_fixture_id,source_match_id,evidence)
+               VALUES (%s,%s,'9002',%s) RETURNING alias_fixture_id""",
+            (alias1, canonical1, evidence),
+        )
+    conn.rollback()
+    rows(
+        conn,
+        """INSERT INTO football_fixture_identity_aliases
+           (alias_fixture_id,canonical_fixture_id,source_match_id,evidence)
+           VALUES (%s,%s,'9001',%s) RETURNING alias_fixture_id""",
+        (alias1, canonical1, evidence),
+    )
+    with pytest.raises(RaiseException, match="chain|alias"):
+        rows(
+            conn,
+            """INSERT INTO football_fixture_identity_aliases
+               (alias_fixture_id,canonical_fixture_id,source_match_id,evidence)
+               VALUES (%s,%s,'9001',%s) RETURNING alias_fixture_id""",
+            (alias2, alias1, evidence),
+        )
+    conn.rollback()
+
+
+def test_fixture_alias_requires_every_match_order_link_to_match_an_exact_pool_slot(ready):
+    conn = ready
+    official(conn)
+    canonical = rows(conn, "INSERT INTO football_fixtures DEFAULT VALUES RETURNING id")[0][0]
+    alias = rows(conn, "INSERT INTO football_fixtures DEFAULT VALUES RETURNING id")[0][0]
+    rows(
+        conn,
+        """INSERT INTO football_fixture_source_links
+           (source_name,id_system,source_match_id,fixture_id,evidence)
+           VALUES ('sporttery','jc.matchId','9001',%s,'{}'),
+                  ('sporttery','traditional.t14c.26001.matchOrder','2',%s,'{}')
+           RETURNING source_match_id""",
+        (canonical, alias),
+    )
+    issue = store_pool_issue(conn, "26001", "t14c", None, None, 1, "finished", {})
+    rows(
+        conn,
+        """INSERT INTO football_pool_issue_matches
+           (issue_id,match_order,league_name,home_team_name,away_team_name,
+            source_result_source,fixture_id,identity_status,identity_evidence)
+           VALUES (%s,1,'英超','主1','客1','sporttery_history_api',%s,'linked','{}')
+           RETURNING id""",
+        (issue, alias),
+    )
+
+    with pytest.raises(RaiseException, match="exact traditional issue slot"):
+        rows(
+            conn,
+            """INSERT INTO football_fixture_identity_aliases
+               (alias_fixture_id,canonical_fixture_id,source_match_id,evidence)
+               VALUES (%s,%s,'9001',%s) RETURNING alias_fixture_id""",
+            (
+                alias,
+                canonical,
+                Json(
+                    {
+                        "contract": "football-fixture-alias/v1",
+                        "basis": "direct_sporttery_match_id",
+                        "source_match_id": "9001",
+                        "candidate_snapshot_sha256": "a" * 64,
+                    }
+                ),
+            ),
+        )
+    conn.rollback()
+
+
+def test_alias_fixture_identity_rows_cannot_change_after_alias_creation(ready):
+    conn = ready
+    canonical, alias, issue, membership_id = create_valid_fixture_alias(conn)
+    next_issue = store_pool_issue(conn, "26002", "t14c", None, None, 14, "finished", {})
+    conn.commit()
+
+    with pytest.raises(RaiseException, match="aliased fixture cannot be changed"):
+        rows(
+            conn,
+            """INSERT INTO football_fixture_source_links
+               (source_name,id_system,source_match_id,fixture_id,evidence)
+               VALUES ('titan007','matchId','5001',%s,'{}') RETURNING fixture_id""",
+            (alias,),
+        )
+    conn.rollback()
+
+    with pytest.raises(RaiseException, match="aliased fixture cannot be changed"):
+        rows(
+            conn,
+            """INSERT INTO football_pool_issue_matches
+               (issue_id,match_order,league_name,home_team_name,away_team_name,
+                source_result_source,fixture_id,identity_status,identity_evidence)
+               VALUES (%s,1,'英超','主1','客1','sporttery_history_api',%s,'linked','{}')
+               RETURNING id""",
+            (next_issue, alias),
+        )
+    conn.rollback()
+
+    with pytest.raises(RaiseException, match="aliased fixture cannot be changed"):
+        rows(
+            conn,
+            "UPDATE football_pool_issue_matches SET fixture_id=%s WHERE id=%s RETURNING id",
+            (canonical, membership_id),
+        )
+    conn.rollback()
+
+    with pytest.raises(RaiseException, match="aliased fixture cannot be changed"):
+        rows(
+            conn,
+            "DELETE FROM football_pool_issue_matches WHERE id=%s RETURNING id",
+            (membership_id,),
+        )
+    conn.rollback()
+
+    with pytest.raises(RaiseException, match="issue namespace used by an aliased fixture"):
+        rows(
+            conn,
+            "UPDATE football_pool_issues SET issue_no='26003' WHERE id=%s RETURNING id",
+            (issue,),
+        )
+    conn.rollback()
+
+    assert rows(
+        conn,
+        "SELECT fixture_id,identity_status FROM football_pool_issue_matches WHERE id=%s",
+        (membership_id,),
+    ) == [(alias, "linked")]
+    assert rows(
+        conn,
+        "SELECT count(*) FROM football_fixture_source_links WHERE fixture_id=%s",
+        (alias,),
+    ) == [(1,)]
+
+
+def test_alias_fixture_cannot_acquire_a_season_membership_after_creation(ready):
+    conn = ready
+    _, alias, _, _ = create_valid_fixture_alias(conn)
+    competition_id = rows(
+        conn,
+        """INSERT INTO competitions(competition_code,competition_name_cn,competition_type)
+           VALUES ('alias-test','别名测试联赛','league') RETURNING id""",
+    )[0][0]
+    season_id = rows(
+        conn,
+        """INSERT INTO seasons(season_code,season_name)
+           VALUES ('alias-test:2026','2026') RETURNING id""",
+    )[0][0]
+    competition_season_id = rows(
+        conn,
+        "INSERT INTO competition_seasons(competition_id,season_id) VALUES (%s,%s) RETURNING id",
+        (competition_id, season_id),
+    )[0][0]
+    season_source_id = rows(
+        conn,
+        """INSERT INTO football_competition_season_sources
+           (competition_season_id,source_name,id_system,source_competition_id,source_season_id,
+            planned_start_date,planned_end_date,source_timezone,evidence)
+           VALUES (%s,'sporttery','leagueId','72','alias-test:2026',
+                   '2026-08-01','2027-05-31','Asia/Shanghai','{"source":"fixture"}')
+           RETURNING id""",
+        (competition_season_id,),
+    )[0][0]
+    conn.commit()
+
+    with pytest.raises(RaiseException, match="aliased fixture cannot be changed"):
+        rows(
+            conn,
+            """INSERT INTO football_fixture_seasons
+               (fixture_id,season_source_id,source_name,match_id_system,source_match_id,evidence)
+           VALUES (%s,%s,'sporttery','traditional.t14c.26001.matchOrder','1','{"source":"fixture"}')
+               RETURNING fixture_id""",
+            (alias, season_source_id),
+        )
+    conn.rollback()
+    assert rows(
+        conn, "SELECT count(*) FROM football_fixture_seasons WHERE fixture_id=%s", (alias,)
+    ) == [(0,)]
+
+
+def test_alias_creation_rejects_unknown_result_provenance(ready):
+    conn = ready
+    official(conn)
+    canonical = rows(conn, "INSERT INTO football_fixtures DEFAULT VALUES RETURNING id")[0][0]
+    alias = rows(conn, "INSERT INTO football_fixtures DEFAULT VALUES RETURNING id")[0][0]
+    rows(
+        conn,
+        """INSERT INTO football_fixture_source_links
+           (source_name,id_system,source_match_id,fixture_id,evidence)
+           VALUES ('sporttery','jc.matchId','9001',%s,'{}'),
+                  ('sporttery','traditional.t14c.26001.matchOrder','1',%s,'{}'),
+                  ('sporttery','traditional.r9.26001.matchOrder','1',%s,'{}')
+           RETURNING source_match_id""",
+        (canonical, alias, alias),
+    )
+    for game_type, source_result_source in (
+        ("t14c", "sporttery_history_api"),
+        ("r9", None),
+    ):
+        issue = store_pool_issue(conn, "26001", game_type, None, None, 14, "finished", {})
+        rows(
+            conn,
+            """INSERT INTO football_pool_issue_matches
+               (issue_id,match_order,league_name,home_team_name,away_team_name,
+                source_result_source,fixture_id,identity_status,identity_evidence)
+               VALUES (%s,1,'英超','主1','客1',%s,%s,'linked','{}') RETURNING id""",
+            (issue, source_result_source, alias),
+        )
+
+    with pytest.raises(RaiseException, match="only linked traditional Sporttery"):
+        rows(
+            conn,
+            """INSERT INTO football_fixture_identity_aliases
+               (alias_fixture_id,canonical_fixture_id,source_match_id,evidence)
+               VALUES (%s,%s,'9001',%s) RETURNING alias_fixture_id""",
+            (
+                alias,
+                canonical,
+                Json(
+                    {
+                        "contract": "football-fixture-alias/v1",
+                        "basis": "direct_sporttery_match_id",
+                        "source_match_id": "9001",
+                        "candidate_snapshot_sha256": "a" * 64,
+                    }
+                ),
+            ),
+        )
+    conn.rollback()
+
+
+def test_concurrent_alias_inserts_cannot_form_a_cycle(ready):
+    conn = ready
+    official(conn, source="9001", code="周五001")
+    official(conn, source="9002", code="周五002")
+    fixture_a = rows(conn, "INSERT INTO football_fixtures DEFAULT VALUES RETURNING id")[0][0]
+    fixture_b = rows(conn, "INSERT INTO football_fixtures DEFAULT VALUES RETURNING id")[0][0]
+    rows(
+        conn,
+        """INSERT INTO football_fixture_source_links
+           (source_name,id_system,source_match_id,fixture_id,evidence)
+           VALUES ('sporttery','traditional.t14c.26001.matchOrder','1',%s,'{}'),
+                  ('sporttery','traditional.r9.26001.matchOrder','1',%s,'{}')
+           RETURNING source_match_id""",
+        (fixture_a, fixture_b),
+    )
+    for game_type in ("t14c", "r9"):
+        issue = store_pool_issue(conn, "26001", game_type, None, None, 14, "finished", {})
+        rows(
+            conn,
+            """INSERT INTO football_pool_issue_matches
+               (issue_id,match_order,league_name,home_team_name,away_team_name,
+                source_result_source,fixture_id,identity_status,identity_evidence)
+               VALUES (%s,1,'英超','主1','客1','sporttery_history_api',%s,'linked','{}')
+               RETURNING id""",
+            (issue, fixture_a if game_type == "t14c" else fixture_b),
+        )
+    schema = rows(conn, "SELECT current_schema()")[0][0]
+    conn.commit()
+
+    def insert_alias(alias_fixture, canonical_fixture, source_id):
+        try:
+            with closing(psycopg2.connect(os.environ["FQP_HISTORY_TEST_DSN"])) as other:
+                with other.cursor() as cur:
+                    cur.execute(sql.SQL("SET search_path TO {}").format(sql.Identifier(schema)))
+                    cur.execute("SET statement_timeout='10s'")
+                    cur.execute("SET lock_timeout='5s'")
+                    cur.execute(
+                        """INSERT INTO football_fixture_source_links
+                           (source_name,id_system,source_match_id,fixture_id,evidence)
+                           VALUES ('sporttery','jc.matchId',%s,%s,'{}') RETURNING fixture_id""",
+                        (source_id, canonical_fixture),
+                    )
+                evidence = Json(
+                    {
+                        "contract": "football-fixture-alias/v1",
+                        "basis": "direct_sporttery_match_id",
+                        "source_match_id": source_id,
+                        "candidate_snapshot_sha256": "a" * 64,
+                    }
+                )
+                with other.cursor() as cur:
+                    cur.execute(
+                        """INSERT INTO football_fixture_identity_aliases
+                           (alias_fixture_id,canonical_fixture_id,source_match_id,evidence)
+                           VALUES (%s,%s,%s,%s) RETURNING alias_fixture_id""",
+                        (alias_fixture, canonical_fixture, source_id, evidence),
+                    )
+                other.commit()
+                return "inserted"
+        except Exception as error:
+            return str(error)
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        outcomes = list(
+            executor.map(
+                lambda args: insert_alias(*args),
+                ((fixture_a, fixture_b, "9002"), (fixture_b, fixture_a, "9001")),
+            )
+        )
+    assert outcomes.count("inserted") == 1
+    assert sum("aliased fixture cannot be changed" in result for result in outcomes) == 1
+    assert rows(conn, "SELECT count(*) FROM football_fixture_identity_aliases") == [(1,)]
+    assert rows(
+        conn,
+        """SELECT a.alias_fixture_id,a.canonical_fixture_id
+           FROM football_fixture_identity_aliases a""",
+    ) in ([(fixture_a, fixture_b)], [(fixture_b, fixture_a)])
+
+
+def test_alias_insert_serializes_with_a_concurrent_source_link_write(ready):
+    conn = ready
+    canonical, alias, _, _ = create_valid_fixture_alias(conn, insert_alias=False)
+    schema = rows(conn, "SELECT current_schema()")[0][0]
+    conn.commit()
+    alias_inserted = Event()
+    allow_alias_commit = Event()
+    writer_started = Event()
+
+    def insert_alias():
+        with closing(psycopg2.connect(os.environ["FQP_HISTORY_TEST_DSN"])) as other:
+            with other.cursor() as cur:
+                cur.execute(sql.SQL("SET search_path TO {}").format(sql.Identifier(schema)))
+                cur.execute("SET lock_timeout='5s'")
+                cur.execute(
+                    """INSERT INTO football_fixture_identity_aliases
+                       (alias_fixture_id,canonical_fixture_id,source_match_id,evidence)
+                       VALUES (%s,%s,'9001',%s) RETURNING alias_fixture_id""",
+                    (
+                        alias,
+                        canonical,
+                        Json(
+                            {
+                                "contract": "football-fixture-alias/v1",
+                                "basis": "direct_sporttery_match_id",
+                                "source_match_id": "9001",
+                                "candidate_snapshot_sha256": "a" * 64,
+                            }
+                        ),
+                    ),
+                )
+            alias_inserted.set()
+            if not allow_alias_commit.wait(timeout=5):
+                raise TimeoutError("test did not release alias transaction")
+            other.commit()
+            return "inserted"
+
+    def insert_source_link():
+        if not alias_inserted.wait(timeout=5):
+            return "alias transaction did not reach its trigger"
+        with closing(psycopg2.connect(os.environ["FQP_HISTORY_TEST_DSN"])) as other:
+            with other.cursor() as cur:
+                cur.execute(sql.SQL("SET search_path TO {}").format(sql.Identifier(schema)))
+                cur.execute("SET lock_timeout='5s'")
+                cur.execute("SELECT set_config('application_name','p132-alias-write',false)")
+                writer_started.set()
+                try:
+                    cur.execute(
+                        """INSERT INTO football_fixture_source_links
+                           (source_name,id_system,source_match_id,fixture_id,evidence)
+                           VALUES ('sporttery','other.matchId','race-5001',%s,'{}')
+                           RETURNING fixture_id""",
+                        (alias,),
+                    )
+                except Exception as error:
+                    other.rollback()
+                    return str(error)
+            other.commit()
+            return "inserted"
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        alias_future = executor.submit(insert_alias)
+        assert alias_inserted.wait(timeout=5)
+        writer_future = executor.submit(insert_source_link)
+        assert writer_started.wait(timeout=5)
+        deadline = monotonic() + 5
+        observed_advisory_wait = False
+        while monotonic() < deadline:
+            activity = rows(
+                conn,
+                """SELECT wait_event_type,wait_event FROM pg_stat_activity
+                   WHERE application_name='p132-alias-write'""",
+            )
+            if activity and activity[0] == ("Lock", "advisory"):
+                observed_advisory_wait = True
+                break
+            sleep(0.02)
+        allow_alias_commit.set()
+        assert observed_advisory_wait
+        assert alias_future.result(timeout=5) == "inserted"
+        assert "aliased fixture cannot be changed" in writer_future.result(timeout=5)
+    assert rows(conn, "SELECT count(*) FROM football_fixture_identity_aliases") == [(1,)]
+    assert rows(
+        conn,
+        "SELECT count(*) FROM football_fixture_source_links WHERE fixture_id=%s",
+        (alias,),
+    ) == [(1,)]
+
+
+def test_alias_migration_ddl_rolls_back_as_one_transaction(database):
+    conn = database
+    migrate(conn)
+    with conn.cursor() as cur:
+        cur.execute((ROOT / "sql/08_season_team_database.sql").read_text())
+        cur.execute((ROOT / "sql/127_football_fixture_seasons.sql").read_text())
+        cur.execute(
+            "CREATE TABLE local_schema_migrations(filename TEXT PRIMARY KEY, checksum_sha256 TEXT)"
+        )
+        cur.execute((ROOT / "sql/128_traditional_history_facts.sql").read_text())
+    conn.commit()
+    original_view = rows(
+        conn,
+        """SELECT column_name,data_type,ordinal_position
+           FROM information_schema.columns
+           WHERE table_schema=current_schema() AND table_name='football_pool_fixture_catalog'
+           ORDER BY ordinal_position""",
+    )
+
+    with conn.cursor() as cur:
+        cur.execute((ROOT / "sql/129_football_fixture_identity_aliases.sql").read_text())
+        assert rows(conn, "SELECT to_regclass('football_fixture_identity_aliases')") == [
+            ("football_fixture_identity_aliases",)
+        ]
+        assert rows(conn, "SELECT count(*) FROM football_fixture_identity_aliases") == [(0,)]
+    conn.rollback()
+
+    assert rows(conn, "SELECT to_regclass('football_fixture_identity_aliases')") == [(None,)]
+    assert (
+        rows(
+            conn,
+            """SELECT column_name,data_type,ordinal_position
+           FROM information_schema.columns
+           WHERE table_schema=current_schema() AND table_name='football_pool_fixture_catalog'
+           ORDER BY ordinal_position""",
+        )
+        == original_view
+    )
+
+
+def test_fixture_alias_is_append_only_and_application_role_cannot_rewrite_it(ready):
+    conn = ready
+    mid = official(conn)
+    canonical = rows(conn, "INSERT INTO football_fixtures DEFAULT VALUES RETURNING id")[0][0]
+    alias = rows(conn, "INSERT INTO football_fixtures DEFAULT VALUES RETURNING id")[0][0]
+    rows(
+        conn,
+        """INSERT INTO football_fixture_source_links
+           (source_name,id_system,source_match_id,fixture_id,evidence)
+           VALUES ('sporttery','jc.matchId','9001',%s,'{}'),
+                  ('sporttery','traditional.t14c.26001.matchOrder','1',%s,'{}')
+           RETURNING source_match_id""",
+        (canonical, alias),
+    )
+    issue = store_pool_issue(conn, "26001", "t14c", None, None, 1, "finished", {})
+    rows(
+        conn,
+        """INSERT INTO football_pool_issue_matches
+           (issue_id,match_order,league_name,home_team_name,away_team_name,
+            source_result_source,fixture_id,identity_status,identity_evidence)
+           VALUES (%s,1,'英超','主1','客1','sporttery_history_api',%s,'linked','{}')
+           RETURNING id""",
+        (issue, alias),
+    )
+    schema = rows(conn, "SELECT current_schema()")[0][0]
+    alias_table = sql.Identifier(schema, "football_fixture_identity_aliases")
+    catalog_view = sql.Identifier(schema, "football_pool_fixture_catalog")
+    with conn.cursor() as cur:
+        cur.execute(sql.SQL("GRANT USAGE ON SCHEMA {} TO fqp").format(sql.Identifier(schema)))
+        cur.execute(
+            sql.SQL("GRANT SELECT ON {},{},{} TO fqp").format(
+                sql.Identifier(schema, "official_matches"),
+                sql.Identifier(schema, "football_pool_issue_matches"),
+                sql.Identifier(schema, "football_pool_issues"),
+            )
+        )
+        cur.execute("SET LOCAL ROLE fqp")
+        cur.execute(
+            sql.SQL("""INSERT INTO {}
+                (alias_fixture_id,canonical_fixture_id,source_match_id,evidence)
+                VALUES (%s,%s,'9001',%s) RETURNING alias_fixture_id""").format(alias_table),
+            (
+                alias,
+                canonical,
+                Json(
+                    {
+                        "contract": "football-fixture-alias/v1",
+                        "basis": "direct_sporttery_match_id",
+                        "source_match_id": "9001",
+                        "candidate_snapshot_sha256": "a" * 64,
+                    }
+                ),
+            ),
+        )
+        assert cur.fetchone() == (alias,)
+        cur.execute(
+            sql.SQL("SELECT fixture_id,official_match_id FROM {} WHERE fixture_id=%s").format(
+                catalog_view
+            ),
+            (canonical,),
+        )
+        assert cur.fetchone() == (canonical, mid)
+    conn.commit()
+    with conn.cursor() as cur:
+        cur.execute("SET LOCAL ROLE fqp")
+    with pytest.raises(InsufficientPrivilege):
+        with conn.cursor() as cur:
+            cur.execute(sql.SQL("UPDATE {} SET evidence='{{}}'::jsonb").format(alias_table))
+    conn.rollback()
+    with conn.cursor() as cur:
+        cur.execute("SET LOCAL ROLE fqp")
+    with pytest.raises(InsufficientPrivilege):
+        with conn.cursor() as cur:
+            cur.execute(sql.SQL("DELETE FROM {}").format(alias_table))
+    conn.rollback()
+    with pytest.raises(RaiseException, match="immutable"):
+        with conn.cursor() as cur:
+            cur.execute(sql.SQL("DELETE FROM {}").format(alias_table))
+    conn.rollback()
+
+
+def test_fixture_linker_normalizes_aliases_and_checks_equivalent_fixture_revisions(ready):
+    conn = ready
+    official(conn)
+    canonical = rows(conn, "INSERT INTO football_fixtures DEFAULT VALUES RETURNING id")[0][0]
+    alias = rows(conn, "INSERT INTO football_fixtures DEFAULT VALUES RETURNING id")[0][0]
+    rows(
+        conn,
+        """INSERT INTO football_fixture_source_links
+           (source_name,id_system,source_match_id,fixture_id,evidence)
+           VALUES ('sporttery','jc.matchId','9001',%s,%s),
+                  ('sporttery','traditional.t14c.26001.matchOrder','1',%s,%s)
+           RETURNING source_match_id""",
+        (
+            canonical,
+            Json({"home_team_name": "主1", "away_team_name": "客1"}),
+            alias,
+            Json({"home_team_name": "主1", "away_team_name": "客1"}),
+        ),
+    )
+    issue = store_pool_issue(conn, "26001", "t14c", None, None, 1, "finished", {})
+    rows(
+        conn,
+        """INSERT INTO football_pool_issue_matches
+           (issue_id,match_order,league_name,home_team_name,away_team_name,
+            source_result_source,fixture_id,identity_status,identity_evidence)
+           VALUES (%s,1,'英超','主1','客1','sporttery_history_api',%s,'linked','{}')
+           RETURNING id""",
+        (issue, alias),
+    )
+    rows(
+        conn,
+        """INSERT INTO football_fixture_identity_aliases
+           (alias_fixture_id,canonical_fixture_id,source_match_id,evidence)
+           VALUES (%s,%s,'9001',%s) RETURNING alias_fixture_id""",
+        (
+            alias,
+            canonical,
+            Json(
+                {
+                    "contract": "football-fixture-alias/v1",
+                    "basis": "direct_sporttery_match_id",
+                    "source_match_id": "9001",
+                    "candidate_snapshot_sha256": "a" * 64,
+                }
+            ),
+        ),
+    )
+
+    from scripts.football_fixture_identity import _bind_fixture
+
+    with conn.cursor() as cur:
+        compatible = _bind_fixture(
+            cur,
+            [("sporttery", "traditional.t14c.26001.matchOrder", "1")],
+            {"league_name": "英超", "home_team_name": "主1", "away_team_name": "客1"},
+            {alias, canonical},
+            {"league_name": "英超", "home_team_name": "主1", "away_team_name": "客1"},
+            None,
+        )
+    assert compatible["identity_status"] == "linked"
+    assert compatible["fixture_id"] == canonical
+
+    rows(
+        conn,
+        """INSERT INTO football_pool_fixture_revisions
+           (issue_id,match_order,fixture_id,content_sha256,material_json)
+           VALUES (%s,1,%s,repeat('b',64),
+                   '{"league_name":"英超","home_team_name":"冲突队","away_team_name":"客1"}')
+           RETURNING id""",
+        (issue, alias),
+    )
+    with conn.cursor() as cur:
+        conflicted = _bind_fixture(
+            cur,
+            [("sporttery", "traditional.t14c.26001.matchOrder", "1")],
+            {"league_name": "英超", "home_team_name": "主1", "away_team_name": "客1"},
+            {canonical},
+            {"league_name": "英超", "home_team_name": "主1", "away_team_name": "客1"},
+            None,
+        )
+    assert conflicted["identity_status"] == "conflict"
+
+
 def test_catalog_http_reads_real_schema_with_all_four_game_memberships(ready, client, monkeypatch):
     from contextlib import nullcontext
 
@@ -2061,7 +2813,6 @@ def test_explicit_traditional_slot_group_links_completed_products_without_jc_ali
         "SELECT source_match_id FROM football_pool_issue_matches WHERE source_match_id IS NOT NULL",
     ) == [("1010262",)]
     assert rows(conn, "SELECT count(*) FROM football_pool_fixture_revisions") == [(6,)]
-
     repeated = link_traditional_issue_slot_group(conn, slots)
     assert repeated["fixture_id"] == linked["fixture_id"]
     assert repeated["inserted_fixture"] is False
@@ -2070,6 +2821,65 @@ def test_explicit_traditional_slot_group_links_completed_products_without_jc_ali
     assert rows(conn, "SELECT count(*) FROM football_fixtures") == [(1,)]
     assert rows(conn, "SELECT count(*) FROM football_fixture_source_links") == [(3,)]
     assert rows(conn, "SELECT count(*) FROM football_pool_fixture_revisions") == [(6,)]
+
+
+def test_explicit_traditional_slot_group_replay_normalizes_an_existing_alias(ready):
+    from scripts.football_fixture_identity import link_traditional_issue_slot_group
+
+    conn = ready
+    slots = [
+        {"game_type": "r9", "issue_no": "22036", "match_order": 6},
+        {"game_type": "t14c", "issue_no": "22036", "match_order": 6},
+    ]
+    for slot in slots:
+        put_traditional_history_slot(conn, **slot)
+    initial = link_traditional_issue_slot_group(conn, slots)
+    alias = initial["fixture_id"]
+    official(conn, source="9001")
+    canonical = rows(conn, "INSERT INTO football_fixtures DEFAULT VALUES RETURNING id")[0][0]
+    rows(
+        conn,
+        """INSERT INTO football_fixture_source_links
+           (source_name,id_system,source_match_id,fixture_id,evidence)
+           VALUES ('sporttery','jc.matchId','9001',%s,'{}') RETURNING fixture_id""",
+        (canonical,),
+    )
+    rows(
+        conn,
+        """INSERT INTO football_fixture_identity_aliases
+           (alias_fixture_id,canonical_fixture_id,source_match_id,evidence)
+           VALUES (%s,%s,'9001',%s) RETURNING alias_fixture_id""",
+        (
+            alias,
+            canonical,
+            Json(
+                {
+                    "contract": "football-fixture-alias/v1",
+                    "basis": "direct_sporttery_match_id",
+                    "source_match_id": "9001",
+                    "candidate_snapshot_sha256": "a" * 64,
+                }
+            ),
+        ),
+    )
+    conn.commit()
+
+    replay = link_traditional_issue_slot_group(conn, slots)
+
+    assert replay["identity_status"] == "linked"
+    assert replay["fixture_id"] == canonical
+    assert replay["inserted_fixture"] is False
+    assert replay["inserted_source_links"] == 0
+    assert replay["updated_memberships"] == 0
+    assert rows(
+        conn,
+        "SELECT count(*),count(DISTINCT fixture_id) FROM football_pool_issue_matches",
+    ) == [(2, 1)]
+    assert rows(
+        conn,
+        "SELECT count(*) FROM football_pool_issue_matches WHERE fixture_id=%s",
+        (alias,),
+    ) == [(2,)]
 
 
 def test_explicit_traditional_slot_group_accepts_p128_fill_evidence_shape(ready):

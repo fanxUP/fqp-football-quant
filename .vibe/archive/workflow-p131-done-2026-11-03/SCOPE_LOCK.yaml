@@ -1,0 +1,18 @@
+{
+  "schema_version": 4,
+  "task_id": "P131-TRADITIONAL-SUPPLEMENT-RECEIPT-ALLOWLIST",
+  "objective": "Expand P129 half-score identity evidence acceptance only for exact, locally retained P128 supplement receipts that independently hash-match production.",
+  "allowed_paths": [
+    "scripts/football_fixture_identity.py",
+    "scripts/data/traditional_half_score_supplement_allowlist.json",
+    "tests/test_computation/test_football_fixture_identity_postgres.py"
+  ],
+  "protected_paths": [
+    "ops/**",
+    "sql/**",
+    "**/package*.json",
+    "requirements*.txt"
+  ],
+  "approved_protected_paths": [],
+  "notes": "Single main branch only. Strict static allowlist limited to 4,557 exact production receipt rows verified against P128 raw manifests. Keep unknown digest/key/facts blocked. No migrations, dependencies, public API, or production DML."
+}

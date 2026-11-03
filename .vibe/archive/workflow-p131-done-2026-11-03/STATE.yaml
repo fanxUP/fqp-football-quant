@@ -1,0 +1,17 @@
+{
+  "state": "DONE",
+  "workflow_id": "P131-TRADITIONAL-SUPPLEMENT-RECEIPT-ALLOWLIST",
+  "previous_workflow": {
+    "task_id": "P130-HISTORY-FILL-LIVE-DRAW",
+    "state": "DONE",
+    "archive": ".vibe/archive/workflow-p130-done-2026-11-03",
+    "archive_manifest_sha256": "4c3344cb045743753f3a7a0ceea4d4b6e223b76cae479bcc0150ad0336ba5cb4"
+  },
+  "blocked_reason": null,
+  "last_transition": {
+    "from": "READY_TO_MERGE",
+    "to": "DONE",
+    "at": "2026-11-03T08:42:31.712007+08:00",
+    "reason": "P131 was merged to main, exact-head CI passed, deployed, and independently verified on 2026-11-03; production identity write and post-write readback completed without backup or schema migration."
+  }
+}
