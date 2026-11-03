@@ -1,11 +1,11 @@
-# P136 验收：足球比赛结果事实层
+# P137 验收：Titan 实际赛果导入
 
-- 新 migration 130 只追加结构，表与来源 MatchId/ID-system/fixture 绑定一致。
-- 同源同 payload、解析事实与证据完全一致时重放幂等；同 payload 却有不同解析事实/证据时拒绝静默覆盖；来源 payload 改变时追加新行；摘要由数据库生成。
-- 半场/全场分数只能成对出现且非负；状态和 score basis/period 都明确保存。
-- 数据库拒绝不存在或映射到其他 fixture 的来源链接。
-- 模型候选视图只含日期已知、completed、on_field、regulation、全场比分完整的事实；非标准赛果、未知日期和未知语义均排除。
-- 应用角色只能读/追加，不能更新、删除或截断；触发器和权限均有隔离 PG 断言。
-- 迁移整笔回滚不留对象，既有表和数据不变；发布策略必须精确 pin migration SHA 与演练报告。
-- 本地固定样本及隔离 PostgreSQL 回归零失败零跳过；Ruff、格式、编译、diff、scope 与预算通过。
-- 本批没有生产业务 DML、外部 API 请求、依赖增加或公开 API 变更。
+- 使用 Python 标准库解析原始 Titan HTML，并逐字段核对 `match_id`、日期、状态、主客队、全场比分和半场比分与 SQLite 规范列；仅执行版本化的明确名称规则，不做模糊匹配。
+- 状态/比分不完整、来源 ID 不符、原文冲突、比分不是官方已确认记录、fixture/官方比赛映射缺失或歧义的行必须排除并给出确定原因。
+- 实际比赛日期来自来源行；无来源发布时间不生成发布时间；不从彩票计划开球时间或旧 `updated_at` 推定实际时间/发布时间。
+- 写入前重查 Titan 来源链接及其 evidence、已 Settled 的 `official_matches`、confirmed official results 及原始体彩结果载荷；原始 JC MatchId、半/全场原文比分、派彩/确认状态和已确认分数必须一致，显式无效/退款与非官方来源拒绝。
+- 只有 Titan 完场、体彩正式确认且未作废的记录才按官方90分钟（含伤停补时）规则分类；这一分类属于多源结算证据推断，不冒充逐分钟事件验证，并把规则地址及原始体彩JSON摘要写入证据。
+- 成功路径仅调用 P136 `store_result_fact`；重放幂等，冲突解释拒绝，全部写入位于一个事务。
+- 隔离 PostgreSQL 回归验证 append-only、权限边界、重放、失败回滚、autocommit 拒绝；固定样本覆盖官方原始载荷语义。SQLite 只读导出防止覆盖源库且原子落包，本地扫描和生产预检保留摘要及拒绝原因。
+- 生产首批导入后结果表数量与 manifest 一致，所有插入行的来源链接、official result、原始记录摘要可追溯；`official_results` 与传统足彩结算列的行数/摘要保持不变。
+- 主线 CI、独立代码/安全审查、V4 scope/budget 与部署后 health/smoke 通过。

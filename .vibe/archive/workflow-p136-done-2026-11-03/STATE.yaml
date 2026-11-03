@@ -1,0 +1,18 @@
+{
+  "state": "DONE",
+  "workflow_id": "P136-FOOTBALL-RESULT-FACT-LAYER",
+  "previous_workflow": {
+    "task_id": "P132-TRADITIONAL-FIXTURE-ALIASES",
+    "state": "DONE",
+    "archive": ".vibe/archive/workflow-p132-done-2026-11-03",
+    "archive_manifest_sha256": "4d91a1406d847d87a24568fd37b63025e01f9cf56282f546a4e30e8b2f082076"
+  },
+  "blocked_reason": null,
+  "mode": "STANDARD",
+  "last_transition": {
+    "from": "VERIFIED",
+    "to": "DONE",
+    "at": "2026-11-03T13:28:46.038516+08:00",
+    "reason": "P136 acceptance and production release evidence are recorded; deployment is verified with zero source-result business rows written and no backup created."
+  }
+}

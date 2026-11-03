@@ -1,0 +1,65 @@
+{
+  "archive_format": 1,
+  "archived_at": "2026-11-03",
+  "reason": "Preserve the completed P136 workflow and its production deployment evidence before starting P137 source result validation and import.",
+  "prior_workflow": "P136-FOOTBALL-RESULT-FACT-LAYER",
+  "prior_state": "DONE",
+  "files": [
+    {
+      "path": "ACCEPTANCE.md",
+      "sha256": "5688460d92284abc7d282c159f8dda06eedb92026c7b910dc28163707c75238b"
+    },
+    {
+      "path": "BASELINE.yaml",
+      "sha256": "993e688b032c4bc8d5221cfc0ac87873c5f8dc281baf4e4c614ac34d44b28bbe"
+    },
+    {
+      "path": "CHANGE_BUDGET.yaml",
+      "sha256": "471f2d3dbdb3aa4af5b8ece7f516b11698d022a4b866ac6ba4cf064a28bbab5a"
+    },
+    {
+      "path": "DESIGN.md",
+      "sha256": "e38fb4eacb9341a6651237494d3300d1605641b29716f80ba7860916f036c1dd"
+    },
+    {
+      "path": "EVIDENCE.yaml",
+      "sha256": "691a2d4c48e10cebee8d3f7f1afe0c66878a1e2d006ec1d955c7156c1a0db354"
+    },
+    {
+      "path": "PLAN.md",
+      "sha256": "dbf3c847fffb368838ba9c68bab696835946b0aa06b9b6e5609649114c328ac2"
+    },
+    {
+      "path": "QUALITY_GATE.md",
+      "sha256": "ef17ec38e7f8c8c9afa31831c585c47e5fcce86b699827e589913a7bf765d478"
+    },
+    {
+      "path": "SCOPE_LOCK.yaml",
+      "sha256": "d4b1e1cfc80d022d910621dc6a4dedc8bf78c42a8c38137a1da28f9636b2b9d2"
+    },
+    {
+      "path": "STATE.yaml",
+      "sha256": "b1a6c39482f96db601ae89f87675191624d36a1f9428895f0c11de202328bc49"
+    },
+    {
+      "path": "TASK_DAG.yaml",
+      "sha256": "5dcd4b3e6f09cbc3df9375559fab7963ef64a80eae72bd00ef385e0cc72ad3a0"
+    },
+    {
+      "path": "config.yaml",
+      "sha256": "c9142be8cb8605b7816a84da58ccfbb6deb0913bb8cbe7a3020d52f5fd85f4cd"
+    },
+    {
+      "path": "engine-lock.json",
+      "sha256": "d6248de04ddb2e172a226a3b3b4f29e4826bca7c7f1a9e44fbbcb8f98eedf42e"
+    },
+    {
+      "path": "quality_gate.py",
+      "sha256": "33667a89aad2f3a7dc08fb32ac0dbe7d32513fea7df118526193b292c07cb191"
+    },
+    {
+      "path": "verify_migration.py",
+      "sha256": "d14b14b400d20c1b5f437c788c1da65e59df1c82f33370a80a5483498d77c772"
+    }
+  ]
+}

@@ -1,17 +1,12 @@
 {
   "schema_version": 4,
-  "task_id": "P136-FOOTBALL-RESULT-FACT-LAYER",
-  "objective": "Create a shared, provenance-backed actual football result fact layer without mutating Sporttery settlement facts.",
+  "task_id": "P137-TITAN-RESULT-FACT-IMPORT",
+  "objective": "Validate Titan source raw match rows against normalized columns and official confirmed results, then append eligible records to P136 shared result facts.",
   "allowed_paths": [
-    "sql/130_football_fixture_result_facts.sql",
-    "scripts/football_fixture_result_facts.py",
+    "scripts/titan007_result_facts.py",
+    "tests/test_scripts/test_titan007_result_facts.py",
     "tests/test_computation/test_football_fixture_result_facts_postgres.py",
-    "tests/test_local/test_release_migration_policy.py",
-    "ops/server/release_migration_policy.py",
-    "ops/server/deploy.sh",
-    ".github/workflows/ci.yml",
-    "docs/football-fixture-identity.md",
-    "ops/server/README.md"
+    "docs/football-fixture-identity.md"
   ],
   "protected_paths": [
     "sql/**",
@@ -20,12 +15,6 @@
     "requirements*.txt",
     "**/package*.json"
   ],
-  "approved_protected_paths": [
-    "sql/130_football_fixture_result_facts.sql",
-    "ops/server/release_migration_policy.py",
-    "ops/server/deploy.sh",
-    ".github/workflows/ci.yml",
-    "ops/server/README.md"
-  ],
-  "notes": "One main branch only. Migration is additive. P136 does not import production scores or alter official_results, traditional pool result values, season links, predictions, or model parameters."
+  "approved_protected_paths": [],
+  "notes": "No migration or deployment-policy changes; production business writes only to football_fixture_result_facts after all-or-nothing revalidation."
 }

@@ -1,10 +1,10 @@
 {
   "schema_version": 4,
-  "task_id": "P136-FOOTBALL-RESULT-FACT-LAYER",
-  "max_files_changed": 9,
-  "max_new_files": 3,
+  "task_id": "P137-TITAN-RESULT-FACT-IMPORT",
+  "max_files_changed": 4,
+  "max_new_files": 2,
   "max_new_dependencies": 0,
-  "max_schema_migrations": 1,
+  "max_schema_migrations": 0,
   "max_public_api_changes": 0,
   "declared_public_api_changes": 0,
   "regression_budget": {
@@ -12,5 +12,5 @@
     "new_lint_errors": 0,
     "new_type_errors": 0
   },
-  "notes": "Single main branch; nine bounded paths, three new files, one additive migration. No business data import, public API, dependency, model behavior, or production writes."
+  "notes": "Single main branch. Bounded source parser/importer, focused regression tests and one identity/result-layer documentation update. No migration, dependency, API or model behavior change; production writes limited to new append-only result facts."
 }

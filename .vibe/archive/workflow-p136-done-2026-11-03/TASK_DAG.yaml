@@ -1,0 +1,227 @@
+{
+  "schema_version": 4,
+  "current_task": "P136-FOOTBALL-RESULT-FACT-LAYER",
+  "tasks": {
+    "P136-FOOTBALL-RESULT-FACT-LAYER": {
+      "title": "Add append-only actual football match result facts separate from pool settlement",
+      "acceptance_id": "A136-SHARED-MATCH-RESULT-FACTS",
+      "depends_on": [],
+      "kind": "additive_schema_and_source_evidence_storage",
+      "status": "DONE",
+      "files": [
+        "sql/130_football_fixture_result_facts.sql",
+        "scripts/football_fixture_result_facts.py",
+        "tests/test_computation/test_football_fixture_result_facts_postgres.py",
+        "tests/test_local/test_release_migration_policy.py",
+        "ops/server/release_migration_policy.py",
+        "ops/server/deploy.sh",
+        ".github/workflows/ci.yml",
+        "docs/football-fixture-identity.md",
+        "ops/server/README.md"
+      ],
+      "definition_of_done": [
+        "Migration 130 adds an append-only result-fact table keyed to a verified shared fixture and exact source-link identity; source facts never overwrite official_results or Sporttery pool result fields.",
+        "A result observation stores actual match date/time precision, match state, score basis and period, half/full score pairs, source record payload, provenance evidence and deterministic hashes.",
+        "The database rejects source-link/fixture mismatches, malformed score pairs and invalid eligible-result combinations; runtime fqp receives only SELECT/INSERT and cannot update, delete or truncate.",
+        "A model-eligible read view includes only explicitly completed, on-field, regulation-time results with a known actual match date and a complete score; awarded, shortened, abandoned, postponed, cancelled, date-unknown and semantically unknown records remain excluded.",
+        "Storage is idempotent only when the same source payload, parsed facts and evidence replay exactly; conflicting interpretations of one payload are rejected, while a changed source payload appends a new immutable observation.",
+        "Focused fixed-sample and isolated PostgreSQL regressions execute with zero skips; migration rollback, source identity, ACL and append-only behavior are verified.",
+        "No production score or business data is written in this task; no dependency or public API change is added."
+      ]
+    }
+  },
+  "completed_history": {
+    "P106-DERIVED-OUTPUT-GROUP-COUNTS": {
+      "title": "Count persisted primary and derived prediction groups consistently",
+      "acceptance_id": "A106-OUTPUT-GROUP-COUNTS",
+      "depends_on": [],
+      "kind": "correctness_hotfix",
+      "status": "PASS",
+      "files": [
+        "scripts/derived_play_predictions.py",
+        "scripts/jobs/run_model_prediction.py",
+        "tests/test_scripts/test_derived_play_predictions.py",
+        "tests/test_scripts/test_run_model_prediction.py"
+      ],
+      "definition_of_done": [
+        "The run summary counts complete BF, ZJQ, and BQC prediction groups alongside primary groups, without confusing prediction option rows with output groups.",
+        "Every expected but uncompleted derived group has a reasoned skip record, including market validation failures and input-update interruptions.",
+        "Focused local regression and configured GitHub CI pass; an independent read-only review finds no blocker or major issue.",
+        "A green PR is ready for the existing production release process; production P106 acceptance is recorded separately after deployment and the next natural scheduled run."
+      ]
+    },
+    "P106-MANIFEST-PERSISTENCE": {
+      "title": "Persist and verify full Maher training manifests",
+      "acceptance_id": "A106-05",
+      "depends_on": [],
+      "kind": "correctness_and_auditability",
+      "status": "DONE",
+      "files": [
+        "scripts/training_manifest.py",
+        "scripts/model_artifact_identity.py",
+        "scripts/model_training_manifest_storage.py",
+        "scripts/mle_trainer.py",
+        "scripts/model_prediction_run_identity.py",
+        "scripts/jobs/run_model_prediction.py",
+        "sql/112_model_training_manifest.sql",
+        "tests/test_scripts/test_mle_trainer.py",
+        "tests/test_scripts/test_model_prediction_run_identity.py",
+        "tests/test_scripts/test_run_model_prediction.py",
+        "tests/test_computation/test_prediction_run_postgres.py",
+        "tests/test_sql/test_model_training_manifest_schema.py"
+      ],
+      "definition_of_done": [
+        "Every new Maher model version stores the complete canonical training manifest atomically with model activation; old versions are not backfilled.",
+        "The database and application can verify canonical bytes, full-content SHA-256, training-manifest SHA-256, array counts, and model-version binding.",
+        "Prediction provenance is complete only when a valid stored manifest is present; missing or invalid evidence remains incomplete without blocking ordinary predictions.",
+        "Fixed-sample and isolated PostgreSQL tests, migration 112 through the production migration runner on a copy of the already-migrated schema, static checks, scope/budget, independent review, and exact-head CI pass.",
+        "Production rollout has verified recovery material; no manual training. Natural training and its later prediction verify the end-to-end record before acceptance."
+      ]
+    },
+    "P128-TRADITIONAL-FOOTBALL-CATALOG": {
+      "title": "Build the official traditional football pool catalog and safe history importer",
+      "acceptance_id": "A128-LOCAL-CATALOG",
+      "depends_on": [],
+      "kind": "additive_schema_and_import_pipeline",
+      "status": "DONE",
+      "files": [
+        "apps/frontend/src/core/types.ts",
+        "apps/frontend/src/features/pool/PoolFixtureCatalog.tsx",
+        "docs/project-reliability-improvements.md",
+        "ops/server/README.md",
+        "ops/server/deploy.sh",
+        "ops/server/release_migration_policy.py",
+        "scripts/football_pool_catalog.py",
+        "scripts/official_crawler.py",
+        "scripts/official_storage.py",
+        "scripts/traditional_history_import.py",
+        "scripts/traditional_history_type_repair.py",
+        "sql/128_traditional_history_facts.sql",
+        "tests/test_computation/test_football_fixture_identity_postgres.py",
+        "tests/test_computation/test_no_backup_traditional_history_migration_postgres.py",
+        "tests/test_computation/test_pool_postgres.py",
+        "tests/test_computation/test_observed_pipeline_postgres.py",
+        "tests/test_jobs/test_traditional_history_import.py",
+        "tests/test_local/test_release_migration_policy.py",
+        "tests/test_local/test_vibe_quality_gate.py",
+        "tests/test_scripts/test_official_storage.py"
+      ],
+      "definition_of_done": [
+        "The four Sporttery products share the official issue/match catalog while preserving source game numbers, source result semantics, and kickoff date precision.",
+        "Migration 128 is additive, preserves legacy rows and permissions, and is pinned to its reviewed SQL checksum in the no-backup release policy.",
+        "Type repair and historical import are explicit, bounded, idempotent, and require exact evidence; ambiguous candidate keys remain blocked.",
+        "Fixed-sample and isolated PostgreSQL regression, frontend tests/typecheck/build, lint, format, syntax and scope/budget checks pass.",
+        "The full CI pool fixture includes migration 128; observation cutoff fixtures remain valid across calendar dates.",
+        "Before production data writes, release migration 128 alone, then refresh the production inventory and regenerate the repair/import manifests."
+      ]
+    },
+    "P129-TRADITIONAL-SLOT-IDENTITY": {
+      "title": "Explicitly link completed traditional Sporttery issue slots to shared fixtures",
+      "acceptance_id": "A129-TRADITIONAL-SLOT-IDENTITY",
+      "depends_on": [
+        "P128-TRADITIONAL-FOOTBALL-CATALOG"
+      ],
+      "kind": "bounded_identity_write_path",
+      "status": "DONE",
+      "files": [
+        "scripts/football_fixture_identity.py",
+        "tests/test_computation/test_football_fixture_identity_postgres.py"
+      ],
+      "definition_of_done": [
+        "A caller must name the exact product, issue and slot for every member; official Sporttery team, date, full score, result code and import receipts must match exactly.",
+        "If an official halftime field is '{}', accept a secondary half score only from the reviewed P128 500.com manifest SHA-256 b637cdd2943e1e5a1ba10844af7a0d2ed9bba8f154f735a9b476f63d48a6ada8 and exact canonical source-row SHA-256 81c3009ce7f1fb2a36c3b5393f64bceb2e3c5fbac5015602fd75a8b4a0413f87; accept both P128 new and fill evidence envelopes, and reject altered IDs, page hashes, teams or ambiguous identities.",
+        "Cancelled/unplayed, incomplete, conflicting or already-divergent identities are rejected before writes.",
+        "The operation binds only typed traditional issue-slot source IDs, preserves legacy/cancelled JC values as evidence, and never creates a jc.matchId, official result, season membership or prediction.",
+        "The transaction is idempotent and records revisions; rollback leaves no fixture, source-link or membership changes.",
+        "Focused isolated PostgreSQL regressions and static checks pass; P128 automatic import behavior remains unchanged.",
+        "Push the corrected implementation to the sole main branch; exact-head GitHub CI and independent read-only review pass. This code acceptance does not claim production identities were written; the separately authorized post-deployment data operation is recorded in the plan checkpoint."
+      ]
+    },
+    "P130-HISTORY-FILL-LIVE-DRAW": {
+      "title": "Allow exact official history fill for existing live-draw issues",
+      "acceptance_id": "A130-HISTORY-FILL-LIVE-DRAW",
+      "depends_on": [],
+      "kind": "bounded_data_import_correctness",
+      "status": "DONE",
+      "files": [
+        "scripts/traditional_history_import.py",
+        "tests/test_jobs/test_traditional_history_import.py",
+        "tests/test_computation/test_football_fixture_identity_postgres.py"
+      ],
+      "definition_of_done": [
+        "Allow source_game_no_source=sporttery_live_draw only when its stored gameNo equals the official history API gameNo; preserve the existing header namespace.",
+        "Merge history import receipts/evidence into existing raw fields; fill only null facts and preserve all identities and model fields.",
+        "Reject mismatched gameNo/source namespace, date, roster, result and existing-value conflicts before any write; remain serializable and idempotent.",
+        "Focused unit and isolated PostgreSQL regressions plus lint, format, compile, scope and budget checks pass.",
+        "No migration, dependency, public API or production DML is part of code acceptance."
+      ]
+    },
+    "P131-TRADITIONAL-SUPPLEMENT-RECEIPT-ALLOWLIST": {
+      "title": "Allow exact P128 half-score supplement receipts in traditional fixture linking",
+      "acceptance_id": "A131-TRADITIONAL-SUPPLEMENT-RECEIPT-ALLOWLIST",
+      "depends_on": [
+        "P130-HISTORY-FILL-LIVE-DRAW"
+      ],
+      "kind": "bounded_identity_evidence_allowlist",
+      "status": "DONE",
+      "files": [
+        "scripts/football_fixture_identity.py",
+        "scripts/data/traditional_half_score_supplement_allowlist.json",
+        "tests/test_computation/test_football_fixture_identity_postgres.py"
+      ],
+      "definition_of_done": [
+        "Accept only the 4,557 complete P128 secondary-half-score receipts whose production core receipt aggregate exactly matches the retained raw manifest rows.",
+        "Pin the exact evidence key, manifest SHA-256, typed traditional issue slot, canonical receipt digest, half score, and existing official primary-source facts; reject unknown or modified evidence.",
+        "Preserve the existing single 500.com row verification and keep all unknown/missing manifests blocked.",
+        "Fixed-sample and isolated PostgreSQL regressions cover a newly allowlisted source, tampered receipt, unknown manifest/key, and unchanged identity-link side effects.",
+        "No migration, dependency, public API, production write, push, merge, or deploy is part of this task."
+      ]
+    },
+    "P132-TRADITIONAL-FIXTURE-ALIASES": {
+      "title": "Add evidence-backed canonical aliases for duplicate traditional fixtures",
+      "acceptance_id": "A132-TRADITIONAL-FIXTURE-ALIASES",
+      "depends_on": [
+        "P131-TRADITIONAL-SUPPLEMENT-RECEIPT-ALLOWLIST"
+      ],
+      "kind": "additive_identity_alias_schema_and_read_path",
+      "status": "DONE",
+      "files": [
+        "scripts/football_fixture_identity.py",
+        "sql/129_football_fixture_identity_aliases.sql",
+        "tests/test_computation/test_football_fixture_identity_postgres.py",
+        "tests/test_computation/test_pool_postgres.py",
+        "tests/test_local/test_release_migration_policy.py",
+        "ops/server/release_migration_policy.py",
+        "ops/server/README.md",
+        "docs/football-fixture-identity.md"
+      ],
+      "definition_of_done": [
+        "Provide a single-level, append-only fixture alias table with evidence, direct canonical jc.matchId binding, foreign keys, cycle/chain prevention, and restricted fqp read/insert permissions.",
+        "Project canonical fixture_id and its official_match_id through the existing football_pool_fixture_catalog without changing its output column order, names, types, or row count.",
+        "Normalize aliases in the identity linker so a future exact source link cannot create a second identity or false conflict.",
+        "Fixed-sample and isolated PostgreSQL regressions cover valid alias reads, source/canonical mismatch, alias/canonical uniqueness, chains, immutability, permissions, view compatibility, and unchanged no-alias behavior.",
+        "Migration 129 is additive, uses 2-second lock and 30-second statement timeouts, is included in deployment no-backup evidence policy, and passes a disposable PostgreSQL migration rehearsal.",
+        "The deployment installs an empty alias table only; no production alias rows are written in this task. Production alias application is a separate preflighted transaction.",
+        "Exact main CI, scope/budget, security, migration, and independent review gates pass; no branches beyond main, no dependencies, no production data backup, and no model/prediction writes."
+      ]
+    },
+    "P133-TRADITIONAL-FIXTURE-ALIASES-PRODUCTION-WRITE": {
+      "title": "Write and independently verify 967 evidence-backed fixture aliases",
+      "status": "DONE",
+      "acceptance_id": "P133-RESULT-20261103",
+      "evidence_path": "/Volumes/Nas/FQP/plans/local-football-data-integration-20261029/P133-RESULT-20261103.md"
+    },
+    "P134-TRADITIONAL-DIRECT-MATCH-ID-LINK": {
+      "title": "Link eight exact traditional slots through source MatchId evidence",
+      "status": "DONE",
+      "acceptance_id": "P134-RESULT-20261103",
+      "evidence_path": "/Volumes/Nas/FQP/plans/local-football-data-integration-20261029/P134-RESULT-20261103.md"
+    },
+    "P135-HISTORICAL-SCORE-GAP-RECONCILIATION": {
+      "title": "Read-only audit of missing historical pool scores against Titan source data",
+      "status": "DONE",
+      "acceptance_id": "P135-SCORE-GAP-ANALYSIS-20261103",
+      "evidence_path": "/Volumes/Nas/FQP/plans/local-football-data-integration-20261029/P135-SCORE-GAP-ANALYSIS-20261103.md"
+    }
+  }
+}

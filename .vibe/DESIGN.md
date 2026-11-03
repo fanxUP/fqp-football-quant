@@ -1,14 +1,7 @@
-# P136 设计：共享比赛结果事实
+# P137 设计：可信结果事实的最小导入
 
-## 边界
+读取边界：Titan SQLite `mode=ro`, `query_only=ON`；原始 HTML 只解析，不执行。只有生产中已存在唯一 Titan MatchId → fixture → official match 的链路可被考虑。官方来源的已确认全场与半场比分作为语义校验；任一不一致即排除，不用模糊队名/日期匹配。
 
-- `official_results` 继续代表官方竞彩比赛的官方结果；传统玩法的 `source_*` 继续代表体彩期次结果/结算语义。
-- 新表记录第三方或补充来源对同一实际比赛的观察。每条必须关联已有 `football_fixture_source_links` 的同一来源 ID 和同一规范 fixture。
-- 来源修订追加新观察；重复的同源同载荷回放返回原行，不修改旧事实。
-- 赛果状态与比分依据分开：completed/shortened/abandoned/postponed/cancelled/awarded/unknown；on_field/awarded/unknown；regulation/extra_time/penalties/unknown。
-- 仅 completed + on_field + regulation + 完整全场比分可以进入模型候选视图。历史源只写“完场”但未证明时间范围时必须标记 unknown，不可据此自动训练。
-- 日期、开球时间精度和来源发布时间可空；缺失就保持空，不把采集时间或排期时间伪造成实际开球。
+事实写入：将精确校验过的来源行作为 `source_payload`，保存 Titan 比赛 ID、实际日期、比分和 P136 事实字段。发布时间保持 NULL。若未确认精确开球时区，`kickoff_time_precision=date_only`、`actual_kickoff_at=NULL`。写入使用受限 runtime role、事务级 lock/statement timeout 和单事务 all-or-nothing。
 
-## 数据保护
-
-SQL 130 只建表、索引、只读视图和约束/触发器；fqp 仅 SELECT/INSERT。表记录完整解析 payload 与证据 JSONB，并由数据库生成确定性 SHA-256。没有更新、删除或清空旧观察的路径。
+不会用规范化得分推断延期、取消、提前结束或点球/加时语义；P137 仅导入 `完场` 原文一致且与体彩 `confirmed` 赛果全/半场完全一致的样本。其他项输出分类报告，等待单独证据，不静默丢失。

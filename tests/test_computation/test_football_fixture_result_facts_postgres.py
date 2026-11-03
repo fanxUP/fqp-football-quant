@@ -23,12 +23,21 @@ MIGRATION = ROOT / "sql/130_football_fixture_result_facts.sql"
 def result_ready(ready):
     conn = ready
     with conn.cursor() as cur:
+        cur.execute((ROOT / "sql/119_football_history_backfill.sql").read_text())
         cur.execute(MIGRATION.read_text())
     conn.commit()
     return conn
 
 
-def _fixture_source(conn, *, fixture_id=None, source_match_id="titan-1001"):
+def _fixture_source(
+    conn,
+    *,
+    fixture_id=None,
+    source_match_id="titan-1001",
+    id_system="history.matchId",
+    evidence=None,
+):
+    evidence = evidence or {}
     with conn.cursor() as cur:
         if fixture_id is None:
             cur.execute("INSERT INTO football_fixtures DEFAULT VALUES RETURNING id")
@@ -36,9 +45,9 @@ def _fixture_source(conn, *, fixture_id=None, source_match_id="titan-1001"):
         cur.execute(
             """INSERT INTO football_fixture_source_links
                (source_name,id_system,source_match_id,fixture_id,evidence)
-               VALUES ('titan007','history.matchId',%s,%s,'{}')
+               VALUES ('titan007',%s,%s,%s,%s)
                RETURNING fixture_id""",
-            (source_match_id, fixture_id),
+            (id_system, source_match_id, fixture_id, Json(evidence)),
         )
     conn.commit()
     return fixture_id
@@ -362,6 +371,210 @@ def test_database_rejects_invalid_date_and_awarded_score_semantics(result_ready,
     with pytest.raises(CheckViolation, match="check constraint"):
         _insert_fact_direct(conn, fact)
     conn.rollback()
+    assert _rows(conn, "SELECT count(*) FROM football_fixture_result_facts") == [(0,)]
+
+
+def _titan_source_row(*, match_id="123456", full=(2, 1), half=(1, 0)):
+    return {
+        "match_id": int(match_id),
+        "source": "history",
+        "match_date": "2026-11-22",
+        "kickoff": "2026-11-22 20:00",
+        "status_code": -1,
+        "status_text": "完场",
+        "home_name": "阿森纳",
+        "away_name": "切尔西",
+        "home_score": full[0],
+        "away_score": full[1],
+        "home_half": half[0],
+        "away_half": half[1],
+        "raw": (
+            '<tr><td>英超</td><td>22日20:00</td><td class="style1">完</td>'
+            '<td align="right">阿森纳</td>'
+            f'<td onclick="showgoallist({match_id})"><font>{full[0]}</font>-'
+            f'<font>{full[1]}</font></td><td align="left">切尔西</td>'
+            f'<td><font>{half[0]}</font>-<font>{half[1]}</font></td></tr>'
+        ),
+    }
+
+
+def _titan_import_context(conn, *, official_full=(2, 1), official_half=(1, 0)):
+    source_match_id = "123456"
+    with conn.cursor() as cur:
+        cur.execute("INSERT INTO football_fixtures DEFAULT VALUES RETURNING id")
+        fixture_id = cur.fetchone()[0]
+        cur.execute(
+            """INSERT INTO official_matches
+               (business_date,official_match_code,source_match_id,league_name,
+                home_team_name,away_team_name,kickoff_time,match_status)
+               VALUES ('2026-11-22','周日001','1001','英超','阿森纳','切尔西',
+                       '2026-11-22 20:00','Settled') RETURNING id"""
+        )
+        official_match_id = cur.fetchone()[0]
+        evidence = {
+            "method": "verified_history_lottery_link",
+            "official_match_id": official_match_id,
+            "history_batch_id": 12,
+            "history_content_sha256": "a" * 64,
+            "history_source_match_id": source_match_id,
+            "home_team_name": "阿森纳",
+            "away_team_name": "切尔西",
+            "lottery_links": [
+                {
+                    "lottery_match_id": 1001,
+                    "home_team": "阿森纳",
+                    "home_full_name": "阿森纳",
+                    "away_team": "切尔西",
+                    "away_full_name": "切尔西",
+                }
+            ],
+        }
+        cur.execute(
+            """INSERT INTO football_fixture_source_links
+               (source_name,id_system,source_match_id,fixture_id,evidence)
+               VALUES ('titan007','matchId',%s,%s,%s)""",
+            (source_match_id, fixture_id, Json(evidence)),
+        )
+        cur.execute(
+            """INSERT INTO football_fixture_source_links
+               (source_name,id_system,source_match_id,fixture_id,evidence)
+               VALUES ('sporttery','jc.matchId','1001',%s,'{}')""",
+            (fixture_id,),
+        )
+        cur.execute(
+            """INSERT INTO official_results
+               (match_id,half_home_goals,half_away_goals,full_home_goals,full_away_goals,
+                result_status,raw_json)
+               VALUES (%s,%s,%s,%s,%s,'confirmed',%s)""",
+            (
+                official_match_id,
+                *official_half,
+                *official_full,
+                Json(
+                    {
+                        "source_name": "sporttery",
+                        "match_result": {
+                            "matchId": 1001,
+                            "matchResultStatus": "2",
+                            "poolStatus": "Payout",
+                            "resultStatus": "",
+                            "sectionsNo1": f"{official_half[0]}:{official_half[1]}",
+                            "sectionsNo999": f"{official_full[0]}:{official_full[1]}",
+                        },
+                        "source_artifact": {
+                            "url": "https://webapi.sporttery.cn/gateway/uniform/football/getUniformMatchResultV1.qry",
+                            "payload_sha256": "b" * 64,
+                        },
+                    }
+                ),
+            ),
+        )
+        cur.execute(
+            """INSERT INTO football_history_batches
+               (id,source_name,content_sha256,normalization_version,state,manifest)
+               VALUES (12,'titan007',%s,'fixed/v1','building','{}')""",
+            ("a" * 64,),
+        )
+        cur.execute(
+            """INSERT INTO football_history_matches
+               (batch_id,source_match_id,source_competition_id,source_season,kickoff_at,
+                match_status,source_home_team_id,source_away_team_id,home_name,away_name,
+                home_goals,away_goals,source_metadata,official_match_id)
+               VALUES (12,123456,1,'2026','2026-11-22T12:00:00Z','finished',1,2,
+                       '阿森纳','切尔西',%s,%s,'{}',%s)""",
+            (2, 1, official_match_id),
+        )
+        cur.execute("UPDATE football_history_batches SET state='published' WHERE id=12")
+    conn.commit()
+    return fixture_id
+
+
+def test_titan_import_preview_apply_and_replay_only_append_result_facts(result_ready):
+    from scripts.titan007_result_facts import import_titan_result_rows
+
+    conn = result_ready
+    _titan_import_context(conn)
+    source = _titan_source_row()
+
+    with conn:
+        preview = import_titan_result_rows(conn, [source], apply=False)
+    assert preview["counts"] == {"eligible": 1}
+    assert _rows(conn, "SELECT count(*) FROM football_fixture_result_facts") == [(0,)]
+    conn.commit()
+
+    with conn:
+        applied = import_titan_result_rows(conn, [source], apply=True)
+    assert applied["counts"] == {"inserted": 1}
+    assert _rows(
+        conn,
+        "SELECT match_status,score_basis,score_period,full_home_goals,full_away_goals,model_eligible "
+        "FROM football_fixture_result_facts",
+    ) == [("completed", "on_field", "regulation", 2, 1, True)]
+    assert _rows(conn, "SELECT result_status,full_home_goals,full_away_goals FROM official_results") == [
+        ("confirmed", 2, 1)
+    ]
+    conn.commit()
+
+    with conn:
+        replay = import_titan_result_rows(conn, [source], apply=True)
+    assert replay["counts"] == {"already_present": 1}
+    assert _rows(conn, "SELECT count(*) FROM football_fixture_result_facts") == [(1,)]
+
+
+def test_titan_import_requires_a_fresh_transaction(result_ready):
+    from scripts.titan007_result_facts import import_titan_result_rows
+
+    conn = result_ready
+    _titan_import_context(conn)
+    with conn.cursor() as cur:
+        cur.execute("SELECT 1")
+    with pytest.raises(RuntimeError, match="requires a fresh transaction"):
+        import_titan_result_rows(conn, [_titan_source_row()], apply=False)
+    conn.rollback()
+
+
+def test_titan_import_refuses_autocommit_connection(result_ready):
+    from scripts.titan007_result_facts import import_titan_result_rows
+
+    conn = result_ready
+    _titan_import_context(conn)
+    conn.autocommit = True
+    try:
+        with pytest.raises(RuntimeError, match="refuses autocommit"):
+            import_titan_result_rows(conn, [_titan_source_row()], apply=True)
+    finally:
+        conn.autocommit = False
+
+
+def test_titan_import_rejects_official_score_conflict_without_writing(result_ready):
+    from scripts.titan007_result_facts import import_titan_result_rows
+
+    conn = result_ready
+    _titan_import_context(conn, official_full=(3, 1))
+    with conn:
+        report = import_titan_result_rows(conn, [_titan_source_row()], apply=False)
+    assert report["counts"] == {"rejected": 1}
+    assert report["rejection_reasons"] == {"official_full_score_mismatch": 1}
+    assert _rows(conn, "SELECT count(*) FROM football_fixture_result_facts") == [(0,)]
+
+
+def test_titan_import_rolls_back_the_whole_transaction_on_insert_failure(
+    result_ready, monkeypatch
+):
+    import scripts.titan007_result_facts as importer
+
+    conn = result_ready
+    _titan_import_context(conn)
+    original = importer.store_result_fact
+
+    def insert_then_fail(connection, fact):
+        original(connection, fact)
+        raise RuntimeError("fixed insert failure")
+
+    monkeypatch.setattr(importer, "store_result_fact", insert_then_fail)
+    with pytest.raises(RuntimeError, match="fixed insert failure"):
+        with conn:
+            importer.import_titan_result_rows(conn, [_titan_source_row()], apply=True)
     assert _rows(conn, "SELECT count(*) FROM football_fixture_result_facts") == [(0,)]
 
 

@@ -1,18 +1,18 @@
 {
-  "state": "DEPLOYING",
-  "workflow_id": "P136-FOOTBALL-RESULT-FACT-LAYER",
+  "state": "REVIEWING",
+  "workflow_id": "P137-TITAN-RESULT-FACT-IMPORT",
   "previous_workflow": {
-    "task_id": "P132-TRADITIONAL-FIXTURE-ALIASES",
+    "task_id": "P136-FOOTBALL-RESULT-FACT-LAYER",
     "state": "DONE",
-    "archive": ".vibe/archive/workflow-p132-done-2026-11-03",
-    "archive_manifest_sha256": "4d91a1406d847d87a24568fd37b63025e01f9cf56282f546a4e30e8b2f082076"
+    "archive": ".vibe/archive/workflow-p136-done-2026-11-03",
+    "archive_manifest_sha256": "c97bf69c3479351883eb86cb633baa824524b73b46ca3495fa64f9f5aa95c619"
   },
   "blocked_reason": null,
   "mode": "STANDARD",
   "last_transition": {
-    "from": "READY_TO_DEPLOY",
-    "to": "DEPLOYING",
-    "at": "2026-11-03T13:01:16.166456+08:00",
-    "reason": "Beginning the authorized no-backup release for append-only migration 130 after the strict V4 gate passed."
+    "from": "VERIFYING",
+    "to": "REVIEWING",
+    "at": "2026-11-03T14:40:53.808960+08:00",
+    "reason": "Verification complete; independent review passed. GitHub exact-main CI and production apply/readback remain pending."
   }
 }
