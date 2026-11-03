@@ -5,7 +5,8 @@
   "allowed_paths": [
     "scripts/jobs/run_model_prediction.py",
     "tests/test_scripts/test_run_model_prediction.py",
-    "tests/test_computation/test_prediction_run_postgres.py"
+    "tests/test_computation/test_prediction_run_postgres.py",
+    "apps/frontend/src/pages/DashboardPage.test.tsx"
   ],
   "protected_paths": [
     "scripts/**",
@@ -17,7 +18,8 @@
   "approved_protected_paths": [
     "scripts/jobs/run_model_prediction.py",
     "tests/test_scripts/test_run_model_prediction.py",
-    "tests/test_computation/test_prediction_run_postgres.py"
+    "tests/test_computation/test_prediction_run_postgres.py",
+    "apps/frontend/src/pages/DashboardPage.test.tsx"
   ],
-  "notes": "Single main branch only. Three bounded code/test paths; isolated PostgreSQL fixture validates actual before/equal/after row selection. No migrations or dependencies."
+  "notes": "Single main branch only. Four bounded code/test paths; the added dashboard assertion waits for the existing animated counter effect to settle after CI exposed a race. Isolated PostgreSQL fixture validates actual before/equal/after row selection. No migrations or dependencies."
 }

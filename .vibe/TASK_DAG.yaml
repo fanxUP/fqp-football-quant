@@ -11,7 +11,8 @@
       "files": [
         "scripts/jobs/run_model_prediction.py",
         "tests/test_scripts/test_run_model_prediction.py",
-        "tests/test_computation/test_prediction_run_postgres.py"
+        "tests/test_computation/test_prediction_run_postgres.py",
+        "apps/frontend/src/pages/DashboardPage.test.tsx"
       ],
       "definition_of_done": [
         "Every primary odds input row has snapshot_time less than or equal to the same fixed predict_time recorded on its prediction group.",
@@ -19,7 +20,8 @@
         "If no pre-cutoff odds exist, existing missing-input handling is used; no future fallback or fabricated odds is allowed.",
         "An isolated PostgreSQL sample verifies before/equal/after snapshots and same-time ID tie-breaking through the prediction query.",
         "Focused regression and relevant prediction tests pass; Ruff, diff, scope and change budget pass with zero skips in configured tests.",
-        "No schema migration, dependency, public API, model parameter or production data change is included."
+        "No schema migration, dependency, public API, model parameter or production data change is included.",
+        "Exact-head CI frontend tests pass without a counter-animation assertion race."
       ]
     }
   }

@@ -173,7 +173,7 @@ describe('DashboardPage', () => {
     });
     render(<LiveStatusProvider><DashboardPage /></LiveStatusProvider>);
     await waitFor(() => expect(stat('模型预测').getByText(/统计已过期/)).toBeInTheDocument());
-    expect(stat('模型预测').getByText('1,234')).toBeInTheDocument();
+    await waitFor(() => expect(stat('模型预测').getByText('1,234')).toBeInTheDocument());
     expect(stat('模型预测').getByText(/截至/)).toHaveAttribute('dateTime', '2026-10-25T07:00:00+00:00');
   });
 

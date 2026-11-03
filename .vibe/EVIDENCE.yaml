@@ -17,7 +17,8 @@
         "isolated_postgresql_odds": "test_prediction_odds_use_only_rows_at_or_before_fixed_cutoff: 1 passed, 0 skipped; verifies before/equal/after, same-time ID tie-break, and selected input values against a local disposable PostgreSQL 16 database.",
         "isolated_postgresql_handicap": "test_rqspf_handicap_uses_latest_value_at_or_before_fixed_cutoff: 1 passed, 0 skipped; real query selected cutoff value 1.0 and excluded future 0.5.",
         "container": "temporary local fqp-p138-test-pg container stopped and removed after tests; no production DB connection.",
-        "static": "Ruff lint and format checks passed for all three paths; scope 3/3, budget 3/3, no migrations/dependencies/API; git diff --check passed."
+        "static": "Ruff lint and format checks passed for all three paths; scope 3/3, budget 3/3, no migrations/dependencies/API; git diff --check passed.",
+        "frontend_dashboard": "npm --prefix apps/frontend test -- src/pages/DashboardPage.test.tsx: 15 passed, 0 skipped; stabilized the stale-count assertion by waiting for the existing counter effect to render."
       },
       "tree_fingerprint": "19c0e8081ebae7b1ea8b5f1f30d94e241a5e4dd54c5c39fcf2567e1f4ddb7f69"
     }
@@ -36,7 +37,7 @@
   "quality_gate": {
     "status": "NOT_READY",
     "failures": [
-      "P138 changes are not yet on main; exact-head CI and main quality gate pending."
+      "Rerun exact-head CI after stabilizing the existing DashboardPage counter assertion."
     ]
   },
   "security": {
@@ -48,7 +49,15 @@
   },
   "external_ci": {
     "status": "pending",
-    "checks": {}
+    "checks": {},
+    "previous_attempts": [
+      {
+        "run_id": 41602957411,
+        "revision": "090984e09cff70466078bf28cbcbae5db9810d24",
+        "status": "failure",
+        "summary": "Frontend DashboardPage stale-count test observed the stale marker before CountUp effect updated the displayed number; the local test now waits for both."
+      }
+    ]
   },
   "production": {
     "status": "NOT_DEPLOYED",
