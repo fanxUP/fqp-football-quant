@@ -1,5 +1,5 @@
 {
-  "state": "REVIEWING",
+  "state": "DONE",
   "workflow_id": "P137-TITAN-RESULT-FACT-IMPORT",
   "previous_workflow": {
     "task_id": "P136-FOOTBALL-RESULT-FACT-LAYER",
@@ -10,9 +10,9 @@
   "blocked_reason": null,
   "mode": "STANDARD",
   "last_transition": {
-    "from": "VERIFYING",
-    "to": "REVIEWING",
-    "at": "2026-11-03T14:56:18.534685+08:00",
-    "reason": "Final implementation review passed; exact-main CI and fresh production preview/apply/readback remain."
+    "from": "READY_TO_MERGE",
+    "to": "DONE",
+    "at": "2026-11-03T16:08:10.169565+08:00",
+    "reason": "P137 acceptance and production readback are complete; no pool settlement fields were changed and no backup was created."
   }
 }

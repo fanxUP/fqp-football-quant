@@ -70,10 +70,9 @@
     }
   },
   "quality_gate": {
-    "status": "NOT_READY",
-    "failures": [
-      "control evidence commit and exact-head CI pending"
-    ]
+    "status": "READY_TO_MERGE",
+    "checked_at": "2026-11-03T16:02:11.349094+08:00",
+    "failures": []
   },
   "production": {
     "status": "APPLIED_AND_READBACK_VERIFIED",

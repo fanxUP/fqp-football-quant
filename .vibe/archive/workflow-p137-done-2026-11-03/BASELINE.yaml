@@ -1,0 +1,11 @@
+{
+  "git_revision": "7bfb272f72d525262cf6268564ad70c5be598c99",
+  "branch": "main",
+  "dirty": true,
+  "captured_at": "2026-11-03T13:40:00+08:00",
+  "checks": {
+    "P136_application_revision": "7bfb272f72d525262cf6268564ad70c5be598c99",
+    "P136_archived_manifest_sha256": "c97bf69c3479351883eb86cb633baa824524b73b46ca3495fa64f9f5aa95c619",
+    "production_readonly_inventory": "1085 Titan source links; 0 result facts; 4000 official results; 39552 traditional members; read-only SQL transaction rolled back"
+  }
+}

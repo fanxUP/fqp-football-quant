@@ -1,0 +1,18 @@
+{
+  "state": "DONE",
+  "workflow_id": "P137-TITAN-RESULT-FACT-IMPORT",
+  "previous_workflow": {
+    "task_id": "P136-FOOTBALL-RESULT-FACT-LAYER",
+    "state": "DONE",
+    "archive": ".vibe/archive/workflow-p136-done-2026-11-03",
+    "archive_manifest_sha256": "c97bf69c3479351883eb86cb633baa824524b73b46ca3495fa64f9f5aa95c619"
+  },
+  "blocked_reason": null,
+  "mode": "STANDARD",
+  "last_transition": {
+    "from": "READY_TO_MERGE",
+    "to": "DONE",
+    "at": "2026-11-03T16:08:10.169565+08:00",
+    "reason": "P137 acceptance and production readback are complete; no pool settlement fields were changed and no backup was created."
+  }
+}

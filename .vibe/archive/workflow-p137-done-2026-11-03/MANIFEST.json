@@ -1,0 +1,65 @@
+{
+  "archive_format": 1,
+  "archived_at": "2026-11-03",
+  "reason": "Preserve completed P137 source-backed result-fact import before starting the prediction odds as-of cutoff correction.",
+  "prior_workflow": "P137-TITAN-RESULT-FACT-IMPORT",
+  "prior_state": "DONE",
+  "files": [
+    {
+      "path": "ACCEPTANCE.md",
+      "sha256": "45beb78faf3a7b5c410ddcc65557ca56e5927271ae0023fac8ff7b4cb1bae60e"
+    },
+    {
+      "path": "BASELINE.yaml",
+      "sha256": "7e3db97a5505b937ab8bc2ac1d01abf1251af30b511919d8c939f9de4132a360"
+    },
+    {
+      "path": "CHANGE_BUDGET.yaml",
+      "sha256": "cccb0667b84be719008902b9d76ff6b26c5c31124688e6120d3ef4e38659bb43"
+    },
+    {
+      "path": "DESIGN.md",
+      "sha256": "84cc12f0a95eb5c56f9e3f9550a96268d93d08b85b78cd55532c749c32b51987"
+    },
+    {
+      "path": "EVIDENCE.yaml",
+      "sha256": "8784d7eb2dacf975fd773bb0498ca32fa293fceef7f486d5bbc1e46868c780e5"
+    },
+    {
+      "path": "PLAN.md",
+      "sha256": "1a40b25c64e51c78dca2697f72d728560d6c060100d90d97c2edfa5aefefd7a1"
+    },
+    {
+      "path": "QUALITY_GATE.md",
+      "sha256": "c18b6fd5ba213bd93c6f76c56ac5dc35368c104478b8556d8b31b0cefb7f6611"
+    },
+    {
+      "path": "SCOPE_LOCK.yaml",
+      "sha256": "f4c5acec4c6412f5e6288f4eae755f88b160deea657370b352d43f73dd29f85f"
+    },
+    {
+      "path": "STATE.yaml",
+      "sha256": "91fa90ba86dde8a6816cb3a8fcd4bf965223566dfdc9ba210e16b1e10ddddb96"
+    },
+    {
+      "path": "TASK_DAG.yaml",
+      "sha256": "29204f3af02f0b7500c2eacb58a015143751c2fa31932e3b7a9cc79a0aeedd8d"
+    },
+    {
+      "path": "config.yaml",
+      "sha256": "6c06d4bfd8a4e9f539ffe452f434d996642928f10087dd3bba074416d90fd8c4"
+    },
+    {
+      "path": "engine-lock.json",
+      "sha256": "d6248de04ddb2e172a226a3b3b4f29e4826bca7c7f1a9e44fbbcb8f98eedf42e"
+    },
+    {
+      "path": "quality_gate.py",
+      "sha256": "33667a89aad2f3a7dc08fb32ac0dbe7d32513fea7df118526193b292c07cb191"
+    },
+    {
+      "path": "verify_migration.py",
+      "sha256": "d14b14b400d20c1b5f437c788c1da65e59df1c82f33370a80a5483498d77c772"
+    }
+  ]
+}

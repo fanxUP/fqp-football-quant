@@ -1,0 +1,34 @@
+{
+  "schema_version": 4,
+  "current_task": "P137-TITAN-RESULT-FACT-IMPORT",
+  "tasks": {
+    "P137-TITAN-RESULT-FACT-IMPORT": {
+      "title": "Validate and import source-backed Titan match result facts",
+      "acceptance_id": "A137-TITAN-RESULT-FACT-IMPORT",
+      "depends_on": [],
+      "kind": "bounded_append_only_data_import",
+      "status": "DONE",
+      "files": [
+        "scripts/titan007_result_facts.py",
+        "tests/test_scripts/test_titan007_result_facts.py",
+        "tests/test_computation/test_football_fixture_result_facts_postgres.py",
+        "docs/football-fixture-identity.md"
+      ],
+      "definition_of_done": [
+        "Only exact existing titan007/matchId fixture bindings are used.",
+        "Source raw HTML and normalized match fields agree exactly.",
+        "Official confirmed match identity and full/half scores agree before write.",
+        "Only P136 result-fact table is appended in one rollback-safe transaction.",
+        "Fixed sample and isolated PostgreSQL tests, CI, review and production readback pass."
+      ]
+    }
+  },
+  "completed_history": {
+    "P136-FOOTBALL-RESULT-FACT-LAYER": {
+      "status": "DONE",
+      "revision": "7bfb272f72d525262cf6268564ad70c5be598c99",
+      "archive": ".vibe/archive/workflow-p136-done-2026-11-03",
+      "archive_manifest_sha256": "c97bf69c3479351883eb86cb633baa824524b73b46ca3495fa64f9f5aa95c619"
+    }
+  }
+}
