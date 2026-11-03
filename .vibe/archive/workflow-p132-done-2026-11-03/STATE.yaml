@@ -1,0 +1,17 @@
+{
+  "state": "DONE",
+  "workflow_id": "P132-TRADITIONAL-FIXTURE-ALIASES",
+  "previous_workflow": {
+    "task_id": "P131-TRADITIONAL-SUPPLEMENT-RECEIPT-ALLOWLIST",
+    "state": "DONE",
+    "archive": ".vibe/archive/workflow-p131-done-2026-11-03",
+    "archive_manifest_sha256": "8c693bb8fc55de98a69f457e8d376a1ae0de3629c2770b7fe45dba53207e81e5"
+  },
+  "blocked_reason": null,
+  "last_transition": {
+    "from": "READY_TO_MERGE",
+    "to": "DONE",
+    "at": "2026-11-03T11:57:26.550565+08:00",
+    "reason": "P132 code and migration are deployed; P133 alias write and P134 direct-ID link batches have independent production readback."
+  }
+}

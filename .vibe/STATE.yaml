@@ -1,17 +1,18 @@
 {
   "state": "REVIEWING",
-  "workflow_id": "P132-TRADITIONAL-FIXTURE-ALIASES",
+  "workflow_id": "P136-FOOTBALL-RESULT-FACT-LAYER",
   "previous_workflow": {
-    "task_id": "P131-TRADITIONAL-SUPPLEMENT-RECEIPT-ALLOWLIST",
+    "task_id": "P132-TRADITIONAL-FIXTURE-ALIASES",
     "state": "DONE",
-    "archive": ".vibe/archive/workflow-p131-done-2026-11-03",
-    "archive_manifest_sha256": "8c693bb8fc55de98a69f457e8d376a1ae0de3629c2770b7fe45dba53207e81e5"
+    "archive": ".vibe/archive/workflow-p132-done-2026-11-03",
+    "archive_manifest_sha256": "4d91a1406d847d87a24568fd37b63025e01f9cf56282f546a4e30e8b2f082076"
   },
   "blocked_reason": null,
+  "mode": "STANDARD",
   "last_transition": {
     "from": "VERIFYING",
     "to": "REVIEWING",
-    "at": "2026-11-03T09:20:40.480346+08:00",
-    "reason": "P132 independent review passed; release gate remains blocked until exact-head CI and production schema rollout are authorized and verified."
+    "at": "2026-11-03T12:29:33.088337+08:00",
+    "reason": "Implementation verified; independent read-only application and migration reviews recorded."
   }
 }

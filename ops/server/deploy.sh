@@ -64,7 +64,7 @@ if [[ "$RELEASE_MODE" == '--plan' ]]; then
     if [[ "$FRONTEND_DEV_DEPENDENCIES_CHANGED" == true ]]; then
         echo 'Verified frontend Vite/Vitest devDependency update; rollback will reinstall the prior lockfile.'
     fi
-    echo 'Plan only. Record quality/rollback/HTTP evidence and a migration rehearsal before apply. Ordinary pending migrations require a recent verified backup; --apply-no-backup accepts only pinned migration 123, the exact 124+125 pair, ACL-only migration 126, season identity migration 127, or traditional history facts migration 128. Migrations 124+125, 126, 127 and 128 require isolated PostgreSQL rollback/runtime-role evidence.'
+    echo 'Plan only. Record quality/rollback/HTTP evidence and a migration rehearsal before apply. Ordinary pending migrations require a recent verified backup; --apply-no-backup accepts only pinned migration 123, the exact 124+125 pair, ACL-only migration 126, season identity migration 127, traditional history facts migration 128, fixture aliases migration 129, or append-only result facts migration 130. Migrations 124+125, 126, 127, 128, 129 and 130 require isolated PostgreSQL rollback/runtime-role evidence.'
     exit 0
 fi
 [[ -f "$RELEASE_EVIDENCE" ]] || { echo 'Missing release evidence JSON' >&2; exit 1; }

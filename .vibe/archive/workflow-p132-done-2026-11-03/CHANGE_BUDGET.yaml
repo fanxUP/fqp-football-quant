@@ -1,0 +1,16 @@
+{
+  "schema_version": 4,
+  "task_id": "P132-TRADITIONAL-FIXTURE-ALIASES",
+  "max_files_changed": 8,
+  "max_new_files": 1,
+  "max_new_dependencies": 0,
+  "max_schema_migrations": 1,
+  "max_public_api_changes": 0,
+  "declared_public_api_changes": 0,
+  "regression_budget": {
+    "new_test_failures": 0,
+    "new_lint_errors": 0,
+    "new_type_errors": 0
+  },
+  "notes": "Eight bounded paths, one additive migration, no dependency or external API changes. Production alias-row DML is explicitly out of scope."
+}

@@ -1,54 +1,32 @@
 {
   "schema_version": 4,
-  "current_task": "P132-TRADITIONAL-FIXTURE-ALIASES",
+  "current_task": "P136-FOOTBALL-RESULT-FACT-LAYER",
   "tasks": {
-    "P131-TRADITIONAL-SUPPLEMENT-RECEIPT-ALLOWLIST": {
-      "title": "Allow exact P128 half-score supplement receipts in traditional fixture linking",
-      "acceptance_id": "A131-TRADITIONAL-SUPPLEMENT-RECEIPT-ALLOWLIST",
-      "depends_on": [
-        "P130-HISTORY-FILL-LIVE-DRAW"
-      ],
-      "kind": "bounded_identity_evidence_allowlist",
+    "P136-FOOTBALL-RESULT-FACT-LAYER": {
+      "title": "Add append-only actual football match result facts separate from pool settlement",
+      "acceptance_id": "A136-SHARED-MATCH-RESULT-FACTS",
+      "depends_on": [],
+      "kind": "additive_schema_and_source_evidence_storage",
       "status": "DONE",
       "files": [
-        "scripts/football_fixture_identity.py",
-        "scripts/data/traditional_half_score_supplement_allowlist.json",
-        "tests/test_computation/test_football_fixture_identity_postgres.py"
-      ],
-      "definition_of_done": [
-        "Accept only the 4,557 complete P128 secondary-half-score receipts whose production core receipt aggregate exactly matches the retained raw manifest rows.",
-        "Pin the exact evidence key, manifest SHA-256, typed traditional issue slot, canonical receipt digest, half score, and existing official primary-source facts; reject unknown or modified evidence.",
-        "Preserve the existing single 500.com row verification and keep all unknown/missing manifests blocked.",
-        "Fixed-sample and isolated PostgreSQL regressions cover a newly allowlisted source, tampered receipt, unknown manifest/key, and unchanged identity-link side effects.",
-        "No migration, dependency, public API, production write, push, merge, or deploy is part of this task."
-      ]
-    },
-    "P132-TRADITIONAL-FIXTURE-ALIASES": {
-      "title": "Add evidence-backed canonical aliases for duplicate traditional fixtures",
-      "acceptance_id": "A132-TRADITIONAL-FIXTURE-ALIASES",
-      "depends_on": [
-        "P131-TRADITIONAL-SUPPLEMENT-RECEIPT-ALLOWLIST"
-      ],
-      "kind": "additive_identity_alias_schema_and_read_path",
-      "status": "IN_PROGRESS",
-      "files": [
-        "scripts/football_fixture_identity.py",
-        "sql/129_football_fixture_identity_aliases.sql",
-        "tests/test_computation/test_football_fixture_identity_postgres.py",
-        "tests/test_computation/test_pool_postgres.py",
+        "sql/130_football_fixture_result_facts.sql",
+        "scripts/football_fixture_result_facts.py",
+        "tests/test_computation/test_football_fixture_result_facts_postgres.py",
         "tests/test_local/test_release_migration_policy.py",
         "ops/server/release_migration_policy.py",
-        "ops/server/README.md",
-        "docs/football-fixture-identity.md"
+        "ops/server/deploy.sh",
+        ".github/workflows/ci.yml",
+        "docs/football-fixture-identity.md",
+        "ops/server/README.md"
       ],
       "definition_of_done": [
-        "Provide a single-level, append-only fixture alias table with evidence, direct canonical jc.matchId binding, foreign keys, cycle/chain prevention, and restricted fqp read/insert permissions.",
-        "Project canonical fixture_id and its official_match_id through the existing football_pool_fixture_catalog without changing its output column order, names, types, or row count.",
-        "Normalize aliases in the identity linker so a future exact source link cannot create a second identity or false conflict.",
-        "Fixed-sample and isolated PostgreSQL regressions cover valid alias reads, source/canonical mismatch, alias/canonical uniqueness, chains, immutability, permissions, view compatibility, and unchanged no-alias behavior.",
-        "Migration 129 is additive, uses 2-second lock and 30-second statement timeouts, is included in deployment no-backup evidence policy, and passes a disposable PostgreSQL migration rehearsal.",
-        "The deployment installs an empty alias table only; no production alias rows are written in this task. Production alias application is a separate preflighted transaction.",
-        "Exact main CI, scope/budget, security, migration, and independent review gates pass; no branches beyond main, no dependencies, no production data backup, and no model/prediction writes."
+        "Migration 130 adds an append-only result-fact table keyed to a verified shared fixture and exact source-link identity; source facts never overwrite official_results or Sporttery pool result fields.",
+        "A result observation stores actual match date/time precision, match state, score basis and period, half/full score pairs, source record payload, provenance evidence and deterministic hashes.",
+        "The database rejects source-link/fixture mismatches, malformed score pairs and invalid eligible-result combinations; runtime fqp receives only SELECT/INSERT and cannot update, delete or truncate.",
+        "A model-eligible read view includes only explicitly completed, on-field, regulation-time results with a known actual match date and a complete score; awarded, shortened, abandoned, postponed, cancelled, date-unknown and semantically unknown records remain excluded.",
+        "Storage is idempotent only when the same source payload, parsed facts and evidence replay exactly; conflicting interpretations of one payload are rejected, while a changed source payload appends a new immutable observation.",
+        "Focused fixed-sample and isolated PostgreSQL regressions execute with zero skips; migration rollback, source identity, ACL and append-only behavior are verified.",
+        "No production score or business data is written in this task; no dependency or public API change is added."
       ]
     }
   },
@@ -177,6 +155,73 @@
         "Focused unit and isolated PostgreSQL regressions plus lint, format, compile, scope and budget checks pass.",
         "No migration, dependency, public API or production DML is part of code acceptance."
       ]
+    },
+    "P131-TRADITIONAL-SUPPLEMENT-RECEIPT-ALLOWLIST": {
+      "title": "Allow exact P128 half-score supplement receipts in traditional fixture linking",
+      "acceptance_id": "A131-TRADITIONAL-SUPPLEMENT-RECEIPT-ALLOWLIST",
+      "depends_on": [
+        "P130-HISTORY-FILL-LIVE-DRAW"
+      ],
+      "kind": "bounded_identity_evidence_allowlist",
+      "status": "DONE",
+      "files": [
+        "scripts/football_fixture_identity.py",
+        "scripts/data/traditional_half_score_supplement_allowlist.json",
+        "tests/test_computation/test_football_fixture_identity_postgres.py"
+      ],
+      "definition_of_done": [
+        "Accept only the 4,557 complete P128 secondary-half-score receipts whose production core receipt aggregate exactly matches the retained raw manifest rows.",
+        "Pin the exact evidence key, manifest SHA-256, typed traditional issue slot, canonical receipt digest, half score, and existing official primary-source facts; reject unknown or modified evidence.",
+        "Preserve the existing single 500.com row verification and keep all unknown/missing manifests blocked.",
+        "Fixed-sample and isolated PostgreSQL regressions cover a newly allowlisted source, tampered receipt, unknown manifest/key, and unchanged identity-link side effects.",
+        "No migration, dependency, public API, production write, push, merge, or deploy is part of this task."
+      ]
+    },
+    "P132-TRADITIONAL-FIXTURE-ALIASES": {
+      "title": "Add evidence-backed canonical aliases for duplicate traditional fixtures",
+      "acceptance_id": "A132-TRADITIONAL-FIXTURE-ALIASES",
+      "depends_on": [
+        "P131-TRADITIONAL-SUPPLEMENT-RECEIPT-ALLOWLIST"
+      ],
+      "kind": "additive_identity_alias_schema_and_read_path",
+      "status": "DONE",
+      "files": [
+        "scripts/football_fixture_identity.py",
+        "sql/129_football_fixture_identity_aliases.sql",
+        "tests/test_computation/test_football_fixture_identity_postgres.py",
+        "tests/test_computation/test_pool_postgres.py",
+        "tests/test_local/test_release_migration_policy.py",
+        "ops/server/release_migration_policy.py",
+        "ops/server/README.md",
+        "docs/football-fixture-identity.md"
+      ],
+      "definition_of_done": [
+        "Provide a single-level, append-only fixture alias table with evidence, direct canonical jc.matchId binding, foreign keys, cycle/chain prevention, and restricted fqp read/insert permissions.",
+        "Project canonical fixture_id and its official_match_id through the existing football_pool_fixture_catalog without changing its output column order, names, types, or row count.",
+        "Normalize aliases in the identity linker so a future exact source link cannot create a second identity or false conflict.",
+        "Fixed-sample and isolated PostgreSQL regressions cover valid alias reads, source/canonical mismatch, alias/canonical uniqueness, chains, immutability, permissions, view compatibility, and unchanged no-alias behavior.",
+        "Migration 129 is additive, uses 2-second lock and 30-second statement timeouts, is included in deployment no-backup evidence policy, and passes a disposable PostgreSQL migration rehearsal.",
+        "The deployment installs an empty alias table only; no production alias rows are written in this task. Production alias application is a separate preflighted transaction.",
+        "Exact main CI, scope/budget, security, migration, and independent review gates pass; no branches beyond main, no dependencies, no production data backup, and no model/prediction writes."
+      ]
+    },
+    "P133-TRADITIONAL-FIXTURE-ALIASES-PRODUCTION-WRITE": {
+      "title": "Write and independently verify 967 evidence-backed fixture aliases",
+      "status": "DONE",
+      "acceptance_id": "P133-RESULT-20261103",
+      "evidence_path": "/Volumes/Nas/FQP/plans/local-football-data-integration-20261029/P133-RESULT-20261103.md"
+    },
+    "P134-TRADITIONAL-DIRECT-MATCH-ID-LINK": {
+      "title": "Link eight exact traditional slots through source MatchId evidence",
+      "status": "DONE",
+      "acceptance_id": "P134-RESULT-20261103",
+      "evidence_path": "/Volumes/Nas/FQP/plans/local-football-data-integration-20261029/P134-RESULT-20261103.md"
+    },
+    "P135-HISTORICAL-SCORE-GAP-RECONCILIATION": {
+      "title": "Read-only audit of missing historical pool scores against Titan source data",
+      "status": "DONE",
+      "acceptance_id": "P135-SCORE-GAP-ANALYSIS-20261103",
+      "evidence_path": "/Volumes/Nas/FQP/plans/local-football-data-integration-20261029/P135-SCORE-GAP-ANALYSIS-20261103.md"
     }
   }
 }

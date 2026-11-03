@@ -33,6 +33,9 @@ REVIEWED_NO_BACKUP_CHECKSUMS = {
     "129_football_fixture_identity_aliases.sql": (
         "ee124b135697aa5cce79f37d9ebf7c8d96e6e4ee64918aabd3e856b4bc4e4f58"
     ),
+    "130_football_fixture_result_facts.sql": (
+        "be4c70ac5a61b0a3047e62dd89be7dff57bd58a16587958905284e712b671655"
+    ),
 }
 REVIEWED_NO_BACKUP_SEASONS = ["127_football_fixture_seasons.sql"]
 REVIEWED_NO_BACKUP_PAIR = [
@@ -42,6 +45,7 @@ REVIEWED_NO_BACKUP_PAIR = [
 REVIEWED_NO_BACKUP_ACL = ["126_official_season_retention_access.sql"]
 REVIEWED_NO_BACKUP_TRADITIONAL_FACTS = ["128_traditional_history_facts.sql"]
 REVIEWED_NO_BACKUP_ALIASES = ["129_football_fixture_identity_aliases.sql"]
+REVIEWED_NO_BACKUP_RESULT_FACTS = ["130_football_fixture_result_facts.sql"]
 NO_BACKUP_REHEARSAL_FIELD = "no_backup_migration_rehearsal"
 
 
@@ -247,6 +251,29 @@ def _verify_no_backup_rehearsal(
                 "Fixture alias migration requires runtime ACL, alias read/write path and rollback proof"
             )
 
+    if pending == REVIEWED_NO_BACKUP_RESULT_FACTS:
+        role = report.get("application_role")
+        if (
+            not isinstance(role, dict)
+            or role.get("name") != "fqp"
+            or role.get("superuser") is not False
+            or role.get("owns_result_fact_table") is not False
+        ):
+            _refuse("Result fact rehearsal must use the restricted non-owner fqp runtime role")
+        if any(
+            report.get(field) != "passed"
+            for field in (
+                "application_role_acl",
+                "result_fact_insert_and_model_read",
+                "source_fixture_mismatch_rejected",
+                "append_only_enforced",
+                "result_fact_rollback_verified",
+            )
+        ):
+            _refuse(
+                "Result fact migration requires runtime ACL, source binding, model read and rollback proof"
+            )
+
 
 def _validate_no_backup(
     record: dict[str, Any],
@@ -265,12 +292,13 @@ def _validate_no_backup(
         REVIEWED_NO_BACKUP_SEASONS,
         REVIEWED_NO_BACKUP_TRADITIONAL_FACTS,
         REVIEWED_NO_BACKUP_ALIASES,
+        REVIEWED_NO_BACKUP_RESULT_FACTS,
     ):
         _verify_pinned_sql(project_root, pending)
         _verify_no_backup_rehearsal(record, pending, target_sha, evidence_directory)
         return
     _refuse(
-        "No-backup release is restricted to pinned migration123, the reviewed124+125 pair, ACL repair126, season identity127, traditional history facts128, or fixture identity aliases129"
+        "No-backup release is restricted to pinned migration123, the reviewed124+125 pair, ACL repair126, season identity127, traditional history facts128, fixture identity aliases129, or actual result facts130"
     )
 
 

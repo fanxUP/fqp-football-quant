@@ -1,0 +1,65 @@
+{
+  "archive_format": 1,
+  "archived_at": "2026-11-03",
+  "reason": "Preserve the completed P132 workflow and reconcile deployment evidence before starting the shared match-result fact layer.",
+  "prior_workflow": "P132-TRADITIONAL-FIXTURE-ALIASES",
+  "prior_state": "DONE",
+  "files": [
+    {
+      "path": "ACCEPTANCE.md",
+      "sha256": "91360ba813493d9d5911b90a2e79b1e56a3a58a2d644de9226d82791ddc93a6a"
+    },
+    {
+      "path": "BASELINE.yaml",
+      "sha256": "76ac08547befe7b22eb4c7390abe1b6353407c4b152b2d85a34e51711bd2da05"
+    },
+    {
+      "path": "CHANGE_BUDGET.yaml",
+      "sha256": "04975f3d23db0a1b5b39800e2d7f79bfd201a082be8d43021b615174cf2fb032"
+    },
+    {
+      "path": "DESIGN.md",
+      "sha256": "5e33ce08f2c7f76d6fc8bd8938ea2cfa5da77f2c155a3f26cc892e8af0759d7a"
+    },
+    {
+      "path": "EVIDENCE.yaml",
+      "sha256": "531f4cd917663a0e17fe8c72e9602ecd05ab2af815ffb4b9d76bb3dfda733e10"
+    },
+    {
+      "path": "PLAN.md",
+      "sha256": "d9a91335775723f49ce986d1b665689e8789e0038c3161bce8ea392fd176db28"
+    },
+    {
+      "path": "QUALITY_GATE.md",
+      "sha256": "e1826d93e3cc0460c3f5445c4fce0dd5062a40e5a1bd733bc0fe2b1eb3c9f07a"
+    },
+    {
+      "path": "SCOPE_LOCK.yaml",
+      "sha256": "eeee605e3c9ff90a03a4d7c8c264d4d50f45da75efe0bc430b90be415ae1582c"
+    },
+    {
+      "path": "STATE.yaml",
+      "sha256": "3017071cc25484049944acdb73c2f68a6f039ada42da036781bca7b5d615eae1"
+    },
+    {
+      "path": "TASK_DAG.yaml",
+      "sha256": "74f1868d37f0be21869a1a68d95e0fe1847232c41f47fc3950d286bbfb8ef250"
+    },
+    {
+      "path": "config.yaml",
+      "sha256": "fa67c6f45e4ba20d5b6880aaac902dfa9afe07804eef9e40ed2514b3a830d93e"
+    },
+    {
+      "path": "engine-lock.json",
+      "sha256": "d6248de04ddb2e172a226a3b3b4f29e4826bca7c7f1a9e44fbbcb8f98eedf42e"
+    },
+    {
+      "path": "quality_gate.py",
+      "sha256": "33667a89aad2f3a7dc08fb32ac0dbe7d32513fea7df118526193b292c07cb191"
+    },
+    {
+      "path": "verify_migration.py",
+      "sha256": "d14b14b400d20c1b5f437c788c1da65e59df1c82f33370a80a5483498d77c772"
+    }
+  ]
+}

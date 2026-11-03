@@ -1,27 +1,31 @@
 {
   "schema_version": 4,
-  "task_id": "P132-TRADITIONAL-FIXTURE-ALIASES",
-  "objective": "Add an additive evidence-backed canonical alias layer for duplicate traditional fixture rows and expose canonical identity through existing catalog reads.",
+  "task_id": "P136-FOOTBALL-RESULT-FACT-LAYER",
+  "objective": "Create a shared, provenance-backed actual football result fact layer without mutating Sporttery settlement facts.",
   "allowed_paths": [
-    "scripts/football_fixture_identity.py",
-    "sql/129_football_fixture_identity_aliases.sql",
-    "tests/test_computation/test_football_fixture_identity_postgres.py",
-    "tests/test_computation/test_pool_postgres.py",
+    "sql/130_football_fixture_result_facts.sql",
+    "scripts/football_fixture_result_facts.py",
+    "tests/test_computation/test_football_fixture_result_facts_postgres.py",
     "tests/test_local/test_release_migration_policy.py",
     "ops/server/release_migration_policy.py",
-    "ops/server/README.md",
-    "docs/football-fixture-identity.md"
-  ],
-  "protected_paths": [
-    "ops/**",
-    "sql/**",
-    "**/package*.json",
-    "requirements*.txt"
-  ],
-  "approved_protected_paths": [
-    "sql/129_football_fixture_identity_aliases.sql",
-    "ops/server/release_migration_policy.py",
+    "ops/server/deploy.sh",
+    ".github/workflows/ci.yml",
+    "docs/football-fixture-identity.md",
     "ops/server/README.md"
   ],
-  "notes": "Single main branch. Migration 129 is allowed only with disposable isolation rehearsal and exact hash policy. Do not write production alias data in this task."
+  "protected_paths": [
+    "sql/**",
+    "ops/**",
+    ".github/workflows/**",
+    "requirements*.txt",
+    "**/package*.json"
+  ],
+  "approved_protected_paths": [
+    "sql/130_football_fixture_result_facts.sql",
+    "ops/server/release_migration_policy.py",
+    "ops/server/deploy.sh",
+    ".github/workflows/ci.yml",
+    "ops/server/README.md"
+  ],
+  "notes": "One main branch only. Migration is additive. P136 does not import production scores or alter official_results, traditional pool result values, season links, predictions, or model parameters."
 }

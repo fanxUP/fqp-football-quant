@@ -20,6 +20,7 @@ MIGRATIONS_124_125 = [
 MIGRATION_126 = ["126_official_season_retention_access.sql"]
 MIGRATION_128 = ["128_traditional_history_facts.sql"]
 MIGRATION_129 = ["129_football_fixture_identity_aliases.sql"]
+MIGRATION_130 = ["130_football_fixture_result_facts.sql"]
 
 
 def _write_report(directory: Path, report: dict) -> str:
@@ -534,6 +535,105 @@ def test_season_127_sql_tampering_refused(tmp_path):
         validate(
             season_rehearsal_record(tmp_path),
             MIGRATION_127,
+            project_root=tmp_path,
+            evidence_directory=tmp_path,
+        )
+
+
+def result_fact_rehearsal_record(directory: Path) -> dict:
+    pending = MIGRATION_130
+    checksums = {name: policy.REVIEWED_NO_BACKUP_CHECKSUMS[name] for name in pending}
+    report = {
+        "status": "passed",
+        "target_sha": TARGET_SHA,
+        "pending_migrations": pending,
+        "migration_sha256": checksums,
+        "verified_at": datetime.now(UTC).isoformat(),
+        "database": {
+            "disposable": True,
+            "postgres_major": 16,
+            "fixture_kind": "synthetic_schema_fixture",
+            "production_data_copy": False,
+        },
+        "existing_rows_preserved": "passed",
+        "constraints_and_triggers_verified": "passed",
+        "transaction_rollback_verified": "passed",
+        "timeouts": {"lock_seconds": 2, "statement_seconds": 30},
+        "test_results": {"passed": 1, "failed": 0, "skipped": 0},
+        "application_role": {
+            "name": "fqp",
+            "superuser": False,
+            "owns_result_fact_table": False,
+        },
+        "application_role_acl": "passed",
+        "result_fact_insert_and_model_read": "passed",
+        "source_fixture_mismatch_rejected": "passed",
+        "append_only_enforced": "passed",
+        "result_fact_rollback_verified": "passed",
+    }
+    digest = _write_report(directory, report)
+    return {
+        "target_sha": TARGET_SHA,
+        "migration_copy_dry_run": "passed",
+        "migration_transaction_dry_run": "passed",
+        "no_backup_authorized": True,
+        "no_backup_reason": "Explicit operator preference; migration 130 was rehearsed in isolation.",
+        "no_backup_migration_rehearsal": {
+            "status": "passed",
+            "pending_migrations": pending,
+            "sha256": checksums,
+            "report_path": "no-backup-migration-rehearsal.json",
+            "evidence_sha256": digest,
+        },
+    }
+
+
+def test_no_backup_allows_only_pinned_130_with_result_fact_runtime_rehearsal(tmp_path):
+    validate(
+        result_fact_rehearsal_record(tmp_path),
+        MIGRATION_130,
+        evidence_directory=tmp_path,
+    )
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("application_role_acl", "not_run"),
+        ("result_fact_insert_and_model_read", "not_run"),
+        ("source_fixture_mismatch_rejected", "not_run"),
+        ("append_only_enforced", "not_run"),
+        ("result_fact_rollback_verified", "not_run"),
+        ("application_role", {"name": "postgres", "superuser": True}),
+        (
+            "application_role",
+            {"name": "fqp", "superuser": False, "owns_result_fact_table": True},
+        ),
+    ],
+)
+def test_no_backup_130_requires_runtime_role_and_data_contract_proof(tmp_path, field, value):
+    record = result_fact_rehearsal_record(tmp_path)
+    report_path = tmp_path / record["no_backup_migration_rehearsal"]["report_path"]
+    report = json.loads(report_path.read_text())
+    report[field] = value
+    record["no_backup_migration_rehearsal"]["evidence_sha256"] = _write_report(tmp_path, report)
+    with pytest.raises(SystemExit, match="runtime|ACL|source binding|append-only|rollback"):
+        validate(record, MIGRATION_130, evidence_directory=tmp_path)
+
+
+def test_no_backup_130_rejects_other_migration_sets(tmp_path):
+    record = result_fact_rehearsal_record(tmp_path)
+    with pytest.raises(SystemExit, match="restricted|reviewed"):
+        validate(record, MIGRATION_129 + MIGRATION_130, evidence_directory=tmp_path)
+
+
+def test_no_backup_130_sql_tampering_is_rejected(tmp_path):
+    (tmp_path / "sql").mkdir()
+    (tmp_path / "sql" / MIGRATION_130[0]).write_text("DROP TABLE official_results;")
+    with pytest.raises(SystemExit, match="checksum"):
+        validate(
+            result_fact_rehearsal_record(tmp_path),
+            MIGRATION_130,
             project_root=tmp_path,
             evidence_directory=tmp_path,
         )
