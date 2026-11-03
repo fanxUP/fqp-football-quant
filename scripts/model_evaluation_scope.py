@@ -69,17 +69,17 @@ LATEST_METRICS_CTE = """
 """
 
 
-def _metric_prediction_rows_ctes() -> str:
+def _metric_prediction_rows_ctes(*, spf_home_only: bool = False) -> str:
     return f"""
         , metric_prediction_matches AS MATERIALIZED (
             SELECT DISTINCT match_id FROM latest_metrics
-        ), {canonical_prediction_rows_ctes(match_scope="metric_prediction_matches", spf_only=True)}
+        ), {canonical_prediction_rows_ctes(match_scope="metric_prediction_matches", spf_only=True, spf_home_only=spf_home_only)}
     """
 
 
 METRIC_HOME_PREDICTIONS_CTE = f"""
-    {_metric_prediction_rows_ctes()}
-    , metric_home_predictions AS (
+    {_metric_prediction_rows_ctes(spf_home_only=True)}
+    , metric_home_predictions AS MATERIALIZED (
         -- Keep canonical selection ahead of option/version/time matching so
         -- newer or invalid rows continue to shield older predictions.
         SELECT latest.* FROM canonical_prediction_rows latest

@@ -39,7 +39,13 @@ def test_prediction_research_uses_exact_foreign_keys(client, query):
     cur = conn.__enter__.return_value.cursor.return_value.__enter__.return_value
     cur.fetchall.return_value = [row]
     cur.fetchone.return_value = (1, 0, 0, 1, now)
-    with patch("apps.backend.src.routers.predictions.get_db", return_value=conn):
+    with (
+        patch("apps.backend.src.routers.predictions.get_db", return_value=conn),
+        patch(
+            "apps.backend.src.routers.predictions.get_prediction_summary_snapshot",
+            return_value={"summary": None, "meta": {"status": "pending"}},
+        ),
+    ):
         result = client.get("/api/predictions" + query)
     assert result.status_code == 200
     evidence = result.json()["predictions"][0]["research_evidence"]
@@ -108,7 +114,13 @@ def test_missing_research_evidence_is_not_inferred(client):
     cur = conn.__enter__.return_value.cursor.return_value.__enter__.return_value
     cur.fetchall.return_value = [row]
     cur.fetchone.return_value = (1, 0, None, 1, now)
-    with patch("apps.backend.src.routers.predictions.get_db", return_value=conn):
+    with (
+        patch("apps.backend.src.routers.predictions.get_db", return_value=conn),
+        patch(
+            "apps.backend.src.routers.predictions.get_prediction_summary_snapshot",
+            return_value={"summary": None, "meta": {"status": "pending"}},
+        ),
+    ):
         result = client.get("/api/predictions")
     evidence = result.json()["predictions"][0]["research_evidence"]
     assert evidence["feature_snapshot_id"] is None
@@ -144,7 +156,12 @@ def test_records_only_read_skips_full_aggregate(client, path):
     with patch("apps.backend.src.routers.predictions.get_db", return_value=conn):
         response = client.get(path + "?limit=200&include_summary=false")
     assert response.status_code == 200
-    assert response.json() == {"predictions": [], "total": None, "summary": None}
+    assert response.json() == {
+        "predictions": [],
+        "total": None,
+        "summary": None,
+        "summary_meta": None,
+    }
     assert cur.execute.call_count == 2
     assert cur.execute.call_args_list[0].args == ("SET LOCAL jit = off",)
     assert "recent AS MATERIALIZED" in cur.execute.call_args.args[0]

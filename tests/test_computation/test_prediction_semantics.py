@@ -120,10 +120,17 @@ def test_training_and_explanation_only_select_current_semantics(monkeypatch):
     assert cursor.execute.call_args.args[1]["feature_versions"] == (CURRENT_SNAPSHOT,)
     assert feature_importance._load_training_data(conn, min_samples=1) is None
     sql, params = cursor.execute.call_args.args
-    assert "fs.feature_version IN %(feature_versions)s" in sql
+    assert "snapshot.feature_version IN %(feature_versions)s" in sql
     assert params["feature_versions"] == (CURRENT_SNAPSHOT,)
     assert "r.result_status IN ('final', 'confirmed')" in sql
-    monkeypatch.setattr(feature_importance, "train_if_needed", lambda _: {"status": "ok"})
+    monkeypatch.setattr(
+        feature_importance.explanation_artifact,
+        "read_state",
+        lambda: {"artifact": {"features": [], "sha256": "fixture", "info": {}}, "error": None},
+    )
+    monkeypatch.setattr(
+        feature_importance.explanation_artifact, "load_classifier", lambda _artifact: object()
+    )
     cursor.fetchone.return_value = None
     assert feature_importance.explain_prediction(conn, 101)["status"] == "error"
     sql, params = cursor.execute.call_args.args

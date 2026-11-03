@@ -23,17 +23,46 @@ def latest_prediction_ctes(
     filter_match_ids: bool = False,
     match_scope: str | None = None,
     spf_only: bool = False,
+    spf_home_only: bool = False,
 ) -> str:
     """Seek legacy match/version/play keys before enumerating uncovered options."""
+    if spf_home_only and not spf_only:
+        raise ValueError("spf_home_only requires spf_only")
     group_match = "AND g.match_id = %(match_id)s" if filter_match else ""
     key_match = "WHERE p.match_id = %(match_id)s" if filter_match else ""
     next_match = "AND p.match_id = %(match_id)s" if filter_match else ""
     play_filter = "AND p.play_type = 'spf'" if spf_only else ""
+    option_filter = "AND p.option_code = '3'" if spf_home_only else ""
+    option_keys_cte = (
+        "option_keys AS (SELECT '3'::text AS option_code)"
+        if spf_home_only
+        else """
+            option_keys AS (
+                (
+                    SELECT p.option_code FROM model_predictions p
+                    WHERE p.match_id = keys.match_id
+                      AND p.model_version_id = keys.model_version_id
+                      AND p.play_type = keys.play_type
+                    ORDER BY p.option_code LIMIT 1
+                )
+                UNION ALL
+                SELECT next_option.* FROM option_keys previous_option
+                CROSS JOIN LATERAL (
+                    SELECT p.option_code FROM model_predictions p
+                    WHERE p.match_id = keys.match_id
+                      AND p.model_version_id = keys.model_version_id
+                      AND p.play_type = keys.play_type
+                      AND p.option_code > previous_option.option_code
+                    ORDER BY p.option_code LIMIT 1
+                ) next_option
+            )
+        """
+    )
     if filter_match_ids:
         group_match = "AND g.match_id = ANY(%(match_ids)s::bigint[])"
         key_match = "WHERE p.match_id = ANY(%(match_ids)s::bigint[])"
         next_match = "AND p.match_id = ANY(%(match_ids)s::bigint[])"
-    key_filters = play_filter
+    key_filters = f"{play_filter} {option_filter}".strip()
     if key_filters:
         key_match = f"{key_match} {key_filters}" if key_match else "WHERE " + key_filters[4:]
     legacy_keys = f"""
@@ -52,6 +81,7 @@ def latest_prediction_ctes(
                     > (previous.match_id, previous.model_version_id, previous.play_type)
                   {next_match}
                   {play_filter}
+                  {option_filter}
                 ORDER BY p.match_id, p.model_version_id, p.play_type LIMIT 1
             ) next_key
         )
@@ -72,6 +102,7 @@ def latest_prediction_ctes(
                             SELECT p.model_version_id, p.play_type
                             FROM model_predictions p WHERE p.match_id = scoped.match_id
                               {play_filter}
+                              {option_filter}
                             ORDER BY p.model_version_id, p.play_type LIMIT 1
                         )
                         UNION ALL
@@ -80,6 +111,7 @@ def latest_prediction_ctes(
                             SELECT p.model_version_id, p.play_type FROM model_predictions p
                             WHERE p.match_id = scoped.match_id
                               {play_filter}
+                              {option_filter}
                               AND (p.model_version_id, p.play_type)
                                   > (previous.model_version_id, previous.play_type)
                             ORDER BY p.model_version_id, p.play_type LIMIT 1
@@ -113,25 +145,7 @@ def latest_prediction_ctes(
         ), legacy_by_version AS (
             SELECT p.*, keys.model_name FROM eligible_legacy_keys keys
             CROSS JOIN LATERAL (
-                WITH RECURSIVE option_keys AS (
-                    (
-                        SELECT p.option_code FROM model_predictions p
-                        WHERE p.match_id = keys.match_id
-                          AND p.model_version_id = keys.model_version_id
-                          AND p.play_type = keys.play_type
-                        ORDER BY p.option_code LIMIT 1
-                    )
-                    UNION ALL
-                    SELECT next_option.* FROM option_keys previous_option
-                    CROSS JOIN LATERAL (
-                        SELECT p.option_code FROM model_predictions p
-                        WHERE p.match_id = keys.match_id
-                          AND p.model_version_id = keys.model_version_id
-                          AND p.play_type = keys.play_type
-                          AND p.option_code > previous_option.option_code
-                        ORDER BY p.option_code LIMIT 1
-                    ) next_option
-                )
+                WITH RECURSIVE {option_keys_cte}
                 SELECT p.* FROM option_keys option_key
                 CROSS JOIN LATERAL (
                     SELECT p.* FROM model_predictions p
@@ -158,14 +172,16 @@ def canonical_prediction_rows_ctes(
     *,
     match_scope: str | None = None,
     spf_only: bool = False,
+    spf_home_only: bool = False,
     prefix: str = "",
 ) -> str:
     """Canonical IDs before validity/time filters; preserve complete-group shielding."""
     result = f"""
-        {latest_prediction_ctes(filter_match=False, match_scope=match_scope, spf_only=spf_only)},
+        {latest_prediction_ctes(filter_match=False, match_scope=match_scope, spf_only=spf_only, spf_home_only=spf_home_only)},
         canonical_prediction_ids AS (
             SELECT mapped.prediction_id AS id FROM latest_groups groups
             JOIN model_prediction_group_options mapped ON mapped.group_id = groups.group_id
+            {"WHERE mapped.option_code = '3'" if spf_home_only else ""}
             UNION ALL
             SELECT id FROM legacy_latest
         ), canonical_prediction_rows AS (

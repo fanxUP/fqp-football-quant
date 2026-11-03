@@ -24,7 +24,7 @@
       "kind": "external_ci",
       "status": "IN_PROGRESS",
       "definition_of_done": [
-        "Only the 51 mapped product paths and reviewed V4 control/evidence files are committed; uv.lock is not staged.",
+        "Only the 54 mapped P107/P138 paths and reviewed V4 control/evidence files are committed; uv.lock is not staged.",
         "GitHub main push CI passes for the exact local HEAD.",
         "Review, security and migration evidence are recorded for this candidate."
       ]
