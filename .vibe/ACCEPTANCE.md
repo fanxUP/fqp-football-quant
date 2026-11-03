@@ -12,7 +12,7 @@
 
 ## 2026-11-03 验收结果
 
-- P137 完成：固定样本与隔离 PostgreSQL **71/71 通过、0 跳过**；GitHub CI `41593089049` 的 lint/typecheck 与 test 均通过；独立审查及安全审查通过。
+- P137 完成：固定样本与隔离 PostgreSQL **71/71 通过、0 跳过**；源代码提交 `bc14daa` 的 GitHub CI `41593089049` 与最终证据提交 `dde1913` 的精确头 CI `41595553805` 均通过；独立审查及安全审查通过。
 - 生产只读预览 1,085 条中 1,080 条合格；5 条缺少历史批次证据并排除。随后在同一事务中追加 1,080 条，读回全部 1,080 条，均为 model-eligible；排除的 5 个 ID 均未写入。
 - `official_results` 维持 4,000 行，`football_pool_issue_matches` 维持 39,552 行；没有建备份，没有重启服务。
 - 本批结果和 SHA 摘要见 `/Volumes/Nas/FQP/plans/local-football-data-integration-20261029/P137-RESULT-FACT-IMPORT-20261103.md`。本结论不等于五赛季覆盖完整或模型效果提升。

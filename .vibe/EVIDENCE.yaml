@@ -4,6 +4,7 @@
   "acceptance": {
     "A137-TITAN-RESULT-FACT-IMPORT": {
       "status": "PASS",
+      "tree_fingerprint": "e115da6c445c9fb2d5f2768234efcbddbf36f9cff48acdbec7bde2efef2f6b7d",
       "local_regression": "71 passed, 0 skipped, against isolated PostgreSQL 16; Ruff lint and format (665 files), full Mypy (345 files), scope, budget, and git diff --check passed",
       "source_readonly_scan": {
         "requested_match_ids": 1085,
@@ -71,7 +72,7 @@
   "quality_gate": {
     "status": "NOT_READY",
     "failures": [
-      "final acceptance evidence commit and exact-head CI pending"
+      "control evidence commit and exact-head CI pending"
     ]
   },
   "production": {
@@ -99,8 +100,8 @@
       "lint-and-typecheck": "passed",
       "test": "passed"
     },
-    "run_id": 41593089049,
-    "head_sha": "bc14daa8de4b78cacb33e9c29a23c98681c18e17",
+    "run_id": 41595553805,
+    "head_sha": "dde19135db0fc413cef9e76e105d2b9da2ca1fe9",
     "local_code_sha256": "fdd457664ff3e54cdaf34c3ce9483b2aa452f55b1ffa47c224a065f6d5ba5832",
     "production_preview_report": "/tmp/fqp-p137-preview-bc14daa.json",
     "production_apply_report": "/tmp/fqp-p137-apply-bc14daa.json"
