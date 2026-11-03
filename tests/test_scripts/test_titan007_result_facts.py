@@ -446,6 +446,34 @@ def test_export_writes_package_atomically(tmp_path, compressed):
     }
 
 
+def test_package_loader_preserves_record_and_missing_id_manifest(tmp_path):
+    package_path = tmp_path / "partial-package.json"
+    requested_ids_sha256 = hashlib.sha256(b'["123456","999999"]').hexdigest()
+    package_path.write_text(
+        json.dumps(
+            {
+                "contract": PACKAGE_CONTRACT,
+                "source_database": "titan.sqlite",
+                "source_table": "matches",
+                "requested_ids_sha256": requested_ids_sha256,
+                "requested_count": 2,
+                "record_count": 1,
+                "missing_source_ids": ["999999"],
+                "records": [{"match_id": 123456, "raw": "<tr></tr>"}],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    loaded = _load_package(str(package_path))
+
+    assert loaded["requested_ids_sha256"] == requested_ids_sha256
+    assert loaded["requested_count"] == 2
+    assert loaded["record_count"] == 1
+    assert loaded["missing_source_ids"] == ["999999"]
+    assert loaded["records"] == [{"match_id": 123456, "raw": "<tr></tr>"}]
+
+
 def test_apply_cli_requires_explicit_production_target_before_opening_package(monkeypatch):
     monkeypatch.delenv("FQP_RESULT_FACT_IMPORT_TARGET", raising=False)
     monkeypatch.delenv("DATABASE_URL", raising=False)

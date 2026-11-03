@@ -4,7 +4,7 @@
   "acceptance": {
     "A137-TITAN-RESULT-FACT-IMPORT": {
       "status": "IN_PROGRESS",
-      "local_regression": "70 passed, 0 skipped, against isolated PostgreSQL 16; Ruff check and format (665 files) passed; scope, budget, and git diff --check passed",
+      "local_regression": "71 passed, 0 skipped, against isolated PostgreSQL 16; Ruff check and format (665 files), full Mypy (345 files), scope, budget, and git diff --check passed",
       "source_readonly_scan": {
         "requested_match_ids": 1085,
         "found": 1085,
@@ -23,7 +23,8 @@
         },
         "applied": false,
         "script_sha256": "5d2e22caabf038354f4170bd9f89fd05aeb4c1e6f56c60913e7aff026b9095e2",
-        "report_sha256": "9ebaf0c89907d5cac67ccb5df0c0700f8b7d1f65a5303d0747dd7b058b426f52"
+        "report_sha256": "9ebaf0c89907d5cac67ccb5df0c0700f8b7d1f65a5303d0747dd7b058b426f52",
+        "fresh_preview_required_after_server_sync": true
       }
     }
   },
@@ -31,8 +32,8 @@
     "status": "PASS",
     "application_code": {
       "status": "PASS",
-      "source_sha256": "e9279f940ecd201eb939a5e153be690105610189eb3f4d834080b9aa5a2a337b",
-      "note": "Independent reviewer confirmed the CI format fix is semantics-preserving Ruff formatting only."
+      "source_sha256": "fdd457664ff3e54cdaf34c3ce9483b2aa452f55b1ffa47c224a065f6d5ba5832",
+      "note": "Independent reviewer passed latest Mypy package-typing fix and confirmed nonempty-record/missing-ID manifest test uses the exporter canonical hash."
     },
     "v4_migration": {
       "status": "PASS",
@@ -65,7 +66,7 @@
   },
   "external_ci": {
     "status": "PENDING",
-    "local_code_sha256": "e9279f940ecd201eb939a5e153be690105610189eb3f4d834080b9aa5a2a337b",
+    "local_code_sha256": "fdd457664ff3e54cdaf34c3ce9483b2aa452f55b1ffa47c224a065f6d5ba5832",
     "production_preview_report": "/tmp/fqp-p137-preview-final-v7.json"
   }
 }

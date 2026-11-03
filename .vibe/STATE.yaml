@@ -12,7 +12,7 @@
   "last_transition": {
     "from": "VERIFYING",
     "to": "REVIEWING",
-    "at": "2026-11-03T14:40:53.808960+08:00",
-    "reason": "Verification complete; independent review passed. GitHub exact-main CI and production apply/readback remain pending."
+    "at": "2026-11-03T14:56:18.534685+08:00",
+    "reason": "Final implementation review passed; exact-main CI and fresh production preview/apply/readback remain."
   }
 }

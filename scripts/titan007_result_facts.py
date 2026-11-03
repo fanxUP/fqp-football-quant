@@ -24,7 +24,7 @@ from contextlib import closing
 from datetime import date, datetime
 from html.parser import HTMLParser
 from pathlib import Path
-from typing import Any
+from typing import Any, TypedDict, cast
 from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo
 
@@ -98,6 +98,17 @@ class _TitanRowParser(HTMLParser):
                 raise ValueError("raw_row_structure_invalid")
             self.rows.append(self._row)
             self._row = None
+
+
+class TitanResultPackage(TypedDict):
+    contract: str
+    source_database: str
+    source_table: str
+    requested_ids_sha256: str
+    requested_count: int
+    record_count: int
+    missing_source_ids: list[str]
+    records: list[Mapping[str, Any]]
 
 
 def _plain_text(parts: Iterable[str]) -> str:
@@ -829,41 +840,58 @@ def read_titan_result_rows(
     return result, [source_id for source_id in ids if source_id not in found]
 
 
-def _load_package(path: str) -> dict[str, Any]:
+def _load_package(path: str) -> TitanResultPackage:
     opener = gzip.open if path.endswith(".gz") else open
     with opener(path, "rt", encoding="utf-8") as handle:
-        package = json.load(handle)
+        candidate = json.load(handle)
+    if not isinstance(candidate, dict):
+        raise ValueError("source_package_contract_invalid")
+    package = cast(dict[str, Any], candidate)
+    records = package.get("records")
+    missing_source_ids = package.get("missing_source_ids")
+    requested_count = package.get("requested_count")
+    record_count = package.get("record_count")
+    requested_ids_sha256 = package.get("requested_ids_sha256")
+    source_database = package.get("source_database")
     if (
-        not isinstance(package, dict)
-        or package.get("contract") != PACKAGE_CONTRACT
-        or not isinstance(package.get("records"), list)
-        or not isinstance(package.get("missing_source_ids"), list)
-        or type(package.get("requested_count")) is not int
-        or type(package.get("record_count")) is not int
-        or package.get("record_count") != len(package["records"])
-        or package.get("record_count") + len(package["missing_source_ids"])
-        != package.get("requested_count")
-        or not isinstance(package.get("requested_ids_sha256"), str)
-        or not _DIGEST_RE.fullmatch(package["requested_ids_sha256"])
-        or not isinstance(package.get("source_database"), str)
+        package.get("contract") != PACKAGE_CONTRACT
+        or not isinstance(records, list)
+        or not isinstance(missing_source_ids, list)
+        or type(requested_count) is not int
+        or type(record_count) is not int
+        or not isinstance(requested_ids_sha256, str)
+        or not _DIGEST_RE.fullmatch(requested_ids_sha256)
+        or not isinstance(source_database, str)
         or package.get("source_table") != "matches"
+        or record_count != len(records)
+        or record_count + len(missing_source_ids) != requested_count
     ):
         raise ValueError("source_package_contract_invalid")
-    record_ids = []
-    for row in package["records"]:
+    record_ids: list[str] = []
+    normalized_records: list[Mapping[str, Any]] = []
+    for row in records:
         if not isinstance(row, dict):
             raise ValueError("source_package_contract_invalid")
-        record_ids.append(_id_text(row.get("match_id"), "source_match_id"))
-    missing_ids = [
-        _id_text(source_id, "source_match_id") for source_id in package["missing_source_ids"]
-    ]
+        record = cast(Mapping[str, Any], row)
+        normalized_records.append(record)
+        record_ids.append(_id_text(record.get("match_id"), "source_match_id"))
+    missing_ids = [_id_text(source_id, "source_match_id") for source_id in missing_source_ids]
     requested_ids = record_ids + missing_ids
     if (
-        len(set(requested_ids)) != package["requested_count"]
-        or _sha256(sorted(requested_ids)) != package["requested_ids_sha256"]
+        len(set(requested_ids)) != requested_count
+        or _sha256(sorted(requested_ids)) != requested_ids_sha256
     ):
         raise ValueError("source_package_manifest_mismatch")
-    return package
+    return {
+        "contract": PACKAGE_CONTRACT,
+        "source_database": source_database,
+        "source_table": "matches",
+        "requested_ids_sha256": requested_ids_sha256,
+        "requested_count": requested_count,
+        "record_count": record_count,
+        "missing_source_ids": missing_ids,
+        "records": normalized_records,
+    }
 
 
 def _export_destination(source_db: str | Path, output: str | Path) -> Path:
@@ -928,7 +956,7 @@ def main(argv: list[str] | None = None) -> int:
         ]
         destination = _export_destination(args.source_db, args.output)
         records, missing = read_titan_result_rows(args.source_db, ids)
-        package = {
+        export_package = {
             "contract": PACKAGE_CONTRACT,
             "source_database": Path(args.source_db).name,
             "source_table": "matches",
@@ -940,7 +968,9 @@ def main(argv: list[str] | None = None) -> int:
             "missing_source_ids": missing,
             "records": records,
         }
-        output = json.dumps(package, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        output = json.dumps(
+            export_package, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        )
         _atomic_write_package(
             destination,
             output,
@@ -966,7 +996,7 @@ def main(argv: list[str] | None = None) -> int:
     dsn = os.environ.get("DATABASE_URL", "").strip()
     if not dsn:
         raise SystemExit("BLOCKED: DATABASE_URL is required; credentials are never printed")
-    package = _load_package(args.input)
+    import_package = _load_package(args.input)
     with closing(psycopg2.connect(dsn, connect_timeout=5)) as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -980,12 +1010,14 @@ def main(argv: list[str] | None = None) -> int:
             )
         conn.commit()
         with conn:
-            report = import_titan_result_rows(conn, package["records"], apply=args.apply_production)
+            report = import_titan_result_rows(
+                conn, import_package["records"], apply=args.apply_production
+            )
     report.update(
         contract=PACKAGE_CONTRACT,
-        source_database=package["source_database"],
-        requested_count=package["requested_count"],
-        missing_source_ids=package["missing_source_ids"],
+        source_database=import_package["source_database"],
+        requested_count=import_package["requested_count"],
+        missing_source_ids=import_package["missing_source_ids"],
         applied=bool(args.apply_production),
     )
     _write_json(args.report, report)
