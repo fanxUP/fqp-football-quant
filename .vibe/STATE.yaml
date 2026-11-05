@@ -1,5 +1,5 @@
 {
-  "state": "REVIEWING",
+  "state": "READY_TO_MERGE",
   "workflow_id": "P107-AGGREGATE-CANDIDATE-RELEASE-READINESS",
   "previous_workflow": {
     "task_id": "P107-AGGREGATE-SCOPE-RECONCILIATION",
@@ -10,9 +10,9 @@
   "blocked_reason": null,
   "mode": "STANDARD",
   "last_transition": {
-    "from": "VERIFYING",
-    "to": "REVIEWING",
-    "at": "2026-11-06T03:54:45.580676+08:00",
-    "reason": "V4 verification is complete and independent read-only review confirms the follow-up findings are resolved."
+    "from": "REVIEWING",
+    "to": "READY_TO_MERGE",
+    "at": "2026-11-06T04:23:10.477439+08:00",
+    "reason": "Exact-head candidate CI, independent review, security, unchanged-migration evidence, and the V4 quality gate passed."
   }
 }

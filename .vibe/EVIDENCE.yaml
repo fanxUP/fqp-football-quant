@@ -20,15 +20,15 @@
     },
     "A107-EXACT-HEAD-CI": {
       "status": "PASS",
-      "command": "gh run view 42077034390 --repo fanxUP/fqp-football-quant --json headSha,status,conclusion,jobs; asserted exact head SHA and both required jobs completed successfully.",
+      "command": "gh run view 42101028820 --repo fanxUP/fqp-football-quant --json headSha,status,conclusion,jobs; asserted exact candidate SHA and both required jobs completed successfully.",
       "exit_code": 0,
-      "summary": "PASS: exact-head CI run 42077034390; lint-and-typecheck and test succeeded for 326c3a32eb4090e84e10e11b38b6d18b5715f466.",
+      "summary": "PASS: exact-head GitHub Actions run 42101028820 for 43c22621d938a13f20034c1f8aa6736525d50042; lint-and-typecheck and test both succeeded.",
       "timed_out": false,
       "environment": "GitHub Actions",
-      "revision": "326c3a32eb4090e84e10e11b38b6d18b5715f466",
+      "revision": "43c22621d938a13f20034c1f8aa6736525d50042",
       "dirty_tree": false,
-      "verified_at": "2026-11-05T17:54:52+00:00",
-      "tree_fingerprint": "621cfdbc4c7d61ff9799d138a4598ba5442f65f7508c9c5a07fe5779387f0cf1"
+      "tree_fingerprint": "a6ba61604300126fcdd238c1cc1c6eb530129546f4a24233cc905b407e8c2ae1",
+      "verified_at": "2026-11-06T04:22:28.710184+08:00"
     },
     "A107-131-COPY-REHEARSAL": {
       "status": "PASS",
@@ -40,19 +40,20 @@
       "revision": "0eeaa1e0c60cb2cf7eb04109fba73146801cc408",
       "dirty_tree": true,
       "verified_at": "2026-11-05T19:08:17+08:00",
-      "tree_fingerprint": "621cfdbc4c7d61ff9799d138a4598ba5442f65f7508c9c5a07fe5779387f0cf1"
+      "tree_fingerprint": "a6ba61604300126fcdd238c1cc1c6eb530129546f4a24233cc905b407e8c2ae1",
+      "note": "Reused the completed targeted PostgreSQL 16 production-copy rehearsal for unchanged migration 131; this scheduler-only follow-up changes no SQL or schema."
     },
     "A107-DEPLOY-PREFLIGHT-INPUTS": {
       "status": "PASS",
-      "command": "Exact-head CI and independent review; read-only SSH health/API/service checks; deploy.sh <sha> --plan; read-only migration plan.",
+      "command": "Exact-head GitHub CI; read-only SSH health/service/protected-HTTP checks; ops/server/deploy.sh <candidate-sha> --plan; migration set diff inspection.",
       "exit_code": 0,
-      "summary": "Candidate 326c3a32eb4090e84e10e11b38b6d18b5715f466 is on GitHub main. The server checkout is clean on main at 2fce6f83, Node 24 is available, all six services are active, nginx -t passes, protected HTTP returns / 200, ready 200, release 200, predictions 401, deploy plan reports zero nginx files, and migration plan reports no pending migrations. No agent-initiated production write, backup, manual refresh, restart or pressure-baseline collection occurred. The last confirmed natural refresh at 2026-11-05T17:22Z was partial (dirty queue 3,975; rollups 145); a later 3-second-capped read-only observation timed out and was not retried.",
+      "summary": "Candidate 43c22621d938a13f20034c1f8aa6736525d50042 is on GitHub main. The server checkout is clean on main at 7d4f5792; all six services are active, nginx -t passes, protected HTTP returns / 200, ready 200, release 200, predictions 401; deploy plan passed with 0 nginx files and the candidate diff contains no migration files. The release is code-only with no backup. Natural 03:52 refresh 229698 failed QueryCanceled in 30.975s while collect_upset_evidence 229697 overlapped and failed after 405.392s; dirty queue 3,922 and rollups 198. No manual refresh, restart, business write, PSI read, or pressure-threshold setup.",
       "timed_out": false,
-      "environment": "FQP LXC 106 via SSH password; production checks were read-only.",
-      "revision": "326c3a32eb4090e84e10e11b38b6d18b5715f466",
+      "environment": "FQP LXC 106 via SSH password; checks were read-only.",
+      "revision": "43c22621d938a13f20034c1f8aa6736525d50042",
       "dirty_tree": false,
-      "verified_at": "2026-11-06T01:58:56+08:00",
-      "tree_fingerprint": "621cfdbc4c7d61ff9799d138a4598ba5442f65f7508c9c5a07fe5779387f0cf1"
+      "tree_fingerprint": "a6ba61604300126fcdd238c1cc1c6eb530129546f4a24233cc905b407e8c2ae1",
+      "verified_at": "2026-11-06T04:22:28.710184+08:00"
     }
   },
   "reviews": {
@@ -98,15 +99,15 @@
   },
   "external_ci": {
     "status": "passed",
-    "run_id": 42077034390,
-    "head_sha": "326c3a32eb4090e84e10e11b38b6d18b5715f466",
-    "url": "https://github.com/fanxUP/fqp-football-quant/actions/runs/42077034390",
+    "run_id": 42101028820,
+    "head_sha": "43c22621d938a13f20034c1f8aa6736525d50042",
+    "url": "https://github.com/fanxUP/fqp-football-quant/actions/runs/42101028820",
     "checks": {
       "lint-and-typecheck": "passed",
       "test": "passed"
     },
-    "verified_at": "2026-11-05T17:54:52+00:00",
-    "note": "Exact-head GitHub CI passed on the P107 target-table ANALYZE code commit. The workflow-evidence commit receives its own exact-head CI before the release gate."
+    "verified_at": "2026-11-06T04:22:28.710184+08:00",
+    "note": "Both required GitHub Actions jobs passed for the exact scheduler-follow-up candidate SHA."
   },
   "production": {
     "status": "RELEASE_PREFLIGHT_PASSED_DEPLOYMENT_PENDING",
@@ -115,10 +116,8 @@
     "note": "Migration 131 is already applied and the new release has no pending migrations. The user cancelled all PSI and server pressure-baseline requirements; read-only server configuration checks found no pressure collector, timer, cron entry, or threshold. The active proc-pressure.mount is the kernel pseudo-filesystem mount only. No PSI values were read and no pressure threshold was set. No production business data was written during preflight."
   },
   "quality_gate": {
-    "status": "PENDING",
-    "failures": [
-      "committed preflight evidence requires its exact-head CI and V4 gate",
-      "production deployment and natural queue-drain/full-snapshot consumer acceptance remain pending"
-    ]
+    "status": "READY_TO_MERGE",
+    "checked_at": "2026-11-06T04:22:51.738031+08:00",
+    "failures": []
   }
 }
