@@ -55,7 +55,13 @@ def test_prediction_count_preserves_global_eligibility_without_evidence_joins():
             assert compute_prediction_count(conn)["total"] == 0
 
 
-def test_prediction_summary_snapshot_labels_age_and_failed_refresh_without_losing_values():
+@pytest.mark.parametrize(
+    ("attempt_status", "expected_status"),
+    [("failed", "refresh_failed"), ("running", "stale")],
+)
+def test_prediction_summary_snapshot_labels_age_and_failed_refresh_without_losing_values(
+    attempt_status, expected_status
+):
     from scripts.prediction_statistics import (
         PREDICTION_SUMMARY_SCOPE,
         get_prediction_summary_snapshot,
@@ -77,7 +83,7 @@ def test_prediction_summary_snapshot_labels_age_and_failed_refresh_without_losin
     cur = conn.cursor.return_value.__enter__.return_value
     cur.fetchone.return_value = (
         {"prediction_summary": summary},
-        "failed",
+        attempt_status,
         now,
         now - timedelta(minutes=2),
     )
@@ -92,7 +98,7 @@ def test_prediction_summary_snapshot_labels_age_and_failed_refresh_without_losin
         "latest_predict_time": "2026-11-03T10:45:00+00:00",
     }
     assert result["meta"] == {
-        "status": "refresh_failed",
+        "status": expected_status,
         "data_as_of": data_as_of.isoformat(),
         "last_success_at": data_as_of.isoformat(),
         "last_attempt_at": (now - timedelta(minutes=2)).isoformat(),
@@ -115,7 +121,8 @@ def test_prediction_summary_snapshot_without_compatible_success_is_unavailable()
     assert result["meta"]["data_as_of"] is None
 
 
-def test_partial_refresh_with_legacy_count_only_snapshot_reports_refreshing():
+@pytest.mark.parametrize("attempt_status", ["partial", "running"])
+def test_active_refresh_with_legacy_count_only_snapshot_reports_refreshing(attempt_status):
     from scripts.prediction_statistics import get_prediction_summary_snapshot
 
     now = datetime(2026, 11, 5, 13, 22, tzinfo=UTC)
@@ -123,7 +130,7 @@ def test_partial_refresh_with_legacy_count_only_snapshot_reports_refreshing():
     cur = conn.cursor.return_value.__enter__.return_value
     cur.fetchone.return_value = (
         {"prediction_count": {"scope": "valid_prematch_history_v1", "total": 14814579}},
-        "partial",
+        attempt_status,
         now,
         now - timedelta(seconds=10),
     )

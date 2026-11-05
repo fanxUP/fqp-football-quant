@@ -697,6 +697,7 @@ def get_prediction_summary_snapshot(conn: Any, *, now: datetime | None = None) -
     if current_time.tzinfo is None:
         raise ValueError("summary snapshot clock must be timezone-aware")
     current_time = current_time.astimezone(UTC)
+    refresh_in_progress = attempt_status in {"running", "partial"}
     last_attempt_at = (
         attempt_at.astimezone(UTC).isoformat()
         if attempt_at is not None and attempt_at.tzinfo is not None
@@ -712,7 +713,7 @@ def get_prediction_summary_snapshot(conn: Any, *, now: datetime | None = None) -
         "is_stale": False,
     }
     if output is None:
-        if attempt_status == "partial":
+        if refresh_in_progress:
             empty_meta["status"] = "refreshing"
             empty_meta["is_stale"] = True
         elif attempt_status in {"failed", "completed"}:
@@ -750,13 +751,12 @@ def get_prediction_summary_snapshot(conn: Any, *, now: datetime | None = None) -
         if data_as_of > computed_at or computed_at > current_time:
             raise ValueError("invalid summary timestamps")
     except KeyError, TypeError, ValueError, AttributeError:
-        is_refreshing = attempt_status == "partial"
         return {
             "summary": None,
             "meta": {
                 **empty_meta,
-                "status": "refreshing" if is_refreshing else "unavailable",
-                "is_stale": is_refreshing,
+                "status": "refreshing" if refresh_in_progress else "unavailable",
+                "is_stale": refresh_in_progress,
             },
         }
 
@@ -766,7 +766,7 @@ def get_prediction_summary_snapshot(conn: Any, *, now: datetime | None = None) -
         "refresh_failed"
         if attempt_status == "failed"
         else "stale"
-        if attempt_status == "partial"
+        if refresh_in_progress
         else "stale"
         if is_stale
         else "ok"
@@ -786,6 +786,6 @@ def get_prediction_summary_snapshot(conn: Any, *, now: datetime | None = None) -
             "last_attempt_at": last_attempt_at,
             "age_seconds": age_seconds,
             "stale_after_seconds": int(MAX_AGE.total_seconds()),
-            "is_stale": is_stale or attempt_status == "partial",
+            "is_stale": is_stale or refresh_in_progress,
         },
     }
