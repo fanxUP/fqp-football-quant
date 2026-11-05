@@ -25,6 +25,7 @@ const EMPTY_HISTORY: ModelPerformanceHistory = { status: 'ok', metric: 'rolling_
 function summaryStatusText(meta: PredictionSummaryMeta | null, summary: PredictionSummary | null): string {
   if (meta === null) return '全量统计尚未读取；独立于最近 200 条研究记录。';
   if (meta.status === 'pending') return '全量统计尚未生成；暂不显示估算值。';
+  if (meta.status === 'refreshing') return '全量统计正在分批刷新；当前完整摘要尚不可用，暂不显示部分数据。';
   if (meta.status === 'unavailable' || summary === null) return '暂无可用的全量预测统计快照；暂不显示估算值。';
   if (meta.status === 'live') return '当前为单场实时统计。';
 
@@ -77,7 +78,7 @@ export default function ModelsPage() {
     api.predictions({ summary_only: true }).then((response) => {
       const value = response.summary;
       const meta = response.summary_meta;
-      const validStatuses = ['ok', 'stale', 'refresh_failed', 'unavailable', 'pending', 'live'];
+      const validStatuses = ['ok', 'stale', 'refresh_failed', 'unavailable', 'pending', 'refreshing', 'live'];
       if (!meta || !validStatuses.includes(meta.status)
         || typeof meta.is_stale !== 'boolean'
         || (meta.age_seconds !== null && (!Number.isSafeInteger(meta.age_seconds) || meta.age_seconds < 0))
@@ -88,7 +89,7 @@ export default function ModelsPage() {
         throw new ApiError(502, '全量统计状态格式不正确');
       }
       if (value === null) {
-        if (response.total !== null || !['unavailable', 'pending'].includes(meta.status)) {
+        if (response.total !== null || !['unavailable', 'pending', 'refreshing'].includes(meta.status)) {
           throw new ApiError(502, '全量统计格式或口径不正确');
         }
         setSummary(null);

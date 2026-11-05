@@ -691,7 +691,7 @@ def test_audited_refresh_preserves_last_complete_snapshot_during_backfill(
     }
     with closing(connect()) as reader:
         assert statistics.get_prediction_count_snapshot(reader)["status"] == "pending"
-        assert statistics.get_prediction_summary_snapshot(reader)["meta"]["status"] == "pending"
+        assert statistics.get_prediction_summary_snapshot(reader)["meta"]["status"] == "refreshing"
 
     second = statistics.refresh_prediction_count(batch_size=2)
     assert second["status"] == "ok"

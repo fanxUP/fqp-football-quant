@@ -590,7 +590,7 @@ export interface PredictionSummary {
 }
 
 export interface PredictionSummaryMeta {
-  status: 'ok' | 'stale' | 'refresh_failed' | 'unavailable' | 'pending' | 'live';
+  status: 'ok' | 'stale' | 'refresh_failed' | 'unavailable' | 'pending' | 'refreshing' | 'live';
   data_as_of: string | null;
   last_success_at: string | null;
   last_attempt_at: string | null;

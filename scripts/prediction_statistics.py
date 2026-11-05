@@ -712,7 +712,10 @@ def get_prediction_summary_snapshot(conn: Any, *, now: datetime | None = None) -
         "is_stale": False,
     }
     if output is None:
-        if attempt_status in {"failed", "completed"}:
+        if attempt_status == "partial":
+            empty_meta["status"] = "refreshing"
+            empty_meta["is_stale"] = True
+        elif attempt_status in {"failed", "completed"}:
             empty_meta["status"] = "unavailable"
         return {"summary": None, "meta": empty_meta}
 
@@ -747,7 +750,15 @@ def get_prediction_summary_snapshot(conn: Any, *, now: datetime | None = None) -
         if data_as_of > computed_at or computed_at > current_time:
             raise ValueError("invalid summary timestamps")
     except KeyError, TypeError, ValueError, AttributeError:
-        return {"summary": None, "meta": {**empty_meta, "status": "unavailable"}}
+        is_refreshing = attempt_status == "partial"
+        return {
+            "summary": None,
+            "meta": {
+                **empty_meta,
+                "status": "refreshing" if is_refreshing else "unavailable",
+                "is_stale": is_refreshing,
+            },
+        }
 
     age_seconds = max(0, int((current_time - data_as_of).total_seconds()))
     is_stale = age_seconds > MAX_AGE.total_seconds()

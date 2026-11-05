@@ -218,6 +218,31 @@ describe('ModelsPage', () => {
     await waitFor(() => expect(within(screen.getByLabelText('预测概览')).getAllByText('0')).toHaveLength(3));
   });
 
+  it('旧统计快照不兼容且增量刷新进行中时明确显示刷新中，不显示部分结果', async () => {
+    apiMocks.predictions.mockImplementation((options) => Promise.resolve(options?.summary_only
+      ? {
+        predictions: [],
+        total: null,
+        summary: null,
+        summary_meta: {
+          status: 'refreshing',
+          data_as_of: null,
+          last_success_at: null,
+          last_attempt_at: null,
+          age_seconds: null,
+          stale_after_seconds: 2700,
+          is_stale: true,
+        },
+      }
+      : { predictions: [], total: 0 }));
+    render(<ModelsPage />);
+    fireEvent.click(screen.getByRole('button', { name: '加载全量预测统计' }));
+
+    expect(await screen.findByText(/全量统计正在分批刷新/)).toBeInTheDocument();
+    expect(screen.queryByText('暂无可用的全量预测统计快照；暂不显示估算值。')).not.toBeInTheDocument();
+    expect(within(screen.getByLabelText('预测概览')).queryByText('0')).not.toBeInTheDocument();
+  });
+
   it('统计重读失败保留全量口径，记录刷新不会覆盖统计', async () => {
     render(<ModelsPage />);
     await screen.findByRole('button', { name: /Elo 实力评分 · #1/ });

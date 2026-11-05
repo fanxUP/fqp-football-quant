@@ -115,6 +115,35 @@ def test_prediction_summary_snapshot_without_compatible_success_is_unavailable()
     assert result["meta"]["data_as_of"] is None
 
 
+def test_partial_refresh_with_legacy_count_only_snapshot_reports_refreshing():
+    from scripts.prediction_statistics import get_prediction_summary_snapshot
+
+    now = datetime(2026, 11, 5, 13, 22, tzinfo=UTC)
+    conn = MagicMock()
+    cur = conn.cursor.return_value.__enter__.return_value
+    cur.fetchone.return_value = (
+        {"prediction_count": {"scope": "valid_prematch_history_v1", "total": 14814579}},
+        "partial",
+        now,
+        now - timedelta(seconds=10),
+    )
+
+    result = get_prediction_summary_snapshot(conn, now=now)
+
+    assert result == {
+        "summary": None,
+        "meta": {
+            "status": "refreshing",
+            "data_as_of": None,
+            "last_success_at": None,
+            "last_attempt_at": (now - timedelta(seconds=10)).isoformat(),
+            "age_seconds": None,
+            "stale_after_seconds": 2700,
+            "is_stale": True,
+        },
+    }
+
+
 def test_prediction_count_snapshot_with_malformed_success_is_unavailable():
     from scripts.prediction_statistics import COUNT_SCOPE, get_prediction_count_snapshot
 
