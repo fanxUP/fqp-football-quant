@@ -18,6 +18,11 @@ from ops.server.migrate import _sql_statements
 from scripts import prediction_statistics as statistics
 
 
+def test_default_refresh_batch_stays_within_hdd_budget():
+    # Production timed out the 500-match rollup query at its 120-second limit.
+    assert statistics.DEFAULT_REFRESH_BATCH_SIZE <= 25
+
+
 @pytest.fixture
 def statistics_database(request):
     dsn = os.getenv("FQP_P106_TEST_DATABASE_URL") or os.getenv("FQP_AUDIT_TEST_DATABASE_URL")

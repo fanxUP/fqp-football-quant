@@ -13,7 +13,9 @@ JOB_CODE = "refresh_prediction_count"
 COUNT_SCOPE = "valid_prematch_history_v1"
 PREDICTION_SUMMARY_SCOPE = "canonical_valid_prematch_history_v1"
 MAX_AGE = timedelta(minutes=45)
-DEFAULT_REFRESH_BATCH_SIZE = 500
+# Keep the scheduled HDD pass small: production's former 500-match batch
+# exceeded its 120-second statement timeout on the 4k-match history.
+DEFAULT_REFRESH_BATCH_SIZE = 25
 MAX_REFRESH_BATCH_SIZE = 1000
 
 
