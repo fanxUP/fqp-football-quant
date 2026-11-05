@@ -527,6 +527,11 @@ def _refresh_prediction_statistics_batch(
         matches_refreshed = max(cur.rowcount, 0)
         _execute_with_local_timeout(
             cur,
+            "ANALYZE prediction_statistics_refresh_targets",
+            CLAIM_STATEMENT_TIMEOUT_SECONDS,
+        )
+        _execute_with_local_timeout(
+            cur,
             """DELETE FROM prediction_statistics_match_rollups rollup
                USING prediction_statistics_refresh_targets target
                WHERE rollup.match_id = target.match_id

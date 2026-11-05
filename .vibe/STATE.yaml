@@ -1,5 +1,5 @@
 {
-  "state": "VERIFYING",
+  "state": "REVIEWING",
   "workflow_id": "P107-AGGREGATE-CANDIDATE-RELEASE-READINESS",
   "previous_workflow": {
     "task_id": "P107-AGGREGATE-SCOPE-RECONCILIATION",
@@ -10,9 +10,9 @@
   "blocked_reason": null,
   "mode": "STANDARD",
   "last_transition": {
-    "from": "BLOCKED",
-    "to": "VERIFYING",
-    "at": "2026-11-05T17:51:35.504774+08:00",
-    "reason": "2026-11-05 Beijing: user cancelled the fixed 3-5% host PSI prerequisite. Resume P107-131 with bounded stages, per-stage before/after telemetry, hard row caps and short timeouts; stop on material deterioration or timeout."
+    "from": "VERIFYING",
+    "to": "REVIEWING",
+    "at": "2026-11-06T01:39:51.503712+08:00",
+    "reason": "Verification evidence is collected for the target-table ANALYZE fix; independent review is clear. Proceed to release candidate review and exact-head CI."
   }
 }

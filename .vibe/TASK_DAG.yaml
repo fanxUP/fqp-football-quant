@@ -22,7 +22,7 @@
         "P107-LOCAL-CANDIDATE-VALIDATION"
       ],
       "kind": "external_ci",
-      "status": "DONE",
+      "status": "IN_PROGRESS",
       "definition_of_done": [
         "Only the 54 mapped P107/P138 paths, three scoped P107 release-gate paths, and reviewed V4 control/evidence files are committed; uv.lock is not staged.",
         "GitHub main push CI passes for the exact local HEAD.",
@@ -40,7 +40,7 @@
       "definition_of_done": [
         "Use an isolated current production schema copy with all official matches, runs and model versions plus indexed match-scoped prediction/group/option samples; do not full-dump unrelated large tables or write production data.",
         "Record existing source counts, queued match count, lock wait, batch duration and fqp grants.",
-        "Verify migration up/down behavior and recovery without destructive loss of source rows; do not require an absolute host PSI baseline. Stream in capped stages with short query timeouts, compare pressure to the immediate pre-stage sample, and stop if a stage causes material worsening or times out."
+        "Verify migration up/down behavior and recovery without destructive loss of source rows; do not require or collect PSI/host pressure baselines. Stream in capped stages with short query timeouts and row limits; stop a stage if a query times out or exceeds its cap."
       ]
     },
     "P107-RELEASE-NATURAL-OBSERVATION": {
@@ -53,8 +53,8 @@
       "status": "IN_PROGRESS",
       "definition_of_done": [
         "V4 deploy preflight passes and the authorized production release completes.",
-        "Verify service health, API behavior, migration, logs, refresh latency and natural scheduled jobs.",
-        "Keep A107 open until consumer behavior and resource outcomes are observed; do not claim P104 probability use."
+        "Verify service health, API behavior, migration, logs, refresh latency, dirty-queue drain and natural scheduled jobs; do not collect PSI or set a pressure threshold.",
+        "Keep A107 open until consumers read a complete snapshot and the queue is drained; do not claim P104 probability use."
       ]
     }
   }

@@ -249,19 +249,21 @@ def test_refresh_uses_distinct_timeouts_for_each_statement(statistics_database, 
     assert result["status"] == "completed"
     assert [timeout for timeout, _ in timed_statements] == [
         statistics.CLAIM_STATEMENT_TIMEOUT_SECONDS,
+        statistics.CLAIM_STATEMENT_TIMEOUT_SECONDS,
         statistics.ORPHAN_DELETE_STATEMENT_TIMEOUT_SECONDS,
         statistics.ROLLUP_STATEMENT_TIMEOUT_SECONDS,
         statistics.SNAPSHOT_STATEMENT_TIMEOUT_SECONDS,
     ]
-    assert len(timed_statements) == 4
+    assert len(timed_statements) == 5
     assert timed_statements[0][1].lstrip().startswith("CREATE TEMP TABLE")
+    assert timed_statements[1][1].strip().upper() == "ANALYZE PREDICTION_STATISTICS_REFRESH_TARGETS"
     assert (
-        timed_statements[1][1]
+        timed_statements[2][1]
         .lstrip()
         .startswith("DELETE FROM prediction_statistics_match_rollups")
     )
-    assert timed_statements[2][1] == statistics._REFRESH_PREDICTION_STATISTICS_SQL
-    assert timed_statements[3][1] == statistics._PREDICTION_STATISTICS_SNAPSHOT_SQL
+    assert timed_statements[3][1] == statistics._REFRESH_PREDICTION_STATISTICS_SQL
+    assert timed_statements[4][1] == statistics._PREDICTION_STATISTICS_SNAPSHOT_SQL
 
 
 def test_rollup_batches_match_full_scan_reference_and_publish_only_when_drained(
