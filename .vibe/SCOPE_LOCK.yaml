@@ -7,6 +7,7 @@
     "apps/backend/src/routers/teams.py",
     "apps/backend/src/services/agent_interpretation.py",
     "apps/backend/src/services/match_review.py",
+    "apps/backend/src/services/pipeline_status.py",
     "apps/backend/src/services/read_performance.py",
     "apps/backend/src/services/test_agent_interpretation.py",
     "apps/backend/src/services/test_match_review.py",
@@ -26,6 +27,7 @@
     "scripts/feature_importance.py",
     "scripts/jobs/generate_daily_review.py",
     "scripts/jobs/run_model_prediction.py",
+    "scripts/jobs/run_scheduler.py",
     "scripts/model_evaluation_scope.py",
     "scripts/model_performance.py",
     "scripts/model_prediction_run_identity.py",
@@ -52,6 +54,7 @@
     "tests/test_jobs/test_generate_daily_review.py",
     "tests/test_jobs/test_recommendation_candidate.py",
     "tests/test_jobs/test_run_news_shadow_model.py",
+    "tests/test_jobs/test_run_scheduler.py",
     "tests/test_scripts/test_derived_play_predictions.py",
     "tests/test_scripts/test_feature_importance.py",
     "tests/test_scripts/test_model_performance.py",
@@ -74,6 +77,7 @@
     "apps/backend/src/routers/teams.py",
     "apps/backend/src/services/agent_interpretation.py",
     "apps/backend/src/services/match_review.py",
+    "apps/backend/src/services/pipeline_status.py",
     "apps/backend/src/services/read_performance.py",
     "apps/backend/src/services/test_agent_interpretation.py",
     "apps/backend/src/services/test_match_review.py",
@@ -93,6 +97,7 @@
     "scripts/feature_importance.py",
     "scripts/jobs/generate_daily_review.py",
     "scripts/jobs/run_model_prediction.py",
+    "scripts/jobs/run_scheduler.py",
     "scripts/model_evaluation_scope.py",
     "scripts/model_performance.py",
     "scripts/model_prediction_run_identity.py",
@@ -119,6 +124,7 @@
     "tests/test_jobs/test_generate_daily_review.py",
     "tests/test_jobs/test_recommendation_candidate.py",
     "tests/test_jobs/test_run_news_shadow_model.py",
+    "tests/test_jobs/test_run_scheduler.py",
     "tests/test_scripts/test_derived_play_predictions.py",
     "tests/test_scripts/test_feature_importance.py",
     "tests/test_scripts/test_model_performance.py",
@@ -127,5 +133,5 @@
     "tests/test_local/test_release_migration_policy.py",
     "tests/test_upset/test_review_storage.py"
   ],
-  "notes": "The 54 mapped P107/P138 paths include three required regression files revealed by exact-head CI. Three additional paths narrowly extend P107 scope to enforce the migration-131 no-backup release gate after a current targeted production schema/data-copy rehearsal. The unowned uv.lock is preserved locally and explicitly ignored by the candidate scope; never modify or stage it."
+  "notes": "The 54 mapped P107/P138 paths include three required regression files revealed by exact-head CI. Three additional paths enforce the migration-131 no-backup release gate. Three narrowly scoped HDD runtime follow-up paths cover the scheduler minute, its operations-status label, and scheduler regression, based on observed same-minute startup overlap with long-running cold-evidence jobs. The unowned uv.lock is preserved locally and explicitly ignored by the candidate scope; never modify or stage it."
 }

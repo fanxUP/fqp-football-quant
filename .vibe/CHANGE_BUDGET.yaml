@@ -1,7 +1,7 @@
 {
   "schema_version": 4,
   "task_id": "P107-AGGREGATE-CANDIDATE-RELEASE-READINESS",
-  "max_files_changed": 57,
+  "max_files_changed": 60,
   "max_new_files": 5,
   "max_new_dependencies": 0,
   "max_schema_migrations": 2,
@@ -12,5 +12,5 @@
     "new_lint_errors": 0,
     "new_type_errors": 0
   },
-  "budget_basis": "The approved candidate has 54 P107/P138 paths, including three regression files exposed by exact-head CI, plus three narrowly scoped P107 migration-131 no-backup release-gate paths: the deploy explanation, pinned release policy, and its regression test. The new paths enforce a reviewed targeted production schema/data-copy rehearsal; they add no migration, dependency, or public API. uv.lock remains unowned, preserved locally, excluded from V4 counting and staging."
+  "budget_basis": "The approved P107/P138 candidate has 54 paths, including three regression files exposed by exact-head CI, plus three migration-131 no-backup release-gate paths. This user-requested HDD runtime follow-up adds the scheduler, its operations-status schedule metadata, and the existing scheduler regression file to separate prediction-statistics refresh from the measured cold-evidence overlap. It adds no migration, dependency, or public API. uv.lock remains unowned, preserved locally, excluded from V4 counting and staging."
 }

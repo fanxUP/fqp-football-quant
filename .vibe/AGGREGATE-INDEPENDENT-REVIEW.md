@@ -25,3 +25,9 @@ The reviewer rechecked the migration-131 no-backup gate after it was extended to
 The reviewer clarified the evidence boundary: the host signature proves that a holder of the production host key endorsed the report; it does not independently prove the reported database facts. The migration gate therefore remains closed until an actual current targeted copy rehearsal is completed and its report is signed. The previous full-copy attempt was interrupted when production storage I/O rose sharply; it produced no report and must not be represented as a pass.
 
 The final local candidate validation was rerun after the gate change and passed, including the 94 focused release-policy tests, disposable PostgreSQL regressions, frontend tests/typecheck/build, repository lint/type checks, scope/budget, shell syntax, and diff checks. Current reviewed business-tree fingerprint: `ba154a93f3a27bc0fb90e241d923738107c8e8fd10db344baadb46afc65a290b` on base commit `d7eaf589da609dcdab92f7aefea16441b046ba77`. The unowned `uv.lock` remains unchanged and excluded. The earlier DAG status mismatch was corrected: exact-head CI is now the active task, and the production-copy rehearsal is pending that CI and a safe storage window.
+
+## HDD scheduler follow-up review — 2026-11-06
+
+The read-only reviewer initially found stale operations-status schedule metadata and limited direct coverage of the CronTrigger. Both findings were fixed: the status label now shows `:18/:48`, and the scheduler regression asserts both the displayed schedule and the next Asia/Shanghai CronTrigger times. The follow-up review passed; the reviewer confirmed the three code paths match the amended scope and the 60-path budget. No migrations, dependencies, SQL, credentials, permissions, or API contracts changed.
+
+This review validates the code and schedule metadata. Production has not yet run the new schedule, so runtime savings and queue-drain improvement remain unverified.

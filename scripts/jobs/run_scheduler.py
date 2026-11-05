@@ -24,6 +24,9 @@ OFFICIAL_SCHEDULE_CRON = {"minute": "10,40"}
 # Run five minutes after each schedule refresh so newly sellable matches have
 # official markets and odds available before the prediction snapshot is written.
 MODEL_PREDICTION_CRON = {"minute": "15,45"}
+# Run the bounded statistics refresh after prediction windows and before the
+# cold-review jobs, avoiding a same-minute start with cold evidence collection.
+PREDICTION_STATISTICS_REFRESH_CRON = {"minute": "18,48"}
 # Search aggregators at most once every two hours. The job is registered only
 # when the explicit collection flag is enabled, so a newly deployed server
 # never starts external news traffic by accident.
@@ -423,14 +426,16 @@ def main() -> None:
             id="refresh_model_performance_history",
         )
 
-        # Count history off the request path after the normal prediction windows.
-        # The producer owns structured audit output and its cross-process lock.
+        # Count history off the request path after the prediction window and
+        # before the :20/:50 cold-review chain. The producer owns its audit and
+        # cross-process lock; a separate minute avoids starting beside its long
+        # per-match evidence scan.
         scheduler.add_job(
             lambda: __import__(
                 "scripts.prediction_statistics", fromlist=["refresh_prediction_count"]
             ).refresh_prediction_count(),
             "cron",
-            minute="22,52",
+            **PREDICTION_STATISTICS_REFRESH_CRON,
             next_run_time=_business_now(timezone_name) + timedelta(minutes=2),
             max_instances=1,
             coalesce=True,

@@ -12,7 +12,7 @@
   "last_transition": {
     "from": "VERIFYING",
     "to": "REVIEWING",
-    "at": "2026-11-06T01:39:51.503712+08:00",
-    "reason": "Verification evidence is collected for the target-table ANALYZE fix; independent review is clear. Proceed to release candidate review and exact-head CI."
+    "at": "2026-11-06T03:54:45.580676+08:00",
+    "reason": "V4 verification is complete and independent read-only review confirms the follow-up findings are resolved."
   }
 }

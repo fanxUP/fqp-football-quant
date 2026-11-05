@@ -3,9 +3,11 @@ from datetime import datetime, timedelta
 from datetime import time as clock_time
 from pathlib import Path
 from unittest.mock import MagicMock, patch
+from zoneinfo import ZoneInfo
 
 import pytest
 from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.cron import CronTrigger
 
 from apps.backend.src.services.pipeline_status import JOB_DEFINITIONS
 from scripts.jobs.run_scheduler import (
@@ -16,6 +18,7 @@ from scripts.jobs.run_scheduler import (
     NEWS_SHADOW_CRON,
     NEWS_SNAPSHOT_CRON,
     OFFICIAL_SCHEDULE_CRON,
+    PREDICTION_STATISTICS_REFRESH_CRON,
     SEASON_RECONCILIATION_RETRY_TIME,
     STARTUP_RECOVERY_JOB_CODES,
     WEEKLY_REPORT_CHECK_CRON,
@@ -60,12 +63,28 @@ def test_history_count_is_monitored_and_scheduled_outside_requests():
         )
     ]
     assert 'id="refresh_prediction_count"' in job_source
-    assert 'minute="22,52"' in job_source
+    assert PREDICTION_STATISTICS_REFRESH_CRON == {"minute": "18,48"}
+    assert "**PREDICTION_STATISTICS_REFRESH_CRON" in job_source
     assert "timedelta(minutes=2)" in job_source
     assert "max_instances=1" in job_source
     assert "coalesce=True" in job_source
     assert "_audited_job" not in job_source  # producer owns structured audit output
     assert JOB_DEFINITIONS["refresh_prediction_count"].max_age == timedelta(minutes=45)
+    assert JOB_DEFINITIONS["refresh_prediction_count"].schedule == (
+        "每30分钟（:18/:48，启动后2分钟首跑）"
+    )
+
+
+def test_prediction_statistics_trigger_uses_the_configured_minutes() -> None:
+    timezone = ZoneInfo("Asia/Shanghai")
+    trigger = CronTrigger(**PREDICTION_STATISTICS_REFRESH_CRON, timezone=timezone)
+    now = datetime.fromisoformat("2026-11-06T03:17:00+08:00")
+
+    first = trigger.get_next_fire_time(None, now)
+    second = trigger.get_next_fire_time(first, first)
+
+    assert first == datetime.fromisoformat("2026-11-06T03:18:00+08:00")
+    assert second == datetime.fromisoformat("2026-11-06T03:48:00+08:00")
 
 
 def test_self_tracked_job_is_not_wrapped_again():

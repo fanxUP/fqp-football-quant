@@ -7,16 +7,16 @@
     },
     "A107-LOCAL-CANDIDATE-VALIDATION": {
       "status": "PASS",
-      "command": "Disposable PostgreSQL 16 on 127.0.0.1:56859 with FQP_P106_TEST_DATABASE_URL; pytest -q tests/test_computation/test_prediction_statistics_rollup_postgres.py; related API/SQL/model regressions; Ruff, Mypy, Python compileall and git diff --check.",
+      "command": "sh -c '.venv/bin/python -m pytest -q tests/test_jobs/test_run_scheduler.py && .venv/bin/ruff check scripts/jobs/run_scheduler.py apps/backend/src/services/pipeline_status.py tests/test_jobs/test_run_scheduler.py && .venv/bin/ruff format --check scripts/jobs/run_scheduler.py apps/backend/src/services/pipeline_status.py tests/test_jobs/test_run_scheduler.py && .venv/bin/python -m compileall -q scripts/jobs/run_scheduler.py apps/backend/src/services/pipeline_status.py tests/test_jobs/test_run_scheduler.py && git diff --check'",
       "exit_code": 0,
-      "summary": "Prediction-statistics PostgreSQL 16 regression: 17 passed, 0 skipped. Related regression subset: 206 passed; 73 prediction-run tests skipped because that separate suite requires FQP_P106_TEST_DATABASE_URL. Ruff check/format, Mypy across 345 Python sources, compileall and git diff --check passed.",
+      "summary": "Current scheduler regression: 81 passed. Ruff check/format, compileall and git diff --check passed. Reused P107 core results remain valid for unchanged sources: PostgreSQL 16 rollup regression 17 passed, 0 skipped; related regression subset 206 passed, with 73 separate prediction-run tests skipped because FQP_P106_TEST_DATABASE_URL was unavailable.",
       "timed_out": false,
-      "environment": "Local Python 3.14.6 and disposable PostgreSQL 16; no production database or external API.",
-      "revision": "326c3a32eb4090e84e10e11b38b6d18b5715f466",
+      "environment": "Local Python 3.14.6; the follow-up regression used the in-repo scheduler test suite and did not access production or an external API.",
+      "revision": "7d4f5792b6f21ea3f8dea9cd82e4759764073b1c",
       "dirty_tree": true,
-      "note": "Only unrelated user-owned OddsMovement frontend edits remained in the worktree; they were not staged or changed.",
-      "verified_at": "2026-11-06T01:58:56+08:00",
-      "tree_fingerprint": "621cfdbc4c7d61ff9799d138a4598ba5442f65f7508c9c5a07fe5779387f0cf1"
+      "tree_fingerprint": "a6ba61604300126fcdd238c1cc1c6eb530129546f4a24233cc905b407e8c2ae1",
+      "verified_at": "2026-11-06T03:57:08.187565+08:00",
+      "note": "Previous P107 rollup and related regression results are reused only for their unchanged implementation scope. This scheduler follow-up is independently exercised by 81 current tests."
     },
     "A107-EXACT-HEAD-CI": {
       "status": "PASS",
@@ -80,16 +80,21 @@
       "status": "PASS",
       "record": "/Volumes/Nas/FQP/release-evidence/P107-4574936/INDEPENDENT-REVIEW.md",
       "note": "Independent read-only review of scripts/prediction_statistics.py and tests/test_computation/test_prediction_statistics_rollup_postgres.py found no code or transaction-semantics issue. The added ANALYZE uses a fixed temp-table identifier, a 5-second local timeout, and precedes rollup execution. Production EXPLAIN cost reduction remains a hypothesis until natural-run timing and queue behavior are observed."
+    },
+    "p107_hdd_scheduler_followup": {
+      "status": "PASS",
+      "record": ".vibe/AGGREGATE-INDEPENDENT-REVIEW.md",
+      "note": "Independent read-only review passed after fixing the operations-status cadence and adding Asia/Shanghai CronTrigger assertions. Reviewer confirmed the three code paths fit the amended scope and 60-path budget. Production runtime effect remains unverified."
     }
   },
   "security": {
     "status": "PASS",
-    "reviewed_at": "2026-11-06T01:58:56+08:00",
-    "note": "The P107 fix only runs ANALYZE on a fixed, transaction-local temporary table under the existing five-second statement timeout. It introduces no input interpolation, new secret, dependency, outbound request, permission or migration change. Independent review confirmed transaction behavior."
+    "reviewed_at": "2026-11-06T03:57:57+08:00",
+    "note": "The P107 code change only moves a scheduled statistics refresh from :22/:52 to :18/:48 and aligns its operations-status label. It adds no SQL, dynamic input, credentials, dependency, outbound request, permission, migration, or public API. Independent review passed."
   },
   "migration": {
     "status": "PASS",
-    "note": "Production is at migration 131 and the target release has no pending migrations. The prior targeted isolated PostgreSQL rehearsal remains valid; this Python-only fix does not change migration SQL. No database backup is created for this release. No PSI or server pressure baseline is required or collected."
+    "note": "No migration files or database schema changed in this follow-up. Migration 131 remains applied; there are no new pending migrations. The existing targeted isolated PostgreSQL rehearsal remains applicable to the unchanged migration. No database backup is required for this code-only follow-up. No PSI or server pressure baseline is collected."
   },
   "external_ci": {
     "status": "passed",
@@ -107,7 +112,7 @@
     "status": "RELEASE_PREFLIGHT_PASSED_DEPLOYMENT_PENDING",
     "production_database_access": true,
     "business_data_writes": 0,
-    "note": "Migration 131 is already applied and the new release has no pending migrations. The user cancelled all PSI and server pressure-baseline requirements; none will be collected or set. No production business data was written during preflight."
+    "note": "Migration 131 is already applied and the new release has no pending migrations. The user cancelled all PSI and server pressure-baseline requirements; read-only server configuration checks found no pressure collector, timer, cron entry, or threshold. The active proc-pressure.mount is the kernel pseudo-filesystem mount only. No PSI values were read and no pressure threshold was set. No production business data was written during preflight."
   },
   "quality_gate": {
     "status": "PENDING",
