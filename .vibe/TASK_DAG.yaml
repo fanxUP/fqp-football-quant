@@ -1,6 +1,6 @@
 {
   "schema_version": 4,
-  "current_task": "P107-RELEASE-NATURAL-OBSERVATION",
+  "current_task": "P107-DEPLOY-PREFLIGHT-INPUTS",
   "tasks": {
     "P107-LOCAL-CANDIDATE-VALIDATION": {
       "title": "Run current aggregate Python, PostgreSQL, frontend and static regressions",
@@ -22,7 +22,7 @@
         "P107-LOCAL-CANDIDATE-VALIDATION"
       ],
       "kind": "external_ci",
-      "status": "IN_PROGRESS",
+      "status": "DONE",
       "definition_of_done": [
         "Only the 54 mapped P107/P138 paths, three scoped P107 release-gate paths, and reviewed V4 control/evidence files are committed; uv.lock is not staged.",
         "GitHub main push CI passes for the exact local HEAD.",
@@ -43,18 +43,19 @@
         "Verify migration up/down behavior and recovery without destructive loss of source rows; do not require or collect PSI/host pressure baselines. Stream in capped stages with short query timeouts and row limits; stop a stage if a query times out or exceeds its cap."
       ]
     },
-    "P107-RELEASE-NATURAL-OBSERVATION": {
-      "title": "Release the verified candidate and observe natural runtime behavior",
-      "acceptance_id": "A107-RELEASE-NATURAL-OBSERVATION",
+    "P107-DEPLOY-PREFLIGHT-INPUTS": {
+      "title": "Prepare verified inputs for the authorized production release",
+      "acceptance_id": "A107-DEPLOY-PREFLIGHT-INPUTS",
       "depends_on": [
         "P107-131-COPY-REHEARSAL"
       ],
-      "kind": "production_release_and_observation",
-      "status": "IN_PROGRESS",
+      "kind": "production_release_preflight",
+      "status": "DONE",
       "definition_of_done": [
-        "V4 deploy preflight passes and the authorized production release completes.",
-        "Verify service health, API behavior, migration, logs, refresh latency, dirty-queue drain and natural scheduled jobs; do not collect PSI or set a pressure threshold.",
-        "Keep A107 open until consumers read a complete snapshot and the queue is drained; do not claim P104 probability use."
+        "The exact candidate passed GitHub CI and independent review; production checkout, service health, protected HTTP behavior, migration plan and deploy --plan were checked read-only.",
+        "The release introduces no migration, so the authorized no-backup release creates no database backup. No manual refresh or restart is used.",
+        "Do not collect PSI or set a server pressure baseline or threshold.",
+        "After release, track natural runtime observations separately. Keep the overall A107 acceptance open until the dirty queue drains and consumers read a complete snapshot; do not claim P104 probability use."
       ]
     }
   }

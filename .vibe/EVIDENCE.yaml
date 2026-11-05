@@ -7,26 +7,26 @@
     },
     "A107-LOCAL-CANDIDATE-VALIDATION": {
       "status": "PASS",
-      "command": "/bin/sh -c 'set -e\nif lsof -nP -iTCP:56857 -sTCP:LISTEN >/dev/null 2>&1; then\n  echo \"Port 56857 is occupied; refusing to use it.\"\n  exit 2\nfi\ndocker run --rm -d --name fqp-p107-verify-20261104 -e POSTGRES_DB=fqp_audit_test_candidate -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=fqp_test_only -p 127.0.0.1:56857:5432 postgres:16-alpine\ncleanup() { docker stop fqp-p107-verify-20261104 >/dev/null 2>&1 || true; }\ntrap cleanup EXIT\nattempt=0\nuntil PGPASSWORD=fqp_test_only pg_isready -h 127.0.0.1 -p 56857 -U postgres -d fqp_audit_test_candidate >/dev/null 2>&1; do\n  attempt=$((attempt + 1))\n  if [ \"$attempt\" -ge 30 ]; then\n    docker logs fqp-p107-verify-20261104\n    exit 3\n  fi\n  sleep 1\ndone\nFQP_AUDIT_TEST_DATABASE_URL=postgresql://postgres:fqp_test_only@127.0.0.1:56857/fqp_audit_test_candidate .venv/bin/python -m pytest -q tests/test_computation/test_prediction_run_postgres.py tests/test_computation/test_prediction_statistics_rollup_postgres.py tests/test_sql/test_dashboard_prediction_count.py tests/test_computation/test_prediction_semantics.py tests/test_scripts/test_feature_importance.py tests/test_api/test_api_versioning.py tests/test_api/test_prediction_research.py tests/test_local/test_release_migration_policy.py\n.venv/bin/ruff check .\n.venv/bin/ruff format --check .\n.venv/bin/mypy apps/backend/src scripts --explicit-package-bases\n.venv/bin/python -m compileall -q apps/backend/src scripts\nnpm --prefix apps/frontend test -- --run src/features/analysis/FeatureSnapshotPanel.test.tsx src/features/model-research/ModelResearchPanel.test.tsx src/pages/ModelsPage.test.tsx\nnpm --prefix apps/frontend run typecheck\nnpm --prefix apps/frontend run build\npython3 /Users/estefan-macworkstation/.remote-vibe-coding/engine/vibe.py --repo . scope check\npython3 /Users/estefan-macworkstation/.remote-vibe-coding/engine/vibe.py --repo . budget check\nbash -n ops/server/deploy.sh\ngit diff --check'",
+      "command": "Disposable PostgreSQL 16 on 127.0.0.1:56859 with FQP_P106_TEST_DATABASE_URL; pytest -q tests/test_computation/test_prediction_statistics_rollup_postgres.py; related API/SQL/model regressions; Ruff, Mypy, Python compileall and git diff --check.",
       "exit_code": 0,
-      "summary": "sets/radar-gHSAJbDR.js                       5.29 kB │ gzip:   2.31 kB\ndist/assets/ModulesPage-DJUjdVjU.js                 5.44 kB │ gzip:   1.88 kB\ndist/assets/axisAlignTicks-Cq4bKvYc.js              5.67 kB │ gzip:   2.50 kB\ndist/assets/scatter-GX9F4nE6.js                     6.39 kB │ gzip:   2.45 kB\ndist/assets/install-CWJREfL_.js                     6.55 kB │ gzip:   2.67 kB\ndist/assets/heatmap-C6hVjCpv.js                     6.57 kB │ gzip:   2.79 kB\ndist/assets/points-Bk4o0kJr.js                      7.52 kB │ gzip:   2.96 kB\ndist/assets/jsx-runtime-CIxEorsV.js                 7.89 kB │ gzip:   2.98 kB\ndist/assets/OddsMovementPage-BV44kBhK.js            8.84 kB │ gzip:   3.60 kB\ndist/assets/MatchesPage-BPtgk7qA.js                 9.64 kB │ gzip:   3.85 kB\ndist/assets/ExecutionCenter-B0q2ycgC.js            11.50 kB │ gzip:   4.22 kB\ndist/assets/AgentPanel-BD5UK2eW.js                 11.55 kB │ gzip:   3.61 kB\ndist/assets/DataHealthPage-BU3A7B2t.js             11.71 kB │ gzip:   4.33 kB\ndist/assets/UpsetsPage-DgxrLo9U.js                 11.74 kB │ gzip:   3.78 kB\ndist/assets/visualization-BdFqTE_4.js              12.19 kB │ gzip:   4.08 kB\ndist/assets/RosterEvidencePanel-Diirtpu0.js        13.40 kB │ gzip:   4.98 kB\ndist/assets/pie-CrbRJEEF.js                        15.15 kB │ gzip:   6.36 kB\ndist/assets/MatchDetailPage-XTJuGiTr.js            15.24 kB │ gzip:   5.58 kB\ndist/assets/axisHelper-DEUVdXih.js                 15.42 kB │ gzip:   5.61 kB\ndist/assets/DashboardPage-Crr7Kee9.js              18.57 kB │ gzip:   6.25 kB\ndist/assets/NewsIntelligencePage-NwRrPs2R.js       18.79 kB │ gzip:   5.93 kB\ndist/assets/AgentWorkspacePage-BtvF7zge.js         19.40 kB │ gzip:   6.46 kB\ndist/assets/BacktestPage-D-3X8Q11.js               19.78 kB │ gzip:   7.23 kB\ndist/assets/line-DgZ4oTdw.js                       20.02 kB │ gzip:   8.17 kB\ndist/assets/scaleRawExtentInfo-DpJKVGD1.js         20.21 kB │ gzip:   8.13 kB\ndist/assets/bar-CfizbZkM.js                        22.01 kB │ gzip:   8.44 kB\ndist/assets/installSimple-D1zSL3pa.js              22.31 kB │ gzip:   8.01 kB\ndist/assets/PoolPage-DNHRq3ti.js                   22.80 kB │ gzip:   7.65 kB\ndist/assets/ModelProvidersPage-COHlw2T3.js         26.82 kB │ gzip:   8.73 kB\ndist/assets/ReviewsPage-DxKtOjgo.js                27.32 kB │ gzip:   8.85 kB\ndist/assets/EventsPage-mrQFL6Vt.js                 28.66 kB │ gzip:   9.09 kB\ndist/assets/MatchDetailDrawer-C2413NxJ.js          30.25 kB │ gzip:   7.86 kB\ndist/assets/ModelsPage-D0AJsTvn.js                 53.12 kB │ gzip:  16.00 kB\ndist/assets/AnalysisPage-BMVhM95I.js               59.79 kB │ gzip:  16.82 kB\ndist/assets/BettingCenterPage-GwtUqLHh.js          60.05 kB │ gzip:  16.90 kB\ndist/assets/TeamLogo-vNhV2TGg.js                   63.04 kB │ gzip:  12.92 kB\ndist/assets/chartRuntime-DYGJzoJX.js              164.83 kB │ gzip:  53.72 kB\ndist/assets/LightweightLineChart-BaAHbm35.js      166.38 kB │ gzip:  54.51 kB\ndist/assets/index-B5WmQDEF.js                     259.40 kB │ gzip:  84.28 kB\ndist/assets/SeriesData-B6NLPcGc.js                345.26 kB │ gzip: 116.97 kB\ndist/assets/PitchScene-DEKloEGv.js                943.55 kB │ gzip: 250.06 kB\n\n✓ built in 8.31s\nchanged_files=57\nPASS: scope\nfiles_changed: 57/57\nnew_files: 4/5\nnew_dependencies_heuristic: 0/0\nschema_migration_files: 2/2\ndeclared_public_api_changes: 4/4\nPASS: change budget\n\u001b[33m[PLUGIN_TIMINGS] \u001b[0mYour build spent significant time in plugins. Here is a breakdown:\n  - vite:css-post (46%)\n  - vite:css (41%)\n  - vite:prepare-out-dir (5%)\nSee https://rolldown.rs/reference/InputOptions.checks#plugintimings for more details.\n\n[plugin builtin:vite-reporter] \n(!) Some chunks are larger than 500 kB after minification. Consider:\n- Using dynamic import() to code-split the application\n- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting\n- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.\n",
+      "summary": "Prediction-statistics PostgreSQL 16 regression: 17 passed, 0 skipped. Related regression subset: 206 passed; 73 prediction-run tests skipped because that separate suite requires FQP_P106_TEST_DATABASE_URL. Ruff check/format, Mypy across 345 Python sources, compileall and git diff --check passed.",
       "timed_out": false,
-      "environment": "unknown",
-      "revision": "d7eaf589da609dcdab92f7aefea16441b046ba77",
+      "environment": "Local Python 3.14.6 and disposable PostgreSQL 16; no production database or external API.",
+      "revision": "326c3a32eb4090e84e10e11b38b6d18b5715f466",
       "dirty_tree": true,
-      "tree_fingerprint": "ba154a93f3a27bc0fb90e241d923738107c8e8fd10db344baadb46afc65a290b",
-      "verified_at": "2026-11-04T01:58:01.053513+08:00"
+      "note": "Only unrelated user-owned OddsMovement frontend edits remained in the worktree; they were not staged or changed.",
+      "verified_at": "2026-11-06T01:58:56+08:00"
     },
     "A107-EXACT-HEAD-CI": {
       "status": "PASS",
-      "command": "gh run view 41692129970 --repo fanxUP/fqp-football-quant --json headSha,status,conclusion,jobs; asserted exact head SHA and both required jobs completed successfully",
+      "command": "gh run view 42077034390 --repo fanxUP/fqp-football-quant --json headSha,status,conclusion,jobs; asserted exact head SHA and both required jobs completed successfully.",
       "exit_code": 0,
-      "summary": "PASS: exact-head CI run 41692129970; lint-and-typecheck and test succeeded for 0eeaa1e0c60cb2cf7eb04109fba73146801cc408.",
+      "summary": "PASS: exact-head CI run 42077034390; lint-and-typecheck and test succeeded for 326c3a32eb4090e84e10e11b38b6d18b5715f466.",
       "timed_out": false,
       "environment": "GitHub Actions",
-      "revision": "0eeaa1e0c60cb2cf7eb04109fba73146801cc408",
+      "revision": "326c3a32eb4090e84e10e11b38b6d18b5715f466",
       "dirty_tree": false,
-      "verified_at": "2026-11-03T18:29:58+00:00"
+      "verified_at": "2026-11-05T17:54:52+00:00"
     },
     "A107-131-COPY-REHEARSAL": {
       "status": "PASS",
@@ -39,6 +39,17 @@
       "dirty_tree": true,
       "verified_at": "2026-11-05T19:08:17+08:00",
       "tree_fingerprint": "bf8b49be0ce572cecf4d03eb5bb59299d9c0e41438ca1ed7b36d6b63e128a4e3"
+    },
+    "A107-DEPLOY-PREFLIGHT-INPUTS": {
+      "status": "PASS",
+      "command": "Exact-head CI and independent review; read-only SSH health/API/service checks; deploy.sh <sha> --plan; read-only migration plan.",
+      "exit_code": 0,
+      "summary": "Candidate 326c3a32eb4090e84e10e11b38b6d18b5715f466 is on GitHub main. The server checkout is clean on main at 2fce6f83, Node 24 is available, all six services are active, nginx -t passes, protected HTTP returns / 200, ready 200, release 200, predictions 401, deploy plan reports zero nginx files, and migration plan reports no pending migrations. No agent-initiated production write, backup, manual refresh, restart or pressure-baseline collection occurred. The last confirmed natural refresh at 2026-11-05T17:22Z was partial (dirty queue 3,975; rollups 145); a later 3-second-capped read-only observation timed out and was not retried.",
+      "timed_out": false,
+      "environment": "FQP LXC 106 via SSH password; production checks were read-only.",
+      "revision": "326c3a32eb4090e84e10e11b38b6d18b5715f466",
+      "dirty_tree": false,
+      "verified_at": "2026-11-06T01:58:56+08:00"
     }
   },
   "reviews": {
@@ -61,40 +72,45 @@
       "status": "PASS",
       "record": ".vibe/AGGREGATE-INDEPENDENT-REVIEW.md",
       "note": "Follow-up review confirms 57 approved paths and no remaining signature-gate issue; uv.lock remains unchanged and excluded. Current business-tree fingerprint ba154a93f3a27bc0fb90e241d923738107c8e8fd10db344baadb46afc65a290b."
+    },
+    "p107_target_table_analyze": {
+      "status": "PASS",
+      "record": ".vibe/AGGREGATE-INDEPENDENT-REVIEW.md",
+      "note": "Independent read-only review of scripts/prediction_statistics.py and tests/test_computation/test_prediction_statistics_rollup_postgres.py found no code or transaction-semantics issue. The added ANALYZE uses a fixed temp-table identifier, a 5-second local timeout, and precedes rollup execution. Production EXPLAIN cost reduction remains a hypothesis until natural-run timing and queue behavior are observed."
     }
   },
   "security": {
     "status": "PASS",
-    "reviewed_at": "2026-11-04T02:00:00+08:00",
-    "note": "Read-only security review covered the production-host signature verifier, fixed /usr/bin/ssh-keygen path, signed report bytes, fixed migration SQL, existing runtime grants, and PATH-injection regression. No new secret, dependency, outbound request, user-controlled command argument or dynamic SQL path was introduced. The production-copy rehearsal is still pending."
+    "reviewed_at": "2026-11-06T01:58:56+08:00",
+    "note": "The P107 fix only runs ANALYZE on a fixed, transaction-local temporary table under the existing five-second statement timeout. It introduces no input interpolation, new secret, dependency, outbound request, permission or migration change. Independent review confirmed transaction behavior."
   },
   "migration": {
     "status": "PASS",
-    "note": "Migration 131 passed a fresh targeted production schema/data-copy rehearsal and isolated up/down/reapply validation. Signed no-backup release detail and release evidence will be produced for the final exact release SHA before deployment."
+    "note": "Production is at migration 131 and the target release has no pending migrations. The prior targeted isolated PostgreSQL rehearsal remains valid; this Python-only fix does not change migration SQL. No database backup is created for this release. No PSI or server pressure baseline is required or collected."
   },
   "external_ci": {
     "status": "passed",
-    "run_id": 41692129970,
-    "head_sha": "0eeaa1e0c60cb2cf7eb04109fba73146801cc408",
-    "url": "https://github.com/fanxUP/fqp-football-quant/actions/runs/41692129970",
+    "run_id": 42077034390,
+    "head_sha": "326c3a32eb4090e84e10e11b38b6d18b5715f466",
+    "url": "https://github.com/fanxUP/fqp-football-quant/actions/runs/42077034390",
     "checks": {
       "lint-and-typecheck": "passed",
       "test": "passed"
     },
-    "verified_at": "2026-11-03T18:29:58+00:00",
-    "note": "Exact-head GitHub CI passed for the application candidate. A later workflow-evidence commit will receive its own exact-head CI before release."
+    "verified_at": "2026-11-05T17:54:52+00:00",
+    "note": "Exact-head GitHub CI passed on the P107 target-table ANALYZE code commit. The workflow-evidence commit receives its own exact-head CI before the release gate."
   },
   "production": {
-    "status": "COPY_REHEARSAL_PASSED_RELEASE_PENDING",
+    "status": "RELEASE_PREFLIGHT_PASSED_DEPLOYMENT_PENDING",
     "production_database_access": true,
     "business_data_writes": 0,
-    "note": "Read-only bounded binary COPY only; production remains at migration 130. The staged 3–5% PSI prerequisite was removed. No fixed PSI baseline is required; use stage-local timeout, row cap, and before/after observation only."
+    "note": "Migration 131 is already applied and the new release has no pending migrations. The user cancelled all PSI and server pressure-baseline requirements; none will be collected or set. No production business data was written during preflight."
   },
   "quality_gate": {
     "status": "PENDING",
     "failures": [
-      "final workflow-evidence commit needs exact-head GitHub CI",
-      "production release evidence, migration 131 deployment, health checks, and one natural scheduled refresh are pending"
+      "committed preflight evidence requires its exact-head CI and V4 gate",
+      "production deployment and natural queue-drain/full-snapshot consumer acceptance remain pending"
     ]
   }
 }
