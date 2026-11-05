@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import time
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -13,10 +14,17 @@ JOB_CODE = "refresh_prediction_count"
 COUNT_SCOPE = "valid_prematch_history_v1"
 PREDICTION_SUMMARY_SCOPE = "canonical_valid_prematch_history_v1"
 MAX_AGE = timedelta(minutes=45)
-# Keep the scheduled HDD pass small: production's former 500-match batch
-# exceeded its 120-second statement timeout on the 4k-match history.
-DEFAULT_REFRESH_BATCH_SIZE = 25
+# Keep each SQL statement small enough to make progress under shared-disk load.
+# A production 25-match read exceeded a short timeout; a 5-match read completed.
+DEFAULT_REFRESH_BATCH_SIZE = 5
 MAX_REFRESH_BATCH_SIZE = 1000
+MAX_REFRESH_BATCHES_PER_RUN = 20
+CLAIM_STATEMENT_TIMEOUT_SECONDS = 5
+ORPHAN_DELETE_STATEMENT_TIMEOUT_SECONDS = 5
+ROLLUP_STATEMENT_TIMEOUT_SECONDS = 25
+SNAPSHOT_STATEMENT_TIMEOUT_SECONDS = 10
+REFRESH_BATCH_SQL_RESERVATION_SECONDS = 50
+REFRESH_RUN_SQL_BUDGET_SECONDS = 75
 
 
 def latest_prediction_ctes(
@@ -469,6 +477,23 @@ _PREDICTION_STATISTICS_SNAPSHOT_SQL = """
 """
 
 
+def _set_local_statement_timeout(cur: Any, timeout_seconds: int) -> None:
+    if type(timeout_seconds) is not int or not 1 <= timeout_seconds <= 120:
+        raise ValueError("statement timeout must be between 1 and 120 seconds")
+    cur.execute(f"SET LOCAL statement_timeout = '{timeout_seconds}s'")
+
+
+def _execute_with_local_timeout(
+    cur: Any, statement: str, timeout_seconds: int, params: Any = None
+) -> None:
+    """Apply a transaction-local timeout immediately before executing SQL."""
+    _set_local_statement_timeout(cur, timeout_seconds)
+    if params is None:
+        cur.execute(statement)
+    else:
+        cur.execute(statement, params)
+
+
 def _refresh_prediction_statistics_batch(
     conn: Any, *, batch_size: int = DEFAULT_REFRESH_BATCH_SIZE
 ) -> dict[str, Any]:
@@ -477,7 +502,8 @@ def _refresh_prediction_statistics_batch(
         raise ValueError(f"batch_size must be between 1 and {MAX_REFRESH_BATCH_SIZE}")
 
     with conn.cursor() as cur:
-        cur.execute(
+        _execute_with_local_timeout(
+            cur,
             """
             CREATE TEMP TABLE prediction_statistics_refresh_targets ON COMMIT DROP AS
             WITH claimed AS MATERIALIZED (
@@ -494,20 +520,27 @@ def _refresh_prediction_statistics_batch(
             )
             SELECT match_id FROM deleted
             """,
+            CLAIM_STATEMENT_TIMEOUT_SECONDS,
             {"batch_size": batch_size},
         )
         matches_refreshed = max(cur.rowcount, 0)
-        cur.execute(
+        _execute_with_local_timeout(
+            cur,
             """DELETE FROM prediction_statistics_match_rollups rollup
                USING prediction_statistics_refresh_targets target
                WHERE rollup.match_id = target.match_id
                  AND NOT EXISTS (
                      SELECT 1 FROM official_matches match
                      WHERE match.id = target.match_id
-                 )"""
+                 )""",
+            ORPHAN_DELETE_STATEMENT_TIMEOUT_SECONDS,
         )
-        cur.execute(_REFRESH_PREDICTION_STATISTICS_SQL)
-        cur.execute(_PREDICTION_STATISTICS_SNAPSHOT_SQL)
+        _execute_with_local_timeout(
+            cur, _REFRESH_PREDICTION_STATISTICS_SQL, ROLLUP_STATEMENT_TIMEOUT_SECONDS
+        )
+        _execute_with_local_timeout(
+            cur, _PREDICTION_STATISTICS_SNAPSHOT_SQL, SNAPSHOT_STATEMENT_TIMEOUT_SECONDS
+        )
         row = cur.fetchone()
 
     if row is None:
@@ -554,13 +587,34 @@ def _refresh_prediction_statistics_batch(
     }
 
 
-def refresh_prediction_count(*, batch_size: int = DEFAULT_REFRESH_BATCH_SIZE) -> dict[str, Any]:
-    """Process a bounded match batch; publish only when every dirty match is current."""
+def _refresh_batch_fits_run_budget(started_at: float, now: float) -> bool:
+    """Reserve room for one batch before admitting it to the SQL work window.
+
+    This is a soft admission budget, not a wall-clock kill deadline: SET commands,
+    driver latency, and transaction commits can extend observed elapsed time.
+    """
+    elapsed = now - started_at
+    return (
+        elapsed >= 0
+        and elapsed + REFRESH_BATCH_SQL_RESERVATION_SECONDS <= REFRESH_RUN_SQL_BUDGET_SECONDS
+    )
+
+
+def refresh_prediction_count(
+    *,
+    batch_size: int = DEFAULT_REFRESH_BATCH_SIZE,
+    max_batches: int = MAX_REFRESH_BATCHES_PER_RUN,
+) -> dict[str, Any]:
+    """Process bounded match batches; publish only when every dirty match is current."""
+    if type(batch_size) is not int or not 1 <= batch_size <= DEFAULT_REFRESH_BATCH_SIZE:
+        raise ValueError(f"batch_size must be between 1 and {DEFAULT_REFRESH_BATCH_SIZE}")
+    if type(max_batches) is not int or not 1 <= max_batches <= MAX_REFRESH_BATCHES_PER_RUN:
+        raise ValueError(f"max_batches must be between 1 and {MAX_REFRESH_BATCHES_PER_RUN}")
     with get_db() as count_conn:
         lock_acquired = False
         try:
             with count_conn.cursor() as cur:
-                cur.execute("SET LOCAL statement_timeout = '120s'")
+                _set_local_statement_timeout(cur, CLAIM_STATEMENT_TIMEOUT_SECONDS)
                 cur.execute(
                     """SELECT pg_try_advisory_lock(%s, %s),
                               to_regclass('prediction_statistics_match_rollups') IS NOT NULL,
@@ -591,19 +645,34 @@ def refresh_prediction_count(*, batch_size: int = DEFAULT_REFRESH_BATCH_SIZE) ->
                     raise RuntimeError("prediction count audit record was not created")
                 try:
                     if rollup_schema_ready:
-                        refresh_result = _refresh_prediction_statistics_batch(
-                            count_conn, batch_size=batch_size
-                        )
-                        count_conn.commit()
-                        if refresh_result["status"] == "partial":
+                        started_at = time.monotonic()
+                        matches_refreshed = 0
+                        pending_matches: int | None = None
+                        snapshots: dict[str, Any] | None = None
+                        for _batch_number in range(max_batches):
+                            # The batch has four independently timed SQL
+                            # statements; reserve their full budget before starting.
+                            if not _refresh_batch_fits_run_budget(started_at, time.monotonic()):
+                                break
+                            refresh_result = _refresh_prediction_statistics_batch(
+                                count_conn, batch_size=batch_size
+                            )
+                            count_conn.commit()
+                            matches_refreshed += refresh_result["matches_refreshed"]
+                            if refresh_result["status"] == "completed":
+                                snapshots = refresh_result["snapshots"]
+                                pending_matches = 0
+                                break
+                            pending_matches = refresh_result["pending_matches"]
+
+                        if snapshots is None:
                             partial_refs = {
                                 "refreshing": True,
-                                "matches_refreshed": refresh_result["matches_refreshed"],
-                                "pending_matches": refresh_result["pending_matches"],
+                                "matches_refreshed": matches_refreshed,
+                                "pending_matches": pending_matches,
                             }
                             finish_job_run(audit_conn, run_id, "partial", output_refs=partial_refs)
                             return {"status": "refreshing", **partial_refs}
-                        snapshots = refresh_result["snapshots"]
                     else:
                         # Older isolated fixtures have no migration ledger. Keep
                         # their legacy contract; managed databases skip until 131.
@@ -613,7 +682,20 @@ def refresh_prediction_count(*, batch_size: int = DEFAULT_REFRESH_BATCH_SIZE) ->
                     return {"status": "ok", **snapshots["prediction_count"]}
                 except Exception as exc:
                     audit_conn.rollback()
-                    finish_job_run(audit_conn, run_id, "failed", error=type(exc).__name__)
+                    progress_refs = None
+                    if rollup_schema_ready and matches_refreshed:
+                        progress_refs = {
+                            "refreshing": True,
+                            "matches_refreshed": matches_refreshed,
+                            "pending_matches": pending_matches,
+                        }
+                    finish_job_run(
+                        audit_conn,
+                        run_id,
+                        "failed",
+                        output_refs=progress_refs,
+                        error=type(exc).__name__,
+                    )
                     raise
         finally:
             count_conn.rollback()

@@ -19,8 +19,21 @@ from scripts import prediction_statistics as statistics
 
 
 def test_default_refresh_batch_stays_within_hdd_budget():
-    # Production timed out the 500-match rollup query at its 120-second limit.
-    assert statistics.DEFAULT_REFRESH_BATCH_SIZE <= 25
+    # Keep both per-statement and per-invocation database work bounded.
+    assert statistics.DEFAULT_REFRESH_BATCH_SIZE == 5
+    assert statistics.MAX_REFRESH_BATCHES_PER_RUN == 20
+    assert statistics.REFRESH_BATCH_SQL_RESERVATION_SECONDS == 50
+    assert statistics.REFRESH_RUN_SQL_BUDGET_SECONDS == 75
+    with pytest.raises(ValueError, match="batch_size"):
+        statistics.refresh_prediction_count(batch_size=6)
+    with pytest.raises(ValueError, match="max_batches"):
+        statistics.refresh_prediction_count(max_batches=21)
+
+
+def test_refresh_reserves_one_batch_before_starting_it():
+    started_at = 100.0
+    assert statistics._refresh_batch_fits_run_budget(started_at, 125.0)
+    assert not statistics._refresh_batch_fits_run_budget(started_at, 125.001)
 
 
 @pytest.fixture
@@ -217,6 +230,37 @@ def _refresh(conn, batch_size: int = 500):
     result = statistics._refresh_prediction_statistics_batch(conn, batch_size=batch_size)
     conn.commit()
     return result
+
+
+def test_refresh_uses_distinct_timeouts_for_each_statement(statistics_database, monkeypatch):
+    conn, _ = statistics_database
+    _insert_match_and_legacy_predictions(conn)
+    timed_statements = []
+    execute_with_timeout = statistics._execute_with_local_timeout
+
+    def record_statement(cursor, statement, timeout_seconds, params=None):
+        timed_statements.append((timeout_seconds, statement))
+        execute_with_timeout(cursor, statement, timeout_seconds, params)
+
+    monkeypatch.setattr(statistics, "_execute_with_local_timeout", record_statement)
+    result = _refresh(conn, batch_size=5)
+
+    assert result["status"] == "completed"
+    assert [timeout for timeout, _ in timed_statements] == [
+        statistics.CLAIM_STATEMENT_TIMEOUT_SECONDS,
+        statistics.ORPHAN_DELETE_STATEMENT_TIMEOUT_SECONDS,
+        statistics.ROLLUP_STATEMENT_TIMEOUT_SECONDS,
+        statistics.SNAPSHOT_STATEMENT_TIMEOUT_SECONDS,
+    ]
+    assert len(timed_statements) == 4
+    assert timed_statements[0][1].lstrip().startswith("CREATE TEMP TABLE")
+    assert (
+        timed_statements[1][1]
+        .lstrip()
+        .startswith("DELETE FROM prediction_statistics_match_rollups")
+    )
+    assert timed_statements[2][1] == statistics._REFRESH_PREDICTION_STATISTICS_SQL
+    assert timed_statements[3][1] == statistics._PREDICTION_STATISTICS_SNAPSHOT_SQL
 
 
 def test_rollup_batches_match_full_scan_reference_and_publish_only_when_drained(
@@ -682,7 +726,7 @@ def test_audited_refresh_preserves_last_complete_snapshot_during_backfill(
             connection.close()
 
     monkeypatch.setattr(statistics, "get_db", test_connection)
-    first = statistics.refresh_prediction_count(batch_size=2)
+    first = statistics.refresh_prediction_count(batch_size=2, max_batches=1)
     assert first == {
         "status": "refreshing",
         "refreshing": True,
@@ -707,7 +751,7 @@ def test_audited_refresh_preserves_last_complete_snapshot_during_backfill(
         cur.execute("UPDATE official_matches SET kickoff_time='2026-11-03 18:30' WHERE id=102")
     conn.commit()
 
-    third = statistics.refresh_prediction_count(batch_size=1)
+    third = statistics.refresh_prediction_count(batch_size=1, max_batches=1)
     assert third["status"] == "refreshing"
     with closing(connect()) as reader:
         during_refresh = statistics.get_prediction_count_snapshot(reader)
@@ -732,3 +776,81 @@ def test_audited_refresh_preserves_last_complete_snapshot_during_backfill(
                 ("partial",),
                 ("completed",),
             ]
+
+
+def test_audited_refresh_processes_multiple_small_batches_per_invocation(
+    statistics_database, monkeypatch
+):
+    conn, connect = statistics_database
+    _insert_match_and_legacy_predictions(conn)
+    conn.commit()
+
+    @contextmanager
+    def test_connection():
+        connection = connect()
+        try:
+            yield connection
+        finally:
+            connection.close()
+
+    monkeypatch.setattr(statistics, "get_db", test_connection)
+    result = statistics.refresh_prediction_count(batch_size=1, max_batches=2)
+
+    assert result == {
+        "status": "refreshing",
+        "refreshing": True,
+        "matches_refreshed": 2,
+        "pending_matches": 1,
+    }
+    with closing(connect()) as reader:
+        with reader.cursor() as cur:
+            cur.execute("SELECT COUNT(*) FROM prediction_statistics_dirty_matches")
+            assert cur.fetchone()[0] == 1
+            cur.execute("SELECT COUNT(*) FROM prediction_statistics_match_rollups")
+            assert cur.fetchone()[0] == 2
+
+
+def test_audited_refresh_failure_keeps_prior_committed_batches(statistics_database, monkeypatch):
+    conn, connect = statistics_database
+    _insert_match_and_legacy_predictions(conn)
+    conn.commit()
+
+    @contextmanager
+    def test_connection():
+        connection = connect()
+        try:
+            yield connection
+        finally:
+            connection.close()
+
+    original_refresh = statistics._refresh_prediction_statistics_batch
+    calls = 0
+
+    def fail_second_batch(connection, *, batch_size):
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise RuntimeError("injected second-batch failure")
+        return original_refresh(connection, batch_size=batch_size)
+
+    monkeypatch.setattr(statistics, "get_db", test_connection)
+    monkeypatch.setattr(statistics, "_refresh_prediction_statistics_batch", fail_second_batch)
+
+    with pytest.raises(RuntimeError, match="injected second-batch failure"):
+        statistics.refresh_prediction_count(batch_size=1, max_batches=2)
+
+    with closing(connect()) as reader:
+        with reader.cursor() as cur:
+            cur.execute("SELECT COUNT(*) FROM prediction_statistics_dirty_matches")
+            assert cur.fetchone()[0] == 2
+            cur.execute("SELECT COUNT(*) FROM prediction_statistics_match_rollups")
+            assert cur.fetchone()[0] == 1
+            cur.execute("SELECT status, output_refs, error_message FROM ai_job_runs")
+            status, output_refs, error = cur.fetchone()
+            assert status == "failed"
+            assert output_refs == {
+                "refreshing": True,
+                "matches_refreshed": 1,
+                "pending_matches": 2,
+            }
+            assert error == "RuntimeError"
