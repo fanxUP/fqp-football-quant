@@ -14,9 +14,10 @@ JOB_CODE = "refresh_prediction_count"
 COUNT_SCOPE = "valid_prematch_history_v1"
 PREDICTION_SUMMARY_SCOPE = "canonical_valid_prematch_history_v1"
 MAX_AGE = timedelta(minutes=45)
-# Keep each SQL statement small enough to make progress under shared-disk load.
-# A production 25-match read exceeded a short timeout; a 5-match read completed.
-DEFAULT_REFRESH_BATCH_SIZE = 5
+# Production canceled a canonical rollup for a five-match chunk; isolate each
+# match so one heavy fixture does not roll back the other matches in its chunk.
+DEFAULT_REFRESH_BATCH_SIZE = 1
+MAX_SCHEDULED_REFRESH_BATCH_SIZE = 5
 MAX_REFRESH_BATCH_SIZE = 1000
 MAX_REFRESH_BATCHES_PER_RUN = 20
 CLAIM_STATEMENT_TIMEOUT_SECONDS = 5
@@ -606,8 +607,8 @@ def refresh_prediction_count(
     max_batches: int = MAX_REFRESH_BATCHES_PER_RUN,
 ) -> dict[str, Any]:
     """Process bounded match batches; publish only when every dirty match is current."""
-    if type(batch_size) is not int or not 1 <= batch_size <= DEFAULT_REFRESH_BATCH_SIZE:
-        raise ValueError(f"batch_size must be between 1 and {DEFAULT_REFRESH_BATCH_SIZE}")
+    if type(batch_size) is not int or not 1 <= batch_size <= MAX_SCHEDULED_REFRESH_BATCH_SIZE:
+        raise ValueError(f"batch_size must be between 1 and {MAX_SCHEDULED_REFRESH_BATCH_SIZE}")
     if type(max_batches) is not int or not 1 <= max_batches <= MAX_REFRESH_BATCHES_PER_RUN:
         raise ValueError(f"max_batches must be between 1 and {MAX_REFRESH_BATCHES_PER_RUN}")
     with get_db() as count_conn:

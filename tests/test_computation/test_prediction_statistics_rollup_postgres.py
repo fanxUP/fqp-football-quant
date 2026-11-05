@@ -18,9 +18,10 @@ from ops.server.migrate import _sql_statements
 from scripts import prediction_statistics as statistics
 
 
-def test_default_refresh_batch_stays_within_hdd_budget():
-    # Keep both per-statement and per-invocation database work bounded.
-    assert statistics.DEFAULT_REFRESH_BATCH_SIZE == 5
+def test_scheduled_refresh_uses_bounded_chunk_policy():
+    # Keep scheduled chunks and SQL admission work bounded.
+    assert statistics.DEFAULT_REFRESH_BATCH_SIZE == 1
+    assert statistics.MAX_SCHEDULED_REFRESH_BATCH_SIZE == 5
     assert statistics.MAX_REFRESH_BATCHES_PER_RUN == 20
     assert statistics.REFRESH_BATCH_SQL_RESERVATION_SECONDS == 50
     assert statistics.REFRESH_RUN_SQL_BUDGET_SECONDS == 75
@@ -808,6 +809,34 @@ def test_audited_refresh_processes_multiple_small_batches_per_invocation(
             assert cur.fetchone()[0] == 1
             cur.execute("SELECT COUNT(*) FROM prediction_statistics_match_rollups")
             assert cur.fetchone()[0] == 2
+
+
+def test_audited_refresh_defaults_to_single_match_chunks(statistics_database, monkeypatch):
+    conn, connect = statistics_database
+    _insert_match_and_legacy_predictions(conn)
+    conn.commit()
+
+    @contextmanager
+    def test_connection():
+        connection = connect()
+        try:
+            yield connection
+        finally:
+            connection.close()
+
+    original_refresh = statistics._refresh_prediction_statistics_batch
+    batch_sizes = []
+
+    def record_batch_size(connection, *, batch_size):
+        batch_sizes.append(batch_size)
+        return original_refresh(connection, batch_size=batch_size)
+
+    monkeypatch.setattr(statistics, "get_db", test_connection)
+    monkeypatch.setattr(statistics, "_refresh_prediction_statistics_batch", record_batch_size)
+    result = statistics.refresh_prediction_count()
+
+    assert result["status"] == "ok"
+    assert batch_sizes == [1, 1, 1]
 
 
 def test_audited_refresh_failure_keeps_prior_committed_batches(statistics_database, monkeypatch):
