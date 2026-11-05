@@ -19,15 +19,26 @@
     },
     "A107-EXACT-HEAD-CI": {
       "status": "PASS",
-      "command": "python3 -c 'import json,subprocess; d=json.loads(subprocess.check_output([\"gh\",\"run\",\"view\",\"41689707607\",\"--repo\",\"fanxUP/fqp-football-quant\",\"--json\",\"headSha,status,conclusion,jobs\"],text=True)); assert d[\"headSha\"]==\"94873b18fa14c6d91f588ccc2fe36633e7e6521d\"; assert d[\"status\"]==\"completed\" and d[\"conclusion\"]==\"success\"; jobs={j[\"name\"]:j for j in d[\"jobs\"]}; assert set((\"lint-and-typecheck\",\"test\")).issubset(jobs); assert all(jobs[n][\"status\"]==\"completed\" and jobs[n][\"conclusion\"]==\"success\" for n in (\"lint-and-typecheck\",\"test\")); print(\"PASS: exact-head CI run 41689707607, both jobs succeeded\")'",
+      "command": "gh run view 41692129970 --repo fanxUP/fqp-football-quant --json headSha,status,conclusion,jobs; asserted exact head SHA and both required jobs completed successfully",
       "exit_code": 0,
-      "summary": "PASS: exact-head CI run 41689707607, both jobs succeeded\n",
+      "summary": "PASS: exact-head CI run 41692129970; lint-and-typecheck and test succeeded for 0eeaa1e0c60cb2cf7eb04109fba73146801cc408.",
       "timed_out": false,
-      "environment": "unknown",
-      "revision": "94873b18fa14c6d91f588ccc2fe36633e7e6521d",
+      "environment": "GitHub Actions",
+      "revision": "0eeaa1e0c60cb2cf7eb04109fba73146801cc408",
       "dirty_tree": false,
-      "tree_fingerprint": "ba154a93f3a27bc0fb90e241d923738107c8e8fd10db344baadb46afc65a290b",
-      "verified_at": "2026-11-04T02:14:30.552134+08:00"
+      "verified_at": "2026-11-03T18:29:58+00:00"
+    },
+    "A107-131-COPY-REHEARSAL": {
+      "status": "PASS",
+      "command": "Read-only staged PostgreSQL binary COPY into isolated PG16.14 rehearsal DB; apply migration 131, verify the single-match refresh under SET ROLE fqp, run down and reapply, and compare all seven source-table hashes after each phase. Dedicated isolated PostgreSQL regression: 11 passed, 0 failed, 0 skipped.",
+      "exit_code": 0,
+      "summary": "PASS: 4,064 official matches; 566 prediction runs; 66 model versions; 567 referenced/retry-parent job runs; match 168072 indexed sample (13,266 predictions, 2,077 groups, 13,266 options); 4,064 queue rows; 14 triggers; expected migration checksum; fqp non-superuser/non-owner grants; one-match refresh 1.76525s over 13,266 prediction rows. Source hashes unchanged after up/down/reapply. No production DDL/DML, service stop, backup, or deployment occurred.",
+      "timed_out": false,
+      "environment": "read-only production COPY + disposable local PostgreSQL 16.14; no persistent dump",
+      "revision": "0eeaa1e0c60cb2cf7eb04109fba73146801cc408",
+      "dirty_tree": true,
+      "verified_at": "2026-11-05T19:08:17+08:00",
+      "tree_fingerprint": "bf8b49be0ce572cecf4d03eb5bb59299d9c0e41438ca1ed7b36d6b63e128a4e3"
     }
   },
   "reviews": {
@@ -58,31 +69,32 @@
     "note": "Read-only security review covered the production-host signature verifier, fixed /usr/bin/ssh-keygen path, signed report bytes, fixed migration SQL, existing runtime grants, and PATH-injection regression. No new secret, dependency, outbound request, user-controlled command argument or dynamic SQL path was introduced. The production-copy rehearsal is still pending."
   },
   "migration": {
-    "status": "PENDING",
-    "note": "Migration 131 has isolated PG16 coverage; current production schema/data-copy rehearsal remains."
+    "status": "PASS",
+    "note": "Migration 131 passed a fresh targeted production schema/data-copy rehearsal and isolated up/down/reapply validation. Signed no-backup release detail and release evidence will be produced for the final exact release SHA before deployment."
   },
   "external_ci": {
     "status": "passed",
-    "run_id": 41689707607,
-    "head_sha": "94873b18fa14c6d91f588ccc2fe36633e7e6521d",
-    "url": "https://github.com/fanxUP/fqp-football-quant/actions/runs/41689707607",
+    "run_id": 41692129970,
+    "head_sha": "0eeaa1e0c60cb2cf7eb04109fba73146801cc408",
+    "url": "https://github.com/fanxUP/fqp-football-quant/actions/runs/41692129970",
     "checks": {
       "lint-and-typecheck": "passed",
       "test": "passed"
     },
-    "verified_at": "2026-11-04T02:14:30+08:00",
-    "note": "This exact-head run passed for the release-gate candidate. The remaining quality-gate blocker is the incomplete production-copy rehearsal."
+    "verified_at": "2026-11-03T18:29:58+00:00",
+    "note": "Exact-head GitHub CI passed for the application candidate. A later workflow-evidence commit will receive its own exact-head CI before release."
   },
   "production": {
-    "status": "READ_ONLY_COPY_ATTEMPT_ABORTED",
+    "status": "COPY_REHEARSAL_PASSED_RELEASE_PENDING",
     "production_database_access": true,
     "business_data_writes": 0,
-    "note": "A read-only streamed copy attempt was stopped after storage I/O wait rose materially; no dump file was retained, no migration ran and no business data was written."
+    "note": "Read-only bounded binary COPY only; production remains at migration 130. The staged 3–5% PSI prerequisite was removed. No fixed PSI baseline is required; use stage-local timeout, row cap, and before/after observation only."
   },
   "quality_gate": {
-    "status": "BLOCKED",
+    "status": "PENDING",
     "failures": [
-      "targeted production schema/data-copy rehearsal is incomplete after the read-only attempt was aborted for storage I/O pressure"
+      "final workflow-evidence commit needs exact-head GitHub CI",
+      "production release evidence, migration 131 deployment, health checks, and one natural scheduled refresh are pending"
     ]
   }
 }
