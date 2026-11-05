@@ -24,7 +24,7 @@ def test_scheduled_refresh_uses_bounded_chunk_policy():
     assert statistics.MAX_SCHEDULED_REFRESH_BATCH_SIZE == 5
     assert statistics.MAX_REFRESH_BATCHES_PER_RUN == 20
     assert statistics.REFRESH_BATCH_SQL_RESERVATION_SECONDS == 50
-    assert statistics.REFRESH_RUN_SQL_BUDGET_SECONDS == 75
+    assert statistics.REFRESH_RUN_SQL_BUDGET_SECONDS == 90
     with pytest.raises(ValueError, match="batch_size"):
         statistics.refresh_prediction_count(batch_size=6)
     with pytest.raises(ValueError, match="max_batches"):
@@ -33,8 +33,8 @@ def test_scheduled_refresh_uses_bounded_chunk_policy():
 
 def test_refresh_reserves_one_batch_before_starting_it():
     started_at = 100.0
-    assert statistics._refresh_batch_fits_run_budget(started_at, 125.0)
-    assert not statistics._refresh_batch_fits_run_budget(started_at, 125.001)
+    assert statistics._refresh_batch_fits_run_budget(started_at, 140.0)
+    assert not statistics._refresh_batch_fits_run_budget(started_at, 140.001)
 
 
 @pytest.fixture
