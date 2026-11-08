@@ -311,6 +311,44 @@ def test_rollup_batches_match_full_scan_reference_and_publish_only_when_drained(
     )
 
 
+def test_refresh_selects_canonical_rows_before_validity_and_kickoff_filters(
+    statistics_database,
+):
+    conn, _ = statistics_database
+    _insert_match_and_legacy_predictions(conn)
+    with conn.cursor() as cur:
+        cur.execute("INSERT INTO official_matches(id,kickoff_time) VALUES (104,'2026-11-03 20:00')")
+        cur.execute(
+            """INSERT INTO model_predictions
+                   (id,match_id,model_version_id,predict_time,play_type,option_code,
+                    ev,confidence_score,validation_status,uncertainty_reason)
+               VALUES
+                   (2001,104,1,'2026-11-03 19:00','spf','3',0.1,0.6,'valid','{}'),
+                   (2002,104,1,'2026-11-03 19:30','spf','3',0.8,0.9,'rejected','{}'),
+                   (2003,104,1,'2026-11-03 19:00','spf','1',0.1,0.6,'valid','{}'),
+                   (2004,104,1,'2026-11-03 20:30','spf','1',0.8,0.9,'valid','{}'),
+                   (2005,104,1,'2026-11-03 19:15','spf','0',0.1,0.6,'valid','{}')"""
+        )
+    conn.commit()
+
+    refreshed = _refresh(conn, batch_size=10)
+    assert refreshed["status"] == "completed"
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT raw_prediction_total, summary_total "
+            "FROM prediction_statistics_match_rollups WHERE match_id=104"
+        )
+        raw_total, canonical_total = cur.fetchone()
+
+    assert raw_total == 3
+    assert canonical_total == 1
+    reference = statistics.compute_prediction_snapshots(conn)
+    assert (
+        refreshed["snapshots"]["prediction_summary"]["total"]
+        == reference["prediction_summary"]["total"]
+    )
+
+
 def test_rollback_restores_claim_and_update_delete_and_kickoff_changes_invalidate(
     statistics_database,
 ):
@@ -636,6 +674,11 @@ def test_two_match_refresh_does_not_scan_unrelated_prediction_history(statistics
             entries.extend(prediction_scan_nodes(child, node.get("Node Type")))
         return entries
 
+    def plan_node_types(node):
+        return [node.get("Node Type")] + [
+            node_type for child in node.get("Plans", []) for node_type in plan_node_types(child)
+        ]
+
     print(
         {
             "archive_prediction_rows": 50000,
@@ -647,6 +690,10 @@ def test_two_match_refresh_does_not_scan_unrelated_prediction_history(statistics
         flush=True,
     )
     assert examined < 2000, "refreshing two matches must not read unrelated prediction history"
+    assert "Recursive Union" not in plan_node_types(plan["Plan"]), (
+        "scheduled rollups use a bounded match set; legacy identity enumeration must scan "
+        "that set directly instead of issuing recursive per-key seeks"
+    )
 
 
 def test_down_migration_preserves_source_rows_and_up_migration_reseeds_queue(

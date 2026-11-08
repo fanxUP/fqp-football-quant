@@ -36,10 +36,13 @@ def latest_prediction_ctes(
     match_scope: str | None = None,
     spf_only: bool = False,
     spf_home_only: bool = False,
+    legacy_strategy: str = "recursive",
 ) -> str:
-    """Seek legacy match/version/play keys before enumerating uncovered options."""
+    """Select canonical prediction rows with a bounded legacy access strategy."""
     if spf_home_only and not spf_only:
         raise ValueError("spf_home_only requires spf_only")
+    if legacy_strategy not in {"recursive", "scoped_scan"}:
+        raise ValueError("legacy_strategy must be recursive or scoped_scan")
     group_match = "AND g.match_id = %(match_id)s" if filter_match else ""
     key_match = "WHERE p.match_id = %(match_id)s" if filter_match else ""
     next_match = "AND p.match_id = %(match_id)s" if filter_match else ""
@@ -74,6 +77,63 @@ def latest_prediction_ctes(
         group_match = "AND g.match_id = ANY(%(match_ids)s::bigint[])"
         key_match = "WHERE p.match_id = ANY(%(match_ids)s::bigint[])"
         next_match = "AND p.match_id = ANY(%(match_ids)s::bigint[])"
+    if legacy_strategy == "scoped_scan":
+        if (
+            match_scope is None
+            or filter_match
+            or filter_match_ids
+            or not re.fullmatch(r"[a-z_][a-z_0-9]*", match_scope)
+        ):
+            raise ValueError("scoped_scan requires a static match_scope")
+        group_match = f"AND g.match_id = ANY(ARRAY(SELECT match_id FROM {match_scope}))"
+        candidate_filters = []
+        if spf_only:
+            candidate_filters.append("p.play_type = 'spf'")
+        if spf_home_only:
+            candidate_filters.append("p.option_code = '3'")
+        candidate_filter_sql = " AND ".join(candidate_filters)
+        if candidate_filter_sql:
+            candidate_filter_sql += " AND "
+        return f"""
+            latest_groups AS MATERIALIZED (
+                SELECT DISTINCT ON (g.match_id, mv.model_name, g.play_type)
+                    g.id AS group_id, g.match_id, mv.model_name, g.play_type
+                FROM model_prediction_groups g
+                JOIN model_prediction_runs r ON r.id = g.run_id
+                JOIN model_versions mv ON mv.id = g.model_version_id
+                WHERE g.group_status = 'complete'
+                  AND r.run_status IN ('completed', 'partial')
+                  {group_match}
+                  {"AND g.play_type = 'spf'" if spf_only else ""}
+                ORDER BY g.match_id, mv.model_name, g.play_type,
+                         g.predict_time DESC, g.created_at DESC, g.id DESC
+            ), legacy_candidates AS MATERIALIZED (
+                SELECT p.*, mv.model_name
+                FROM {match_scope} scoped
+                CROSS JOIN LATERAL (
+                    SELECT p.* FROM model_predictions p
+                    WHERE p.match_id = scoped.match_id
+                    OFFSET 0
+                ) p
+                JOIN model_versions mv ON mv.id = p.model_version_id
+                JOIN official_matches m ON m.id = p.match_id
+                WHERE {candidate_filter_sql}NOT EXISTS (
+                      SELECT 1 FROM latest_groups g
+                      WHERE g.match_id = p.match_id
+                        AND g.model_name = mv.model_name
+                        AND g.play_type = p.play_type
+                  )
+                  AND NOT EXISTS (
+                      SELECT 1 FROM model_prediction_group_options mapped
+                      WHERE mapped.prediction_id = p.id
+                  )
+            ), legacy_latest AS (
+                SELECT DISTINCT ON (match_id, model_name, play_type, option_code) *
+                FROM legacy_candidates
+                ORDER BY match_id, model_name, play_type, option_code,
+                         predict_time DESC, id DESC
+            )
+        """
     key_filters = f"{play_filter} {option_filter}".strip()
     if key_filters:
         key_match = f"{key_match} {key_filters}" if key_match else "WHERE " + key_filters[4:]
@@ -186,10 +246,11 @@ def canonical_prediction_rows_ctes(
     spf_only: bool = False,
     spf_home_only: bool = False,
     prefix: str = "",
+    legacy_strategy: str = "recursive",
 ) -> str:
     """Canonical IDs before validity/time filters; preserve complete-group shielding."""
     result = f"""
-        {latest_prediction_ctes(filter_match=False, match_scope=match_scope, spf_only=spf_only, spf_home_only=spf_home_only)},
+        {latest_prediction_ctes(filter_match=False, match_scope=match_scope, spf_only=spf_only, spf_home_only=spf_home_only, legacy_strategy=legacy_strategy)},
         canonical_prediction_ids AS (
             SELECT mapped.prediction_id AS id FROM latest_groups groups
             JOIN model_prediction_group_options mapped ON mapped.group_id = groups.group_id
@@ -208,6 +269,7 @@ def canonical_prediction_rows_ctes(
             raise ValueError("prefix must be a static SQL identifier prefix")
         names = (
             "latest_groups",
+            "legacy_candidates",
             "legacy_keys",
             "eligible_legacy_keys",
             "legacy_by_version",
@@ -381,7 +443,7 @@ def compute_prediction_snapshots(conn: Any) -> dict[str, dict[str, Any]]:
 
 _REFRESH_PREDICTION_STATISTICS_SQL = f"""
     WITH RECURSIVE
-    {canonical_prediction_rows_ctes(match_scope="prediction_statistics_refresh_targets")},
+    {canonical_prediction_rows_ctes(match_scope="prediction_statistics_refresh_targets", legacy_strategy="scoped_scan")},
     eligible_canonical_rows AS MATERIALIZED (
         SELECT p.match_id, mv.model_name, p.ev, p.confidence_score, p.predict_time
         FROM canonical_prediction_rows p
