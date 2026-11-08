@@ -56,6 +56,22 @@
       "tree_fingerprint": "a0052667733befc938c82c33c4ad5ba7dadf415278748672876cf107a846385f",
       "verified_at": "2026-11-06T05:53:49+08:00",
       "note": "Read-only preflight for 9cbf98c passed on server 100.121.47.26: clean main at rollback b25c00d, services active, nginx -t and health/protected HTTP smoke passed, deploy.sh --plan passed, migration plan pending=[] and no Nginx file changes. Apply has not occurred. Server natural run 235922 (00:48 Beijing) was partial: 16 refreshed, 2707 pending, no recorded error. No business-data write, backup, PSI, or pressure baseline was used."
+    },
+    "A107-CATCHUP-QUERY-OPTIMIZATION": {
+      "status": "PASS",
+      "command": "Disposable PostgreSQL 16: pytest -q tests/test_computation/test_prediction_statistics_rollup_postgres.py; focused recent-prediction regressions in test_prediction_run_postgres.py; Ruff, format, compileall, git diff --check; read-only production EXPLAIN; rollback-only isolated-copy EXPLAIN ANALYZE.",
+      "exit_code": 0,
+      "summary": "PASS: 23 PostgreSQL rollup tests and 3 recent-prediction regressions passed. Both recursive and scoped-scan paths now join the bounded match-scope relation through SELECT DISTINCT, preserving ANY set semantics. Read-only production EXPLAIN estimate dropped from 1,695,049.63 to 266,834.79 and avoided the full model_prediction_group_options scan. Rollback-only isolated-copy EXPLAIN ANALYZE was 194.478 ms original vs 47.355 ms optimized for the same representative 13,266-prediction match; this is directional, not a controlled benchmark or production ETA. No schema, API, dependency, transaction, queue-lock, or scheduler changes.",
+      "timed_out": false,
+      "environment": "Disposable PostgreSQL 16 for regression and rollback-only isolated production-copy query plan; production query plan was EXPLAIN only.",
+      "revision": "75aef8ea103fae2ec8e02f9e24103d0688a518de",
+      "dirty_tree": true,
+      "tree_fingerprint": "0b8a1327daef8b7b5f792ba8dc445ff5d89741ae759cad7357a77705da022112",
+      "verified_at": "2026-11-09T02:41:14+08:00",
+      "note": "No production rows or schema were modified while measuring plans. This is code/test evidence only; production catch-up and consumer snapshot acceptance remain open."
+    },
+    "A107-CATCHUP-OPTIMIZED-EXACT-HEAD-CI": {
+      "status": "PENDING"
     }
   },
   "reviews": {
@@ -88,12 +104,17 @@
       "status": "PASS",
       "record": ".vibe/AGGREGATE-INDEPENDENT-REVIEW.md",
       "note": "Independent read-only review passed after fixing the operations-status cadence and adding Asia/Shanghai CronTrigger assertions. Reviewer confirmed the three code paths fit the amended scope and 60-path budget. Production runtime effect remains unverified."
+    },
+    "p107_match_scope_query_optimization": {
+      "status": "PASS",
+      "record": ".vibe/AGGREGATE-INDEPENDENT-REVIEW.md",
+      "note": "Independent read-only review passed after fixing the duplicate-scope semantics concern with SELECT DISTINCT; follow-up confirmed indexes remain available and no full mapping-table scan returns."
     }
   },
   "security": {
     "status": "PASS",
-    "reviewed_at": "2026-11-09T00:54:19+08:00",
-    "note": "Follow-up changes only restore the :18/:48 non-overlapping cron cadence and remove the arbitrary startup +2 minute override. No migration, dependency, credential, outbound request, permission or public API changed. Independent follow-up review passed."
+    "reviewed_at": "2026-11-09T02:41:14+08:00",
+    "note": "Match-scope SQL change validates the static CTE identifier with a strict regex and joins a DISTINCT match_id relation. No migration, dependency, credential, permission, outbound request, public API, transaction, advisory-lock, or scheduler cadence change."
   },
   "migration": {
     "status": "PASS",

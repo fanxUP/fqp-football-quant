@@ -33,6 +33,21 @@ def test_scheduled_refresh_uses_bounded_chunk_policy():
         statistics.refresh_prediction_count(max_batches=21)
 
 
+@pytest.mark.parametrize("legacy_strategy", ["recursive", "scoped_scan"])
+def test_match_scoped_group_lookup_joins_the_scope_relation(legacy_strategy):
+    query = statistics.latest_prediction_ctes(
+        filter_match=False,
+        match_scope="target_match_ids",
+        legacy_strategy=legacy_strategy,
+    )
+
+    assert (
+        "JOIN (SELECT DISTINCT match_id FROM target_match_ids) group_scope "
+        "ON group_scope.match_id = g.match_id"
+    ) in query
+    assert "g.match_id = ANY(ARRAY(SELECT match_id FROM target_match_ids))" not in query
+
+
 def test_refresh_reserves_one_batch_before_starting_it():
     started_at = 100.0
     assert statistics._refresh_batch_fits_run_budget(started_at, 135.0)

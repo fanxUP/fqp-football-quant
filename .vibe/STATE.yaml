@@ -1,5 +1,5 @@
 {
-  "state": "READY_TO_MERGE",
+  "state": "REVIEWING",
   "workflow_id": "P107-AGGREGATE-CANDIDATE-RELEASE-READINESS",
   "previous_workflow": {
     "task_id": "P107-AGGREGATE-SCOPE-RECONCILIATION",
@@ -10,9 +10,9 @@
   "blocked_reason": null,
   "mode": "STANDARD",
   "last_transition": {
-    "from": "REVIEWING",
-    "to": "READY_TO_MERGE",
-    "at": "2026-11-06T04:23:10.477439+08:00",
-    "reason": "Exact-head candidate CI, independent review, security, unchanged-migration evidence, and the V4 quality gate passed."
+    "from": "VERIFYING",
+    "to": "REVIEWING",
+    "at": "2026-11-09T02:42:25.366361+08:00",
+    "reason": "Local verification passed and the independent follow-up review cleared the duplicate-scope semantics finding."
   }
 }

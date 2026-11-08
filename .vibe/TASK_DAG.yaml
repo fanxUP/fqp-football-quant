@@ -1,6 +1,6 @@
 {
   "schema_version": 4,
-  "current_task": "P107-DEPLOY-PREFLIGHT-INPUTS",
+  "current_task": "P107-CATCHUP-OPTIMIZED-EXACT-HEAD-CI",
   "tasks": {
     "P107-LOCAL-CANDIDATE-VALIDATION": {
       "title": "Run current aggregate Python, PostgreSQL, frontend and static regressions",
@@ -56,6 +56,35 @@
         "The release introduces no migration, so the authorized no-backup release creates no database backup. No manual refresh or restart is used.",
         "Do not collect PSI or set a server pressure baseline or threshold.",
         "After release, track natural runtime observations separately. Keep the overall A107 acceptance open until the dirty queue drains and consumers read a complete snapshot; do not claim P104 probability use."
+      ]
+    },
+    "P107-CATCHUP-QUERY-OPTIMIZATION": {
+      "title": "Keep match-scoped canonical rollups from scanning unrelated group history",
+      "acceptance_id": "A107-CATCHUP-QUERY-OPTIMIZATION",
+      "depends_on": [
+        "P107-DEPLOY-PREFLIGHT-INPUTS"
+      ],
+      "kind": "performance_regression_fix",
+      "status": "DONE",
+      "definition_of_done": [
+        "Scoped canonical queries join the bounded match scope directly and preserve current latest-group and legacy-row semantics.",
+        "Disposable PostgreSQL regressions pass for incremental rollups and recent-prediction consumers.",
+        "A read-only production EXPLAIN and rollback-only isolated production-copy EXPLAIN ANALYZE record the plan and runtime difference; no production data is changed by the experiment.",
+        "No database migration, public API, dependency, or scheduler cadence change is introduced."
+      ]
+    },
+    "P107-CATCHUP-OPTIMIZED-EXACT-HEAD-CI": {
+      "title": "Commit and verify the optimized P107 candidate on GitHub main",
+      "acceptance_id": "A107-CATCHUP-OPTIMIZED-EXACT-HEAD-CI",
+      "depends_on": [
+        "P107-CATCHUP-QUERY-OPTIMIZATION"
+      ],
+      "kind": "external_ci",
+      "status": "IN_PROGRESS",
+      "definition_of_done": [
+        "Commit only the approved query, regression test, and V4 control/evidence changes on main; do not stage uv.lock or user odds-page changes.",
+        "Push the exact candidate to GitHub main and verify required lint-and-typecheck and test jobs pass for that exact SHA.",
+        "Refresh evidence and quality-gate status on the clean exact-head checkout before production deployment."
       ]
     }
   }

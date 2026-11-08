@@ -46,6 +46,7 @@ def latest_prediction_ctes(
     if legacy_strategy not in {"recursive", "scoped_scan"}:
         raise ValueError("legacy_strategy must be recursive or scoped_scan")
     group_match = "AND g.match_id = %(match_id)s" if filter_match else ""
+    group_scope_join = ""
     key_match = "WHERE p.match_id = %(match_id)s" if filter_match else ""
     next_match = "AND p.match_id = %(match_id)s" if filter_match else ""
     play_filter = "AND p.play_type = 'spf'" if spf_only else ""
@@ -87,7 +88,14 @@ def latest_prediction_ctes(
             or not re.fullmatch(r"[a-z_][a-z_0-9]*", match_scope)
         ):
             raise ValueError("scoped_scan requires a static match_scope")
-        group_match = f"AND g.match_id = ANY(ARRAY(SELECT match_id FROM {match_scope}))"
+        # Keep the bounded scope visible to the planner. Wrapping it in an
+        # ARRAY initplan can misestimate a one-match scope and scan every
+        # group-option row while resolving only that match's latest groups.
+        group_match = ""
+        group_scope_join = (
+            f"JOIN (SELECT DISTINCT match_id FROM {match_scope}) group_scope "
+            "ON group_scope.match_id = g.match_id"
+        )
         candidate_filters = []
         if spf_only:
             candidate_filters.append("p.play_type = 'spf'")
@@ -101,6 +109,7 @@ def latest_prediction_ctes(
                 SELECT DISTINCT ON (g.match_id, mv.model_name, g.play_type)
                     g.id AS group_id, g.match_id, mv.model_name, g.play_type
                 FROM model_prediction_groups g
+                {group_scope_join}
                 JOIN model_prediction_runs r ON r.id = g.run_id
                 JOIN model_versions mv ON mv.id = g.model_version_id
                 WHERE g.group_status = 'complete'
@@ -163,7 +172,13 @@ def latest_prediction_ctes(
     if match_scope is not None:
         if filter_match or filter_match_ids or not re.fullmatch(r"[a-z_][a-z_0-9]*", match_scope):
             raise ValueError("match_scope must be a static CTE name and cannot combine filters")
-        group_match = f"AND g.match_id = ANY(ARRAY(SELECT match_id FROM {match_scope}))"
+        # As above, express the match scope as a relation so PostgreSQL can
+        # plan an indexed join instead of an opaque array membership check.
+        group_match = ""
+        group_scope_join = (
+            f"JOIN (SELECT DISTINCT match_id FROM {match_scope}) group_scope "
+            "ON group_scope.match_id = g.match_id"
+        )
         # Seek inside each match's identity index. A global recursive seek with
         # an IN filter can walk unrelated histories between successive keys.
         legacy_keys = f"""
@@ -199,6 +214,7 @@ def latest_prediction_ctes(
             SELECT DISTINCT ON (g.match_id, mv.model_name, g.play_type)
                 g.id AS group_id, g.match_id, mv.model_name, g.play_type
             FROM model_prediction_groups g
+            {group_scope_join}
             JOIN model_prediction_runs r ON r.id = g.run_id
             JOIN model_versions mv ON mv.id = g.model_version_id
             WHERE g.group_status = 'complete'
