@@ -80,7 +80,7 @@
         "P107-CATCHUP-QUERY-OPTIMIZATION"
       ],
       "kind": "external_ci",
-      "status": "IN_PROGRESS",
+      "status": "DONE",
       "definition_of_done": [
         "Commit only the approved query, regression test, and V4 control/evidence changes on main; do not stage uv.lock or user odds-page changes.",
         "Push the exact candidate to GitHub main and verify required lint-and-typecheck and test jobs pass for that exact SHA.",
