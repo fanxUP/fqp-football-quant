@@ -22,11 +22,12 @@ MAX_REFRESH_BATCH_SIZE = 1000
 MAX_REFRESH_BATCHES_PER_RUN = 20
 CLAIM_STATEMENT_TIMEOUT_SECONDS = 5
 ORPHAN_DELETE_STATEMENT_TIMEOUT_SECONDS = 5
+PENDING_MATCHES_STATEMENT_TIMEOUT_SECONDS = 5
 ROLLUP_STATEMENT_TIMEOUT_SECONDS = 25
 SNAPSHOT_STATEMENT_TIMEOUT_SECONDS = 10
-REFRESH_BATCH_SQL_RESERVATION_SECONDS = 50
+REFRESH_BATCH_SQL_RESERVATION_SECONDS = 55
 # Normal starts at :18/:48 ahead of long :20/:50 work; catch-up slots are
-# two minutes apart. Keep a nominal 30-second gap after the SQL work budget.
+# two minutes apart. Keep a nominal 35-second gap after the SQL work budget.
 REFRESH_RUN_SQL_BUDGET_SECONDS = 90
 
 
@@ -541,6 +542,11 @@ _PREDICTION_STATISTICS_SNAPSHOT_SQL = """
     FROM pending CROSS JOIN rollups CROSS JOIN model_count
 """
 
+_PENDING_MATCHES_SQL = """
+    SELECT COUNT(*)::BIGINT AS pending_matches
+    FROM prediction_statistics_dirty_matches
+"""
+
 
 def _set_local_statement_timeout(cur: Any, timeout_seconds: int) -> None:
     if type(timeout_seconds) is not int or not 1 <= timeout_seconds <= 120:
@@ -609,6 +615,23 @@ def _refresh_prediction_statistics_batch(
             cur, _REFRESH_PREDICTION_STATISTICS_SQL, ROLLUP_STATEMENT_TIMEOUT_SECONDS
         )
         _execute_with_local_timeout(
+            cur, _PENDING_MATCHES_SQL, PENDING_MATCHES_STATEMENT_TIMEOUT_SECONDS
+        )
+        pending_row = cur.fetchone()
+        if pending_row is None:
+            raise RuntimeError("prediction statistics pending count returned no row")
+        pending_matches = int(pending_row[0])
+        if pending_matches:
+            return {
+                "status": "partial",
+                "matches_refreshed": matches_refreshed,
+                "pending_matches": pending_matches,
+            }
+
+        # The whole rollup table and model-name arrays need aggregation only
+        # when the dirty queue is empty; redoing it after every partial batch
+        # makes catch-up cost grow with the queue size.
+        _execute_with_local_timeout(
             cur, _PREDICTION_STATISTICS_SNAPSHOT_SQL, SNAPSHOT_STATEMENT_TIMEOUT_SECONDS
         )
         row = cur.fetchone()
@@ -660,8 +683,9 @@ def _refresh_prediction_statistics_batch(
 def _refresh_batch_fits_run_budget(started_at: float, now: float) -> bool:
     """Reserve room for one batch before admitting it to the SQL work window.
 
-    This is a soft admission budget, not a wall-clock kill deadline: SET commands,
-    driver latency, and transaction commits can extend observed elapsed time.
+    The reservation covers claim, analysis, orphan cleanup, rollup, pending count,
+    and a possible final snapshot. It is a soft budget, not a wall-clock kill
+    deadline: driver latency and transaction commits can extend observed time.
     """
     elapsed = now - started_at
     return (

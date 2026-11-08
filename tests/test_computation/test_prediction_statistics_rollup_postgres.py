@@ -6,7 +6,9 @@ import os
 import threading
 import time
 from contextlib import closing, contextmanager
+from datetime import UTC, datetime
 from pathlib import Path
+from unittest.mock import MagicMock
 from urllib.parse import urlparse
 from uuid import uuid4
 
@@ -23,7 +25,7 @@ def test_scheduled_refresh_uses_bounded_chunk_policy():
     assert statistics.DEFAULT_REFRESH_BATCH_SIZE == 1
     assert statistics.MAX_SCHEDULED_REFRESH_BATCH_SIZE == 5
     assert statistics.MAX_REFRESH_BATCHES_PER_RUN == 20
-    assert statistics.REFRESH_BATCH_SQL_RESERVATION_SECONDS == 50
+    assert statistics.REFRESH_BATCH_SQL_RESERVATION_SECONDS == 55
     assert statistics.REFRESH_RUN_SQL_BUDGET_SECONDS == 90
     with pytest.raises(ValueError, match="batch_size"):
         statistics.refresh_prediction_count(batch_size=6)
@@ -33,8 +35,54 @@ def test_scheduled_refresh_uses_bounded_chunk_policy():
 
 def test_refresh_reserves_one_batch_before_starting_it():
     started_at = 100.0
-    assert statistics._refresh_batch_fits_run_budget(started_at, 140.0)
-    assert not statistics._refresh_batch_fits_run_budget(started_at, 140.001)
+    assert statistics._refresh_batch_fits_run_budget(started_at, 135.0)
+    assert not statistics._refresh_batch_fits_run_budget(started_at, 135.001)
+
+
+def _mock_refresh_connection(*rows):
+    cursor = MagicMock()
+    cursor.rowcount = 1
+    cursor.fetchone.side_effect = rows
+    connection = MagicMock()
+    connection.cursor.return_value.__enter__.return_value = cursor
+    return connection, cursor
+
+
+def test_partial_rollup_defers_global_snapshot_until_dirty_queue_drains():
+    connection, cursor = _mock_refresh_connection((3,))
+
+    result = statistics._refresh_prediction_statistics_batch(connection, batch_size=1)
+
+    executed = [call.args[0] for call in cursor.execute.call_args_list]
+    assert result == {"status": "partial", "matches_refreshed": 1, "pending_matches": 3}
+    assert statistics._PENDING_MATCHES_SQL in executed
+    assert statistics._PREDICTION_STATISTICS_SNAPSHOT_SQL not in executed
+
+
+def test_drained_rollup_computes_global_snapshot_once():
+    now = datetime(2026, 11, 8, 12, 0, tzinfo=UTC)
+    snapshot_row = (0, 13, 7, 3, 0.75, 2, now, now, now)
+    connection, cursor = _mock_refresh_connection((0,), snapshot_row)
+
+    result = statistics._refresh_prediction_statistics_batch(connection, batch_size=1)
+
+    executed = [call.args[0] for call in cursor.execute.call_args_list]
+    assert result["status"] == "completed"
+    assert result["snapshots"]["prediction_count"]["total"] == 13
+    assert result["snapshots"]["prediction_summary"]["total"] == 7
+    assert statistics._PREDICTION_STATISTICS_SNAPSHOT_SQL in executed
+
+
+def test_final_snapshot_rechecks_pending_after_precheck():
+    now = datetime(2026, 11, 8, 12, 0, tzinfo=UTC)
+    snapshot_row = (1, 13, 7, 3, 0.75, 2, now, now, now)
+    connection, cursor = _mock_refresh_connection((0,), snapshot_row)
+
+    result = statistics._refresh_prediction_statistics_batch(connection, batch_size=1)
+
+    executed = [call.args[0] for call in cursor.execute.call_args_list]
+    assert result == {"status": "partial", "matches_refreshed": 1, "pending_matches": 1}
+    assert statistics._PREDICTION_STATISTICS_SNAPSHOT_SQL in executed
 
 
 @pytest.fixture
@@ -252,9 +300,10 @@ def test_refresh_uses_distinct_timeouts_for_each_statement(statistics_database, 
         statistics.CLAIM_STATEMENT_TIMEOUT_SECONDS,
         statistics.ORPHAN_DELETE_STATEMENT_TIMEOUT_SECONDS,
         statistics.ROLLUP_STATEMENT_TIMEOUT_SECONDS,
+        statistics.PENDING_MATCHES_STATEMENT_TIMEOUT_SECONDS,
         statistics.SNAPSHOT_STATEMENT_TIMEOUT_SECONDS,
     ]
-    assert len(timed_statements) == 5
+    assert len(timed_statements) == 6
     assert timed_statements[0][1].lstrip().startswith("CREATE TEMP TABLE")
     assert timed_statements[1][1].strip().upper() == "ANALYZE PREDICTION_STATISTICS_REFRESH_TARGETS"
     assert (
@@ -263,24 +312,37 @@ def test_refresh_uses_distinct_timeouts_for_each_statement(statistics_database, 
         .startswith("DELETE FROM prediction_statistics_match_rollups")
     )
     assert timed_statements[3][1] == statistics._REFRESH_PREDICTION_STATISTICS_SQL
-    assert timed_statements[4][1] == statistics._PREDICTION_STATISTICS_SNAPSHOT_SQL
+    assert timed_statements[4][1] == statistics._PENDING_MATCHES_SQL
+    assert timed_statements[5][1] == statistics._PREDICTION_STATISTICS_SNAPSHOT_SQL
 
 
 def test_rollup_batches_match_full_scan_reference_and_publish_only_when_drained(
-    statistics_database,
+    statistics_database, monkeypatch
 ):
     conn, _ = statistics_database
     _insert_match_and_legacy_predictions(conn)
+    executed_statements = []
+    execute_with_timeout = statistics._execute_with_local_timeout
+
+    def record_statement(cursor, statement, timeout_seconds, params=None):
+        executed_statements.append(statement)
+        execute_with_timeout(cursor, statement, timeout_seconds, params)
+
+    monkeypatch.setattr(statistics, "_execute_with_local_timeout", record_statement)
 
     first = _refresh(conn, batch_size=2)
     assert first == {"status": "partial", "matches_refreshed": 2, "pending_matches": 1}
+    assert statistics._PENDING_MATCHES_SQL in executed_statements
+    assert statistics._PREDICTION_STATISTICS_SNAPSHOT_SQL not in executed_statements
     with conn.cursor() as cur:
         cur.execute("SELECT COUNT(*) FROM prediction_statistics_match_rollups")
         assert cur.fetchone()[0] == 2
 
+    executed_statements.clear()
     second = _refresh(conn, batch_size=2)
     assert second["status"] == "completed"
     assert second["matches_refreshed"] == 1
+    assert statistics._PREDICTION_STATISTICS_SNAPSHOT_SQL in executed_statements
     reference = statistics.compute_prediction_snapshots(conn)
     assert (
         second["snapshots"]["prediction_count"]["total"] == reference["prediction_count"]["total"]
