@@ -18,6 +18,7 @@ from scripts.jobs.run_scheduler import (
     NEWS_SHADOW_CRON,
     NEWS_SNAPSHOT_CRON,
     OFFICIAL_SCHEDULE_CRON,
+    PREDICTION_STATISTICS_CATCHUP_INTERVAL_MINUTES,
     PREDICTION_STATISTICS_REFRESH_CRON,
     SEASON_RECONCILIATION_RETRY_TIME,
     STARTUP_RECOVERY_JOB_CODES,
@@ -26,6 +27,7 @@ from scripts.jobs.run_scheduler import (
     _business_now,
     _odds_dispatch_owner,
     _register_feature_explanation_job,
+    _run_prediction_statistics_refresh,
     _scheduler_timezone_name,
     _should_retry_season_reconciliation,
     _should_run_recommendation_catchup,
@@ -58,20 +60,23 @@ def test_news_jobs_use_staggered_conservative_intervals() -> None:
 def test_history_count_is_monitored_and_scheduled_outside_requests():
     source = Path("scripts/jobs/run_scheduler.py").read_text()
     job_source = source[
-        source.index("# Count history off the request path") : source.index(
+        source.index("# Drain the dirty queue with bounded, natural runs.") : source.index(
             "# ----- Stage 2: official data jobs"
         )
     ]
     assert 'id="refresh_prediction_count"' in job_source
     assert PREDICTION_STATISTICS_REFRESH_CRON == {"minute": "18,48"}
-    assert "**PREDICTION_STATISTICS_REFRESH_CRON" in job_source
+    assert PREDICTION_STATISTICS_CATCHUP_INTERVAL_MINUTES == 2
+    assert '"interval"' in job_source
+    assert "minutes=PREDICTION_STATISTICS_CATCHUP_INTERVAL_MINUTES" in job_source
+    assert "_run_prediction_statistics_refresh(scheduler)" in job_source
     assert "timedelta(minutes=2)" in job_source
     assert "max_instances=1" in job_source
     assert "coalesce=True" in job_source
     assert "_audited_job" not in job_source  # producer owns structured audit output
     assert JOB_DEFINITIONS["refresh_prediction_count"].max_age == timedelta(minutes=45)
     assert JOB_DEFINITIONS["refresh_prediction_count"].schedule == (
-        "每30分钟（:18/:48，启动后2分钟首跑）"
+        "积压/锁占用时每2分钟；完成或失败后恢复每30分钟（:18/:48）"
     )
 
 
@@ -85,6 +90,113 @@ def test_prediction_statistics_trigger_uses_the_configured_minutes() -> None:
 
     assert first == datetime.fromisoformat("2026-11-06T03:18:00+08:00")
     assert second == datetime.fromisoformat("2026-11-06T03:48:00+08:00")
+
+
+def test_prediction_statistics_refresh_keeps_catchup_interval_while_pending() -> None:
+    scheduler = MagicMock()
+
+    with patch(
+        "scripts.prediction_statistics.refresh_prediction_count",
+        return_value={"status": "refreshing", "pending_matches": 2_743},
+    ) as refresh:
+        result = _run_prediction_statistics_refresh(scheduler)
+
+    assert result["pending_matches"] == 2_743
+    refresh.assert_called_once_with()
+    scheduler.reschedule_job.assert_not_called()
+
+
+def test_prediction_statistics_refresh_keeps_catchup_interval_if_another_owner_is_running():
+    scheduler = MagicMock()
+
+    with patch(
+        "scripts.prediction_statistics.refresh_prediction_count",
+        return_value={"status": "skipped", "reason": "refresh_already_running"},
+    ):
+        result = _run_prediction_statistics_refresh(scheduler)
+
+    assert result["reason"] == "refresh_already_running"
+    scheduler.reschedule_job.assert_not_called()
+
+
+@pytest.mark.parametrize("status", ["ok", "skipped"])
+def test_prediction_statistics_refresh_restores_normal_schedule_when_not_pending(status):
+    scheduler = MagicMock()
+
+    with patch(
+        "scripts.prediction_statistics.refresh_prediction_count",
+        return_value={"status": status},
+    ):
+        result = _run_prediction_statistics_refresh(scheduler)
+
+    assert result["status"] == status
+    scheduler.reschedule_job.assert_called_once_with(
+        "refresh_prediction_count",
+        trigger="cron",
+        **PREDICTION_STATISTICS_REFRESH_CRON,
+        timezone=scheduler.timezone,
+    )
+
+
+def test_prediction_statistics_refresh_restores_normal_schedule_after_failure():
+    scheduler = MagicMock()
+
+    with (
+        patch(
+            "scripts.prediction_statistics.refresh_prediction_count",
+            side_effect=RuntimeError("rollup failed"),
+        ),
+        pytest.raises(RuntimeError, match="rollup failed"),
+    ):
+        _run_prediction_statistics_refresh(scheduler)
+
+    scheduler.reschedule_job.assert_called_once_with(
+        "refresh_prediction_count",
+        trigger="cron",
+        **PREDICTION_STATISTICS_REFRESH_CRON,
+        timezone=scheduler.timezone,
+    )
+
+
+def test_prediction_statistics_refresh_does_not_mask_failure_if_reschedule_fails():
+    scheduler = MagicMock()
+    scheduler.reschedule_job.side_effect = RuntimeError("schedule update failed")
+
+    with (
+        patch(
+            "scripts.prediction_statistics.refresh_prediction_count",
+            side_effect=ValueError("rollup failed"),
+        ),
+        pytest.raises(ValueError, match="rollup failed"),
+    ):
+        _run_prediction_statistics_refresh(scheduler)
+
+
+def test_prediction_statistics_refresh_reschedules_live_apscheduler_job():
+    timezone = ZoneInfo("Asia/Shanghai")
+    scheduler = BackgroundScheduler(timezone=timezone)
+    scheduler.add_job(
+        lambda: None,
+        "interval",
+        minutes=PREDICTION_STATISTICS_CATCHUP_INTERVAL_MINUTES,
+        next_run_time=datetime.now(timezone) + timedelta(days=1),
+        id="refresh_prediction_count",
+    )
+    scheduler.start(paused=True)
+    try:
+        with patch(
+            "scripts.prediction_statistics.refresh_prediction_count",
+            return_value={"status": "ok"},
+        ):
+            _run_prediction_statistics_refresh(scheduler)
+
+        job = scheduler.get_job("refresh_prediction_count")
+        assert job is not None
+        assert isinstance(job.trigger, CronTrigger)
+        assert job.next_run_time is not None
+        assert job.next_run_time.minute in {18, 48}
+    finally:
+        scheduler.shutdown(wait=False)
 
 
 def test_self_tracked_job_is_not_wrapped_again():

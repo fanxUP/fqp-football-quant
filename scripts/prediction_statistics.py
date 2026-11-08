@@ -25,7 +25,8 @@ ORPHAN_DELETE_STATEMENT_TIMEOUT_SECONDS = 5
 ROLLUP_STATEMENT_TIMEOUT_SECONDS = 25
 SNAPSHOT_STATEMENT_TIMEOUT_SECONDS = 10
 REFRESH_BATCH_SQL_RESERVATION_SECONDS = 50
-# Starts at :18/:48 ahead of long :20/:50 work; keep 30 seconds of schedule margin.
+# Normal starts at :18/:48 ahead of long :20/:50 work; catch-up slots are
+# two minutes apart. Keep a nominal 30-second gap after the SQL work budget.
 REFRESH_RUN_SQL_BUDGET_SECONDS = 90
 
 

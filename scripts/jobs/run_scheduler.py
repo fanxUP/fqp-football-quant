@@ -27,6 +27,9 @@ MODEL_PREDICTION_CRON = {"minute": "15,45"}
 # Run the bounded statistics refresh after prediction windows and before the
 # cold-review jobs, avoiding a same-minute start with cold evidence collection.
 PREDICTION_STATISTICS_REFRESH_CRON = {"minute": "18,48"}
+# Drain a previously populated dirty queue at a bounded catch-up cadence. The
+# job returns to the normal cron above when it publishes a complete snapshot.
+PREDICTION_STATISTICS_CATCHUP_INTERVAL_MINUTES = 2
 # Search aggregators at most once every two hours. The job is registered only
 # when the explicit collection flag is enabled, so a newly deployed server
 # never starts external news traffic by accident.
@@ -121,6 +124,34 @@ def _run_recommendation_catchup() -> dict[str, Any]:
 
     result = run()
     print(f"[scheduler] recommendation startup catch-up: {result}")
+    return result
+
+
+def _restore_prediction_statistics_cadence(scheduler: Any) -> None:
+    try:
+        scheduler.reschedule_job(
+            "refresh_prediction_count",
+            trigger="cron",
+            **PREDICTION_STATISTICS_REFRESH_CRON,
+            timezone=scheduler.timezone,
+        )
+    except Exception as exc:
+        print(f"[scheduler] prediction statistics cadence reset failed: {exc}")
+
+
+def _run_prediction_statistics_refresh(scheduler: Any) -> dict[str, Any]:
+    """Drain dirty rollups at a bounded cadence, then restore the normal one."""
+    try:
+        from scripts.prediction_statistics import refresh_prediction_count
+
+        result = refresh_prediction_count()
+    except Exception:
+        _restore_prediction_statistics_cadence(scheduler)
+        raise
+
+    lock_is_busy = result.get("reason") == "refresh_already_running"
+    if result.get("status") != "refreshing" and not lock_is_busy:
+        _restore_prediction_statistics_cadence(scheduler)
     return result
 
 
@@ -426,16 +457,13 @@ def main() -> None:
             id="refresh_model_performance_history",
         )
 
-        # Count history off the request path after the prediction window and
-        # before the :20/:50 cold-review chain. The producer owns its audit and
-        # cross-process lock; a separate minute avoids starting beside its long
-        # per-match evidence scan.
+        # Drain the dirty queue with bounded, natural runs. The producer owns
+        # its audit and cross-process lock; once it publishes a complete
+        # snapshot, the wrapper restores the normal :18/:48 cadence.
         scheduler.add_job(
-            lambda: __import__(
-                "scripts.prediction_statistics", fromlist=["refresh_prediction_count"]
-            ).refresh_prediction_count(),
-            "cron",
-            **PREDICTION_STATISTICS_REFRESH_CRON,
+            lambda: _run_prediction_statistics_refresh(scheduler),
+            "interval",
+            minutes=PREDICTION_STATISTICS_CATCHUP_INTERVAL_MINUTES,
             next_run_time=_business_now(timezone_name) + timedelta(minutes=2),
             max_instances=1,
             coalesce=True,

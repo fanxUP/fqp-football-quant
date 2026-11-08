@@ -24,7 +24,7 @@ class JobDefinition:
 JOB_DEFINITIONS: dict[str, JobDefinition] = {
     "refresh_prediction_count": JobDefinition(
         "有效赛前历史预测累计统计",
-        "每30分钟（:18/:48，启动后2分钟首跑）",
+        "积压/锁占用时每2分钟；完成或失败后恢复每30分钟（:18/:48）",
         "model",
         max_age=timedelta(minutes=45),
     ),
