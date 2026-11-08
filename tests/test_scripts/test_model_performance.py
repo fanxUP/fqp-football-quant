@@ -70,9 +70,10 @@ def test_model_performance_history_returns_rolling_hit_rate_by_play_type() -> No
     result = get_model_performance_history(conn, window=20, days=90)
 
     assert "model_prediction_latest_rows" not in conn.cursor_instance.query
-    assert "g.match_id = ANY(ARRAY(SELECT match_id FROM settled_matches))" in (
-        conn.cursor_instance.query
-    )
+    assert (
+        "JOIN (SELECT DISTINCT match_id FROM settled_matches) group_scope "
+        "ON group_scope.match_id = g.match_id"
+    ) in conn.cursor_instance.query
     assert "p.match_id = scoped.match_id" in conn.cursor_instance.query
     assert "source_mp.validation_status = 'valid'" in conn.cursor_instance.query
     assert "model_independent" in conn.cursor_instance.query

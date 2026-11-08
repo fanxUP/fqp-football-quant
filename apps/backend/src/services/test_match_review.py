@@ -157,7 +157,10 @@ def test_match_review_prediction_read_scopes_canonical_selection_to_review_match
     )
     assert "model_prediction_latest_rows" not in query
     assert "review_match_scope AS MATERIALIZED" in query
-    assert "g.match_id = ANY(ARRAY(SELECT match_id FROM review_match_scope))" in query
+    assert (
+        "JOIN (SELECT DISTINCT match_id FROM review_match_scope) group_scope "
+        "ON group_scope.match_id = g.match_id"
+    ) in query
     assert "p.match_id = scoped.match_id" in query
     assert "validation_status = 'valid'" in query
     assert "predict_time <" in query

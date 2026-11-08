@@ -61,17 +61,22 @@
       "status": "PASS",
       "command": "Disposable PostgreSQL 16: pytest -q tests/test_computation/test_prediction_statistics_rollup_postgres.py; focused recent-prediction regressions in test_prediction_run_postgres.py; Ruff, format, compileall, git diff --check; read-only production EXPLAIN; rollback-only isolated-copy EXPLAIN ANALYZE.",
       "exit_code": 0,
-      "summary": "PASS: 23 PostgreSQL rollup tests and 3 recent-prediction regressions passed. Both recursive and scoped-scan paths now join the bounded match-scope relation through SELECT DISTINCT, preserving ANY set semantics. Read-only production EXPLAIN estimate dropped from 1,695,049.63 to 266,834.79 and avoided the full model_prediction_group_options scan. Rollback-only isolated-copy EXPLAIN ANALYZE was 194.478 ms original vs 47.355 ms optimized for the same representative 13,266-prediction match; this is directional, not a controlled benchmark or production ETA. No schema, API, dependency, transaction, queue-lock, or scheduler changes.",
+      "summary": "PASS: 23 PostgreSQL rollup tests and 3 recent-prediction regressions passed. Both recursive and scoped-scan paths now join the bounded match-scope relation through SELECT DISTINCT, preserving ANY set semantics. Read-only production EXPLAIN estimate dropped from 1,695,049.63 to 266,834.79 and avoided the full model_prediction_group_options scan. Rollback-only isolated-copy EXPLAIN ANALYZE was 194.478 ms original vs 47.355 ms optimized for the same representative 13,266-prediction match; this is directional, not a controlled benchmark or production ETA. No schema, API, dependency, transaction, queue-lock, or scheduler changes. After exact-head CI exposed four stale SQL-shape assertions in approved consumers, all four were updated to assert the DISTINCT scope join; these four affected consumer tests plus the optimized-query regression passed locally (6 passed total).",
       "timed_out": false,
       "environment": "Disposable PostgreSQL 16 for regression and rollback-only isolated production-copy query plan; production query plan was EXPLAIN only.",
-      "revision": "75aef8ea103fae2ec8e02f9e24103d0688a518de",
+      "revision": "e70fcb5d8e00a3f0ad805f3792569b91fc08c9c1",
       "dirty_tree": true,
-      "tree_fingerprint": "0b8a1327daef8b7b5f792ba8dc445ff5d89741ae759cad7357a77705da022112",
-      "verified_at": "2026-11-09T02:41:14+08:00",
+      "tree_fingerprint": "d79042cd002f0e541f211a803c3e99f2f3d8e2fe523c28fc5e64bb86942e43a7",
+      "verified_at": "2026-11-09T02:58:22+08:00",
       "note": "No production rows or schema were modified while measuring plans. This is code/test evidence only; production catch-up and consumer snapshot acceptance remain open."
     },
     "A107-CATCHUP-OPTIMIZED-EXACT-HEAD-CI": {
-      "status": "PENDING"
+      "status": "PENDING",
+      "first_attempt_revision": "e70fcb5d8e00a3f0ad805f3792569b91fc08c9c1",
+      "first_attempt_run_id": 42511360382,
+      "first_attempt_conclusion": "failure",
+      "first_attempt_summary": "lint-and-typecheck passed; full test job had 3,759 passed, 25 skipped, and 4 failures. All four failures were legacy assertions for the old ANY(ARRAY(...)) SQL shape; no behavior or PostgreSQL integration test failed. Updated the four permitted assertions, confirmed the affected six tests locally, and will rerun exact-head CI on a fix commit.",
+      "tree_fingerprint": "d79042cd002f0e541f211a803c3e99f2f3d8e2fe523c28fc5e64bb86942e43a7"
     }
   },
   "reviews": {

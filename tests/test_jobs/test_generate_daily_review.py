@@ -70,7 +70,10 @@ def test_daily_review_only_counts_prematch_features_and_predictions(mock_conn):
     assert "fs.snapshot_time < m.kickoff_time" in feature_query
     assert "model_prediction_latest_rows" not in prediction_query
     assert "review_matches AS MATERIALIZED" in prediction_query
-    assert "g.match_id = ANY(ARRAY(SELECT match_id FROM review_matches))" in prediction_query
+    assert (
+        "JOIN (SELECT DISTINCT match_id FROM review_matches) group_scope "
+        "ON group_scope.match_id = g.match_id"
+    ) in prediction_query
     assert "p.match_id = scoped.match_id" in prediction_query
     assert "mp.predict_time < m.kickoff_time" in prediction_query
     assert "mp.validation_status = 'valid'" in prediction_query

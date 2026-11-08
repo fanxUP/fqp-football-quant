@@ -56,7 +56,10 @@ def test_upset_prediction_evidence_scopes_canonical_read_to_event_match() -> Non
     query = conn.cursor_instance.query
     assert "model_prediction_latest_rows" not in query
     assert "upset_match_scope AS MATERIALIZED" in query
-    assert "g.match_id = ANY(ARRAY(SELECT match_id FROM upset_match_scope))" in query
+    assert (
+        "JOIN (SELECT DISTINCT match_id FROM upset_match_scope) group_scope "
+        "ON group_scope.match_id = g.match_id"
+    ) in query
     assert "p.match_id = scoped.match_id" in query
     assert "play_type" in query
     assert "validation_status = 'valid'" in query
