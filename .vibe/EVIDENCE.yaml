@@ -7,28 +7,29 @@
     },
     "A107-LOCAL-CANDIDATE-VALIDATION": {
       "status": "PASS",
-      "command": "sh -c '.venv/bin/python -m pytest -q tests/test_jobs/test_run_scheduler.py && .venv/bin/ruff check scripts/jobs/run_scheduler.py apps/backend/src/services/pipeline_status.py tests/test_jobs/test_run_scheduler.py && .venv/bin/ruff format --check scripts/jobs/run_scheduler.py apps/backend/src/services/pipeline_status.py tests/test_jobs/test_run_scheduler.py && .venv/bin/python -m compileall -q scripts/jobs/run_scheduler.py apps/backend/src/services/pipeline_status.py tests/test_jobs/test_run_scheduler.py && git diff --check'",
+      "command": ".venv/bin/python -m pytest -q tests/test_jobs/test_run_scheduler.py; .venv/bin/ruff check/format/compileall on five P107 files; GitHub CI run 42501255082 exact-head database suite",
       "exit_code": 0,
-      "summary": "Candidate 8010675 validation: the two focused SQL-admission-budget boundary tests passed after the 75-to-90-second change; the prior 81-test scheduler suite, Ruff, format, compileall and git diff checks also passed. Exact-head GitHub CI subsequently passed both required jobs. Unchanged P107 PostgreSQL rollup and migration-131 rehearsal evidence is reused only for those unchanged paths.",
+      "summary": "Current candidate scheduler suite: 81 passed. Ruff, format, compileall and diff checks passed. The local PG16-targeted file invocation without an isolated DB configured yielded 6 passed/15 skipped; the exact-head GitHub test job used disposable PostgreSQL 16 and ran tests/test_computation/test_prediction_statistics_rollup_postgres.py with 21 passed/0 skipped. Full CI test job: 3761 passed, 25 skips.",
       "timed_out": false,
-      "environment": "Local Python 3.14.6; the follow-up regression used the in-repo scheduler test suite and did not access production or an external API.",
-      "revision": "80106758d0a2d9dc2ada33eb2702d5d7786963ae",
+      "environment": "macOS Python 3.14.6 for local scheduler/static checks; GitHub Actions Ubuntu 26.04 with isolated PostgreSQL 16 for integration tests.",
+      "revision": "9cbf98cc069233f91d74c6c4722b289521b20bbc",
       "dirty_tree": false,
-      "tree_fingerprint": "e76e2bc0f9ddf7775d3a3bc6b5d4655bd0ed0360b543516e8639abd9a2594a06",
-      "verified_at": "2026-11-06T05:53:49+08:00",
-      "note": "The 90-second value is a soft run budget, preserving the 50-second per-match reservation, statement timeouts, 20-batch cap, and :18/:48 schedule. Independent review recommends leaving P107 open until a natural run confirms runtime and no overlap."
+      "tree_fingerprint": "a0052667733befc938c82c33c4ad5ba7dadf415278748672876cf107a846385f",
+      "verified_at": "2026-11-09T00:54:19+08:00",
+      "note": "The local PostgreSQL invocation was not treated as a no-skip pass; exact-head CI is the evidence for the isolated PostgreSQL regression. No production DB was used during local tests."
     },
     "A107-EXACT-HEAD-CI": {
       "status": "PASS",
-      "command": "gh run view 42114146043 --repo fanxUP/fqp-football-quant --json headSha,status,conclusion,jobs; asserted exact candidate SHA and both required jobs completed successfully.",
+      "command": "gh run view 42501255082 --repo fanxUP/fqp-football-quant --json status,conclusion,headSha,jobs; assert exact SHA and both required jobs passed.",
       "exit_code": 0,
-      "summary": "PASS: exact-head GitHub Actions run 42114146043 for 80106758d0a2d9dc2ada33eb2702d5d7786963ae; lint-and-typecheck and test both succeeded.",
+      "summary": "PASS: exact-head GitHub Actions run 42501255082 for 9cbf98cc069233f91d74c6c4722b289521b20bbc; lint-and-typecheck and test succeeded. Test job: 3761 passed, 25 skipped, 43 warnings; targeted prediction_statistics_rollup_postgres module: 21 passed, 0 skipped.",
       "timed_out": false,
-      "environment": "GitHub Actions",
-      "revision": "80106758d0a2d9dc2ada33eb2702d5d7786963ae",
+      "environment": "GitHub Actions, Ubuntu 26.04; isolated PostgreSQL 16 service for database integration tests.",
+      "revision": "9cbf98cc069233f91d74c6c4722b289521b20bbc",
       "dirty_tree": false,
-      "tree_fingerprint": "e76e2bc0f9ddf7775d3a3bc6b5d4655bd0ed0360b543516e8639abd9a2594a06",
-      "verified_at": "2026-11-06T05:53:49+08:00"
+      "tree_fingerprint": "a0052667733befc938c82c33c4ad5ba7dadf415278748672876cf107a846385f",
+      "verified_at": "2026-11-09T00:54:19+08:00",
+      "url": "https://github.com/fanxUP/fqp-football-quant/actions/runs/42501255082"
     },
     "A107-131-COPY-REHEARSAL": {
       "status": "PASS",
@@ -40,20 +41,21 @@
       "revision": "0eeaa1e0c60cb2cf7eb04109fba73146801cc408",
       "dirty_tree": true,
       "verified_at": "2026-11-05T19:08:17+08:00",
-      "tree_fingerprint": "e76e2bc0f9ddf7775d3a3bc6b5d4655bd0ed0360b543516e8639abd9a2594a06",
-      "note": "The production-copy up/down/reapply rehearsal remains valid for unchanged migration 131, source tables, grants, and single-match refresh SQL. The current follow-up only changes the scheduler soft admission budget; no migration or schema changed, so no rehearsal was repeated."
+      "tree_fingerprint": "a0052667733befc938c82c33c4ad5ba7dadf415278748672876cf107a846385f",
+      "note": "The production-copy up/down/reapply rehearsal remains evidence for unchanged migration 131, source tables, grants, seed triggers and single-match refresh behavior. This release adds no migration or schema changes. Its source revision remains the recorded rehearsal revision; the current candidate is additionally covered by isolated PostgreSQL CI. The updated fingerprint records applicability to the current 60-path P107 tree, not a newly repeated production-copy rehearsal."
     },
     "A107-DEPLOY-PREFLIGHT-INPUTS": {
       "status": "PASS",
       "command": "Exact-head GitHub CI; read-only SSH health/service/protected-HTTP checks; ops/server/deploy.sh <candidate-sha> --plan; migration set diff inspection.",
       "exit_code": 0,
-      "summary": "Candidate 80106758d0a2d9dc2ada33eb2702d5d7786963ae is on GitHub main. The server was clean on main at rollback revision aef9bbea509de5d8a026af726e6f39e14aa7cddc; all six services were active, nginx -t passed, protected HTTP returned / 200, ready 200, release 200, predictions 401; the server-side deploy --plan passed with 0 Nginx files and a two-source/test-path diff. No migration, backup, manual refresh, restart, business-data write, PSI read, or pressure threshold is involved.",
+      "summary": "Read-only preflight for target 9cbf98cc069233f91d74c6c4722b289521b20bbc on FQP server 100.121.47.26: server checkout clean on main at rollback b25c00d; all four application services active, nginx -t and protected HTTP smoke passed, deploy.sh --plan passed with zero Nginx changes, migration plan pending=[]. No apply, backup, business-data write, manual refresh, PSI or pressure threshold. This is candidate preflight; exact release commit preflight will be repeated before apply.",
       "timed_out": false,
       "environment": "FQP LXC 106 via SSH password; checks were read-only.",
-      "revision": "80106758d0a2d9dc2ada33eb2702d5d7786963ae",
+      "revision": "9cbf98cc069233f91d74c6c4722b289521b20bbc",
       "dirty_tree": false,
-      "tree_fingerprint": "e76e2bc0f9ddf7775d3a3bc6b5d4655bd0ed0360b543516e8639abd9a2594a06",
-      "verified_at": "2026-11-06T05:53:49+08:00"
+      "tree_fingerprint": "a0052667733befc938c82c33c4ad5ba7dadf415278748672876cf107a846385f",
+      "verified_at": "2026-11-06T05:53:49+08:00",
+      "note": "Read-only preflight for 9cbf98c passed on server 100.121.47.26: clean main at rollback b25c00d, services active, nginx -t and health/protected HTTP smoke passed, deploy.sh --plan passed, migration plan pending=[] and no Nginx file changes. Apply has not occurred. Server natural run 235922 (00:48 Beijing) was partial: 16 refreshed, 2707 pending, no recorded error. No business-data write, backup, PSI, or pressure baseline was used."
     }
   },
   "reviews": {
@@ -90,34 +92,35 @@
   },
   "security": {
     "status": "PASS",
-    "reviewed_at": "2026-11-06T03:57:57+08:00",
-    "note": "The P107 follow-up adjusts the scheduler refresh start to :18/:48 and the soft per-run SQL admission budget from 75 to 90 seconds while preserving statement timeouts, batching limits, and the per-match reservation. It adds no SQL, dynamic input, credentials, dependency, outbound request, permission, migration, or public API. Independent review passed with a minor operational caveat: exceptional driver/commit delays may overrun the soft budget."
+    "reviewed_at": "2026-11-09T00:54:19+08:00",
+    "note": "Follow-up changes only restore the :18/:48 non-overlapping cron cadence and remove the arbitrary startup +2 minute override. No migration, dependency, credential, outbound request, permission or public API changed. Independent follow-up review passed."
   },
   "migration": {
     "status": "PASS",
-    "note": "No migration files or database schema changed in this follow-up. Migration 131 remains applied; there are no new pending migrations. The existing targeted isolated PostgreSQL rehearsal remains applicable to the unchanged migration. No database backup is required for this code-only follow-up. No PSI or server pressure baseline is collected."
+    "note": "No migration or database schema changed in 9cbf98c. Server read-only plan has pending migrations=[]; no production backup or business-data write is part of this code-only release. The existing migration-131 rehearsal remains scoped to unchanged schema and grants; candidate refresh regressions passed in isolated PostgreSQL CI."
   },
   "external_ci": {
     "status": "passed",
-    "run_id": 42114146043,
-    "head_sha": "80106758d0a2d9dc2ada33eb2702d5d7786963ae",
-    "url": "https://github.com/fanxUP/fqp-football-quant/actions/runs/42114146043",
+    "run_id": 42501255082,
+    "head_sha": "9cbf98cc069233f91d74c6c4722b289521b20bbc",
+    "url": "https://github.com/fanxUP/fqp-football-quant/actions/runs/42501255082",
     "checks": {
       "lint-and-typecheck": "passed",
       "test": "passed"
     },
-    "verified_at": "2026-11-06T05:53:49+08:00",
-    "note": "Both required GitHub Actions jobs passed for the exact P107 refresh-budget candidate SHA."
+    "verified_at": "2026-11-09T00:54:19+08:00",
+    "note": "Both required jobs passed on the exact pushed 9cbf98c candidate. Full test suite was green; targeted prediction-statistics PostgreSQL module passed all 21 tests with zero skips."
   },
   "production": {
     "status": "RELEASE_PREFLIGHT_PASSED_DEPLOYMENT_PENDING",
     "production_database_access": true,
     "business_data_writes": 0,
-    "note": "Migration 131 is already applied and the new release has no pending migrations. The user cancelled all PSI and server pressure-baseline requirements; read-only server configuration checks found no pressure collector, timer, cron entry, or threshold. The active proc-pressure.mount is the kernel pseudo-filesystem mount only. No PSI values were read and no pressure threshold was set. No production business data was written during preflight."
+    "note": "Exact-head code release preflight passed; apply remains pending. Server is still on b25c00d. Natural catch-up remains partial at 2707 dirty matches after run 235922; no current complete prediction_count+prediction_summary snapshot or authenticated consumer readback is verified. User has not authorized a controlled maintenance-window bulk catch-up."
   },
   "quality_gate": {
-    "status": "READY_TO_MERGE",
-    "checked_at": "2026-11-06T05:53:57.394301+08:00",
-    "failures": []
+    "status": "NOT_RUN_FOR_9CBF98C",
+    "checked_at": "2026-11-09T01:05:14+08:00",
+    "failures": [],
+    "note": "Will be evaluated on the clean exact-head checkout after evidence commit CI; aggregate production acceptance remains pending."
   }
 }
