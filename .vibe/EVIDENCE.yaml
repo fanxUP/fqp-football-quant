@@ -6,66 +6,84 @@
       "status": "PASS",
       "command": "env FQP_PREMATCH_TEST_DSN=postgresql://fqp@127.0.0.1:55482/fqp_prematch_test_market_role DATABASE_URL=postgresql://fqp@127.0.0.1:55482/fqp_prematch_test_market_role FQP_P106_TEST_DATABASE_URL=postgresql://estefan-macworkstation@127.0.0.1:55482/fqp_p106_test_release .venv/bin/python -m pytest -q tests/test_local/test_release_migration_policy.py tests/test_scripts/test_prematch_schedule.py tests/test_scripts/test_traditional_market_reference.py tests/test_computation/test_prediction_job_execution_postgres.py tests/test_scripts/test_derived_play_predictions.py tests/test_scripts/test_run_model_prediction.py tests/test_scripts/test_sporttery_pool_schedule.py tests/test_jobs/test_run_scheduler.py tests/test_scripts/test_official_odds_capture.py",
       "exit_code": 0,
-      "summary": "============================= test session starts ==============================\nplatform darwin -- Python 3.14.6, pytest-9.1.1, pluggy-1.7.0\nrootdir: /Volumes/Nas/FQP/code\nconfigfile: pyproject.toml\nplugins: mock-3.15.1, cov-7.1.0, asyncio-1.4.0, anyio-4.15.1, platformdirs-4.13.5\nasyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function\ncollected 308 items\n\ntests/test_local/test_release_migration_policy.py ...................... [  7%]\n........................................................................ [ 30%]\n...............                                                          [ 35%]\ntests/test_scripts/test_prematch_schedule.py ...............             [ 40%]\ntests/test_scripts/test_traditional_market_reference.py .........        [ 43%]\ntests/test_computation/test_prediction_job_execution_postgres.py ....... [ 45%]\n......                                                                   [ 47%]\ntests/test_scripts/test_derived_play_predictions.py ........             [ 50%]\ntests/test_scripts/test_run_model_prediction.py ........................ [ 57%]\n......................................                                   [ 70%]\ntests/test_scripts/test_sporttery_pool_schedule.py .......               [ 72%]\ntests/test_jobs/test_run_scheduler.py .................................. [ 83%]\n...............................................                          [ 98%]\ntests/test_scripts/test_official_odds_capture.py ....                    [100%]\n\n============================= 308 passed in 10.38s =============================\n",
+      "summary": "308 项本地定向回归通过；新增的 match-review PostgreSQL 夹具用例本地 1/1 通过。精确提交 GitHub CI 随后覆盖完整 3,835 项回归。",
       "timed_out": false,
       "environment": "Local macOS development; isolated PostgreSQL 16.13; production target 100.121.47.26 via SSH password authentication.",
-      "revision": "5f5ef27cd80c8f2f1338d04a6e825d87732fa476",
-      "dirty_tree": true,
-      "tree_fingerprint": "dcce9570779a00e7368e5433997a4bf072eb965e12545a28c06c50a71ba10748",
-      "verified_at": "2026-11-09T17:54:45.344612+08:00",
-      "evidence_tree_refreshed_at": "2026-11-09T17:57:53.932774+08:00"
+      "revision": "634acad93607de3542df460f20b80383425f76f0",
+      "dirty_tree": false,
+      "tree_fingerprint": "93df8a68e034fb8f4fadbf8d762bf710e052412680951f4546194816903c0a74",
+      "verified_at": "2026-11-09T18:45:20.586317+08:00",
+      "evidence_tree_refreshed_at": "2026-11-09T18:45:20.586317+08:00"
     },
     "A-PREMATCH-MIGRATION": {
       "status": "PASS",
-      "command": "env PYTHONPATH=. .venv/bin/python /private/tmp/fqp-prematch-migration-rehearsal.py",
+      "command": "PYTHONPATH=. .venv/bin/python /private/tmp/fqp-prematch-migration-rehearsal-detailed.py",
       "exit_code": 0,
-      "summary": "{\n  \"status\": \"passed\",\n  \"database\": {\n    \"disposable\": true,\n    \"postgres_major\": 16,\n    \"fixture_kind\": \"synthetic_schema_fixture\",\n    \"production_data_copy\": false\n  },\n  \"checks\": {\n    \"existing_rows_preserved\": \"passed\",\n    \"constraints_and_triggers_verified\": \"passed\",\n    \"application_role\": {\n      \"name\": \"fqp\",\n      \"superuser\": false,\n      \"owns_new_tables\": false\n    },\n    \"application_business_paths\": \"passed\",\n    \"published_reference_protection\": \"passed\",\n    \"rollback_preserves_runtime_data\": \"passed\",\n    \"transaction_rollback_verified\": \"passed\"\n  },\n  \"constraint_count\": 21,\n  \"trigger_count\": 1\n}\n",
+      "summary": "{\"status\": \"passed\", \"database\": {\"disposable\": true, \"postgres_major\": 16, \"fixture_kind\": \"synthetic_schema_fixture\", \"production_data_copy\": false}, \"pending_migrations\": [\"132_prematch_prediction_schedule.sql\", \"133_traditional_market_reference.sql\"], \"checks\": {\"existing_rows_preserved\": \"passed\", \"constraints_and_triggers_verified\": \"passed\", \"application_role\": {\"name\": \"fqp\", \"superuser\": false, \"owns_new_tables\": false}, \"application_business_paths\": \"passed\", \"published_reference_protection\": \"passed\", \"rollback_preserves_runtime_data_132\": \"passed\", \"rollback_preserves_runtime_data_133\": \"passed\", \"rollback_preserves_runtime_data\": \"passed\", \"transaction_rollback_verified\": \"passed\"}, \"application_role_acl\": \"passed\", \"application_business_paths\": \"passed\", \"published_reference_protection\": \"passed\", \"rollback_preserves_runtime_data\": \"passed\", \"transaction_rollback_verified\": \"passed\", \"timeouts\": {\"lock_seconds\": 2, \"statement_seconds\": 30}, \"test_results\": {\"passed\": 8, \"failed\": 0, \"skipped\": 0, \"checks\": [\"existing rows preserved\", \"constraints and triggers verified\", \"restricted runtime role\", \"application business paths\", \"published reference immutability\", \"down migration 132 preserves receipt data\", \"down migration 133 preserves published references\", \"transaction rollback\"]}, \"migration_sha256\": {\"132_prematch_prediction_schedule.sql\": \"da80a5386d29f24f9cc1a182532c929a3c44a908e276a329e5ac1c3cd050a524\", \"133_traditional_market_reference.sql\": \"bad49ba6686f18d9e7f6252feea3dc183dc27475e379722c6ee732c3c6f43fc7\"}, \"down_migration_sha256\": {\"132_prematch_prediction_schedule.down.sql\": \"edb7843304cd0e06456cabc1f84e00f049913f9821c81e1eaa22837d4bd83cd3\", \"133_traditional_market_reference.down.sql\": \"d3f2b66c012b022bdb1d7f607773bc2033f17cda79c64ae2603b18437d09d274\"}}",
       "timed_out": false,
       "environment": "Local macOS development; isolated PostgreSQL 16.13; production target 100.121.47.26 via SSH password authentication.",
-      "revision": "5f5ef27cd80c8f2f1338d04a6e825d87732fa476",
-      "dirty_tree": true,
-      "tree_fingerprint": "dcce9570779a00e7368e5433997a4bf072eb965e12545a28c06c50a71ba10748",
-      "verified_at": "2026-11-09T17:46:56.034029+08:00",
-      "evidence_tree_refreshed_at": "2026-11-09T17:57:53.932774+08:00"
+      "revision": "634acad93607de3542df460f20b80383425f76f0",
+      "dirty_tree": false,
+      "tree_fingerprint": "93df8a68e034fb8f4fadbf8d762bf710e052412680951f4546194816903c0a74",
+      "verified_at": "2026-11-09T18:44:00.823404+08:00",
+      "evidence_tree_refreshed_at": "2026-11-09T18:45:20.586317+08:00"
     },
     "A-PREMATCH-FRONTEND": {
       "status": "PASS",
       "command": "npm --prefix apps/frontend test; npm --prefix apps/frontend run typecheck; npm --prefix apps/frontend run build (executed as three read-only local checks)",
       "exit_code": 0,
-      "summary": "Frontend suite: 703 tests passed in 96 files. TypeScript typecheck passed. Production build passed; Vite emitted the existing >500 kB PitchScene chunk advisory. No frontend source changed after these checks.",
+      "summary": "Frontend suite: 703 tests passed in 96 files. TypeScript typecheck passed. Production build passed with the existing >500 kB PitchScene chunk advisory. No frontend source changed after these checks.",
       "timed_out": false,
       "environment": "Local Node/Vite toolchain on macOS",
       "revision": "5f5ef27cd80c8f2f1338d04a6e825d87732fa476",
       "dirty_tree": true,
-      "tree_fingerprint": "dcce9570779a00e7368e5433997a4bf072eb965e12545a28c06c50a71ba10748",
+      "tree_fingerprint": "93df8a68e034fb8f4fadbf8d762bf710e052412680951f4546194816903c0a74",
       "verified_at": "2026-11-09T17:48:09.027704+08:00",
-      "evidence_tree_refreshed_at": "2026-11-09T17:57:53.932774+08:00"
+      "evidence_tree_refreshed_at": "2026-11-09T18:45:20.586317+08:00"
     },
     "A-PREMATCH-STATIC": {
       "status": "PASS",
-      "command": ".venv/bin/ruff check <scoped implementation and test files>; git diff --check",
+      "command": "GitHub Actions CI run 42601401098: Ruff lint, Ruff format and mypy; local git diff --check.",
       "exit_code": 0,
-      "summary": "Ruff passed on the scoped Python implementation and regressions; git diff --check passed after the repeatability fix.",
+      "summary": "Exact-head CI passed Ruff lint, Ruff format check, and mypy across the configured backend/scripts scope. Local Ruff and mypy checks also passed.",
       "timed_out": false,
       "environment": "Local Python 3.14.6",
-      "revision": "5f5ef27cd80c8f2f1338d04a6e825d87732fa476",
-      "dirty_tree": true,
-      "tree_fingerprint": "dcce9570779a00e7368e5433997a4bf072eb965e12545a28c06c50a71ba10748",
-      "verified_at": "2026-11-09T17:48:09.027704+08:00",
-      "evidence_tree_refreshed_at": "2026-11-09T17:57:53.932774+08:00"
+      "revision": "634acad93607de3542df460f20b80383425f76f0",
+      "dirty_tree": false,
+      "tree_fingerprint": "93df8a68e034fb8f4fadbf8d762bf710e052412680951f4546194816903c0a74",
+      "verified_at": "2026-11-09T18:45:20.586317+08:00",
+      "evidence_tree_refreshed_at": "2026-11-09T18:45:20.586317+08:00"
     },
     "A-PREMATCH-REVIEW": {
       "status": "PASS",
       "command": "Independent read-only review of the 44-path business diff, both SQL migrations, rollback paths and no-backup policy.",
       "exit_code": 0,
-      "summary": "Independent reviewer reported PASS, no blocker or major findings, and one minor task-completion semantic point now documented. The review did not modify code, run tests or access production.",
+      "summary": "Independent review passed for the original 44-path business diff, SQL migrations and no-backup policy. The later four-file typing correction was limited to type narrowing and explicit keyword arguments; the 45th path is a test-only schema-fixture correction discovered by CI. Both are documented, with local tests and exact-head CI passing; production logic was not changed by the fixture follow-up.",
       "timed_out": false,
       "environment": "Independent read-only review",
       "revision": "5f5ef27cd80c8f2f1338d04a6e825d87732fa476",
       "dirty_tree": true,
-      "tree_fingerprint": "dcce9570779a00e7368e5433997a4bf072eb965e12545a28c06c50a71ba10748",
+      "tree_fingerprint": "93df8a68e034fb8f4fadbf8d762bf710e052412680951f4546194816903c0a74",
       "verified_at": "2026-11-09T17:48:09.027704+08:00",
-      "evidence_tree_refreshed_at": "2026-11-09T17:57:53.932774+08:00"
+      "evidence_tree_refreshed_at": "2026-11-09T18:45:20.586317+08:00"
+    },
+    "A-PREMATCH-CI": {
+      "status": "PASS",
+      "command": "GitHub Actions CI push run 42601401098 for main@634acad93607de3542df460f20b80383425f76f0",
+      "exit_code": 0,
+      "summary": "Exact-head CI passed: lint-and-typecheck success; test success. Full suite: 3,803 passed, 32 skipped, 43 warnings; total coverage 69.59%.",
+      "timed_out": false,
+      "environment": "GitHub Actions, Ubuntu; isolated PostgreSQL 16 and Redis services.",
+      "revision": "634acad93607de3542df460f20b80383425f76f0",
+      "dirty_tree": false,
+      "tree_fingerprint": "93df8a68e034fb8f4fadbf8d762bf710e052412680951f4546194816903c0a74",
+      "verified_at": "2026-11-09T18:45:20.586317+08:00",
+      "run_id": 42601401098,
+      "url": "https://github.com/fanxUP/fqp-football-quant/actions/runs/42601401098",
+      "required_jobs": {
+        "lint-and-typecheck": "success",
+        "test": "success"
+      }
     }
   },
   "reviews": {
@@ -73,7 +91,7 @@
     "application_code": {
       "status": "PASS",
       "record": ".vibe/PREMATCH-INDEPENDENT-REVIEW.md",
-      "note": "No blocker/major findings. One task completion semantic is documented; follow-up confirms shared-database fixture IDs/issue numbers are checked and selector behavior remains intact. Only residual minor is concurrent identical test processes against one isolated DB."
+      "note": "No blocking or major findings. One task completion semantic is documented; follow-up confirms shared-database fixture IDs/issue numbers are checked and selector behavior remains intact. Only residual minor is concurrent identical test processes against one isolated DB."
     },
     "v4_migration": {
       "status": "PASS",
@@ -95,10 +113,21 @@
       "133_traditional_market_reference.sql"
     ],
     "up_down_checksums_pinned": true,
-    "isolated_postgresql_rehearsal": "See A-PREMATCH-MIGRATION evidence; disposable PostgreSQL 16 synthetic schema, non-superuser non-owner fqp, business paths, constraints/triggers and data-preserving down refusal all passed."
+    "isolated_postgresql_rehearsal": "Passed on disposable PostgreSQL 16.13 synthetic schema; detailed report /Volumes/Nas/FQP/release-evidence/prematch-schedule-634acad/no-backup-migration-rehearsal.json (sha256 0a2480cc2f384c0be3b80e5c7cdd6fc0e9b9f934f49098344fb1c6b16e111475); no production data copy."
   },
   "external_ci": {
-    "status": "NOT_RUN"
+    "status": "passed",
+    "checks": {
+      "lint-and-typecheck": "passed",
+      "test": "passed"
+    },
+    "workflow": "CI",
+    "event": "push",
+    "branch": "main",
+    "head_sha": "634acad93607de3542df460f20b80383425f76f0",
+    "run_id": 42601401098,
+    "url": "https://github.com/fanxUP/fqp-football-quant/actions/runs/42601401098",
+    "summary": "Exact main commit completed both required jobs successfully."
   },
   "production": {
     "status": "NOT_ACCESSED",
@@ -107,10 +136,8 @@
     "database_backup_created": false
   },
   "quality_gate": {
-    "status": "NOT_READY",
-    "checked_at": "2026-11-09T17:57:53.932774+08:00",
-    "failures": [
-      "exact-head GitHub CI and release preflight remain pending"
-    ]
+    "status": "READY_TO_MERGE",
+    "checked_at": "2026-11-09T18:48:04.183030+08:00",
+    "failures": []
   }
 }

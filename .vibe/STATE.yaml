@@ -1,6 +1,6 @@
 {
   "schema_version": 4,
-  "state": "REVIEWING",
+  "state": "READY_TO_MERGE",
   "workflow_id": "PREMATCH-SCHEDULE-MARKET-REFERENCE-20261109",
   "previous_workflow": {
     "task_id": "P107-AGGREGATE-CANDIDATE-RELEASE-READINESS",
@@ -11,9 +11,9 @@
   "mode": "STRICT",
   "environment": "Local macOS development; isolated PostgreSQL 16.13; production target 100.121.47.26 via SSH password authentication.",
   "last_transition": {
-    "from": "VERIFYING",
-    "to": "REVIEWING",
-    "at": "2026-11-09T17:49:01.687394+08:00",
-    "reason": "Targeted local, frontend, static, migration rehearsal and independent review evidence passed; exact-head CI remains next."
+    "from": "REVIEWING",
+    "to": "READY_TO_MERGE",
+    "at": "2026-11-09T18:48:12.791431+08:00",
+    "reason": "Exact main CI, local targeted regression, migration rehearsal, reviews, security, scope, budget and regression gates passed."
   }
 }
