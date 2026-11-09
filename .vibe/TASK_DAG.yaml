@@ -79,7 +79,7 @@
         "PREMATCH-EXACT-HEAD-CI"
       ],
       "kind": "api_regression",
-      "status": "IN_PROGRESS",
+      "status": "DONE",
       "definition_of_done": [
         "Recent official Selling status and future kickoff are required; known expired cutoffs are excluded.",
         "A missing cutoff requires recent same-match odds and a live selling pool with no nested cutoff evidence.",

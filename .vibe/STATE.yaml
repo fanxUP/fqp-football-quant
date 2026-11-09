@@ -13,7 +13,7 @@
   "last_transition": {
     "from": "REVIEWING",
     "to": "READY_TO_MERGE",
-    "at": "2026-11-09T18:48:12.791431+08:00",
-    "reason": "Exact main CI, local targeted regression, migration rehearsal, reviews, security, scope, budget and regression gates passed."
+    "at": "2026-11-09T22:54:30.204707+08:00",
+    "reason": "Betting-center cutoff fallback, follow-up regression guard, independent review, scope/budget checks, and exact-main CI 42636725983 passed."
   }
 }
