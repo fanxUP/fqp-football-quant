@@ -52,9 +52,19 @@
     "status": "PENDING"
   },
   "external_ci": {
-    "status": "PENDING",
-    "checks": {},
-    "note": "Push to main will trigger CI; the workflow list contains only CI and no automatic production deploy workflow."
+    "status": "passed",
+    "checks": {
+      "test": "passed",
+      "lint-and-typecheck": "passed"
+    },
+    "workflow": "CI",
+    "event": "push",
+    "branch": "main",
+    "head_sha": "100026ca0dbf53226f362d1c897b07df9665653d",
+    "run_id": 42688652473,
+    "run_url": "https://github.com/fanxUP/fqp-football-quant/actions/runs/42688652473",
+    "completed_at": "2026-11-09T20:12:05Z",
+    "note": "Exact-head GitHub Actions CI passed: test and lint-and-typecheck. This repository has no automatic production deploy workflow; P108-01 production rollout/import remains outside this slice."
   },
   "production": {
     "status": "NOT_APPLICABLE",
