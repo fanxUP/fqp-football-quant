@@ -44,7 +44,6 @@ def test_result_settlement_uses_business_dates_during_utc_evening():
 
 def test_business_time_sql_is_used_for_naive_match_timestamps():
     files = [
-        "apps/backend/src/routers/simulator.py",
         "apps/backend/src/routers/predictions.py",
         "apps/backend/src/routers/teams.py",
         "scripts/jobs/run_model_prediction.py",
@@ -56,3 +55,11 @@ def test_business_time_sql_is_used_for_naive_match_timestamps():
         assert "timezone('Asia/Shanghai', NOW())" in source, file
         assert "CURRENT_TIMESTAMP" not in source, file
         assert "m.kickoff_time > NOW()" not in source, file
+
+    # The simulator route gets Beijing business time from the official sales
+    # window and binds that value as `now`; its API regression checks the exact
+    # local and UTC parameters passed to PostgreSQL.
+    simulator_source = Path("apps/backend/src/routers/simulator.py").read_text(encoding="utf-8")
+    assert "sales_window.current_time.replace(tzinfo=None)" in simulator_source
+    assert "m.kickoff_time > %(now)s" in simulator_source
+    assert "CURRENT_TIMESTAMP" not in simulator_source

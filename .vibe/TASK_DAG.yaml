@@ -69,6 +69,23 @@
         "The writer restores its original lock timeout after acquiring the advisory lock; the pool writer uses the same helper.",
         "Focused tests, static checks, exact-head CI, independent read-only review and deployment smoke pass."
       ]
+    },
+    "PREMATCH-BETTING-CUTOFF-FALLBACK": {
+      "title": "Show current official selling matches when the operator omits a match cutoff",
+      "acceptance_id": "A-BETTING-CUTOFF-FALLBACK",
+      "depends_on": [
+        "PREMATCH-LOCAL-REGRESSION",
+        "PREMATCH-INDEPENDENT-REVIEW",
+        "PREMATCH-EXACT-HEAD-CI"
+      ],
+      "kind": "api_regression",
+      "status": "IN_PROGRESS",
+      "definition_of_done": [
+        "Recent official Selling status and future kickoff are required; known expired cutoffs are excluded.",
+        "A missing cutoff requires recent same-match odds and a live selling pool with no nested cutoff evidence.",
+        "Focused route regressions and isolated PostgreSQL eligibility/JSONPath edge cases pass.",
+        "Independent read-only review and exact-main CI pass."
+      ]
     }
   }
 }

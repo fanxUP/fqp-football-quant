@@ -11,9 +11,10 @@
       "environment": "Local macOS development; isolated PostgreSQL 16.13; production target 100.121.47.26 via SSH password authentication.",
       "revision": "d90a6b3610757a44ee5b98a9716343b304196364",
       "dirty_tree": true,
-      "tree_fingerprint": "c03c9e2925724cb4b2a5bcd7049fac1c886ed30c6902af17030993aed8445c27",
+      "tree_fingerprint": "312c184d8e358d1faf642a441d3d1a2f99ddec483f879992ee89c923af4698a2",
       "verified_at": "2026-11-09T20:33:10.217278+08:00",
-      "evidence_tree_refreshed_at": "2026-11-09T20:33:10.217278+08:00"
+      "evidence_tree_refreshed_at": "2026-11-09T22:38:31.541525+08:00",
+      "note": ""
     },
     "A-PREMATCH-MIGRATION": {
       "status": "PASS",
@@ -24,9 +25,10 @@
       "environment": "Local macOS development; isolated PostgreSQL 16.13; production target 100.121.47.26 via SSH password authentication.",
       "revision": "634acad93607de3542df460f20b80383425f76f0",
       "dirty_tree": false,
-      "tree_fingerprint": "c03c9e2925724cb4b2a5bcd7049fac1c886ed30c6902af17030993aed8445c27",
+      "tree_fingerprint": "312c184d8e358d1faf642a441d3d1a2f99ddec483f879992ee89c923af4698a2",
       "verified_at": "2026-11-09T18:44:00.823404+08:00",
-      "evidence_tree_refreshed_at": "2026-11-09T20:33:10.217278+08:00"
+      "evidence_tree_refreshed_at": "2026-11-09T22:38:31.541525+08:00",
+      "note": ""
     },
     "A-PREMATCH-FRONTEND": {
       "status": "PASS",
@@ -37,9 +39,10 @@
       "environment": "Local Node/Vite toolchain on macOS",
       "revision": "5f5ef27cd80c8f2f1338d04a6e825d87732fa476",
       "dirty_tree": true,
-      "tree_fingerprint": "c03c9e2925724cb4b2a5bcd7049fac1c886ed30c6902af17030993aed8445c27",
+      "tree_fingerprint": "312c184d8e358d1faf642a441d3d1a2f99ddec483f879992ee89c923af4698a2",
       "verified_at": "2026-11-09T17:48:09.027704+08:00",
-      "evidence_tree_refreshed_at": "2026-11-09T20:33:10.217278+08:00"
+      "evidence_tree_refreshed_at": "2026-11-09T22:38:31.541525+08:00",
+      "note": ""
     },
     "A-PREMATCH-STATIC": {
       "status": "PASS",
@@ -50,9 +53,10 @@
       "environment": "Local macOS development; isolated PostgreSQL 16.13; production target 100.121.47.26 via SSH password authentication.",
       "revision": "d90a6b3610757a44ee5b98a9716343b304196364",
       "dirty_tree": true,
-      "tree_fingerprint": "c03c9e2925724cb4b2a5bcd7049fac1c886ed30c6902af17030993aed8445c27",
+      "tree_fingerprint": "312c184d8e358d1faf642a441d3d1a2f99ddec483f879992ee89c923af4698a2",
       "verified_at": "2026-11-09T20:33:10.217278+08:00",
-      "evidence_tree_refreshed_at": "2026-11-09T20:33:10.217278+08:00"
+      "evidence_tree_refreshed_at": "2026-11-09T22:38:31.541525+08:00",
+      "note": ""
     },
     "A-PREMATCH-REVIEW": {
       "status": "PASS",
@@ -63,9 +67,10 @@
       "environment": "Independent read-only review",
       "revision": "d90a6b3610757a44ee5b98a9716343b304196364",
       "dirty_tree": true,
-      "tree_fingerprint": "c03c9e2925724cb4b2a5bcd7049fac1c886ed30c6902af17030993aed8445c27",
+      "tree_fingerprint": "312c184d8e358d1faf642a441d3d1a2f99ddec483f879992ee89c923af4698a2",
       "verified_at": "2026-11-09T20:33:10.217278+08:00",
-      "evidence_tree_refreshed_at": "2026-11-09T20:33:10.217278+08:00"
+      "evidence_tree_refreshed_at": "2026-11-09T22:38:31.541525+08:00",
+      "note": ""
     },
     "A-PREMATCH-CI": {
       "status": "PASS",
@@ -76,7 +81,7 @@
       "environment": "GitHub Actions, Ubuntu; isolated PostgreSQL 16 and Redis services.",
       "revision": "3eef0fec1f5be45dc20ac99903a48bcffa4654ee",
       "dirty_tree": false,
-      "tree_fingerprint": "c03c9e2925724cb4b2a5bcd7049fac1c886ed30c6902af17030993aed8445c27",
+      "tree_fingerprint": "312c184d8e358d1faf642a441d3d1a2f99ddec483f879992ee89c923af4698a2",
       "verified_at": "2026-11-09T20:48:54.311276+08:00",
       "run_id": 42618066966,
       "url": "https://github.com/fanxUP/fqp-football-quant/actions/runs/42618066966",
@@ -84,7 +89,8 @@
         "lint-and-typecheck": "success",
         "test": "success"
       },
-      "evidence_tree_refreshed_at": "2026-11-09T20:33:10.217278+08:00"
+      "evidence_tree_refreshed_at": "2026-11-09T22:38:31.541525+08:00",
+      "note": ""
     },
     "A-PREMATCH-WRITER-LOCK-WAIT": {
       "status": "PASS",
@@ -95,9 +101,23 @@
       "environment": "Local macOS development; isolated PostgreSQL 16.13; production target 100.121.47.26 via SSH password authentication.",
       "revision": "d90a6b3610757a44ee5b98a9716343b304196364",
       "dirty_tree": true,
-      "tree_fingerprint": "c03c9e2925724cb4b2a5bcd7049fac1c886ed30c6902af17030993aed8445c27",
+      "tree_fingerprint": "312c184d8e358d1faf642a441d3d1a2f99ddec483f879992ee89c923af4698a2",
       "verified_at": "2026-11-09T20:32:36.531695+08:00",
-      "evidence_tree_refreshed_at": "2026-11-09T20:33:10.217278+08:00"
+      "evidence_tree_refreshed_at": "2026-11-09T22:38:31.541525+08:00",
+      "note": ""
+    },
+    "A-BETTING-CUTOFF-FALLBACK": {
+      "status": "PASS",
+      "command": ".venv/bin/python -m pytest -q tests/test_api/test_simulator_matches.py tests/test_scripts/test_business_time.py::test_business_time_sql_is_used_for_naive_match_timestamps; isolated PostgreSQL 16 synthetic eligibility and nested-JSON cutoff edge regressions",
+      "exit_code": 0,
+      "summary": "Ten focused tests passed (nine betting-route regressions and the business-time guard). Isolated PostgreSQL 16 checks evaluated 10 synthetic rows (3 eligible, 8 excluded) and confirmed cutoff-free selling matches remain visible while nested oddsList/direct-pool cutoff evidence is excluded. Ruff, format, mypy and diff checks passed. Independent follow-up review resolved the nested-cutoff finding. Exact-head full CI is pending.",
+      "timed_out": false,
+      "environment": "Local macOS; disposable PostgreSQL 16 synthetic fixture; production database read-only inspection only.",
+      "revision": "f110586964e5cc8402ada864baca51f881bc11dc",
+      "dirty_tree": true,
+      "tree_fingerprint": "312c184d8e358d1faf642a441d3d1a2f99ddec483f879992ee89c923af4698a2",
+      "verified_at": "2026-11-09T22:38:31.541525+08:00",
+      "evidence_tree_refreshed_at": "2026-11-09T22:38:31.541525+08:00"
     }
   },
   "reviews": {
@@ -105,7 +125,7 @@
     "application_code": {
       "status": "PASS",
       "record": ".vibe/PREMATCH-INDEPENDENT-REVIEW.md",
-      "note": "Original implementation review passed. Independent read-only follow-up reviewed the bounded shared-lock wait and found no release-stopping or major issue; one minor test-thread cleanup assertion was added. See .vibe/PREMATCH-INDEPENDENT-REVIEW.md."
+      "note": "Original implementation review passed. Independent read-only follow-up reviewed the bounded shared-lock wait and found no release-stopping or major issue; one minor test-thread cleanup assertion was added. See .vibe/PREMATCH-INDEPENDENT-REVIEW.md. Independent cutoff-fallback review passed after a minor nested-cutoff finding was resolved; see .vibe/BETTING-CUTOFF-REVIEW.md."
     },
     "v4_migration": {
       "status": "PASS",

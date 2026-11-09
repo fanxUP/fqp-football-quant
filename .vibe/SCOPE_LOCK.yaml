@@ -2,6 +2,7 @@
   "schema_version": 4,
   "task_id": "PREMATCH-SCHEDULE-MARKET-REFERENCE-20261109",
   "allowed_paths": [
+    "apps/backend/src/routers/simulator.py",
     "apps/backend/src/routers/time_machine.py",
     "apps/backend/src/services/match_review.py",
     "apps/backend/src/services/pipeline_status.py",
@@ -39,10 +40,12 @@
     "sql/133_traditional_market_reference.sql",
     "sql/down/132_prematch_prediction_schedule.down.sql",
     "sql/down/133_traditional_market_reference.down.sql",
+    "tests/test_api/test_simulator_matches.py",
     "tests/test_computation/test_football_fixture_identity_postgres.py",
     "tests/test_computation/test_prediction_run_postgres.py",
     "tests/test_jobs/test_run_scheduler.py",
     "tests/test_local/test_release_migration_policy.py",
+    "tests/test_scripts/test_business_time.py",
     "tests/test_scripts/test_official_odds_capture.py",
     "tests/test_scripts/test_prematch_schedule.py",
     "tests/test_scripts/test_sporttery_pool_schedule.py",
@@ -56,6 +59,7 @@
     "ops/server/**"
   ],
   "approved_protected_paths": [
+    "apps/backend/src/routers/simulator.py",
     "apps/backend/src/routers/time_machine.py",
     "apps/backend/src/services/match_review.py",
     "apps/backend/src/services/pipeline_status.py",
@@ -92,14 +96,16 @@
     "sql/133_traditional_market_reference.sql",
     "sql/down/132_prematch_prediction_schedule.down.sql",
     "sql/down/133_traditional_market_reference.down.sql",
+    "tests/test_api/test_simulator_matches.py",
     "tests/test_computation/test_football_fixture_identity_postgres.py",
     "tests/test_computation/test_prediction_run_postgres.py",
     "tests/test_jobs/test_run_scheduler.py",
     "tests/test_local/test_release_migration_policy.py",
+    "tests/test_scripts/test_business_time.py",
     "tests/test_scripts/test_official_odds_capture.py",
     "tests/test_scripts/test_prematch_schedule.py",
     "tests/test_scripts/test_sporttery_pool_schedule.py",
     "tests/test_scripts/test_traditional_market_reference.py"
   ],
-  "notes": "Original exact 44-path code scope at task start on main, plus one required isolated PostgreSQL fixture correction discovered by exact-head CI: the match-review fixture now includes the production official_odds_snapshots.raw_hash column. No production behavior, dependencies, services or branches were added."
+  "notes": "Original exact 44-path code scope at task start on main, plus one required isolated PostgreSQL fixture correction discovered by exact-head CI: the match-review fixture now includes the production official_odds_snapshots.raw_hash column. No production behavior, dependencies, services or branches were added. A bounded follow-up restores eligible official selling matches when the operator omits a match cutoff; odds recency and nested cutoff evidence remain required. The shared naive-timestamp guard was updated to verify the simulator’s injected Beijing business clock and bound query parameter; route-level tests assert the exact local and UTC values."
 }
