@@ -47,6 +47,20 @@ class AcquisitionStatus(StrEnum):
     FAILED = "failed"
 
 
+class LineupStatus(StrEnum):
+    CONFIRMED = "confirmed"
+    PREDICTED = "predicted"
+    UNKNOWN = "unknown"
+
+
+class PlayerAvailabilityStatus(StrEnum):
+    DOUBTFUL = "doubtful"
+    INJURED = "injured"
+    SUSPENDED = "suspended"
+    RETURNED = "returned"
+    UNKNOWN = "unknown"
+
+
 class ResolutionStatus(StrEnum):
     RESOLVED = "resolved"
     UNRESOLVED = "unresolved"

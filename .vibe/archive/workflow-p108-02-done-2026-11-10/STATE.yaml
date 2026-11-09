@@ -1,0 +1,20 @@
+{
+  "schema_version": 4,
+  "state": "DONE",
+  "workflow_id": "P108-02-EFFECTIVE-AFFILIATION-ELIGIBILITY-20261110",
+  "previous_workflow": {
+    "task_id": "P108-01-PLAYER-IDENTITY-BRIDGE",
+    "state": "DONE",
+    "archive": ".vibe/archive/workflow-p108-01-done-2026-11-10",
+    "archive_manifest_sha256": "60cc0a6841794bf05b4a18c114b9809aa6fc765c6820cca458e63c1a0012dc5b"
+  },
+  "blocked_reason": null,
+  "mode": "STRICT",
+  "environment": "Local main checkout; synthetic fixtures and isolated PostgreSQL 16 only; no production DB/API access or data import.",
+  "last_transition": {
+    "from": "READY_TO_MERGE",
+    "to": "DONE",
+    "at": "2026-11-10T06:22:26.696249+08:00",
+    "reason": "P108-02 代码与验收已进入 GitHub main；本切片明确不发布迁移 135、不导入生产数据、不接入模型。"
+  }
+}

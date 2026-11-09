@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from collections import Counter
 from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
@@ -18,6 +19,7 @@ from scripts.api_football_client import ApiFootballClient
 from scripts.api_football_player import get_or_create_player
 from scripts.business_time import business_now_naive as _business_now
 from scripts.business_time import business_now_naive_iso as _now
+from scripts.data_contracts import PlayerAvailabilityStatus, to_utc
 from scripts.features.api_football_fixture_matcher import (
     find_matching_fixture,
     load_api_aliases,
@@ -34,15 +36,121 @@ from scripts.player_observations import (
 
 def _extract_injury_fields(injury: dict[str, Any]) -> tuple[str, str, str]:
     """兼容当前 fixture 响应和旧 league 响应的伤停字段。"""
+    metadata = _extract_injury_observation_metadata(injury)
+    return metadata["availability_status"], metadata["injury_type"], metadata["reason"]
+
+
+def _source_text(value: Any) -> str:
+    return value.strip() if isinstance(value, str) else ""
+
+
+def _normalized_source_text(value: str) -> str:
+    return re.sub(r"[^a-z0-9]+", " ", value.casefold()).strip()
+
+
+def _explicit_status(text: str, *, allow_medical_reason: bool) -> PlayerAvailabilityStatus | None:
+    normalized = _normalized_source_text(text)
+    tokens = set(normalized.split())
+    if not normalized or {"no", "not", "without", "uninjured"}.intersection(tokens):
+        return None
+    if any(token.startswith("suspend") for token in tokens):
+        return PlayerAvailabilityStatus.SUSPENDED
+    if "doubtful" in tokens or "questionable" in tokens:
+        return PlayerAvailabilityStatus.DOUBTFUL
+    if normalized in {"returned", "return", "recovered", "available", "fit"}:
+        return PlayerAvailabilityStatus.RETURNED
+    if {"injury", "injuries", "injured"}.intersection(tokens):
+        return PlayerAvailabilityStatus.INJURED
+    if allow_medical_reason and {
+        "bruise",
+        "bruised",
+        "concussion",
+        "dislocation",
+        "fracture",
+        "fractured",
+        "sprain",
+        "sprained",
+        "strain",
+        "strained",
+        "tear",
+        "torn",
+    }.intersection(tokens):
+        return PlayerAvailabilityStatus.INJURED
+    return None
+
+
+def _availability_status(injury_type: str, reason: str) -> PlayerAvailabilityStatus:
+    """Map explicit status values; API-Football's Missing Fixture is not a diagnosis."""
+    typed_status = _explicit_status(injury_type, allow_medical_reason=False)
+    if typed_status is not None:
+        return typed_status
+    if _normalized_source_text(injury_type) != "missing fixture":
+        return PlayerAvailabilityStatus.UNKNOWN
+    reason_status = _explicit_status(reason, allow_medical_reason=True)
+    if reason_status in {
+        PlayerAvailabilityStatus.SUSPENDED,
+        PlayerAvailabilityStatus.INJURED,
+    }:
+        return reason_status
+    return PlayerAvailabilityStatus.UNKNOWN
+
+
+def _explicit_source_timestamp(injury: dict[str, Any], field: str) -> str | None:
+    raw_legacy = injury.get("injury")
+    legacy = raw_legacy if isinstance(raw_legacy, dict) else {}
+    value = injury.get(field)
+    if value is None:
+        value = legacy.get(field)
+    if value is None or value == "":
+        return None
+    if isinstance(value, datetime):
+        parsed = value
+    elif isinstance(value, str):
+        parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+    else:
+        raise ValueError(f"source {field} must be an ISO timestamp")
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise ValueError(f"source {field} must include a timezone")
+    return to_utc(parsed).isoformat()
+
+
+def _explicit_expected_return_date(injury: dict[str, Any]) -> str | None:
     raw_player = injury.get("player")
     raw_legacy = injury.get("injury")
     player: dict[str, Any] = raw_player if isinstance(raw_player, dict) else {}
     legacy: dict[str, Any] = raw_legacy if isinstance(raw_legacy, dict) else {}
-    injury_type = str(player.get("type") or legacy.get("type") or "")
-    reason = str(player.get("reason") or legacy.get("reason") or "")
-    combined = f"{injury_type} {reason}".lower()
-    status = "suspended" if "suspend" in combined else "injured"
-    return status, injury_type, reason
+    value = injury.get("expected_return_date")
+    if value is None:
+        value = player.get("expected_return_date")
+    if value is None:
+        value = legacy.get("expected_return_date")
+    if value is None or value == "":
+        return None
+    if isinstance(value, str):
+        parsed = date.fromisoformat(value.strip())
+    elif isinstance(value, date) and not isinstance(value, datetime):
+        parsed = value
+    else:
+        raise ValueError("source expected_return_date must be an ISO calendar date")
+    return parsed.isoformat()
+
+
+def _extract_injury_observation_metadata(injury: dict[str, Any]) -> dict[str, Any]:
+    """Normalize explicit source facts; absent values remain unknown/null."""
+    raw_player = injury.get("player")
+    raw_legacy = injury.get("injury")
+    player: dict[str, Any] = raw_player if isinstance(raw_player, dict) else {}
+    legacy: dict[str, Any] = raw_legacy if isinstance(raw_legacy, dict) else {}
+    injury_type = _source_text(player.get("type") or legacy.get("type"))
+    reason = _source_text(player.get("reason") or legacy.get("reason"))
+    return {
+        "availability_status": _availability_status(injury_type, reason).value,
+        "injury_type": injury_type,
+        "reason": reason,
+        "effective_at": _explicit_source_timestamp(injury, "effective_at"),
+        "published_at": _explicit_source_timestamp(injury, "published_at"),
+        "expected_return_date": _explicit_expected_return_date(injury),
+    }
 
 
 def _get_or_create_player(conn: Any, player_data: dict[str, Any]) -> int | None:
@@ -95,7 +203,15 @@ def _process_fixture_injuries(
             player_id = _get_or_create_player(conn, injury["player"])
             if not player_id:
                 raise ValueError("injury player identity unresolved")
-            status, injury_type, reason = _extract_injury_fields(injury)
+            metadata = _extract_injury_observation_metadata(injury)
+            status = metadata["availability_status"]
+            injury_type = metadata["injury_type"]
+            reason = metadata["reason"]
+            expected_return_date = (
+                date.fromisoformat(metadata["expected_return_date"])
+                if metadata["expected_return_date"] is not None
+                else None
+            )
             players.append(
                 dict(
                     player_id=player_id,
@@ -106,6 +222,9 @@ def _process_fixture_injuries(
                     availability_status=status,
                     injury_type=injury_type,
                     injury_body_part=reason,
+                    expected_return_date=expected_return_date,
+                    source_effective_at=metadata["effective_at"],
+                    source_published_at=metadata["published_at"],
                     is_suspended=status == "suspended",
                     suspension_reason=reason if status == "suspended" else "",
                     source_name="api-football",

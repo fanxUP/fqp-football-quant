@@ -1,10 +1,10 @@
 {
   "schema_version": 4,
-  "task_id": "P108-02-AFFILIATION-ELIGIBILITY",
-  "max_files_changed": 7,
-  "max_new_files": 5,
+  "task_id": "P108-03-LINEUPS-AVAILABILITY",
+  "max_files_changed": 8,
+  "max_new_files": 0,
   "max_new_dependencies": 0,
-  "max_schema_migrations": 2,
+  "max_schema_migrations": 0,
   "max_public_api_changes": 0,
   "declared_public_api_changes": 0,
   "regression_budget": {
@@ -12,5 +12,5 @@
     "new_lint_errors": 0,
     "new_type_errors": 0
   },
-  "budget_basis": "Seven paths: additive migration and protective down migration, shared data helper, data catalog contract, focused unit and isolated PostgreSQL regressions, and CI required-module wiring. No API endpoint, dependency, production import, or model behavior change."
+  "budget_basis": "Eight existing code/test paths: shared status enums, player observation adapter, injury source mapping, fixed-response tests, P104 PostgreSQL fixture and player-observation regressions, data-contract tests, and CI required-module check. Reuse migration 107 observation JSON and legacy projections; no migration, provider/API or model behavior."
 }

@@ -4,9 +4,9 @@
     "command_timeout_seconds": 1800
   },
   "commands": {
-    "test": "FQP_PLAYER_REGISTRATION_TEST_DSN=${FQP_PLAYER_REGISTRATION_TEST_DSN:?must point to explicit isolated PG16} .venv/bin/python -m pytest -q tests/test_scripts/test_player_registration_facts.py tests/test_computation/test_player_registration_facts_postgres.py tests/test_scripts/test_data_catalog.py tests/test_scripts/test_data_contracts.py",
-    "lint": ".venv/bin/ruff check scripts/player_registration_facts.py tests/test_scripts/test_player_registration_facts.py tests/test_computation/test_player_registration_facts_postgres.py && .venv/bin/ruff format --check scripts/player_registration_facts.py tests/test_scripts/test_player_registration_facts.py tests/test_computation/test_player_registration_facts_postgres.py && git diff --check",
-    "typecheck": ".venv/bin/mypy scripts/player_registration_facts.py --explicit-package-bases"
+    "test": "FQP_OBSERVATION_TEST_POSTGRES_DSN=${FQP_OBSERVATION_TEST_POSTGRES_DSN:?must point to explicit isolated PG16} .venv/bin/python -m pytest -q tests/test_scripts/test_data_contracts.py tests/test_jobs/test_collect_injury_data.py tests/test_computation/test_player_observations_postgres.py tests/test_computation/test_observation_postgres.py",
+    "lint": ".venv/bin/ruff check scripts/data_contracts.py scripts/player_observations.py scripts/jobs/collect_injury_data.py tests/test_scripts/test_data_contracts.py tests/test_jobs/test_collect_injury_data.py tests/test_computation/test_player_observations_postgres.py tests/test_computation/test_observation_postgres.py && .venv/bin/ruff format --check scripts/data_contracts.py scripts/player_observations.py scripts/jobs/collect_injury_data.py tests/test_scripts/test_data_contracts.py tests/test_jobs/test_collect_injury_data.py tests/test_computation/test_player_observations_postgres.py tests/test_computation/test_observation_postgres.py && git diff --check",
+    "typecheck": ".venv/bin/mypy scripts/data_contracts.py scripts/player_observations.py scripts/jobs/collect_injury_data.py --explicit-package-bases"
   },
   "paths": {
     "dependency_files": [

@@ -8,6 +8,8 @@ from scripts.data_contracts import (
     ExternalIdentity,
     FactStatus,
     IdentityResolution,
+    LineupStatus,
+    PlayerAvailabilityStatus,
     ResolutionStatus,
     to_utc,
 )
@@ -77,3 +79,14 @@ def test_fact_status_and_acquisition_status_are_separate_vocabulary():
     assert FactStatus.NOT_PUBLISHED.value != FactStatus.NOT_COVERED.value
     assert AcquisitionStatus.SUCCESS.value == "success"
     assert AcquisitionStatus.QUOTA_EXHAUSTED.value == "quota_exhausted"
+
+
+def test_player_observation_status_vocabulary_is_explicit():
+    assert {status.value for status in PlayerAvailabilityStatus} == {
+        "doubtful",
+        "injured",
+        "suspended",
+        "returned",
+        "unknown",
+    }
+    assert {status.value for status in LineupStatus} == {"confirmed", "predicted", "unknown"}

@@ -1,15 +1,16 @@
 {
   "schema_version": 4,
-  "task_id": "P108-02-AFFILIATION-ELIGIBILITY",
-  "objective": "Expose Titan transfers only as historical affiliation candidates and add an append-only, evidence-backed registration eligibility fact contract that defaults to unknown; no source data import, production access, or model use.",
+  "task_id": "P108-03-LINEUPS-AVAILABILITY",
+  "objective": "Use the P104 append-only observation ledger for explicit confirmed lineups and typed player availability, preserving source publication/effective/return dates without inferred timestamps or false healthy status.",
   "allowed_paths": [
     ".github/workflows/ci.yml",
-    "configs/data_catalog.yaml",
-    "sql/135_player_affiliation_eligibility.sql",
-    "sql/down/135_player_affiliation_eligibility.down.sql",
-    "scripts/player_registration_facts.py",
-    "tests/test_scripts/test_player_registration_facts.py",
-    "tests/test_computation/test_player_registration_facts_postgres.py"
+    "scripts/data_contracts.py",
+    "scripts/player_observations.py",
+    "scripts/jobs/collect_injury_data.py",
+    "tests/test_scripts/test_data_contracts.py",
+    "tests/test_jobs/test_collect_injury_data.py",
+    "tests/test_computation/test_player_observations_postgres.py",
+    "tests/test_computation/test_observation_postgres.py"
   ],
   "protected_paths": [
     ".github/**",
@@ -22,12 +23,13 @@
   ],
   "approved_protected_paths": [
     ".github/workflows/ci.yml",
-    "configs/data_catalog.yaml",
-    "sql/135_player_affiliation_eligibility.sql",
-    "sql/down/135_player_affiliation_eligibility.down.sql",
-    "scripts/player_registration_facts.py",
-    "tests/test_scripts/test_player_registration_facts.py",
-    "tests/test_computation/test_player_registration_facts_postgres.py"
+    "scripts/data_contracts.py",
+    "scripts/player_observations.py",
+    "scripts/jobs/collect_injury_data.py",
+    "tests/test_scripts/test_data_contracts.py",
+    "tests/test_jobs/test_collect_injury_data.py",
+    "tests/test_computation/test_player_observations_postgres.py",
+    "tests/test_computation/test_observation_postgres.py"
   ],
-  "notes": "Single main branch. No duplicate transfer table; reuse immutable football history and verified identity bridge. Titan transfers never establish current club or competition eligibility. No registration source is currently authorized or populated. Runtime fqp is read-only. Production migration/import and model rollout remain separate tasks."
+  "notes": "One main branch. No new tables or migration; reuse P104 ledger and existing projections. Predicted lineups remain uncollected and cannot pass through confirmed adapter. No provider calls, production data or model behavior."
 }

@@ -2,7 +2,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from scripts.jobs.collect_injury_data import _extract_injury_fields
+from scripts.jobs.collect_injury_data import (
+    _extract_injury_fields,
+    _extract_injury_observation_metadata,
+)
 
 
 def test_extracts_current_fixture_injury_fields_from_player_payload():
@@ -28,6 +31,109 @@ def test_marks_suspension_as_suspended():
     assert status == "suspended"
     assert injury_type == "Suspended"
     assert reason == "Red Card"
+
+
+@pytest.mark.parametrize(
+    ("source_type", "reason", "expected"),
+    [
+        ("Missing Fixture", "Suspended 3 matches", "suspended"),
+        ("Missing Fixture", "Knee Injury", "injured"),
+        ("Missing Fixture", "Personal Reasons", "unknown"),
+        ("Missing Fixture", "Unknown", "unknown"),
+        ("Questionable", "Suspended", "doubtful"),
+    ],
+)
+def test_classifies_actual_api_football_injury_payload(source_type, reason, expected):
+    status, _, _ = _extract_injury_fields({"player": {"type": source_type, "reason": reason}})
+
+    assert status == expected
+
+
+@pytest.mark.parametrize(
+    ("source_type", "reason", "expected"),
+    [
+        ("Questionable", "Fitness test", "doubtful"),
+        ("Doubtful", "Knee", "doubtful"),
+        ("Returned", "Recovered", "returned"),
+        ("Returned", "Doubtful before", "returned"),
+        ("Available", "", "returned"),
+        ("Uninjured", "", "unknown"),
+        ("Not injured", "", "unknown"),
+        ("Unknown", "Questionable", "unknown"),
+        ("medical review", "", "unknown"),
+        ("", "", "unknown"),
+    ],
+)
+def test_maps_only_recognized_availability_values(source_type, reason, expected):
+    status, _, _ = _extract_injury_fields({"player": {"type": source_type, "reason": reason}})
+
+    assert status == expected
+
+
+def test_preserves_explicit_source_timestamps_and_expected_return_date():
+    metadata = _extract_injury_observation_metadata(
+        {
+            "effective_at": "2026-11-08T13:00:00+01:00",
+            "published_at": "2026-11-09T08:30:00Z",
+            "player": {
+                "type": "Doubtful",
+                "reason": "Ankle",
+                "expected_return_date": "2026-11-15",
+            },
+        }
+    )
+
+    assert metadata == {
+        "availability_status": "doubtful",
+        "injury_type": "Doubtful",
+        "reason": "Ankle",
+        "effective_at": "2026-11-08T12:00:00+00:00",
+        "published_at": "2026-11-09T08:30:00+00:00",
+        "expected_return_date": "2026-11-15",
+    }
+
+
+def test_preserves_explicit_top_level_expected_return_date():
+    metadata = _extract_injury_observation_metadata(
+        {
+            "expected_return_date": "2026-11-20",
+            "player": {"type": "Missing Fixture", "reason": "Back Bruise"},
+        }
+    )
+
+    assert metadata["expected_return_date"] == "2026-11-20"
+
+
+def test_missing_source_times_are_not_inferred_from_update_or_fixture_time():
+    metadata = _extract_injury_observation_metadata(
+        {
+            "updated_at": "2026-11-09T08:30:00Z",
+            "fixture": {"date": "2026-11-10T20:00:00+08:00"},
+            "player": {"type": "Missing Fixture", "reason": "Back Bruise"},
+        }
+    )
+
+    assert metadata["effective_at"] is None
+    assert metadata["published_at"] is None
+    assert metadata["expected_return_date"] is None
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("published_at", "2026-11-09T08:30:00"),
+        ("effective_at", "not-a-timestamp"),
+        ("expected_return_date", "2026-02-30"),
+    ],
+)
+def test_rejects_malformed_source_temporal_values(field, value):
+    if field == "expected_return_date":
+        payload = {"player": {"expected_return_date": value}}
+    else:
+        payload = {field: value, "player": {}}
+
+    with pytest.raises(ValueError):
+        _extract_injury_observation_metadata(payload)
 
 
 @pytest.mark.parametrize("mode", ["recent", "empty", "quota", "discovery_failure", "dry"])

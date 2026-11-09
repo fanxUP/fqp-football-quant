@@ -6,11 +6,17 @@ strength/absence heuristics in old projections are not source fact values.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from scripts.data_contracts import AcquisitionStatus, FactStatus, to_utc
+from scripts.data_contracts import (
+    AcquisitionStatus,
+    FactStatus,
+    LineupStatus,
+    PlayerAvailabilityStatus,
+    to_utc,
+)
 from scripts.feature_storage import (
     store_match_lineup_player,
     store_match_lineup_snapshot,
@@ -107,6 +113,15 @@ def store_lineup_observation(
     acquired_at: datetime,
 ) -> int:
     """Store one complete team roster/header/fact; no commit or rollback here."""
+    raw_lineup_status = snapshot.get("lineup_type")
+    if not isinstance(raw_lineup_status, str):
+        raise ValueError("lineup requires an explicit supported status")
+    try:
+        lineup_status = LineupStatus(raw_lineup_status)
+    except ValueError as exc:
+        raise ValueError("lineup requires an explicit supported status") from exc
+    if lineup_status is not LineupStatus.CONFIRMED:
+        raise ValueError("only confirmed lineups may enter the confirmed roster projection")
     if (
         len(players) > 64
         or sum(p["is_starting"] for p in players) != 11
@@ -127,6 +142,7 @@ def store_lineup_observation(
         **team_stream(snapshot["match_id"], snapshot["team_id"], "lineup"),
         fact_status=FactStatus.VALUE,
         value=dict(
+            lineup_status=lineup_status.value,
             formation=snapshot.get("formation"),
             players=source_players,
             team_id=snapshot["team_id"],
@@ -149,6 +165,34 @@ def store_lineup_observation(
     for player in players:
         store_match_lineup_player(conn, dict(player, lineup_snapshot_id=lineup_id), commit=False)
     return lineup_id
+
+
+def _source_timestamp_json(value: Any, field: str) -> str | None:
+    if value is None or value == "":
+        return None
+    if isinstance(value, datetime):
+        parsed = value
+    elif isinstance(value, str):
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    else:
+        raise ValueError(f"source {field} must be an ISO timestamp")
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise ValueError(f"source {field} must include a timezone")
+    return to_utc(parsed).isoformat()
+
+
+def _source_date_json(value: Any, field: str) -> str | None:
+    if value is None or value == "":
+        return None
+    if isinstance(value, datetime):
+        raise ValueError(f"source {field} must be a calendar date, not a timestamp")
+    if isinstance(value, date):
+        parsed = value
+    elif isinstance(value, str):
+        parsed = date.fromisoformat(value)
+    else:
+        raise ValueError(f"source {field} must be an ISO calendar date")
+    return parsed.isoformat()
 
 
 def store_injury_observations(
@@ -175,8 +219,16 @@ def store_injury_observations(
             dict(
                 player_id=p["player_id"],
                 source_player_id=p["source_player_id"],
+                availability_status=PlayerAvailabilityStatus(
+                    p.get("availability_status", PlayerAvailabilityStatus.UNKNOWN.value)
+                ).value,
                 reported_type=p["injury_type"],
                 reported_reason=p["injury_body_part"],
+                effective_at=_source_timestamp_json(p.get("source_effective_at"), "effective_at"),
+                published_at=_source_timestamp_json(p.get("source_published_at"), "published_at"),
+                expected_return_date=_source_date_json(
+                    p.get("expected_return_date"), "expected_return_date"
+                ),
             )
             for p in selected
         ]

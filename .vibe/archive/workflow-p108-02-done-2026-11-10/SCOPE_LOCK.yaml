@@ -1,0 +1,33 @@
+{
+  "schema_version": 4,
+  "task_id": "P108-02-AFFILIATION-ELIGIBILITY",
+  "objective": "Expose Titan transfers only as historical affiliation candidates and add an append-only, evidence-backed registration eligibility fact contract that defaults to unknown; no source data import, production access, or model use.",
+  "allowed_paths": [
+    ".github/workflows/ci.yml",
+    "configs/data_catalog.yaml",
+    "sql/135_player_affiliation_eligibility.sql",
+    "sql/down/135_player_affiliation_eligibility.down.sql",
+    "scripts/player_registration_facts.py",
+    "tests/test_scripts/test_player_registration_facts.py",
+    "tests/test_computation/test_player_registration_facts_postgres.py"
+  ],
+  "protected_paths": [
+    ".github/**",
+    "configs/**",
+    "sql/**",
+    "scripts/**",
+    "tests/**",
+    "requirements*.txt",
+    "**/package*.json"
+  ],
+  "approved_protected_paths": [
+    ".github/workflows/ci.yml",
+    "configs/data_catalog.yaml",
+    "sql/135_player_affiliation_eligibility.sql",
+    "sql/down/135_player_affiliation_eligibility.down.sql",
+    "scripts/player_registration_facts.py",
+    "tests/test_scripts/test_player_registration_facts.py",
+    "tests/test_computation/test_player_registration_facts_postgres.py"
+  ],
+  "notes": "Single main branch. No duplicate transfer table; reuse immutable football history and verified identity bridge. Titan transfers never establish current club or competition eligibility. No registration source is currently authorized or populated. Runtime fqp is read-only. Production migration/import and model rollout remain separate tasks."
+}

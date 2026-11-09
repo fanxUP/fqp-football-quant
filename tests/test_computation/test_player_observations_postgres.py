@@ -19,6 +19,7 @@ from scripts.observation_storage import capture_observation_cutoff, load_observa
 from scripts.player_observations import (
     has_fresh_team_checks,
     record_player_acquisition_failure,
+    store_lineup_observation,
     team_stream,
 )
 from tests.test_computation import test_observation_postgres as obs
@@ -133,6 +134,18 @@ def counts(pg, match):
         return q.fetchone()
 
 
+def injury_receipt_counts(pg, match_id):
+    with pg.cursor() as q:
+        q.execute(
+            "SELECT team_id, count(*) FROM team_squad_snapshots "
+            "WHERE raw_json->>'official_match_id'=%s "
+            "AND raw_json->>'observation_type'='fixture_injuries' "
+            "GROUP BY team_id",
+            (str(match_id),),
+        )
+        return dict(q.fetchall())
+
+
 def test_confirmed_lineup_updates_whole_projection_and_preserves_old_cutoff(pg, match):
     first = save_lineup(pg, match)
     cutoff = freeze(pg, match)
@@ -142,6 +155,7 @@ def test_confirmed_lineup_updates_whole_projection_and_preserves_old_cutoff(pg, 
     assert read(pg, match, "lineup", cutoff)["value"]["players"][0]["source_player_id"] == 1
     assert read(pg, match, "lineup")["value"]["players"][0]["source_player_id"] == 2
     assert read(pg, match, "lineup")["revision"] == 2
+    assert read(pg, match, "lineup")["value"]["lineup_status"] == "confirmed"
     assert (
         get_lineup_for_match(pg, match["id"], match["home_team_id"])["lineup_type"] == "confirmed"
     )
@@ -183,6 +197,31 @@ def test_partial_lineup_is_unknown_and_does_not_publish_confirmed_projection(pg,
     assert read(pg, match, "lineup")["fact_status"] == "unknown"
 
 
+@pytest.mark.parametrize(
+    ("lineup_status", "error"),
+    [
+        ("predicted", "only confirmed lineups"),
+        ("unknown", "only confirmed lineups"),
+        (None, "explicit supported status"),
+    ],
+)
+def test_only_explicit_confirmed_lineup_can_enter_projection(pg, match, lineup_status, error):
+    snapshot = dict(match_id=match["id"], team_id=match["home_team_id"])
+    if lineup_status is not None:
+        snapshot["lineup_type"] = lineup_status
+
+    with pytest.raises(ValueError, match=error):
+        store_lineup_observation(
+            pg,
+            snapshot,
+            [],
+            api_fixture_id=900,
+            acquired_at=datetime.now(UTC),
+        )
+
+    assert counts(pg, match)[:3] == (0, 0, 0)
+
+
 def test_complete_lineup_is_invisible_until_final_commit(pg, connect, match):
     real_commit = pg.commit
 
@@ -221,6 +260,88 @@ def test_coverage_evidence_can_confirm_absence_without_fabricated_player(pg, mat
         ]
         == 0
     )
+
+
+def test_injury_revision_preserves_explicit_status_and_source_dates(pg, match):
+    row = injury(
+        404,
+        effective_at="2026-10-18T12:00:00+08:00",
+        published_at="2026-10-19T08:30:00Z",
+    )
+    row["player"].update(
+        type="Questionable",
+        reason="Ankle",
+        expected_return_date="2026-10-25",
+    )
+
+    save_injuries(pg, match, [row])
+    fact = read(pg, match, "injuries")["value"]["players"][0]
+
+    assert fact["availability_status"] == "doubtful"
+    assert fact["effective_at"] == "2026-10-18T04:00:00+00:00"
+    assert fact["published_at"] == "2026-10-19T08:30:00+00:00"
+    assert fact["expected_return_date"] == "2026-10-25"
+
+
+@pytest.mark.parametrize(
+    ("reason", "expected_status"),
+    [
+        ("Suspended 3 matches", "suspended"),
+        ("Knee Injury", "injured"),
+        ("Personal Reasons", "unknown"),
+    ],
+)
+def test_missing_fixture_reason_is_persisted_without_inventing_injury(
+    pg, match, reason, expected_status
+):
+    row = injury(406)
+    row["player"]["reason"] = reason
+
+    save_injuries(pg, match, [row])
+
+    fact = read(pg, match, "injuries")["value"]["players"][0]
+    assert fact["availability_status"] == expected_status
+
+
+def test_repeated_injury_payload_preserves_revision_and_appends_legacy_receipts(pg, match):
+    row = injury(407)
+    save_injuries(pg, match, [row])
+    before = read(pg, match, "injuries")
+    before_counts = counts(pg, match)
+    before_receipts = injury_receipt_counts(pg, match["id"])
+
+    save_injuries(pg, match, [row])
+
+    after = read(pg, match, "injuries")
+    assert after["revision_id"] == before["revision_id"]
+    assert after["revision"] == before["revision"]
+    assert after["latest_check_id"] > before["latest_check_id"]
+    after_counts = counts(pg, match)
+    assert after_counts[:4] == before_counts[:4]
+    assert after_counts[4] == before_counts[4] + 2
+    after_receipts = injury_receipt_counts(pg, match["id"])
+    assert (
+        set(after_receipts)
+        == set(before_receipts)
+        == {
+            match["home_team_id"],
+            match["away_team_id"],
+        }
+    )
+    assert all(after_receipts[team_id] == count + 1 for team_id, count in before_receipts.items())
+
+
+def test_injury_revision_keeps_unprovided_source_dates_null(pg, match):
+    row = injury(405)
+    row["updated_at"] = "2026-10-19T08:30:00Z"
+    row["fixture"]["date"] = "2026-10-20T20:00:00+08:00"
+
+    save_injuries(pg, match, [row])
+    fact = read(pg, match, "injuries")["value"]["players"][0]
+
+    assert fact["effective_at"] is None
+    assert fact["published_at"] is None
+    assert fact["expected_return_date"] is None
 
 
 def test_corrected_injuries_replace_only_current_projection_and_keep_history(pg, match):

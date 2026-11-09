@@ -1,8 +1,8 @@
-# P108-02 实施计划：转会归属候选与注册资格
+# P108-03：首发阵容与可用性观察
 
-1. 固定范围为迁移 135、只读/审计 helper、数据目录契约、两组定向测试及 CI 必跑模块登记。
-2. 先写 RED：验证 Titan 转会仅呈现为带来源批次证据的历史候选；仅 verified 身份映射能给出 canonical player ID。
-3. 资格事实另存 append-only 账本，分开事件有效日期与采集时刻；缺记录、未知记录、有效期外和截止时未采集到的记录一律返回 unknown。
-4. 只允许经过来源权威类别、证据摘要和人工复核的 confirmed 行；当前没有已核准注册来源，因此本批不写入任何资格行，也不启用数据源。
-5. 在显式命名的本地 disposable PostgreSQL 16 数据库中验证迁移、受限角色、时间截面和回滚保留；CI 确认数据库测试模块无跳过。
-6. 不连接生产库、不导入 Titan 或供应商数据、不修改模型输入/概率、不部署迁移。
+1. 固定八条允许路径和零迁移/零依赖预算；复用 P104 observation ledger。
+2. 先写 RED：API-Football 的 `Missing Fixture` 只说明缺席，须依据明确的伤停原因分类；来源未给出可识别原因时保持 unknown。Returned/doubtful/suspended 明确区分；只接受带时区的显式 source timestamps 和 ISO expected-return date；`updated_at` 不可代填。
+3. 补充严格解析与 per-player facts；加入 `lineup_status=confirmed`；预测阵容不得写入确认投影；保持完整性、幂等、失败回滚和 coverage 规则。
+4. 扩展固定响应单测与已有隔离 PostgreSQL P104 fixture，验证 cutoff、幂等修订和空覆盖语义。
+5. 将 PostgreSQL 回归模块登记为 CI 必跑、无 skip；运行本地隔离测试、静态检查、scope/budget/quality gate。
+6. 进行一次独立只读复核，记录具体结论；不得接入模型或部署生产。

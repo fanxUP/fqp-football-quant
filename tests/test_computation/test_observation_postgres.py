@@ -26,6 +26,25 @@ from scripts.observation_storage import (
 )
 
 ROOT = Path(__file__).resolve().parents[2]
+_OBSERVATION_DSN_KEYS = {"host", "port", "user", "dbname", "password"}
+_AMBIENT_LIBPQ_ROUTES = ("PGHOSTADDR", "PGSERVICE", "PGSERVICEFILE")
+
+
+def _parse_observation_test_dsn(dsn: str) -> dict[str, str]:
+    if any(os.environ.get(name) for name in _AMBIENT_LIBPQ_ROUTES):
+        raise ValueError("Ambient libpq routing configuration is not allowed")
+    params = parse_dsn(dsn)
+    if set(params) - _OBSERVATION_DSN_KEYS:
+        raise ValueError("Unsupported libpq connection parameters are not allowed")
+    if (
+        params.get("host") != "127.0.0.1"
+        or params.get("user") != "fqp_observation_test"
+        or params.get("dbname") != "fqp_observation_test"
+        or not params.get("port", "").isdecimal()
+        or not 1 <= int(params["port"]) <= 65535
+    ):
+        raise ValueError("Observation test DSN must use the dedicated loopback database")
+    return params
 
 
 @pytest.fixture(scope="module")
@@ -33,10 +52,7 @@ def connect():
     dsn = os.getenv("FQP_OBSERVATION_TEST_POSTGRES_DSN")
     if not dsn:
         pytest.skip("Explicit isolated observation database not configured")
-    params = parse_dsn(dsn)
-    assert params == dict(
-        host="127.0.0.1", port="5432", user="fqp_observation_test", dbname="fqp_observation_test"
-    )
+    _parse_observation_test_dsn(dsn)
 
     def create():
         conn = psycopg2.connect(
@@ -58,6 +74,39 @@ def connect():
             raise
 
     return create
+
+
+@pytest.mark.parametrize(
+    "extra_route",
+    [
+        "hostaddr=198.51.100.7",
+        "service=fqp-production",
+        "servicefile=/tmp/fqp-pg-service.conf",
+    ],
+)
+def test_observation_test_dsn_rejects_non_loopback_routes(extra_route):
+    with pytest.raises((ValueError, psycopg2.ProgrammingError)):
+        _parse_observation_test_dsn(
+            "host=127.0.0.1 port=60492 user=fqp_observation_test "
+            f"dbname=fqp_observation_test {extra_route}"
+        )
+
+
+@pytest.mark.parametrize(
+    ("name", "value"),
+    [
+        ("PGHOSTADDR", "198.51.100.7"),
+        ("PGSERVICE", "fqp-production"),
+        ("PGSERVICEFILE", "/tmp/fqp-pg-service.conf"),
+    ],
+)
+def test_observation_test_dsn_rejects_ambient_libpq_routes(monkeypatch, name, value):
+    monkeypatch.setenv(name, value)
+
+    with pytest.raises(ValueError):
+        _parse_observation_test_dsn(
+            "host=127.0.0.1 port=60492 user=fqp_observation_test dbname=fqp_observation_test"
+        )
 
 
 @pytest.fixture

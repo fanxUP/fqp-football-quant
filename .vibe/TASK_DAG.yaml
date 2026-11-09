@@ -1,21 +1,21 @@
 {
   "schema_version": 4,
-  "current_task": "P108-02-AFFILIATION-ELIGIBILITY",
+  "current_task": "P108-03-LINEUPS-AVAILABILITY",
   "tasks": {
-    "P108-02-AFFILIATION-ELIGIBILITY": {
-      "title": "Separate player transfer affiliation candidates from effective competition registration eligibility",
-      "acceptance_id": "A-P108-02",
+    "P108-03-LINEUPS-AVAILABILITY": {
+      "title": "Preserve confirmed lineup and player availability facts with source-safe time semantics",
+      "acceptance_id": "A-P108-03",
       "depends_on": [],
-      "kind": "schema_and_read_contract",
+      "kind": "application_data_contract",
       "status": "DONE",
       "definition_of_done": [
-        "Derive dated Titan transfer rows from the published immutable history product and preserve batch/hash/normalization provenance without duplicating them.",
-        "Resolve canonical player IDs only through verified source identity links; label every transfer row candidate-only and never assert current club or registration.",
-        "Persist registration/eligibility facts separately with source IDs, canonical competition-season mapping when available, inclusive/exclusive validity dates, acquisition time, source revision/hash, evidence, and reviewed confirmation state.",
-        "Return unknown for absent, explicit-unknown, expired, out-of-validity, or not-yet-acquired facts; only reviewed facts from a declared authority may return confirmed eligibility.",
-        "Runtime role fqp is read-only; fact rows are append-only; down migration refuses to drop persisted facts.",
-        "Isolated PostgreSQL 16 verifies provenance view, verified-only identity join, unknown fallback, cutoff/validity behavior, constraints, ACLs, append-only protections, migration up/down/up, and data-preserving down refusal.",
-        "Focused CI regression is required and cannot be skipped; no production database/source access, import, or model consumption in this slice."
+        "Typed availability status distinguishes doubtful, injured, suspended, returned and unknown without defaulting unknown to injured.",
+        "Confirmed lineup facts explicitly say confirmed; predicted payloads cannot enter confirmed legacy projection.",
+        "Per-player effective_at, published_at and expected_return_date are persisted only from explicit source fields; timestamps are timezone-aware; updated_at/acquisition/kickoff are never substituted.",
+        "Empty injury responses remain unknown unless explicit complete coverage proves absence; no player healthy/returned facts are fabricated.",
+        "P104 append-only revisions/cutoffs, idempotence, failure rollback and transaction grouping remain correct in isolated PostgreSQL.",
+        "Exact CI requires the PostgreSQL player observations module and passes it without skip.",
+        "No schema migration, production access, provider calls, model behavior or probability changes."
       ]
     }
   }
