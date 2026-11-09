@@ -8,11 +8,15 @@ Can also be invoked manually: python -m scripts.jobs.crawl_official_schedule [YY
 
 from __future__ import annotations
 
+import logging
 import sys
 
 from scripts.agents.task_queue import finish_tracked_job, start_tracked_job
 from scripts.business_time import business_today
 from scripts.official_crawler import crawl_official_schedule_v2
+from scripts.sporttery_schedule_notices import refresh_jc_notices
+
+logger = logging.getLogger(__name__)
 
 
 def run(business_date: str | None = None) -> dict:
@@ -29,7 +33,15 @@ def run(business_date: str | None = None) -> dict:
     print(f"[crawl_official_schedule] running for {business_date}")
     run_id = start_tracked_job("official_schedule", "data_agent", {"business_date": business_date})
     try:
+        try:
+            notice_count = refresh_jc_notices()
+        except Exception:
+            logger.exception(
+                "Official bulletins unavailable; keeping previously confirmed evidence"
+            )
+            notice_count = None
         result = crawl_official_schedule_v2(business_date)
+        result["schedule_notices"] = notice_count
         finish_tracked_job(
             run_id, "completed" if result.get("status") == "ok" else "failed", result
         )

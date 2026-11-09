@@ -59,6 +59,25 @@ describe('PoolFixtureCatalog', () => {
     expect(await screen.findByText(/暂无符合条件的已采集期次/)).toBeInTheDocument();
   });
 
+  it('将市场参考的概率、原赔率及报价时间与官方赛果分开显示', async () => {
+    mocks.catalogIssue.mockResolvedValue({ ...detail, fixtures: [
+      { ...detail.fixtures[0], market_reference: {
+        company_name: '样本公司', odds: { h: 2, d: 3.25, a: 4 },
+        probabilities: { h: 0.48, d: 0.29, a: 0.23 },
+        quote_at: '2026-10-30T17:59:00+08:00', target_at: '2026-10-30T18:00:00+08:00',
+        published_at: '2026-10-30T18:00:05+08:00',
+      } },
+      detail.fixtures[1],
+    ] });
+    render(<PoolFixtureCatalog />);
+    fireEvent.click(await screen.findByRole('button', { name: /查看4场进球第26001期/ }));
+    expect(await screen.findByRole('columnheader', { name: '胜平负市场参考' })).toBeInTheDocument();
+    expect(screen.getByText('主胜 48%（2.00）')).toBeInTheDocument();
+    expect(screen.getByText(/样本公司 · 报价.*17:59/)).toBeInTheDocument();
+    expect(screen.getByText('暂无赛前参考')).toBeInTheDocument();
+    expect(screen.getAllByText('尚未回填')).toHaveLength(2);
+  });
+
   it('列表失败可以重试，空记录不显示系统异常', async () => {
     mocks.catalog.mockRejectedValueOnce(new Error('暂时不可用')).mockResolvedValue(page([]));
     render(<PoolFixtureCatalog />);

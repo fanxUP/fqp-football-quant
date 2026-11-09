@@ -29,7 +29,7 @@ def build_match_review_cards(conn: Any, review_date: str) -> list[dict[str, Any]
                       m.kickoff_time, m.match_status, r.full_home_goals, r.full_away_goals,
                       r.spf_result, r.rqspf_result, r.total_goals_result,
                       r.score_result, r.half_full_result, r.result_status,
-                      r.official_publish_time
+                      r.official_publish_time, m.sale_stop_time
                FROM official_matches m
                JOIN official_results r ON r.match_id = m.id
                WHERE m.business_date = %s AND r.result_status = 'confirmed'
@@ -52,10 +52,15 @@ def build_match_review_cards(conn: Any, review_date: str) -> list[dict[str, Any]
                       source_mp.match_id, source_mv.model_name, source_mp.play_type,
                       source_mp.option_code, source_mp.model_probability,
                       source_mp.market_probability, source_mp.ev,
-                      source_mp.confidence_score, source_mp.predict_time
+                      source_mp.confidence_score, source_mp.predict_time,
+                      original_odds.sp_value, original_odds.snapshot_time, original_odds.id
                FROM canonical_prediction_rows source_mp
                JOIN model_versions source_mv ON source_mv.id = source_mp.model_version_id
                JOIN official_matches source_match ON source_match.id = source_mp.match_id
+               LEFT JOIN official_odds_snapshots original_odds
+                 ON original_odds.id=source_mp.odds_snapshot_id
+                 AND original_odds.match_id=source_mp.match_id
+                 AND original_odds.snapshot_time<=source_mp.predict_time
                WHERE source_mp.validation_status = 'valid'
                  AND source_mp.predict_time < source_match.kickoff_time
                ORDER BY source_mp.match_id, source_mv.model_name,
@@ -66,13 +71,26 @@ def build_match_review_cards(conn: Any, review_date: str) -> list[dict[str, Any]
         predictions = cur.fetchall()
 
         cur.execute(
-            """SELECT DISTINCT ON (o.match_id, o.play_type, o.option_code)
-                      o.match_id, o.play_type, o.option_code, o.option_name, o.sp_value, o.handicap, o.snapshot_time
-               FROM official_odds_snapshots o
-               JOIN official_matches m ON m.id = o.match_id
-               WHERE o.match_id = ANY(%s) AND o.is_open = true
-                 AND o.snapshot_time <= COALESCE(m.sale_stop_time, m.kickoff_time)
-               ORDER BY o.match_id, o.play_type, o.option_code, o.snapshot_time DESC, o.id DESC""",
+            """WITH eligible AS MATERIALIZED (
+                 SELECT DISTINCT ON (o.match_id,o.play_type,o.snapshot_time,o.handicap,o.raw_hash,o.option_code)
+                        o.match_id,o.play_type,o.option_code,o.option_name,o.sp_value,
+                        o.handicap,o.snapshot_time,o.id,o.raw_hash
+                 FROM official_odds_snapshots o JOIN official_matches m ON m.id=o.match_id
+                 WHERE o.match_id=ANY(%s) AND o.is_open AND o.raw_hash IS NOT NULL
+                   AND m.sale_stop_time IS NOT NULL
+                   AND o.snapshot_time<m.kickoff_time AND o.snapshot_time<m.sale_stop_time
+                   AND o.sp_value>1 AND o.sp_value<'Infinity'::numeric
+                 ORDER BY o.match_id,o.play_type,o.snapshot_time,o.handicap,o.raw_hash,o.option_code,o.id DESC
+               ), latest AS (
+                 SELECT DISTINCT ON (match_id,play_type) match_id,play_type,snapshot_time,handicap,raw_hash
+                 FROM eligible GROUP BY match_id,play_type,snapshot_time,handicap,raw_hash
+                 HAVING count(*)=CASE play_type WHEN 'spf' THEN 3 WHEN 'rqspf' THEN 3
+                    WHEN 'bf' THEN 31 WHEN 'zjq' THEN 8 WHEN 'bqc' THEN 9 END
+                 ORDER BY match_id,play_type,snapshot_time DESC,max(id) DESC
+               ) SELECT o.match_id,o.play_type,o.option_code,o.option_name,o.sp_value,o.handicap,o.snapshot_time
+                 FROM eligible o JOIN latest l USING (match_id,play_type,snapshot_time,raw_hash)
+                 WHERE o.handicap IS NOT DISTINCT FROM l.handicap
+                 ORDER BY o.match_id,o.play_type,o.option_code""",
             (match_ids,),
         )
         odds = cur.fetchall()
@@ -130,6 +148,9 @@ def build_match_review_cards(conn: Any, review_date: str) -> list[dict[str, Any]
                 "ev": float(row[6]) if row[6] is not None else None,
                 "confidenceScore": float(row[7]) if row[7] is not None else None,
                 "predictTime": _as_text(row[8]),
+                "predictionOdds": float(row[9]) if row[9] is not None else None,
+                "predictionOddsTime": _as_text(row[10]),
+                "predictionOddsSnapshotId": row[11],
             }
         )
     odds_map: dict[int, list[dict[str, Any]]] = defaultdict(list)
@@ -201,6 +222,14 @@ def build_match_review_cards(conn: Any, review_date: str) -> list[dict[str, Any]
                 },
                 "modelSignals": prediction_map[row[0]],
                 "oddsSignals": odds_map[row[0]],
+                "officialSaleStopTime": _as_text(row[16]),
+                "oddsComparisonStatus": (
+                    "available"
+                    if odds_map[row[0]]
+                    else "snapshot_missing"
+                    if row[16]
+                    else "cutoff_unknown"
+                ),
                 "evidence": card_evidence,
                 "evidenceStatus": "已收录" if card_evidence else "未查到可靠资料",
             }

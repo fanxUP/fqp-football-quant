@@ -19,6 +19,8 @@ _MATCH_CARD_FIELDS = (
     "result",
     "modelSignals",
     "oddsSignals",
+    "officialSaleStopTime",
+    "oddsComparisonStatus",
     "evidence",
     "evidenceStatus",
 )

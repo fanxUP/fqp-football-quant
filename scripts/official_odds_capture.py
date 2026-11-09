@@ -25,6 +25,7 @@ from scripts.official_storage import (
     store_odds_snapshots,
     update_health,
 )
+from scripts.prematch_schedule import reserve_prediction_quotes
 from scripts.sporttery_client import SportteryClient
 
 
@@ -33,6 +34,15 @@ class OfficialCaptureCandidate(CaptureCandidate):
     business_date: date
     official_match_code: str
     expected_play_types: tuple[str, ...]
+    source_match_id: str | None = None
+
+
+def _same_official_fixture(match: dict[str, Any], source_id: str, kickoff: datetime) -> bool:
+    try:
+        source_kickoff = datetime.fromisoformat(match["kickoff_time"])
+    except KeyError, TypeError, ValueError:
+        return False
+    return str(match["raw_json"].get("matchId")) == source_id and source_kickoff == kickoff
 
 
 def _close_expired_sales(conn: Any, now: datetime) -> int:
@@ -59,7 +69,7 @@ def _load_candidates(conn: Any, now: datetime) -> list[OfficialCaptureCandidate]
         cur.execute(
             """
             WITH relevant_matches AS MATERIALIZED (
-                SELECT m.id, m.business_date, m.official_match_code, m.kickoff_time
+                SELECT m.id, m.business_date, m.official_match_code, m.kickoff_time, m.source_match_id
                 FROM official_matches m
                 WHERE m.kickoff_time >= %(grace_start)s
                   AND (
@@ -98,7 +108,7 @@ def _load_candidates(conn: Any, now: datetime) -> list[OfficialCaptureCandidate]
                        SELECT 1 FROM official_odds_capture_batches final_batch
                        WHERE final_batch.match_id = relevant.id
                          AND final_batch.capture_kind = 'final'
-                   ) AS final_attempted
+                   ) AS final_attempted, relevant.source_match_id
             FROM relevant_matches relevant
             JOIN offered_plays offered ON offered.match_id = relevant.id
             LEFT JOIN LATERAL (
@@ -128,6 +138,7 @@ def _load_candidates(conn: Any, now: datetime) -> list[OfficialCaptureCandidate]
             last_attempt_at=row[5],
             last_attempt_status=str(row[6]) if row[6] else None,
             final_attempted=bool(row[7]),
+            source_match_id=row[8],
         )
         for row in rows
     ]
@@ -192,6 +203,7 @@ def collect_due_official_odds(now: datetime | None = None) -> dict[str, Any]:
     reserved: list[tuple[OfficialCaptureCandidate, str, int]] = []
     with get_db() as conn:
         _close_expired_sales(conn, current)
+        prediction_quotes = reserve_prediction_quotes(conn, current)
         for candidate in _load_candidates(conn, current):
             decision = capture_decision(candidate, current)
             if not decision.is_due or not decision.capture_kind or not decision.scheduled_for:
@@ -200,10 +212,10 @@ def collect_due_official_odds(now: datetime | None = None) -> dict[str, Any]:
             batch_id = _reserve_batch(conn, candidate, decision.capture_kind, scheduled_for)
             if batch_id is not None:
                 reserved.append((candidate, decision.capture_kind, batch_id))
-        if not reserved:
+        if not reserved and not prediction_quotes:
             update_health(conn, "sporttery", "odds", "ok", 0)
 
-    if not reserved:
+    if not reserved and not prediction_quotes:
         return {"status": "ok", "matches_due": 0, "snapshots_inserted": 0}
 
     started_at = current.replace(tzinfo=None).isoformat(timespec="seconds")
@@ -215,15 +227,27 @@ def collect_due_official_odds(now: datetime | None = None) -> dict[str, Any]:
             (str(match["business_date"]), str(match["official_match_code"])): match
             for match in parsed
         }
-        snapshot_time = current.replace(tzinfo=None).isoformat(timespec="seconds")
+        captured_at = datetime.now(BUSINESS_TIMEZONE).replace(tzinfo=None)
+        snapshot_time = captured_at.isoformat()
         inserted_total = 0
         complete_count = 0
+        ordinary_captures: set[tuple[int, str]] = set()
 
         with get_db() as conn:
             for candidate, capture_kind, batch_id in reserved:
                 source_match = source_matches.get(
                     (candidate.business_date.isoformat(), candidate.official_match_code)
                 )
+                if (
+                    source_match
+                    and candidate.source_match_id
+                    and not _same_official_fixture(
+                        source_match,
+                        candidate.source_match_id,
+                        candidate.kickoff_time,
+                    )
+                ):
+                    source_match = None
                 snapshots = (
                     parse_odds_snapshots_from_match(
                         source_match.get("raw_json", {}), snapshot_time=snapshot_time
@@ -240,6 +264,8 @@ def collect_due_official_odds(now: datetime | None = None) -> dict[str, Any]:
                     snapshot["raw_json"] = {
                         **snapshot.get("raw_json", {}),
                         "_collector_timezone": "Asia/Shanghai",
+                        "_sporttery_match_id": candidate.source_match_id,
+                        "_scheduled_kickoff": candidate.kickoff_time.isoformat(timespec="seconds"),
                     }
                 completeness = evaluate_capture_completeness(
                     candidate.expected_play_types, snapshots
@@ -256,6 +282,9 @@ def collect_due_official_odds(now: datetime | None = None) -> dict[str, Any]:
                         snapshots=snapshots,
                     )
                     inserted = int(result.get("inserted", 0))
+                    ordinary_captures.update(
+                        (candidate.match_id, s["play_type"]) for s in snapshots
+                    )
 
                 status = completeness.status
                 failure_reason = None
@@ -276,6 +305,55 @@ def collect_due_official_odds(now: datetime | None = None) -> dict[str, Any]:
                 inserted_total += inserted
                 complete_count += int(status == "complete")
 
+            wanted: dict[tuple, set[str]] = {}
+            for match_id, day, code, source_id, kickoff, home, away, play in prediction_quotes:
+                if (match_id, play) not in ordinary_captures:
+                    wanted.setdefault(
+                        (match_id, day, code, source_id, kickoff, home, away), set()
+                    ).add(play)
+            for (match_id, day, code, source_id, kickoff, home, away), plays in wanted.items():
+                match = source_matches.get((day.isoformat(), code))
+                if not match or kickoff <= captured_at:
+                    continue
+                raw_match = match["raw_json"]
+                if (
+                    not _same_official_fixture(match, source_id, kickoff)
+                    or match["home_team_name"] != home
+                    or match["away_team_name"] != away
+                ):
+                    continue
+                snapshots = [
+                    s
+                    for s in parse_odds_snapshots_from_match(
+                        raw_match,
+                        snapshot_time=snapshot_time,
+                        prediction_quote=True,
+                    )
+                    if s["play_type"] in plays
+                ]
+                complete_plays = {
+                    play
+                    for play in plays
+                    if {
+                        s["option_code"]
+                        for s in snapshots
+                        if s["play_type"] == play and s["sp_value"] > 1
+                    }
+                    == {"h", "d", "a"}
+                }
+                valid = [
+                    s for s in snapshots if s["play_type"] in complete_plays and s["sp_value"] > 1
+                ]
+                for snapshot in valid:
+                    snapshot["raw_json"]["_collector_timezone"] = "Asia/Shanghai"
+                    snapshot["raw_json"]["_sporttery_match_id"] = source_id
+                    snapshot["raw_json"]["_scheduled_kickoff"] = kickoff.isoformat(
+                        timespec="seconds"
+                    )
+                if valid:
+                    result = store_odds_snapshots(conn, match_id, None, valid)
+                    inserted_total += int(result.get("inserted", 0))
+
             log_crawl(
                 conn,
                 source_name="sporttery",
@@ -291,6 +369,7 @@ def collect_due_official_odds(now: datetime | None = None) -> dict[str, Any]:
             "status": "ok",
             "matches_due": len(reserved),
             "matches_complete": complete_count,
+            "prediction_quotes_requested": len(prediction_quotes),
             "snapshots_inserted": inserted_total,
         }
     except Exception as exc:

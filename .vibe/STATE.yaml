@@ -1,18 +1,19 @@
 {
-  "state": "DONE",
-  "workflow_id": "P107-AGGREGATE-CANDIDATE-RELEASE-READINESS",
+  "schema_version": 4,
+  "state": "REVIEWING",
+  "workflow_id": "PREMATCH-SCHEDULE-MARKET-REFERENCE-20261109",
   "previous_workflow": {
-    "task_id": "P107-AGGREGATE-SCOPE-RECONCILIATION",
+    "task_id": "P107-AGGREGATE-CANDIDATE-RELEASE-READINESS",
     "state": "DONE",
-    "archive": ".vibe/archive/workflow-p107-aggregate-scope-reconciliation-2026-11-03",
-    "archive_manifest_sha256": "cfb735cddd7f4dc4431923acc1cf80363e57d0a6f0159f4b1d8727e46a53f8f6"
+    "recorded_in_git_revision": "5f5ef27cd80c8f2f1338d04a6e825d87732fa476"
   },
   "blocked_reason": null,
-  "mode": "STANDARD",
+  "mode": "STRICT",
+  "environment": "Local macOS development; isolated PostgreSQL 16.13; production target 100.121.47.26 via SSH password authentication.",
   "last_transition": {
-    "from": "VERIFIED",
-    "to": "DONE",
-    "at": "2026-11-09T12:20:47.824401+08:00",
-    "reason": "P107 production acceptance passed: exact main/production SHA b605866d2757102185ad75d8174dbc8f91076674, CI passed, natural aggregate run 237100 drained the queue, and both authenticated consumers read the fresh shared snapshot."
+    "from": "VERIFYING",
+    "to": "REVIEWING",
+    "at": "2026-11-09T17:49:01.687394+08:00",
+    "reason": "Targeted local, frontend, static, migration rehearsal and independent review evidence passed; exact-head CI remains next."
   }
 }

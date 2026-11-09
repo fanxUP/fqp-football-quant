@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from datetime import date
 from functools import lru_cache
 from pathlib import Path
@@ -144,13 +145,17 @@ def _traditional_half_score_supplement_allowlist() -> dict[tuple, dict]:
 
 def traditional_source_ids(raw: dict) -> dict[str, str]:
     """Keep the actual source field names, without trusting booleans/empty IDs."""
-    return {
+    ids = {
         key: str(value).strip()
         for key in ("infohubMatchId", "matchId")
         if isinstance(value := raw.get(key), (int, str))
         and not isinstance(value, bool)
         and str(value).strip() not in ("", "0")
     }
+    gm_id = str(raw.get("gmMatchId"))
+    if raw.get("_source") == "sporttery_live_schedule" and re.fullmatch(r"[1-9]\d{0,17}", gm_id):
+        ids["gmMatchId"] = gm_id
+    return ids
 
 
 def _pending(reason: str, *, conflict: bool = False) -> dict:
@@ -356,6 +361,9 @@ def resolve_pool_fixture(
         keys.append(("traditional.infohubMatchId", ids["infohubMatchId"]))
     if ids.get("matchId"):
         keys.append((f"traditional.{game_type}.{issue_no}.matchId", ids["matchId"]))
+    gm_id = ids.get("gmMatchId")
+    if gm_id:
+        keys.append(("traditional.gmMatchId", gm_id))
     fields = ("league_name", "home_team_name", "away_team_name")
     names = {k: str(row.get(k) or "").strip() for k in fields}
     kickoff = pool_time(row.get("kickoff_time"))
@@ -368,8 +376,8 @@ def resolve_pool_fixture(
         cur.execute(
             """SELECT id,source_match_id FROM official_matches
                WHERE league_name=%s AND home_team_name=%s AND away_team_name=%s
-                 AND kickoff_time=%s""",
-            params,
+                 AND kickoff_time=%s AND (%s IS NULL OR source_match_id=%s)""",
+            (*params, gm_id, gm_id),
         )
         officials = cur.fetchall()
         if len(officials) > 1:

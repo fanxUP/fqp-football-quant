@@ -301,11 +301,11 @@ def test_season_reconciliation_retry_requires_a_failed_primary_run_today():
     )
 
 
-def test_scheduler_refreshes_official_schedule_metadata_every_30_minutes():
+def test_scheduler_refreshes_official_schedule_metadata_before_2030_and_every_10_minutes():
     from pathlib import Path
 
     source = Path("scripts/jobs/run_scheduler.py").read_text()
-    assert OFFICIAL_SCHEDULE_CRON == {"minute": "10,40"}
+    assert OFFICIAL_SCHEDULE_CRON == {"minute": "8,18,28,38,48,58"}
     assert "**OFFICIAL_SCHEDULE_CRON" in source
 
 
@@ -371,11 +371,12 @@ def test_scheduler_refreshes_features_after_lineup_collection_before_prediction(
     assert 'minute="14,44"' in source
 
 
-def test_scheduler_runs_model_predictions_after_each_schedule_refresh():
+def test_scheduler_dispatches_only_due_predictions_each_minute():
     source = Path("scripts/jobs/run_scheduler.py").read_text()
 
-    assert MODEL_PREDICTION_CRON == {"minute": "15,45"}
+    assert MODEL_PREDICTION_CRON == {"minute": "*"}
     assert "**MODEL_PREDICTION_CRON" in source
+    assert ").run_due()" in source
 
 
 def test_scheduler_retries_periodic_reports_after_daily_reports_can_complete():

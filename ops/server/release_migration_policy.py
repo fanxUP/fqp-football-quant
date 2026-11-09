@@ -40,6 +40,12 @@ REVIEWED_NO_BACKUP_CHECKSUMS = {
     "131_prediction_statistics_rollup.sql": (
         "a98300da5bfa7ec8b1e1c21cabec83ec580a4346cb6e6835707d831706c55b1f"
     ),
+    "132_prematch_prediction_schedule.sql": (
+        "da80a5386d29f24f9cc1a182532c929a3c44a908e276a329e5ac1c3cd050a524"
+    ),
+    "133_traditional_market_reference.sql": (
+        "bad49ba6686f18d9e7f6252feea3dc183dc27475e379722c6ee732c3c6f43fc7"
+    ),
 }
 REVIEWED_NO_BACKUP_ROLLBACK_CHECKSUMS = {
     "131_prediction_statistics_rollup.down.sql": (
@@ -56,7 +62,20 @@ REVIEWED_NO_BACKUP_TRADITIONAL_FACTS = ["128_traditional_history_facts.sql"]
 REVIEWED_NO_BACKUP_ALIASES = ["129_football_fixture_identity_aliases.sql"]
 REVIEWED_NO_BACKUP_RESULT_FACTS = ["130_football_fixture_result_facts.sql"]
 REVIEWED_NO_BACKUP_PREDICTION_STATS = ["131_prediction_statistics_rollup.sql"]
+REVIEWED_NO_BACKUP_PREMATCH = [
+    "132_prematch_prediction_schedule.sql",
+    "133_traditional_market_reference.sql",
+]
+REVIEWED_NO_BACKUP_PREMATCH_ROLLBACK_CHECKSUMS = {
+    "132_prematch_prediction_schedule.down.sql": (
+        "edb7843304cd0e06456cabc1f84e00f049913f9821c81e1eaa22837d4bd83cd3"
+    ),
+    "133_traditional_market_reference.down.sql": (
+        "d3f2b66c012b022bdb1d7f607773bc2033f17cda79c64ae2603b18437d09d274"
+    ),
+}
 NO_BACKUP_REHEARSAL_FIELD = "no_backup_migration_rehearsal"
+PREMATCH_REHEARSAL_FIELD = "prematch_migration_rehearsal"
 MAX_PRODUCTION_SAMPLE_MATCHES = 20
 MAX_PRODUCTION_SAMPLE_ROWS_PER_TABLE = 250_000
 TRUSTED_NO_BACKUP_SIGNER_PUBLIC_KEY = Path("/etc/ssh/ssh_host_ed25519_key.pub")
@@ -84,9 +103,15 @@ def _verify_pinned_sql(project_root: Path, migration_names: list[str]) -> None:
             _refuse(f"Migration checksum is outside the reviewed no-backup release: {name}")
 
 
-def _verify_pinned_rollback_sql(project_root: Path, rollback_names: list[str]) -> None:
+def _verify_pinned_rollback_sql(
+    project_root: Path,
+    rollback_names: list[str],
+    *,
+    checksums: dict[str, str] | None = None,
+) -> None:
+    pinned_checksums = checksums or REVIEWED_NO_BACKUP_ROLLBACK_CHECKSUMS
     for name in rollback_names:
-        expected = REVIEWED_NO_BACKUP_ROLLBACK_CHECKSUMS[name]
+        expected = pinned_checksums[name]
         path = project_root / "sql" / "down" / name
         if not path.is_file():
             _refuse(f"Reviewed rollback migration is missing from checkout: {name}")
@@ -166,10 +191,12 @@ def _verify_no_backup_rehearsal(
     pending: list[str],
     target_sha: str,
     evidence_directory: Path | None,
+    *,
+    manifest_field: str = NO_BACKUP_REHEARSAL_FIELD,
 ) -> None:
     if record.get("migration_copy_dry_run") != "passed":
         _refuse("Reviewed migrations require a passed isolated PostgreSQL migration copy rehearsal")
-    manifest = record.get(NO_BACKUP_REHEARSAL_FIELD)
+    manifest = record.get(manifest_field)
     if not isinstance(manifest, dict) or manifest.get("status") != "passed":
         _refuse("Reviewed migrations require structured no-backup PostgreSQL rehearsal evidence")
     if evidence_directory is None:
@@ -368,6 +395,27 @@ def _verify_no_backup_rehearsal(
     if pending == REVIEWED_NO_BACKUP_PREDICTION_STATS:
         _verify_prediction_statistics_rehearsal(report)
 
+    if pending == REVIEWED_NO_BACKUP_PREMATCH:
+        expected_down = REVIEWED_NO_BACKUP_PREMATCH_ROLLBACK_CHECKSUMS
+        if report.get("down_migration_sha256") != expected_down:
+            _refuse("Prematch scheduling rehearsal rollback checksums do not match")
+        role = report.get("application_role")
+        if (
+            not isinstance(role, dict)
+            or role.get("name") != "fqp"
+            or role.get("superuser") is not False
+            or role.get("owns_new_tables") is not False
+        ):
+            _refuse("Prematch migration rehearsal must use the restricted non-owner fqp role")
+        for field in (
+            "application_role_acl",
+            "application_business_paths",
+            "published_reference_protection",
+            "rollback_preserves_runtime_data",
+        ):
+            if report.get(field) != "passed":
+                _refuse(f"Prematch migration rehearsal is missing {field} evidence")
+
 
 def _verify_prediction_statistics_rehearsal(report: dict[str, Any]) -> None:
     database = report["database"]
@@ -531,6 +579,7 @@ def _validate_no_backup(
         REVIEWED_NO_BACKUP_ALIASES,
         REVIEWED_NO_BACKUP_RESULT_FACTS,
         REVIEWED_NO_BACKUP_PREDICTION_STATS,
+        REVIEWED_NO_BACKUP_PREMATCH,
     ):
         _verify_pinned_sql(project_root, pending)
         if pending == REVIEWED_NO_BACKUP_PREDICTION_STATS:
@@ -538,14 +587,41 @@ def _validate_no_backup(
                 project_root,
                 list(REVIEWED_NO_BACKUP_ROLLBACK_CHECKSUMS),
             )
-        _verify_no_backup_rehearsal(record, pending, target_sha, evidence_directory)
+        if pending == REVIEWED_NO_BACKUP_PREMATCH:
+            _verify_pinned_rollback_sql(
+                project_root,
+                list(REVIEWED_NO_BACKUP_PREMATCH_ROLLBACK_CHECKSUMS),
+                checksums=REVIEWED_NO_BACKUP_PREMATCH_ROLLBACK_CHECKSUMS,
+            )
+        _verify_no_backup_rehearsal(
+            record,
+            pending,
+            target_sha,
+            evidence_directory,
+            manifest_field=(
+                PREMATCH_REHEARSAL_FIELD
+                if pending == REVIEWED_NO_BACKUP_PREMATCH
+                else NO_BACKUP_REHEARSAL_FIELD
+            ),
+        )
         return
     _refuse(
-        "No-backup release is restricted to pinned migration123, the reviewed124+125 pair, ACL repair126, season identity127, traditional history facts128, fixture identity aliases129, actual result facts130, or production-copy-rehearsed prediction statistics migration131"
+        "No-backup release is restricted to the reviewed migration sets 123, 124+125, 126, 127, 128, 129, 130, 131, or the exact 132+133 prematch scheduling pair"
     )
 
 
-def _validate_backup(record: dict[str, Any]) -> None:
+def _validate_backup(
+    record: dict[str, Any],
+    pending: list[str],
+    target_sha: str,
+    project_root: Path,
+    evidence_directory: Path | None,
+) -> None:
+    prematch_migrations = set(REVIEWED_NO_BACKUP_PREMATCH)
+    if prematch_migrations.intersection(pending) and pending != REVIEWED_NO_BACKUP_PREMATCH:
+        _refuse(
+            "Migrations 132+133 must be the exact ordered pair with the prematch rehearsal evidence"
+        )
     if record.get("migration_copy_dry_run") != "passed":
         _refuse("Pending migrations require a passed migration copy rehearsal")
     backup_path = record.get("backup_path")
@@ -571,6 +647,20 @@ def _validate_backup(record: dict[str, Any]) -> None:
         )
     except (OSError, subprocess.CalledProcessError) as exc:
         raise SystemExit("Backup archive validation failed") from exc
+    if pending == REVIEWED_NO_BACKUP_PREMATCH:
+        _verify_pinned_sql(project_root, pending)
+        _verify_pinned_rollback_sql(
+            project_root,
+            list(REVIEWED_NO_BACKUP_PREMATCH_ROLLBACK_CHECKSUMS),
+            checksums=REVIEWED_NO_BACKUP_PREMATCH_ROLLBACK_CHECKSUMS,
+        )
+        _verify_no_backup_rehearsal(
+            record,
+            pending,
+            target_sha,
+            evidence_directory,
+            manifest_field=PREMATCH_REHEARSAL_FIELD,
+        )
 
 
 def validate_release_migrations(
@@ -588,7 +678,7 @@ def validate_release_migrations(
     if release_mode == "--apply-no-backup":
         _validate_no_backup(record, pending, target_sha, project_root, evidence_directory)
     elif release_mode == "--apply":
-        _validate_backup(record)
+        _validate_backup(record, pending, target_sha, project_root, evidence_directory)
     else:
         _refuse(f"Unsupported migration release mode: {release_mode}")
 

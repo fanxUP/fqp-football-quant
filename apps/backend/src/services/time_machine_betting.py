@@ -42,7 +42,7 @@ def build_time_machine_matches(
     sale_stops: dict[int, datetime] = {}
     for row in match_rows:
         match_id, code, league, home, away, kickoff, sale_stop, _raw_json = row
-        stop_at = sale_stop or kickoff
+        stop_at = min(sale_stop, kickoff) if sale_stop is not None else kickoff
         sale_stops[int(match_id)] = stop_at
         matches[int(match_id)] = {
             "match_id": int(match_id),
@@ -53,9 +53,8 @@ def build_time_machine_matches(
             "kickoff_time": kickoff.isoformat() if hasattr(kickoff, "isoformat") else str(kickoff),
             "match_status": "historical",
             "match_num_str": code,
-            "sale_stop_time": stop_at.isoformat()
-            if hasattr(stop_at, "isoformat")
-            else str(stop_at),
+            "sale_stop_time": sale_stop.isoformat() if sale_stop else None,
+            "odds_source": "official_pre_close" if sale_stop else "official_pre_kickoff",
             "odds": _new_markets(),
         }
 
@@ -75,7 +74,7 @@ def build_time_machine_matches(
         match_id = int(match_id)
         if match_id not in matches or play_type not in PLAY_TYPES:
             continue
-        if snapshot_time > sale_stops[match_id]:
+        if snapshot_time >= sale_stops[match_id]:
             continue
         key = (match_id, str(play_type), str(option_code))
         existing = latest.get(key)

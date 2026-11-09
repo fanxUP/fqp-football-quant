@@ -148,6 +148,22 @@ class SportteryClient:
             endpoint,
         )
 
+    def get_match_bulletins(self) -> list[dict[str, Any]]:
+        """Fetch the first page used by the official 赛事公告 page."""
+        endpoint = "gmBulletin.qry"
+        data = self._require_success(
+            self._request_url(
+                "https://webapi.sporttery.cn/gateway/jc/common/" + endpoint,
+                {"page": 1, "pageSize": 30, "isShowHis": 1},
+                referer="https://www.sporttery.cn/ssgg/",
+            ),
+            endpoint,
+        )
+        rows = data.get("value", {}).get("data")
+        if not isinstance(rows, list):
+            raise ValueError("invalid Sporttery bulletin list")
+        return rows
+
     def get_uniform_match_results(self, begin_date: str, end_date: str) -> dict[str, Any]:
         """Fetch official result pages one day at a time via the Uniform API.
 
@@ -256,6 +272,31 @@ class SportteryClient:
         return self._request_url(
             self.UNIFORM_BASE_URL + "getFixedBonusV1.qry",
             {"clientCode": "3001", "matchId": str(match_id)},
+        )
+
+    def get_traditional_lottery_schedule(
+        self, game_code: int, issue_no: str | None = None
+    ) -> dict[str, Any]:
+        """Read the current issue shown on the official traditional schedule page."""
+        endpoint = "getFootBallConcernV1.qry"
+        return self._require_success(
+            self._request_url(
+                self.LOTTERY_BASE_URL + endpoint,
+                {"param": f"{game_code},0", "lotteryDrawNum": issue_no or ""},
+                referer="https://www.sporttery.cn/ctzc/szsc/index.html",
+            ),
+            endpoint,
+        )
+
+    def get_match_head(self, sporttery_match_id: str) -> dict[str, Any]:
+        endpoint = "getMatchHeadV1.qry"
+        return self._require_success(
+            self._request_url(
+                self.UNIFORM_BASE_URL + endpoint,
+                {"source": "web", "sportteryMatchId": sporttery_match_id},
+                referer="https://www.sporttery.cn/jc/zqdz/index.html",
+            ),
+            endpoint,
         )
 
     def get_traditional_lottery_draw(self) -> dict[str, Any]:

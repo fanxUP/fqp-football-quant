@@ -39,7 +39,7 @@ from scripts.extra_trees_shadow_model import (
 from scripts.feature_adjustment import GoalRateAdjustment, adjust_goal_rates
 from scripts.feature_batch_storage import load_latest_feature_batch_summary
 from scripts.feature_schema import FEATURE_COLUMNS, FEATURE_SCHEMA_VERSION
-from scripts.feature_storage import load_latest_match_feature_snapshot
+from scripts.feature_storage import load_latest_match_feature_snapshot, store_match_feature_snapshot
 from scripts.glicko2_model import Glicko2Rating
 from scripts.glicko2_model import predict_1x2 as glicko2_predict_1x2
 from scripts.hist_gradient_boosting_shadow_model import (
@@ -97,6 +97,14 @@ from scripts.poisson_model import (
 from scripts.prediction_input_fence import capture_prediction_input_fence
 from scripts.prediction_input_updates import InputUpdateSuperseded
 from scripts.prediction_job_execution import EXECUTION_PROTOCOL, prediction_execution
+from scripts.prematch_schedule import (
+    PredictionTask,
+    attach_prediction_tasks,
+    complete_prediction_tasks,
+    current_official_quote,
+    due_prediction_tasks,
+    fence_scheduled_match,
+)
 from scripts.random_forest_shadow_model import (
     load_probabilities as load_random_forest_shadow_probabilities,
 )
@@ -115,6 +123,7 @@ _PREDICTION_SOURCE_PATHS = (
     "apps/backend/src/deployment_version.py",
     "scripts/agents/task_queue.py",
     "scripts/prediction_job_execution.py",
+    "scripts/prematch_schedule.py",
     "scripts/bayesian_form_model.py",
     "scripts/bivariate_poisson_model.py",
     "scripts/business_time.py",
@@ -560,6 +569,8 @@ def _run_impl(
     dry_run: bool = False,
     prediction_run_id: uuid.UUID | str | None = None,
     execution_conn: Any = None,
+    scheduled_tasks: list[PredictionTask] | None = None,
+    schedule_manifest: list[dict] | None = None,
 ) -> dict[str, Any]:
     """Run model predictions for active matches."""
     if dry_run:
@@ -658,7 +669,16 @@ def _run_impl(
         rho = mle_rho if mle_rho is not None else DEFAULT_RHO
 
         # 2. Get matches to predict (team names → look up IDs for Elo)
-        if match_id:
+        scheduled_markets = {(t.match_id, t.play_type): t for t in scheduled_tasks or []}
+        if scheduled_tasks is not None:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT id, home_team_name, away_team_name FROM official_matches "
+                    "WHERE id=ANY(%s) ORDER BY kickoff_time, id",
+                    (sorted({t.match_id for t in scheduled_tasks}),),
+                )
+                match_rows = cur.fetchall()
+        elif match_id:
             with conn.cursor() as cur:
                 cur.execute(
                     """SELECT id, home_team_name, away_team_name
@@ -716,18 +736,21 @@ def _run_impl(
         output_groups_completed = 0
         output_group_skips: list[dict[str, Any]] = []
 
-        # 3. Load available markets: only predict for play types that are open
-        match_ids = [r[0] for r in match_rows]
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT match_id, play_type FROM official_markets
-                WHERE match_id = ANY(%s) AND is_open = true
-                  AND play_type IN ('spf', 'rqspf')
-                """,
-                (match_ids,),
-            )
-            market_rows = cur.fetchall()
+        # Scheduled research forecasts use observed odds; ticket eligibility is separate.
+        if scheduled_tasks is not None:
+            market_rows = list(scheduled_markets)
+        else:
+            match_ids = [r[0] for r in match_rows]
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT match_id, play_type FROM official_markets
+                    WHERE match_id = ANY(%s) AND is_open = true
+                      AND play_type IN ('spf', 'rqspf')
+                    """,
+                    (match_ids,),
+                )
+                market_rows = cur.fetchall()
 
         # Build {match_id: [play_types]} map
         available_markets: dict[int, list[str]] = {}
@@ -752,6 +775,7 @@ def _run_impl(
                         for play_type in play_types
                     ),
                     "predict_time": predict_time,
+                    **({"prematch_schedule": schedule_manifest} if schedule_manifest else {}),
                 },
                 provenance_status=run_provenance_status,
             )
@@ -782,6 +806,30 @@ def _run_impl(
                 if prediction_run_id is not None and play_types
                 else None
             )
+            if (
+                scheduled_tasks is not None
+                and run_feature_inputs is not None
+                and run_feature_inputs[0] is None
+            ):
+                try:
+                    fence_scheduled_match(conn, scheduled_markets[(mid, play_types[0])])
+                    store_match_feature_snapshot(
+                        conn,
+                        {
+                            "match_id": mid,
+                            "snapshot_time": predict_time,
+                            "feature_version": "prematch_market_only/v1",
+                            "raw_feature_refs": {
+                                "availability": "odds_only",
+                                "reason": "no_prematch_feature_snapshot",
+                            },
+                        },
+                    )
+                    run_feature_inputs = _run_feature_inputs(conn, int(mid), predict_time)
+                except InputUpdateSuperseded, LockNotAvailable:
+                    conn.rollback()
+                    input_updates_skipped += 1
+                    continue
             for play_type in play_types:
                 output_group_counts: dict[str, Any] = {}
                 try:
@@ -800,6 +848,11 @@ def _run_impl(
                         model_artifact_identities=model_artifact_identities,
                         output_group_counts=output_group_counts,
                         run_feature_inputs=run_feature_inputs,
+                        **(
+                            {"schedule_task": scheduled_markets[(mid, play_type)]}
+                            if scheduled_tasks is not None
+                            else {}
+                        ),
                     )
                 except InputUpdateSuperseded, LockNotAvailable:
                     # Other matches remain available. Any already committed
@@ -912,12 +965,34 @@ def run(match_id: int | None = None, dry_run: bool = False) -> dict[str, Any]:
         return _run_owned(conn, match_id=match_id, dry_run=dry_run)
 
 
-def _run_owned(conn: Any, *, match_id: int | None, dry_run: bool) -> dict[str, Any]:
+def run_due() -> dict[str, Any]:
+    """Run only the due Beijing schedule, including newly confirmed late additions."""
+    with prediction_execution() as conn:
+        if conn is None:
+            return {"status": "skipped", "reason": "prediction_execution_in_progress"}
+        tasks, manifest = due_prediction_tasks(conn, business_now())
+        if not tasks:
+            return {"status": "ok", "predictions": 0, "due": 0}
+        return _run_owned(
+            conn, match_id=None, dry_run=False, scheduled_tasks=tasks, schedule_manifest=manifest
+        )
+
+
+def _run_owned(
+    conn: Any,
+    *,
+    match_id: int | None,
+    dry_run: bool,
+    scheduled_tasks: list[PredictionTask] | None = None,
+    schedule_manifest: list[dict] | None = None,
+) -> dict[str, Any]:
     run_id = start_tracked_job(
         "model_prediction",
         "model_agent",
         {"dry_run": dry_run, "match_id": match_id, "execution_protocol": EXECUTION_PROTOCOL},
-        dependencies=[] if dry_run else ["official_odds_snapshot", "feature_snapshot_build"],
+        dependencies=[]
+        if dry_run or scheduled_tasks
+        else ["official_odds_snapshot", "feature_snapshot_build"],
     )
     if dry_run:
         try:
@@ -952,11 +1027,18 @@ def _run_owned(conn: Any, *, match_id: int | None, dry_run: bool) -> dict[str, A
             provenance_status="incomplete",
         )
         prediction_run_created = True
+        if scheduled_tasks:
+            attach_prediction_tasks(conn, scheduled_tasks, prediction_run_id)
         result = _run_impl(
             match_id=match_id,
             dry_run=False,
             prediction_run_id=prediction_run_id,
             execution_conn=conn,
+            **(
+                {"scheduled_tasks": scheduled_tasks, "schedule_manifest": schedule_manifest}
+                if scheduled_tasks
+                else {}
+            ),
         )
         run_status = (
             "failed"
@@ -982,7 +1064,11 @@ def _run_owned(conn: Any, *, match_id: int | None, dry_run: bool) -> dict[str, A
             run_status=run_status,
             error_message=result.get("error") if run_status == "failed" else None,
             output_summary=output_summary,
+            **({"commit": False} if scheduled_tasks else {}),
         )
+        if scheduled_tasks:
+            complete_prediction_tasks(conn, prediction_run_id)
+            conn.commit()
         prediction_run_finalized = True
         finish_tracked_job(run_id, result.get("status", "completed"), {"result": result})
         return result
@@ -1022,6 +1108,7 @@ def _predict_match_play_type(
     model_artifact_identities: dict[str, dict[str, Any]] | None = None,
     output_group_counts: dict[str, Any] | None = None,
     run_feature_inputs: tuple[dict[str, Any] | None, dict[str, Any]] | None = None,
+    schedule_task: PredictionTask | None = None,
 ) -> tuple[int, int]:
     """Run prediction pipeline for a single match + play type.
 
@@ -1075,20 +1162,27 @@ def _predict_match_play_type(
             else []
         )
 
-    # 1. Load latest odds for this play type
-    with conn.cursor() as cur:
-        cur.execute(
-            """
-            SELECT id, option_code, sp_value, snapshot_time
-            FROM official_odds_snapshots
-            WHERE match_id = %s AND play_type = %s
-              AND is_open = true
-              AND snapshot_time <= %s
-            ORDER BY snapshot_time DESC, id DESC
-            """,
-            (mid, play_type, predict_time),
-        )
-        odds_rows = cur.fetchall()
+    # Scheduled forecasts must share a single complete price capture and handicap.
+    handicap: float | None = None
+    if schedule_task is not None:
+        quote_rows = current_official_quote(conn, mid, play_type, predict_time)
+        odds_rows = [row[:4] for row in quote_rows]
+        if quote_rows and quote_rows[0][4] is not None:
+            handicap = float(quote_rows[0][4])
+    else:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT id, option_code, sp_value, snapshot_time
+                FROM official_odds_snapshots
+                WHERE match_id = %s AND play_type = %s
+                  AND is_open = true
+                  AND snapshot_time <= %s
+                ORDER BY snapshot_time DESC, id DESC
+                """,
+                (mid, play_type, predict_time),
+            )
+            odds_rows = cur.fetchall()
 
     if not odds_rows:
         record_expected_groups(0.0, skipped_reason="official_odds_missing")
@@ -1120,8 +1214,7 @@ def _predict_match_play_type(
     overround(odds_dict)
 
     # 3. Get handicap for RQSPF
-    handicap: float | None = None
-    if play_type == "rqspf":
+    if play_type == "rqspf" and schedule_task is None:
         with conn.cursor() as cur:
             cur.execute(
                 "SELECT handicap FROM official_odds_snapshots "
@@ -1282,6 +1375,8 @@ def _predict_match_play_type(
     # 5b. Derive BF/ZJQ/BQC from SPF score matrix
     derived_predictions = 0
     if play_type == "spf" and poisson_matrix and raw_poisson_matrix:
+        if schedule_task is not None:
+            fence_scheduled_match(conn, schedule_task)
         derived_predictions = store_derived_play_predictions(
             input_fence=input_fence,
             conn=conn,
@@ -1309,6 +1404,8 @@ def _predict_match_play_type(
             model_artifact_identities=model_artifact_identities,
             output_group_counts=output_group_counts,
             feature_context=run_feature_context,
+            schedule_task=schedule_task,
+            **({"kickoff_deadline": schedule_task.kickoff_at} if schedule_task is not None else {}),
         )
 
     # 5. Elo model. Cold-start ratings are placeholders and must not become
@@ -1672,6 +1769,8 @@ def _predict_match_play_type(
             }
             raw_matrix, adjusted_matrix = score_matrices.get(model_name, (None, None))
             input_payload = input_fence.payload() if input_fence is not None else None
+            if schedule_task is not None:
+                fence_scheduled_match(conn, schedule_task)
             store_prediction_group(
                 conn,
                 run_id=prediction_run_id,
@@ -1709,6 +1808,11 @@ def _predict_match_play_type(
                     ),
                 },
                 predictions=group_predictions,
+                **(
+                    {"kickoff_deadline": schedule_task.kickoff_at}
+                    if schedule_task is not None
+                    else {}
+                ),
             )
             if output_group_counts is not None:
                 output_group_counts["completed"] = output_group_counts.get("completed", 0) + 1
@@ -1721,6 +1825,8 @@ def _predict_match_play_type(
         if model_name not in vote_weights:
             continue
 
+        if schedule_task is not None:
+            fence_scheduled_match(conn, schedule_task)
         for opt_code in ("3", "1", "0"):
             p = probs.get(opt_code, 0)
             direction = "strong" if p > 0.40 else ("weak" if p > 0.30 else "against")

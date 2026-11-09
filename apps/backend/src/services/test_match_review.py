@@ -23,7 +23,20 @@ class _Cursor:
             or "FROM canonical_prediction_rows" in query
         ):
             self._rows = [
-                (7, "Elo", "spf", "home_win", 0.62, 0.55, 0.12, 0.78, "2026-08-09T10:00:00")
+                (
+                    7,
+                    "Elo",
+                    "spf",
+                    "home_win",
+                    0.62,
+                    0.55,
+                    0.12,
+                    0.78,
+                    "2026-08-09T10:00:00",
+                    1.75,
+                    "2026-08-09T09:55:00",
+                    21,
+                )
             ]
         elif "FROM official_odds_snapshots" in query:
             self._rows = [(7, "spf", "home_win", "主胜", 1.82, None, "2026-08-09T17:00:00")]
@@ -60,6 +73,7 @@ class _Cursor:
                     "3-3",
                     "confirmed",
                     "2026-08-09T20:00:00",
+                    "2026-08-09T17:55:00",
                 )
             ]
         else:
@@ -114,6 +128,9 @@ def test_match_review_card_combines_official_result_pre_match_signals_and_empty_
                     "ev": 0.12,
                     "confidenceScore": 0.78,
                     "predictTime": "2026-08-09T10:00:00",
+                    "predictionOdds": 1.75,
+                    "predictionOddsTime": "2026-08-09T09:55:00",
+                    "predictionOddsSnapshotId": 21,
                 }
             ],
             "oddsSignals": [
@@ -126,6 +143,8 @@ def test_match_review_card_combines_official_result_pre_match_signals_and_empty_
                     "snapshotTime": "2026-08-09T17:00:00",
                 }
             ],
+            "officialSaleStopTime": "2026-08-09T17:55:00",
+            "oddsComparisonStatus": "available",
             "evidence": [
                 {
                     "phase": "post_match",

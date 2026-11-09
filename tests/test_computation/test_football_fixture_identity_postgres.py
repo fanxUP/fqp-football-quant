@@ -28,8 +28,14 @@ from scripts.football_history_storage import match_history_reference
 from scripts.football_pool_catalog import read_pool_catalog, read_pool_catalog_issue
 from scripts.official_crawler import parse_traditional_lottery_response
 from scripts.official_storage import store_pool_issue, store_pool_issue_matches
+from scripts.sporttery_pool_schedule import (
+    _store_current_issue,
+    apply_match_head,
+    parse_current_issue,
+)
 from scripts.traditional_history_import import apply_issue_batch, load_issue_batch
 from tests.test_jobs.test_traditional_history_import import _write_inputs
+from tests.test_scripts.test_sporttery_pool_schedule import NOW, match_head, schedule_response
 
 ROOT = Path(__file__).resolve().parents[2]
 MIGRATION = ROOT / "sql/125_football_fixture_identity.sql"
@@ -85,6 +91,7 @@ def ready(database):
         cur.execute((ROOT / "sql/127_football_fixture_seasons.sql").read_text())
         cur.execute((ROOT / "sql/128_traditional_history_facts.sql").read_text())
         cur.execute((ROOT / "sql/129_football_fixture_identity_aliases.sql").read_text())
+        cur.execute((ROOT / "sql/133_traditional_market_reference.sql").read_text())
     database.commit()
     return database
 
@@ -93,6 +100,59 @@ def rows(conn, query, params=()):
     with conn.cursor() as cur:
         cur.execute(query, params)
         return cur.fetchall()
+
+
+def test_official_current_schedule_bridges_games_and_keeps_changed_slot_unconfirmed(ready):
+    conn = ready
+    first = parse_current_issue(90, schedule_response(90, 14), NOW)
+    r9 = parse_current_issue(900129, schedule_response(900129, 14), NOW)
+    assert apply_match_head(first["matches"][0], match_head())
+    assert apply_match_head(r9["matches"][0], match_head())
+    assert _store_current_issue(conn, first) == (1, 14)
+    assert _store_current_issue(conn, r9) == (1, 14)
+    conn.commit()
+    issues = read_pool_catalog(conn)["issues"]
+    by_game = {issue["game_type"]: issue for issue in issues}
+    assert by_game["r9"]["source_game_no"] == 900129
+    members = {
+        game: read_pool_catalog_issue(conn, issue["id"])["fixtures"]
+        for game, issue in by_game.items()
+    }
+    assert members["t14c"][0]["fixture_id"] == members["r9"][0]["fixture_id"]
+    assert members["t14c"][0]["fixture_id"] is not None
+    assert members["t14c"][0]["official_match_id"] is None
+    assert members["t14c"][0]["kickoff"] == "2026-11-13T01:00:00+08:00"
+    assert members["t14c"][7]["identity_status"] == "pending"
+    assert members["t14c"][7]["kickoff"] is None
+
+    mid = rows(
+        conn,
+        """INSERT INTO official_matches
+               (business_date,official_match_code,source_match_id,league_name,home_team_name,
+                away_team_name,kickoff_time)
+           VALUES ('2026-11-12','周四002','2042693','欧国联','主队1','客队1','2026-11-13 01:00')
+           RETURNING id""",
+    )[0][0]
+    # A restart without a response retains the previously corroborated time.
+    repeated = parse_current_issue(90, schedule_response(90, 14), NOW)
+    assert _store_current_issue(conn, repeated) == (0, 1)
+    read_back = read_pool_catalog_issue(conn, by_game["t14c"]["id"])["fixtures"][0]
+    assert read_back["official_match_id"] == mid
+    assert read_back["fixture_id"] == members["t14c"][0]["fixture_id"]
+    assert _store_current_issue(conn, repeated) == (0, 0)
+
+    replacement = schedule_response(90, 14)
+    replacement["value"]["drawMatch"]["matchList"][0].update(
+        gmMatchId=99999, masterTeamName="新主队", masterTeamAllName="新主队"
+    )
+    revised = parse_current_issue(90, replacement, NOW)
+    assert _store_current_issue(conn, revised) == (1, 1)
+    conn.commit()
+    member = read_pool_catalog_issue(conn, by_game["t14c"]["id"])["fixtures"][0]
+    assert member["fixture_id"] != members["t14c"][0]["fixture_id"]
+    assert member["kickoff"] is None
+    assert member["kickoff_time_precision"] == "date_only"
+    assert rows(conn, "SELECT id FROM official_matches") == [(mid,)]
 
 
 def fixture_row(n=1, **changes):

@@ -8,6 +8,7 @@ from typing import Any
 
 from apps.backend.src.db import get_pool
 from scripts.model_prediction_run_storage import fail_prediction_run
+from scripts.prematch_schedule import PREMATCH_NOTICE_LOCK
 
 EXECUTION_PROTOCOL = "prediction-session/v1"
 _LOCK_KEY = (913201, 106)
@@ -82,6 +83,11 @@ def prediction_execution() -> Iterator[Any | None]:
         with conn.cursor() as cur:
             cur.execute("SELECT pg_try_advisory_lock(%s, %s)", _LOCK_KEY)
             acquired = cur.fetchone()[0]
+            if acquired:
+                # Keep schedule and official pool revisions stable from selection
+                # through every output group commit; schedule writers take this
+                # key transactionally before publishing their update.
+                cur.execute("SELECT pg_advisory_lock(%s, %s)", PREMATCH_NOTICE_LOCK)
         conn.commit()  # Do not hold an idle transaction during model computation.
         if not acquired:
             yield None

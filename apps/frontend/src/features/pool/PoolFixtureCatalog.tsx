@@ -47,6 +47,21 @@ const formatSourceResult = (fixture: PoolCatalogDetail['fixtures'][number]) => {
   const source = fixture.source_result_source ? SOURCE_LABELS[fixture.source_result_source] ?? fixture.source_result_source : '';
   return parts.length ? `${parts.join(' · ')}${source ? ` · ${source}` : ''}` : '尚未回填';
 };
+const percent = new Intl.NumberFormat('zh-CN', { style: 'percent', maximumFractionDigits: 1 });
+const MARKET_OPTIONS = [['h', '主胜'], ['d', '平'], ['a', '客胜']] as const;
+
+function MarketReference({ reference }: {
+  reference: PoolCatalogDetail['fixtures'][number]['market_reference'];
+}) {
+  if (!reference) return <>暂无赛前参考</>;
+  return <>
+    {MARKET_OPTIONS.map(([key, label]) => <div key={key}>
+      {label} {percent.format(reference.probabilities[key])}（{reference.odds[key].toFixed(2)}）
+    </div>)}
+    <small>{reference.company_name} · 报价 {formatTime(reference.quote_at)}</small>
+    <br /><small>计划 {formatTime(reference.target_at)} · 发布 {formatTime(reference.published_at)}</small>
+  </>;
+}
 
 export default function PoolFixtureCatalog() {
   const [query, setQuery] = useState<PoolCatalogFilters>({ limit: 20, offset: 0 });
@@ -145,13 +160,14 @@ export default function PoolFixtureCatalog() {
       {detail && <>
         <p>来源玩法号：{detail.issue.source_game_no ?? '待核实'} · 全期 {detail.issue.stored_matches} 条选场记录 · {detail.issue.unique_fixtures} 个已关联比赛身份 · 停售时间：{formatTime(detail.issue.sale_stop)}</p>
         {!detail.issue.catalogue_complete && <p className="pool-catalog__warning">场序或玩法来源尚未核实完整；以下保留已采集材料。</p>}
-        <p className="pool-catalog__hint">无竞彩关联的传统足彩比赛也会保留。身份已关联不代表赛季、赛果或预测数据已齐全。6场半全场和4场进球当前提供选场查询。</p>
+        <p className="pool-catalog__hint">胜平负市场参考来自球探单家公司的赛前欧赔，供对照使用。半全场和进球彩继续按各自玩法展示官方赛果。</p>
         {detail.fixtures.length === 0 ? <p className="pool-catalog__empty">该期尚未采集到比赛材料。</p> :
           <div className="pool-catalog__table-scroll" role="region" aria-label="全期比赛列表" tabIndex={0}>
-            <table className="fqp-table"><thead><tr><th scope="col">场序</th><th scope="col">联赛 / 对阵</th><th scope="col">开球日期 / 时间（北京时间）</th><th scope="col">来源赛果（本玩法口径）</th><th scope="col">统一身份</th><th scope="col">竞彩关联</th></tr></thead>
+            <table className="fqp-table"><thead><tr><th scope="col">场序</th><th scope="col">联赛 / 对阵</th><th scope="col">开球日期 / 时间（北京时间）</th><th scope="col">胜平负市场参考</th><th scope="col">来源赛果（本玩法口径）</th><th scope="col">统一身份</th><th scope="col">竞彩关联</th></tr></thead>
               <tbody>{detail.fixtures.map(fixture => <tr key={fixture.match_order}>
                 <td>{fixture.match_order}</td><td><small>{fixture.league || '联赛待核实'}</small><br />{fixture.home_team || '主队待核实'} vs {fixture.away_team || '客队待核实'}</td>
                 <td>{formatKickoff(fixture.kickoff_date, fixture.kickoff, fixture.kickoff_time_precision)}{fixture.kickoff_time_precision === 'date_only' && <><br /><small>来源只提供日期</small></>}{fixture.kickoff_time_precision === 'unknown' && <><br /><small>时刻精度待核实</small></>}</td>
+                <td><MarketReference reference={fixture.market_reference} /></td>
                 <td>{formatSourceResult(fixture)}{fixture.source_result_semantics_key && <><br /><small>{fixture.source_result_semantics_key}</small></>}</td>
                 <td><span className={fixture.identity_status === 'linked' ? 'pool-catalog__linked' : 'pool-catalog__warning'}>{fixture.identity_status === 'linked' ? `已关联 · 比赛 #${fixture.fixture_id}` : fixture.identity_status === 'conflict' ? '关联冲突' : '待核实'}</span>
                   {fixture.identity_status !== 'linked' && <><br /><small>{REASONS[fixture.identity_reason ?? ''] ?? '身份关联材料待核实'}</small></>}</td>

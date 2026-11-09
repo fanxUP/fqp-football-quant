@@ -1,10 +1,7 @@
 {
-  "schema_version": 4,
-  "task_id": "P107-AGGREGATE-CANDIDATE-RELEASE-READINESS",
-  "git_revision": "4a7a37aa57b885cc3ae332731b6a6e273dd49bff",
+  "git_revision": "5f5ef27cd80c8f2f1338d04a6e825d87732fa476",
   "branch": "main",
   "dirty": true,
-  "preexisting_worktree_changes_preserved": true,
-  "known_scope_limit": "54 mapped P107/P138 paths; uv.lock is unowned, excluded from V4 accounting and must not be staged.",
-  "captured_at": "2026-11-03T23:56:52+08:00"
+  "captured_at": "2026-11-09T17:35:20.926741+08:00",
+  "checks": {}
 }

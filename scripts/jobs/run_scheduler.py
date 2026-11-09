@@ -19,11 +19,10 @@ from zoneinfo import ZoneInfo
 from scripts.weather_schedule import weather_collection_cron
 
 # Sporttery may add matches or change sale/pool permissions after midnight.
-# Refresh at :10 and :40 so the betting terminal never relies on a stale daily snapshot.
-OFFICIAL_SCHEDULE_CRON = {"minute": "10,40"}
-# Run five minutes after each schedule refresh so newly sellable matches have
-# official markets and odds available before the prediction snapshot is written.
-MODEL_PREDICTION_CRON = {"minute": "15,45"}
+# Check for newly listed matches before and throughout the 20:30 window.
+OFFICIAL_SCHEDULE_CRON = {"minute": "8,18,28,38,48,58"}
+TRADITIONAL_SCHEDULE_CRON = {"minute": "5,15,25,35,45,55"}
+MODEL_PREDICTION_CRON = {"minute": "*"}
 # Run the bounded statistics refresh after prediction windows and before the
 # cold-review jobs, avoiding a same-minute start with cold evidence collection.
 PREDICTION_STATISTICS_REFRESH_CRON = {"minute": "18,48"}
@@ -468,12 +467,14 @@ def main() -> None:
                 id="reconcile_event_seasons_retry",
             )
 
-            # Every 30 min: refresh official matches, sale states, and pool permissions.
+            # Refresh official matches, sale states, and pool permissions.
             scheduler.add_job(
                 lambda: __import__("scripts.jobs.crawl_official_schedule", fromlist=["run"]).run(),
                 "cron",
                 **OFFICIAL_SCHEDULE_CRON,
                 id="crawl_official_schedule",
+                max_instances=1,
+                coalesce=True,
             )
 
             if _odds_dispatch_owner() == "scheduler":
@@ -486,7 +487,38 @@ def main() -> None:
                     id="crawl_official_odds",
                 )
 
-            # Hourly from 06:07 through 23:07: traditional lottery crawl.
+            # Current selections and official amendments are separate from draw data.
+            scheduler.add_job(
+                _audited_job(
+                    "crawl_traditional_schedule",
+                    "传统足彩当前赛程与变更",
+                    "crawler_agent",
+                    lambda: __import__(
+                        "scripts.jobs.crawl_traditional_lottery", fromlist=["run_schedule"]
+                    ).run_schedule(),
+                ),
+                "cron",
+                **TRADITIONAL_SCHEDULE_CRON,
+                id="crawl_traditional_schedule",
+                max_instances=1,
+                coalesce=True,
+            )
+
+            if os.getenv("FQP_TRADITIONAL_MARKET_REFERENCE_ENABLED", "false").lower() == "true":
+                from scripts.traditional_market_reference import (
+                    run_due as run_traditional_reference,
+                )
+
+                scheduler.add_job(
+                    run_traditional_reference,
+                    "cron",
+                    **MODEL_PREDICTION_CRON,
+                    id="traditional_market_reference",
+                    max_instances=1,
+                    coalesce=True,
+                )
+
+            # Hourly from 06:07 through 23:07: traditional draw data.
             scheduler.add_job(
                 _audited_job(
                     "crawl_traditional_lottery",
@@ -626,8 +658,7 @@ def main() -> None:
                 id="collect_lineup_data",
             )
 
-            # Rebuild feature snapshots after the lineup window and before
-            # model prediction at :15/:45, so late evidence reaches decisions.
+            # Rebuild enriched feature snapshots after the lineup window.
             scheduler.add_job(
                 _audited_job(
                     "build_feature_snapshots",
@@ -702,17 +733,21 @@ def main() -> None:
                 id="update_glicko2_ratings",
             )
 
-            # Every 30 minutes: persist a pre-match prediction history snapshot.
+            # Check due fixtures only, including the 20:30 batch and late additions.
             scheduler.add_job(
                 _audited_job(
                     "run_model_prediction",
                     "模型预测执行",
                     "model_agent",
-                    lambda: __import__("scripts.jobs.run_model_prediction", fromlist=["run"]).run(),
+                    lambda: __import__(
+                        "scripts.jobs.run_model_prediction", fromlist=["run_due"]
+                    ).run_due(),
                 ),
                 "cron",
                 **MODEL_PREDICTION_CRON,
                 id="run_model_prediction",
+                max_instances=1,
+                coalesce=True,
             )
 
             # Daily at 16:00: generate recommendation candidates

@@ -33,7 +33,7 @@ JOB_DEFINITIONS: dict[str, JobDefinition] = {
     ),
     "official_schedule": JobDefinition(
         "官方赛程采集",
-        "每30分钟（:10/:40）",
+        "每10分钟（:08/:18/:28/:38/:48/:58）",
         "official",
         ("crawl_official_schedule",),
         timedelta(minutes=90),
@@ -46,7 +46,14 @@ JOB_DEFINITIONS: dict[str, JobDefinition] = {
         timedelta(minutes=5),
     ),
     "crawl_traditional_lottery": JobDefinition(
-        "传统足彩采集", "每日 06:07-23:07 每小时", "official", max_age=timedelta(hours=8)
+        "传统足彩票开奖采集", "每日 06:07-23:07 每小时", "official", max_age=timedelta(hours=8)
+    ),
+    "crawl_traditional_schedule": JobDefinition(
+        "传统足彩当前赛程与变更", "每10分钟", "official", max_age=timedelta(minutes=35)
+    ),
+    "traditional_market_reference": JobDefinition(
+        "传统足彩胜平负市场参考", "每分钟检查到期场次", "official",
+        enabled_env="FQP_TRADITIONAL_MARKET_REFERENCE_ENABLED",
     ),
     "settle_finished_matches": JobDefinition(
         "赛果采集", "每30分钟", "official", max_age=timedelta(minutes=90)
@@ -102,7 +109,7 @@ JOB_DEFINITIONS: dict[str, JobDefinition] = {
     ),
     "model_prediction": JobDefinition(
         "模型预测执行",
-        "每30分钟（官方赛程刷新后5分钟）",
+        "每分钟检查；销售截止日20:30或开球前2小时执行",
         "model",
         ("run_model_prediction",),
         timedelta(hours=2),

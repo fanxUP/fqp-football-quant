@@ -47,9 +47,9 @@ def execute_recovery_task(task: dict[str, Any]) -> dict[str, Any]:
 
         return run_feature_snapshot(dry_run=False)
     if code == "run_model_prediction":
-        from scripts.jobs.run_model_prediction import run as run_model_prediction
+        from scripts.jobs.run_model_prediction import run_due
 
-        return run_model_prediction(dry_run=False)
+        return run_due()
     if code == "run_recommendation_candidate":
         from scripts.jobs.run_recommendation_candidate import run as run_recommendation_candidate
 

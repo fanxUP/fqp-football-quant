@@ -112,6 +112,7 @@ def test_due_collector_fetches_once_and_records_complete_offered_play():
         "status": "ok",
         "matches_due": 1,
         "matches_complete": 1,
+        "prediction_quotes_requested": 0,
         "snapshots_inserted": 3,
     }
     client.get_uniform_match_calculator.assert_called_once_with()

@@ -1,90 +1,59 @@
 {
   "schema_version": 4,
-  "current_task": "P107-CATCHUP-OPTIMIZED-EXACT-HEAD-CI",
+  "current_task": "PREMATCH-SCHEDULE-MARKET-REFERENCE-20261109",
   "tasks": {
-    "P107-LOCAL-CANDIDATE-VALIDATION": {
-      "title": "Run current aggregate Python, PostgreSQL, frontend and static regressions",
-      "acceptance_id": "A107-LOCAL-CANDIDATE-VALIDATION",
+    "PREMATCH-LOCAL-REGRESSION": {
+      "title": "Validate scheduling, official notices, prediction fencing and traditional market references",
+      "acceptance_id": "A-PREMATCH-LOCAL",
       "depends_on": [],
-      "kind": "aggregate_regression",
+      "kind": "local_regression",
       "status": "DONE",
       "definition_of_done": [
-        "Affected Python/API regressions pass on Python 3.14.",
-        "Prediction statistics and snapshot regressions pass on disposable PostgreSQL 16 with zero skips.",
-        "Affected frontend tests, typecheck and production build pass.",
-        "Ruff, Mypy, Python compileall and git diff check pass."
+        "Targeted Python/PostgreSQL regressions pass without skips.",
+        "Frontend tests, typecheck and production build pass.",
+        "Ruff and diff checks pass."
       ]
     },
-    "P107-EXACT-HEAD-CI": {
-      "title": "Commit and verify the exact candidate on GitHub main",
-      "acceptance_id": "A107-EXACT-HEAD-CI",
+    "PREMATCH-MIGRATION-REHEARSAL": {
+      "title": "Rehearse ordered migrations 132 and 133 in isolated PostgreSQL",
+      "acceptance_id": "A-PREMATCH-MIGRATION",
       "depends_on": [
-        "P107-LOCAL-CANDIDATE-VALIDATION"
+        "PREMATCH-LOCAL-REGRESSION"
+      ],
+      "kind": "isolated_postgresql_rehearsal",
+      "status": "DONE",
+      "definition_of_done": [
+        "Disposable PG16 synthetic schema only; no production data copy.",
+        "Runtime role is non-superuser and non-owner; ACL and business paths pass.",
+        "Rollback refuses destructive removal and preserves receipts/references.",
+        "Up/down hashes, 2-second lock timeout, 30-second statement timeout, and zero-skip test evidence are recorded."
+      ]
+    },
+    "PREMATCH-INDEPENDENT-REVIEW": {
+      "title": "Complete independent code, migration and security review",
+      "acceptance_id": "A-PREMATCH-REVIEW",
+      "depends_on": [
+        "PREMATCH-LOCAL-REGRESSION"
+      ],
+      "kind": "independent_review",
+      "status": "DONE",
+      "definition_of_done": [
+        "Read-only reviewer confirms no blocking correctness, data-loss, permissions, or migration issue.",
+        "Any minor semantics are documented in code or acceptance evidence."
+      ]
+    },
+    "PREMATCH-EXACT-HEAD-CI": {
+      "title": "Push the reviewed candidate to GitHub main and verify exact-head CI",
+      "acceptance_id": "A-PREMATCH-CI",
+      "depends_on": [
+        "PREMATCH-MIGRATION-REHEARSAL",
+        "PREMATCH-INDEPENDENT-REVIEW"
       ],
       "kind": "external_ci",
-      "status": "DONE",
+      "status": "IN_PROGRESS",
       "definition_of_done": [
-        "Only the 54 mapped P107/P138 paths, three scoped P107 release-gate paths, and reviewed V4 control/evidence files are committed; uv.lock is not staged.",
-        "GitHub main push CI passes for the exact local HEAD.",
-        "Review, security, migration and no-backup policy evidence are recorded for this candidate, including the production-host signature requirement."
-      ]
-    },
-    "P107-131-COPY-REHEARSAL": {
-      "title": "Rehearse migration 131 against a current production schema/data copy",
-      "acceptance_id": "A107-131-COPY-REHEARSAL",
-      "depends_on": [
-        "P107-EXACT-HEAD-CI"
-      ],
-      "kind": "production_data_copy_rehearsal",
-      "status": "DONE",
-      "definition_of_done": [
-        "Use an isolated current production schema copy with all official matches, runs and model versions plus indexed match-scoped prediction/group/option samples; do not full-dump unrelated large tables or write production data.",
-        "Record existing source counts, queued match count, lock wait, batch duration and fqp grants.",
-        "Verify migration up/down behavior and recovery without destructive loss of source rows; do not require or collect PSI/host pressure baselines. Stream in capped stages with short query timeouts and row limits; stop a stage if a query times out or exceeds its cap."
-      ]
-    },
-    "P107-DEPLOY-PREFLIGHT-INPUTS": {
-      "title": "Prepare verified inputs for the authorized production release",
-      "acceptance_id": "A107-DEPLOY-PREFLIGHT-INPUTS",
-      "depends_on": [
-        "P107-131-COPY-REHEARSAL"
-      ],
-      "kind": "production_release_preflight",
-      "status": "DONE",
-      "definition_of_done": [
-        "The exact candidate passed GitHub CI and independent review; production checkout, service health, protected HTTP behavior, migration plan and deploy --plan were checked read-only.",
-        "The release introduces no migration, so the authorized no-backup release creates no database backup. No manual refresh or restart is used.",
-        "Do not collect PSI or set a server pressure baseline or threshold.",
-        "After release, track natural runtime observations separately. Keep the overall A107 acceptance open until the dirty queue drains and consumers read a complete snapshot; do not claim P104 probability use."
-      ]
-    },
-    "P107-CATCHUP-QUERY-OPTIMIZATION": {
-      "title": "Keep match-scoped canonical rollups from scanning unrelated group history",
-      "acceptance_id": "A107-CATCHUP-QUERY-OPTIMIZATION",
-      "depends_on": [
-        "P107-DEPLOY-PREFLIGHT-INPUTS"
-      ],
-      "kind": "performance_regression_fix",
-      "status": "DONE",
-      "definition_of_done": [
-        "Scoped canonical queries join the bounded match scope directly and preserve current latest-group and legacy-row semantics.",
-        "Disposable PostgreSQL regressions pass for incremental rollups and recent-prediction consumers.",
-        "A read-only production EXPLAIN and rollback-only isolated production-copy EXPLAIN ANALYZE record the plan and runtime difference; no production data is changed by the experiment.",
-        "No database migration, public API, dependency, or scheduler cadence change is introduced."
-      ]
-    },
-    "P107-CATCHUP-OPTIMIZED-EXACT-HEAD-CI": {
-      "title": "Commit and verify the optimized P107 candidate on GitHub main",
-      "acceptance_id": "A107-CATCHUP-OPTIMIZED-EXACT-HEAD-CI",
-      "depends_on": [
-        "P107-CATCHUP-QUERY-OPTIMIZATION"
-      ],
-      "kind": "external_ci",
-      "status": "DONE",
-      "definition_of_done": [
-        "Commit only the approved query, regression test, and V4 control/evidence changes on main; do not stage uv.lock or user odds-page changes.",
-        "Push the exact candidate to GitHub main and verify required lint-and-typecheck and test jobs pass for that exact SHA.",
-        "Refresh evidence and quality-gate status on the clean exact-head checkout before production deployment."
+        "Commit on main only; GitHub main equals the local commit.",
+        "Required test and lint/typecheck workflows pass for that exact SHA."
       ]
     }
   }

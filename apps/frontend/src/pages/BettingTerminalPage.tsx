@@ -338,7 +338,7 @@ export default function BettingTerminalPage() {
         {timeMachineMode ? (
           <aside className="fqp-card time-machine-guide" aria-label={translate('时光机补录说明')}>
             <h3>{translate('时光机补录')}</h3>
-            <p>{translate('仅使用体彩官方编号比赛及停售前最后一次官方赔率。补录票会进入比赛结果和我的盈亏。')}</p>
+            <p>{translate('使用体彩官方历史赔率。缺少停售时间时展示开球前快照，补录后请核对票面。')}</p>
           </aside>
         ) : (
           <RecommendationPanel
@@ -352,7 +352,7 @@ export default function BettingTerminalPage() {
 
         <section className="betting-market sporttery-widget-column" aria-label={translate('投注器')}>
           <div className="betting-slip-head betting-market-head">
-            <div><h3>{timeMachineMode ? translate('历史投注器') : translate('投注器')}</h3><span>{timeMachineMode ? translate('按历史官方封盘赔率重新录入真实彩票') : translate('可手工选号，也可接收左侧推荐投注')}</span></div>
+            <div><h3>{timeMachineMode ? translate('历史投注器') : translate('投注器')}</h3><span>{timeMachineMode ? translate('按官方历史赔率重新录入真实彩票') : translate('可手工选号，也可接收左侧推荐投注')}</span></div>
           </div>
           <section className="sporttery-terminal" role="region" aria-label={translate('竞彩足球模拟试玩投注器')}>
       <div className="sporttery-main">
@@ -418,7 +418,7 @@ export default function BettingTerminalPage() {
         {!timeMachineMode && !loading && !loadError && salesWindow?.is_open === false && (
           <div className="sporttery-status" role="status">{salesWindow.message}</div>
         )}
-        {!(timeMachineMode ? timeMachineLoading : loading) && !(timeMachineMode ? timeMachineError : loadError) && (!timeMachineMode && salesWindow?.is_open === false ? false : filteredMatches.length === 0) && <div className="sporttery-status">{timeMachineMode ? translate('该日没有可补录的官方封盘赔率') : translate('当前筛选条件下没有开售比赛')}</div>}
+        {!(timeMachineMode ? timeMachineLoading : loading) && !(timeMachineMode ? timeMachineError : loadError) && (!timeMachineMode && salesWindow?.is_open === false ? false : filteredMatches.length === 0) && <div className="sporttery-status">{timeMachineMode ? translate('该日没有可补录的官方历史赔率') : translate('当前筛选条件下没有开售比赛')}</div>}
         {!timeMachineMode && !loading && !loadError && activeMatches.length > 0 && hasPublishedOdds && !hasSelectableOfficialMarket && (
           <div className="sporttery-status" role="status">{translate('官方赔率已发布，但当前未开放单关或过关，请稍后刷新。')}</div>
         )}
@@ -438,7 +438,7 @@ export default function BettingTerminalPage() {
         {activeMatches.some((match) => Object.values(match.odds).some((market) => market.is_single_allowed)) && (
           <aside className="sporttery-single-tip"><span aria-hidden="true">💡</span><span>{translate('有“单”标记的选项可投单场，其他至少选择2场比赛')}</span></aside>
         )}
-        <p className="sporttery-disclaimer">{timeMachineMode ? translate('赔率已锁定为官方停售前最后一次快照，补录后请人工核对票面。') : translate('比赛信息及固定奖金仅供参考，请以出票时刻为准。')}</p>
+        <p className="sporttery-disclaimer">{timeMachineMode ? translate('历史赔率来自停售前快照；停售时间未知的场次使用开球前快照。') : translate('比赛信息及固定奖金仅供参考，请以出票时刻为准。')}</p>
       </div>
 
           </section>

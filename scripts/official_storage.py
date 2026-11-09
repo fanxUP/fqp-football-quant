@@ -157,18 +157,19 @@ def store_matches(conn: Any, matches: list[dict]) -> dict[str, Any]:
             %(sale_status)s, %(match_status)s, %(source_url)s, %(raw_hash)s, %(raw_json)s, now()
         )
         ON CONFLICT (business_date, official_match_code) DO UPDATE SET
-            source_match_id = COALESCE(EXCLUDED.source_match_id, official_matches.source_match_id),
             league_name = EXCLUDED.league_name,
             home_team_name = EXCLUDED.home_team_name,
             away_team_name = EXCLUDED.away_team_name,
             kickoff_time = EXCLUDED.kickoff_time,
             sale_stop_time = EXCLUDED.sale_stop_time,
             sale_status = EXCLUDED.sale_status,
-            match_status = EXCLUDED.match_status,
+            match_status = CASE WHEN lower(official_matches.match_status)='settled'
+                                THEN official_matches.match_status ELSE EXCLUDED.match_status END,
             source_url = EXCLUDED.source_url,
             raw_hash = EXCLUDED.raw_hash,
             raw_json = EXCLUDED.raw_json,
             updated_at = now()
+        WHERE official_matches.source_match_id = EXCLUDED.source_match_id
         RETURNING id, (xmax = 0) AS is_inserted
     """
     with conn.cursor() as cur:
@@ -198,7 +199,20 @@ def store_matches(conn: Any, matches: list[dict]) -> dict[str, Any]:
                     params,
                 )
                 row = cur.fetchone()
-                if row and row[1]:
+                if row is None:
+                    cur.execute(
+                        """UPDATE official_matches SET match_status='schedule_conflict', updated_at=now()
+                           WHERE business_date=%s AND official_match_code=%s
+                             AND lower(match_status) IN ('scheduled','selling','not_started')""",
+                        (m["business_date"], m["official_match_code"]),
+                    )
+                    errors.append(
+                        {
+                            "match_code": m["official_match_code"],
+                            "error": "official display code reused with a different match ID",
+                        }
+                    )
+                elif row[1]:
                     inserted += 1
                 else:
                     updated += 1
@@ -746,6 +760,17 @@ def store_pool_issue_matches(
                     league_name=EXCLUDED.league_name,
                     home_team_name=EXCLUDED.home_team_name,away_team_name=EXCLUDED.away_team_name,
                     kickoff_time=CASE
+                        WHEN EXCLUDED.source_raw_json->>'_source'='sporttery_live_schedule'
+                            AND (EXCLUDED.source_raw_json ? '_schedule_head_conflict'
+                                OR (EXCLUDED.home_team_name,EXCLUDED.away_team_name)
+                                    IS DISTINCT FROM
+                                    (football_pool_issue_matches.home_team_name,
+                                     football_pool_issue_matches.away_team_name)
+                                OR (football_pool_issue_matches.source_raw_json->>'_source'=
+                                        'sporttery_live_schedule'
+                                    AND EXCLUDED.source_raw_json->>'gmMatchId' IS DISTINCT FROM
+                                        football_pool_issue_matches.source_raw_json->>'gmMatchId'))
+                        THEN EXCLUDED.kickoff_time
                         WHEN EXCLUDED.kickoff_time_precision='unknown'
                             AND EXCLUDED.kickoff_date IS NULL
                         THEN football_pool_issue_matches.kickoff_time
@@ -768,6 +793,17 @@ def store_pool_issue_matches(
                         EXCLUDED.kickoff_date,football_pool_issue_matches.kickoff_date
                     ),
                     kickoff_time_precision=CASE
+                        WHEN EXCLUDED.source_raw_json->>'_source'='sporttery_live_schedule'
+                            AND (EXCLUDED.source_raw_json ? '_schedule_head_conflict'
+                                OR (EXCLUDED.home_team_name,EXCLUDED.away_team_name)
+                                    IS DISTINCT FROM
+                                    (football_pool_issue_matches.home_team_name,
+                                     football_pool_issue_matches.away_team_name)
+                                OR (football_pool_issue_matches.source_raw_json->>'_source'=
+                                        'sporttery_live_schedule'
+                                    AND EXCLUDED.source_raw_json->>'gmMatchId' IS DISTINCT FROM
+                                        football_pool_issue_matches.source_raw_json->>'gmMatchId'))
+                        THEN EXCLUDED.kickoff_time_precision
                         WHEN EXCLUDED.kickoff_time_precision='unknown'
                             AND EXCLUDED.kickoff_date IS NULL
                         THEN football_pool_issue_matches.kickoff_time_precision
@@ -780,6 +816,17 @@ def store_pool_issue_matches(
                         THEN football_pool_issue_matches.kickoff_time_precision
                         ELSE EXCLUDED.kickoff_time_precision END,
                     kickoff_evidence=CASE
+                        WHEN EXCLUDED.source_raw_json->>'_source'='sporttery_live_schedule'
+                            AND (EXCLUDED.source_raw_json ? '_schedule_head_conflict'
+                                OR (EXCLUDED.home_team_name,EXCLUDED.away_team_name)
+                                    IS DISTINCT FROM
+                                    (football_pool_issue_matches.home_team_name,
+                                     football_pool_issue_matches.away_team_name)
+                                OR (football_pool_issue_matches.source_raw_json->>'_source'=
+                                        'sporttery_live_schedule'
+                                    AND EXCLUDED.source_raw_json->>'gmMatchId' IS DISTINCT FROM
+                                        football_pool_issue_matches.source_raw_json->>'gmMatchId'))
+                        THEN EXCLUDED.kickoff_evidence
                         WHEN EXCLUDED.kickoff_evidence='{}'::jsonb
                         THEN football_pool_issue_matches.kickoff_evidence
                         WHEN EXCLUDED.kickoff_time_precision='date_only'

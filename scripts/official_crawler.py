@@ -221,10 +221,13 @@ def parse_matches_from_response(
             match_date = sub.get("matchDate", "")
             match_time = sub.get("matchTime", "")
             kickoff: str | None
-            if match_date and match_time:
-                kickoff = f"{match_date}T{match_time}"
-            else:
-                kickoff = match_date or match_time or None
+            if not match_date or not match_time:
+                continue
+            try:
+                datetime.fromisoformat(f"{match_date}T{match_time}")
+            except ValueError:
+                continue
+            kickoff = f"{match_date}T{match_time}"
 
             sale_status = _match_sale_status(sub)
 
@@ -305,6 +308,8 @@ def parse_matches_from_response(
 def parse_odds_snapshots_from_match(
     match_raw: dict[str, Any],
     snapshot_time: str | None = None,
+    *,
+    prediction_quote: bool = False,
 ) -> list[dict[str, Any]]:
     """Parse a single match's current odds into snapshot dicts.
 
@@ -313,7 +318,7 @@ def parse_odds_snapshots_from_match(
     """
     snapshots: list[dict] = []
     match_sale_status = _match_sale_status(match_raw)
-    if match_sale_status != "selling":
+    if match_sale_status != "selling" and not prediction_quote:
         return snapshots
     snap_time = snapshot_time or _now()
     match_raw.get("kickoffTime") or match_raw.get("matchTime")
@@ -340,8 +345,17 @@ def parse_odds_snapshots_from_match(
         play_type = POOL_CODE_MAP.get(pool_code, pool_code.lower())
         pool = pools_by_code.get(pool_code)
         is_open = _pool_is_open(pool, match_sale_status)
-        if not is_open:
+        if not is_open and not prediction_quote:
             continue
+        if prediction_quote and not is_open:
+            # A closed card can expose old odds. Only use a recent dated quote.
+            try:
+                quote_at = datetime.fromisoformat(f"{odds['updateDate']}T{odds['updateTime']}")
+                age = (datetime.fromisoformat(snap_time) - quote_at).total_seconds()
+            except KeyError, TypeError, ValueError:
+                continue
+            if not 0 <= age <= 45 * 60:
+                continue
         is_single = _pool_enabled(pool or {}, "single", "bettingSingle", "cbtSingle", "intSingle")
         is_pass = _pool_enabled(pool or {}, "allUp", "bettingAllup", "cbtAllUp", "intAllUp")
         handicap = odds.get("goalLine")
@@ -403,10 +417,14 @@ def parse_odds_snapshots_from_match(
                     "option_name": option_name,
                     "sp_value": sp_val,
                     "handicap": handicap_val,
-                    "is_open": True,
-                    "is_single_allowed": is_single,
-                    "is_pass_allowed": is_pass,
-                    "raw_json": {**odds, "_pool": pool or {}},
+                    "is_open": is_open,
+                    "is_single_allowed": is_open and is_single,
+                    "is_pass_allowed": is_open and is_pass,
+                    "raw_json": {
+                        **odds,
+                        "_pool": pool or {},
+                        **({"_capture_purpose": "prediction_quote"} if prediction_quote else {}),
+                    },
                 }
             )
 
@@ -612,8 +630,8 @@ def crawl_official_schedule(business_date: str) -> dict[str, Any]:
                 with conn.cursor() as cur:
                     cur.execute(
                         "SELECT id FROM official_matches "
-                        "WHERE official_match_code = %s AND business_date = %s",
-                        (code, bdate),
+                        "WHERE official_match_code = %s AND business_date = %s AND source_match_id=%s",
+                        (code, bdate, str(m["raw_json"].get("matchId") or "")),
                     )
                     row = cur.fetchone()
                 if row is None:
@@ -1046,8 +1064,8 @@ def crawl_official_schedule_v2(business_date: str | None = None) -> dict[str, An
                 with conn.cursor() as cur:
                     cur.execute(
                         "SELECT id FROM official_matches "
-                        "WHERE official_match_code = %s AND business_date = %s",
-                        (code, bdate),
+                        "WHERE official_match_code = %s AND business_date = %s AND source_match_id=%s",
+                        (code, bdate, str(m["raw_json"].get("matchId") or "")),
                     )
                     row = cur.fetchone()
                 if row is None:
@@ -1087,6 +1105,10 @@ def crawl_official_schedule_v2(business_date: str | None = None) -> dict[str, An
             "matches_found": len(matches),
             "matches_inserted": total_inserted,
             "matches_updated": total_updated,
+            "schedule_conflicts": sum(
+                error["error"] == "official display code reused with a different match ID"
+                for error in match_result.get("errors", [])
+            ),
             "snapshots_inserted": 0,
             "latency_ms": latency_ms,
         }

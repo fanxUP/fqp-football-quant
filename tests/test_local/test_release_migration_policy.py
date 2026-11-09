@@ -23,6 +23,10 @@ MIGRATION_128 = ["128_traditional_history_facts.sql"]
 MIGRATION_129 = ["129_football_fixture_identity_aliases.sql"]
 MIGRATION_130 = ["130_football_fixture_result_facts.sql"]
 MIGRATION_131 = ["131_prediction_statistics_rollup.sql"]
+MIGRATION_132_133 = [
+    "132_prematch_prediction_schedule.sql",
+    "133_traditional_market_reference.sql",
+]
 
 
 @pytest.fixture(scope="session")
@@ -48,7 +52,12 @@ def trusted_migration_131_signer(monkeypatch, migration_131_test_signing_key):
 
 
 def _write_report(directory: Path, report: dict) -> str:
-    path = directory / "no-backup-migration-rehearsal.json"
+    name = (
+        "prematch-migration-rehearsal.json"
+        if report.get("pending_migrations") == MIGRATION_132_133
+        else "no-backup-migration-rehearsal.json"
+    )
+    path = directory / name
     path.write_text(json.dumps(report, sort_keys=True) + "\n")
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
@@ -78,6 +87,11 @@ def _write_signed_report(directory: Path, report: dict, signing_key: Path) -> st
 def rehearsal_record(directory: Path, pending=None) -> dict:
     pending = MIGRATIONS_124_125 if pending is None else pending
     checksums = {name: policy.REVIEWED_NO_BACKUP_CHECKSUMS[name] for name in pending}
+    report_name = (
+        "prematch-migration-rehearsal.json"
+        if pending == MIGRATION_132_133
+        else "no-backup-migration-rehearsal.json"
+    )
     report = {
         "status": "passed",
         "target_sha": TARGET_SHA,
@@ -110,6 +124,15 @@ def rehearsal_record(directory: Path, pending=None) -> dict:
             application_alias_insert_and_read_path="passed",
             application_alias_rollback_verified="passed",
         )
+    if pending == MIGRATION_132_133:
+        report.update(
+            down_migration_sha256=policy.REVIEWED_NO_BACKUP_PREMATCH_ROLLBACK_CHECKSUMS,
+            application_role={"name": "fqp", "superuser": False, "owns_new_tables": False},
+            application_role_acl="passed",
+            application_business_paths="passed",
+            published_reference_protection="passed",
+            rollback_preserves_runtime_data="passed",
+        )
     evidence_sha256 = _write_report(directory, report)
     return {
         "target_sha": TARGET_SHA,
@@ -117,11 +140,15 @@ def rehearsal_record(directory: Path, pending=None) -> dict:
         "migration_transaction_dry_run": "passed",
         "no_backup_authorized": True,
         "no_backup_reason": "Explicit operator preference; both additive migrations were rehearsed in isolation.",
-        "no_backup_migration_rehearsal": {
+        (
+            policy.PREMATCH_REHEARSAL_FIELD
+            if pending == MIGRATION_132_133
+            else "no_backup_migration_rehearsal"
+        ): {
             "status": "passed",
             "pending_migrations": pending,
             "sha256": checksums,
-            "report_path": "no-backup-migration-rehearsal.json",
+            "report_path": report_name,
             "evidence_sha256": evidence_sha256,
         },
     }
@@ -154,6 +181,105 @@ def test_no_backup_allows_only_the_pinned_129_alias_migration_with_runtime_role_
         MIGRATION_129,
         evidence_directory=tmp_path,
     )
+
+
+def test_no_backup_allows_exact_132_133_prematch_pair_with_runtime_and_data_preservation_evidence(
+    tmp_path,
+):
+    validate(
+        rehearsal_record(tmp_path, pending=MIGRATION_132_133),
+        MIGRATION_132_133,
+        evidence_directory=tmp_path,
+    )
+
+
+def test_backup_release_for_132_133_also_requires_prematch_rehearsal(tmp_path, monkeypatch):
+    record = rehearsal_record(tmp_path, pending=MIGRATION_132_133)
+    backup = tmp_path / "pre-release.dump"
+    backup.write_bytes(b"isolated test archive")
+    record["backup_path"] = str(backup)
+    record["backup_sha256"] = hashlib.sha256(backup.read_bytes()).hexdigest()
+    monkeypatch.setattr(
+        policy.subprocess,
+        "run",
+        lambda args, **kwargs: subprocess.CompletedProcess(args, 0),
+    )
+    validate(record, MIGRATION_132_133, evidence_directory=tmp_path, mode="--apply")
+
+
+def test_backup_release_for_132_133_rejects_missing_prematch_rehearsal(tmp_path, monkeypatch):
+    record = rehearsal_record(tmp_path, pending=MIGRATION_132_133)
+    record.pop(policy.PREMATCH_REHEARSAL_FIELD)
+    backup = tmp_path / "pre-release.dump"
+    backup.write_bytes(b"isolated test archive")
+    record["backup_path"] = str(backup)
+    record["backup_sha256"] = hashlib.sha256(backup.read_bytes()).hexdigest()
+    monkeypatch.setattr(
+        policy.subprocess,
+        "run",
+        lambda args, **kwargs: subprocess.CompletedProcess(args, 0),
+    )
+    with pytest.raises(SystemExit):
+        validate(record, MIGRATION_132_133, evidence_directory=tmp_path, mode="--apply")
+
+
+@pytest.mark.parametrize(
+    "pending",
+    [MIGRATION_132_133[:1], MIGRATION_132_133[1:], [*MIGRATION_132_133, "134_unreviewed.sql"]],
+)
+def test_backup_release_rejects_partial_or_mixed_132_133_sets(pending, tmp_path, monkeypatch):
+    record = rehearsal_record(tmp_path, pending=MIGRATION_132_133)
+    backup = tmp_path / "pre-release.dump"
+    backup.write_bytes(b"isolated test archive")
+    record["backup_path"] = str(backup)
+    record["backup_sha256"] = hashlib.sha256(backup.read_bytes()).hexdigest()
+    monkeypatch.setattr(
+        policy.subprocess,
+        "run",
+        lambda args, **kwargs: subprocess.CompletedProcess(args, 0),
+    )
+    with pytest.raises(SystemExit, match="exact ordered pair"):
+        validate(record, pending, evidence_directory=tmp_path, mode="--apply")
+
+
+@pytest.mark.parametrize(
+    "pending",
+    [
+        MIGRATION_132_133[:1],
+        list(reversed(MIGRATION_132_133)),
+        [*MIGRATION_132_133, *MIGRATION_131],
+    ],
+)
+def test_no_backup_rejects_incomplete_or_mixed_prematch_migration_set(pending, tmp_path):
+    with pytest.raises(SystemExit):
+        validate(
+            rehearsal_record(tmp_path, pending=MIGRATION_132_133),
+            pending,
+            evidence_directory=tmp_path,
+        )
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("application_role", {"name": "postgres", "superuser": True, "owns_new_tables": True}),
+        ("application_role_acl", "failed"),
+        ("application_business_paths", "not_run"),
+        ("published_reference_protection", "failed"),
+        ("rollback_preserves_runtime_data", "not_run"),
+        ("down_migration_sha256", {}),
+    ],
+)
+def test_no_backup_prematch_requires_restricted_role_and_non_destructive_rollback(
+    field, value, tmp_path
+):
+    record = rehearsal_record(tmp_path, pending=MIGRATION_132_133)
+    report_path = tmp_path / record[policy.PREMATCH_REHEARSAL_FIELD]["report_path"]
+    report = json.loads(report_path.read_text())
+    report[field] = value
+    record[policy.PREMATCH_REHEARSAL_FIELD]["evidence_sha256"] = _write_report(tmp_path, report)
+    with pytest.raises(SystemExit):
+        validate(record, MIGRATION_132_133, evidence_directory=tmp_path)
 
 
 def test_release_policy_cli_verifies_sibling_report_hash(tmp_path):

@@ -1,4 +1,4 @@
-"""Read-only current official pool memberships; no prediction/admission changes.
+"""Read-only official pool memberships and their recorded market references.
 
 Filters select whole issues, never trim their official match orders. Legacy
 TIMESTAMP kickoffs are Beijing wall time. Season membership is not inferred
@@ -11,6 +11,7 @@ from datetime import date, datetime
 from typing import Any
 
 from scripts.football_fixture_identity import TRADITIONAL_MATCH_COUNTS
+from scripts.play_type_registry import TRADITIONAL_SCHEDULE_GAME_CODES
 from scripts.pool_issue_state import pool_time, sale_window
 
 
@@ -49,6 +50,14 @@ def _summary(row: tuple) -> dict:
         last,
     ) = row
     expected = TRADITIONAL_MATCH_COUNTS[game]
+    if (
+        source_game == game
+        and isinstance(raw, dict)
+        and raw.get("_source") == "sporttery_live_schedule"
+    ):
+        code = TRADITIONAL_SCHEDULE_GAME_CODES[game]
+        if str(raw.get("lotteryGameNum")) == str(code):
+            source_game_no, source_game_no_source = code, "sporttery_live_schedule"
     return {
         "id": iid,
         "issue_no": number,
@@ -155,14 +164,25 @@ def read_pool_catalog_issue(conn: Any, issue_id: int) -> dict | None:
         if header is None:
             return None
         cur.execute(
-            """SELECT match_order,fixture_id,official_match_id,identity_status,
-                      identity_evidence->>'reason',league_name,home_team_name,away_team_name,
-                      kickoff_time,kickoff_date,kickoff_time_precision,
+            """SELECT c.match_order,c.fixture_id,c.official_match_id,c.identity_status,
+                      c.identity_evidence->>'reason',c.league_name,c.home_team_name,c.away_team_name,
+                      c.kickoff_time,c.kickoff_date,c.kickoff_time_precision,
                       source_full_home_goals,source_full_away_goals,
                       source_half_home_goals,source_half_away_goals,
                       source_product_result_code,source_result_semantics_key,
-                      source_result_source
-               FROM football_pool_fixture_catalog WHERE issue_id=%s ORDER BY match_order""",
+                      source_result_source,r.reference,r.quote_at,r.observed_at,
+                      r.published_at,r.target_at
+               FROM football_pool_fixture_catalog c
+               LEFT JOIN football_fixture_identity_aliases a ON a.canonical_fixture_id=c.fixture_id
+               LEFT JOIN LATERAL (
+                 SELECT reference,quote_at,observed_at,published_at,target_at
+                 FROM football_fixture_market_references
+                 WHERE fixture_id IN (c.fixture_id,a.alias_fixture_id)
+                   AND kickoff_at=c.kickoff_time AT TIME ZONE 'Asia/Shanghai'
+                   AND published_at IS NOT NULL
+                 ORDER BY target_at DESC,published_at DESC LIMIT 1
+               ) r ON TRUE
+               WHERE c.issue_id=%s ORDER BY c.match_order""",
             (issue_id,),
         )
         fixtures = [
@@ -185,6 +205,13 @@ def read_pool_catalog_issue(conn: Any, issue_id: int) -> dict | None:
                 "source_product_result_code": result_code,
                 "source_result_semantics_key": result_semantics,
                 "source_result_source": result_source,
+                "market_reference": {
+                    **reference,
+                    "quote_at": _iso(quoted),
+                    "observed_at": _iso(observed),
+                    "published_at": _iso(published),
+                    "target_at": _iso(target),
+                } if reference is not None else None,
             }
             for (
                 order,
@@ -205,6 +232,11 @@ def read_pool_catalog_issue(conn: Any, issue_id: int) -> dict | None:
                 result_code,
                 result_semantics,
                 result_source,
+                reference,
+                quoted,
+                observed,
+                published,
+                target,
             ) in cur.fetchall()
         ]
     return {"issue": _summary(header), "fixtures": fixtures, "season_status": "pending"}

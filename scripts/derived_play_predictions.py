@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 from scripts.market_metric_validation import (
@@ -14,6 +15,11 @@ from scripts.model_storage import safe_fair_odds, store_model_prediction
 from scripts.odds_conversion import normalize_probabilities
 from scripts.poisson_model import derive_total_goals
 from scripts.prediction_input_fence import PredictionInputFence
+from scripts.prematch_schedule import (
+    PredictionTask,
+    current_official_quote,
+    fence_scheduled_match,
+)
 
 
 def _latest_official_odds(
@@ -123,9 +129,21 @@ def store_derived_play_predictions(
     model_artifact_identities: dict[str, dict[str, Any]] | None = None,
     output_group_counts: dict[str, Any] | None = None,
     feature_context: dict[str, Any] | None = None,
+    kickoff_deadline: datetime | None = None,
+    schedule_task: PredictionTask | None = None,
 ) -> int:
     """Store unfiltered model history for every open official derived option."""
-    official_odds = _latest_official_odds(conn, match_id, predict_time)
+    if kickoff_deadline is None:
+        official_odds = _latest_official_odds(conn, match_id, predict_time)
+    else:
+        official_odds = {
+            play: {
+                option: (snapshot, float(price), captured.isoformat())
+                for snapshot, option, price, captured, _handicap in quote
+            }
+            for play in ("bf", "zjq", "bqc")
+            if (quote := current_official_quote(conn, match_id, play, predict_time))
+        }
     model_independence = model_independence or {}
     rollout_modes = rollout_modes or {}
     model_artifact_identities = model_artifact_identities or {}
@@ -286,6 +304,8 @@ def store_derived_play_predictions(
                 )
                 identity = model_artifact_identities.get(model_name)
                 fence = input_fence.payload() if input_fence is not None else None
+                if schedule_task is not None:
+                    fence_scheduled_match(conn, schedule_task)
                 store_prediction_group(
                     conn,
                     run_id=prediction_run_id,
@@ -323,6 +343,11 @@ def store_derived_play_predictions(
                         ),
                     },
                     predictions=group_predictions,
+                    **(
+                        {"kickoff_deadline": kickoff_deadline}
+                        if kickoff_deadline is not None
+                        else {}
+                    ),
                 )
                 if derived_counts is not None:
                     derived_counts["completed"] += 1

@@ -65,7 +65,7 @@ def list_time_machine_dates(limit: int = Query(180, ge=1, le=365)):
                   SELECT 1 FROM official_odds_snapshots o
                   WHERE o.match_id = m.id
                     AND o.is_open = TRUE
-                    AND o.snapshot_time <= COALESCE(m.sale_stop_time, m.kickoff_time)
+                  AND o.snapshot_time < LEAST(m.sale_stop_time, m.kickoff_time)
               )
             GROUP BY m.business_date
             ORDER BY m.business_date DESC
@@ -110,7 +110,7 @@ def list_time_machine_matches(business_date: Annotated[date, Query()]):
             JOIN official_matches m ON m.id = o.match_id
             WHERE o.match_id = ANY(%(match_ids)s)
               AND o.is_open = TRUE
-              AND o.snapshot_time <= COALESCE(m.sale_stop_time, m.kickoff_time)
+              AND o.snapshot_time < LEAST(m.sale_stop_time, m.kickoff_time)
             ORDER BY o.match_id, o.play_type, o.option_code, o.snapshot_time DESC, o.id DESC
             """,
             {"match_ids": match_ids},
@@ -133,7 +133,7 @@ def _resolve_selections(conn, request: CreateTimeMachineTicketRequest) -> list[d
                 """
                 SELECT m.id, m.official_match_code, o.id, o.snapshot_time,
                        o.play_type, o.option_code, o.option_name, o.sp_value,
-                       o.handicap, o.is_single_allowed
+                       o.handicap, o.is_single_allowed, m.sale_stop_time
                 FROM official_matches m
                 JOIN LATERAL (
                     SELECT snapshot.id, snapshot.snapshot_time, snapshot.play_type,
@@ -144,7 +144,7 @@ def _resolve_selections(conn, request: CreateTimeMachineTicketRequest) -> list[d
                       AND snapshot.play_type = %(play_type)s
                       AND snapshot.option_code = %(option_code)s
                       AND snapshot.is_open = TRUE
-                      AND snapshot.snapshot_time <= COALESCE(m.sale_stop_time, m.kickoff_time)
+                      AND snapshot.snapshot_time < LEAST(m.sale_stop_time, m.kickoff_time)
                     ORDER BY snapshot.snapshot_time DESC, snapshot.id DESC
                     LIMIT 1
                 ) o ON TRUE
@@ -176,7 +176,9 @@ def _resolve_selections(conn, request: CreateTimeMachineTicketRequest) -> list[d
                     "handicap": float(row[8]) if row[8] is not None else None,
                     "is_single_allowed": bool(row[9]),
                     "is_pass_allowed": True,
-                    "odds_source": "official_pre_close",
+                    "odds_source": "official_pre_close"
+                    if row[10] is not None
+                    else "official_pre_kickoff",
                 }
             )
     return resolved

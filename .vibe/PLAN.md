@@ -1,10 +1,7 @@
-# P107 aggregate candidate release readiness
+# Prematch scheduling and traditional market references
 
-This workflow verifies the already reconciled local P107/P138 candidate on the single `main` branch. It does not enlarge any completed slice budget.
+Task: `PREMATCH-SCHEDULE-MARKET-REFERENCE-20261109` on the existing `main` branch.
 
-- Baseline: `main` at `4a7a37aa57b885cc3ae332731b6a6e273dd49bff`.
-- Scope: 51 mapped product/test paths. `uv.lock` is count-only, unowned, and excluded from staging.
-- Candidate: accumulated P107 consumers/resource limits, prediction statistics rollup migration 131, and P138 prediction input cutoff changes.
-- Release remains blocked until exact-head CI and a current production schema/data-copy migration rehearsal pass.
-- Deployment is followed by read-only health, query/runtime evidence, and natural scheduled-run observation.
-- No ordinary-model probability improvement is claimed; P104 exact-value consumption remains unproven.
+Implement and release the agreed prediction-time rules: use kickoff minus two hours when kickoff is before the official Sporttery cutoff; otherwise use 20:30 China Standard Time. Reconcile official fixture changes and temporary additions before a scheduled run, and prevent stale odds or changed schedule inputs from being published. For traditional lottery issues, collect a pre-kickoff Titan007 1X2 market reference as a separate review signal; it must not replace model predictions or official results.
+
+The release adds migrations 132 and 133 as one pinned ordered pair. User authorized submission and server deployment without creating a database backup. Production migration is permitted only after isolated PostgreSQL rehearsal and exact-head CI. No unrelated model redesign or data backfill is in scope.

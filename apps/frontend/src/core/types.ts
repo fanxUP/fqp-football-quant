@@ -914,6 +914,14 @@ export interface PoolCatalogDetail {
     source_product_result_code?: string | null;
     source_result_semantics_key?: string | null;
     source_result_source?: string | null;
+    market_reference?: {
+      company_name: string;
+      odds: Record<'h' | 'd' | 'a', number>;
+      probabilities: Record<'h' | 'd' | 'a', number>;
+      quote_at: string;
+      target_at: string;
+      published_at: string;
+    } | null;
   }[];
 }
 export interface PoolParameters {

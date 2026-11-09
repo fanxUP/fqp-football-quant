@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import uuid
 from collections.abc import Mapping, Sequence
+from datetime import datetime
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import Any
 
@@ -17,6 +18,7 @@ from scripts.model_prediction_run_identity import (
     verify_prediction_feature_context,
 )
 from scripts.model_storage import store_model_prediction
+from scripts.prediction_input_updates import InputUpdateSuperseded
 
 
 def _uuid(value: uuid.UUID | str) -> uuid.UUID:
@@ -423,6 +425,7 @@ def store_prediction_group(
     run_id: uuid.UUID | str,
     metadata: Mapping[str, Any],
     predictions: Sequence[Mapping[str, Any]],
+    kickoff_deadline: datetime | None = None,
 ) -> uuid.UUID:
     group_id = uuid.uuid4()
     try:
@@ -519,12 +522,18 @@ def store_prediction_group(
                 )
         with conn.cursor() as cur:
             cur.execute(
-                """UPDATE model_prediction_groups
-                   SET group_status = 'complete', completed_at = clock_timestamp()
-                   WHERE id = %s AND group_status = 'building'""",
-                (str(group_id),),
+                """WITH tick AS MATERIALIZED (SELECT clock_timestamp() AS ts)
+                   UPDATE model_prediction_groups
+                   SET group_status = 'complete', completed_at = tick.ts
+                   FROM tick WHERE id = %s AND group_status = 'building'
+                     AND (%s::timestamptz IS NULL OR tick.ts < %s::timestamptz)""",
+                (str(group_id), kickoff_deadline, kickoff_deadline),
             )
             if cur.rowcount != 1:
+                if kickoff_deadline is not None:
+                    raise InputUpdateSuperseded(
+                        "kickoff reached before prediction group publication"
+                    )
                 raise RuntimeError("prediction group could not be completed")
         conn.commit()
         return group_id

@@ -1,192 +1,116 @@
 {
   "schema_version": 4,
-  "current_task": "P107-AGGREGATE-CANDIDATE-RELEASE-READINESS",
+  "current_task": "PREMATCH-SCHEDULE-MARKET-REFERENCE-20261109",
   "acceptance": {
-    "A107-AGGREGATE-CANDIDATE-RELEASE-READINESS": {
+    "A-PREMATCH-LOCAL": {
       "status": "PASS",
-      "command": "Verify production release marker, healthy API, natural aggregate run and queue drain; authenticated GET /api/dashboard/prediction-count and GET /api/predictions?summary_only=true in the logged-in FQP browser session.",
+      "command": "env FQP_PREMATCH_TEST_DSN=postgresql://fqp@127.0.0.1:55482/fqp_prematch_test_market_role DATABASE_URL=postgresql://fqp@127.0.0.1:55482/fqp_prematch_test_market_role FQP_P106_TEST_DATABASE_URL=postgresql://estefan-macworkstation@127.0.0.1:55482/fqp_p106_test_release .venv/bin/python -m pytest -q tests/test_local/test_release_migration_policy.py tests/test_scripts/test_prematch_schedule.py tests/test_scripts/test_traditional_market_reference.py tests/test_computation/test_prediction_job_execution_postgres.py tests/test_scripts/test_derived_play_predictions.py tests/test_scripts/test_run_model_prediction.py tests/test_scripts/test_sporttery_pool_schedule.py tests/test_jobs/test_run_scheduler.py tests/test_scripts/test_official_odds_capture.py",
       "exit_code": 0,
-      "summary": "PASS: production release b605866d2757102185ad75d8174dbc8f91076674 matches GitHub main and exact-head CI. Natural run 237100 completed at 2026-11-09T03:48:17Z and produced both required outputs from the same snapshot (data_as_of 03:48:17.178628Z, computed_at 03:48:17.384019Z). Queue was 0 on recheck at 03:50:23Z. Authenticated dashboard count returned 16,287,673; prediction summary returned 278,317 total, 47,334 positive-EV, 19 models, average confidence 0.83283351608776, latest prediction 2026-11-09T11:45:26. Consumer summary was fresh (age 971s, stale_after 2700s, is_stale=false). The summary_only response intentionally returned no prediction rows. Both consumer paths are verified against the shared production snapshot.",
+      "summary": "============================= test session starts ==============================\nplatform darwin -- Python 3.14.6, pytest-9.1.1, pluggy-1.7.0\nrootdir: /Volumes/Nas/FQP/code\nconfigfile: pyproject.toml\nplugins: mock-3.15.1, cov-7.1.0, asyncio-1.4.0, anyio-4.15.1, platformdirs-4.13.5\nasyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function\ncollected 308 items\n\ntests/test_local/test_release_migration_policy.py ...................... [  7%]\n........................................................................ [ 30%]\n...............                                                          [ 35%]\ntests/test_scripts/test_prematch_schedule.py ...............             [ 40%]\ntests/test_scripts/test_traditional_market_reference.py .........        [ 43%]\ntests/test_computation/test_prediction_job_execution_postgres.py ....... [ 45%]\n......                                                                   [ 47%]\ntests/test_scripts/test_derived_play_predictions.py ........             [ 50%]\ntests/test_scripts/test_run_model_prediction.py ........................ [ 57%]\n......................................                                   [ 70%]\ntests/test_scripts/test_sporttery_pool_schedule.py .......               [ 72%]\ntests/test_jobs/test_run_scheduler.py .................................. [ 83%]\n...............................................                          [ 98%]\ntests/test_scripts/test_official_odds_capture.py ....                    [100%]\n\n============================= 308 passed in 10.38s =============================\n",
       "timed_out": false,
-      "environment": "Production 100.121.47.26 via public health/release endpoints and the user-authenticated local FQP browser session; no manual business-data write or scheduler pause.",
-      "revision": "b605866d2757102185ad75d8174dbc8f91076674",
-      "verified_at": "2026-11-09T12:04:28+08:00",
-      "url": "https://github.com/fanxUP/fqp-football-quant/actions/runs/42514769523"
-    },
-    "A107-LOCAL-CANDIDATE-VALIDATION": {
-      "status": "PASS",
-      "command": ".venv/bin/python -m pytest -q tests/test_jobs/test_run_scheduler.py; .venv/bin/ruff check/format/compileall on five P107 files; GitHub CI run 42501255082 exact-head database suite",
-      "exit_code": 0,
-      "summary": "PASS: isolated PostgreSQL 16 rollup regressions (23 passed), recent-prediction regressions (3 passed), the four consumer SQL-shape assertions affected by the join refactor plus the new shape regression (6 passed total), Ruff, format, compileall and git diff checks. Exact-head GitHub CI on this SHA then passed 3,763 tests, 25 skips, 43 warnings; all configured required modules passed, with 0 skips in required PostgreSQL prediction modules. No production database writes were performed by local tests.",
-      "timed_out": false,
-      "environment": "macOS Python 3.14.6 for local scheduler/static checks; GitHub Actions Ubuntu 26.04 with isolated PostgreSQL 16 for integration tests.",
-      "revision": "727c94ed6fd1d74e7b2dd110ecc8c5a1cce50a81",
-      "dirty_tree": false,
-      "tree_fingerprint": "d79042cd002f0e541f211a803c3e99f2f3d8e2fe523c28fc5e64bb86942e43a7",
-      "verified_at": "2026-11-09T03:22:09+08:00",
-      "note": "The local PostgreSQL invocation was not treated as a no-skip pass; exact-head CI is the evidence for the isolated PostgreSQL regression. No production DB was used during local tests."
-    },
-    "A107-EXACT-HEAD-CI": {
-      "status": "PASS",
-      "command": "gh run view 42514769523 --repo fanxUP/fqp-football-quant --json status,conclusion,headSha,jobs; assert exact production SHA and required jobs passed.",
-      "exit_code": 0,
-      "summary": "PASS: exact production SHA b605866d2757102185ad75d8174dbc8f91076674 on main; lint-and-typecheck and test jobs succeeded.",
-      "timed_out": false,
-      "environment": "GitHub Actions, Ubuntu 26.04; isolated PostgreSQL 16 service for database tests.",
-      "revision": "b605866d2757102185ad75d8174dbc8f91076674",
-      "dirty_tree": false,
-      "tree_fingerprint": "d79042cd002f0e541f211a803c3e99f2f3d8e2fe523c28fc5e64bb86942e43a7",
-      "verified_at": "2026-11-09T12:19:33+08:00",
-      "url": "https://github.com/fanxUP/fqp-football-quant/actions/runs/42514769523"
-    },
-    "A107-131-COPY-REHEARSAL": {
-      "status": "PASS",
-      "command": "Read-only staged PostgreSQL binary COPY into isolated PG16.14 rehearsal DB; apply migration 131, verify the single-match refresh under SET ROLE fqp, run down and reapply, and compare all seven source-table hashes after each phase. Dedicated isolated PostgreSQL regression: 11 passed, 0 failed, 0 skipped.",
-      "exit_code": 0,
-      "summary": "PASS: 4,064 official matches; 566 prediction runs; 66 model versions; 567 referenced/retry-parent job runs; match 168072 indexed sample (13,266 predictions, 2,077 groups, 13,266 options); 4,064 queue rows; 14 triggers; expected migration checksum; fqp non-superuser/non-owner grants; one-match refresh 1.76525s over 13,266 prediction rows. Source hashes unchanged after up/down/reapply. No production DDL/DML, service stop, backup, or deployment occurred.",
-      "timed_out": false,
-      "environment": "read-only production COPY + disposable local PostgreSQL 16.14; no persistent dump",
-      "revision": "0eeaa1e0c60cb2cf7eb04109fba73146801cc408",
+      "environment": "Local macOS development; isolated PostgreSQL 16.13; production target 100.121.47.26 via SSH password authentication.",
+      "revision": "5f5ef27cd80c8f2f1338d04a6e825d87732fa476",
       "dirty_tree": true,
-      "verified_at": "2026-11-05T19:08:17+08:00",
-      "tree_fingerprint": "d79042cd002f0e541f211a803c3e99f2f3d8e2fe523c28fc5e64bb86942e43a7",
-      "note": "The read-only production-copy up/down/reapply rehearsal remains applicable because this release changes no schema or migration files. Its recorded source revision and isolated tests remain the evidence for unchanged migration 131; this code-only query refactor is additionally covered by exact-head PostgreSQL CI. No production DDL/DML occurred during the query-plan experiment."
+      "tree_fingerprint": "dcce9570779a00e7368e5433997a4bf072eb965e12545a28c06c50a71ba10748",
+      "verified_at": "2026-11-09T17:54:45.344612+08:00",
+      "evidence_tree_refreshed_at": "2026-11-09T17:57:53.932774+08:00"
     },
-    "A107-DEPLOY-PREFLIGHT-INPUTS": {
+    "A-PREMATCH-MIGRATION": {
       "status": "PASS",
-      "command": "Exact-head GitHub CI; read-only SSH service/disk/memory/HTTP checks; migration runner plan; ops/server/deploy.sh <target-sha> --plan.",
+      "command": "env PYTHONPATH=. .venv/bin/python /private/tmp/fqp-prematch-migration-rehearsal.py",
       "exit_code": 0,
-      "summary": "PASS for code candidate 727c94ed6fd1d74e7b2dd110ecc8c5a1cce50a81 on 100.121.47.26: server checkout clean on main at rollback 75aef8e; all application services and nginx active; root filesystem 251G total/139G free, 8 GiB RAM; /health, /health/ready and frontend returned 200; unauthenticated /api/modules returned 401; migration runner reported pending=[]; deploy.sh --plan passed with Nginx plan 0 files. No backup, service stop, production SQL write or deployment occurred during preflight.",
+      "summary": "{\n  \"status\": \"passed\",\n  \"database\": {\n    \"disposable\": true,\n    \"postgres_major\": 16,\n    \"fixture_kind\": \"synthetic_schema_fixture\",\n    \"production_data_copy\": false\n  },\n  \"checks\": {\n    \"existing_rows_preserved\": \"passed\",\n    \"constraints_and_triggers_verified\": \"passed\",\n    \"application_role\": {\n      \"name\": \"fqp\",\n      \"superuser\": false,\n      \"owns_new_tables\": false\n    },\n    \"application_business_paths\": \"passed\",\n    \"published_reference_protection\": \"passed\",\n    \"rollback_preserves_runtime_data\": \"passed\",\n    \"transaction_rollback_verified\": \"passed\"\n  },\n  \"constraint_count\": 21,\n  \"trigger_count\": 1\n}\n",
       "timed_out": false,
-      "environment": "FQP LXC 106 via SSH password; checks were read-only.",
-      "revision": "727c94ed6fd1d74e7b2dd110ecc8c5a1cce50a81",
-      "dirty_tree": false,
-      "tree_fingerprint": "d79042cd002f0e541f211a803c3e99f2f3d8e2fe523c28fc5e64bb86942e43a7",
-      "verified_at": "2026-11-09T03:22:09+08:00",
-      "note": "Read-only preflight passed for the code-bearing candidate; exact final control-only SHA receives a fresh --plan check immediately before apply. No database migration is part of the candidate."
+      "environment": "Local macOS development; isolated PostgreSQL 16.13; production target 100.121.47.26 via SSH password authentication.",
+      "revision": "5f5ef27cd80c8f2f1338d04a6e825d87732fa476",
+      "dirty_tree": true,
+      "tree_fingerprint": "dcce9570779a00e7368e5433997a4bf072eb965e12545a28c06c50a71ba10748",
+      "verified_at": "2026-11-09T17:46:56.034029+08:00",
+      "evidence_tree_refreshed_at": "2026-11-09T17:57:53.932774+08:00"
     },
-    "A107-CATCHUP-QUERY-OPTIMIZATION": {
+    "A-PREMATCH-FRONTEND": {
       "status": "PASS",
-      "command": "Disposable PostgreSQL 16: pytest -q tests/test_computation/test_prediction_statistics_rollup_postgres.py; focused recent-prediction regressions in test_prediction_run_postgres.py; Ruff, format, compileall, git diff --check; read-only production EXPLAIN; rollback-only isolated-copy EXPLAIN ANALYZE.",
+      "command": "npm --prefix apps/frontend test; npm --prefix apps/frontend run typecheck; npm --prefix apps/frontend run build (executed as three read-only local checks)",
       "exit_code": 0,
-      "summary": "PASS: 23 PostgreSQL rollup tests and 3 recent-prediction regressions passed. Both recursive and scoped-scan paths join the bounded scope through SELECT DISTINCT, preserving ANY set semantics. Read-only production EXPLAIN estimate fell from 1,695,049.63 to 266,834.79 and avoided the full group-option scan. Rollback-only isolated-copy EXPLAIN ANALYZE for a representative 13,266-prediction match: 194.478 ms original vs 47.355 ms optimized; directional only, not a controlled benchmark or production ETA. Four existing callers received updated SQL-shape assertions; all six focused tests passed. No schema, API, dependency, transaction, queue-lock, or scheduler changes.",
+      "summary": "Frontend suite: 703 tests passed in 96 files. TypeScript typecheck passed. Production build passed; Vite emitted the existing >500 kB PitchScene chunk advisory. No frontend source changed after these checks.",
       "timed_out": false,
-      "environment": "Disposable PostgreSQL 16 for regression and rollback-only isolated production-copy query plan; production query plan was EXPLAIN only.",
-      "revision": "727c94ed6fd1d74e7b2dd110ecc8c5a1cce50a81",
-      "dirty_tree": false,
-      "tree_fingerprint": "d79042cd002f0e541f211a803c3e99f2f3d8e2fe523c28fc5e64bb86942e43a7",
-      "verified_at": "2026-11-09T03:22:09+08:00",
-      "note": "No production rows or schema were modified while measuring plans. This is code/test evidence only; production catch-up and consumer snapshot acceptance remain open."
+      "environment": "Local Node/Vite toolchain on macOS",
+      "revision": "5f5ef27cd80c8f2f1338d04a6e825d87732fa476",
+      "dirty_tree": true,
+      "tree_fingerprint": "dcce9570779a00e7368e5433997a4bf072eb965e12545a28c06c50a71ba10748",
+      "verified_at": "2026-11-09T17:48:09.027704+08:00",
+      "evidence_tree_refreshed_at": "2026-11-09T17:57:53.932774+08:00"
     },
-    "A107-CATCHUP-OPTIMIZED-EXACT-HEAD-CI": {
+    "A-PREMATCH-STATIC": {
       "status": "PASS",
-      "command": "gh run view 42512674697 --repo fanxUP/fqp-football-quant --json status,conclusion,headSha,jobs; assert exact candidate SHA and configured required jobs passed.",
+      "command": ".venv/bin/ruff check <scoped implementation and test files>; git diff --check",
       "exit_code": 0,
-      "summary": "PASS: exact SHA 727c94ed6fd1d74e7b2dd110ecc8c5a1cce50a81 on main; both lint-and-typecheck and test jobs passed. Full suite: 3,763 passed, 25 skipped, 43 warnings in 495.64s. The first CI attempt found four stale assertions on the old ANY(ARRAY(...)) query text; all were updated and the second exact-head run passed.",
+      "summary": "Ruff passed on the scoped Python implementation and regressions; git diff --check passed after the repeatability fix.",
       "timed_out": false,
-      "environment": "GitHub Actions, isolated PostgreSQL 16; local focused retest on Python 3.14.6.",
-      "revision": "727c94ed6fd1d74e7b2dd110ecc8c5a1cce50a81",
-      "dirty_tree": false,
-      "tree_fingerprint": "d79042cd002f0e541f211a803c3e99f2f3d8e2fe523c28fc5e64bb86942e43a7",
-      "verified_at": "2026-11-09T03:22:09+08:00",
-      "url": "https://github.com/fanxUP/fqp-football-quant/actions/runs/42512674697"
+      "environment": "Local Python 3.14.6",
+      "revision": "5f5ef27cd80c8f2f1338d04a6e825d87732fa476",
+      "dirty_tree": true,
+      "tree_fingerprint": "dcce9570779a00e7368e5433997a4bf072eb965e12545a28c06c50a71ba10748",
+      "verified_at": "2026-11-09T17:48:09.027704+08:00",
+      "evidence_tree_refreshed_at": "2026-11-09T17:57:53.932774+08:00"
+    },
+    "A-PREMATCH-REVIEW": {
+      "status": "PASS",
+      "command": "Independent read-only review of the 44-path business diff, both SQL migrations, rollback paths and no-backup policy.",
+      "exit_code": 0,
+      "summary": "Independent reviewer reported PASS, no blocker or major findings, and one minor task-completion semantic point now documented. The review did not modify code, run tests or access production.",
+      "timed_out": false,
+      "environment": "Independent read-only review",
+      "revision": "5f5ef27cd80c8f2f1338d04a6e825d87732fa476",
+      "dirty_tree": true,
+      "tree_fingerprint": "dcce9570779a00e7368e5433997a4bf072eb965e12545a28c06c50a71ba10748",
+      "verified_at": "2026-11-09T17:48:09.027704+08:00",
+      "evidence_tree_refreshed_at": "2026-11-09T17:57:53.932774+08:00"
     }
   },
   "reviews": {
     "status": "PASS",
     "application_code": {
       "status": "PASS",
-      "record": ".vibe/AGGREGATE-INDEPENDENT-REVIEW.md",
-      "note": "Independent read-only review covers the 57-path candidate, including the migration-131 signature gate. It found no remaining signature bypass or fail-open path; the signature authenticates the report signer but does not independently prove database facts. See the 2026-11-04 addendum in .vibe/AGGREGATE-INDEPENDENT-REVIEW.md."
+      "record": ".vibe/PREMATCH-INDEPENDENT-REVIEW.md",
+      "note": "No blocker/major findings. One task completion semantic is documented; follow-up confirms shared-database fixture IDs/issue numbers are checked and selector behavior remains intact. Only residual minor is concurrent identical test processes against one isolated DB."
     },
     "v4_migration": {
       "status": "PASS",
-      "record": ".vibe/AGGREGATE-INDEPENDENT-REVIEW.md",
-      "note": "Review included migration/rollback behavior and the signed-report gate; actual current targeted production-copy rehearsal is still required."
-    },
-    "aggregate_scope": {
-      "status": "PASS",
-      "record": "plans/model-modernization-20261016/integrated/P107/06-consumer-acceptance-matrix/AGGREGATE-SCOPE-REVIEW-20261103.md"
-    },
-    "aggregate_review": {
-      "status": "PASS",
-      "record": ".vibe/AGGREGATE-INDEPENDENT-REVIEW.md",
-      "note": "Follow-up review confirms 57 approved paths and no remaining signature-gate issue; uv.lock remains unchanged and excluded. Current business-tree fingerprint ba154a93f3a27bc0fb90e241d923738107c8e8fd10db344baadb46afc65a290b."
-    },
-    "p107_target_table_analyze": {
-      "status": "PASS",
-      "record": "/Volumes/Nas/FQP/release-evidence/P107-4574936/INDEPENDENT-REVIEW.md",
-      "note": "Independent read-only review of scripts/prediction_statistics.py and tests/test_computation/test_prediction_statistics_rollup_postgres.py found no code or transaction-semantics issue. The added ANALYZE uses a fixed temp-table identifier, a 5-second local timeout, and precedes rollup execution. Production EXPLAIN cost reduction remains a hypothesis until natural-run timing and queue behavior are observed."
-    },
-    "p107_hdd_scheduler_followup": {
-      "status": "PASS",
-      "record": ".vibe/AGGREGATE-INDEPENDENT-REVIEW.md",
-      "note": "Independent read-only review passed after fixing the operations-status cadence and adding Asia/Shanghai CronTrigger assertions. Reviewer confirmed the three code paths fit the amended scope and 60-path budget. Production runtime effect remains unverified."
-    },
-    "p107_match_scope_query_optimization": {
-      "status": "PASS",
-      "record": ".vibe/AGGREGATE-INDEPENDENT-REVIEW.md",
-      "note": "Independent read-only review passed after fixing the duplicate-scope semantics concern with SELECT DISTINCT; follow-up confirmed indexes remain available and no full mapping-table scan returns."
+      "record": ".vibe/PREMATCH-INDEPENDENT-REVIEW.md",
+      "note": "Exact ordered 132+133 pair, fixed up/down checksums, restricted role, business paths, published-reference protection, and rollback preservation are independently reviewed and rehearsed."
     }
   },
   "security": {
     "status": "PASS",
-    "reviewed_at": "2026-11-09T02:41:14+08:00",
-    "note": "Match-scope SQL change validates the static CTE identifier with a strict regex and joins a DISTINCT match_id relation. No migration, dependency, credential, permission, outbound request, public API, transaction, advisory-lock, or scheduler cadence change."
+    "reviewed_at": "2026-11-09T17:48:09.027704+08:00",
+    "record": ".vibe/PREMATCH-SECURITY-REVIEW.md",
+    "note": "STRICT review covered secrets, source host/path bounds, SQL parameterization, runtime ACLs, immutability, rollback and operations."
   },
   "migration": {
     "status": "PASS",
-    "note": "No migration or database schema changed in 9cbf98c. Server read-only plan has pending migrations=[]; no production backup or business-data write is part of this code-only release. The existing migration-131 rehearsal remains scoped to unchanged schema and grants; candidate refresh regressions passed in isolated PostgreSQL CI."
+    "no_backup_authorized": true,
+    "target_migrations": [
+      "132_prematch_prediction_schedule.sql",
+      "133_traditional_market_reference.sql"
+    ],
+    "up_down_checksums_pinned": true,
+    "isolated_postgresql_rehearsal": "See A-PREMATCH-MIGRATION evidence; disposable PostgreSQL 16 synthetic schema, non-superuser non-owner fqp, business paths, constraints/triggers and data-preserving down refusal all passed."
   },
   "external_ci": {
-    "status": "passed",
-    "run_id": 42514769523,
-    "head_sha": "b605866d2757102185ad75d8174dbc8f91076674",
-    "url": "https://github.com/fanxUP/fqp-football-quant/actions/runs/42514769523",
-    "checks": {
-      "lint-and-typecheck": "passed",
-      "test": "passed"
-    },
-    "verified_at": "2026-11-09T12:19:33+08:00",
-    "note": "Exact production main SHA passed both configured GitHub Actions jobs; it is the same revision reported by the production release endpoint."
+    "status": "NOT_RUN"
   },
   "production": {
-    "status": "DEPLOYED_AND_CONSUMERS_VERIFIED",
-    "production_database_access": true,
+    "status": "NOT_ACCESSED",
+    "production_database_access": false,
     "business_data_writes": 0,
-    "note": "Exact release and consumers verified. Natural scheduler run 237100 drained the queue; no 10-minute scheduler pause or manual refresh was needed. This turn issued no manual business-data writes. Dashboard count and canonical prediction summary are intentionally distinct scopes and both read the same data_as_of snapshot.",
-    "revision": "b605866d2757102185ad75d8174dbc8f91076674",
-    "last_successful_aggregate_run_id": 237100,
-    "dirty_queue_remaining": 0,
-    "count_snapshot": {
-      "scope": "valid_prematch_history_v1",
-      "total": 16287673,
-      "data_as_of": "2026-11-09T03:48:17.178628+00:00",
-      "last_success_at": "2026-11-09T03:48:17.384019+00:00"
-    },
-    "summary_snapshot": {
-      "scope": "canonical_valid_prematch_history_v1",
-      "total": 278317,
-      "positive_ev_count": 47334,
-      "avg_confidence": 0.83283351608776,
-      "model_count": 19,
-      "latest_predict_time": "2026-11-09T11:45:26",
-      "data_as_of": "2026-11-09T03:48:17.178628+00:00",
-      "last_success_at": "2026-11-09T03:48:17.384019+00:00"
-    },
-    "authenticated_consumer_readback": {
-      "status": "PASS",
-      "summary_age_seconds": 971,
-      "stale_after_seconds": 2700,
-      "is_stale": false,
-      "dashboard_count": 16287673,
-      "summary_total": 278317
-    }
+    "database_backup_created": false
   },
   "quality_gate": {
-    "status": "PASS_POST_DEPLOYMENT",
-    "checked_at": "2026-11-09T12:19:33+08:00",
-    "failures": [],
-    "note": "Exact-head CI, deployment identity, health, queue drain, and authenticated consumer readback all passed for b605866d2757102185ad75d8174dbc8f91076674. P107 acceptance is closed."
+    "status": "NOT_READY",
+    "checked_at": "2026-11-09T17:57:53.932774+08:00",
+    "failures": [
+      "exact-head GitHub CI and release preflight remain pending"
+    ]
   }
 }

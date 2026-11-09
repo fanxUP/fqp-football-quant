@@ -29,6 +29,9 @@ TRADITIONAL_GAME_TYPES: dict[int, str] = {
     99: "jq4",  # 4场进球
 }
 
+# getFootBallConcernV1 uses different codes for two of the four draw products.
+TRADITIONAL_SCHEDULE_GAME_CODES = {"t14c": 90, "r9": 900129, "bqc6": 98, "jq4": 94}
+
 TRADITIONAL_GAME_LABELS: dict[str, str] = {
     "t14c": "胜负游戏 14场",
     "r9": "任选9场",
