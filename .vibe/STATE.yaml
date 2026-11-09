@@ -1,5 +1,5 @@
 {
-  "state": "REVIEWING",
+  "state": "DONE",
   "workflow_id": "P107-AGGREGATE-CANDIDATE-RELEASE-READINESS",
   "previous_workflow": {
     "task_id": "P107-AGGREGATE-SCOPE-RECONCILIATION",
@@ -10,9 +10,9 @@
   "blocked_reason": null,
   "mode": "STANDARD",
   "last_transition": {
-    "from": "VERIFYING",
-    "to": "REVIEWING",
-    "at": "2026-11-09T02:42:25.366361+08:00",
-    "reason": "Local verification passed and the independent follow-up review cleared the duplicate-scope semantics finding."
+    "from": "VERIFIED",
+    "to": "DONE",
+    "at": "2026-11-09T12:20:47.824401+08:00",
+    "reason": "P107 production acceptance passed: exact main/production SHA b605866d2757102185ad75d8174dbc8f91076674, CI passed, natural aggregate run 237100 drained the queue, and both authenticated consumers read the fresh shared snapshot."
   }
 }

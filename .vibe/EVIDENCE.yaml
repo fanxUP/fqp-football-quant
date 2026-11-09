@@ -3,7 +3,15 @@
   "current_task": "P107-AGGREGATE-CANDIDATE-RELEASE-READINESS",
   "acceptance": {
     "A107-AGGREGATE-CANDIDATE-RELEASE-READINESS": {
-      "status": "PENDING"
+      "status": "PASS",
+      "command": "Verify production release marker, healthy API, natural aggregate run and queue drain; authenticated GET /api/dashboard/prediction-count and GET /api/predictions?summary_only=true in the logged-in FQP browser session.",
+      "exit_code": 0,
+      "summary": "PASS: production release b605866d2757102185ad75d8174dbc8f91076674 matches GitHub main and exact-head CI. Natural run 237100 completed at 2026-11-09T03:48:17Z and produced both required outputs from the same snapshot (data_as_of 03:48:17.178628Z, computed_at 03:48:17.384019Z). Queue was 0 on recheck at 03:50:23Z. Authenticated dashboard count returned 16,287,673; prediction summary returned 278,317 total, 47,334 positive-EV, 19 models, average confidence 0.83283351608776, latest prediction 2026-11-09T11:45:26. Consumer summary was fresh (age 971s, stale_after 2700s, is_stale=false). The summary_only response intentionally returned no prediction rows. Both consumer paths are verified against the shared production snapshot.",
+      "timed_out": false,
+      "environment": "Production 100.121.47.26 via public health/release endpoints and the user-authenticated local FQP browser session; no manual business-data write or scheduler pause.",
+      "revision": "b605866d2757102185ad75d8174dbc8f91076674",
+      "verified_at": "2026-11-09T12:04:28+08:00",
+      "url": "https://github.com/fanxUP/fqp-football-quant/actions/runs/42514769523"
     },
     "A107-LOCAL-CANDIDATE-VALIDATION": {
       "status": "PASS",
@@ -20,16 +28,16 @@
     },
     "A107-EXACT-HEAD-CI": {
       "status": "PASS",
-      "command": "gh run view 42512674697 --repo fanxUP/fqp-football-quant --json status,conclusion,headSha,jobs; assert exact SHA and required jobs passed.",
+      "command": "gh run view 42514769523 --repo fanxUP/fqp-football-quant --json status,conclusion,headSha,jobs; assert exact production SHA and required jobs passed.",
       "exit_code": 0,
-      "summary": "PASS: exact-head push CI run 42512674697 for 727c94ed6fd1d74e7b2dd110ecc8c5a1cce50a81; lint-and-typecheck and test succeeded. Full suite: 3,763 passed, 25 skipped, 43 warnings. The new PostgreSQL scope-join regressions passed on isolated PostgreSQL 16.",
+      "summary": "PASS: exact production SHA b605866d2757102185ad75d8174dbc8f91076674 on main; lint-and-typecheck and test jobs succeeded.",
       "timed_out": false,
       "environment": "GitHub Actions, Ubuntu 26.04; isolated PostgreSQL 16 service for database tests.",
-      "revision": "727c94ed6fd1d74e7b2dd110ecc8c5a1cce50a81",
+      "revision": "b605866d2757102185ad75d8174dbc8f91076674",
       "dirty_tree": false,
       "tree_fingerprint": "d79042cd002f0e541f211a803c3e99f2f3d8e2fe523c28fc5e64bb86942e43a7",
-      "verified_at": "2026-11-09T03:22:09+08:00",
-      "url": "https://github.com/fanxUP/fqp-football-quant/actions/runs/42512674697"
+      "verified_at": "2026-11-09T12:19:33+08:00",
+      "url": "https://github.com/fanxUP/fqp-football-quant/actions/runs/42514769523"
     },
     "A107-131-COPY-REHEARSAL": {
       "status": "PASS",
@@ -132,26 +140,53 @@
   },
   "external_ci": {
     "status": "passed",
-    "run_id": 42512674697,
-    "head_sha": "727c94ed6fd1d74e7b2dd110ecc8c5a1cce50a81",
-    "url": "https://github.com/fanxUP/fqp-football-quant/actions/runs/42512674697",
+    "run_id": 42514769523,
+    "head_sha": "b605866d2757102185ad75d8174dbc8f91076674",
+    "url": "https://github.com/fanxUP/fqp-football-quant/actions/runs/42514769523",
     "checks": {
       "lint-and-typecheck": "passed",
       "test": "passed"
     },
-    "verified_at": "2026-11-09T03:22:09+08:00",
-    "note": "Exact candidate passed all configured GitHub Actions checks; test job ran 3,763 passed, 25 skipped, 43 warnings. Full output is available at the linked run."
+    "verified_at": "2026-11-09T12:19:33+08:00",
+    "note": "Exact production main SHA passed both configured GitHub Actions jobs; it is the same revision reported by the production release endpoint."
   },
   "production": {
-    "status": "RELEASE_PREFLIGHT_PASSED_DEPLOYMENT_PENDING",
+    "status": "DEPLOYED_AND_CONSUMERS_VERIFIED",
     "production_database_access": true,
     "business_data_writes": 0,
-    "note": "Exact-head code release preflight passed; apply remains pending. Server is still on b25c00d. Natural catch-up remains partial at 2707 dirty matches after run 235922; no current complete prediction_count+prediction_summary snapshot or authenticated consumer readback is verified. User has not authorized a controlled maintenance-window bulk catch-up."
+    "note": "Exact release and consumers verified. Natural scheduler run 237100 drained the queue; no 10-minute scheduler pause or manual refresh was needed. This turn issued no manual business-data writes. Dashboard count and canonical prediction summary are intentionally distinct scopes and both read the same data_as_of snapshot.",
+    "revision": "b605866d2757102185ad75d8174dbc8f91076674",
+    "last_successful_aggregate_run_id": 237100,
+    "dirty_queue_remaining": 0,
+    "count_snapshot": {
+      "scope": "valid_prematch_history_v1",
+      "total": 16287673,
+      "data_as_of": "2026-11-09T03:48:17.178628+00:00",
+      "last_success_at": "2026-11-09T03:48:17.384019+00:00"
+    },
+    "summary_snapshot": {
+      "scope": "canonical_valid_prematch_history_v1",
+      "total": 278317,
+      "positive_ev_count": 47334,
+      "avg_confidence": 0.83283351608776,
+      "model_count": 19,
+      "latest_predict_time": "2026-11-09T11:45:26",
+      "data_as_of": "2026-11-09T03:48:17.178628+00:00",
+      "last_success_at": "2026-11-09T03:48:17.384019+00:00"
+    },
+    "authenticated_consumer_readback": {
+      "status": "PASS",
+      "summary_age_seconds": 971,
+      "stale_after_seconds": 2700,
+      "is_stale": false,
+      "dashboard_count": 16287673,
+      "summary_total": 278317
+    }
   },
   "quality_gate": {
-    "status": "NOT_RUN_FOR_727C94E",
-    "checked_at": "2026-11-09T03:22:09+08:00",
+    "status": "PASS_POST_DEPLOYMENT",
+    "checked_at": "2026-11-09T12:19:33+08:00",
     "failures": [],
-    "note": "Candidate evidence refreshed after exact-head CI and read-only production preflight. Run the V4 quality gate on a clean checkout after committing these controls; overall P107 production acceptance remains open."
+    "note": "Exact-head CI, deployment identity, health, queue drain, and authenticated consumer readback all passed for b605866d2757102185ad75d8174dbc8f91076674. P107 acceptance is closed."
   }
 }
