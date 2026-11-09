@@ -1,11 +1,11 @@
-# P108-01 验收
+# P108-02 验收
 
-- `(source_name, external_player_id)` 唯一，canonical 外键有效，状态和置信区间受数据库约束。
-- 身份状态每次实质变更增加单调修订和 append-only 审计事件；同一输入重复提交无新事件。
-- `verified` 要求目标、证据、方法、置信、审查人和时间齐全；其他状态不进入解析结果。
-- 已登记的非 verified 来源 ID fail closed；禁止 verified 直接指向另一 canonical player。
-- API-Football 精确 `player_code` 兼容，不以姓名/birth/team 自动匹配。
-- 候选 CSV 报告稳定、只读、可复现，候选状态从不等同 verified。
-- 隔离 PostgreSQL 16 验证应用角色仅读、up/down/up、回滚保留规则及现有测试夹具不受影响。
-- GitHub CI 的 required-module 校验确认该 PostgreSQL 测试模块实际运行且无跳过。
-- P108-01 不导入生产数据、不接入模型、不宣称球员归属/资格/出场分钟已完整。
+- 转会候选视图复用不可变历史事实，保留原来源记录、批次内容摘要、规范化版本和采集/导入证据。
+- candidate 视图不会把 Titan 转会升级为当前球队/注册结论；未 verified 的外部 ID 不解析到 canonical player。
+- 独立注册事实支持明确 unknown/confirmed、true/false、有效起止日、采集知识时间和修订摘要。
+- 查询将 `known_at` 定义为系统当时可用知识的截止点：事实的来源采集时间、数据库写入时间以及所需人工复核时间都不得晚于该点；来源审批同样必须已写入并完成复核。没有记录、截止后采集/写入/审核、显式未知或不在有效区间都返回 unknown，防止晚到回填改写历史截面。
+- confirmed 必须有人工复核、有效来源证据、完整有效日期、canonical competition-season，以及当时处于获批状态且权威类别匹配的来源登记；来源登记与事实账本都追加式，fqp 只读。
+- 事实行 append-only；down 遇到已保存事实必须拒绝且保留原数据；隔离 PG16 验证 up/down/up。
+- 查询对齐 `valid_at`、`known_at`、当时的来源审批和身份映射更新时间/审核时间；未来才采集、入库、审核或验证的记录不参与较早时间截面，来源后来停用则当前投影返回 unknown。
+- CI required-module 校验确保 P108-02 PostgreSQL 回归被执行且无 skip。
+- 本批无生产访问、数据导入、来源启用、模型消费、概率改动或部署；当前无真实注册资格数据可标为 confirmed。

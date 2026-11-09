@@ -1,0 +1,78 @@
+{
+  "schema_version": 4,
+  "current_task": "P108-01-IDENTITY-BRIDGE",
+  "acceptance": {
+    "A-P108-01": {
+      "status": "PASS",
+      "command": "Dedicated disposable PostgreSQL 16: pytest -q tests/test_scripts/test_player_identity_bridge.py tests/test_scripts/test_player_identity_candidates.py tests/test_computation/test_player_identity_bridge_postgres.py; CI fallback database: pytest -q tests/test_computation/test_player_identity_bridge_postgres.py; Ruff check/format, mypy, git diff --check, V4 scope check, V4 budget check.",
+      "exit_code": 0,
+      "summary": "Dedicated PostgreSQL 16 database at 127.0.0.1 with marker fqp-p108-player-identity-test/v1: 29 passed, 0 skipped. CI fallback fqp_history_test_ci: 10 passed, 0 skipped. High-precision confidence and concurrent first-insert regressions both reproduced before their fixes and passed afterward. Tests cover source identity uniqueness, revisions/idempotency, verified remap rejection, append-only audit with owner UPDATE/DELETE/TRUNCATE rejection, runtime fqp role denied INSERT/UPDATE/DELETE/TRUNCATE on both tables, API-Football exact fallback, down refusal preserving rows, and empty down/up. Ruff, format (5 files), mypy (2 modules), diff, scope (8/8), and budget (8/8; 7 new, 2 SQL, 0 dependencies) passed.",
+      "timed_out": false,
+      "environment": "Local macOS; disposable PostgreSQL 16 container and synthetic schemas only; no production DB/API access or data import.",
+      "revision": "b5d67bb442975b8ee07bc5d89ae17a6731c16b2e",
+      "dirty_tree": true,
+      "tree_fingerprint": "c7dba1d4f81e9c14cab4f427c3fa33a7d63ad7f6a1156fe7a7839dea761a5867",
+      "verified_at": "2026-11-10T03:56:21.170437+08:00"
+    }
+  },
+  "reviews": {
+    "status": "PASS",
+    "application_code": {
+      "status": "PASS",
+      "record": ".vibe/P108-01-INDEPENDENT-REVIEW.md",
+      "note": "Separate read-only review passed after fixing NUMERIC(6,5) idempotency, concurrent first-insert handling, and adding audit owner DELETE/TRUNCATE tests.",
+      "reviewed_at": "2026-11-10T03:58:42.426823+08:00"
+    },
+    "v4_migration": {
+      "status": "PASS",
+      "record": ".vibe/P108-01-INDEPENDENT-REVIEW.md",
+      "note": "Review confirmed migration ownership path, read-only fqp grants, audit immutability, up/down safety, and isolated PostgreSQL evidence; no production apply is in scope.",
+      "reviewed_at": "2026-11-10T03:58:42.426823+08:00"
+    }
+  },
+  "security": {
+    "status": "PASS",
+    "record": ".vibe/P108-01-INDEPENDENT-REVIEW.md",
+    "reviewed_at": "2026-11-10T03:58:42.426823+08:00",
+    "note": "No secrets, provider calls, model changes, or production access were added. Runtime role ACLs are verified read-only; only verified mappings resolve."
+  },
+  "migration": {
+    "status": "PASS",
+    "target_migrations": [
+      "sql/134_player_identity_bridge.sql",
+      "sql/down/134_player_identity_bridge.down.sql"
+    ],
+    "rehearsal": "Isolated PostgreSQL 16 only; up/down/up passed; down refused with existing mapping rows and preserved them; all runtime DML operations are denied to fqp on current mappings and audit events are inaccessible; audit owner UPDATE/DELETE/TRUNCATE mutations were rejected; SQL hashes recorded below.",
+    "migration_sha256": "2c3f5abb198921676b7c7b3732c703e4ff346db900da40a6bd6069193b68451a",
+    "down_migration_sha256": "e719d5cea796d6a6d8c113261f1b362c162a1307f2129ffe722a5206e9825b8b",
+    "verified_at": "2026-11-10T03:56:21.170437+08:00",
+    "production_applied": false
+  },
+  "quality_gate": {
+    "status": "READY_TO_MERGE",
+    "checked_at": "2026-11-10T04:46:56.231196+08:00",
+    "failures": []
+  },
+  "external_ci": {
+    "status": "passed",
+    "checks": {
+      "test": "passed",
+      "lint-and-typecheck": "passed"
+    },
+    "workflow": "CI",
+    "event": "push",
+    "branch": "main",
+    "head_sha": "100026ca0dbf53226f362d1c897b07df9665653d",
+    "run_id": 42688652473,
+    "run_url": "https://github.com/fanxUP/fqp-football-quant/actions/runs/42688652473",
+    "completed_at": "2026-11-09T20:12:05Z",
+    "note": "Exact-head GitHub Actions CI passed: test and lint-and-typecheck. This repository has no automatic production deploy workflow; P108-01 production rollout/import remains outside this slice."
+  },
+  "production": {
+    "status": "NOT_APPLICABLE",
+    "production_database_access": false,
+    "business_data_writes": 0,
+    "database_backup_created": false,
+    "note": "P108-01 is a local schema/helper slice; it does not authorize production rollout or player import."
+  }
+}

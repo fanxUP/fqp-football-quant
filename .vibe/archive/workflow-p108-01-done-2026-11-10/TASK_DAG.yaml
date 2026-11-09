@@ -1,0 +1,21 @@
+{
+  "schema_version": 4,
+  "current_task": "P108-01-IDENTITY-BRIDGE",
+  "tasks": {
+    "P108-01-IDENTITY-BRIDGE": {
+      "title": "Build an auditable source-player-ID to canonical-player mapping bridge",
+      "acceptance_id": "A-P108-01",
+      "depends_on": [],
+      "kind": "schema_and_local_identity_bridge",
+      "status": "DONE",
+      "definition_of_done": [
+        "A source identity is unique by source_name and external_player_id and can point only to a canonical players.id.",
+        "Mapping state, evidence references, method, confidence, review metadata, and revisions are persisted with append-only history.",
+        "Only verified mappings resolve; explicit non-verified mappings fail closed; API-Football exact player_code lookup remains compatible.",
+        "The file-only candidate report is deterministic and never marks a candidate as verified.",
+        "Isolated PostgreSQL 16 verifies uniqueness, ambiguity, status transitions, idempotency, runtime read-only grants, up/down/re-up, and rollback refusal with existing mapping rows.",
+        "No production data import, provider call, rollout, or probability change is part of this slice."
+      ]
+    }
+  }
+}

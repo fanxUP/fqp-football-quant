@@ -1,0 +1,89 @@
+{
+  "archive_format": 1,
+  "archived_at": "2026-11-10",
+  "reason": "Preserve the completed P108-01 identity bridge workflow before starting P108-02.",
+  "prior_workflow": "P108-01-PLAYER-IDENTITY-BRIDGE-20261110",
+  "prior_state": "DONE",
+  "files": [
+    {
+      "path": "ACCEPTANCE.md",
+      "sha256": "ae76c92c50e35e709c65d6e91c36104984694cf705dbb15b26e66811e087f0f4"
+    },
+    {
+      "path": "AGGREGATE-INDEPENDENT-REVIEW.md",
+      "sha256": "531f2ecd7380bd109916a585480c6f82d5e22c53ecbae2dcbdc44921ba25b537"
+    },
+    {
+      "path": "BASELINE.yaml",
+      "sha256": "7229259e16268f056832853dbd657d988aa73159091ce2a31569422499a1bafb"
+    },
+    {
+      "path": "BETTING-CUTOFF-REVIEW.md",
+      "sha256": "a7cef68f909430698e148f6becc239c42973f86ecbb8e356610d79bf893d17f2"
+    },
+    {
+      "path": "CHANGE_BUDGET.yaml",
+      "sha256": "926a22bbcad78c0974f1aa628ae646ff57f6bed61e8f6558bbc8f16935327176"
+    },
+    {
+      "path": "DESIGN.md",
+      "sha256": "a204cc7e99c3104b72166f6c26274b6a55bc2c11425e1ffed0cea5ebd06d1f08"
+    },
+    {
+      "path": "EVIDENCE.yaml",
+      "sha256": "65a9cb732a1196af112e15b021c86b1bf6da02017ed3243c9c8e1b5df8ed76c6"
+    },
+    {
+      "path": "ODDS-REST-DISPLAY-REVIEW.md",
+      "sha256": "be21ab8e8dae8f9523696cc8f7be1d2e9ae77403e012a7a11805e508e6624b1f"
+    },
+    {
+      "path": "P108-01-INDEPENDENT-REVIEW.md",
+      "sha256": "20ee1eb05676528386279fc7e0e59ca21c1b6e6ef187663c30b9d5ffeab114db"
+    },
+    {
+      "path": "PLAN.md",
+      "sha256": "a62da1e353f8bf2c2c992ffd0283ab06079e32ce3f8f8e6af04b1e2332a162c3"
+    },
+    {
+      "path": "PREMATCH-INDEPENDENT-REVIEW.md",
+      "sha256": "46f963f45e8d6caaa957ccf60b0ff26ff13c264c20e2b0ade6268ef7dd84d61c"
+    },
+    {
+      "path": "PREMATCH-SECURITY-REVIEW.md",
+      "sha256": "5342c8833aa2f5748bc8df2ef99e02fb0694fb8bbd187040dee43fa227cef9b0"
+    },
+    {
+      "path": "QUALITY_GATE.md",
+      "sha256": "563dda068ede493c1d32b901bbeaf8d364fb022f8db4b5f40c04e284a5bd5ded"
+    },
+    {
+      "path": "SCOPE_LOCK.yaml",
+      "sha256": "67dd539fa1f0b012ab0619829b2a8ed3e12548b596a7459c7a3faa8b32231ce3"
+    },
+    {
+      "path": "STATE.yaml",
+      "sha256": "344ec9a844b11adcd885c4a22adda8aa033f5df02ce96e30ff23b0c46f5c7cd1"
+    },
+    {
+      "path": "TASK_DAG.yaml",
+      "sha256": "30f4e87e1bc162316272dc351e98e5ad3cbb8b246384b253970a3c0b9b9f9fbe"
+    },
+    {
+      "path": "config.yaml",
+      "sha256": "9564bed24a7b9397d08e8d5c5b4162a8caac383d1303dd6d84f997a1a3ac0060"
+    },
+    {
+      "path": "engine-lock.json",
+      "sha256": "d6248de04ddb2e172a226a3b3b4f29e4826bca7c7f1a9e44fbbcb8f98eedf42e"
+    },
+    {
+      "path": "quality_gate.py",
+      "sha256": "33667a89aad2f3a7dc08fb32ac0dbe7d32513fea7df118526193b292c07cb191"
+    },
+    {
+      "path": "verify_migration.py",
+      "sha256": "d14b14b400d20c1b5f437c788c1da65e59df1c82f33370a80a5483498d77c772"
+    }
+  ]
+}

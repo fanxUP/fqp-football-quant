@@ -1,34 +1,33 @@
 {
   "schema_version": 4,
-  "task_id": "P108-01-IDENTITY-BRIDGE",
-  "objective": "Create a source-scoped external player ID bridge to canonical players with auditable manual verification; no player facts are imported or consumed by models.",
+  "task_id": "P108-02-AFFILIATION-ELIGIBILITY",
+  "objective": "Expose Titan transfers only as historical affiliation candidates and add an append-only, evidence-backed registration eligibility fact contract that defaults to unknown; no source data import, production access, or model use.",
   "allowed_paths": [
     ".github/workflows/ci.yml",
-    "sql/134_player_identity_bridge.sql",
-    "sql/down/134_player_identity_bridge.down.sql",
-    "scripts/player_identity_bridge.py",
-    "scripts/player_identity_candidates.py",
-    "tests/test_scripts/test_player_identity_bridge.py",
-    "tests/test_scripts/test_player_identity_candidates.py",
-    "tests/test_computation/test_player_identity_bridge_postgres.py"
+    "configs/data_catalog.yaml",
+    "sql/135_player_affiliation_eligibility.sql",
+    "sql/down/135_player_affiliation_eligibility.down.sql",
+    "scripts/player_registration_facts.py",
+    "tests/test_scripts/test_player_registration_facts.py",
+    "tests/test_computation/test_player_registration_facts_postgres.py"
   ],
   "protected_paths": [
     ".github/**",
+    "configs/**",
+    "sql/**",
     "scripts/**",
     "tests/**",
-    "sql/**",
     "requirements*.txt",
     "**/package*.json"
   ],
   "approved_protected_paths": [
     ".github/workflows/ci.yml",
-    "sql/134_player_identity_bridge.sql",
-    "sql/down/134_player_identity_bridge.down.sql",
-    "scripts/player_identity_bridge.py",
-    "scripts/player_identity_candidates.py",
-    "tests/test_scripts/test_player_identity_bridge.py",
-    "tests/test_scripts/test_player_identity_candidates.py",
-    "tests/test_computation/test_player_identity_bridge_postgres.py"
+    "configs/data_catalog.yaml",
+    "sql/135_player_affiliation_eligibility.sql",
+    "sql/down/135_player_affiliation_eligibility.down.sql",
+    "scripts/player_registration_facts.py",
+    "tests/test_scripts/test_player_registration_facts.py",
+    "tests/test_computation/test_player_registration_facts_postgres.py"
   ],
-  "notes": "One main branch only. Additive schema/helper/candidate report and isolated PostgreSQL regression are explicitly required in CI, so the CI verifier must fail if that module is skipped. No production access, data import, or API/model behavior change."
+  "notes": "Single main branch. No duplicate transfer table; reuse immutable football history and verified identity bridge. Titan transfers never establish current club or competition eligibility. No registration source is currently authorized or populated. Runtime fqp is read-only. Production migration/import and model rollout remain separate tasks."
 }

@@ -1,0 +1,34 @@
+{
+  "schema_version": 4,
+  "task_id": "P108-01-IDENTITY-BRIDGE",
+  "objective": "Create a source-scoped external player ID bridge to canonical players with auditable manual verification; no player facts are imported or consumed by models.",
+  "allowed_paths": [
+    ".github/workflows/ci.yml",
+    "sql/134_player_identity_bridge.sql",
+    "sql/down/134_player_identity_bridge.down.sql",
+    "scripts/player_identity_bridge.py",
+    "scripts/player_identity_candidates.py",
+    "tests/test_scripts/test_player_identity_bridge.py",
+    "tests/test_scripts/test_player_identity_candidates.py",
+    "tests/test_computation/test_player_identity_bridge_postgres.py"
+  ],
+  "protected_paths": [
+    ".github/**",
+    "scripts/**",
+    "tests/**",
+    "sql/**",
+    "requirements*.txt",
+    "**/package*.json"
+  ],
+  "approved_protected_paths": [
+    ".github/workflows/ci.yml",
+    "sql/134_player_identity_bridge.sql",
+    "sql/down/134_player_identity_bridge.down.sql",
+    "scripts/player_identity_bridge.py",
+    "scripts/player_identity_candidates.py",
+    "tests/test_scripts/test_player_identity_bridge.py",
+    "tests/test_scripts/test_player_identity_candidates.py",
+    "tests/test_computation/test_player_identity_bridge_postgres.py"
+  ],
+  "notes": "One main branch only. Additive schema/helper/candidate report and isolated PostgreSQL regression are explicitly required in CI, so the CI verifier must fail if that module is skipped. No production access, data import, or API/model behavior change."
+}

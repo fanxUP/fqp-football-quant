@@ -243,6 +243,7 @@ jobs:
               "tests.test_computation.test_football_fixture_result_facts_postgres",
               "tests.test_computation.test_football_season_identity_postgres",
               "tests.test_computation.test_player_identity_bridge_postgres",
+              "tests.test_computation.test_player_registration_facts_postgres",
               "tests.test_sql.test_dashboard_prediction_count",
               "tests.test_data_sources.titan007.test_history_backfill",
           }
@@ -269,4 +270,5 @@ jobs:
           FQP_P106_TEST_DATABASE_URL: postgresql://postgres:fqp_audit_fixture_password@127.0.0.1:5433/fqp_p106_test_ci
           FQP_AUDIT_TEST_DATABASE_URL: postgresql://postgres:fqp_audit_fixture_password@127.0.0.1:5433/fqp_audit_test_ci
           FQP_HISTORY_TEST_DSN: postgresql://postgres:fqp_audit_fixture_password@127.0.0.1:5433/fqp_history_test_ci
+          FQP_PLAYER_REGISTRATION_TEST_DSN: postgresql://postgres:fqp_audit_fixture_password@127.0.0.1:5433/fqp_history_test_ci
           PGPASSWORD: fqp_test_password

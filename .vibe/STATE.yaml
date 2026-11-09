@@ -1,20 +1,20 @@
 {
   "schema_version": 4,
-  "state": "DONE",
-  "workflow_id": "P108-01-PLAYER-IDENTITY-BRIDGE-20261110",
+  "state": "REVIEWING",
+  "workflow_id": "P108-02-EFFECTIVE-AFFILIATION-ELIGIBILITY-20261110",
   "previous_workflow": {
-    "task_id": "PREMATCH-ODDS-REST-DISPLAY-20261110",
+    "task_id": "P108-01-PLAYER-IDENTITY-BRIDGE",
     "state": "DONE",
-    "archive": ".vibe/archive/workflow-prematch-odds-rest-display-done-2026-11-10",
-    "archive_manifest_sha256": "0736502ddbe9a6086b88c932edace85c35e1465500fa4c796a479849a7300487"
+    "archive": ".vibe/archive/workflow-p108-01-done-2026-11-10",
+    "archive_manifest_sha256": "60cc0a6841794bf05b4a18c114b9809aa6fc765c6820cca458e63c1a0012dc5b"
   },
   "blocked_reason": null,
   "mode": "STRICT",
-  "environment": "Local main checkout; isolated PostgreSQL 16; no production DB/API access or import.",
+  "environment": "Local main checkout; synthetic fixtures and isolated PostgreSQL 16 only; no production DB/API access or data import.",
   "last_transition": {
-    "from": "READY_TO_MERGE",
-    "to": "DONE",
-    "at": "2026-11-10T04:47:29.682702+08:00",
-    "reason": "P108-01 has been pushed to main and its exact-head CI, independent reviews, scope/budget, isolated migration rehearsal, and local regression gate pass; no production rollout or import was part of this slice."
+    "from": "VERIFYING",
+    "to": "REVIEWING",
+    "at": "2026-11-10T06:04:26.197647+08:00",
+    "reason": "本地 67 项回归、静态/范围/预算、隔离 PG 迁移演练和独立复审均通过；提交后等待 exact-head GitHub CI。"
   }
 }

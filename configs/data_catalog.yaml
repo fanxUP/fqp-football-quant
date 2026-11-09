@@ -147,6 +147,20 @@ products:
     purposes: [research, prediction, display, operations]
     consumers: [feature_build, news, lineup_scenarios]
     availability: optional_until_model_requires
+  player_affiliation_candidates:
+    contract_owner: P108
+    writer: published_football_history
+    tables: [football_history_available, player_affiliation_candidates, player_identity_links]
+    purposes: [research, display, operations]
+    consumers: [source_review, future_player_feature_adapter]
+    availability: titan_transfers_are_historical_candidates_only_and_resolve_player_only_through_verified_identity
+  player_registration_eligibility:
+    contract_owner: P108
+    writer: reviewed_authoritative_registration_import
+    tables: [player_registration_authority_sources, player_registration_facts, player_registration_eligibility_current]
+    purposes: [research, display, operations]
+    consumers: [source_review, future_player_feature_adapter]
+    availability: requires_active_reviewed_authority_and_effective_dated_evidence; missing_or_out_of_scope_facts_return_unknown
   news_evidence:
     contract_owner: P104
     writer: existing_news_review_pipeline
