@@ -1,7 +1,7 @@
 {
   "schema_version": 4,
   "task_id": "PREMATCH-SCHEDULE-MARKET-REFERENCE-20261109",
-  "max_files_changed": 44,
+  "max_files_changed": 45,
   "max_new_files": 11,
   "max_new_dependencies": 0,
   "max_schema_migrations": 4,
@@ -12,5 +12,5 @@
     "new_lint_errors": 0,
     "new_type_errors": 0
   },
-  "budget_basis": "Counts include one additive catalog response field and the up/down SQL files for two pinned additive migrations; no new package or service."
+  "budget_basis": "Original 44-path release scope includes one additive catalog response field and the up/down SQL files for two pinned additive migrations. One additional test-only schema fixture path was added after exact-head CI exposed a missing raw_hash column; no new package, service or production behavior."
 }

@@ -40,6 +40,7 @@
     "sql/down/132_prematch_prediction_schedule.down.sql",
     "sql/down/133_traditional_market_reference.down.sql",
     "tests/test_computation/test_football_fixture_identity_postgres.py",
+    "tests/test_computation/test_prediction_run_postgres.py",
     "tests/test_jobs/test_run_scheduler.py",
     "tests/test_local/test_release_migration_policy.py",
     "tests/test_scripts/test_official_odds_capture.py",
@@ -92,6 +93,7 @@
     "sql/down/132_prematch_prediction_schedule.down.sql",
     "sql/down/133_traditional_market_reference.down.sql",
     "tests/test_computation/test_football_fixture_identity_postgres.py",
+    "tests/test_computation/test_prediction_run_postgres.py",
     "tests/test_jobs/test_run_scheduler.py",
     "tests/test_local/test_release_migration_policy.py",
     "tests/test_scripts/test_official_odds_capture.py",
@@ -99,5 +101,5 @@
     "tests/test_scripts/test_sporttery_pool_schedule.py",
     "tests/test_scripts/test_traditional_market_reference.py"
   ],
-  "notes": "Exact uncommitted business-code scope at task start on main. No other code paths, dependencies, services or branches are included."
+  "notes": "Original exact 44-path code scope at task start on main, plus one required isolated PostgreSQL fixture correction discovered by exact-head CI: the match-review fixture now includes the production official_odds_snapshots.raw_hash column. No production behavior, dependencies, services or branches were added."
 }

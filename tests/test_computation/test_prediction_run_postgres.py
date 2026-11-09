@@ -6483,7 +6483,8 @@ def test_match_review_executes_canonical_prediction_read_for_review_match_set(is
             "ADD total_goals_result TEXT, ADD score_result TEXT, ADD half_full_result TEXT"
         )
         cursor.execute(
-            "ALTER TABLE official_odds_snapshots ADD option_name TEXT, ADD handicap NUMERIC"
+            "ALTER TABLE official_odds_snapshots ADD option_name TEXT, "
+            "ADD handicap NUMERIC, ADD raw_hash VARCHAR(128)"
         )
         cursor.execute(
             """CREATE TABLE match_review_evidence (
