@@ -179,6 +179,12 @@ def list_matches(
                       AND s.raw_json->>'_scheduled_kickoff' = to_char(
                           m.kickoff_time, 'YYYY-MM-DD"T"HH24:MI:SS'
                       )
+                      AND NOT jsonb_path_exists(
+                          m.raw_json, '$.**.poolCloseDate ? (@ != "")'
+                      )
+                      AND NOT jsonb_path_exists(
+                          m.raw_json, '$.**.poolCloseTime ? (@ != "")'
+                      )
                       AND EXISTS (
                           SELECT 1 FROM jsonb_array_elements(
                               CASE WHEN jsonb_typeof(m.raw_json->'poolList') = 'array'

@@ -156,6 +156,7 @@ def test_simulator_matches_without_cutoff_require_fresh_official_status_and_odds
     odds_sql, params = cursor.execute.call_args_list[1].args
     assert "s.snapshot_time BETWEEN %(odds_since)s AND %(now)s" in odds_sql
     assert "pool->>'poolStatus' = 'Selling'" in odds_sql
+    assert "jsonb_path_exists" in odds_sql
     assert params["odds_since"] == datetime(2026, 7, 18, 11, 25)
 
 
