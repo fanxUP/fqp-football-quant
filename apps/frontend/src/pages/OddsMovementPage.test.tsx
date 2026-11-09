@@ -1,6 +1,8 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { OddsMovementPoint } from '../core/types';
 import OddsMovementPage from './OddsMovementPage';
+import OddsSnapshotHeatmap from './odds/OddsSnapshotHeatmap';
 
 const { oddsIndex, oddsMovements } = vi.hoisted(() => ({
   oddsIndex: vi.fn(),
@@ -112,8 +114,8 @@ describe('OddsMovementPage', () => {
     await waitFor(() => expect(oddsMovements).toHaveBeenCalledWith({
       scope: 'current', business_date: undefined, play_type: 'spf', resolution: 'raw', limit: 200,
     }));
-    expect(await screen.findByText(/周二201/)).toBeInTheDocument();
-    expect(screen.getByText(/周二202/)).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: /周二201/ })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /周二202/ })).toBeInTheDocument();
     expect(screen.getByRole('combobox', { name: '赔率联赛' })).toBeInTheDocument();
 
     const dateInput = screen.getByLabelText('赔率历史日期');
@@ -142,7 +144,7 @@ describe('OddsMovementPage', () => {
 
     expect(await screen.findByLabelText('赔率历史日期')).toBeDisabled();
     expect(screen.getByText('暂无历史赔率记录')).toBeInTheDocument();
-    expect(await screen.findByText(/周二201/)).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: /周二201/ })).toBeInTheDocument();
   });
 
   it('定时同步当前开盘比赛的新赔率', async () => {
@@ -157,10 +159,10 @@ describe('OddsMovementPage', () => {
   });
 });
 
-function oddsFixture(id = 304, league = '英超') {
+function oddsFixture(id = 304, league = '英超', series: OddsMovementPoint[] = []) {
   return { id, official_match_code: `测试${id}`, business_date: '2026-07-13', league_name: league,
     home_team_name: `界面测试主队${id}`, away_team_name: '界面测试客队', kickoff_time: '2026-07-13T19:00:00+08:00',
-    capture_status: null, series: [], anomalies: [] };
+    capture_status: null, series, anomalies: [] };
 }
 function oddsResponse(matches = [oddsFixture()]) {
   return { scope: 'current', business_date: null, play_type: 'spf', resolution: 'raw', total: matches.length, matches };
@@ -176,11 +178,11 @@ describe('赔率查询隔离与筛选', () => {
 
   it('玩法空响应清除上一组曲线', async () => {
     render(<OddsMovementPage />);
-    await screen.findByText(/测试304.*图表/);
+    await screen.findByRole('heading', { name: /测试304/ });
     oddsMovements.mockResolvedValue({ ...oddsResponse([]), play_type: 'bf' });
     fireEvent.click(screen.getByRole('tab', { name: '比分' }));
     expect(await screen.findByText('当前没有开盘比赛')).toBeInTheDocument();
-    expect(screen.queryByText(/测试304.*图表/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: /测试304/ })).not.toBeInTheDocument();
   });
 
   it('旧日期晚返回不会覆盖当前查询', async () => {
@@ -190,19 +192,19 @@ describe('赔率查询隔离与筛选', () => {
     await screen.findByLabelText('赔率历史日期');
     oddsMovements.mockResolvedValue({ ...oddsResponse([oddsFixture(305)]), scope: 'history', business_date: '2026-07-13', resolution: 'hour' });
     fireEvent.change(screen.getByLabelText('赔率历史日期'), { target: { value: '2026-07-13' } });
-    await screen.findByText(/测试305.*图表/);
+    await screen.findByRole('heading', { name: /测试305/ });
     await waitFor(() => expect(oddsMovements).toHaveBeenCalledTimes(2));
     await act(async () => resolveOld(oddsResponse([oddsFixture(999)])));
-    expect(screen.queryByText(/测试999.*图表/)).not.toBeInTheDocument();
-    expect(screen.getByText(/测试305.*图表/)).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: /测试999/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /测试305/ })).toBeInTheDocument();
   });
 
   it('同查询刷新失败保留最后成功结果并允许恢复', async () => {
-    render(<OddsMovementPage />); await screen.findByText(/测试304.*图表/);
+    render(<OddsMovementPage />); await screen.findByRole('heading', { name: /测试304/ });
     oddsMovements.mockRejectedValueOnce(new Error('测试断线'));
     fireEvent.click(screen.getByRole('button', { name: '刷新赔率' }));
     expect(await screen.findByText(/测试断线/)).toBeInTheDocument();
-    expect(screen.getByText(/测试304.*图表/)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /测试304/ })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '刷新赔率' }));
     await waitFor(() => expect(screen.queryByText(/测试断线/)).not.toBeInTheDocument());
   });
@@ -212,20 +214,20 @@ describe('赔率查询隔离与筛选', () => {
     render(<OddsMovementPage />);
     expect(await screen.findByText(/首次失败/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '刷新赔率' }));
-    expect(await screen.findByText(/测试304.*图表/)).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: /测试304/ })).toBeInTheDocument();
   });
 
   it('索引失败不挡住当前赔率', async () => {
     oddsIndex.mockRejectedValueOnce(new Error('索引失败'));
     render(<OddsMovementPage />);
-    expect(await screen.findByText(/测试304.*图表/)).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: /测试304/ })).toBeInTheDocument();
     expect(screen.getByText(/索引失败/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '刷新日期索引' })).toBeInTheDocument();
   });
 
-  it('组合筛选与分页只挂载十场图表并重置页码', async () => {
+  it('组合筛选与分页只展示十场比赛并重置页码', async () => {
     oddsMovements.mockResolvedValue(oddsResponse(Array.from({ length: 12 }, (_, i) => oddsFixture(400 + i, i % 2 ? '西甲' : '英超'))));
-    render(<OddsMovementPage />); await screen.findByText(/测试400.*图表/);
+    render(<OddsMovementPage />); await screen.findByRole('heading', { name: /测试400/ });
     expect(screen.getAllByRole('article')).toHaveLength(10);
     fireEvent.click(screen.getByRole('button', { name: '下一页赔率' }));
     expect(screen.getAllByRole('article')).toHaveLength(2);
@@ -247,7 +249,7 @@ describe('赔率查询隔离与筛选', () => {
   });
 
   it('历史模式不自动刷新', async () => {
-    render(<OddsMovementPage />); await screen.findByText(/测试304.*图表/);
+    render(<OddsMovementPage />); await screen.findByRole('heading', { name: /测试304/ });
     oddsMovements.mockResolvedValue({ ...oddsResponse(), scope: 'history', business_date: '2026-07-13', resolution: 'hour' });
     fireEvent.change(screen.getByLabelText('赔率历史日期'), { target: { value: '2026-07-13' } });
     await waitFor(() => expect(oddsMovements).toHaveBeenCalledTimes(2));
@@ -257,7 +259,7 @@ describe('赔率查询隔离与筛选', () => {
   });
 
   it('重复赛事响应拒绝覆盖，保留深链接', async () => {
-    render(<OddsMovementPage />); await screen.findByText(/测试304.*图表/);
+    render(<OddsMovementPage />); await screen.findByRole('heading', { name: /测试304/ });
     expect(screen.getByRole('link', { name: '查看赛事详情' })).toHaveAttribute('href', '#/matches/304');
     oddsMovements.mockResolvedValue(oddsResponse([oddsFixture(), oddsFixture()]));
     fireEvent.click(screen.getByRole('button', { name: '刷新赔率' }));
@@ -266,11 +268,92 @@ describe('赔率查询隔离与筛选', () => {
   });
 });
 
+function oddsPoint(snapshot_id: number, hour: number, option_code: string, option_name: string, sp_value: number,
+  play_type = 'spf', handicap: number | null = null): OddsMovementPoint {
+  return {
+    snapshot_id, snapshot_time: `2026-07-13T${hour}:00:00+08:00`,
+    option_code, option_name, sp_value, play_type, handicap, implied_probability: null, prev_sp_value: null,
+  };
+}
+
+describe('赔率快照热力图', () => {
+  it('按快照时间展示初始赔率，末次格显示涨跌分档与单笔状态', async () => {
+    const data = [
+      oddsPoint(5, 15, 'h', '主胜', 4.6), oddsPoint(1, 11, 'h', '主胜', 4.2), oddsPoint(2, 11, 'h', '主胜', 4),
+      oddsPoint(3, 11, 'd', '平局', 2), oddsPoint(6, 15, 'd', '平局', 1.9), oddsPoint(4, 11, 'a', '客胜', 2.5),
+    ];
+    oddsIndex.mockResolvedValue({ current: { count: 1 }, history: [] });
+    oddsMovements.mockResolvedValue(oddsResponse([oddsFixture(304, '英超', data)]));
+    render(<OddsMovementPage />);
+
+    const table = within(await screen.findByRole('table', { name: '赔率快照对照' }));
+    expect(table.getAllByRole('columnheader').map(header => header.textContent)).toEqual(['赔率来源', '主胜', '平局', '客胜']);
+    const source = within(table.getByRole('row', { name: /中国体彩/ }));
+    const home = within(source.getByRole('cell', { name: /初始赔率：4\.00.*最新赔率：4\.60/ }));
+    expect(home.getByText('4.60').parentElement).toHaveAttribute('data-direction', 'up');
+    expect(home.getByText('↑ 15.0%').parentElement).toHaveAttribute('data-strength', '3');
+    const draw = within(source.getByRole('cell', { name: /初始赔率：2\.00.*最新赔率：1\.90/ }));
+    expect(draw.getByText('↓ 5.0%').parentElement).toHaveAttribute('data-strength', '2');
+    expect(draw.getByText('1.90').parentElement).toHaveAttribute('data-direction', 'down');
+    expect(table.getByText('仅一笔').parentElement).toHaveAttribute('data-direction', 'flat');
+    expect(screen.queryByText('历史走势 图表')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText('查看历史走势'));
+    expect(await screen.findByText('历史走势 图表')).toBeInTheDocument();
+  });
+
+  it('历史标明最终赔率，让球变盘时只比较最新盘口的首末快照', async () => {
+    oddsIndex.mockResolvedValue({ current: { count: 0 }, history: [{ business_date: '2026-07-13', match_count: 1 }] });
+    const data = [
+      oddsPoint(3, 15, 'h', '让球胜', 2.52, 'rqspf', -1),
+      oddsPoint(1, 11, 'h', '让球胜', 1.8, 'rqspf', -2),
+      oddsPoint(2, 13, 'h', '让球胜', 2.4, 'rqspf', -1),
+    ];
+    oddsMovements.mockImplementation(async params => ({
+      ...oddsResponse(params.play_type === 'rqspf' ? [oddsFixture(304, '英超', data)] : []),
+      scope: params.scope, business_date: params.business_date ?? null, play_type: params.play_type, resolution: params.resolution,
+    }));
+    render(<OddsMovementPage />);
+    fireEvent.change(await screen.findByLabelText('赔率历史日期'), { target: { value: '2026-07-13' } });
+    fireEvent.click(screen.getByRole('tab', { name: '让球胜平负' }));
+
+    const table = within(await screen.findByRole('table', { name: '赔率快照对照' }));
+    expect(table.getByRole('columnheader', { name: '让球胜' })).toBeInTheDocument();
+    expect(table.getByText('-1 球')).toBeInTheDocument();
+    expect(table.getByRole('cell', { name: /初始赔率：2\.40.*最终赔率：2\.52/ })).toBeInTheDocument();
+    expect(table.getByText('↑ 5.0%')).toBeInTheDocument();
+    expect(table.queryByText('1.80')).not.toBeInTheDocument();
+  });
+
+  it('不同公司各占一行，按选项对齐，缺失列留空并独立计算涨跌', () => {
+    render(<OddsSnapshotHeatmap playType="spf" historical={false} sources={[
+      { id: 'official', label: '中国体彩', snapshots: [
+        oddsPoint(1, 11, 'h', '主胜', 2), oddsPoint(2, 15, 'h', '主胜', 2.2),
+        oddsPoint(3, 11, 'd', '平局', 3.25),
+      ] },
+      { id: 'demo', label: '示例公司', snapshots: [
+        oddsPoint(3, 11, 'a', '客胜', 4),
+        oddsPoint(1, 11, 'h', '主胜', 2.5), oddsPoint(2, 15, 'h', '主胜', 2),
+      ] },
+    ]} />);
+
+    const table = within(screen.getByRole('table', { name: '赔率快照对照' }));
+    expect(table.getAllByRole('columnheader').map(header => header.textContent)).toEqual(['赔率来源', '主胜', '平局', '客胜']);
+    expect(table.getAllByRole('rowheader').map(header => header.textContent)).toEqual(['中国体彩', '示例公司']);
+    const official = within(table.getByRole('row', { name: /中国体彩/ })).getAllByRole('cell');
+    const demo = within(table.getByRole('row', { name: /示例公司/ })).getAllByRole('cell');
+    expect(official[0]).toHaveTextContent('↑ 10.0%');
+    expect(demo[0]).toHaveTextContent('↓ 20.0%');
+    expect(official[2]).toHaveAccessibleName('暂无快照');
+    expect(demo[1]).toHaveAccessibleName('暂无快照');
+    expect(demo[2]).toHaveTextContent('4.00');
+  });
+});
+
 
 describe('赔率响应边界', () => {
   beforeEach(() => { vi.clearAllMocks(); oddsIndex.mockResolvedValue({ current: { count: 1 }, history: [{ business_date: '2026-07-13', match_count: 1 }] }); oddsMovements.mockResolvedValue(oddsResponse()); });
   it('错历史日期拒绝展示', async () => {
-    render(<OddsMovementPage />); await screen.findByText(/测试304.*图表/);
+    render(<OddsMovementPage />); await screen.findByRole('heading', { name: /测试304/ });
     oddsMovements.mockResolvedValue({ ...oddsResponse(), scope: 'history', business_date: '2026-07-12', resolution: 'hour' });
     fireEvent.change(screen.getByLabelText('赔率历史日期'), { target: { value: '2026-07-13' } });
     expect(await screen.findByText(/赔率响应与当前查询不一致/)).toBeInTheDocument();
@@ -278,10 +361,10 @@ describe('赔率响应边界', () => {
   });
   it('数据缩减后页码收敛并更新空响应', async () => {
     oddsMovements.mockResolvedValue(oddsResponse(Array.from({ length: 11 }, (_, i) => oddsFixture(400 + i))));
-    render(<OddsMovementPage />); await screen.findByText(/测试400.*图表/);
+    render(<OddsMovementPage />); await screen.findByRole('heading', { name: /测试400/ });
     fireEvent.click(screen.getByRole('button', { name: '下一页赔率' }));
     oddsMovements.mockResolvedValue(oddsResponse()); fireEvent.click(screen.getByRole('button', { name: '刷新赔率' }));
-    expect(await screen.findByText(/测试304.*图表/)).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: /测试304/ })).toBeInTheDocument();
     expect(screen.getByText(/第 1 \/ 1 页/)).toBeInTheDocument();
     oddsMovements.mockResolvedValue(oddsResponse([])); fireEvent.click(screen.getByRole('button', { name: '刷新赔率' }));
     expect(await screen.findByText('当前没有开盘比赛')).toBeInTheDocument(); expect(screen.queryByRole('article')).not.toBeInTheDocument();

@@ -1,0 +1,92 @@
+.odds-heat-legend {
+  margin-top: 16px;
+  padding: 12px 16px;
+  border: 1px solid var(--fqp-border);
+  border-radius: var(--fqp-radius-sm);
+  background: var(--fqp-panel);
+}
+
+.odds-heat-key { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; font-size: 13px; }
+.odds-heat-key strong { margin-inline-end: 4px; }
+.odds-heat-legend p { margin: 8px 0 0; color: var(--fqp-text-muted); font-size: 12px; line-height: 1.6; }
+
+.odds-heat-scroll {
+  container-type: inline-size;
+  max-width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--fqp-border);
+  border-radius: var(--fqp-radius-sm);
+}
+
+.odds-heat-table {
+  --odds-source-width: 7rem;
+  --odds-option-width: 9.5rem;
+  width: 100%;
+  min-width: calc(var(--odds-source-width) + var(--odds-option-count) * var(--odds-option-width));
+  border-spacing: 0;
+  table-layout: fixed;
+  font-size: 13px;
+}
+
+.odds-heat-source-col { width: var(--odds-source-width); }
+.odds-heat-table th, .odds-heat-table td { padding: 8px 10px; text-align: start; overflow-wrap: anywhere; }
+.odds-heat-table :is(th, td) + :is(th, td) { border-inline-start: 1px solid var(--fqp-border-light); }
+.odds-heat-table tr > th:first-child { position: sticky; inset-inline-start: 0; z-index: 1; box-shadow: 1px 0 var(--fqp-border); }
+.odds-heat-table thead th { color: var(--fqp-text-muted); background: var(--fqp-panel-2); font-weight: 600; }
+.odds-heat-table tbody :is(th, td) { border-top: 1px solid var(--fqp-border-light); }
+.odds-heat-table tbody th { background: var(--fqp-panel); font-weight: 600; }
+.odds-heat-line { display: block; margin-bottom: 3px; color: var(--fqp-text-muted); font-size: 12px; }
+
+.odds-heat-pair { display: grid; grid-template-columns: auto auto minmax(0, 1fr); align-items: center; gap: 6px; }
+.odds-heat-arrow, .odds-heat-missing { color: var(--fqp-text-muted); }
+.odds-heat-sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+.odds-heat-opening, .odds-heat-table .odds-heat-cell { font-variant-numeric: tabular-nums; }
+.odds-heat-opening, .odds-heat-cell strong { font-size: 15px; }
+
+.odds-heat-cell {
+  --odds-heat-tone: var(--fqp-border);
+  --odds-heat-mix: 10%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 10px;
+  padding: 5px 9px;
+  border: 1px solid color-mix(in srgb, var(--odds-heat-tone) var(--odds-heat-mix), var(--fqp-border));
+  border-inline-start: 3px solid color-mix(in srgb, var(--odds-heat-tone) 75%, var(--fqp-border));
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--odds-heat-tone) var(--odds-heat-mix), var(--fqp-panel));
+  color: var(--fqp-text);
+  line-height: 1.35;
+}
+
+.odds-heat-cell[data-direction='up'] { --odds-heat-tone: var(--fqp-danger); }
+.odds-heat-cell[data-direction='down'] { --odds-heat-tone: var(--fqp-info); }
+.odds-heat-cell[data-strength='1'] { --odds-heat-mix: 14%; }
+.odds-heat-cell[data-strength='2'] { --odds-heat-mix: 24%; }
+.odds-heat-cell[data-strength='3'] { --odds-heat-mix: 36%; }
+.odds-heat-cell span { font-size: 12px; }
+
+.odds-heat-history { margin-top: 8px; }
+.odds-heat-history > summary {
+  align-content: center;
+  width: fit-content;
+  min-height: 44px;
+  color: var(--fqp-accent-strong);
+  font-size: 13px;
+  cursor: pointer;
+}
+.odds-heat-history > summary:focus-visible { outline: 2px solid var(--fqp-accent-strong); outline-offset: 3px; }
+
+@media (max-width: 480px) {
+  .odds-heat-key strong { flex-basis: 100%; }
+}
+
+@container (max-width: 560px) {
+  .odds-heat-table { --odds-source-width: 4.6rem; --odds-option-width: 4.6rem; }
+  .odds-heat-table th, .odds-heat-table td { padding-inline: 6px; }
+  .odds-heat-pair { grid-template-columns: minmax(0, 1fr); gap: 3px; }
+  .odds-heat-arrow { display: none; }
+  .odds-heat-table .odds-heat-cell { padding: 3px 4px; column-gap: 6px; }
+  .odds-heat-opening, .odds-heat-table .odds-heat-cell strong { font-size: 14px; }
+}

@@ -10,6 +10,7 @@ import useReadOnlyResource from '../features/command-center/useReadOnlyResource'
 import { formatTimestamp } from '../shared/utils';
 import OddsDateIndex from './odds/OddsDateIndex';
 import OddsMatchCard from './odds/OddsMatchCard';
+import { OddsHeatmapLegend } from './odds/OddsSnapshotHeatmap';
 import './BusinessEvidence.css';
 
 type PlayTab = 'spf' | 'rqspf' | 'bf' | 'zjq' | 'bqc';
@@ -83,6 +84,7 @@ function OddsQuery({ scope, businessDate, play }: { scope: Scope; businessDate?:
     && (!search || [match.id, match.official_match_code, match.home_team_name, match.away_team_name, match.league_name].join(' ').toLocaleLowerCase().includes(search)));
   const pages = Math.max(1, Math.ceil(filtered.length / 10));
   const currentPage = Math.min(page, pages);
+  const visibleMatches = filtered.slice((currentPage - 1) * 10, currentPage * 10);
   useEffect(() => { if (page > pages) setPage(pages); }, [page, pages]);
   const leagues = [...new Set([...matches.map(match => match.league_name), ...(league ? [league] : [])])].sort();
   const captureOptions = [...new Set([...Object.keys(CAPTURE_LABELS), ...(capture ? [capture] : []), ...matches.map(match => match.capture_status?.status ?? 'pending')])];
@@ -106,7 +108,12 @@ function OddsQuery({ scope, businessDate, play }: { scope: Scope; businessDate?:
       {resource.loading ? <LoadingSpinner text="加载赔率走势..." /> : resource.data && matches.length === 0 ? (
         <EmptyState title={scope === 'history' ? '该日期暂无赔率记录' : resting ? '当前为官方休市时间' : '当前没有开盘比赛'} description={scope === 'history' ? '请选择其他历史日期' : resting ? resource.data.sales_window?.message : '赛程开盘后会自动出现在这里'} />
       ) : resource.data && filtered.length === 0 ? <EmptyState title="筛选无结果" description="清空筛选或调整搜索条件" /> : (
-        <div className="be-odds-list">{filtered.slice((currentPage - 1) * 10, currentPage * 10).map(match => <OddsMatchCard key={match.id} match={match} playType={play} playLabel={PLAY_LABELS[play]} />)}</div>
+        <>
+          {visibleMatches.some(match => match.series.length > 0) && <OddsHeatmapLegend historical={scope === 'history'} />}
+          <div className="be-odds-list">{visibleMatches.map(match => (
+            <OddsMatchCard key={match.id} match={match} playType={play} playLabel={PLAY_LABELS[play]} historical={scope === 'history'} />
+          ))}</div>
+        </>
       )}
       {filtered.length > 0 && <nav className="be-pagination" aria-label="赔率分页">
         <button type="button" aria-label="上一页赔率" disabled={currentPage === 1} onClick={() => setPage(currentPage - 1)}>上一页</button>
