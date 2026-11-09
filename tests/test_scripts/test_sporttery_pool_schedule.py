@@ -1,7 +1,7 @@
 from contextlib import nullcontext
 from copy import deepcopy
 from datetime import datetime
-from unittest.mock import Mock
+from unittest.mock import MagicMock, Mock
 
 import pytest
 
@@ -116,3 +116,38 @@ def test_parallel_issues_are_rotated_and_match_heads_shared(monkeypatch):
     second = sporttery_pool_schedule.refresh_current_pool_schedule()
     assert stored == ["26163", "26166", "26164"]
     assert second["head_requests"] == 0
+
+
+def test_pool_schedule_writer_bounds_only_the_shared_notice_lock_wait(monkeypatch):
+    conn = MagicMock()
+    cur = conn.cursor.return_value.__enter__.return_value
+    cur.fetchone.return_value = ("2s",)
+    cur.fetchall.return_value = []
+    monkeypatch.setattr(sporttery_pool_schedule, "store_pool_issue", lambda *_args, **_kwargs: 7)
+
+    changed = sporttery_pool_schedule._store_current_issue(
+        conn,
+        {
+            "game_type": "t14c",
+            "issue_no": "26163",
+            "raw_json": {"schedule": "fixture"},
+            "official_status": "scheduled",
+            "matches": [],
+        },
+    )
+
+    assert changed == (1, 0)
+    queries = [call.args[0] for call in cur.execute.call_args_list]
+    notice_lock = "SELECT pg_advisory_xact_lock(%s, %s)"
+    identity_lock = "SELECT pg_advisory_xact_lock(%s)"
+    assert queries.index("SELECT current_setting('lock_timeout')") < queries.index(notice_lock)
+    assert queries.index(notice_lock) < queries.index(identity_lock)
+    timeout_updates = [
+        call.args
+        for call in cur.execute.call_args_list
+        if "set_config('lock_timeout'" in call.args[0]
+    ]
+    assert timeout_updates == [
+        ("SELECT set_config('lock_timeout', %s, true)", ("45s",)),
+        ("SELECT set_config('lock_timeout', %s, true)", ("2s",)),
+    ]

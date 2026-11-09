@@ -10,3 +10,7 @@ Mode: STRICT. Scope: all changed application, ingestion, SQL, release-policy and
 - Operations/supply chain: no dependency, SSH configuration, firewall, container privilege or global permission change. The deploy script only expands its pinned migration allowlist and validation.
 
 Result: PASS. The isolated rehearsal used synthetic schema fixtures only and did not connect to production.
+
+## Official schedule writer lock-wait follow-up
+
+The follow-up adds no credentials, dependencies, routes or permission changes. The bounded 45-second wait applies only to the parameterized schedule advisory-lock call; the helper restores the transaction's previous `lock_timeout` before any later identity lock or business write. No SQL identifiers or shell commands are built from external input. The new concurrency regression is limited to explicit loopback test DSNs and a disposable test database.

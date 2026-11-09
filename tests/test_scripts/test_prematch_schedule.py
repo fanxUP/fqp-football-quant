@@ -1,6 +1,8 @@
 import hashlib
 import os
 import threading
+import time
+from contextlib import contextmanager
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from uuid import uuid4
@@ -13,6 +15,7 @@ from psycopg2.extras import Json
 from apps.backend.src.db import get_db
 from apps.backend.src.services.match_review import build_match_review_cards
 from ops.server.migrate import migration_body
+from scripts import sporttery_schedule_notices
 from scripts.business_time import business_now
 from scripts.jobs.run_model_prediction import run_due
 from scripts.model_prediction_run_storage import create_prediction_run, finalize_prediction_run
@@ -516,6 +519,115 @@ def test_fixture_change_notice_and_prediction_fence_share_transaction_lock():
                 cur.execute("DELETE FROM official_matches WHERE id=%s", (mid,))
             reader.commit()
         reader.close()
+
+
+def test_notice_writer_waits_past_default_lock_timeout_for_prediction_fence(monkeypatch):
+    dsn = os.getenv("FQP_PREMATCH_TEST_DSN")
+    ci_database = False
+    if not dsn and os.getenv("CI") == "true":
+        dsn = os.getenv("DATABASE_URL")
+        ci_database = True
+    if not dsn:
+        pytest.skip("set FQP_PREMATCH_TEST_DSN for the isolated scheduling test")
+    parsed = psycopg2.extensions.parse_dsn(dsn)
+    assert parsed["host"] in {"127.0.0.1", "localhost"}
+    assert parsed["user"] == "fqp"
+    assert (
+        parsed["dbname"] == "fqp_test"
+        if ci_database
+        else parsed["dbname"].startswith("fqp_prematch_test")
+    )
+
+    source_url = "isolated-test://lock-timeout-" + uuid4().hex
+    application_name = "fqp_notice_lock_timeout_test"
+    reader = psycopg2.connect(dsn, options="-c lock_timeout=2s")
+    started = threading.Event()
+    connected = threading.Event()
+    finished = threading.Event()
+    errors: list[BaseException] = []
+    writer: threading.Thread | None = None
+
+    @contextmanager
+    def isolated_get_db():
+        conn = psycopg2.connect(
+            dsn,
+            options=f"-c lock_timeout=2s -c application_name={application_name}",
+        )
+        connected.set()
+        try:
+            yield conn
+        finally:
+            conn.close()
+
+    monkeypatch.setattr(sporttery_schedule_notices, "get_db", isolated_get_db)
+    try:
+        with reader.cursor() as cur:
+            cur.execute("SELECT pg_advisory_xact_lock(%s, %s)", (20261109, 1))
+
+        def publish_notice():
+            started.set()
+            try:
+                _store_notices(
+                    [
+                        (
+                            datetime.now(UTC),
+                            {"source_url": source_url, "kind": "jc_fixture_change"},
+                        )
+                    ]
+                )
+            except BaseException as exc:
+                errors.append(exc)
+            finally:
+                finished.set()
+
+        writer = threading.Thread(target=publish_notice, daemon=True)
+        writer.start()
+        assert started.wait(2), "notice writer did not start"
+        assert connected.wait(2), "notice writer did not connect to the isolated database"
+
+        deadline = time.monotonic() + 5
+        waiting = False
+        while time.monotonic() < deadline:
+            with reader.cursor() as cur:
+                cur.execute(
+                    """SELECT EXISTS(
+                           SELECT 1 FROM pg_stat_activity
+                           WHERE application_name=%s AND wait_event_type='Lock'
+                       )""",
+                    (application_name,),
+                )
+                waiting = cur.fetchone()[0]
+            if waiting:
+                break
+            if finished.is_set():
+                break
+            time.sleep(0.05)
+        assert waiting, (
+            "notice writer did not wait on the held schedule fence; "
+            f"finished={finished.is_set()}, errors={errors!r}"
+        )
+
+        # The production database's current default is 2s. Keep the fence held
+        # beyond that value to prove the official writer has its own bounded wait.
+        time.sleep(2.2)
+        assert not finished.is_set(), "notice writer still used the 2-second default timeout"
+        reader.commit()
+        writer.join(timeout=5)
+        assert finished.is_set(), "notice writer remained blocked after fence release"
+        assert not errors, errors
+    finally:
+        reader.rollback()
+        writer_still_alive = False
+        if writer is not None:
+            writer.join(timeout=50)
+            writer_still_alive = writer.is_alive()
+        with reader.cursor() as cur:
+            cur.execute("DELETE FROM sporttery_schedule_notices WHERE source_url=%s", (source_url,))
+        reader.commit()
+        reader.close()
+        assert not writer_still_alive, (
+            "notice writer thread did not terminate after releasing the fence"
+        )
 
 
 def test_sales_window_change_invalidates_a_previously_selected_target():

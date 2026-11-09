@@ -16,7 +16,7 @@ from psycopg2.extras import Json
 from apps.backend.src.db import get_db
 from scripts.football_fixture_identity import IDENTITY_LOCK
 from scripts.football_pool_notice import parse_notice
-from scripts.prematch_schedule import BEIJING, PREMATCH_NOTICE_LOCK
+from scripts.prematch_schedule import BEIJING, acquire_prematch_notice_write_lock
 from scripts.sporttery_client import SportteryClient
 
 logger = logging.getLogger(__name__)
@@ -105,7 +105,7 @@ def _store_notices(rows: list[tuple[datetime, dict]]) -> None:
             evidence["kind"] in {"jc_fixture_change", "jc_sales_window", "pool_schedule"}
             for _, evidence in rows
         ):
-            cur.execute("SELECT pg_advisory_xact_lock(%s, %s)", PREMATCH_NOTICE_LOCK)
+            acquire_prematch_notice_write_lock(cur)
         if any(evidence["kind"] == "pool_schedule" for _, evidence in rows):
             cur.execute("SELECT pg_advisory_xact_lock(%s)", (IDENTITY_LOCK,))
         for published, evidence in rows:

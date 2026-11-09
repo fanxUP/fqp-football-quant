@@ -15,7 +15,7 @@ from scripts.official_crawler import parse_traditional_lottery_response
 from scripts.official_storage import store_pool_issue, store_pool_issue_matches
 from scripts.play_type_registry import TRADITIONAL_SCHEDULE_GAME_CODES
 from scripts.pool_issue_state import pool_time
-from scripts.prematch_schedule import PREMATCH_NOTICE_LOCK
+from scripts.prematch_schedule import acquire_prematch_notice_write_lock
 from scripts.sporttery_client import SportteryClient
 
 logger = logging.getLogger(__name__)
@@ -168,7 +168,7 @@ def _mark_head_conflict(member: dict, head: dict) -> None:
 def _store_current_issue(conn: Any, pool: dict) -> tuple[int, int]:
     # Pool identity writers share this lock. Keep issue and changed slots atomic.
     with conn.cursor() as cur:
-        cur.execute("SELECT pg_advisory_xact_lock(%s, %s)", PREMATCH_NOTICE_LOCK)
+        acquire_prematch_notice_write_lock(cur)
         cur.execute("SELECT pg_advisory_xact_lock(%s)", (IDENTITY_LOCK,))
         cur.execute(
             """SELECT i.id,i.raw_json,i.official_status,m.match_order,m.source_raw_json,

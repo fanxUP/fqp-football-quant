@@ -24,3 +24,9 @@ The first follow-up confirmed that the unique numeric Sporttery IDs are checked 
 ## Exact-head CI fixture follow-up
 
 Exact-head CI found that the isolated match-review fixture omitted `official_odds_snapshots.raw_hash`, a column present in the production schema and read by the reviewed odds-reference query. The test fixture now declares that column. This follow-up changes no production code; the previously failing isolated test passes locally, and full CI is being rerun on the updated main commit.
+
+## Official schedule writer lock-wait follow-up
+
+On 2026-11-09, an independent read-only review examined the bounded advisory-lock wait added to both official schedule write paths. Outcome: PASS with one MINOR test-cleanup finding. The writer temporarily uses a 45-second bound only for the shared schedule advisory lock, then restores the prior transaction-local `lock_timeout`; the value is parameterized and stays below the production 60-second statement timeout. Both writers preserve the existing lock order and prediction fencing. The reviewer found no production blocker or major issue.
+
+The reviewer noted that the integration test should assert its writer thread has terminated before cleanup. That assertion is now present. The isolated PostgreSQL regression first reproduced the old 2-second failure, then passed with the fix; it also passed using the CI branch against a loopback `fqp_test` database. The review was read-only and did not connect to production.

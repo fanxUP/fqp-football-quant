@@ -50,10 +50,24 @@
         "PREMATCH-INDEPENDENT-REVIEW"
       ],
       "kind": "external_ci",
-      "status": "DONE",
+      "status": "IN_PROGRESS",
       "definition_of_done": [
         "Commit on main only; GitHub main equals the local commit.",
         "Required test and lint/typecheck workflows pass for that exact SHA."
+      ]
+    },
+    "PREMATCH-WRITER-LOCK-WAIT-REPAIR": {
+      "title": "Prevent official schedule writers from failing on the 2-second advisory-lock timeout",
+      "acceptance_id": "A-PREMATCH-WRITER-LOCK-WAIT",
+      "depends_on": [
+        "PREMATCH-LOCAL-REGRESSION"
+      ],
+      "kind": "local_regression",
+      "status": "DONE",
+      "definition_of_done": [
+        "An isolated PostgreSQL regression holds the schedule fence beyond 2 seconds and proves the notice writer completes after release.",
+        "The writer restores its original lock timeout after acquiring the advisory lock; the pool writer uses the same helper.",
+        "Focused tests, static checks, exact-head CI, independent read-only review and deployment smoke pass."
       ]
     }
   }

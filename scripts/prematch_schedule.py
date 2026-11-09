@@ -21,6 +21,24 @@ QUOTE_LEAD = timedelta(minutes=4)
 BATCH_SIZE = 24
 ACTIVE_STATES = ("scheduled", "selling", "not_started")
 PREMATCH_NOTICE_LOCK = (20261109, 1)
+PREMATCH_NOTICE_WRITE_LOCK_TIMEOUT = "45s"
+
+
+def acquire_prematch_notice_write_lock(cur: Any) -> None:
+    """Wait up to 45 seconds for the schedule fence, then restore the prior timeout.
+
+    The production role uses a 2-second lock timeout and a 60-second statement
+    timeout. Prediction scans may hold this fence while waiting on mechanical-disk
+    reads, so official schedule writers need a longer but still bounded wait.
+    Other locks and writes in the transaction retain their original lock timeout.
+    """
+    cur.execute("SELECT current_setting('lock_timeout')")
+    previous_timeout = cur.fetchone()[0]
+    cur.execute(
+        "SELECT set_config('lock_timeout', %s, true)", (PREMATCH_NOTICE_WRITE_LOCK_TIMEOUT,)
+    )
+    cur.execute("SELECT pg_advisory_xact_lock(%s, %s)", PREMATCH_NOTICE_LOCK)
+    cur.execute("SELECT set_config('lock_timeout', %s, true)", (previous_timeout,))
 
 
 def beijing_time(value: datetime) -> datetime:
