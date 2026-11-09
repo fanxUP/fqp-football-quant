@@ -49,7 +49,9 @@
     "production_applied": false
   },
   "quality_gate": {
-    "status": "PENDING"
+    "status": "READY_TO_MERGE",
+    "checked_at": "2026-11-10T04:46:56.231196+08:00",
+    "failures": []
   },
   "external_ci": {
     "status": "passed",

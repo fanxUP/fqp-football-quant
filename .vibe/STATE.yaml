@@ -1,6 +1,6 @@
 {
   "schema_version": 4,
-  "state": "REVIEWING",
+  "state": "DONE",
   "workflow_id": "P108-01-PLAYER-IDENTITY-BRIDGE-20261110",
   "previous_workflow": {
     "task_id": "PREMATCH-ODDS-REST-DISPLAY-20261110",
@@ -12,9 +12,9 @@
   "mode": "STRICT",
   "environment": "Local main checkout; isolated PostgreSQL 16; no production DB/API access or import.",
   "last_transition": {
-    "from": "VERIFYING",
-    "to": "REVIEWING",
-    "at": "2026-11-10T03:46:17.161015+08:00",
-    "reason": "本地验收和迁移演练通过，独立只读复核已启动；精确 main CI 尚待提交后执行。"
+    "from": "READY_TO_MERGE",
+    "to": "DONE",
+    "at": "2026-11-10T04:47:29.682702+08:00",
+    "reason": "P108-01 has been pushed to main and its exact-head CI, independent reviews, scope/budget, isolated migration rehearsal, and local regression gate pass; no production rollout or import was part of this slice."
   }
 }
