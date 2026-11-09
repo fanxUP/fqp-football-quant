@@ -1,7 +1,7 @@
 {
   "schema_version": 4,
   "state": "READY_TO_MERGE",
-  "workflow_id": "PREMATCH-SCHEDULE-MARKET-REFERENCE-20261109",
+  "workflow_id": "PREMATCH-ODDS-REST-DISPLAY-20261110",
   "previous_workflow": {
     "task_id": "P107-AGGREGATE-CANDIDATE-RELEASE-READINESS",
     "state": "DONE",
@@ -15,5 +15,6 @@
     "to": "READY_TO_MERGE",
     "at": "2026-11-09T22:54:30.204707+08:00",
     "reason": "Betting-center cutoff fallback, follow-up regression guard, independent review, scope/budget checks, and exact-main CI 42636725983 passed."
-  }
+  },
+  "active_follow_up": "PREMATCH-ODDS-REST-DISPLAY"
 }

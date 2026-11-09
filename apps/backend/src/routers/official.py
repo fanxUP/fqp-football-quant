@@ -5,6 +5,8 @@ from __future__ import annotations
 from fastapi import APIRouter, Query
 
 from apps.backend.src.db import get_db
+from apps.backend.src.services.odds_movement import current_odds_match_filter
+from scripts.play_type_registry import CANONICAL_CODES
 from scripts.sporttery_sales import get_sporttery_sales_window
 
 router = APIRouter(tags=["official"])
@@ -112,23 +114,16 @@ def list_official_odds_history_matches(
 
 @router.get("/api/official/odds-index")
 def get_official_odds_index():
-    """Return the open-match tab and historical business-date index."""
+    """Return the current match count and historical business-date index."""
     sales_window = get_sporttery_sales_window()
+    current_filter = current_odds_match_filter(sales_open=sales_window.is_open)
     with get_db() as conn, conn.cursor() as cur:
         cur.execute(
-            """
+            f"""
             WITH current_matches AS (
                 SELECT DISTINCT m.id
                 FROM official_matches m
-                WHERE %(sales_open)s
-                  AND m.sale_status = 'selling'
-                  AND m.kickoff_time > timezone('Asia/Shanghai', NOW())
-                  AND EXISTS (
-                      SELECT 1 FROM official_markets market
-                      WHERE market.match_id = m.id
-                        AND market.is_open = TRUE
-                        AND market.play_type = ANY(%(play_types)s)
-                  )
+                WHERE {current_filter}
             ), historical_dates AS (
                 SELECT m.business_date, COUNT(DISTINCT m.id) AS match_count
                 FROM official_matches m
@@ -146,10 +141,7 @@ def get_official_odds_index():
             FROM historical_dates
             ORDER BY business_date DESC NULLS FIRST
             """,
-            {
-                "sales_open": sales_window.is_open,
-                "play_types": ["spf", "rqspf", "bf", "zjq", "bqc"],
-            },
+            {"play_types": list(CANONICAL_CODES)},
         )
         rows = cur.fetchall()
 

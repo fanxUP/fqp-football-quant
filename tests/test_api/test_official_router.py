@@ -119,10 +119,8 @@ def test_odds_index_separates_current_open_matches_from_historical_dates(client)
 
     assert response.status_code == 200
     sql = cursor.execute.call_args.args[0]
-    params = cursor.execute.call_args.args[1]
     assert "timezone('Asia/Shanghai', NOW())" in sql
     assert "market.is_open = TRUE" in sql
-    assert params["sales_open"] is True
     assert response.json() == {
         "current": {"count": 4},
         "history": [
@@ -133,7 +131,7 @@ def test_odds_index_separates_current_open_matches_from_historical_dates(client)
     }
 
 
-def test_odds_index_marks_current_scope_unavailable_during_official_rest_time(client):
+def test_odds_index_counts_current_matches_with_saved_quotes_during_official_rest_time(client):
     closed_window = MagicMock(is_open=False)
     closed_window.as_dict.return_value = {
         "is_open": False,
@@ -149,18 +147,19 @@ def test_odds_index_marks_current_scope_unavailable_during_official_rest_time(cl
         connection = get_db.return_value.__enter__.return_value
         cursor = connection.cursor.return_value.__enter__.return_value
         cursor.fetchall.return_value = [
-            ("current", None, 0),
+            ("current", None, 2),
             ("history", date(2026, 7, 13), 6),
         ]
 
         response = client.get("/api/official/odds-index")
 
     assert response.status_code == 200
-    sql, params = cursor.execute.call_args.args
-    assert "%(sales_open)s" in sql
-    assert params["sales_open"] is False
+    sql = cursor.execute.call_args.args[0]
+    assert "LOWER(m.match_status) IN ('scheduled', 'selling', 'not_started')" in sql
+    assert "official_odds_snapshots available_odds" in sql
+    assert "market.is_open = TRUE" not in sql
     assert response.json() == {
-        "current": {"count": 0},
+        "current": {"count": 2},
         "history": [{"business_date": "2026-07-13", "match_count": 6}],
         "sales_window": {
             "is_open": False,

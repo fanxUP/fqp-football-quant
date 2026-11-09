@@ -7,6 +7,7 @@ from typing import Any, Literal
 from zoneinfo import ZoneInfo
 
 from apps.backend.src.db import get_db
+from scripts.play_type_registry import CANONICAL_CODES
 from scripts.sporttery_sales import get_sporttery_sales_window
 
 BUSINESS_TIMEZONE = ZoneInfo("Asia/Shanghai")
@@ -27,18 +28,33 @@ def _business_iso(value: object) -> str | None:
     return str(value)
 
 
-def _movement_sql(scope: OddsScope, resolution: Resolution) -> str:
-    if scope == "current":
-        match_filter = """
-            m.kickoff_time > timezone('Asia/Shanghai', NOW())
-            AND m.sale_status = 'selling'
+def current_odds_match_filter(*, sales_open: bool) -> str:
+    """Use the same eligibility rule for the index and the current odds list."""
+    if sales_open:
+        eligibility = """
+            m.sale_status = 'selling'
             AND EXISTS (
                 SELECT 1 FROM official_markets market
                 WHERE market.match_id = m.id
                   AND market.is_open = TRUE
-                  AND market.play_type = ANY(%(canonical_play_types)s)
+                  AND market.play_type = ANY(%(play_types)s)
             )
         """
+    else:
+        eligibility = """
+            LOWER(m.match_status) IN ('scheduled', 'selling', 'not_started')
+            AND EXISTS (
+                SELECT 1 FROM official_odds_snapshots available_odds
+                WHERE available_odds.match_id = m.id
+                  AND available_odds.play_type = ANY(%(play_types)s)
+            )
+        """
+    return f"m.kickoff_time > timezone('Asia/Shanghai', NOW()) AND ({eligibility})"
+
+
+def _movement_sql(scope: OddsScope, resolution: Resolution, *, sales_open: bool) -> str:
+    if scope == "current":
+        match_filter = current_odds_match_filter(sales_open=sales_open)
     else:
         match_filter = """
             m.business_date = %(business_date)s::date
@@ -127,25 +143,14 @@ def list_odds_movements(
 ) -> dict:
     """Return all matches and selected-play series in a single bounded query."""
     sales_window = get_sporttery_sales_window()
-    if scope == "current" and not sales_window.is_open:
-        return {
-            "scope": scope,
-            "business_date": business_date,
-            "play_type": play_type,
-            "resolution": resolution,
-            "matches": [],
-            "total": 0,
-            "sales_window": sales_window.as_dict(),
-        }
-
     params = {
         "business_date": business_date,
         "play_type": play_type,
-        "canonical_play_types": ["spf", "rqspf", "bf", "zjq", "bqc"],
+        "play_types": list(CANONICAL_CODES),
         "limit": limit,
     }
     with get_db() as conn, conn.cursor() as cur:
-        cur.execute(_movement_sql(scope, resolution), params)
+        cur.execute(_movement_sql(scope, resolution, sales_open=sales_window.is_open), params)
         rows = cur.fetchall()
 
     matches: dict[int, dict] = {}

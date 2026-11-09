@@ -103,6 +103,20 @@ describe('OddsMovementPage', () => {
     expect(screen.queryByText('赛程开盘后会自动出现在这里')).not.toBeInTheDocument();
   });
 
+  it('休市时显示已保存的赔率和源快照时间', async () => {
+    const salesWindow = { is_open: false, message: '官方竞彩休市中，今日 11:00 恢复开售' };
+    const match = oddsFixture(304, '英超', [oddsPoint(1, 11, 'h', '主胜', 2.1)]);
+    oddsIndex.mockResolvedValue({ current: { count: 1 }, history: [], sales_window: salesWindow });
+    oddsMovements.mockResolvedValue({ ...oddsResponse([match]), sales_window: salesWindow });
+
+    render(<OddsMovementPage />);
+
+    expect(await screen.findByText(/官方竞彩休市中.*已保存的赔率快照/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '当前 (1)' })).toBeInTheDocument();
+    expect(screen.getByRole('table', { name: '赔率快照对照' })).toBeInTheDocument();
+    expect(screen.getByText(/最新源快照：/)).toBeInTheDocument();
+  });
+
   afterEach(() => {
     vi.useRealTimers();
   });

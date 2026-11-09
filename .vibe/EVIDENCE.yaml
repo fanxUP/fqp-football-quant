@@ -11,9 +11,9 @@
       "environment": "Local macOS development; isolated PostgreSQL 16.13; production target 100.121.47.26 via SSH password authentication.",
       "revision": "d90a6b3610757a44ee5b98a9716343b304196364",
       "dirty_tree": true,
-      "tree_fingerprint": "312c184d8e358d1faf642a441d3d1a2f99ddec483f879992ee89c923af4698a2",
+      "tree_fingerprint": "b66fc4b4ba2343092b0b3d1e4d6e3e384d75444d4e9cf70a33c7f71c07bc1b89",
       "verified_at": "2026-11-09T20:33:10.217278+08:00",
-      "evidence_tree_refreshed_at": "2026-11-09T22:38:31.541525+08:00",
+      "evidence_tree_refreshed_at": "2026-11-10T02:23:01+08:00",
       "note": ""
     },
     "A-PREMATCH-MIGRATION": {
@@ -25,9 +25,9 @@
       "environment": "Local macOS development; isolated PostgreSQL 16.13; production target 100.121.47.26 via SSH password authentication.",
       "revision": "634acad93607de3542df460f20b80383425f76f0",
       "dirty_tree": false,
-      "tree_fingerprint": "312c184d8e358d1faf642a441d3d1a2f99ddec483f879992ee89c923af4698a2",
+      "tree_fingerprint": "b66fc4b4ba2343092b0b3d1e4d6e3e384d75444d4e9cf70a33c7f71c07bc1b89",
       "verified_at": "2026-11-09T18:44:00.823404+08:00",
-      "evidence_tree_refreshed_at": "2026-11-09T22:38:31.541525+08:00",
+      "evidence_tree_refreshed_at": "2026-11-10T02:23:01+08:00",
       "note": ""
     },
     "A-PREMATCH-FRONTEND": {
@@ -39,9 +39,9 @@
       "environment": "Local Node/Vite toolchain on macOS",
       "revision": "5f5ef27cd80c8f2f1338d04a6e825d87732fa476",
       "dirty_tree": true,
-      "tree_fingerprint": "312c184d8e358d1faf642a441d3d1a2f99ddec483f879992ee89c923af4698a2",
+      "tree_fingerprint": "b66fc4b4ba2343092b0b3d1e4d6e3e384d75444d4e9cf70a33c7f71c07bc1b89",
       "verified_at": "2026-11-09T17:48:09.027704+08:00",
-      "evidence_tree_refreshed_at": "2026-11-09T22:38:31.541525+08:00",
+      "evidence_tree_refreshed_at": "2026-11-10T02:23:01+08:00",
       "note": ""
     },
     "A-PREMATCH-STATIC": {
@@ -53,9 +53,9 @@
       "environment": "Local macOS development; isolated PostgreSQL 16.13; production target 100.121.47.26 via SSH password authentication.",
       "revision": "d90a6b3610757a44ee5b98a9716343b304196364",
       "dirty_tree": true,
-      "tree_fingerprint": "312c184d8e358d1faf642a441d3d1a2f99ddec483f879992ee89c923af4698a2",
+      "tree_fingerprint": "b66fc4b4ba2343092b0b3d1e4d6e3e384d75444d4e9cf70a33c7f71c07bc1b89",
       "verified_at": "2026-11-09T20:33:10.217278+08:00",
-      "evidence_tree_refreshed_at": "2026-11-09T22:38:31.541525+08:00",
+      "evidence_tree_refreshed_at": "2026-11-10T02:23:01+08:00",
       "note": ""
     },
     "A-PREMATCH-REVIEW": {
@@ -67,9 +67,9 @@
       "environment": "Independent read-only review",
       "revision": "d90a6b3610757a44ee5b98a9716343b304196364",
       "dirty_tree": true,
-      "tree_fingerprint": "312c184d8e358d1faf642a441d3d1a2f99ddec483f879992ee89c923af4698a2",
+      "tree_fingerprint": "b66fc4b4ba2343092b0b3d1e4d6e3e384d75444d4e9cf70a33c7f71c07bc1b89",
       "verified_at": "2026-11-09T20:33:10.217278+08:00",
-      "evidence_tree_refreshed_at": "2026-11-09T22:38:31.541525+08:00",
+      "evidence_tree_refreshed_at": "2026-11-10T02:23:01+08:00",
       "note": ""
     },
     "A-PREMATCH-CI": {
@@ -81,7 +81,7 @@
       "environment": "GitHub Actions, Ubuntu; isolated PostgreSQL 16 and Redis services.",
       "revision": "8e4558fc2d4308506c1a882f6035916e032e9f1c",
       "dirty_tree": false,
-      "tree_fingerprint": "312c184d8e358d1faf642a441d3d1a2f99ddec483f879992ee89c923af4698a2",
+      "tree_fingerprint": "b66fc4b4ba2343092b0b3d1e4d6e3e384d75444d4e9cf70a33c7f71c07bc1b89",
       "verified_at": "2026-11-09T22:54:30.204707+08:00",
       "run_id": 42636725983,
       "url": "https://github.com/fanxUP/fqp-football-quant/actions/runs/42636725983",
@@ -89,7 +89,7 @@
         "lint-and-typecheck": "success",
         "test": "success"
       },
-      "evidence_tree_refreshed_at": "2026-11-09T22:54:30.204707+08:00",
+      "evidence_tree_refreshed_at": "2026-11-10T02:23:01+08:00",
       "note": ""
     },
     "A-PREMATCH-WRITER-LOCK-WAIT": {
@@ -101,9 +101,9 @@
       "environment": "Local macOS development; isolated PostgreSQL 16.13; production target 100.121.47.26 via SSH password authentication.",
       "revision": "d90a6b3610757a44ee5b98a9716343b304196364",
       "dirty_tree": true,
-      "tree_fingerprint": "312c184d8e358d1faf642a441d3d1a2f99ddec483f879992ee89c923af4698a2",
+      "tree_fingerprint": "b66fc4b4ba2343092b0b3d1e4d6e3e384d75444d4e9cf70a33c7f71c07bc1b89",
       "verified_at": "2026-11-09T20:32:36.531695+08:00",
-      "evidence_tree_refreshed_at": "2026-11-09T22:38:31.541525+08:00",
+      "evidence_tree_refreshed_at": "2026-11-10T02:23:01+08:00",
       "note": ""
     },
     "A-BETTING-CUTOFF-FALLBACK": {
@@ -115,45 +115,53 @@
       "environment": "Local macOS; disposable PostgreSQL 16 synthetic fixture; production database read-only inspection only.",
       "revision": "8e4558fc2d4308506c1a882f6035916e032e9f1c",
       "dirty_tree": false,
-      "tree_fingerprint": "312c184d8e358d1faf642a441d3d1a2f99ddec483f879992ee89c923af4698a2",
+      "tree_fingerprint": "b66fc4b4ba2343092b0b3d1e4d6e3e384d75444d4e9cf70a33c7f71c07bc1b89",
       "verified_at": "2026-11-09T22:54:30.204707+08:00",
-      "evidence_tree_refreshed_at": "2026-11-09T22:54:30.204707+08:00",
+      "evidence_tree_refreshed_at": "2026-11-10T02:23:01+08:00",
       "run_id": 42636725983,
       "url": "https://github.com/fanxUP/fqp-football-quant/actions/runs/42636725983",
       "required_jobs": {
         "lint-and-typecheck": "success",
         "test": "success"
       }
+    },
+    "A-ODDS-REST-DISPLAY": {
+      "status": "PASS",
+      "command": ".venv/bin/python -m pytest -q tests/test_api/test_odds_movements.py tests/test_api/test_official_router.py; npm --prefix apps/frontend test -- src/pages/OddsMovementPage.test.tsx; disposable PostgreSQL 16 read-only smoke; Ruff; frontend typecheck and production build",
+      "exit_code": 0,
+      "summary": "8 backend route regressions and 19 focused frontend tests passed. An isolated PostgreSQL 16 smoke verified matching rest-time index/list counts, canonical play isolation, snapshot ordering, historical filtering, and unchanged open-sales eligibility. Ruff, TypeScript typecheck, production build, and git diff checks passed.",
+      "timed_out": false,
+      "environment": "Local macOS; disposable PostgreSQL 16 synthetic schema; no production database access or business data writes.",
+      "revision": "7f5bb6b4037829fe7a1d37778e29826d9a3bb165",
+      "dirty_tree": true,
+      "tree_fingerprint": "b66fc4b4ba2343092b0b3d1e4d6e3e384d75444d4e9cf70a33c7f71c07bc1b89",
+      "verified_at": "2026-11-10T02:23:01+08:00",
+      "note": "Exact-main CI and production read-only smoke are separate release checks recorded after this local regression evidence."
     }
   },
   "reviews": {
     "status": "PASS",
     "application_code": {
       "status": "PASS",
-      "record": ".vibe/PREMATCH-INDEPENDENT-REVIEW.md",
-      "note": "Original implementation review passed. Independent read-only follow-up reviewed the bounded shared-lock wait and found no release-stopping or major issue; one minor test-thread cleanup assertion was added. See .vibe/PREMATCH-INDEPENDENT-REVIEW.md. Independent cutoff-fallback review passed after a minor nested-cutoff finding was resolved; see .vibe/BETTING-CUTOFF-REVIEW.md."
+      "record": ".vibe/ODDS-REST-DISPLAY-REVIEW.md",
+      "note": "Independent read-only review of rest-time fixture eligibility, count/list parity, open and history behavior, SQL binding, read-only HTTP semantics, and freshness labeling found no release-stopping issue."
     },
     "v4_migration": {
       "status": "PASS",
       "record": ".vibe/PREMATCH-INDEPENDENT-REVIEW.md",
-      "note": "Exact ordered 132+133 pair, fixed up/down checksums, restricted role, business paths, published-reference protection, and rollback preservation are independently reviewed and rehearsed."
+      "note": "No SQL, schema, migration, database ownership, or ACL files changed in this follow-up. The previous independently reviewed migration evidence remains applicable."
     }
   },
   "security": {
     "status": "PASS",
-    "reviewed_at": "2026-11-09T20:31:02.656712+08:00",
-    "record": ".vibe/PREMATCH-SECURITY-REVIEW.md",
-    "note": "STRICT review covered secrets, source host/path bounds, SQL parameterization, runtime ACLs, immutability, rollback and operations. Follow-up confirmed the 45-second timeout is parameterized and scoped to one advisory-lock statement, with the prior setting restored before later writes."
+    "reviewed_at": "2026-11-10T02:23:01+08:00",
+    "record": ".vibe/ODDS-REST-DISPLAY-REVIEW.md",
+    "note": "The follow-up is a read-only GET using parameterized SQL and a fixed canonical play type list. It introduces no secrets, permissions, external calls, or data writes."
   },
   "migration": {
-    "status": "PASS",
-    "no_backup_authorized": true,
-    "target_migrations": [
-      "132_prematch_prediction_schedule.sql",
-      "133_traditional_market_reference.sql"
-    ],
-    "up_down_checksums_pinned": true,
-    "isolated_postgresql_rehearsal": "Passed on disposable PostgreSQL 16.13 synthetic schema; detailed report /Volumes/Nas/FQP/release-evidence/prematch-schedule-634acad/no-backup-migration-rehearsal.json (sha256 0a2480cc2f384c0be3b80e5c7cdd6fc0e9b9f934f49098344fb1c6b16e111475); no production data copy."
+    "status": "NOT_APPLICABLE",
+    "target_migrations": [],
+    "note": "This odds visibility follow-up changes no database schema or migration."
   },
   "external_ci": {
     "status": "passed",
@@ -177,7 +185,7 @@
   },
   "quality_gate": {
     "status": "READY_TO_MERGE",
-    "checked_at": "2026-11-09T20:50:57.035479+08:00",
+    "checked_at": "2026-11-10T02:25:11.859154+08:00",
     "failures": []
   }
 }

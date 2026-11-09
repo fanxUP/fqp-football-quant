@@ -1,6 +1,6 @@
 {
   "schema_version": 4,
-  "current_task": "PREMATCH-SCHEDULE-MARKET-REFERENCE-20261109",
+  "current_task": "PREMATCH-ODDS-REST-DISPLAY",
   "tasks": {
     "PREMATCH-LOCAL-REGRESSION": {
       "title": "Validate scheduling, official notices, prediction fencing and traditional market references",
@@ -85,6 +85,22 @@
         "A missing cutoff requires recent same-match odds and a live selling pool with no nested cutoff evidence.",
         "Focused route regressions and isolated PostgreSQL eligibility/JSONPath edge cases pass.",
         "Independent read-only review and exact-main CI pass."
+      ]
+    },
+    "PREMATCH-ODDS-REST-DISPLAY": {
+      "title": "Display saved official odds for upcoming matches during sales rest",
+      "acceptance_id": "A-ODDS-REST-DISPLAY",
+      "depends_on": [
+        "PREMATCH-BETTING-CUTOFF-FALLBACK"
+      ],
+      "kind": "api_regression",
+      "status": "DONE",
+      "definition_of_done": [
+        "Current index and odds endpoint share rest-time eligibility for upcoming fixtures with canonical saved snapshots.",
+        "Open-sales and historical-date query behavior remain covered by regressions.",
+        "Frontend explains the rest window and exposes source snapshot freshness.",
+        "Targeted tests, isolated PostgreSQL verification, frontend typecheck/build, independent review, exact-main CI, and production smoke pass.",
+        "Exact main SHA is deployed to 100.121.47.26 without database backup or business data writes."
       ]
     }
   }
