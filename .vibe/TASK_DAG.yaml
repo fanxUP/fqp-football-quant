@@ -50,7 +50,7 @@
         "PREMATCH-INDEPENDENT-REVIEW"
       ],
       "kind": "external_ci",
-      "status": "IN_PROGRESS",
+      "status": "DONE",
       "definition_of_done": [
         "Commit on main only; GitHub main equals the local commit.",
         "Required test and lint/typecheck workflows pass for that exact SHA."

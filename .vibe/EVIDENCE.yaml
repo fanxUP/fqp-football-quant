@@ -68,18 +68,18 @@
       "evidence_tree_refreshed_at": "2026-11-09T20:33:10.217278+08:00"
     },
     "A-PREMATCH-CI": {
-      "status": "PENDING",
-      "command": "GitHub Actions CI push run 42601401098 for main@634acad93607de3542df460f20b80383425f76f0",
+      "status": "PASS",
+      "command": "GitHub Actions CI push run 42618066966 for main@3eef0fec1f5be45dc20ac99903a48bcffa4654ee",
       "exit_code": 0,
-      "summary": "Exact-head GitHub CI for the schedule-writer lock-wait follow-up is pending; the existing 634acad CI result does not cover this source change.",
+      "summary": "Exact-head CI passed both required jobs: lint-and-typecheck and test. The full suite reported 3,805 passed, 32 skipped, 43 warnings in 496.02s; the new schedule-writer lock-wait regression passed in CI.",
       "timed_out": false,
       "environment": "GitHub Actions, Ubuntu; isolated PostgreSQL 16 and Redis services.",
-      "revision": "d90a6b3610757a44ee5b98a9716343b304196364",
-      "dirty_tree": true,
+      "revision": "3eef0fec1f5be45dc20ac99903a48bcffa4654ee",
+      "dirty_tree": false,
       "tree_fingerprint": "c03c9e2925724cb4b2a5bcd7049fac1c886ed30c6902af17030993aed8445c27",
-      "verified_at": "2026-11-09T20:33:10.217278+08:00",
-      "run_id": 42601401098,
-      "url": "https://github.com/fanxUP/fqp-football-quant/actions/runs/42601401098",
+      "verified_at": "2026-11-09T20:48:54.311276+08:00",
+      "run_id": 42618066966,
+      "url": "https://github.com/fanxUP/fqp-football-quant/actions/runs/42618066966",
       "required_jobs": {
         "lint-and-typecheck": "success",
         "test": "success"
@@ -105,7 +105,7 @@
     "application_code": {
       "status": "PASS",
       "record": ".vibe/PREMATCH-INDEPENDENT-REVIEW.md",
-      "note": "Original implementation review passed. Independent read-only follow-up reviewed the bounded shared-lock wait and found no blocker or major issue; one minor test-thread cleanup assertion was added. See .vibe/PREMATCH-INDEPENDENT-REVIEW.md."
+      "note": "Original implementation review passed. Independent read-only follow-up reviewed the bounded shared-lock wait and found no release-stopping or major issue; one minor test-thread cleanup assertion was added. See .vibe/PREMATCH-INDEPENDENT-REVIEW.md."
     },
     "v4_migration": {
       "status": "PASS",
@@ -130,18 +130,18 @@
     "isolated_postgresql_rehearsal": "Passed on disposable PostgreSQL 16.13 synthetic schema; detailed report /Volumes/Nas/FQP/release-evidence/prematch-schedule-634acad/no-backup-migration-rehearsal.json (sha256 0a2480cc2f384c0be3b80e5c7cdd6fc0e9b9f934f49098344fb1c6b16e111475); no production data copy."
   },
   "external_ci": {
-    "status": "pending",
+    "status": "passed",
     "checks": {
-      "lint-and-typecheck": "pending",
-      "test": "pending"
+      "lint-and-typecheck": "passed",
+      "test": "passed"
     },
     "workflow": "CI",
     "event": "push",
     "branch": "main",
-    "head_sha": null,
-    "run_id": null,
-    "url": null,
-    "summary": "Waiting for exact-head CI on the schedule-writer lock-wait follow-up."
+    "head_sha": "3eef0fec1f5be45dc20ac99903a48bcffa4654ee",
+    "run_id": 42618066966,
+    "url": "https://github.com/fanxUP/fqp-football-quant/actions/runs/42618066966",
+    "summary": "Exact main commit completed both required jobs successfully; test job: 3,805 passed, 32 skipped, 43 warnings."
   },
   "production": {
     "status": "NOT_ACCESSED",
@@ -150,10 +150,8 @@
     "database_backup_created": false
   },
   "quality_gate": {
-    "status": "PENDING",
-    "checked_at": "2026-11-09T20:33:10.217278+08:00",
-    "failures": [
-      "waiting for exact-head CI and final evidence refresh"
-    ]
+    "status": "READY_TO_MERGE",
+    "checked_at": "2026-11-09T20:50:57.035479+08:00",
+    "failures": []
   }
 }
