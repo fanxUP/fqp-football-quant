@@ -211,7 +211,9 @@ def read_pool_catalog_issue(conn: Any, issue_id: int) -> dict | None:
                     "observed_at": _iso(observed),
                     "published_at": _iso(published),
                     "target_at": _iso(target),
-                } if reference is not None else None,
+                }
+                if reference is not None
+                else None,
             }
             for (
                 order,

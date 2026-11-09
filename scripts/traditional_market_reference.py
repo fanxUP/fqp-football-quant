@@ -72,24 +72,24 @@ def match_titan_fixture(target: MarketTarget, rows: list[dict]) -> dict | None:
     identity = tuple(_name(value) for value in (target.league, target.home, target.away))
     minute = target.kickoff.strftime("%Y-%m-%d %H:%M")
     matching = [
-        row for row in rows
-        if row["kickoff"] == minute and tuple(
-            _name(row[key]) for key in ("league_name", "home_name", "away_name")
-        ) == identity
+        row
+        for row in rows
+        if row["kickoff"] == minute
+        and tuple(_name(row[key]) for key in ("league_name", "home_name", "away_name")) == identity
     ]
     ids = {(row["match_id"], row["league_id"]) for row in matching}
     if not all(identity) or len(ids) != 1:
         return None
     first = matching[0]
-    if (
-        any(type(value) is not int or value <= 0 for value in next(iter(ids)))
-        or (target.titan_id is not None and str(first["match_id"]) != target.titan_id)
+    if any(type(value) is not int or value <= 0 for value in next(iter(ids))) or (
+        target.titan_id is not None and str(first["match_id"]) != target.titan_id
     ):
         return None
     if any(
         row["status_code"] not in (0, None)
         or (row["status_code"] is None and row.get("status_text"))
-        or row.get("home_score") is not None or row.get("away_score") is not None
+        or row.get("home_score") is not None
+        or row.get("away_score") is not None
         for row in matching
     ):
         return None
@@ -133,9 +133,14 @@ def read_current_quote(
             "a": company["live_away"],
         }
         if (
-            company_id > 0 and counts[company_id] == 1 and company_name
-            and quoted_at is not None and observed_at - QUOTE_MAX_AGE <= quoted_at <= observed_at
-            and all(value is not None and math.isfinite(value) and value > 1 for value in odds.values())
+            company_id > 0
+            and counts[company_id] == 1
+            and company_name
+            and quoted_at is not None
+            and observed_at - QUOTE_MAX_AGE <= quoted_at <= observed_at
+            and all(
+                value is not None and math.isfinite(value) and value > 1 for value in odds.values()
+            )
         ):
             quotes.append((quoted_at, company_id, company_name, odds))
     if not quotes:
@@ -182,8 +187,13 @@ def _current_targets(
                  )
                ORDER BY c.fixture_id,c.game_type,c.issue_id,c.match_order""",
             (
-                now.date(), now.date() + timedelta(days=7), now.replace(tzinfo=None),
-                fixture_id, fixture_id, SCHEDULE_SOURCE, SCHEDULE_SOURCE,
+                now.date(),
+                now.date() + timedelta(days=7),
+                now.replace(tzinfo=None),
+                fixture_id,
+                fixture_id,
+                SCHEDULE_SOURCE,
+                SCHEDULE_SOURCE,
             ),
         )
         rows = cur.fetchall()
@@ -213,10 +223,17 @@ def _current_targets(
         target, rule = prediction_target(kickoff, cutoff)
         if target <= now:
             market = MarketTarget(fid, kickoff, target, sid, league, home, away, titan)
-            targets.setdefault(market, []).append({
-                "issue_id": issue, "issue_no": number, "game_type": game, "match_order": order,
-                "rule": rule, "source": source, "cutoff": cutoff.isoformat() if cutoff else None,
-            })
+            targets.setdefault(market, []).append(
+                {
+                    "issue_id": issue,
+                    "issue_no": number,
+                    "game_type": game,
+                    "match_order": order,
+                    "rule": rule,
+                    "source": source,
+                    "cutoff": cutoff.isoformat() if cutoff else None,
+                }
+            )
     # Contradictory current memberships for the same physical slot require review.
     counts = Counter(target.key for target in targets)
     return {target: basis for target, basis in targets.items() if counts[target.key] == 1}
@@ -230,17 +247,26 @@ def _claim(conn: Any, target: MarketTarget, basis: list[dict], now: datetime) ->
                VALUES (%s,%s,%s,%s)
                ON CONFLICT (fixture_id,kickoff_at,target_at) DO UPDATE
                SET checks=r.checks+1,last_checked_at=clock_timestamp()
-               WHERE """ + _RETRY_READY + " RETURNING last_checked_at",
-            (*target.key, Json({"sporttery_match_id": target.sporttery_id, "scopes": basis}),
-             MAX_CHECKS, now),
+               WHERE """
+            + _RETRY_READY
+            + " RETURNING last_checked_at",
+            (
+                *target.key,
+                Json({"sporttery_match_id": target.sporttery_id, "scopes": basis}),
+                MAX_CHECKS,
+                now,
+            ),
         )
         row = cur.fetchone()
     return row[0] if row else None
 
 
 def _finish(
-    target: MarketTarget, claimed: datetime, observed: datetime,
-    reference: dict | None, reason: str | None,
+    target: MarketTarget,
+    claimed: datetime,
+    observed: datetime,
+    reference: dict | None,
+    reason: str | None,
 ) -> bool:
     with get_db() as conn, conn.cursor() as cur:
         if reference is None:
@@ -278,14 +304,20 @@ def _finish(
                  AND r.last_checked_at=%s AND r.published_at IS NULL
                  AND stamp.published<r.kickoff_at""",
             (
-                reference["quote_at"], observed,
+                reference["quote_at"],
+                observed,
                 Json({key: value for key, value in reference.items() if key != "quote_at"}),
-                Json({
-                    "sporttery_match_id": target.sporttery_id, "scopes": basis,
-                    "timing": "late_dispatch" if observed >= target.target + timedelta(minutes=1)
-                    else "on_time",
-                }),
-                *target.key, claimed,
+                Json(
+                    {
+                        "sporttery_match_id": target.sporttery_id,
+                        "scopes": basis,
+                        "timing": "late_dispatch"
+                        if observed >= target.target + timedelta(minutes=1)
+                        else "on_time",
+                    }
+                ),
+                *target.key,
+                claimed,
             ),
         )
         stored = cur.rowcount == 1
@@ -321,9 +353,12 @@ def _collect(client: TitanClient, target: MarketTarget) -> tuple[dict | None, da
     if reference is None:
         return None, observed, "quote_unavailable"
     reference.update(
-        source_url=url, response_sha256=hashlib.sha256(raw).hexdigest(),
-        fixture_pages=pages, source_league_id=match["league_id"],
-        source_home=match["home_name"], source_away=match["away_name"],
+        source_url=url,
+        response_sha256=hashlib.sha256(raw).hexdigest(),
+        fixture_pages=pages,
+        source_league_id=match["league_id"],
+        source_home=match["home_name"],
+        source_away=match["away_name"],
     )
     return reference, observed, None
 
@@ -337,11 +372,15 @@ def run_due() -> dict:
             cur.execute(
                 """SELECT fixture_id,kickoff_at,target_at
                    FROM football_fixture_market_references r
-                   WHERE fixture_id=ANY(%s) AND NOT (""" + _RETRY_READY + ")",
+                   WHERE fixture_id=ANY(%s) AND NOT ("""
+                + _RETRY_READY
+                + ")",
                 (sorted({target.fixture_id for target in targets}), MAX_CHECKS, now),
             )
             blocked = set(cur.fetchall())
-            targets = {target: basis for target, basis in targets.items() if target.key not in blocked}
+            targets = {
+                target: basis for target, basis in targets.items() if target.key not in blocked
+            }
         if not targets:
             return {"status": "ok", "checked": 0, "published": 0}
     checked = published = 0
@@ -366,7 +405,9 @@ def run_due() -> dict:
                     if claimed is None:
                         continue
                     if not checked:
-                        run_id = start_tracked_job("traditional_market_reference", "crawler_agent", {})
+                        run_id = start_tracked_job(
+                            "traditional_market_reference", "crawler_agent", {}
+                        )
                     checked += 1
                     try:
                         reference, observed, reason = _collect(client, target)
@@ -374,8 +415,11 @@ def run_due() -> dict:
                         _finish(target, claimed, datetime.now(UTC), None, "source_unavailable")
                         raise
                     except (httpx.HTTPError, ValueError) as exc:
-                        logger.info("Traditional market source unavailable for #%s: %s",
-                                    target.fixture_id, exc)
+                        logger.info(
+                            "Traditional market source unavailable for #%s: %s",
+                            target.fixture_id,
+                            exc,
+                        )
                         reference, observed, reason = None, datetime.now(UTC), "source_unavailable"
                     published += _finish(target, claimed, observed, reference, reason)
     except AcquisitionStopped as exc:

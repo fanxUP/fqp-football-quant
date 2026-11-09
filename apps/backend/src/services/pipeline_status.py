@@ -52,7 +52,9 @@ JOB_DEFINITIONS: dict[str, JobDefinition] = {
         "传统足彩当前赛程与变更", "每10分钟", "official", max_age=timedelta(minutes=35)
     ),
     "traditional_market_reference": JobDefinition(
-        "传统足彩胜平负市场参考", "每分钟检查到期场次", "official",
+        "传统足彩胜平负市场参考",
+        "每分钟检查到期场次",
+        "official",
         enabled_env="FQP_TRADITIONAL_MARKET_REFERENCE_ENABLED",
     ),
     "settle_finished_matches": JobDefinition(
