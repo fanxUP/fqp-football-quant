@@ -1,106 +1,20 @@
 {
   "schema_version": 4,
-  "current_task": "PREMATCH-ODDS-REST-DISPLAY",
+  "current_task": "P108-01-IDENTITY-BRIDGE",
   "tasks": {
-    "PREMATCH-LOCAL-REGRESSION": {
-      "title": "Validate scheduling, official notices, prediction fencing and traditional market references",
-      "acceptance_id": "A-PREMATCH-LOCAL",
+    "P108-01-IDENTITY-BRIDGE": {
+      "title": "Build an auditable source-player-ID to canonical-player mapping bridge",
+      "acceptance_id": "A-P108-01",
       "depends_on": [],
-      "kind": "local_regression",
+      "kind": "schema_and_local_identity_bridge",
       "status": "DONE",
       "definition_of_done": [
-        "Targeted Python/PostgreSQL regressions pass without skips.",
-        "Frontend tests, typecheck and production build pass.",
-        "Ruff and diff checks pass."
-      ]
-    },
-    "PREMATCH-MIGRATION-REHEARSAL": {
-      "title": "Rehearse ordered migrations 132 and 133 in isolated PostgreSQL",
-      "acceptance_id": "A-PREMATCH-MIGRATION",
-      "depends_on": [
-        "PREMATCH-LOCAL-REGRESSION"
-      ],
-      "kind": "isolated_postgresql_rehearsal",
-      "status": "DONE",
-      "definition_of_done": [
-        "Disposable PG16 synthetic schema only; no production data copy.",
-        "Runtime role is non-superuser and non-owner; ACL and business paths pass.",
-        "Rollback refuses destructive removal and preserves receipts/references.",
-        "Up/down hashes, 2-second lock timeout, 30-second statement timeout, and zero-skip test evidence are recorded."
-      ]
-    },
-    "PREMATCH-INDEPENDENT-REVIEW": {
-      "title": "Complete independent code, migration and security review",
-      "acceptance_id": "A-PREMATCH-REVIEW",
-      "depends_on": [
-        "PREMATCH-LOCAL-REGRESSION"
-      ],
-      "kind": "independent_review",
-      "status": "DONE",
-      "definition_of_done": [
-        "Read-only reviewer confirms no blocking correctness, data-loss, permissions, or migration issue.",
-        "Any minor semantics are documented in code or acceptance evidence."
-      ]
-    },
-    "PREMATCH-EXACT-HEAD-CI": {
-      "title": "Push the reviewed candidate to GitHub main and verify exact-head CI",
-      "acceptance_id": "A-PREMATCH-CI",
-      "depends_on": [
-        "PREMATCH-MIGRATION-REHEARSAL",
-        "PREMATCH-INDEPENDENT-REVIEW"
-      ],
-      "kind": "external_ci",
-      "status": "DONE",
-      "definition_of_done": [
-        "Commit on main only; GitHub main equals the local commit.",
-        "Required test and lint/typecheck workflows pass for that exact SHA."
-      ]
-    },
-    "PREMATCH-WRITER-LOCK-WAIT-REPAIR": {
-      "title": "Prevent official schedule writers from failing on the 2-second advisory-lock timeout",
-      "acceptance_id": "A-PREMATCH-WRITER-LOCK-WAIT",
-      "depends_on": [
-        "PREMATCH-LOCAL-REGRESSION"
-      ],
-      "kind": "local_regression",
-      "status": "DONE",
-      "definition_of_done": [
-        "An isolated PostgreSQL regression holds the schedule fence beyond 2 seconds and proves the notice writer completes after release.",
-        "The writer restores its original lock timeout after acquiring the advisory lock; the pool writer uses the same helper.",
-        "Focused tests, static checks, exact-head CI, independent read-only review and deployment smoke pass."
-      ]
-    },
-    "PREMATCH-BETTING-CUTOFF-FALLBACK": {
-      "title": "Show current official selling matches when the operator omits a match cutoff",
-      "acceptance_id": "A-BETTING-CUTOFF-FALLBACK",
-      "depends_on": [
-        "PREMATCH-LOCAL-REGRESSION",
-        "PREMATCH-INDEPENDENT-REVIEW",
-        "PREMATCH-EXACT-HEAD-CI"
-      ],
-      "kind": "api_regression",
-      "status": "DONE",
-      "definition_of_done": [
-        "Recent official Selling status and future kickoff are required; known expired cutoffs are excluded.",
-        "A missing cutoff requires recent same-match odds and a live selling pool with no nested cutoff evidence.",
-        "Focused route regressions and isolated PostgreSQL eligibility/JSONPath edge cases pass.",
-        "Independent read-only review and exact-main CI pass."
-      ]
-    },
-    "PREMATCH-ODDS-REST-DISPLAY": {
-      "title": "Display saved official odds for upcoming matches during sales rest",
-      "acceptance_id": "A-ODDS-REST-DISPLAY",
-      "depends_on": [
-        "PREMATCH-BETTING-CUTOFF-FALLBACK"
-      ],
-      "kind": "api_regression",
-      "status": "DONE",
-      "definition_of_done": [
-        "Current index and odds endpoint share rest-time eligibility for upcoming fixtures with canonical saved snapshots.",
-        "Open-sales and historical-date query behavior remain covered by regressions.",
-        "Frontend explains the rest window and exposes source snapshot freshness.",
-        "Targeted tests, isolated PostgreSQL verification, frontend typecheck/build, independent review, exact-main CI, and production smoke pass.",
-        "Exact main SHA is deployed to 100.121.47.26 without database backup or business data writes."
+        "A source identity is unique by source_name and external_player_id and can point only to a canonical players.id.",
+        "Mapping state, evidence references, method, confidence, review metadata, and revisions are persisted with append-only history.",
+        "Only verified mappings resolve; explicit non-verified mappings fail closed; API-Football exact player_code lookup remains compatible.",
+        "The file-only candidate report is deterministic and never marks a candidate as verified.",
+        "Isolated PostgreSQL 16 verifies uniqueness, ambiguity, status transitions, idempotency, runtime read-only grants, up/down/re-up, and rollback refusal with existing mapping rows.",
+        "No production data import, provider call, rollout, or probability change is part of this slice."
       ]
     }
   }

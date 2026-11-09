@@ -1,191 +1,66 @@
 {
   "schema_version": 4,
-  "current_task": "PREMATCH-SCHEDULE-MARKET-REFERENCE-20261109",
+  "current_task": "P108-01-IDENTITY-BRIDGE",
   "acceptance": {
-    "A-PREMATCH-LOCAL": {
+    "A-P108-01": {
       "status": "PASS",
-      "command": "env FQP_PREMATCH_TEST_DSN=postgresql://fqp@127.0.0.1:55482/fqp_prematch_test_market_role DATABASE_URL=postgresql://fqp@127.0.0.1:55482/fqp_prematch_test_market_role FQP_P106_TEST_DATABASE_URL=postgresql://estefan-macworkstation@127.0.0.1:55482/fqp_p106_test_release .venv/bin/python -m pytest -q tests/test_local/test_release_migration_policy.py tests/test_scripts/test_prematch_schedule.py tests/test_scripts/test_traditional_market_reference.py tests/test_computation/test_prediction_job_execution_postgres.py tests/test_scripts/test_derived_play_predictions.py tests/test_scripts/test_run_model_prediction.py tests/test_scripts/test_sporttery_pool_schedule.py tests/test_jobs/test_run_scheduler.py tests/test_scripts/test_official_odds_capture.py",
+      "command": "Dedicated disposable PostgreSQL 16: pytest -q tests/test_scripts/test_player_identity_bridge.py tests/test_scripts/test_player_identity_candidates.py tests/test_computation/test_player_identity_bridge_postgres.py; CI fallback database: pytest -q tests/test_computation/test_player_identity_bridge_postgres.py; Ruff check/format, mypy, git diff --check, V4 scope check, V4 budget check.",
       "exit_code": 0,
-      "summary": "308 项本地定向回归通过；新增的 match-review PostgreSQL 夹具用例本地 1/1 通过。精确提交 GitHub CI 随后覆盖完整 3,835 项回归。 Follow-up on the current source tree: schedule and pool writer scripts had 18 passed, 6 DSN-gated skips; the new isolated lock-wait regression passed 1/1, and the helper/order unit regression passed 1/1. Final follow-up verification: 18 script tests passed and 6 unrelated DSN-gated PostgreSQL cases skipped locally; the new isolated lock-wait regression and pool writer-order regression each passed. The lock-wait test also passed via the GitHub-CI fqp_test branch.",
+      "summary": "Dedicated PostgreSQL 16 database at 127.0.0.1 with marker fqp-p108-player-identity-test/v1: 29 passed, 0 skipped. CI fallback fqp_history_test_ci: 10 passed, 0 skipped. High-precision confidence and concurrent first-insert regressions both reproduced before their fixes and passed afterward. Tests cover source identity uniqueness, revisions/idempotency, verified remap rejection, append-only audit with owner UPDATE/DELETE/TRUNCATE rejection, runtime fqp role denied INSERT/UPDATE/DELETE/TRUNCATE on both tables, API-Football exact fallback, down refusal preserving rows, and empty down/up. Ruff, format (5 files), mypy (2 modules), diff, scope (8/8), and budget (8/8; 7 new, 2 SQL, 0 dependencies) passed.",
       "timed_out": false,
-      "environment": "Local macOS development; isolated PostgreSQL 16.13; production target 100.121.47.26 via SSH password authentication.",
-      "revision": "d90a6b3610757a44ee5b98a9716343b304196364",
+      "environment": "Local macOS; disposable PostgreSQL 16 container and synthetic schemas only; no production DB/API access or data import.",
+      "revision": "b5d67bb442975b8ee07bc5d89ae17a6731c16b2e",
       "dirty_tree": true,
-      "tree_fingerprint": "b66fc4b4ba2343092b0b3d1e4d6e3e384d75444d4e9cf70a33c7f71c07bc1b89",
-      "verified_at": "2026-11-09T20:33:10.217278+08:00",
-      "evidence_tree_refreshed_at": "2026-11-10T02:23:01+08:00",
-      "note": ""
-    },
-    "A-PREMATCH-MIGRATION": {
-      "status": "PASS",
-      "command": "PYTHONPATH=. .venv/bin/python /private/tmp/fqp-prematch-migration-rehearsal-detailed.py",
-      "exit_code": 0,
-      "summary": "{\"status\": \"passed\", \"database\": {\"disposable\": true, \"postgres_major\": 16, \"fixture_kind\": \"synthetic_schema_fixture\", \"production_data_copy\": false}, \"pending_migrations\": [\"132_prematch_prediction_schedule.sql\", \"133_traditional_market_reference.sql\"], \"checks\": {\"existing_rows_preserved\": \"passed\", \"constraints_and_triggers_verified\": \"passed\", \"application_role\": {\"name\": \"fqp\", \"superuser\": false, \"owns_new_tables\": false}, \"application_business_paths\": \"passed\", \"published_reference_protection\": \"passed\", \"rollback_preserves_runtime_data_132\": \"passed\", \"rollback_preserves_runtime_data_133\": \"passed\", \"rollback_preserves_runtime_data\": \"passed\", \"transaction_rollback_verified\": \"passed\"}, \"application_role_acl\": \"passed\", \"application_business_paths\": \"passed\", \"published_reference_protection\": \"passed\", \"rollback_preserves_runtime_data\": \"passed\", \"transaction_rollback_verified\": \"passed\", \"timeouts\": {\"lock_seconds\": 2, \"statement_seconds\": 30}, \"test_results\": {\"passed\": 8, \"failed\": 0, \"skipped\": 0, \"checks\": [\"existing rows preserved\", \"constraints and triggers verified\", \"restricted runtime role\", \"application business paths\", \"published reference immutability\", \"down migration 132 preserves receipt data\", \"down migration 133 preserves published references\", \"transaction rollback\"]}, \"migration_sha256\": {\"132_prematch_prediction_schedule.sql\": \"da80a5386d29f24f9cc1a182532c929a3c44a908e276a329e5ac1c3cd050a524\", \"133_traditional_market_reference.sql\": \"bad49ba6686f18d9e7f6252feea3dc183dc27475e379722c6ee732c3c6f43fc7\"}, \"down_migration_sha256\": {\"132_prematch_prediction_schedule.down.sql\": \"edb7843304cd0e06456cabc1f84e00f049913f9821c81e1eaa22837d4bd83cd3\", \"133_traditional_market_reference.down.sql\": \"d3f2b66c012b022bdb1d7f607773bc2033f17cda79c64ae2603b18437d09d274\"}}",
-      "timed_out": false,
-      "environment": "Local macOS development; isolated PostgreSQL 16.13; production target 100.121.47.26 via SSH password authentication.",
-      "revision": "634acad93607de3542df460f20b80383425f76f0",
-      "dirty_tree": false,
-      "tree_fingerprint": "b66fc4b4ba2343092b0b3d1e4d6e3e384d75444d4e9cf70a33c7f71c07bc1b89",
-      "verified_at": "2026-11-09T18:44:00.823404+08:00",
-      "evidence_tree_refreshed_at": "2026-11-10T02:23:01+08:00",
-      "note": ""
-    },
-    "A-PREMATCH-FRONTEND": {
-      "status": "PASS",
-      "command": "npm --prefix apps/frontend test; npm --prefix apps/frontend run typecheck; npm --prefix apps/frontend run build (executed as three read-only local checks)",
-      "exit_code": 0,
-      "summary": "Frontend suite: 703 tests passed in 96 files. TypeScript typecheck passed. Production build passed with the existing >500 kB PitchScene chunk advisory. No frontend source changed after these checks.",
-      "timed_out": false,
-      "environment": "Local Node/Vite toolchain on macOS",
-      "revision": "5f5ef27cd80c8f2f1338d04a6e825d87732fa476",
-      "dirty_tree": true,
-      "tree_fingerprint": "b66fc4b4ba2343092b0b3d1e4d6e3e384d75444d4e9cf70a33c7f71c07bc1b89",
-      "verified_at": "2026-11-09T17:48:09.027704+08:00",
-      "evidence_tree_refreshed_at": "2026-11-10T02:23:01+08:00",
-      "note": ""
-    },
-    "A-PREMATCH-STATIC": {
-      "status": "PASS",
-      "command": "/bin/zsh -c '.venv/bin/ruff check scripts/prematch_schedule.py scripts/sporttery_schedule_notices.py scripts/sporttery_pool_schedule.py tests/test_scripts/test_prematch_schedule.py tests/test_scripts/test_sporttery_pool_schedule.py && .venv/bin/ruff format --check scripts/prematch_schedule.py scripts/sporttery_schedule_notices.py scripts/sporttery_pool_schedule.py tests/test_scripts/test_prematch_schedule.py tests/test_scripts/test_sporttery_pool_schedule.py && .venv/bin/mypy apps/backend/src scripts --explicit-package-bases && git diff --check'",
-      "exit_code": 0,
-      "summary": "All checks passed!\n5 files already formatted\napps/backend/src/db.py:105: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]\napps/backend/src/routers/competition.py:166: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]\nscripts/league_reference_storage.py:314: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]\nscripts/league_reference_storage.py:407: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]\nscripts/league_reference_storage.py:439: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]\nSuccess: no issues found in 349 source files\n Final follow-up: Ruff check/format passed and mypy reported no issues across 349 source files.",
-      "timed_out": false,
-      "environment": "Local macOS development; isolated PostgreSQL 16.13; production target 100.121.47.26 via SSH password authentication.",
-      "revision": "d90a6b3610757a44ee5b98a9716343b304196364",
-      "dirty_tree": true,
-      "tree_fingerprint": "b66fc4b4ba2343092b0b3d1e4d6e3e384d75444d4e9cf70a33c7f71c07bc1b89",
-      "verified_at": "2026-11-09T20:33:10.217278+08:00",
-      "evidence_tree_refreshed_at": "2026-11-10T02:23:01+08:00",
-      "note": ""
-    },
-    "A-PREMATCH-REVIEW": {
-      "status": "PASS",
-      "command": "Independent read-only review of the 44-path business diff, both SQL migrations, rollback paths and no-backup policy.",
-      "exit_code": 0,
-      "summary": "Independent review passed for the original 44-path business diff, SQL migrations and no-backup policy. The later four-file typing correction was limited to type narrowing and explicit keyword arguments; the 45th path is a test-only schema-fixture correction discovered by CI. Both are documented, with local tests and exact-head CI passing; production logic was not changed by the fixture follow-up. Follow-up independent review of the bounded lock-wait change passed with one minor test-cleanup finding; writer-thread termination is now asserted before cleanup. Follow-up independent read-only review passed; the one minor test cleanup finding was addressed with a writer-thread termination assertion.",
-      "timed_out": false,
-      "environment": "Independent read-only review",
-      "revision": "d90a6b3610757a44ee5b98a9716343b304196364",
-      "dirty_tree": true,
-      "tree_fingerprint": "b66fc4b4ba2343092b0b3d1e4d6e3e384d75444d4e9cf70a33c7f71c07bc1b89",
-      "verified_at": "2026-11-09T20:33:10.217278+08:00",
-      "evidence_tree_refreshed_at": "2026-11-10T02:23:01+08:00",
-      "note": ""
-    },
-    "A-PREMATCH-CI": {
-      "status": "PASS",
-      "command": "GitHub Actions CI push run 42636725983 for main@8e4558fc2d4308506c1a882f6035916e032e9f1c",
-      "exit_code": 0,
-      "summary": "Exact main commit completed lint-and-typecheck and test successfully; full suite: 3,806 passed, 32 skipped, 43 warnings in 494.83s.",
-      "timed_out": false,
-      "environment": "GitHub Actions, Ubuntu; isolated PostgreSQL 16 and Redis services.",
-      "revision": "8e4558fc2d4308506c1a882f6035916e032e9f1c",
-      "dirty_tree": false,
-      "tree_fingerprint": "b66fc4b4ba2343092b0b3d1e4d6e3e384d75444d4e9cf70a33c7f71c07bc1b89",
-      "verified_at": "2026-11-09T22:54:30.204707+08:00",
-      "run_id": 42636725983,
-      "url": "https://github.com/fanxUP/fqp-football-quant/actions/runs/42636725983",
-      "required_jobs": {
-        "lint-and-typecheck": "success",
-        "test": "success"
-      },
-      "evidence_tree_refreshed_at": "2026-11-10T02:23:01+08:00",
-      "note": ""
-    },
-    "A-PREMATCH-WRITER-LOCK-WAIT": {
-      "status": "PASS",
-      "command": ".venv/bin/python -m pytest -q tests/test_scripts/test_prematch_schedule.py::test_notice_writer_waits_past_default_lock_timeout_for_prediction_fence tests/test_scripts/test_sporttery_pool_schedule.py::test_pool_schedule_writer_bounds_only_the_shared_notice_lock_wait",
-      "exit_code": 0,
-      "summary": "============================= test session starts ==============================\nplatform darwin -- Python 3.14.6, pytest-9.1.1, pluggy-1.7.0\nrootdir: /Volumes/Nas/FQP/code\nconfigfile: pyproject.toml\nplugins: mock-3.15.1, cov-7.1.0, asyncio-1.4.0, anyio-4.15.1, platformdirs-4.13.5\nasyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function\ncollected 2 items\n\ntests/test_scripts/test_prematch_schedule.py .                           [ 50%]\ntests/test_scripts/test_sporttery_pool_schedule.py .                     [100%]\n\n============================== 2 passed in 2.44s ===============================\n",
-      "timed_out": false,
-      "environment": "Local macOS development; isolated PostgreSQL 16.13; production target 100.121.47.26 via SSH password authentication.",
-      "revision": "d90a6b3610757a44ee5b98a9716343b304196364",
-      "dirty_tree": true,
-      "tree_fingerprint": "b66fc4b4ba2343092b0b3d1e4d6e3e384d75444d4e9cf70a33c7f71c07bc1b89",
-      "verified_at": "2026-11-09T20:32:36.531695+08:00",
-      "evidence_tree_refreshed_at": "2026-11-10T02:23:01+08:00",
-      "note": ""
-    },
-    "A-BETTING-CUTOFF-FALLBACK": {
-      "status": "PASS",
-      "command": ".venv/bin/python -m pytest -q tests/test_api/test_simulator_matches.py tests/test_scripts/test_business_time.py::test_business_time_sql_is_used_for_naive_match_timestamps; isolated PostgreSQL 16 synthetic eligibility and nested-JSON cutoff edge regressions",
-      "exit_code": 0,
-      "summary": "Ten focused local tests passed (nine betting-route regressions and the business-time guard); isolated PostgreSQL 16 synthetic eligibility and nested-cutoff JSONPath checks passed; Ruff, format, mypy and diff checks passed. Independent follow-up review passed after resolving the nested-cutoff finding. Exact-head GitHub CI run 42636725983 passed lint-and-typecheck and the full suite (3,806 passed, 32 skipped).",
-      "timed_out": false,
-      "environment": "Local macOS; disposable PostgreSQL 16 synthetic fixture; production database read-only inspection only.",
-      "revision": "8e4558fc2d4308506c1a882f6035916e032e9f1c",
-      "dirty_tree": false,
-      "tree_fingerprint": "b66fc4b4ba2343092b0b3d1e4d6e3e384d75444d4e9cf70a33c7f71c07bc1b89",
-      "verified_at": "2026-11-09T22:54:30.204707+08:00",
-      "evidence_tree_refreshed_at": "2026-11-10T02:23:01+08:00",
-      "run_id": 42636725983,
-      "url": "https://github.com/fanxUP/fqp-football-quant/actions/runs/42636725983",
-      "required_jobs": {
-        "lint-and-typecheck": "success",
-        "test": "success"
-      }
-    },
-    "A-ODDS-REST-DISPLAY": {
-      "status": "PASS",
-      "command": ".venv/bin/python -m pytest -q tests/test_api/test_odds_movements.py tests/test_api/test_official_router.py; npm --prefix apps/frontend test -- src/pages/OddsMovementPage.test.tsx; disposable PostgreSQL 16 read-only smoke; Ruff; frontend typecheck and production build",
-      "exit_code": 0,
-      "summary": "8 backend route regressions and 19 focused frontend tests passed. An isolated PostgreSQL 16 smoke verified matching rest-time index/list counts, canonical play isolation, snapshot ordering, historical filtering, and unchanged open-sales eligibility. Ruff, TypeScript typecheck, production build, and git diff checks passed.",
-      "timed_out": false,
-      "environment": "Local macOS; disposable PostgreSQL 16 synthetic schema; no production database access or business data writes.",
-      "revision": "7f5bb6b4037829fe7a1d37778e29826d9a3bb165",
-      "dirty_tree": true,
-      "tree_fingerprint": "b66fc4b4ba2343092b0b3d1e4d6e3e384d75444d4e9cf70a33c7f71c07bc1b89",
-      "verified_at": "2026-11-10T02:23:01+08:00",
-      "note": "Exact-main CI and production read-only smoke are separate release checks recorded after this local regression evidence."
+      "tree_fingerprint": "c7dba1d4f81e9c14cab4f427c3fa33a7d63ad7f6a1156fe7a7839dea761a5867",
+      "verified_at": "2026-11-10T03:56:21.170437+08:00"
     }
   },
   "reviews": {
     "status": "PASS",
     "application_code": {
       "status": "PASS",
-      "record": ".vibe/ODDS-REST-DISPLAY-REVIEW.md",
-      "note": "Independent read-only review of rest-time fixture eligibility, count/list parity, open and history behavior, SQL binding, read-only HTTP semantics, and freshness labeling found no release-stopping issue."
+      "record": ".vibe/P108-01-INDEPENDENT-REVIEW.md",
+      "note": "Separate read-only review passed after fixing NUMERIC(6,5) idempotency, concurrent first-insert handling, and adding audit owner DELETE/TRUNCATE tests.",
+      "reviewed_at": "2026-11-10T03:58:42.426823+08:00"
     },
     "v4_migration": {
       "status": "PASS",
-      "record": ".vibe/PREMATCH-INDEPENDENT-REVIEW.md",
-      "note": "No SQL, schema, migration, database ownership, or ACL files changed in this follow-up. The previous independently reviewed migration evidence remains applicable."
+      "record": ".vibe/P108-01-INDEPENDENT-REVIEW.md",
+      "note": "Review confirmed migration ownership path, read-only fqp grants, audit immutability, up/down safety, and isolated PostgreSQL evidence; no production apply is in scope.",
+      "reviewed_at": "2026-11-10T03:58:42.426823+08:00"
     }
   },
   "security": {
     "status": "PASS",
-    "reviewed_at": "2026-11-10T02:23:01+08:00",
-    "record": ".vibe/ODDS-REST-DISPLAY-REVIEW.md",
-    "note": "The follow-up is a read-only GET using parameterized SQL and a fixed canonical play type list. It introduces no secrets, permissions, external calls, or data writes."
+    "record": ".vibe/P108-01-INDEPENDENT-REVIEW.md",
+    "reviewed_at": "2026-11-10T03:58:42.426823+08:00",
+    "note": "No secrets, provider calls, model changes, or production access were added. Runtime role ACLs are verified read-only; only verified mappings resolve."
   },
   "migration": {
-    "status": "NOT_APPLICABLE",
-    "target_migrations": [],
-    "note": "This odds visibility follow-up changes no database schema or migration."
-  },
-  "external_ci": {
-    "status": "passed",
-    "checks": {
-      "lint-and-typecheck": "passed",
-      "test": "passed"
-    },
-    "workflow": "CI",
-    "event": "push",
-    "branch": "main",
-    "head_sha": "8e4558fc2d4308506c1a882f6035916e032e9f1c",
-    "run_id": 42636725983,
-    "url": "https://github.com/fanxUP/fqp-football-quant/actions/runs/42636725983",
-    "summary": "Exact main commit completed lint-and-typecheck and test successfully; full suite: 3,806 passed, 32 skipped, 43 warnings in 494.83s."
-  },
-  "production": {
-    "status": "NOT_ACCESSED",
-    "production_database_access": false,
-    "business_data_writes": 0,
-    "database_backup_created": false
+    "status": "PASS",
+    "target_migrations": [
+      "sql/134_player_identity_bridge.sql",
+      "sql/down/134_player_identity_bridge.down.sql"
+    ],
+    "rehearsal": "Isolated PostgreSQL 16 only; up/down/up passed; down refused with existing mapping rows and preserved them; all runtime DML operations are denied to fqp on current mappings and audit events are inaccessible; audit owner UPDATE/DELETE/TRUNCATE mutations were rejected; SQL hashes recorded below.",
+    "migration_sha256": "2c3f5abb198921676b7c7b3732c703e4ff346db900da40a6bd6069193b68451a",
+    "down_migration_sha256": "e719d5cea796d6a6d8c113261f1b362c162a1307f2129ffe722a5206e9825b8b",
+    "verified_at": "2026-11-10T03:56:21.170437+08:00",
+    "production_applied": false
   },
   "quality_gate": {
-    "status": "READY_TO_MERGE",
-    "checked_at": "2026-11-10T02:25:11.859154+08:00",
-    "failures": []
+    "status": "PENDING"
+  },
+  "external_ci": {
+    "status": "PENDING",
+    "checks": {},
+    "note": "Push to main will trigger CI; the workflow list contains only CI and no automatic production deploy workflow."
+  },
+  "production": {
+    "status": "NOT_APPLICABLE",
+    "production_database_access": false,
+    "business_data_writes": 0,
+    "database_backup_created": false,
+    "note": "P108-01 is a local schema/helper slice; it does not authorize production rollout or player import."
   }
 }

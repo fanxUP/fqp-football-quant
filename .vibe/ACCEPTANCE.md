@@ -1,18 +1,11 @@
-# Acceptance: prematch schedule and traditional market references
+# P108-01 验收
 
-- Target time follows the authorized kickoff/cutoff rule, including equality, next-day and year-boundary cases.
-- Official schedule notices cover postponements, cancellations and temporary additions; concurrent notice updates fence scheduled predictions.
-- Model runs use current eligible quotes, preserve fixture identity and do not publish after an input supersession.
-- Traditional pool market references are pre-kickoff-only, tied to one exact fixture and current bookmaker quote, separately labeled, and protected after publication.
-- Local PostgreSQL tests prove both migrations, restricted `fqp` ACL/business paths, published-reference protection and data-preserving rollback refusal.
-- Frontend tests/typecheck/build, targeted backend regression, Ruff and GitHub CI pass.
-- `main` is the only branch; publish to GitHub, deploy to `100.121.47.26` without a database backup, then verify migrations, release identity, services, readiness and protected critical paths.
-
-## Follow-up: odds movement during sales rest
-
-- During sales rest, the current odds index and current odds response count the same upcoming scheduled official matches that have at least one saved canonical Sporttery odds snapshot.
-- Current odds results still return each selected play's full stored snapshot series and preserve the snapshot timestamps.
-- Open-sales matching and historical-date filtering retain their previous eligibility rules.
-- The page explains sales rest when saved odds are visible, and shows a useful empty message when no eligible snapshot exists.
-- Targeted backend/frontend regressions, isolated PostgreSQL behavior checks, frontend typecheck/build, exact-main CI and production read-only smoke pass.
-- Deploy the exact GitHub `main` SHA to `100.121.47.26` without creating a database backup or writing business data.
+- `(source_name, external_player_id)` 唯一，canonical 外键有效，状态和置信区间受数据库约束。
+- 身份状态每次实质变更增加单调修订和 append-only 审计事件；同一输入重复提交无新事件。
+- `verified` 要求目标、证据、方法、置信、审查人和时间齐全；其他状态不进入解析结果。
+- 已登记的非 verified 来源 ID fail closed；禁止 verified 直接指向另一 canonical player。
+- API-Football 精确 `player_code` 兼容，不以姓名/birth/team 自动匹配。
+- 候选 CSV 报告稳定、只读、可复现，候选状态从不等同 verified。
+- 隔离 PostgreSQL 16 验证应用角色仅读、up/down/up、回滚保留规则及现有测试夹具不受影响。
+- GitHub CI 的 required-module 校验确认该 PostgreSQL 测试模块实际运行且无跳过。
+- P108-01 不导入生产数据、不接入模型、不宣称球员归属/资格/出场分钟已完整。

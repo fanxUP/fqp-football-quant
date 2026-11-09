@@ -1,0 +1,40 @@
+{
+  "schema_version": 4,
+  "execution": {
+    "command_timeout_seconds": 1800
+  },
+  "commands": {
+    "test": ".venv/bin/python -m pytest -q tests/test_local/test_release_migration_policy.py tests/test_scripts/test_prematch_schedule.py tests/test_scripts/test_traditional_market_reference.py tests/test_computation/test_prediction_job_execution_postgres.py tests/test_scripts/test_derived_play_predictions.py tests/test_scripts/test_run_model_prediction.py tests/test_scripts/test_sporttery_pool_schedule.py tests/test_jobs/test_run_scheduler.py tests/test_scripts/test_official_odds_capture.py",
+    "lint": ".venv/bin/ruff check ops/server/release_migration_policy.py scripts/prematch_schedule.py scripts/sporttery_pool_schedule.py scripts/sporttery_schedule_notices.py scripts/traditional_market_reference.py scripts/jobs/run_model_prediction.py scripts/jobs/run_scheduler.py scripts/official_crawler.py scripts/official_odds_capture.py scripts/official_storage.py tests/test_local/test_release_migration_policy.py tests/test_scripts/test_prematch_schedule.py tests/test_scripts/test_sporttery_pool_schedule.py tests/test_scripts/test_traditional_market_reference.py && git diff --check",
+    "typecheck": "npm --prefix apps/frontend run typecheck"
+  },
+  "paths": {
+    "dependency_files": [
+      "requirements.txt",
+      "requirements-dev.txt",
+      "pyproject.toml",
+      "apps/backend/requirements.txt",
+      "apps/backend/pyproject.toml",
+      "apps/frontend/package.json",
+      "apps/frontend/package-lock.json"
+    ],
+    "migrations": [
+      "**/migrations/**",
+      "**/*.sql"
+    ],
+    "ignore_untracked": [
+      "uv.lock"
+    ]
+  },
+  "quality_gate": {
+    "engine_path": "/Users/estefan-macworkstation/.remote-vibe-coding/engine/vibe.py",
+    "repository": "fanxUP/fqp-football-quant",
+    "required_branch": "main",
+    "required_workflow": "CI",
+    "required_checks": [
+      "test",
+      "lint-and-typecheck"
+    ],
+    "preflight": "python3 -I -S -B .vibe/quality_gate.py --repo ."
+  }
+}

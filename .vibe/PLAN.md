@@ -1,11 +1,8 @@
-# Prematch scheduling and traditional market references
+# P108-01 实施计划：外部球员身份桥
 
-Task: `PREMATCH-SCHEDULE-MARKET-REFERENCE-20261109` on the existing `main` branch.
-
-Implement and release the agreed prediction-time rules: use kickoff minus two hours when kickoff is before the official Sporttery cutoff; otherwise use 20:30 China Standard Time. Reconcile official fixture changes and temporary additions before a scheduled run, and prevent stale odds or changed schedule inputs from being published. For traditional lottery issues, collect a pre-kickoff Titan007 1X2 market reference as a separate review signal; it must not replace model predictions or official results.
-
-The release adds migrations 132 and 133 as one pinned ordered pair. User authorized submission and server deployment without creating a database backup. Production migration is permitted only after isolated PostgreSQL rehearsal and exact-head CI. No unrelated model redesign or data backfill is in scope.
-
-## Follow-up: odds movement during sales rest
-
-During official sales rest, show upcoming official fixtures that already have saved Sporttery odds snapshots. Use the same eligibility rule for the current match count and the current movement query. Preserve the open-sales filter and historical-date query. Label the rest notice and expose each match's source snapshot time so the user can judge its freshness.
+1. 固定范围为迁移 134、身份映射读写 helper、文件输入候选报告、三组定向测试和 CI 必跑模块登记。
+2. 先写 RED：验证外部 ID 唯一、状态转换、审计修订、幂等、歧义不解析、API-Football 旧 player_code 兼容和报告确定性。
+3. 添加 PostgreSQL 16 隔离测试；迁移只新建空表/触发器并提供保护数据的 down，运行 up/down/up 和回滚拒绝测试。
+4. 运行目标 pytest、Ruff、格式、Mypy、scope/budget/diff 检查。所有 PG 测试必须使用 127.0.0.1 上显式命名的 disposable 数据库。
+5. 不读取生产数据库，不导入本地 Titan 数据，不调用供应商 API，不更改预测或模型消费行为。
+6. 本地验收后再检查 GitHub exact-head CI 与审查；任何生产迁移/导入须另行评估存储、恢复策略和运行时权限。

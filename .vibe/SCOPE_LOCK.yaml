@@ -1,28 +1,34 @@
 {
   "schema_version": 4,
-  "task_id": "PREMATCH-ODDS-REST-DISPLAY-20261110",
+  "task_id": "P108-01-IDENTITY-BRIDGE",
+  "objective": "Create a source-scoped external player ID bridge to canonical players with auditable manual verification; no player facts are imported or consumed by models.",
   "allowed_paths": [
-    "apps/backend/src/routers/official.py",
-    "apps/backend/src/services/odds_movement.py",
-    "apps/frontend/src/pages/OddsMovementPage.tsx",
-    "apps/frontend/src/pages/OddsMovementPage.test.tsx",
-    "tests/test_api/test_odds_movements.py",
-    "tests/test_api/test_official_router.py"
+    ".github/workflows/ci.yml",
+    "sql/134_player_identity_bridge.sql",
+    "sql/down/134_player_identity_bridge.down.sql",
+    "scripts/player_identity_bridge.py",
+    "scripts/player_identity_candidates.py",
+    "tests/test_scripts/test_player_identity_bridge.py",
+    "tests/test_scripts/test_player_identity_candidates.py",
+    "tests/test_computation/test_player_identity_bridge_postgres.py"
   ],
   "protected_paths": [
-    "apps/**",
+    ".github/**",
     "scripts/**",
     "tests/**",
     "sql/**",
-    "ops/server/**"
+    "requirements*.txt",
+    "**/package*.json"
   ],
   "approved_protected_paths": [
-    "apps/backend/src/routers/official.py",
-    "apps/backend/src/services/odds_movement.py",
-    "apps/frontend/src/pages/OddsMovementPage.tsx",
-    "apps/frontend/src/pages/OddsMovementPage.test.tsx",
-    "tests/test_api/test_odds_movements.py",
-    "tests/test_api/test_official_router.py"
+    ".github/workflows/ci.yml",
+    "sql/134_player_identity_bridge.sql",
+    "sql/down/134_player_identity_bridge.down.sql",
+    "scripts/player_identity_bridge.py",
+    "scripts/player_identity_candidates.py",
+    "tests/test_scripts/test_player_identity_bridge.py",
+    "tests/test_scripts/test_player_identity_candidates.py",
+    "tests/test_computation/test_player_identity_bridge_postgres.py"
   ],
-  "notes": "Single-main follow-up. The odds index and current movement endpoint share the sales-window-aware fixture eligibility predicate. Changes are limited to the six listed implementation and regression files; no API schema or database migration was added."
+  "notes": "One main branch only. Additive schema/helper/candidate report and isolated PostgreSQL regression are explicitly required in CI, so the CI verifier must fail if that module is skipped. No production access, data import, or API/model behavior change."
 }

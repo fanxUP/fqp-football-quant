@@ -1,3 +1,8 @@
-# Release quality gate
+# P108-01 质量门禁
 
-Commit the scoped 45 paths for this task, including the one test-only fixture correction required by exact-head CI, plus the workflow controls/evidence. Keep the single `main` branch and do not create backup branches or database backups. Exact-head GitHub CI, independent code/migration review, security review and isolated PostgreSQL 16 migration rehearsal must pass. Migrations 132 and 133 must be pending together in order and match their pinned up/down checksums. Before production apply, record current release SHA, rollback SHA, service health, migration plan, no-backup authorization and rehearsal evidence. After release, verify release marker, migration ledger, all application services, Nginx and `/health/ready`, plus read-only scheduling and market-reference paths. If validation fails, stop and follow the deploy script's rollback-required behavior; do not claim success until post-deploy checks pass.
+- 只在 `main` 顺序开发，不创建分支或 worktree。
+- 仅允许 SCOPE_LOCK 中的 8 个路径；最多 2 个 migration SQL 文件。
+- RED/GREEN/REFACTOR；固定 CSV 和隔离 PG16 夹具，不调用付费 API。
+- 数据库角色 `fqp` 只能读取映射；down 迁移不得丢弃任何映射或事件。
+- 完成本地回归、静态检查、scope/budget、独立只读审查、GitHub exact-head CI 后才进入发布评估。
+- 本批不做生产迁移、球员导入或模型 rollout。

@@ -1,0 +1,28 @@
+{
+  "schema_version": 4,
+  "task_id": "PREMATCH-ODDS-REST-DISPLAY-20261110",
+  "allowed_paths": [
+    "apps/backend/src/routers/official.py",
+    "apps/backend/src/services/odds_movement.py",
+    "apps/frontend/src/pages/OddsMovementPage.tsx",
+    "apps/frontend/src/pages/OddsMovementPage.test.tsx",
+    "tests/test_api/test_odds_movements.py",
+    "tests/test_api/test_official_router.py"
+  ],
+  "protected_paths": [
+    "apps/**",
+    "scripts/**",
+    "tests/**",
+    "sql/**",
+    "ops/server/**"
+  ],
+  "approved_protected_paths": [
+    "apps/backend/src/routers/official.py",
+    "apps/backend/src/services/odds_movement.py",
+    "apps/frontend/src/pages/OddsMovementPage.tsx",
+    "apps/frontend/src/pages/OddsMovementPage.test.tsx",
+    "tests/test_api/test_odds_movements.py",
+    "tests/test_api/test_official_router.py"
+  ],
+  "notes": "Single-main follow-up. The odds index and current movement endpoint share the sales-window-aware fixture eligibility predicate. Changes are limited to the six listed implementation and regression files; no API schema or database migration was added."
+}

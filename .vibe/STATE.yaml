@@ -1,20 +1,20 @@
 {
   "schema_version": 4,
-  "state": "READY_TO_MERGE",
-  "workflow_id": "PREMATCH-ODDS-REST-DISPLAY-20261110",
+  "state": "REVIEWING",
+  "workflow_id": "P108-01-PLAYER-IDENTITY-BRIDGE-20261110",
   "previous_workflow": {
-    "task_id": "P107-AGGREGATE-CANDIDATE-RELEASE-READINESS",
+    "task_id": "PREMATCH-ODDS-REST-DISPLAY-20261110",
     "state": "DONE",
-    "recorded_in_git_revision": "5f5ef27cd80c8f2f1338d04a6e825d87732fa476"
+    "archive": ".vibe/archive/workflow-prematch-odds-rest-display-done-2026-11-10",
+    "archive_manifest_sha256": "0736502ddbe9a6086b88c932edace85c35e1465500fa4c796a479849a7300487"
   },
   "blocked_reason": null,
   "mode": "STRICT",
-  "environment": "Local macOS development; isolated PostgreSQL 16.13; production target 100.121.47.26 via SSH password authentication.",
+  "environment": "Local main checkout; isolated PostgreSQL 16; no production DB/API access or import.",
   "last_transition": {
-    "from": "REVIEWING",
-    "to": "READY_TO_MERGE",
-    "at": "2026-11-09T22:54:30.204707+08:00",
-    "reason": "Betting-center cutoff fallback, follow-up regression guard, independent review, scope/budget checks, and exact-main CI 42636725983 passed."
-  },
-  "active_follow_up": "PREMATCH-ODDS-REST-DISPLAY"
+    "from": "VERIFYING",
+    "to": "REVIEWING",
+    "at": "2026-11-10T03:46:17.161015+08:00",
+    "reason": "本地验收和迁移演练通过，独立只读复核已启动；精确 main CI 尚待提交后执行。"
+  }
 }

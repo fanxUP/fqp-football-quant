@@ -1,10 +1,10 @@
 {
   "schema_version": 4,
-  "task_id": "PREMATCH-ODDS-REST-DISPLAY-20261110",
-  "max_files_changed": 6,
-  "max_new_files": 0,
+  "task_id": "P108-01-IDENTITY-BRIDGE",
+  "max_files_changed": 8,
+  "max_new_files": 7,
   "max_new_dependencies": 0,
-  "max_schema_migrations": 0,
+  "max_schema_migrations": 2,
   "max_public_api_changes": 0,
   "declared_public_api_changes": 0,
   "regression_budget": {
@@ -12,5 +12,5 @@
     "new_lint_errors": 0,
     "new_type_errors": 0
   },
-  "budget_basis": "Bounded follow-up to display saved official odds snapshots for eligible upcoming fixtures during sales rest. Six existing implementation/regression paths, no dependencies, migrations, new API contract fields, or production data writes."
+  "budget_basis": "Eight scoped files: two migration directions, two identity utilities, three focused tests, and one CI required-module registration to prevent the database regression from being skipped. No dependency, public API, or production data change."
 }

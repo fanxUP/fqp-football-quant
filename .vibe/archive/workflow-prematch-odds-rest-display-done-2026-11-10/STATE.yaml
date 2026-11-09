@@ -1,0 +1,20 @@
+{
+  "schema_version": 4,
+  "state": "DONE",
+  "workflow_id": "PREMATCH-ODDS-REST-DISPLAY-20261110",
+  "previous_workflow": {
+    "task_id": "P107-AGGREGATE-CANDIDATE-RELEASE-READINESS",
+    "state": "DONE",
+    "recorded_in_git_revision": "5f5ef27cd80c8f2f1338d04a6e825d87732fa476"
+  },
+  "blocked_reason": null,
+  "mode": "STRICT",
+  "environment": "Local macOS development; isolated PostgreSQL 16.13; production target 100.121.47.26 via SSH password authentication.",
+  "last_transition": {
+    "from": "READY_TO_MERGE",
+    "to": "DONE",
+    "at": "2026-11-10T03:02:51.453829+08:00",
+    "reason": "PREMATCH-ODDS-REST-DISPLAY b5d67bb is deployed to 100.121.47.26; production readiness, protection routes, and read-only closed-sales odds smoke passed; temporary sudoers removed."
+  },
+  "active_follow_up": "PREMATCH-ODDS-REST-DISPLAY"
+}
