@@ -7,7 +7,7 @@
       "acceptance_id": "A-P108-02",
       "depends_on": [],
       "kind": "schema_and_read_contract",
-      "status": "IN_PROGRESS",
+      "status": "DONE",
       "definition_of_done": [
         "Derive dated Titan transfer rows from the published immutable history product and preserve batch/hash/normalization provenance without duplicating them.",
         "Resolve canonical player IDs only through verified source identity links; label every transfer row candidate-only and never assert current club or registration.",
