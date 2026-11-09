@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+from datetime import UTC, timedelta
+
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 from apps.backend.src.db import get_db
+from scripts.odds_capture_policy import CAPTURE_INTERVAL
 from scripts.real_ticket_storage import create_bankroll_transaction
 from scripts.simulator_calculator import (
     calculate_multi_all,
@@ -103,18 +106,27 @@ def list_matches(
     if not sales_window.is_open:
         return {"matches": [], "total": 0, "sales_window": sales_window.as_dict()}
 
+    local_now = sales_window.current_time.replace(tzinfo=None)
+    utc_now = sales_window.current_time.astimezone(UTC).replace(tzinfo=None)
     with get_db() as conn:
         with conn.cursor() as cur:
-            # A stale selling flag or missing official cutoff must never expose
-            # a match as actionable.
+            # Sporttery can publish a selling card without a match-level cutoff.
+            # Require a current official status to avoid trusting a stale flag.
             where_parts = [
                 "m.sale_status = 'selling'",
                 "LOWER(COALESCE(m.match_status, '')) IN ('scheduled', 'selling', 'not_started')",
-                "m.kickoff_time > timezone('Asia/Shanghai', NOW())",
-                "m.sale_stop_time IS NOT NULL",
-                "m.sale_stop_time > timezone('Asia/Shanghai', NOW())",
+                "m.kickoff_time > %(now)s",
+                "m.updated_at BETWEEN %(status_since)s AND %(utc_now)s",
+                "m.raw_json->>'matchStatus' = 'Selling'",
+                "m.raw_json->>'sellStatus' = '1'",
+                "(m.sale_stop_time IS NULL OR m.sale_stop_time > %(now)s)",
             ]
-            params: dict = {"limit": limit}
+            params: dict = {
+                "limit": limit,
+                "now": local_now,
+                "utc_now": utc_now,
+                "status_since": utc_now - timedelta(minutes=20),
+            }
 
             if date:
                 where_parts.append("m.business_date = %(date)s")
@@ -131,7 +143,7 @@ def list_matches(
                        m.home_team_name, m.away_team_name,
                        m.kickoff_time, m.match_status,
                        COALESCE(m.raw_json->>'matchNumStr', m.official_match_code::text) AS match_num_str,
-                       m.raw_json
+                       m.raw_json, m.sale_stop_time IS NULL AS cutoff_missing
                 FROM official_matches m
                 WHERE {where_clause}
                 ORDER BY m.kickoff_time ASC
@@ -148,20 +160,58 @@ def list_matches(
             # Bulk-fetch latest odds for all match_ids.
             # Use DISTINCT ON to get the latest snapshot per (match_id, play_type, option_code)
             sql_odds = """
-                SELECT DISTINCT ON (match_id, play_type, option_code)
-                    match_id, play_type, option_code, option_name,
-                    sp_value, handicap, is_single_allowed
-                FROM official_odds_snapshots
-                WHERE match_id = ANY(%(match_ids)s)
-                  AND is_open = true
-                ORDER BY match_id, play_type, option_code, snapshot_time DESC
+                SELECT DISTINCT ON (s.match_id, s.play_type, s.option_code)
+                    s.match_id, s.play_type, s.option_code, s.option_name,
+                    s.sp_value, s.handicap, s.is_single_allowed
+                FROM official_odds_snapshots s
+                JOIN official_matches m ON m.id = s.match_id
+                WHERE s.match_id = ANY(%(match_ids)s)
+                  AND s.is_open = true
+                  AND s.snapshot_time BETWEEN %(odds_since)s AND %(now)s
+                  AND m.sale_status = 'selling'
+                  AND m.kickoff_time > %(now)s
+                  AND m.updated_at BETWEEN %(status_since)s AND %(utc_now)s
+                  AND m.raw_json->>'matchStatus' = 'Selling'
+                  AND m.raw_json->>'sellStatus' = '1'
+                  AND (m.sale_stop_time > %(now)s OR (
+                      m.sale_stop_time IS NULL
+                      AND s.raw_json->>'_sporttery_match_id' = m.source_match_id
+                      AND s.raw_json->>'_scheduled_kickoff' = to_char(
+                          m.kickoff_time, 'YYYY-MM-DD"T"HH24:MI:SS'
+                      )
+                      AND EXISTS (
+                          SELECT 1 FROM jsonb_array_elements(
+                              CASE WHEN jsonb_typeof(m.raw_json->'poolList') = 'array'
+                                   THEN m.raw_json->'poolList' ELSE '[]'::jsonb END
+                          ) pool
+                          WHERE pool->>'poolCode' = s.raw_json#>>'{_pool,poolCode}'
+                            AND pool->>'poolStatus' = 'Selling'
+                            AND COALESCE(pool->>'poolCloseDate', '') = ''
+                            AND COALESCE(pool->>'poolCloseTime', '') = ''
+                            AND COALESCE(s.raw_json#>>'{_pool,poolCloseDate}', '') = ''
+                            AND COALESCE(s.raw_json#>>'{_pool,poolCloseTime}', '') = ''
+                      )
+                  ))
+                ORDER BY s.match_id, s.play_type, s.option_code, s.snapshot_time DESC, s.id DESC
             """
-            cur.execute(sql_odds, {"match_ids": match_ids})
+            cur.execute(
+                sql_odds,
+                {
+                    "match_ids": match_ids,
+                    "now": local_now,
+                    "utc_now": utc_now,
+                    "status_since": utc_now - timedelta(minutes=20),
+                    "odds_since": local_now - CAPTURE_INTERVAL - timedelta(minutes=5),
+                },
+            )
             odds_rows = cur.fetchall()
 
     # Build response — group odds by match and play_type
     matches_map: dict[int, dict] = {}
+    matches_with_odds = {row[0] for row in odds_rows}
     for mr in match_rows:
+        if mr[9] and mr[0] not in matches_with_odds:
+            continue
         capabilities = _pool_capabilities(
             mr[8] if len(mr) > 8 and isinstance(mr[8], dict) else None
         )

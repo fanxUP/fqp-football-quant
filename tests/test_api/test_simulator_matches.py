@@ -109,6 +109,8 @@ def test_simulator_matches_filters_to_future_sellable_statuses(client):
                     "2026-07-11T03:00:00",
                     "scheduled",
                     "周五098",
+                    {},
+                    False,
                 )
             ],
             [],
@@ -121,10 +123,40 @@ def test_simulator_matches_filters_to_future_sellable_statuses(client):
     sql = cursor.execute.call_args_list[0].args[0]
     assert "sale_status = 'selling'" in sql
     assert "LOWER(COALESCE(m.match_status, '')) IN ('scheduled', 'selling', 'not_started')" in sql
-    assert "m.kickoff_time > timezone('Asia/Shanghai', NOW())" in sql
-    assert "m.sale_stop_time IS NOT NULL" in sql
-    assert "m.sale_stop_time > timezone('Asia/Shanghai', NOW())" in sql
-    assert "m.sale_stop_time IS NULL OR" not in sql
+    assert "m.kickoff_time > %(now)s" in sql
+    assert "(m.sale_stop_time IS NULL OR m.sale_stop_time > %(now)s)" in sql
+    assert "m.updated_at BETWEEN %(status_since)s AND %(utc_now)s" in sql
+    assert "m.raw_json->>'sellStatus' = '1'" in sql
+    params = cursor.execute.call_args_list[0].args[1]
+    assert params["now"] == datetime(2026, 7, 18, 12, 0)
+    assert params["utc_now"] == datetime(2026, 7, 18, 4, 0)
+    assert params["status_since"] == datetime(2026, 7, 18, 3, 40)
+
+
+def test_simulator_matches_without_cutoff_require_fresh_official_status_and_odds(client):
+    def match(match_id, day, code, kickoff):
+        return (match_id, day, "英锦标赛", "主队", "客队", kickoff, "scheduled", code, {}, True)
+
+    with patch("apps.backend.src.routers.simulator.get_db") as get_db:
+        connection = get_db.return_value.__enter__.return_value
+        cursor = connection.cursor.return_value.__enter__.return_value
+        cursor.fetchall.side_effect = [
+            [
+                match(1, "2026-07-18", "周六001", "2026-07-19T03:00:00"),
+                match(2, "2026-07-19", "周日001", "2026-07-20T03:00:00"),
+            ],
+            [(2, "spf", "h", "主胜", 2.1, None, True)],
+        ]
+
+        response = client.get("/api/simulator/matches")
+
+    assert response.status_code == 200
+    assert [match["match_num_str"] for match in response.json()["matches"]] == ["周日001"]
+    assert response.json()["matches"][0]["odds"]["spf"]["is_single_allowed"] is True
+    odds_sql, params = cursor.execute.call_args_list[1].args
+    assert "s.snapshot_time BETWEEN %(odds_since)s AND %(now)s" in odds_sql
+    assert "pool->>'poolStatus' = 'Selling'" in odds_sql
+    assert params["odds_since"] == datetime(2026, 7, 18, 11, 25)
 
 
 def test_pool_capabilities_support_current_sporttery_field_names():
@@ -160,6 +192,7 @@ def test_simulator_matches_orders_official_had_options_home_draw_away(client):
                     "scheduled",
                     "周日213",
                     raw,
+                    False,
                 )
             ],
             [
@@ -193,6 +226,7 @@ def test_simulator_matches_default_to_unavailable_when_pool_capability_is_missin
                     "scheduled",
                     "周日213",
                     {},
+                    False,
                 )
             ],
             [(1, "spf", "h", "主胜", 2.1, None, False)],
