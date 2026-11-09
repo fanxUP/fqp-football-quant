@@ -74,13 +74,14 @@ export default function BettingTerminalPage() {
   const [calculationWarning, setCalculationWarning] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(true);
-  const [activeMatch, setActiveMatch] = useState<BettingMatch | null>(null);
+  const [activeMatchId, setActiveMatchId] = useState<number | null>(null);
   const [showRules, setShowRules] = useState(false);
   const [showFilter, setShowFilter] = useState(false);
   const [league, setLeague] = useState('');
   const [singleOnly, setSingleOnly] = useState(false);
   const [confirmation, setConfirmation] = useState<ConfirmationState | null>(null);
   const calculateRequestRef = useRef(0);
+  const matchRequestRef = useRef(0);
 
   const resetBetSlip = useCallback(() => {
     calculateRequestRef.current += 1;
@@ -95,20 +96,33 @@ export default function BettingTerminalPage() {
   }, []);
 
   const fetchMatches = useCallback(() => {
+    const requestId = ++matchRequestRef.current;
     setLoading(true);
     setLoadError('');
     api.bettingTerminal.matches({ limit: 100 })
       .then((response) => {
-        // 休市接口会返回空的“当前可售”列表，但页面保留上一批已加载比赛，
-        // 让用户继续查看盘口；真正的下注能力由 bettingClosed 统一锁定。
-        if ((response.matches || []).length > 0) setMatches(response.matches);
+        if (requestId !== matchRequestRef.current) return;
+        setMatches(response.matches || []);
         setSalesWindow(response.sales_window ?? null);
       })
-      .catch((error) => setLoadError(errorMessage(error, translate('官方比赛加载失败'))))
-      .finally(() => setLoading(false));
-  }, []);
+      .catch((error) => {
+        if (requestId === matchRequestRef.current) setLoadError(errorMessage(error, translate('官方比赛加载失败')));
+      })
+      .finally(() => {
+        if (requestId === matchRequestRef.current) setLoading(false);
+      });
+  }, [translate]);
 
   useEffect(() => { fetchMatches(); }, [fetchMatches]);
+
+  useEffect(() => {
+    if (!salesWindow || loading || loadError) return;
+    const nextChange = salesWindow.is_open ? salesWindow.closes_at : salesWindow.next_opens_at;
+    const delay = Date.parse(nextChange) - Date.parse(salesWindow.current_time);
+    if (!Number.isFinite(delay) || delay <= 0) return;
+    const timer = window.setTimeout(fetchMatches, delay);
+    return () => window.clearTimeout(timer);
+  }, [fetchMatches, loadError, loading, salesWindow]);
 
   useEffect(() => {
     if (!timeMachineMode) return;
@@ -135,8 +149,8 @@ export default function BettingTerminalPage() {
   }, [timeMachineDate, timeMachineMode, timeMachineRefreshToken]);
 
   useEffect(() => {
-    if (salesWindow?.is_open === false) resetBetSlip();
-  }, [resetBetSlip, salesWindow?.is_open]);
+    if (!timeMachineMode && salesWindow?.is_open === false) resetBetSlip();
+  }, [resetBetSlip, salesWindow?.is_open, timeMachineMode]);
 
   useEffect(() => {
     setRecommendationsLoading(true);
@@ -148,7 +162,9 @@ export default function BettingTerminalPage() {
   }, []);
 
   const activeMatches = timeMachineMode ? timeMachineMatches : matches;
-  const bettingClosed = !timeMachineMode && salesWindow?.is_open === false;
+  const activeMatch = activeMatches.find((match) => match.match_id === activeMatchId);
+  const isResting = !timeMachineMode && salesWindow?.is_open === false;
+  const bettingClosed = !timeMachineMode && (isResting || loading || Boolean(loadError));
 
   const leagues = useMemo(
     () => [...new Set(activeMatches.map((match) => match.league_name).filter(Boolean))].sort(),
@@ -182,6 +198,7 @@ export default function BettingTerminalPage() {
   const encodedPassTypes = selectedPassTypes.join(',');
   const availableRecommendationIds = useMemo(() => {
     const ids = new Set<number>();
+    if (bettingClosed) return ids;
     recommendations.forEach((recommendation) => {
       const playType = recommendation.play_type as SportteryPlayType;
       if (!PLAY_TYPES.includes(playType)) return;
@@ -195,7 +212,7 @@ export default function BettingTerminalPage() {
       }
     });
     return ids;
-  }, [activeMatches, recommendations]);
+  }, [activeMatches, bettingClosed, recommendations]);
 
   useEffect(() => {
     if (selections.length === 0) {
@@ -239,6 +256,7 @@ export default function BettingTerminalPage() {
   }, [encodedPassTypes, multiple, selections, selectedPassTypes.length]);
 
   const toggleSelection = (match: BettingMatch, playType: SportteryPlayType, option: BettingOddsOption) => {
+    if (bettingClosed) return;
     const key = selectionKey(match.match_id, playType, option.option_code);
     setSelections((current) => {
       const exists = current.some((item) => selectionKey(item.match_id, item.play_type, item.option_code) === key);
@@ -250,6 +268,7 @@ export default function BettingTerminalPage() {
   };
 
   const addRecommendation = (recommendation: LiveRecommendation) => {
+    if (bettingClosed) return;
     const playType = recommendation.play_type as SportteryPlayType;
     const match = matches.find((item) => item.match_id === recommendation.match_id);
     const market = PLAY_TYPES.includes(playType) ? match?.odds[playType] : undefined;
@@ -304,7 +323,7 @@ export default function BettingTerminalPage() {
   };
 
   const confirmTicket = async () => {
-    if (selectedPassTypes.length === 0 || !calculation || calculation.total_cost > 20_000 || calculationWarning) return;
+    if (bettingClosed || selectedPassTypes.length === 0 || !calculation || calculation.total_cost > 20_000 || calculationWarning) return;
     setSubmitting(true);
     try {
       const result = timeMachineMode
@@ -413,29 +432,29 @@ export default function BettingTerminalPage() {
           onConfirm={confirmTicket}
         />
 
-        {(timeMachineMode ? timeMachineLoading : loading) && <div className="sporttery-status" role="status">{timeMachineMode ? translate('正在读取历史官方比赛…') : translate('正在读取官方开售比赛…')}</div>}
+        {(timeMachineMode ? timeMachineLoading : loading) && <div className="sporttery-status" role="status">{timeMachineMode ? translate('正在读取历史官方比赛…') : translate('正在读取官方比赛与赔率…')}</div>}
         {(timeMachineMode ? timeMachineError : loadError) && <div className="sporttery-status is-error" role="alert">{timeMachineMode ? timeMachineError : loadError}<button type="button" onClick={timeMachineMode ? () => setTimeMachineRefreshToken((value) => value + 1) : fetchMatches}>{translate('重试')}</button></div>}
-        {!timeMachineMode && !loading && !loadError && salesWindow?.is_open === false && (
-          <div className="sporttery-status" role="status">{salesWindow.message}</div>
+        {!loading && !loadError && isResting && (
+          <div className="sporttery-status" role="status"><div>{salesWindow.message}</div><div>{translate('休市期间，赛程和赔率仅供查看，暂不可选号。')}</div></div>
         )}
-        {!(timeMachineMode ? timeMachineLoading : loading) && !(timeMachineMode ? timeMachineError : loadError) && (!timeMachineMode && salesWindow?.is_open === false ? false : filteredMatches.length === 0) && <div className="sporttery-status">{timeMachineMode ? translate('该日没有可补录的官方历史赔率') : translate('当前筛选条件下没有开售比赛')}</div>}
-        {!timeMachineMode && !loading && !loadError && activeMatches.length > 0 && hasPublishedOdds && !hasSelectableOfficialMarket && (
+        {!(timeMachineMode ? timeMachineLoading : loading) && !(timeMachineMode ? timeMachineError : loadError) && filteredMatches.length === 0 && <div className="sporttery-status">{timeMachineMode ? translate('该日没有可补录的官方历史赔率') : isResting ? translate('当前筛选条件下没有待开赛的官方比赛') : translate('当前筛选条件下没有开售比赛')}</div>}
+        {!timeMachineMode && !bettingClosed && activeMatches.length > 0 && hasPublishedOdds && !hasSelectableOfficialMarket && (
           <div className="sporttery-status" role="status">{translate('官方赔率已发布，但当前未开放单关或过关，请稍后刷新。')}</div>
         )}
-        <section className="sporttery-match-list" aria-label={timeMachineMode ? translate('历史官方比赛') : translate('开售比赛')}>
+        <section className="sporttery-match-list" aria-label={timeMachineMode ? translate('历史官方比赛') : isResting ? translate('待开赛的官方比赛') : translate('开售比赛')}>
           {filteredMatches.map((match) => (
             <MatchCard
               key={match.match_id}
               match={match}
               selections={selections}
               onToggle={toggleSelection}
-              onAllGames={setActiveMatch}
+              onAllGames={(item) => setActiveMatchId(item.match_id)}
               onAnalyse={(item) => navigate(`/matches/${item.match_id}`)}
               bettingClosed={bettingClosed}
             />
           ))}
         </section>
-        {activeMatches.some((match) => Object.values(match.odds).some((market) => market.is_single_allowed)) && (
+        {!bettingClosed && activeMatches.some((match) => Object.values(match.odds).some((market) => market.is_single_allowed)) && (
           <aside className="sporttery-single-tip"><span aria-hidden="true">💡</span><span>{translate('有“单”标记的选项可投单场，其他至少选择2场比赛')}</span></aside>
         )}
         <p className="sporttery-disclaimer">{timeMachineMode ? translate('历史赔率来自停售前快照；停售时间未知的场次使用开球前快照。') : translate('比赛信息及固定奖金仅供参考，请以出票时刻为准。')}</p>
@@ -458,7 +477,7 @@ export default function BettingTerminalPage() {
         />
       </div>
 
-      {activeMatch && <AllGamesDialog match={activeMatch} selections={selections} onToggle={toggleSelection} onClose={() => setActiveMatch(null)} bettingClosed={bettingClosed} />}
+      {activeMatch && <AllGamesDialog match={activeMatch} selections={selections} onToggle={toggleSelection} onClose={() => setActiveMatchId(null)} bettingClosed={bettingClosed} />}
       {showRules && <RulesDialog onClose={() => setShowRules(false)} />}
       {showFilter && <FilterDialog leagues={leagues} league={league} singleOnly={singleOnly} onLeague={setLeague} onSingleOnly={setSingleOnly} onClose={() => setShowFilter(false)} />}
       {confirmation && <ConfirmationDialog selections={confirmation.selections} passTypes={confirmation.passTypes} multiple={confirmation.multiple} betCount={confirmation.calculation.bet_count} stake={confirmation.calculation.total_cost} prize={confirmation.calculation.max_prize} ticketUid={confirmation.ticketUid} onClose={completeConfirmation} />}

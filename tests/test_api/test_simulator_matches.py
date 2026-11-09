@@ -24,7 +24,7 @@ def open_official_sales_window():
         yield
 
 
-def test_simulator_matches_are_unavailable_during_official_rest_time(client):
+def test_simulator_shows_future_official_matches_during_rest_even_without_current_odds(client):
     with (
         patch("apps.backend.src.routers.simulator.get_db") as get_db,
         patch(
@@ -32,15 +32,48 @@ def test_simulator_matches_are_unavailable_during_official_rest_time(client):
             return_value=REST_WINDOW,
         ),
     ):
+        connection = get_db.return_value.__enter__.return_value
+        cursor = connection.cursor.return_value.__enter__.return_value
+        cursor.fetchall.side_effect = [
+            [
+                (
+                    1,
+                    "2026-07-19",
+                    "英超",
+                    "主队甲",
+                    "客队甲",
+                    "2026-07-19T21:00:00",
+                    "scheduled",
+                    "周日001",
+                    {},
+                    True,
+                ),
+                (
+                    2,
+                    "2026-07-20",
+                    "英超",
+                    "主队乙",
+                    "客队乙",
+                    "2026-07-20T21:00:00",
+                    "scheduled",
+                    "周一001",
+                    {},
+                    True,
+                ),
+            ],
+            [(1, "spf", "h", "主胜", 2.1, None, True)],
+        ]
         response = client.get("/api/simulator/matches")
 
     assert response.status_code == 200
-    assert response.json() == {
-        "matches": [],
-        "total": 0,
-        "sales_window": REST_WINDOW.as_dict(),
-    }
-    get_db.assert_not_called()
+    data = response.json()
+    assert data["sales_window"] == REST_WINDOW.as_dict()
+    assert data["total"] == 2
+    first, second = data["matches"]
+    assert first["match_num_str"] == "周日001"
+    assert first["odds"]["spf"]["options"][0]["sp_value"] == 2.1
+    assert second["match_num_str"] == "周一001"
+    assert second["odds"]["spf"]["options"] == []
 
 
 def test_manual_ticket_submission_is_rejected_during_official_rest_time(client):

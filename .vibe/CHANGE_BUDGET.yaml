@@ -1,16 +1,16 @@
 {
   "schema_version": 4,
   "task_id": "PREMATCH-SCHEDULE-MARKET-REFERENCE-20261109",
-  "max_files_changed": 48,
+  "max_files_changed": 50,
   "max_new_files": 11,
   "max_new_dependencies": 0,
   "max_schema_migrations": 4,
-  "max_public_api_changes": 2,
-  "declared_public_api_changes": 2,
+  "max_public_api_changes": 3,
+  "declared_public_api_changes": 3,
   "regression_budget": {
     "new_test_failures": 0,
     "new_lint_errors": 0,
     "new_type_errors": 0
   },
-  "budget_basis": "Original 44-path release scope includes one additive catalog response field and the up/down SQL files for two pinned additive migrations. One additional test-only schema fixture path was added after exact-head CI exposed a missing raw_hash column; no new package, service or production behavior. Two scoped files cover the official-selling-window cutoff fallback and regression tests. The existing catalog field plus this bounded match-list semantic correction are declared as two public behavior changes; no schema migration, package, or service was added. One additional existing regression file was updated because the full CI exposed a stale source-text assertion that still expected inline database clock conversion; the replacement checks the sales-window clock injection plus route-level bound parameters."
+  "budget_basis": "The prior 48-path release scope is extended by the Betting Center rest-time preview: the simulator returns upcoming official fixtures and valid prior odds during rest, and the UI displays them read-only until sales reopen. This adds two paths for UI translations and frontend regression coverage. Total tracked scope is 50 files; no dependencies or migrations are added. The additive catalog field, cutoff fallback, and rest-time preview account for three public behavior changes."
 }

@@ -101,32 +101,34 @@ def list_matches(
     league_name: str | None = Query(None),
     limit: int = Query(50, ge=1, le=200),
 ):
-    """List sellable matches with odds for all 5 play types."""
+    """List sellable matches when open and preview upcoming fixtures during rest."""
     sales_window = get_sporttery_sales_window()
-    if not sales_window.is_open:
-        return {"matches": [], "total": 0, "sales_window": sales_window.as_dict()}
-
     local_now = sales_window.current_time.replace(tzinfo=None)
     utc_now = sales_window.current_time.astimezone(UTC).replace(tzinfo=None)
     with get_db() as conn:
         with conn.cursor() as cur:
-            # Sporttery can publish a selling card without a match-level cutoff.
-            # Require a current official status to avoid trusting a stale flag.
             where_parts = [
-                "m.sale_status = 'selling'",
                 "LOWER(COALESCE(m.match_status, '')) IN ('scheduled', 'selling', 'not_started')",
                 "m.kickoff_time > %(now)s",
-                "m.updated_at BETWEEN %(status_since)s AND %(utc_now)s",
-                "m.raw_json->>'matchStatus' = 'Selling'",
-                "m.raw_json->>'sellStatus' = '1'",
-                "(m.sale_stop_time IS NULL OR m.sale_stop_time > %(now)s)",
             ]
             params: dict = {
                 "limit": limit,
                 "now": local_now,
-                "utc_now": utc_now,
-                "status_since": utc_now - timedelta(minutes=20),
             }
+            if sales_window.is_open:
+                # Live selection requires a current official status even when cutoff is missing.
+                where_parts.extend(
+                    [
+                        "m.sale_status = 'selling'",
+                        "m.updated_at BETWEEN %(status_since)s AND %(utc_now)s",
+                        "m.raw_json->>'matchStatus' = 'Selling'",
+                        "m.raw_json->>'sellStatus' = '1'",
+                        "(m.sale_stop_time IS NULL OR m.sale_stop_time > %(now)s)",
+                    ]
+                )
+                params.update(utc_now=utc_now, status_since=utc_now - timedelta(minutes=20))
+            else:
+                where_parts.append("m.sale_status IN ('selling', 'not_started', 'paused')")
 
             if date:
                 where_parts.append("m.business_date = %(date)s")
@@ -157,17 +159,26 @@ def list_matches(
 
             match_ids = [r[0] for r in match_rows]
 
-            # Bulk-fetch latest odds for all match_ids.
-            # Use DISTINCT ON to get the latest snapshot per (match_id, play_type, option_code)
-            sql_odds = """
-                SELECT DISTINCT ON (s.match_id, s.play_type, s.option_code)
-                    s.match_id, s.play_type, s.option_code, s.option_name,
-                    s.sp_value, s.handicap, s.is_single_allowed
-                FROM official_odds_snapshots s
-                JOIN official_matches m ON m.id = s.match_id
-                WHERE s.match_id = ANY(%(match_ids)s)
-                  AND s.is_open = true
-                  AND s.snapshot_time BETWEEN %(odds_since)s AND %(now)s
+            # Preview quotes can be older than the live window, but must match the same fixture.
+            fixture_identity = """
+                s.raw_json->>'_sporttery_match_id' = m.source_match_id
+                AND s.raw_json->>'_scheduled_kickoff' = to_char(
+                    m.kickoff_time, 'YYYY-MM-DD"T"HH24:MI:SS'
+                )
+            """
+            odds_conditions = f"""
+                s.snapshot_time <= LEAST(%(now)s, m.sale_stop_time)
+                AND ({fixture_identity})
+            """
+            odds_params: dict = {"match_ids": match_ids, "now": local_now}
+            if sales_window.is_open:
+                odds_params.update(
+                    utc_now=utc_now,
+                    status_since=params["status_since"],
+                    odds_since=local_now - CAPTURE_INTERVAL - timedelta(minutes=5),
+                )
+                odds_conditions = f"""
+                  s.snapshot_time BETWEEN %(odds_since)s AND %(now)s
                   AND m.sale_status = 'selling'
                   AND m.kickoff_time > %(now)s
                   AND m.updated_at BETWEEN %(status_since)s AND %(utc_now)s
@@ -175,10 +186,7 @@ def list_matches(
                   AND m.raw_json->>'sellStatus' = '1'
                   AND (m.sale_stop_time > %(now)s OR (
                       m.sale_stop_time IS NULL
-                      AND s.raw_json->>'_sporttery_match_id' = m.source_match_id
-                      AND s.raw_json->>'_scheduled_kickoff' = to_char(
-                          m.kickoff_time, 'YYYY-MM-DD"T"HH24:MI:SS'
-                      )
+                      AND ({fixture_identity})
                       AND NOT jsonb_path_exists(
                           m.raw_json, '$.**.poolCloseDate ? (@ != "")'
                       )
@@ -190,33 +198,35 @@ def list_matches(
                               CASE WHEN jsonb_typeof(m.raw_json->'poolList') = 'array'
                                    THEN m.raw_json->'poolList' ELSE '[]'::jsonb END
                           ) pool
-                          WHERE pool->>'poolCode' = s.raw_json#>>'{_pool,poolCode}'
+                          WHERE pool->>'poolCode' = s.raw_json->'_pool'->>'poolCode'
                             AND pool->>'poolStatus' = 'Selling'
                             AND COALESCE(pool->>'poolCloseDate', '') = ''
                             AND COALESCE(pool->>'poolCloseTime', '') = ''
-                            AND COALESCE(s.raw_json#>>'{_pool,poolCloseDate}', '') = ''
-                            AND COALESCE(s.raw_json#>>'{_pool,poolCloseTime}', '') = ''
+                            AND COALESCE(s.raw_json->'_pool'->>'poolCloseDate', '') = ''
+                            AND COALESCE(s.raw_json->'_pool'->>'poolCloseTime', '') = ''
                       )
                   ))
+                """
+            # Read the latest snapshot per option in a single query for the visible matches.
+            sql_odds = f"""
+                SELECT DISTINCT ON (s.match_id, s.play_type, s.option_code)
+                    s.match_id, s.play_type, s.option_code, s.option_name,
+                    s.sp_value, s.handicap, s.is_single_allowed
+                FROM official_odds_snapshots s
+                JOIN official_matches m ON m.id = s.match_id
+                WHERE s.match_id = ANY(%(match_ids)s)
+                  AND s.is_open = true
+                  AND ({odds_conditions})
                 ORDER BY s.match_id, s.play_type, s.option_code, s.snapshot_time DESC, s.id DESC
             """
-            cur.execute(
-                sql_odds,
-                {
-                    "match_ids": match_ids,
-                    "now": local_now,
-                    "utc_now": utc_now,
-                    "status_since": utc_now - timedelta(minutes=20),
-                    "odds_since": local_now - CAPTURE_INTERVAL - timedelta(minutes=5),
-                },
-            )
+            cur.execute(sql_odds, odds_params)
             odds_rows = cur.fetchall()
 
     # Build response — group odds by match and play_type
     matches_map: dict[int, dict] = {}
     matches_with_odds = {row[0] for row in odds_rows}
     for mr in match_rows:
-        if mr[9] and mr[0] not in matches_with_odds:
+        if sales_window.is_open and mr[9] and mr[0] not in matches_with_odds:
             continue
         capabilities = _pool_capabilities(
             mr[8] if len(mr) > 8 and isinstance(mr[8], dict) else None

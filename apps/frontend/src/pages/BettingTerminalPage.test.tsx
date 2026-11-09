@@ -1,7 +1,7 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import BettingTerminalPage from './BettingTerminalPage';
-import type { BettingMatch, CalculateItem, LiveRecommendation } from '../core/types';
+import type { BettingMatch, CalculateItem, LiveRecommendation, SportterySalesWindow } from '../core/types';
 
 const completeOdds = {
   spf: {
@@ -100,6 +100,16 @@ const thirdMatch: BettingMatch = {
   away_team_name: '维京',
   kickoff_time: '2026-07-14T02:00:00',
   match_num_str: '周一202',
+};
+
+const restSalesWindow: SportterySalesWindow = {
+  is_open: false,
+  current_time: '2026-07-12T02:09:00+08:00',
+  opens_at: '2026-07-12T11:00:00+08:00',
+  closes_at: '2026-07-12T23:00:00+08:00',
+  next_opens_at: '2026-07-12T11:00:00+08:00',
+  message: '官方竞彩休市中，今日 11:00 恢复开售',
+  schedule: { weekday: '11:00-22:00', weekend: '11:00-23:00', timezone: 'Asia/Shanghai' },
 };
 
 const recommendation: LiveRecommendation = {
@@ -619,29 +629,52 @@ describe('BettingTerminalPage desktop workbench', () => {
     expect(await screen.findByText('官方赔率已发布，但当前未开放单关或过关，请稍后刷新。')).toBeInTheDocument();
   });
 
-  it('shows the official rest-time message instead of treating the card as sellable', async () => {
+  it('shows matches and their odds on first load during rest without allowing selection', async () => {
     apiMocks.matches.mockResolvedValue({
-      matches: [],
-      total: 0,
-      sales_window: {
-        is_open: false,
-        current_time: '2026-07-19T02:09:00+08:00',
-        opens_at: '2026-07-19T11:00:00+08:00',
-        closes_at: '2026-07-19T23:00:00+08:00',
-        next_opens_at: '2026-07-19T11:00:00+08:00',
-        message: '官方竞彩休市中，今日 11:00 恢复开售',
-        schedule: {
-          weekday: '11:00-22:00',
-          weekend: '11:00-23:00',
-          timezone: 'Asia/Shanghai',
-        },
-      },
+      matches: [firstMatch],
+      total: 1,
+      sales_window: restSalesWindow,
     });
 
     render(<BettingTerminalPage />);
 
+    const matchCard = await screen.findByRole('article', { name: '周日203 首尔FC 对 江原FC' });
     expect(await screen.findByText('官方竞彩休市中，今日 11:00 恢复开售')).toBeInTheDocument();
-    expect(screen.queryByText('当前筛选条件下没有开售比赛')).not.toBeInTheDocument();
-    expect(screen.queryByRole('article', { name: /周六103/ })).not.toBeInTheDocument();
+    expect(screen.getByText('休市期间，赛程和赔率仅供查看，暂不可选号。')).toBeInTheDocument();
+    expect(within(matchCard).getByRole('button', { name: '胜平负 主胜 2.04' })).toBeDisabled();
+    expect(within(screen.getByLabelText('推荐投注')).getByRole('button', { name: '当前不可投' })).toBeDisabled();
+    fireEvent.click(within(matchCard).getByRole('button', { name: '全部游戏' }));
+    const dialog = screen.getByRole('dialog', { name: '周日203 全部游戏' });
+    expect(within(dialog).getByRole('button', { name: '胜平负 主胜 2.04' })).toBeDisabled();
+    expect(within(dialog).getByRole('button', { name: '比分 1:0 8.50' })).toBeDisabled();
+    expect(apiMocks.calculate).not.toHaveBeenCalled();
+  });
+
+  it('refreshes and locks the existing match card and dialog when sales close', async () => {
+    vi.useFakeTimers();
+    try {
+      apiMocks.matches.mockResolvedValueOnce({
+        matches: [firstMatch],
+        sales_window: { ...restSalesWindow, is_open: true, current_time: '2026-07-12T22:59:59+08:00' },
+      }).mockResolvedValueOnce({
+        matches: [firstMatch],
+        sales_window: { ...restSalesWindow, current_time: restSalesWindow.closes_at, next_opens_at: '2026-07-13T11:00:00+08:00' },
+      });
+
+      await act(async () => { render(<BettingTerminalPage />); });
+      const matchCard = screen.getByRole('article', { name: '周日203 首尔FC 对 江原FC' });
+      const homeWin = within(matchCard).getByRole('button', { name: '胜平负 主胜 2.04' });
+      expect(homeWin).toBeEnabled();
+      fireEvent.click(within(matchCard).getByRole('button', { name: '全部游戏' }));
+      const score = within(screen.getByRole('dialog')).getByRole('button', { name: '比分 1:0 8.50' });
+      expect(score).toBeEnabled();
+
+      await act(async () => { await vi.advanceTimersByTimeAsync(1_000); });
+      expect(apiMocks.matches).toHaveBeenCalledTimes(2);
+      expect(homeWin).toBeDisabled();
+      expect(score).toBeDisabled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
