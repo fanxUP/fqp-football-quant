@@ -49,7 +49,7 @@ def parse_jc_bulletin(row: dict[str, Any]) -> tuple[datetime, dict] | None:
     )
     if window:
         try:
-            day = _date(window.groups()[:3], published)
+            day = _date((window.group(1), window.group(2), window.group(3)), published)
             cutoff = datetime.fromisoformat(f"{day.isoformat()}T{window[4].zfill(5)}").replace(
                 tzinfo=BEIJING
             )
@@ -80,7 +80,7 @@ def parse_jc_bulletin(row: dict[str, Any]) -> tuple[datetime, dict] | None:
     kickoff = None
     if changed_to:
         try:
-            day = _date(changed_to.groups()[:3], published)
+            day = _date((changed_to.group(1), changed_to.group(2), changed_to.group(3)), published)
             kickoff = datetime.fromisoformat(
                 f"{day.isoformat()}T{changed_to[4].zfill(5)}"
             ).isoformat(timespec="seconds")

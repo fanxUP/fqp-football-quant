@@ -221,23 +221,28 @@ def _store_current_issue(conn: Any, pool: dict) -> tuple[int, int]:
                 if m["match_order"] not in changed_orders
                 and not existing.get(m["match_order"], (None, None))[1]
                 and m["raw_json"].get("_schedule_head")
+                and (kickoff := pool_time(m["kickoff_time"])) is not None
                 and (
                     m["source_ids"]["gmMatchId"],
                     m["league_name"],
                     m["home_team_name"],
                     m["away_team_name"],
-                    pool_time(m["kickoff_time"]).replace(tzinfo=None),
+                    kickoff.replace(tzinfo=None),
                 )
                 in linked_matches
             )
         header_changed = not rows or rows[0][1:3] != (pool["raw_json"], pool["official_status"])
         if not header_changed and not changed:
             return 0, 0
-        issue_id = (
-            store_pool_issue(conn, **{k: v for k, v in pool.items() if k != "matches"})
-            if header_changed
-            else rows[0][0]
-        )
+        if header_changed:
+            stored_issue_id = store_pool_issue(
+                conn, **{k: v for k, v in pool.items() if k != "matches"}
+            )
+            if stored_issue_id is None:
+                raise RuntimeError("pool issue storage did not return its row ID")
+            issue_id = stored_issue_id
+        else:
+            issue_id = int(rows[0][0])
         return int(header_changed), store_pool_issue_matches(
             conn, issue_id, changed
         ) if changed else 0
@@ -266,7 +271,7 @@ def refresh_current_pool_schedule() -> dict:
             return {}
 
     try:
-        extra = set()
+        extra: set[tuple[int, str]] = set()
         for code in SCHEDULE_GAMES:
             value = read_issue(code)
             draw = value.get("drawMatch")
@@ -278,13 +283,13 @@ def refresh_current_pool_schedule() -> dict:
                     for n in numbers[:10]
                     if str(n) != current and re.fullmatch(r"\d{5,8}", str(n))
                 )
-        for key in set(_issue_checks) - extra:
-            del _issue_checks[key]
-        for key in sorted(extra, key=lambda item: (_issue_checks.get(item, 0), item))[
+        for issue_key in set(_issue_checks) - extra:
+            del _issue_checks[issue_key]
+        for issue_key in sorted(extra, key=lambda item: (_issue_checks.get(item, 0), item))[
             :_EXTRA_ISSUE_LIMIT
         ]:
-            _issue_checks[key] = started
-            read_issue(*key)
+            _issue_checks[issue_key] = started
+            read_issue(*issue_key)
 
         members = sorted(
             (
@@ -297,8 +302,8 @@ def refresh_current_pool_schedule() -> dict:
             key=lambda m: m["kickoff_date"],
         )
         ids = dict.fromkeys(member["source_ids"]["gmMatchId"] for member in members)
-        for key in set(_heads) - ids.keys():
-            del _heads[key]
+        for match_id in set(_heads) - ids.keys():
+            del _heads[match_id]
         candidates = sorted(ids, key=lambda key: _heads.get(key, (0, {}))[0])
         requests = [key for key in candidates if _heads.get(key, (0, {}))[0] <= started]
         requests = requests[:_HEAD_REQUEST_LIMIT]

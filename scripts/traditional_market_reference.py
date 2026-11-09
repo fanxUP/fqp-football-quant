@@ -205,7 +205,7 @@ def _current_targets(
                ORDER BY published_at DESC, observed_at DESC""",
             (now - timedelta(days=14), now),
         )
-        revisions = {}
+        revisions: dict[tuple[str, str], tuple[dict, str]] = {}
         for (evidence,) in cur.fetchall():
             for issue in evidence["issues"]:
                 revisions.setdefault(

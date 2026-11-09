@@ -1029,17 +1029,22 @@ def _run_owned(
         prediction_run_created = True
         if scheduled_tasks:
             attach_prediction_tasks(conn, scheduled_tasks, prediction_run_id)
-        result = _run_impl(
-            match_id=match_id,
-            dry_run=False,
-            prediction_run_id=prediction_run_id,
-            execution_conn=conn,
-            **(
-                {"scheduled_tasks": scheduled_tasks, "schedule_manifest": schedule_manifest}
-                if scheduled_tasks
-                else {}
-            ),
-        )
+        if scheduled_tasks:
+            result = _run_impl(
+                match_id=match_id,
+                dry_run=False,
+                prediction_run_id=prediction_run_id,
+                execution_conn=conn,
+                scheduled_tasks=scheduled_tasks,
+                schedule_manifest=schedule_manifest,
+            )
+        else:
+            result = _run_impl(
+                match_id=match_id,
+                dry_run=False,
+                prediction_run_id=prediction_run_id,
+                execution_conn=conn,
+            )
         run_status = (
             "failed"
             if result.get("status") == "error"
