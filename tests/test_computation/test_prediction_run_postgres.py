@@ -3838,11 +3838,14 @@ def isolated_database(request):
             """CREATE TABLE official_odds_snapshots (
                 id BIGSERIAL PRIMARY KEY,
                 match_id BIGINT NOT NULL,
+                market_id BIGINT,
                 play_type VARCHAR(32) NOT NULL,
                 option_code VARCHAR(16) NOT NULL,
                 sp_value NUMERIC(10,4) NOT NULL,
                 snapshot_time TIMESTAMP NOT NULL,
-                is_open BOOLEAN NOT NULL DEFAULT true
+                is_open BOOLEAN NOT NULL DEFAULT true,
+                raw_hash VARCHAR(128),
+                created_at TIMESTAMP NOT NULL DEFAULT NOW()
             )"""
         )
         cursor.execute(
@@ -6727,3 +6730,431 @@ def test_feature_importance_reads_latest_pre_kickoff_snapshots_for_bounded_recen
     assert labels.tolist() == [2, 1]
     assert feature_names == [FEATURE_COLUMNS[0]]
     assert features[:, 0].tolist() == [10.0, 20.0]
+
+
+def test_p111_shadow_uses_p106_run_group_replay_and_research_storage(isolated_database):
+    import math
+    from datetime import datetime, timedelta
+
+    from psycopg2.extensions import TRANSACTION_STATUS_IDLE, TRANSACTION_STATUS_INTRANS
+
+    from scripts.backtest_engine import evaluate_prediction_replay
+    from scripts.dynamic_team_challenger import DynamicTeamFixture, SeasonMatchContext
+    from scripts.dynamic_team_p106 import (
+        MODEL_NAME,
+        evaluate_dynamic_team_p106_shadow,
+        run_dynamic_team_p106_shadow,
+    )
+    from scripts.model_training_manifest_storage import load_training_manifest
+    from scripts.training_manifest import CandidateMatch, build_training_dataset
+
+    conn, _schema_name = isolated_database
+    fit_cutoff = datetime(2026, 3, 1, 0, 0)
+    pairs = ((1, 2), (3, 4), (1, 3), (2, 4), (1, 4), (2, 3))
+    candidates = []
+    for index in range(18):
+        kickoff = datetime(2026, 1, 1, 18) + timedelta(days=index * 2)
+        home_team, away_team = pairs[index % len(pairs)]
+        candidates.append(
+            CandidateMatch(
+                match_id=1000 + index,
+                result_id=2000 + index,
+                kickoff_at=kickoff,
+                home_team_id=home_team,
+                away_team_id=away_team,
+                home_goals=2 if home_team == 1 else index % 3,
+                away_goals=0 if away_team == 2 else (index + 1) % 2,
+                match_status="settled",
+                official_publish_time=kickoff + timedelta(hours=3),
+            )
+        )
+    dataset = build_training_dataset(candidates, min_matches=1, cutoff_at=fit_cutoff)
+    context_sha = "a" * 64
+    venue_sha = "b" * 64
+    contexts = {
+        sample.match_id: SeasonMatchContext(
+            competition_id=77,
+            competition_season_id=20262027,
+            neutral_venue=(sample.match_id % 5 == 0),
+            season_membership_evidence_sha256=context_sha,
+            season_membership_available_at=fit_cutoff - timedelta(days=1),
+            venue_evidence_sha256=venue_sha,
+            venue_evidence_available_at=fit_cutoff - timedelta(days=1),
+        )
+        for sample in dataset.samples
+    }
+    excluded_context_match_id = dataset.samples[-1].match_id
+    excluded_context = contexts[excluded_context_match_id]
+    contexts[excluded_context_match_id] = SeasonMatchContext(
+        competition_id=excluded_context.competition_id,
+        competition_season_id=20252026,
+        neutral_venue=excluded_context.neutral_venue,
+        season_membership_evidence_sha256=excluded_context.season_membership_evidence_sha256,
+        season_membership_available_at=excluded_context.season_membership_available_at,
+        venue_evidence_sha256=excluded_context.venue_evidence_sha256,
+        venue_evidence_available_at=excluded_context.venue_evidence_available_at,
+    )
+    prediction_as_of = datetime(2026, 3, 10, 10, 0)
+    fixtures = []
+    market_ids = {}
+    match_ids = []
+
+    def insert_snapshot_set(
+        cursor,
+        match_id,
+        *,
+        raw_codes,
+        time_by_option,
+        prices=None,
+        is_open=True,
+        raw_hash="a" * 64,
+        created_at=None,
+    ):
+        ids = {}
+        resolved_prices = prices or {"3": 2.10, "1": 3.25, "0": 3.60}
+        created_at = created_at or prediction_as_of - timedelta(hours=8, minutes=25)
+        for option in ("3", "1", "0"):
+            cursor.execute(
+                """INSERT INTO official_odds_snapshots (
+                       match_id, play_type, option_code, sp_value, snapshot_time,
+                       is_open, raw_hash, created_at
+                   ) VALUES (%s,'spf',%s,%s,%s,%s,%s,%s) RETURNING id""",
+                (
+                    match_id,
+                    raw_codes[option],
+                    resolved_prices[option],
+                    time_by_option[option],
+                    is_open,
+                    raw_hash,
+                    created_at,
+                ),
+            )
+            ids[option] = int(cursor.fetchone()[0])
+        return ids
+
+    with conn.cursor() as cursor:
+        cursor.execute(
+            """ALTER TABLE model_versions
+               ADD COLUMN model_type VARCHAR(64),
+               ADD COLUMN version VARCHAR(64),
+               ADD COLUMN training_start_date DATE,
+               ADD COLUMN training_end_date DATE,
+               ADD COLUMN training_window_start DATE,
+               ADD COLUMN training_window_end DATE,
+               ADD COLUMN feature_set_version VARCHAR(64),
+               ADD COLUMN parameters_json JSONB,
+               ADD COLUMN description TEXT,
+               ADD COLUMN is_active BOOLEAN NOT NULL DEFAULT false"""
+        )
+        cursor.execute(
+            "CREATE UNIQUE INDEX model_versions_name_version_uq ON model_versions(model_name, version)"
+        )
+        cursor.execute(
+            """INSERT INTO official_matches (
+                   business_date, kickoff_time, match_status, home_team_name, away_team_name
+               ) VALUES (%s,%s,'scheduled','home-a','away-a'),
+                        (%s,%s,'scheduled','home-b','away-b')
+               RETURNING id""",
+            (
+                datetime(2026, 3, 11).date(),
+                datetime(2026, 3, 11, 18),
+                datetime(2026, 3, 12).date(),
+                datetime(2026, 3, 12, 18),
+            ),
+        )
+        match_ids = [int(row[0]) for row in cursor.fetchall()]
+        first_match_id = match_ids[0]
+        for match_id, kickoff, home_team, away_team in zip(
+            match_ids,
+            (datetime(2026, 3, 11, 18), datetime(2026, 3, 12, 18)),
+            (1, 3),
+            (2, 4),
+            strict=True,
+        ):
+            fixtures.append(
+                DynamicTeamFixture(
+                    match_id=match_id,
+                    competition_id=77,
+                    competition_season_id=20262027,
+                    home_team_id=home_team,
+                    away_team_id=away_team,
+                    kickoff_at=kickoff,
+                    prediction_as_of=prediction_as_of,
+                    neutral_venue=False,
+                    season_membership_evidence_sha256=context_sha,
+                    season_membership_available_at=prediction_as_of - timedelta(days=5),
+                    venue_evidence_sha256=venue_sha,
+                    venue_evidence_available_at=prediction_as_of - timedelta(days=5),
+                )
+            )
+            raw_codes = (
+                {"3": "h", "1": "d", "0": "a"}
+                if match_id == match_ids[0]
+                else {"3": "3", "1": "1", "0": "0"}
+            )
+            capture_times = {
+                option: prediction_as_of - timedelta(minutes=30) for option in ("3", "1", "0")
+            }
+            market_ids[match_id] = insert_snapshot_set(
+                cursor, match_id, raw_codes=raw_codes, time_by_option=capture_times
+            )
+
+        cursor.execute(
+            """INSERT INTO official_odds_snapshots (
+                   match_id, play_type, option_code, sp_value, snapshot_time, is_open,
+                   raw_hash, created_at
+            ) VALUES (%s,'spf','1',3.10,%s,true,%s,%s) RETURNING id""",
+            (
+                first_match_id,
+                prediction_as_of - timedelta(minutes=20),
+                "a" * 64,
+                prediction_as_of - timedelta(hours=8, minutes=20),
+            ),
+        )
+        decoy_snapshot_id = int(cursor.fetchone()[0])
+
+        invalid_market_sets = {}
+        for label, capture_delta, open_state, price_override, split_time in (
+            ("closed", timedelta(minutes=30), False, None, False),
+            ("stale", timedelta(minutes=46), True, None, False),
+            ("under_price", timedelta(minutes=30), True, {"3": 1.0, "1": 3.25, "0": 3.60}, False),
+            ("mixed_capture", timedelta(minutes=30), True, None, True),
+            ("late_backfill", timedelta(minutes=30), True, None, False),
+        ):
+            capture_times = {option: prediction_as_of - capture_delta for option in ("3", "1", "0")}
+            if split_time:
+                capture_times["0"] += timedelta(seconds=1)
+            invalid_market_sets[label] = insert_snapshot_set(
+                cursor,
+                first_match_id,
+                raw_codes={"3": "h", "1": "d", "0": "a"},
+                time_by_option=capture_times,
+                prices=price_override,
+                is_open=open_state,
+                raw_hash="b" * 64,
+                created_at=(
+                    prediction_as_of - timedelta(hours=8) + timedelta(seconds=1)
+                    if label == "late_backfill"
+                    else None
+                ),
+            )
+
+    # A caller-owned write/transaction must never be committed or rolled back by the adapter.
+    with pytest.raises(ValueError, match="idle connection"):
+        run_dynamic_team_p106_shadow(
+            conn,
+            parent_training_manifest=dataset.manifest.to_dict(),
+            season_context_by_match=contexts,
+            competition_id=77,
+            competition_season_id=20262027,
+            target_fixtures=fixtures,
+            market_snapshot_ids_by_match=market_ids,
+            release_id="p111-p106-isolated-test",
+        )
+    assert conn.get_transaction_status() == TRANSACTION_STATUS_INTRANS
+    conn.commit()
+    assert conn.get_transaction_status() == TRANSACTION_STATUS_IDLE
+
+    wrong_market_ids = {match_id: dict(options) for match_id, options in market_ids.items()}
+    wrong_market_ids[first_match_id]["3"] = decoy_snapshot_id
+    with pytest.raises(ValueError, match="does not match"):
+        run_dynamic_team_p106_shadow(
+            conn,
+            parent_training_manifest=dataset.manifest.to_dict(),
+            season_context_by_match=contexts,
+            competition_id=77,
+            competition_season_id=20262027,
+            target_fixtures=fixtures,
+            market_snapshot_ids_by_match=wrong_market_ids,
+            release_id="p111-p106-isolated-test",
+        )
+    with conn.cursor() as cursor:
+        cursor.execute("SELECT COUNT(*) FROM model_versions")
+        assert cursor.fetchone()[0] == 0
+        cursor.execute("SELECT COUNT(*) FROM model_prediction_runs")
+        assert cursor.fetchone()[0] == 0
+    conn.commit()
+
+    for label, invalid_ids in invalid_market_sets.items():
+        invalid_market_map = {match_id: dict(options) for match_id, options in market_ids.items()}
+        invalid_market_map[first_match_id] = invalid_ids
+        expected_error = {
+            "closed": "open",
+            "stale": "older than 45 minutes",
+            "under_price": "price above 1",
+            "mixed_capture": "coherent market capture",
+            "late_backfill": "stored after prediction_as_of",
+        }[label]
+        with pytest.raises(ValueError, match=expected_error):
+            run_dynamic_team_p106_shadow(
+                conn,
+                parent_training_manifest=dataset.manifest.to_dict(),
+                season_context_by_match=contexts,
+                competition_id=77,
+                competition_season_id=20262027,
+                target_fixtures=fixtures,
+                market_snapshot_ids_by_match=invalid_market_map,
+                release_id="p111-p106-isolated-test",
+            )
+        assert conn.get_transaction_status() == TRANSACTION_STATUS_IDLE
+        with conn.cursor() as cursor:
+            cursor.execute("SELECT COUNT(*) FROM model_versions")
+            assert cursor.fetchone()[0] == 0
+            cursor.execute("SELECT COUNT(*) FROM model_prediction_runs")
+            assert cursor.fetchone()[0] == 0
+        conn.commit()
+        assert conn.get_transaction_status() == TRANSACTION_STATUS_IDLE
+
+    result = run_dynamic_team_p106_shadow(
+        conn,
+        parent_training_manifest=dataset.manifest.to_dict(),
+        season_context_by_match=contexts,
+        competition_id=77,
+        competition_season_id=20262027,
+        target_fixtures=fixtures,
+        market_snapshot_ids_by_match=market_ids,
+        release_id="p111-p106-isolated-test",
+    )
+    assert result["status"] == "completed"
+    assert result["rollout_mode"] == "shadow"
+    assert result["publishable"] is False
+    assert result["prediction_count"] == 2
+    with conn.cursor() as cursor:
+        cursor.execute(
+            "SELECT input_manifest FROM model_prediction_runs WHERE id=%s", (result["run_id"],)
+        )
+        input_manifest = cursor.fetchone()[0]
+        first_fixture_input = input_manifest["fixtures"][0]
+        assert first_fixture_input["odds_by_option"] == {
+            "0": "3.6000",
+            "1": "3.2500",
+            "3": "2.1000",
+        }
+        assert first_fixture_input["odds_snapshot_created_at"] == {
+            "0": "2026-03-10T01:35:00.000000",
+            "1": "2026-03-10T01:35:00.000000",
+            "3": "2026-03-10T01:35:00.000000",
+        }
+        cursor.execute(
+            "SELECT model_name, version, is_active, parameters_json FROM model_versions WHERE id=%s",
+            (result["model_version_id"],),
+        )
+        model_name, version, active, parameters = cursor.fetchone()
+        assert model_name == MODEL_NAME
+        assert version == parameters["artifact_sha256"] == result["artifact_sha256"]
+        assert parameters["candidate_sha256"] == result["candidate_sha256"]
+        assert active is False
+        assert parameters["rollout_mode"] == "shadow"
+        assert parameters["publishable"] is False
+        cursor.execute(
+            "SELECT COUNT(*) FROM model_prediction_groups WHERE run_id=%s AND group_status='complete'",
+            (result["run_id"],),
+        )
+        assert cursor.fetchone()[0] == 2
+        cursor.execute(
+            """SELECT COUNT(*), COUNT(DISTINCT option_code),
+                      BOOL_AND(validation_status='invalid')
+               FROM model_prediction_latest_rows WHERE prediction_run_id=%s""",
+            (result["run_id"],),
+        )
+        row_count, option_count, validation_status = cursor.fetchone()
+        assert row_count == 6
+        assert option_count == 3
+        assert validation_status is True
+        cursor.execute(
+            "SELECT bool_and(score_matrix IS NOT NULL) FROM model_prediction_groups WHERE run_id=%s",
+            (result["run_id"],),
+        )
+        assert cursor.fetchone()[0] is True
+    stored_manifest = load_training_manifest(conn, result["model_version_id"])
+    assert stored_manifest is not None
+    assert stored_manifest["sha256"] == result["training_manifest_sha256"]
+    conn.commit()
+
+    repeated_result = run_dynamic_team_p106_shadow(
+        conn,
+        parent_training_manifest=dataset.manifest.to_dict(),
+        season_context_by_match=contexts,
+        competition_id=77,
+        competition_season_id=20262027,
+        target_fixtures=fixtures,
+        market_snapshot_ids_by_match=market_ids,
+        release_id="p111-p106-idempotence-test",
+    )
+    assert repeated_result["model_version_id"] == result["model_version_id"]
+
+    changed_excluded_contexts = dict(contexts)
+    changed_excluded_contexts[excluded_context_match_id] = SeasonMatchContext(
+        competition_id=excluded_context.competition_id,
+        competition_season_id=20252026,
+        neutral_venue=excluded_context.neutral_venue,
+        season_membership_evidence_sha256=excluded_context.season_membership_evidence_sha256,
+        season_membership_available_at=excluded_context.season_membership_available_at,
+        venue_evidence_sha256="c" * 64,
+        venue_evidence_available_at=excluded_context.venue_evidence_available_at,
+    )
+    changed_evidence_result = run_dynamic_team_p106_shadow(
+        conn,
+        parent_training_manifest=dataset.manifest.to_dict(),
+        season_context_by_match=changed_excluded_contexts,
+        competition_id=77,
+        competition_season_id=20262027,
+        target_fixtures=fixtures,
+        market_snapshot_ids_by_match=market_ids,
+        release_id="p111-p106-exclusion-evidence-test",
+    )
+    assert changed_evidence_result["candidate_sha256"] == result["candidate_sha256"]
+    assert changed_evidence_result["artifact_sha256"] != result["artifact_sha256"]
+    assert changed_evidence_result["model_version_id"] != result["model_version_id"]
+
+    with conn.cursor() as cursor:
+        cursor.execute("SELECT 1")
+    assert conn.get_transaction_status() == TRANSACTION_STATUS_INTRANS
+    with pytest.raises(ValueError, match="idle connection"):
+        evaluate_dynamic_team_p106_shadow(
+            conn, prediction_run_id=result["run_id"], name="P111 pending result test"
+        )
+    assert conn.get_transaction_status() == TRANSACTION_STATUS_INTRANS
+    conn.rollback()
+    with pytest.raises(ValueError, match="no complete paired SPF observations"):
+        evaluate_dynamic_team_p106_shadow(
+            conn, prediction_run_id=result["run_id"], name="P111 pending result test"
+        )
+    with conn.cursor() as cursor:
+        cursor.execute("SELECT COUNT(*) FROM backtest_runs")
+        assert cursor.fetchone()[0] == 0
+    conn.commit()
+
+    with conn.cursor() as cursor:
+        cursor.executemany(
+            """INSERT INTO official_results (
+                   match_id, official_publish_time, full_home_goals, full_away_goals,
+                   result_status, spf_result
+               ) VALUES (%s,%s,%s,%s,'confirmed',%s)""",
+            [
+                (match_ids[0], datetime(2026, 3, 11, 21), 2, 0, "3"),
+                (match_ids[1], datetime(2026, 3, 12, 21), 1, 1, "1"),
+            ],
+        )
+    conn.commit()
+    evaluation = evaluate_dynamic_team_p106_shadow(
+        conn, prediction_run_id=result["run_id"], name="P111 P106 shadow replay test"
+    )
+    assert evaluation["status"] == "evaluated"
+    assert evaluation["sample_count"] == 2
+    assert evaluation["report"]["evaluation_mode"] == "prediction_replay"
+    assert evaluation["report"]["official_prediction_writes"] == 0
+    assert math.isfinite(evaluation["report"]["metrics"]["model"]["brier_score"])
+    with conn.cursor() as cursor:
+        cursor.execute(
+            "SELECT status, config FROM backtest_runs WHERE id=%s",
+            (evaluation["evaluation_run_id"],),
+        )
+        status, report = cursor.fetchone()
+    assert status == "completed"
+    assert report["prediction_run_id"] == result["run_id"]
+    assert report["sample_count"] == 2
+    conn.commit()
+    replay = evaluate_prediction_replay(conn, result["run_id"])
+    assert replay["model_match_ids"] == match_ids
+    assert replay["market_match_ids"] == match_ids

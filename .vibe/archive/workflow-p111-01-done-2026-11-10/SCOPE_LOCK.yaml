@@ -1,0 +1,22 @@
+{
+  "schema_version": 4,
+  "task_id": "P111-01-SEASON-AWARE-DYNAMIC-TEAM-CORE",
+  "allowed_paths": [
+    "scripts/dynamic_team_challenger.py",
+    "tests/test_scripts/test_dynamic_team_challenger.py",
+    "plans/model-modernization-20261016/integrated/P111/01-season-aware-core/PLAN.md",
+    "plans/model-modernization-20261016/integrated/P111/01-season-aware-core/ACCEPTANCE.md"
+  ],
+  "protected_paths": [
+    "scripts/**",
+    "tests/**",
+    "sql/**",
+    "requirements*.txt",
+    "**/package*.json"
+  ],
+  "approved_protected_paths": [
+    "scripts/dynamic_team_challenger.py",
+    "tests/test_scripts/test_dynamic_team_challenger.py"
+  ],
+  "notes": "Single main branch only. This is one local research candidate core, not A111 completion, an effectiveness claim, shadow scheduling, probability publication, model activation or deployment."
+}

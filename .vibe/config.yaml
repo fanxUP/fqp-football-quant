@@ -4,9 +4,9 @@
     "command_timeout_seconds": 1800
   },
   "commands": {
-    "test": ".venv/bin/python -m pytest -q tests/test_scripts/test_dynamic_team_challenger.py tests/test_scripts/test_training_manifest.py tests/test_scripts/test_mle_trainer.py",
-    "lint": ".venv/bin/ruff check scripts/dynamic_team_challenger.py tests/test_scripts/test_dynamic_team_challenger.py && .venv/bin/ruff format --check scripts/dynamic_team_challenger.py tests/test_scripts/test_dynamic_team_challenger.py && git diff --check",
-    "typecheck": ".venv/bin/mypy scripts/dynamic_team_challenger.py --explicit-package-bases"
+    "test": "env FQP_P106_TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55492/fqp_p106_test_provenance .venv/bin/python -m pytest -q tests/test_scripts/test_dynamic_team_p106.py tests/test_scripts/test_dynamic_team_challenger.py tests/test_scripts/test_model_prediction_run_storage.py tests/test_computation/test_prediction_run_postgres.py::test_p111_shadow_uses_p106_run_group_replay_and_research_storage",
+    "lint": ".venv/bin/ruff check scripts/dynamic_team_p106.py tests/test_scripts/test_dynamic_team_p106.py tests/test_computation/test_prediction_run_postgres.py && .venv/bin/ruff format --check scripts/dynamic_team_p106.py tests/test_scripts/test_dynamic_team_p106.py tests/test_computation/test_prediction_run_postgres.py && git diff --check",
+    "typecheck": ".venv/bin/mypy scripts/dynamic_team_p106.py --explicit-package-bases"
   },
   "paths": {
     "dependency_files": [

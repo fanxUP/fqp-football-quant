@@ -1,22 +1,19 @@
 {
   "schema_version": 4,
-  "current_task": "P111-01-SEASON-AWARE-DYNAMIC-TEAM-CORE",
+  "current_task": "P111-02-P106-PREDICTION-EVALUATION-INTEGRATION",
   "tasks": {
-    "P111-01-SEASON-AWARE-DYNAMIC-TEAM-CORE": {
-      "title": "Implement one season-scoped, time-decayed and shrinkage-regularized team attack/defense core",
-      "acceptance_id": "A-P111-01",
+    "P111-02-P106-PREDICTION-EVALUATION-INTEGRATION": {
+      "title": "Connect the season-aware dynamic team challenger to P106 prediction runs and replay evaluation",
+      "acceptance_id": "A-P111-02",
       "depends_on": [],
-      "kind": "research_model_core",
-      "status": "DONE",
+      "kind": "research_shadow_integration",
+      "status": "IN_PROGRESS",
       "definition_of_done": [
-        "Consume a verified P106 training manifest plus explicit per-match competition, competition-season, neutral-site and season-membership evidence; reject missing or mixed season identity.",
-        "Include only result labels published no later than the explicit fit cutoff and fixtures kicked off before that cutoff.",
-        "Apply a versioned recency half-life and small-sample shrinkage; treat known promoted teams only through explicit evidence references and never infer status from names or league labels.",
-        "Reset team state at competition-season boundaries and refuse prediction under another competition-season; no implicit prior-season carryover.",
-        "Apply home advantage only to non-neutral matches and return normalized SPF probabilities plus coverage/prior status.",
-        "Provide deterministic artifact-content identity bound to the P106 training manifest, season-context evidence, direct model dependencies and Python/NumPy/SciPy runtime versions; do not persist or publish the candidate.",
-        "Fixed-sample regression covers cutoff leakage, season leakage, neutral venues, shrinkage, promotion evidence, deterministic identity and probability normalization; Ruff/format/mypy/diff checks pass.",
-        "No migration, dependency, external API, production access, model activation, official prediction write or deployment."
+        "Derive an auditable one-season P106 training manifest from the exact parent P106 manifest and explicit point-in-time season evidence; account for every parent included sample.",
+        "Create an inactive dynamic_team_poisson_shadow artifact and exact P106 prediction run/group manifests with candidate, parent manifest, derived manifest and source/runtime identities.",
+        "Create complete SPF 3/1/0 shadow groups paired to coherent fresh market snapshots captured and stored by prediction_as_of, preserving the score matrix and point-in-time input fence data.",
+        "Use the existing P106 prediction replay evaluator and research-evaluation storage for settled fixtures; leave pending fixtures unevaluated without treating that as a failure.",
+        "Pass fixed-sample, attested isolated loopback PostgreSQL, lint, format, type and scope/budget checks; pass independent review and exact-head CI; code-only deployment leaves production DB, providers, migrations, scheduler, and model activation untouched."
       ]
     }
   }

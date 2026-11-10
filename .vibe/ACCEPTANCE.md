@@ -1,14 +1,12 @@
-# P111-01 验收：赛季范围动态球队攻防核心
+# P111-02 验收：P106 run/evaluation 接入
 
-此切片只交付可复现的本地候选算法。它不代表 A111 完整验收，不代表模型优于现有模型或市场，也不改变正式概率。
-
-- [x] 使用 P106 manifest 的精确样本；逐场季赛上下文完整、哈希可校验且同属唯一 canonical competition-season。
-- [x] 拟合 cutoff 同时匹配 P106 manifest；开球、结果发布时间、季赛成员/中立场证据和升班马证据均不得晚于可用 cutoff。
-- [x] 半衰期、基准进球率、先验强度、主场优势先验、版本和换季策略包含在版本化配置中。
-- [x] 中立场不应用主场优势；新队与少样本队使用中性先验和显式收缩；升班马身份只能由带证据引用/可用时间的输入提供。
-- [x] 模型只在同一 competition-season 上预测，换季默认中性重置，不能携带上一季队伍分数。
-- [x] 输出比分分布和完整归一化 SPF 概率、先验/样本覆盖状态，以及绑定 P106 manifest、季赛上下文、模型相关源码和运行时版本的确定性候选摘要。
-- [x] 固定样本回归 31 项通过；Ruff、format、mypy、compile、diff、V4 scope/budget 通过。
-- [x] 仅将源码提交到 GitHub main 触发 CI；无生产访问、外部来源调用、数据库写入、模型注册/激活、调度或服务器部署。
-
-来源 SHA 摘要只绑定传入证据内容，不证明来源权威。调用方仍需独立验证赛季映射、场地事实和升班马来源；该限制阻止 A111 完整验收。
+- [x] 父 P106 manifest 的 SHA、cutoff 和样本身份先验证；派生季赛清单中的每个 included 样本都来自父 included 集合，父 included 每一行都恰好被纳入或带原因排除。
+- [x] 只有证据完整、canonical 赛季匹配、且成员/场地事实不晚于 fit cutoff 的样本进入拟合；目标 fixture 事实与赔率快照不晚于 prediction-as-of，prediction-as-of 严格早于 kickoff。
+- [x] 候选工件绑定父/派生 manifest、季赛上下文、P111 candidate SHA、运行时代码；模型版本保持 inactive，rollout mode 为 shadow。
+- [x] 模型版本以完整不可变工件参数摘要为键；重复相同工件幂等，排除样本证据变化生成新工件且不混淆候选拟合摘要。
+- [x] 每个有效目标输出完整 SPF 3/1/0 组，接受官方 h/d/a 码归一化；快照须来自单一开放市场、同捕获时间与同源摘要，snapshot_time 与数据库 created_at 都不晚于 prediction-as-of、最多 45 分钟新且每项赔率大于 1。P106 group 保存赔率快照 ID/源时间；哈希绑定的 run input manifest 保存 created_at 并按 match_id 关联 group；保留市场基准与完整 artifact identity。
+- [x] 预测 run 与 groups 通过现有 P106 存储函数完成、可读回；完整赛果样本可由现有 `evaluate_prediction_replay` 评价，并经现有研究评价存储器保存模型/市场成对指标。
+- [x] 数据库守卫同时检查连接 host/hostaddr、实际 database 名称和受信 CI/测试库 comment 标记；两个入口只接受 idle psycopg2 连接，且守卫及只读赔率校验结束后恢复 idle。
+- [x] 固定样本测试和隔离 loopback PostgreSQL 回归通过；适配器不连接生产库、不调用供应商、不激活模型、不写入委员会、不新增迁移、依赖或调度。
+- [x] 明确未评价的数据留待官方赛果结算后回放；本切片不声称预测效果提升或 P111 完整验收通过。
+- [ ] GitHub CI exact-head 通过，代码部署完成且只发布休眠适配器；生产模型、调度和正式预测路径仍未连接或启用。

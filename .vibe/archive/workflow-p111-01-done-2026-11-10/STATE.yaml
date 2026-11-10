@@ -1,0 +1,19 @@
+{
+  "schema_version": 4,
+  "state": "DONE",
+  "workflow_id": "P111-01-SEASON-AWARE-DYNAMIC-TEAM-CORE-20261110",
+  "previous_workflow": {
+    "task_id": "P108-05-PLAYER-FEATURE-PROJECTION-20261110",
+    "state": "DONE",
+    "archive": ".vibe/archive/workflow-p108-05-done-2026-11-10"
+  },
+  "blocked_reason": null,
+  "mode": "STRICT",
+  "environment": "Local fixed manifests only; no production database, provider calls, persistence, official probabilities, or deployment.",
+  "last_transition": {
+    "from": "READY_TO_MERGE",
+    "to": "DONE",
+    "at": "2026-11-10T14:38:41.342404+08:00",
+    "reason": "P111-01 is committed on the single main branch, pushed to GitHub, and exact-head CI plus the quality gate passed; production deployment is out of scope for this research-only core."
+  }
+}

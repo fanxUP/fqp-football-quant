@@ -206,6 +206,7 @@ jobs:
           CREATE ROLE fqp NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
           CREATE DATABASE fqp_p106_test_ci;
           CREATE DATABASE fqp_history_test_ci;
+          COMMENT ON DATABASE fqp_p106_test_ci IS 'fqp-p111-p106-isolated-fixtures/v1';
           DO $$
           BEGIN
             IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname='fqp'
