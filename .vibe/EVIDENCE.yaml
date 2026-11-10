@@ -1,60 +1,43 @@
 {
   "schema_version": 4,
-  "current_task": "P108-05-PLAYER-FEATURE-PROJECTION",
+  "current_task": "P111-01-SEASON-AWARE-DYNAMIC-TEAM-CORE",
   "acceptance": {
-    "A-P108-05": {
+    "A-P111-01": {
       "status": "PASS",
-      "command": "/bin/zsh -lc 'FQP_OBSERVATION_TEST_POSTGRES_DSN='\"'\"'host=127.0.0.1 port=60492 user=fqp_observation_test dbname=fqp_observation_test password=fqp_test_password'\"'\"' .venv/bin/python -m pytest -q tests/test_computation/test_player_observations_postgres.py tests/test_computation/test_prediction_input_runtime_postgres.py && .venv/bin/ruff check scripts/player_feature_projection.py scripts/prediction_input_runtime.py scripts/observed_maher_shadow.py tests/test_computation/test_player_observations_postgres.py && .venv/bin/ruff format --check scripts/player_feature_projection.py scripts/prediction_input_runtime.py scripts/observed_maher_shadow.py tests/test_computation/test_player_observations_postgres.py && .venv/bin/mypy scripts/player_feature_projection.py scripts/prediction_input_runtime.py scripts/observed_maher_shadow.py --explicit-package-bases && git diff --check'",
+      "command": "/bin/zsh -lc '.venv/bin/python -m pytest -q tests/test_scripts/test_dynamic_team_challenger.py tests/test_scripts/test_training_manifest.py tests/test_scripts/test_mle_trainer.py && .venv/bin/ruff check scripts/dynamic_team_challenger.py tests/test_scripts/test_dynamic_team_challenger.py && .venv/bin/ruff format --check scripts/dynamic_team_challenger.py tests/test_scripts/test_dynamic_team_challenger.py && .venv/bin/mypy scripts/dynamic_team_challenger.py --explicit-package-bases && .venv/bin/python -m compileall -q scripts/dynamic_team_challenger.py tests/test_scripts/test_dynamic_team_challenger.py && git diff --check'",
       "exit_code": 0,
-      "summary": "============================= test session starts ==============================\nplatform darwin -- Python 3.14.6, pytest-9.1.1, pluggy-1.7.0\nrootdir: /Volumes/Nas/FQP/code\nconfigfile: pyproject.toml\nplugins: mock-3.15.1, cov-7.1.0, asyncio-1.4.0, anyio-4.15.1, platformdirs-4.13.5\nasyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function\ncollected 104 items\n\ntests/test_computation/test_player_observations_postgres.py ............ [ 11%]\n.................................................                        [ 58%]\ntests/test_computation/test_prediction_input_runtime_postgres.py ....... [ 65%]\n....................................                                     [100%]\n\n============================= 104 passed in 28.14s =============================\nAll checks passed!\n4 files already formatted\nSuccess: no issues found in 3 source files\n",
+      "summary": "============================= test session starts ==============================\nplatform darwin -- Python 3.14.6, pytest-9.1.1, pluggy-1.7.0\nrootdir: /Volumes/Nas/FQP/code\nconfigfile: pyproject.toml\nplugins: mock-3.15.1, cov-7.1.0, asyncio-1.4.0, anyio-4.15.1, platformdirs-4.13.5\nasyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function\ncollected 31 items\n\ntests/test_scripts/test_dynamic_team_challenger.py .........             [ 29%]\ntests/test_scripts/test_training_manifest.py ......                      [ 48%]\ntests/test_scripts/test_mle_trainer.py ................                  [100%]\n\n============================== 31 passed in 1.66s ==============================\nAll checks passed!\n2 files already formatted\nSuccess: no issues found in 1 source file\n",
       "timed_out": false,
-      "environment": "Fixed local samples and the dedicated loopback PostgreSQL 16 fixture only; read-only projection; no provider calls, production access, import, probability change, or deployment.",
-      "revision": "fc92c5ae3fafae6117aa9ce45d2cf2082efab80e",
+      "environment": "Local fixed manifests only; no production database, provider calls, persistence, official probabilities, or deployment.",
+      "revision": "dfb336469aaedbbc7ca04ebe022813ca36538a7d",
       "dirty_tree": true,
-      "tree_fingerprint": "9db042bddfcc44576827b5c003ad978f887efe7cea5b827d751fa97c3404d23d",
-      "verified_at": "2026-11-10T11:44:45.625836+08:00"
+      "tree_fingerprint": "d188e7ff877398e33707db7cd1effb80454ed7408b1a2fdc06c0f988dc4c10d4",
+      "verified_at": "2026-11-10T14:06:09.018181+08:00"
     }
   },
   "reviews": {
     "status": "PASS",
     "application_code": {
       "status": "PASS",
-      "summary": "Independent read-only review passed. The review findings were resolved: cutoff-visible fixture-season mapping, source planned season dates, SQL-side registration row bound, and post-cutoff mapping withholding."
+      "summary": "Independent read-only review passed after resolving home-advantage double counting and score-grid tail truncation; verified dependency/runtime-bound implementation identity and prediction-output identity assertions."
     },
     "v4_migration": {
       "status": "PASS",
       "applicability": "NOT_APPLICABLE",
-      "summary": "No database migration or schema change is in scope."
+      "summary": "No V4 engine or workflow schema migration is included."
     }
   },
   "security": {
     "status": "PASS",
-    "summary": "Read-only parameterized SQL only; no secrets, provider calls, shell execution, dynamic SQL identifiers, production access, schema changes, or new dependencies. Optional runtime errors roll back to a savepoint and yield a withheld projection."
+    "summary": "Offline local research code only: no secrets, network calls, SQL, subprocess execution, credential handling, production access, dependency changes, or deployment path."
   },
   "migration": {
     "status": "NOT_APPLICABLE",
     "target_migrations": [],
     "production_applied": false
   },
-  "quality_gate": {
-    "status": "READY_TO_MERGE",
-    "checked_at": "2026-11-10T12:36:27.007833+08:00",
-    "failures": [],
-    "checked_head_sha": "0cab6327071b5854035d7357b369268b3f1ca964",
-    "github_ci_run_id": 42755334904
-  },
   "external_ci": {
-    "status": "passed",
-    "checks": {
-      "test": "passed",
-      "lint-and-typecheck": "passed"
-    },
-    "run_id": 42755334904,
-    "head_sha": "0cab6327071b5854035d7357b369268b3f1ca964",
-    "workflow": "CI",
-    "url": "https://github.com/fanxUP/fqp-football-quant/actions/runs/42755334904",
-    "completed_at": "2026-11-10T04:35:28Z",
-    "summary": "Exact-head GitHub main CI passed; the final release-evidence-only commit is independently checked by its own CI run."
+    "status": "NOT_RUN"
   },
   "production": {
     "status": "NOT_IN_SCOPE",

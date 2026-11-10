@@ -1,14 +1,14 @@
-# P108-05 验收
+# P111-01 验收：赛季范围动态球队攻防核心
 
-- [x] 当前比赛的完整 P104 batch 经 hash/cutoff 校验；无 latest-row 替换或重建 cutoff。
-- [x] 主客队必须分别有恰好 11 名确认首发，球员 source ID 与 verified canonical ID 一一对应。
-- [x] 当前伤停/可用性必须来自该 batch 的完整覆盖报告；未覆盖、过期、未映射或未知状态不被当成健康。
-- [x] 赛事赛季只从 cutoff 前已记录的 linked fixture-season 修订中解析，并使用该来源的计划赛季区间；无唯一映射时 withheld。
-- [x] 注册资格仅认可在 batch cutoff 前可见、权威源获批、且有效区间覆盖开球日的审查事实。
-- [x] 生成版本、match/batch/cutoff/as-of、身份 revision digest、注册/伤停来源证据、coverage 与 missingness。
-- [x] 任意必需信号不完整或冲突时，玩家候选为 withheld；基础影子预测仍按旧规则工作。
-- [x] shadow 集成前后固定样本概率一致，投影不产生 probability、分值或主观权重。
-- [x] 时间泄漏、同名、冲突、完整/不完整 coverage、本地 PostgreSQL 只读行为回归全部通过（104 项通过）。
-- [x] Ruff、format、mypy、scope/budget、V4 本地门禁、独立审查和 security review 通过。
-- [x] P108-05 实现提交 `186202b6db9ceac00aae6d76297a5cd7b966cf01` 的 GitHub main exact-head CI 已通过（run `42751914384`；`test`、`lint-and-typecheck` 成功）。证据提交自身仍由 V4 发布门禁核验其 exact-head CI。
-- [x] 无迁移、外部 API、生产访问/写入、数据导入、调度改动或服务器部署。
+此切片只交付可复现的本地候选算法。它不代表 A111 完整验收，不代表模型优于现有模型或市场，也不改变正式概率。
+
+- [x] 使用 P106 manifest 的精确样本；逐场季赛上下文完整、哈希可校验且同属唯一 canonical competition-season。
+- [x] 拟合 cutoff 同时匹配 P106 manifest；开球、结果发布时间、季赛成员/中立场证据和升班马证据均不得晚于可用 cutoff。
+- [x] 半衰期、基准进球率、先验强度、主场优势先验、版本和换季策略包含在版本化配置中。
+- [x] 中立场不应用主场优势；新队与少样本队使用中性先验和显式收缩；升班马身份只能由带证据引用/可用时间的输入提供。
+- [x] 模型只在同一 competition-season 上预测，换季默认中性重置，不能携带上一季队伍分数。
+- [x] 输出比分分布和完整归一化 SPF 概率、先验/样本覆盖状态，以及绑定 P106 manifest、季赛上下文、模型相关源码和运行时版本的确定性候选摘要。
+- [x] 固定样本回归 31 项通过；Ruff、format、mypy、compile、diff、V4 scope/budget 通过。
+- [x] 仅将源码提交到 GitHub main 触发 CI；无生产访问、外部来源调用、数据库写入、模型注册/激活、调度或服务器部署。
+
+来源 SHA 摘要只绑定传入证据内容，不证明来源权威。调用方仍需独立验证赛季映射、场地事实和升班马来源；该限制阻止 A111 完整验收。

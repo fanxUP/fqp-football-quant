@@ -1,0 +1,20 @@
+{
+  "schema_version": 4,
+  "state": "DONE",
+  "workflow_id": "P108-05-PLAYER-FEATURE-PROJECTION-20261110",
+  "previous_workflow": {
+    "task_id": "P108-04-ACTUAL-APPEARANCES-20261110",
+    "state": "DONE",
+    "archive": ".vibe/archive/workflow-p108-04-done-2026-11-10",
+    "archive_manifest_sha256": "de152b6fbcdf444b7b23fca5f5b968a087227735e499e89f39e0ea06dfe26819"
+  },
+  "blocked_reason": null,
+  "mode": "STRICT",
+  "environment": "Fixed local samples and the dedicated loopback PostgreSQL 16 fixture only; read-only projection; no provider calls, production access, import, probability change, or deployment.",
+  "last_transition": {
+    "from": "READY_TO_MERGE",
+    "to": "DONE",
+    "at": "2026-11-10T13:20:53.052049+08:00",
+    "reason": "P108-05 is included in deployed main dfb3364; production readiness and release marker verified."
+  }
+}

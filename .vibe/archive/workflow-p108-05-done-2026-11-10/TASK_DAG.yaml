@@ -1,0 +1,23 @@
+{
+  "schema_version": 4,
+  "current_task": "P108-05-PLAYER-FEATURE-PROJECTION",
+  "tasks": {
+    "P108-05-PLAYER-FEATURE-PROJECTION": {
+      "title": "Attach a cutoff-safe, versioned player feature projection to the existing SPF shadow record",
+      "acceptance_id": "A-P108-05",
+      "depends_on": [],
+      "kind": "application_data_contract",
+      "status": "DONE",
+      "definition_of_done": [
+        "Read only the exact current-match lineup and injury observations frozen in the complete P104 feature batch; require confirmed XI and complete injury coverage.",
+        "Resolve source player IDs only through the verified identity bridge whose mapping revision and review were known by the batch cutoff; record a deterministic identity-map digest.",
+        "Read competition registration facts and authority revisions only when acquired, created, reviewed, and effective by the explicit cutoff/kickoff; missing, conflicting, or unapproved evidence remains unknown.",
+        "Return a versioned projection with match/cutoff/as-of IDs, evidence refs, per-field coverage, and reasoned missingness; withhold the player-dependent candidate unless both teams have complete required coverage.",
+        "Embed the projection in the existing non-publishable SPF shadow result without changing the current model probabilities or legacy prediction path.",
+        "Fixed and isolated PostgreSQL regression covers complete/partial inputs, source-ID mismatch, same-name independence, authority conflict, future mapping/fact/authority leakage, kickoff leakage, and shadow probability invariance.",
+        "Local fixed regression, Ruff/format/mypy, scope/budget and V4 checks pass; independent review and security review pass. Exact-head GitHub CI is a separate release gate recorded under external_ci.",
+        "No migrations, dependency changes, provider calls, production reads/writes, imports, scheduling changes, candidate training, or probability-impact claim."
+      ]
+    }
+  }
+}

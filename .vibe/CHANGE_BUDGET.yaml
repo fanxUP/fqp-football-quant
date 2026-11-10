@@ -1,8 +1,8 @@
 {
   "schema_version": 4,
-  "task_id": "P108-05-PLAYER-FEATURE-PROJECTION",
+  "task_id": "P111-01-SEASON-AWARE-DYNAMIC-TEAM-CORE",
   "max_files_changed": 4,
-  "max_new_files": 1,
+  "max_new_files": 4,
   "max_new_dependencies": 0,
   "max_schema_migrations": 0,
   "max_public_api_changes": 0,
@@ -12,5 +12,5 @@
     "new_lint_errors": 0,
     "new_type_errors": 0
   },
-  "budget_basis": "One read-only projection module, existing Maher shadow assembly hook, and the existing PostgreSQL player-observation test module. Reuse P104 cutoffs and P108 identity/registration schema; no new public endpoint, migration, dependency, data collector, or probability behavior."
+  "budget_basis": "One standalone research-only model core, one focused fixed-sample regression file and two acceptance/plan records. Reuse P106 manifest identity and existing Poisson/evaluation primitives; no DB, API, migration, dependency or production path."
 }

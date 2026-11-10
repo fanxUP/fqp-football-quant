@@ -1,0 +1,25 @@
+{
+  "schema_version": 4,
+  "task_id": "P108-05-PLAYER-FEATURE-PROJECTION",
+  "allowed_paths": [
+    "scripts/player_feature_projection.py",
+    "scripts/prediction_input_runtime.py",
+    "scripts/observed_maher_shadow.py",
+    "tests/test_computation/test_player_observations_postgres.py"
+  ],
+  "protected_paths": [
+    "configs/**",
+    "sql/**",
+    "scripts/**",
+    "tests/**",
+    "requirements*.txt",
+    "**/package*.json"
+  ],
+  "approved_protected_paths": [
+    "scripts/player_feature_projection.py",
+    "scripts/prediction_input_runtime.py",
+    "scripts/observed_maher_shadow.py",
+    "tests/test_computation/test_player_observations_postgres.py"
+  ],
+  "notes": "Only main. Four paths maximum, one new source file. Read-only projection attached to the existing SPF shadow; no migration, provider, scheduler, model training, published prediction, or probability change."
+}

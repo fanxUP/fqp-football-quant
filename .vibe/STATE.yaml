@@ -1,20 +1,19 @@
 {
   "schema_version": 4,
   "state": "REVIEWING",
-  "workflow_id": "P108-05-PLAYER-FEATURE-PROJECTION-20261110",
+  "workflow_id": "P111-01-SEASON-AWARE-DYNAMIC-TEAM-CORE-20261110",
   "previous_workflow": {
-    "task_id": "P108-04-ACTUAL-APPEARANCES-20261110",
+    "task_id": "P108-05-PLAYER-FEATURE-PROJECTION-20261110",
     "state": "DONE",
-    "archive": ".vibe/archive/workflow-p108-04-done-2026-11-10",
-    "archive_manifest_sha256": "de152b6fbcdf444b7b23fca5f5b968a087227735e499e89f39e0ea06dfe26819"
+    "archive": ".vibe/archive/workflow-p108-05-done-2026-11-10"
   },
   "blocked_reason": null,
   "mode": "STRICT",
-  "environment": "Fixed local samples and the dedicated loopback PostgreSQL 16 fixture only; read-only projection; no provider calls, production access, import, probability change, or deployment.",
+  "environment": "Local fixed manifests only; no production database, provider calls, persistence, official probabilities, or deployment.",
   "last_transition": {
     "from": "VERIFYING",
     "to": "REVIEWING",
-    "at": "2026-11-10T11:22:42.404658+08:00",
-    "reason": "Local verification passed; independent read-only code review is underway."
+    "at": "2026-11-10T13:59:55.363444+08:00",
+    "reason": "Current implementation, deterministic implementation identity, tests, static checks, and scope/budget evidence are ready for independent review."
   }
 }

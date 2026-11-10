@@ -1,1 +1,7 @@
-"# P108-05 quality gate\n\nRun focused unit and fixed PostgreSQL tests on the dedicated marked loopback fixture. Require all selected tests to execute without skip. Run Ruff, format, mypy, scope/budget, V4 quality gate, independent read-only code review and security review, then exact-head GitHub CI. No migration is expected. No provider calls, production DB access, imports, scheduler edits, model training or deployment are in scope for this implementation slice.\n"
+# P111-01 本地质量门禁
+
+- 固定样本：`.venv/bin/python -m pytest -q tests/test_scripts/test_dynamic_team_challenger.py tests/test_scripts/test_training_manifest.py tests/test_scripts/test_mle_trainer.py`
+- Lint/格式/差异：`.venv/bin/ruff check scripts/dynamic_team_challenger.py tests/test_scripts/test_dynamic_team_challenger.py && .venv/bin/ruff format --check scripts/dynamic_team_challenger.py tests/test_scripts/test_dynamic_team_challenger.py && git diff --check`
+- 类型：`.venv/bin/mypy scripts/dynamic_team_challenger.py --explicit-package-bases`
+- V4 scope/budget 和状态门禁。
+- 不运行生产、供应商或部署命令。完整 A111 还需要接入共同 manifest/artifact/run/evaluation 与影子观察。
