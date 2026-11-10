@@ -48,7 +48,16 @@
     "failures": []
   },
   "external_ci": {
-    "status": "pending"
+    "status": "passed",
+    "checks": {
+      "test": "passed",
+      "lint-and-typecheck": "passed"
+    },
+    "run_id": 42723345356,
+    "head_sha": "120ef536210f5ad89155584bcf40b563cbbd6bf4",
+    "url": "https://github.com/fanxUP/fqp-football-quant/actions/runs/42723345356",
+    "completed_at": "2026-11-10T07:59:43+08:00",
+    "note": "Exact-head GitHub CI passed for P108-03; production database access, provider calls, data import, and deployment remain outside this slice."
   },
   "production": {
     "status": "NOT_IN_SCOPE",
