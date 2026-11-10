@@ -55,5 +55,10 @@
     "provider_calls": false,
     "business_data_writes": 0,
     "deployment": false
+  },
+  "quality_gate": {
+    "status": "READY_TO_MERGE",
+    "checked_at": "2026-11-10T14:38:00.652857+08:00",
+    "failures": []
   }
 }
