@@ -1,8 +1,19 @@
-# P108-03：首发阵容与可用性观察
+# P108-04: 实际出场与分钟事实
 
-1. 固定八条允许路径和零迁移/零依赖预算；复用 P104 observation ledger。
-2. 先写 RED：API-Football 的 `Missing Fixture` 只说明缺席，须依据明确的伤停原因分类；来源未给出可识别原因时保持 unknown。Returned/doubtful/suspended 明确区分；只接受带时区的显式 source timestamps 和 ISO expected-return date；`updated_at` 不可代填。
-3. 补充严格解析与 per-player facts；加入 `lineup_status=confirmed`；预测阵容不得写入确认投影；保持完整性、幂等、失败回滚和 coverage 规则。
-4. 扩展固定响应单测与已有隔离 PostgreSQL P104 fixture，验证 cutoff、幂等修订和空覆盖语义。
-5. 将 PostgreSQL 回归模块登记为 CI 必跑、无 skip；运行本地隔离测试、静态检查、scope/budget/quality gate。
-6. 进行一次独立只读复核，记录具体结论；不得接入模型或部署生产。
+## 目标
+
+将 API-Football 对已完赛比赛的逐场球员分钟，按已核实比赛、球队和球员身份写入 P104 append-only observation ledger。旧 Titan007 推算分钟不得作为实际分钟。
+
+## 顺序
+
+1. 固定六条产品路径、两个新增文件、零迁移、零依赖预算；复用 migration 107 的观察表。
+2. RED：固定 API 样本覆盖完赛/未完赛、fixture 与主客队错配、verified 与 unresolved 身份、直接整数分钟、零/null/缺失、类型和时长边界、换人矛盾及同名不同 ID。
+3. GREEN：新增确定性事实解析；扩展显式 `fixtures/players` 客户端方法；将主客队实际分钟作为两个有界 JSON observation 原子写入，caller 管理事务。
+4. 扩展现有 P104 隔离 PostgreSQL 测试，验证 provenance、零分钟、幂等、cutoff 和失败回滚。
+5. Ruff、format、mypy、scope/budget、V4 quality gate 和 exact-head GitHub CI 通过后，归档本工作流。
+
+## 硬边界
+
+- 不调用真实供应商 API、不连接生产数据库、不导入历史批次、不部署、不接 Scheduler。
+- 不按姓名填补身份、不按换人事件估算实际分钟、不使用 Titan default90。
+- 缺失或歧义的数据保留为 missing；本切片不改变任何模型概率。

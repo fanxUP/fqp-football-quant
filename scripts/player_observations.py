@@ -6,6 +6,7 @@ strength/absence heuristics in old projections are not source fact values.
 
 from __future__ import annotations
 
+import re
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -26,6 +27,7 @@ from scripts.feature_storage import (
 from scripts.observation_storage import append_observation, record_acquisition_failure
 
 CHECK_FRESHNESS = timedelta(minutes=30)
+_SHA256 = re.compile(r"^[a-f0-9]{64}$")
 
 
 def begin_player_group(conn: Any) -> None:
@@ -53,7 +55,7 @@ def legacy_snapshot_time(value: str | datetime) -> datetime:
 def team_stream(match_id: int, team_id: int, domain: str) -> dict:
     if type(match_id) is not int or match_id <= 0 or type(team_id) is not int or team_id <= 0:
         raise ValueError("player observation requires canonical match/team IDs")
-    if domain not in {"lineup", "injuries"}:
+    if domain not in {"lineup", "injuries", "appearance"}:
         raise ValueError("unsupported player observation domain")
     return dict(
         match_id=match_id, source_id="api_football", domain=domain, subject_key=f"team:{team_id}"
@@ -102,6 +104,196 @@ def record_lineup_status(
         valid_until=acquired_at + CHECK_FRESHNESS,
         evidence=evidence,
     )
+
+
+def store_actual_appearance_observations(conn: Any, facts: dict) -> dict[str, dict]:
+    """Append both teams' directly reported minutes in the caller's transaction.
+
+    The complete payload is validated before the first write. No freshness
+    expiry is applied to historical appearances, and this function never
+    commits or performs provider I/O.
+    """
+    if not isinstance(facts, dict):
+        raise ValueError("appearance facts must be an object")
+    match_id = facts.get("match_id")
+    fixture_id = facts.get("api_fixture_id")
+    duration = facts.get("duration_bound_minutes")
+    source_hash = facts.get("source_response_sha256")
+    acquired_at = _source_timestamp_json(facts.get("acquired_at"), "acquired_at")
+    if acquired_at is None:
+        raise ValueError("appearance facts require a source acquisition timestamp")
+    if type(match_id) is not int or match_id <= 0:
+        raise ValueError("appearance facts require a canonical official match ID")
+    if type(fixture_id) is not int or fixture_id <= 0:
+        raise ValueError("appearance facts require a positive API fixture ID")
+    if facts.get("fixture_link_status") != "linked":
+        raise ValueError("appearance facts require a linked fixture")
+    if facts.get("match_status") not in {"FT", "AET", "PEN"}:
+        raise ValueError("appearance facts require an explicitly finished match")
+    if type(duration) is not int or not 1 <= duration <= 135:
+        raise ValueError("appearance facts require a bounded finished-match duration")
+    if not isinstance(source_hash, str) or not _SHA256.fullmatch(source_hash):
+        raise ValueError("appearance facts require a source response SHA-256")
+    home_team_id = facts.get("home_team_id")
+    away_team_id = facts.get("away_team_id")
+    if (
+        type(home_team_id) is not int
+        or home_team_id <= 0
+        or type(away_team_id) is not int
+        or away_team_id <= 0
+        or home_team_id == away_team_id
+    ):
+        raise ValueError("appearance facts require distinct canonical home and away teams")
+    teams = facts.get("teams")
+    if not isinstance(teams, list) or len(teams) != 2:
+        raise ValueError("appearance facts require both fixture teams")
+
+    normalized: dict[str, dict] = {}
+    all_source_player_ids: set[str] = set()
+    all_canonical_player_ids: set[int] = set()
+    for team in teams:
+        if not isinstance(team, dict) or team.get("side") not in {"home", "away"}:
+            raise ValueError("appearance team requires an explicit home/away side")
+        side = team["side"]
+        if side in normalized:
+            raise ValueError("appearance facts contain a duplicate team side")
+        expected_team_id = home_team_id if side == "home" else away_team_id
+        team_id = team.get("team_id")
+        api_team_id = team.get("api_team_id")
+        if type(team_id) is not int or team_id != expected_team_id:
+            raise ValueError("appearance team does not match the official home/away identity")
+        if type(api_team_id) is not int or api_team_id <= 0:
+            raise ValueError("appearance team requires a positive source team ID")
+        players = team.get("players")
+        if not isinstance(players, list) or len(players) > 64:
+            raise ValueError("appearance players must be a bounded list")
+        source_count = team.get("source_reported_player_count")
+        missing_count = team.get("missing_minutes_count")
+        unresolved_count = team.get("unresolved_player_count")
+        unresolved_ids = team.get("unresolved_source_player_ids")
+        if (
+            type(source_count) is not int
+            or not 0 <= source_count <= 64
+            or type(missing_count) is not int
+            or not 0 <= missing_count <= 64
+            or type(unresolved_count) is not int
+            or not 0 <= unresolved_count <= 64
+        ):
+            raise ValueError("appearance coverage counts must be bounded")
+        if (
+            not isinstance(unresolved_ids, list)
+            or len(unresolved_ids) != unresolved_count
+            or any(
+                not isinstance(source_id, str) or not source_id.isdecimal()
+                for source_id in unresolved_ids
+            )
+            or len(set(unresolved_ids)) != len(unresolved_ids)
+        ):
+            raise ValueError("appearance unresolved source player IDs are invalid")
+        if set(unresolved_ids) & all_source_player_ids:
+            raise ValueError("appearance source player cannot be duplicated across fixture teams")
+        seen_source_ids: set[str] = set()
+        player_facts: list[dict] = []
+        for player in players:
+            if not isinstance(player, dict):
+                raise ValueError("appearance player fact must be an object")
+            source_player_id = player.get("source_player_id")
+            player_id = player.get("player_id")
+            minutes = player.get("minutes")
+            if (
+                not isinstance(source_player_id, str)
+                or not source_player_id.isdecimal()
+                or source_player_id in seen_source_ids
+                or source_player_id in all_source_player_ids
+            ):
+                raise ValueError("appearance fact requires a distinct source player ID")
+            if (
+                type(player_id) is not int
+                or player_id <= 0
+                or player_id in all_canonical_player_ids
+            ):
+                raise ValueError("appearance fact requires a distinct canonical player ID")
+            if type(minutes) is not int or not 0 <= minutes <= duration:
+                raise ValueError("appearance minutes must be a bounded non-negative integer")
+            if (
+                player.get("source_reported") is not True
+                or player.get("derivation") != "direct_source_field"
+            ):
+                raise ValueError("appearance minutes must be explicitly reported by the source")
+            seen_source_ids.add(source_player_id)
+            all_source_player_ids.add(source_player_id)
+            all_canonical_player_ids.add(player_id)
+            player_facts.append(
+                {
+                    "source_player_id": source_player_id,
+                    "player_id": player_id,
+                    "minutes": minutes,
+                    "source_reported": True,
+                    "derivation": "direct_source_field",
+                }
+            )
+        if set(unresolved_ids) & seen_source_ids:
+            raise ValueError("appearance source player cannot be both resolved and unresolved")
+        if (
+            source_count < len(player_facts)
+            or source_count < missing_count
+            or source_count < unresolved_count
+        ):
+            raise ValueError("appearance coverage counts exceed the source response")
+        all_source_player_ids.update(unresolved_ids)
+        normalized[side] = {
+            "team_id": team_id,
+            "api_team_id": api_team_id,
+            "players": sorted(player_facts, key=lambda item: item["source_player_id"]),
+            "source_reported_player_count": source_count,
+            "missing_minutes_count": missing_count,
+            "unresolved_player_count": unresolved_count,
+            "unresolved_source_player_ids": sorted(unresolved_ids),
+        }
+    if set(normalized) != {"home", "away"}:
+        raise ValueError("appearance facts require exactly one home and one away team")
+    result: dict[str, dict] = {}
+    for side in ("home", "away"):
+        team = normalized[side]
+        evidence = {
+            "adapter_version": "api-football-appearance/v1",
+            "api_fixture_id": fixture_id,
+            "api_team_id": team["api_team_id"],
+            "source_reported": True,
+            "derivation": "direct_source_field",
+            "source_response_sha256": source_hash,
+            "source_reported_player_count": team["source_reported_player_count"],
+            "missing_minutes_count": team["missing_minutes_count"],
+            "unresolved_player_count": team["unresolved_player_count"],
+            "unresolved_source_player_ids": team["unresolved_source_player_ids"],
+        }
+        value = (
+            {
+                "side": side,
+                "team_id": team["team_id"],
+                "api_team_id": team["api_team_id"],
+                "api_fixture_id": fixture_id,
+                "match_status": facts["match_status"],
+                "duration_bound_minutes": duration,
+                "players": team["players"],
+                "source_reported_player_count": team["source_reported_player_count"],
+                "missing_minutes_count": team["missing_minutes_count"],
+                "unresolved_player_count": team["unresolved_player_count"],
+            }
+            if team["players"]
+            else None
+        )
+        ref = append_observation(
+            conn,
+            **team_stream(match_id, team["team_id"], "appearance"),
+            fact_status=FactStatus.VALUE if value is not None else FactStatus.UNKNOWN,
+            value=value,
+            acquired_at=datetime.fromisoformat(acquired_at),
+            verified_at=datetime.fromisoformat(acquired_at),
+            evidence=evidence,
+        )
+        result[side] = ref
+    return result
 
 
 def store_lineup_observation(

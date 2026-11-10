@@ -232,6 +232,46 @@ class ApiFootballClient:
             self._request("fixtures/statistics", params={"fixture": fixture_id})
         )
 
+    def get_fixture_players(self, fixture_id: int) -> list[dict[str, Any]]:
+        """Get per-player statistics for one explicitly requested fixture.
+
+        This method does not schedule or batch requests. Callers still pass
+        through the shared quota ledger and must decide when data is needed.
+        """
+        if type(fixture_id) is not int or fixture_id <= 0:
+            raise ValueError("fixture_id must be a positive integer")
+        payload = self._request("fixtures/players", params={"fixture": fixture_id})
+        rows = payload.get("response")
+        if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
+            raise ProviderRequestError("invalid_response")
+        paging = payload.get("paging")
+        if paging is not None:
+            if (
+                not isinstance(paging, dict)
+                or type(paging.get("current")) is not int
+                or type(paging.get("total")) is not int
+                or paging["current"] < 1
+                or paging["total"] < 1
+            ):
+                raise ProviderRequestError("invalid_response")
+            if paging["current"] != 1 or paging["total"] != 1:
+                raise ProviderRequestError("partial_response")
+        results = payload.get("results")
+        if results is not None and (type(results) is not int or results != len(rows)):
+            raise ProviderRequestError("partial_response")
+        for row in rows:
+            team = row.get("team")
+            players = row.get("players")
+            if (
+                not isinstance(team, dict)
+                or type(team.get("id")) is not int
+                or team["id"] <= 0
+                or not isinstance(players, list)
+                or any(not isinstance(player, dict) for player in players)
+            ):
+                raise ProviderRequestError("invalid_response")
+        return rows
+
     # ------------------------------------------------------------------
     # Public API — Injuries
     # ------------------------------------------------------------------

@@ -1,20 +1,20 @@
 {
   "schema_version": 4,
-  "state": "DONE",
-  "workflow_id": "P108-03-LINEUPS-AVAILABILITY-20261110",
+  "state": "READY_TO_MERGE",
+  "workflow_id": "P108-04-ACTUAL-APPEARANCES-20261110",
   "previous_workflow": {
-    "task_id": "P108-02-EFFECTIVE-AFFILIATION-ELIGIBILITY-20261110",
+    "task_id": "P108-03-LINEUPS-AVAILABILITY-20261110",
     "state": "DONE",
-    "archive": ".vibe/archive/workflow-p108-02-done-2026-11-10",
-    "archive_manifest_sha256": "ee468d2334e076a6909af1673d287d4cc4e6e40584540aef981c4f0c723091f9"
+    "archive": ".vibe/archive/workflow-p108-03-done-2026-11-10",
+    "archive_manifest_sha256": "9b4a869df782d5125a06f5e3e6a67497640f97432103725a7257083acfcbb0d8"
   },
   "blocked_reason": null,
   "mode": "STRICT",
-  "environment": "Local main checkout; fixed responses and isolated PostgreSQL 16 only; no production DB/provider API access or data import.",
+  "environment": "Local fixed responses and the explicitly marked loopback PostgreSQL 16 test database only; no production database, provider calls, import, or deployment.",
   "last_transition": {
-    "from": "READY_TO_MERGE",
-    "to": "DONE",
-    "at": "2026-11-10T08:27:16.957100+08:00",
-    "reason": "P108-03 exact-head CI, isolated PostgreSQL regression, independent reviews, security, scope, budget and V4 quality gate passed; no production deployment or data import."
+    "from": "REVIEWING",
+    "to": "READY_TO_MERGE",
+    "at": "2026-11-10T09:36:55.789735+08:00",
+    "reason": "Local tests, static analysis, scope/budget checks, security review and independent review pass."
   }
 }

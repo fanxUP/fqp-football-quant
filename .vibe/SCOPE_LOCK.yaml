@@ -1,19 +1,16 @@
 {
   "schema_version": 4,
-  "task_id": "P108-03-LINEUPS-AVAILABILITY",
-  "objective": "Use the P104 append-only observation ledger for explicit confirmed lineups and typed player availability, preserving source publication/effective/return dates without inferred timestamps or false healthy status.",
+  "task_id": "P108-04-ACTUAL-APPEARANCES",
+  "objective": "Accept only source-reported fixture player minutes tied to a verified identity, finished and team-matched fixture, recording immutable provenance in the P104 ledger while rejecting inferred Titan minutes.",
   "allowed_paths": [
-    ".github/workflows/ci.yml",
-    "scripts/data_contracts.py",
+    "scripts/api_football_client.py",
+    "scripts/player_appearance_facts.py",
     "scripts/player_observations.py",
-    "scripts/jobs/collect_injury_data.py",
-    "tests/test_scripts/test_data_contracts.py",
-    "tests/test_jobs/test_collect_injury_data.py",
+    "tests/test_scripts/test_player_appearance_facts.py",
     "tests/test_computation/test_player_observations_postgres.py",
-    "tests/test_computation/test_observation_postgres.py"
+    "scripts/player_identity_bridge.py"
   ],
   "protected_paths": [
-    ".github/**",
     "configs/**",
     "sql/**",
     "scripts/**",
@@ -22,14 +19,12 @@
     "**/package*.json"
   ],
   "approved_protected_paths": [
-    ".github/workflows/ci.yml",
-    "scripts/data_contracts.py",
+    "scripts/api_football_client.py",
+    "scripts/player_appearance_facts.py",
     "scripts/player_observations.py",
-    "scripts/jobs/collect_injury_data.py",
-    "tests/test_scripts/test_data_contracts.py",
-    "tests/test_jobs/test_collect_injury_data.py",
+    "tests/test_scripts/test_player_appearance_facts.py",
     "tests/test_computation/test_player_observations_postgres.py",
-    "tests/test_computation/test_observation_postgres.py"
+    "scripts/player_identity_bridge.py"
   ],
-  "notes": "One main branch. No new tables or migration; reuse P104 ledger and existing projections. Predicted lineups remain uncollected and cannot pass through confirmed adapter. No provider calls, production data or model behavior."
+  "notes": "One main branch. Six product paths maximum and two new files maximum. Reuse P104 append-only observations; do not add a table, migration, dependency, scheduler, provider call, production data write, or model behavior. CI already requires the touched PostgreSQL player-observation module without skip."
 }

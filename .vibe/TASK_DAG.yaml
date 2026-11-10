@@ -1,21 +1,22 @@
 {
   "schema_version": 4,
-  "current_task": "P108-03-LINEUPS-AVAILABILITY",
+  "current_task": "P108-04-ACTUAL-APPEARANCES",
   "tasks": {
-    "P108-03-LINEUPS-AVAILABILITY": {
-      "title": "Preserve confirmed lineup and player availability facts with source-safe time semantics",
-      "acceptance_id": "A-P108-03",
+    "P108-04-ACTUAL-APPEARANCES": {
+      "title": "Persist source-reported actual appearance minutes with verified identity and fixture provenance",
+      "acceptance_id": "A-P108-04",
       "depends_on": [],
       "kind": "application_data_contract",
       "status": "DONE",
       "definition_of_done": [
-        "Typed availability status distinguishes doubtful, injured, suspended, returned and unknown without defaulting unknown to injured.",
-        "Confirmed lineup facts explicitly say confirmed; predicted payloads cannot enter confirmed legacy projection.",
-        "Per-player effective_at, published_at and expected_return_date are persisted only from explicit source fields; timestamps are timezone-aware; updated_at/acquisition/kickoff are never substituted.",
-        "Empty injury responses remain unknown unless explicit complete coverage proves absence; no player healthy/returned facts are fabricated.",
-        "P104 append-only revisions/cutoffs, idempotence, failure rollback and transaction grouping remain correct in isolated PostgreSQL.",
-        "Exact CI requires the PostgreSQL player observations module and passes it without skip.",
-        "No schema migration, production access, provider calls, model behavior or probability changes."
+        "Only a direct, non-boolean integer from statistics[].games.minutes becomes an actual appearance fact; zero is preserved and null/missing stays missing.",
+        "The fixture is uniquely bound to the official match, finished in a supported status, and both API team IDs match the official home/away binding.",
+        "Only verified source-player identity links yield canonical player IDs; unresolved coverage is counted, and names never resolve identities.",
+        "Minutes, fixture, identity, and explicit substitution-event contradictions are rejected; legacy Titan default90/name-substitution values cannot enter.",
+        "Each team observation stores direct-source derivation, source IDs, official IDs, response SHA-256, and acquisition time in the append-only P104 ledger with no short TTL.",
+        "The two team streams are written in one caller-owned transaction; idempotence, cutoff replay, and rollback are tested on the marked isolated PostgreSQL 16 database.",
+        "Fixed-response and PostgreSQL tests, Ruff, format, mypy, scope, budget, V4 quality gate, independent review, and exact-head GitHub CI pass.",
+        "No migration, provider call, production access, import, scheduler, model behavior, or probability change."
       ]
     }
   }

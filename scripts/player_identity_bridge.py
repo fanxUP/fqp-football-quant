@@ -275,3 +275,18 @@ def resolve_player_identity(conn: Any, source_name: str, external_player_id: str
             legacy = cur.fetchone()
             return int(legacy[0]) if legacy else None
     return None
+
+
+def resolve_verified_player_identity(
+    conn: Any, source_name: str, external_player_id: str
+) -> int | None:
+    """Resolve only an explicitly verified bridge link; never use legacy fallback."""
+    source, external_id = _validate_identity(source_name, external_player_id)
+    with conn.cursor() as cur:
+        cur.execute(
+            """SELECT player_id FROM player_identity_links
+               WHERE source_name=%s AND external_player_id=%s AND status='verified'""",
+            (source, external_id),
+        )
+        row = cur.fetchone()
+    return int(row[0]) if row is not None and row[0] is not None else None

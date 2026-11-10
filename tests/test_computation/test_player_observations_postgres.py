@@ -16,9 +16,16 @@ from scripts.feature_storage import (
 from scripts.jobs.collect_injury_data import _process_fixture_injuries
 from scripts.jobs.collect_lineup_data import _process_lineup
 from scripts.observation_storage import capture_observation_cutoff, load_observation_as_of
+from scripts.player_appearance_facts import build_actual_appearance_facts
+from scripts.player_identity_bridge import (
+    resolve_player_identity,
+    resolve_verified_player_identity,
+    upsert_player_identity_link,
+)
 from scripts.player_observations import (
     has_fresh_team_checks,
     record_player_acquisition_failure,
+    store_actual_appearance_observations,
     store_lineup_observation,
     team_stream,
 )
@@ -89,6 +96,77 @@ def read(pg, match, domain, cutoff=None, away=False):
             match["id"], match["away_team_id"] if away else match["home_team_id"], domain
         ),
         cutoff=cut,
+    )
+
+
+def _appearance_source_player(source_player_id, minutes, name="Shared Name"):
+    games = {} if minutes == "missing" else {"minutes": minutes}
+    return {"player": {"id": source_player_id, "name": name}, "statistics": [{"games": games}]}
+
+
+def _appearance_fixture_payload(match, *, fixture_id, home_api_id, away_api_id, home, away):
+    summary = {
+        "fixture": {
+            "id": fixture_id,
+            "status": {"short": "FT", "elapsed": 90, "extra": None},
+        },
+        "teams": {"home": {"id": home_api_id}, "away": {"id": away_api_id}},
+    }
+    response = [
+        {"team": {"id": home_api_id}, "players": home},
+        {"team": {"id": away_api_id}, "players": away},
+    ]
+    binding = {
+        "match_id": match["id"],
+        "api_fixture_id": fixture_id,
+        "fixture_link_status": "linked",
+        "home_team_id": match["home_team_id"],
+        "away_team_id": match["away_team_id"],
+        "api_home_team_id": home_api_id,
+        "api_away_team_id": away_api_id,
+    }
+    return binding, summary, response
+
+
+def _verified_appearance_player(pg, source_player_id):
+    tag = uuid4().hex
+    with pg.cursor() as cur:
+        cur.execute(
+            "INSERT INTO players(player_code) VALUES (%s) RETURNING id", ("p108-04-" + tag,)
+        )
+        canonical_id = cur.fetchone()[0]
+    upsert_player_identity_link(
+        pg,
+        source_name="apifootball",
+        external_player_id=str(source_player_id),
+        player_id=canonical_id,
+        status="verified",
+        evidence_refs=["fixed-response/P108-04/" + tag],
+        matching_method="fixed_fixture_test",
+        confidence=1,
+        reviewed_by="fixed-test-reviewer",
+        reviewed_at=datetime.now(UTC),
+    )
+    return canonical_id
+
+
+def _appearance_facts(pg, match, *, fixture_id, home_api_id, away_api_id, home, away):
+    binding, summary, response = _appearance_fixture_payload(
+        match,
+        fixture_id=fixture_id,
+        home_api_id=home_api_id,
+        away_api_id=away_api_id,
+        home=home,
+        away=away,
+    )
+    return build_actual_appearance_facts(
+        official_match=binding,
+        fixture_summary=summary,
+        fixture_players=response,
+        resolve_player_id=lambda external_id: resolve_verified_player_identity(
+            pg, "apifootball", external_id
+        ),
+        acquired_at=datetime.now(UTC),
     )
 
 
@@ -546,3 +624,205 @@ def test_real_failure_receipt_translation_never_persists_raw_exception(pg, match
     assert loaded["acquisition_status"] == expected
     assert loaded["fact_status"] == "unknown" and loaded["value"] is None
     assert "fixture-sentinel-private" not in str(loaded)
+
+
+def _appearance_cutoff(pg, match):
+    cutoff = capture_observation_cutoff(
+        pg,
+        streams=[
+            team_stream(match["id"], team_id, "appearance")
+            for team_id in (match["home_team_id"], match["away_team_id"])
+        ],
+    )
+    pg.commit()
+    return cutoff
+
+
+def _appearance_read(pg, match, cutoff, *, away=False):
+    team_id = match["away_team_id"] if away else match["home_team_id"]
+    return load_observation_as_of(
+        pg,
+        **team_stream(match["id"], team_id, "appearance"),
+        cutoff=cutoff,
+    )
+
+
+def test_actual_appearance_observations_preserve_provenance_zero_minutes_and_revisions(pg, match):
+    home_source = 1_000_000 + uuid4().int % 7_000_000_000
+    missing_source = home_source + 1
+    away_source = home_source + 2
+    unresolved_source = home_source + 3
+    home_player = _verified_appearance_player(pg, home_source)
+    _verified_appearance_player(pg, missing_source)
+    away_player = _verified_appearance_player(pg, away_source)
+    pg.commit()
+    facts = _appearance_facts(
+        pg,
+        match,
+        fixture_id=900_000_000 + uuid4().int % 7_000_000_000,
+        home_api_id=10_000 + uuid4().int % 1_000_000,
+        away_api_id=20_000 + uuid4().int % 1_000_000,
+        home=[
+            _appearance_source_player(home_source, 45),
+            _appearance_source_player(missing_source, None),
+            _appearance_source_player(unresolved_source, 20),
+        ],
+        away=[_appearance_source_player(away_source, 0)],
+    )
+
+    first_refs = store_actual_appearance_observations(pg, facts)
+    pg.commit()
+    before = _appearance_cutoff(pg, match)
+    home = _appearance_read(pg, match, before)
+    away = _appearance_read(pg, match, before, away=True)
+
+    assert home["fact_status"] == "value"
+    assert home["value"]["team_id"] == match["home_team_id"]
+    assert home["value"]["api_fixture_id"] == facts["api_fixture_id"]
+    assert home["evidence"]["api_team_id"] == facts["teams"][0]["api_team_id"]
+    assert home["value"]["players"] == [
+        {
+            "source_player_id": str(home_source),
+            "player_id": home_player,
+            "minutes": 45,
+            "source_reported": True,
+            "derivation": "direct_source_field",
+        }
+    ]
+    assert home["value"]["missing_minutes_count"] == 1
+    assert home["evidence"]["unresolved_player_count"] == 1
+    assert home["evidence"]["unresolved_source_player_ids"] == [str(unresolved_source)]
+    assert home["evidence"]["source_response_sha256"] == facts["source_response_sha256"]
+    assert home["first_acquired_at"] == datetime.fromisoformat(facts["acquired_at"])
+    assert away["fact_status"] == "value"
+    assert away["value"]["players"][0]["player_id"] == away_player
+    assert away["value"]["players"][0]["minutes"] == 0
+    assert away["evidence"]["derivation"] == "direct_source_field"
+
+    repeated_refs = store_actual_appearance_observations(pg, facts)
+    pg.commit()
+    repeated = _appearance_cutoff(pg, match)
+    repeated_home = _appearance_read(pg, match, repeated)
+    repeated_away = _appearance_read(pg, match, repeated, away=True)
+    assert repeated_home["revision_id"] == home["revision_id"]
+    assert repeated_away["revision_id"] == away["revision_id"]
+    assert repeated_home["latest_check_id"] > home["latest_check_id"]
+    assert repeated_refs["home"]["revision"] == first_refs["home"]["revision"]
+
+    corrected = _appearance_facts(
+        pg,
+        match,
+        fixture_id=facts["api_fixture_id"],
+        home_api_id=facts["teams"][0]["api_team_id"],
+        away_api_id=facts["teams"][1]["api_team_id"],
+        home=[
+            _appearance_source_player(home_source, 44),
+            _appearance_source_player(missing_source, None),
+            _appearance_source_player(unresolved_source, 20),
+        ],
+        away=[_appearance_source_player(away_source, 0)],
+    )
+    store_actual_appearance_observations(pg, corrected)
+    pg.commit()
+    current = _appearance_cutoff(pg, match)
+    assert _appearance_read(pg, match, before)["value"]["players"][0]["minutes"] == 45
+    assert _appearance_read(pg, match, current)["value"]["players"][0]["minutes"] == 44
+
+    with pg.cursor() as cur:
+        cur.execute(
+            """SELECT count(*),count(*) FILTER (WHERE c.valid_until IS NULL)
+                 FROM observation_checks c JOIN observation_streams s ON s.id=c.stream_id
+                WHERE s.match_id=%s AND s.source_id='api_football' AND s.domain='appearance'""",
+            (match["id"],),
+        )
+        total_checks, without_expiry = cur.fetchone()
+    assert total_checks >= 6
+    assert without_expiry == total_checks
+
+
+def test_actual_appearance_identity_rejects_legacy_player_code_fallback(pg):
+    source_player_id = 1_000_000 + uuid4().int % 7_000_000_000
+    with pg.cursor() as cur:
+        cur.execute(
+            "INSERT INTO players(player_code) VALUES (%s) RETURNING id",
+            (f"apifootball:{source_player_id}",),
+        )
+        canonical_id = cur.fetchone()[0]
+    pg.commit()
+
+    assert resolve_player_identity(pg, "apifootball", str(source_player_id)) == canonical_id
+    assert resolve_verified_player_identity(pg, "apifootball", str(source_player_id)) is None
+
+
+def test_actual_appearance_writer_rejects_duplicate_canonical_player_across_teams(pg, match):
+    home_source_id = 1_000_000 + uuid4().int % 7_000_000_000
+    away_source_id = home_source_id + 1
+    home_player_id = _verified_appearance_player(pg, home_source_id)
+    _verified_appearance_player(pg, away_source_id)
+    pg.commit()
+    facts = _appearance_facts(
+        pg,
+        match,
+        fixture_id=900_000_000 + uuid4().int % 7_000_000_000,
+        home_api_id=10_000 + uuid4().int % 1_000_000,
+        away_api_id=20_000 + uuid4().int % 1_000_000,
+        home=[_appearance_source_player(home_source_id, 90)],
+        away=[_appearance_source_player(away_source_id, 90)],
+    )
+    facts["teams"][1]["players"][0]["player_id"] = home_player_id
+    with pytest.raises(ValueError, match="distinct canonical player ID"):
+        store_actual_appearance_observations(pg, facts)
+
+
+def test_empty_appearance_response_remains_unknown_not_confirmed_absent(pg, match):
+    facts = _appearance_facts(
+        pg,
+        match,
+        fixture_id=900_000_000 + uuid4().int % 7_000_000_000,
+        home_api_id=10_000 + uuid4().int % 1_000_000,
+        away_api_id=20_000 + uuid4().int % 1_000_000,
+        home=[],
+        away=[],
+    )
+
+    store_actual_appearance_observations(pg, facts)
+    pg.commit()
+    cutoff = _appearance_cutoff(pg, match)
+
+    for away in (False, True):
+        fact = _appearance_read(pg, match, cutoff, away=away)
+        assert fact["fact_status"] == "unknown"
+        assert fact["value"] is None
+        assert fact["evidence"]["source_reported"] is True
+
+
+def test_two_team_appearance_write_requires_caller_rollback_after_partial_failure(pg, match):
+    facts = _appearance_facts(
+        pg,
+        match,
+        fixture_id=900_000_000 + uuid4().int % 7_000_000_000,
+        home_api_id=10_000 + uuid4().int % 1_000_000,
+        away_api_id=20_000 + uuid4().int % 1_000_000,
+        home=[],
+        away=[],
+    )
+    from scripts import player_observations as adapter
+
+    original_append = adapter.append_observation
+    calls = 0
+
+    def fail_second_append(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise RuntimeError("fixed second-team failure")
+        return original_append(*args, **kwargs)
+
+    with patch("scripts.player_observations.append_observation", side_effect=fail_second_append):
+        with pytest.raises(RuntimeError, match="fixed second-team failure"):
+            store_actual_appearance_observations(pg, facts)
+    pg.rollback()
+    cutoff = _appearance_cutoff(pg, match)
+
+    assert _appearance_read(pg, match, cutoff) is None
+    assert _appearance_read(pg, match, cutoff, away=True) is None
