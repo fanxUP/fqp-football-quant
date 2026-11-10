@@ -37,7 +37,17 @@
     "production_applied": false
   },
   "external_ci": {
-    "status": "NOT_RUN"
+    "status": "passed",
+    "checks": {
+      "test": "passed",
+      "lint-and-typecheck": "passed"
+    },
+    "run_id": 42766457782,
+    "head_sha": "255ad32744f1d1d78997f013b9fbda24f46b502d",
+    "workflow": "CI",
+    "url": "https://github.com/fanxUP/fqp-football-quant/actions/runs/42766457782",
+    "completed_at": "2026-11-10T06:21:44Z",
+    "summary": "Exact-head GitHub main CI passed on commit 255ad32744f1d1d78997f013b9fbda24f46b502d; both configured jobs succeeded."
   },
   "production": {
     "status": "NOT_IN_SCOPE",
