@@ -7,5 +7,5 @@
 - [x] P106 storage 读回全部完整 SPF 组；输入支持官方 h/d/a 与规范 3/1/0 码，要求开放、同时间/同源/同市场且 45 分钟内的赔率快照（每项 >1），snapshot_time 和数据库 created_at 都不晚于 prediction-as-of；group 保留 snapshot IDs/times，created_at 保存在按 match_id 关联的哈希 run input manifest 中，并保留比分矩阵。
 - [x] 隔离 PostgreSQL 的最终赛果样本可由 `evaluate_prediction_replay` 读取，得到成对 Brier/LogLoss/RPS 并存入 research backtest 记录；未结算样本不计为已评价。
 - [x] DB 守卫核实 DSN host/hostaddr、实际数据库名和测试库标记；run/evaluation 要求 idle 连接，不提交/回滚调用者事务；赔率只读校验成功或失败都恢复 idle，允许安全重试。
-- [ ] 固定样本和相关现有回归、Ruff/format/mypy、V4 scope/budget、独立审查和 exact-head CI 通过。
-- [ ] 不运行活动模型、委员会、正式推荐/预测发布、schema migration 或外部调用；用户授权的代码部署只运行既有健康检查/保护路由只读 smoke，不执行 P111 adapter、不写生产业务数据。
+- [x] 固定样本和相关现有回归、Ruff/format/mypy、V4 scope/budget、独立审查和 exact-head CI 通过（`996d63a`, CI `42786096692`）。
+- [x] 未运行活动模型、委员会、正式推荐/预测发布、schema migration 或外部调用；仅部署休眠适配器代码，既有健康检查与保护路由只读 smoke 通过，adapter 未执行且生产业务写入为 0。

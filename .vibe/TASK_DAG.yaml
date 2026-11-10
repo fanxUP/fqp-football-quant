@@ -7,7 +7,7 @@
       "acceptance_id": "A-P111-02",
       "depends_on": [],
       "kind": "research_shadow_integration",
-      "status": "IN_PROGRESS",
+      "status": "DONE",
       "definition_of_done": [
         "Derive an auditable one-season P106 training manifest from the exact parent P106 manifest and explicit point-in-time season evidence; account for every parent included sample.",
         "Create an inactive dynamic_team_poisson_shadow artifact and exact P106 prediction run/group manifests with candidate, parent manifest, derived manifest and source/runtime identities.",
