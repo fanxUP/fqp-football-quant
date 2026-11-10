@@ -1,8 +1,8 @@
 {
   "schema_version": 4,
-  "task_id": "P111-02-P106-PREDICTION-EVALUATION-INTEGRATION",
-  "max_files_changed": 6,
-  "max_new_files": 4,
+  "task_id": "ODDS-MULTIBOOK-REFERENCE-20261111",
+  "max_files_changed": 10,
+  "max_new_files": 1,
   "max_new_dependencies": 0,
   "max_schema_migrations": 0,
   "max_public_api_changes": 1,
@@ -12,5 +12,5 @@
     "new_lint_errors": 0,
     "new_type_errors": 0
   },
-  "budget_basis": "One P106 shadow-run adapter, focused unit plus isolated PostgreSQL integration coverage, two P111-02 planning/acceptance records, and a trusted CI database attestation marker; reuse existing manifest, artifact, run/group, and replay evaluation storage. No migration, dependency, scheduler, or production execution path."
+  "budget_basis": "Bounded odds comparison feature across ten implementation and regression paths; one read-only optional response field, no dependency, schema, migration, or background task."
 }

@@ -1,19 +1,18 @@
 {
   "schema_version": 4,
-  "current_task": "P111-02-P106-PREDICTION-EVALUATION-INTEGRATION",
+  "current_task": "ODDS-MULTIBOOK-REFERENCE-20261111",
   "tasks": {
-    "P111-02-P106-PREDICTION-EVALUATION-INTEGRATION": {
-      "title": "Connect the season-aware dynamic team challenger to P106 prediction runs and replay evaluation",
-      "acceptance_id": "A-P111-02",
+    "ODDS-MULTIBOOK-REFERENCE-20261111": {
+      "title": "Show the eight archived bookmaker brands below China Sports Lottery in odds movement",
+      "acceptance_id": "A-ODDS-MULTIBOOK",
       "depends_on": [],
-      "kind": "research_shadow_integration",
+      "kind": "code_release",
       "status": "DONE",
       "definition_of_done": [
-        "Derive an auditable one-season P106 training manifest from the exact parent P106 manifest and explicit point-in-time season evidence; account for every parent included sample.",
-        "Create an inactive dynamic_team_poisson_shadow artifact and exact P106 prediction run/group manifests with candidate, parent manifest, derived manifest and source/runtime identities.",
-        "Create complete SPF 3/1/0 shadow groups paired to coherent fresh market snapshots captured and stored by prediction_as_of, preserving the score matrix and point-in-time input fence data.",
-        "Use the existing P106 prediction replay evaluator and research-evaluation storage for settled fixtures; leave pending fixtures unevaluated without treating that as a failure.",
-        "Pass fixed-sample, attested isolated loopback PostgreSQL, lint, format, type and scope/budget checks; pass independent review and exact-head CI; code-only deployment leaves production DB, providers, migrations, scheduler, and model activation untouched."
+        "Read published archived 1X2 quotes only for uniquely linked official matches, with bounded parameterized SQL and no writes.",
+        "Show China Sports Lottery first, followed by the eight requested brands in the fixed order; preserve missing-data placeholders.",
+        "Keep third-party 1X2 references isolated to the SPF play tab.",
+        "Pass scoped frontend/backend regressions and static/build checks, independent review, exact-head GitHub CI, and server release smoke."
       ]
     }
   }

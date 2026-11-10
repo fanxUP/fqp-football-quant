@@ -161,6 +161,47 @@ describe('OddsMovementPage', () => {
     expect(await screen.findByRole('heading', { name: /周二201/ })).toBeInTheDocument();
   });
 
+  it('胜平负按体彩和八个归并品牌的顺序展示赔率行', async () => {
+    const match = {
+      ...oddsFixture(),
+      reference_1x2: {
+        pinnacle: { opening: [2.1, 3.2, 3.4], latest: [2.0, 3.3, 3.6] },
+        bet365: { opening: [2.3, 3.1, 3.0], latest: [2.2, 3.2, 3.2] },
+      },
+    };
+    oddsMovements.mockResolvedValue(oddsResponse([match]));
+    render(<OddsMovementPage />);
+
+    const table = within(await screen.findByRole('table', { name: '赔率快照对照' }));
+    expect(table.getAllByRole('rowheader').map(header => header.textContent)).toEqual([
+      '中国体彩', 'Betfair', '皇冠 Crown', '易胜博', '澳门', '立博 Ladbrokes',
+      '威廉希尔 William Hill', '平博 Pinnacle', 'bet365',
+    ]);
+    const bet365 = table.getByRole('rowheader', { name: 'bet365' }).closest('tr');
+    const yishengbo = table.getByRole('rowheader', { name: '易胜博' }).closest('tr');
+    expect(bet365?.textContent).toContain('2.20');
+    expect(yishengbo?.textContent).toContain('暂无快照');
+  });
+
+  it('不会把第三方胜平负赔率错配到体彩其他玩法', async () => {
+    const match = {
+      ...oddsFixture(),
+      reference_1x2: {
+        bet365: { opening: [2.3, 3.1, 3.0], latest: [2.2, 3.2, 3.2] },
+      },
+    };
+    oddsMovements.mockImplementation(async params => ({ ...oddsResponse([match]), play_type: params.play_type }));
+    render(<OddsMovementPage />);
+    await screen.findByRole('table', { name: '赔率快照对照' });
+    fireEvent.click(screen.getByRole('tab', { name: '让球胜平负' }));
+
+    const table = within(await screen.findByRole('table', { name: '赔率快照对照' }));
+    await waitFor(() => expect(oddsMovements).toHaveBeenLastCalledWith({
+      scope: 'current', business_date: undefined, play_type: 'rqspf', resolution: 'raw', limit: 200,
+    }));
+    expect(table.getAllByRole('rowheader').map(header => header.textContent)).toEqual(['中国体彩']);
+  });
+
   it('定时同步当前开盘比赛的新赔率', async () => {
     vi.useFakeTimers();
     render(<OddsMovementPage />);

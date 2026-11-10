@@ -32,7 +32,7 @@ export default function OddsMovementPage() {
   const index = useReadOnlyResource(fetchIndex);
   return (
     <div className="be-page">
-      <PageHeader title="赔率走势" subtitle="官方赔率快照 · 日期与玩法独立查询 · 当前数据每 30 秒检查" />
+      <PageHeader title="赔率走势" subtitle="中国体彩与第三方赔率对照 · 当前数据每 30 秒检查" />
       <Card style={{ marginBottom: 20 }}>
         {index.loading && <p>加载赔率日期索引...</p>}
         {index.error && <p className="be-error" role="status">日期索引：{index.error}{index.data ? '，保留上次索引' : ''}</p>}
@@ -105,13 +105,15 @@ function OddsQuery({ scope, businessDate, play }: { scope: Scope; businessDate?:
           <button type="button" onClick={() => void resource.refresh()}>刷新赔率</button>
         </div>
         {resting && matches.length > 0 && <p className="be-note" role="status">{salesWindow.message}。以下为已保存的赔率快照，采集时间见各场比赛。</p>}
+        {matches.length > 0 && play === 'spf' && <p className="be-note">第三方参考来自球探存档，仅对照全场胜平负。各公司展示来源记录的初始和末次赔率。</p>}
+        {resource.data?.reference_unavailable && <p className="be-note" role="status">第三方赔率暂不可用，可刷新重试。</p>}
         <p className="be-note">已获取 {matches.length} 场 · 筛选 {filtered.length} 场 · 最多获取 200 场，每页 10 场。接口总数仅为本次返回数量；获取时间不代表源快照时间。{scope === 'history' ? '历史按小时采样，仅手动刷新。' : '当前查询在页面可见时自动检查。'}</p>
       </Card>
       {resource.loading ? <LoadingSpinner text="加载赔率走势..." /> : resource.data && matches.length === 0 ? (
         <EmptyState title={scope === 'history' ? '该日期暂无赔率记录' : resting ? '休市期间暂无可显示的赔率快照' : '当前没有开盘比赛'} description={scope === 'history' ? '请选择其他历史日期' : resting ? salesWindow.message : '赛程开盘后会自动出现在这里'} />
       ) : resource.data && filtered.length === 0 ? <EmptyState title="筛选无结果" description="清空筛选或调整搜索条件" /> : (
         <>
-          {visibleMatches.some(match => match.series.length > 0) && <OddsHeatmapLegend historical={scope === 'history'} />}
+          {visibleMatches.some(match => match.series.length > 0 || match.reference_1x2) && <OddsHeatmapLegend historical={scope === 'history'} />}
           <div className="be-odds-list">{visibleMatches.map(match => (
             <OddsMatchCard key={match.id} match={match} playType={play} playLabel={PLAY_LABELS[play]} historical={scope === 'history'} />
           ))}</div>

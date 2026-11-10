@@ -1,19 +1,19 @@
 {
   "schema_version": 4,
-  "state": "DONE",
-  "workflow_id": "P111-02-P106-RUN-EVALUATION-INTEGRATION-20261110",
+  "state": "READY_TO_MERGE",
+  "workflow_id": "ODDS-MULTIBOOK-REFERENCE-20261111",
   "previous_workflow": {
-    "task_id": "P111-01-SEASON-AWARE-DYNAMIC-TEAM-CORE",
+    "workflow_id": "P111-02-P106-RUN-EVALUATION-INTEGRATION-20261110",
     "state": "DONE",
-    "archive": ".vibe/archive/workflow-p111-01-done-2026-11-10"
+    "archive": ".vibe/archive/workflow-p111-02-done-2026-11-11"
   },
   "blocked_reason": null,
   "mode": "STRICT",
-  "environment": "Fixed samples and attested isolated loopback PostgreSQL only for P111 verification. User-authorized code deployment may run existing health checks and protected read-only HTTP smoke; the P111 adapter itself is never invoked on production and no provider, scheduler, committee, or active-model path changes.",
+  "environment": "Local fixed-response regression and GitHub CI; production deployment to 100.121.47.26 after exact-main validation. Reference lookup is read-only and adds no migration, provider call, or business write.",
   "last_transition": {
-    "from": "READY_TO_MERGE",
-    "to": "DONE",
-    "at": "2026-11-10T17:17:39.408446+08:00",
-    "reason": "Code-only release 996d63a was deployed to 100.121.47.26; health and protected-route read-only smoke passed, with no model activation or production writes."
+    "from": "REVIEWING",
+    "to": "READY_TO_MERGE",
+    "at": "2026-11-11T01:41:42.022620+08:00",
+    "reason": "V4 gate reports READY_TO_MERGE; scoped regression, safety, independent review, and release policy checks pass."
   }
 }

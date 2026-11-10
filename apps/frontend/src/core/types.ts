@@ -161,6 +161,11 @@ export interface OddsCaptureStatus {
   failure_reason: string | null;
 }
 
+export interface OddsMarketReference {
+  opening: [number | null, number | null, number | null];
+  latest: [number | null, number | null, number | null];
+}
+
 export interface OddsMovementMatch {
   id: number;
   official_match_code: string;
@@ -172,6 +177,7 @@ export interface OddsMovementMatch {
   capture_status: OddsCaptureStatus | null;
   series: OddsMovementPoint[];
   anomalies: DashboardOddsAnomaly[];
+  reference_1x2?: Record<string, OddsMarketReference>;
 }
 
 export interface OddsMovementsResponse {
@@ -182,6 +188,7 @@ export interface OddsMovementsResponse {
   matches: OddsMovementMatch[];
   total: number;
   sales_window?: SportterySalesWindow;
+  reference_unavailable?: boolean;
 }
 
 // ---- Match Detail (Events Center drawer) ----

@@ -7,6 +7,7 @@ from typing import Any, Literal
 from zoneinfo import ZoneInfo
 
 from apps.backend.src.db import get_db
+from apps.backend.src.services.odds_market_reference import read_market_reference
 from scripts.play_type_registry import CANONICAL_CODES
 from scripts.sporttery_sales import get_sporttery_sales_window
 
@@ -140,8 +141,9 @@ def list_odds_movements(
     play_type: PlayType,
     resolution: Resolution,
     limit: int,
+    include_reference: bool = False,
 ) -> dict:
-    """Return all matches and selected-play series in a single bounded query."""
+    """Return date-scoped official series and optional saved 1X2 comparisons."""
     sales_window = get_sporttery_sales_window()
     params = {
         "business_date": business_date,
@@ -218,4 +220,11 @@ def list_odds_movements(
     }
     if scope == "current":
         response["sales_window"] = sales_window.as_dict()
+    if include_reference and play_type == "spf" and matches:
+        references = read_market_reference(list(matches))
+        if references is None:
+            response["reference_unavailable"] = True
+        else:
+            for match_id, quotes in references.items():
+                matches[match_id]["reference_1x2"] = quotes
     return response

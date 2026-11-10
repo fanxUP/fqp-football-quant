@@ -1,27 +1,37 @@
 {
   "schema_version": 4,
-  "task_id": "P111-02-P106-PREDICTION-EVALUATION-INTEGRATION",
+  "task_id": "ODDS-MULTIBOOK-REFERENCE-20261111",
   "allowed_paths": [
-    ".github/workflows/ci.yml",
-    "scripts/dynamic_team_p106.py",
-    "tests/test_scripts/test_dynamic_team_p106.py",
-    "tests/test_computation/test_prediction_run_postgres.py",
-    "plans/model-modernization-20261016/integrated/P111/02-p106-run-evaluation/PLAN.md",
-    "plans/model-modernization-20261016/integrated/P111/02-p106-run-evaluation/ACCEPTANCE.md",
-    ".vibe/**"
+    "apps/backend/src/routers/dashboard.py",
+    "apps/backend/src/services/odds_movement.py",
+    "apps/backend/src/services/odds_market_reference.py",
+    "apps/frontend/src/core/apiClient.ts",
+    "apps/frontend/src/core/types.ts",
+    "apps/frontend/src/pages/OddsMovementPage.tsx",
+    "apps/frontend/src/pages/OddsMovementPage.test.tsx",
+    "apps/frontend/src/pages/odds/OddsMatchCard.tsx",
+    "apps/frontend/src/pages/odds/OddsSnapshotHeatmap.tsx",
+    "tests/test_api/test_odds_movements.py"
   ],
   "protected_paths": [
-    "scripts/**",
+    "apps/**",
     "tests/**",
     "sql/**",
+    "ops/server/**",
     "requirements*.txt",
     "**/package*.json"
   ],
   "approved_protected_paths": [
-    ".github/workflows/ci.yml",
-    "scripts/dynamic_team_p106.py",
-    "tests/test_scripts/test_dynamic_team_p106.py",
-    "tests/test_computation/test_prediction_run_postgres.py"
+    "apps/backend/src/routers/dashboard.py",
+    "apps/backend/src/services/odds_movement.py",
+    "apps/backend/src/services/odds_market_reference.py",
+    "apps/frontend/src/core/apiClient.ts",
+    "apps/frontend/src/core/types.ts",
+    "apps/frontend/src/pages/OddsMovementPage.tsx",
+    "apps/frontend/src/pages/OddsMovementPage.test.tsx",
+    "apps/frontend/src/pages/odds/OddsMatchCard.tsx",
+    "apps/frontend/src/pages/odds/OddsSnapshotHeatmap.tsx",
+    "tests/test_api/test_odds_movements.py"
   ],
-  "notes": "Single main branch. P111-02 adds an inactive shadow adapter over existing P106 storage/evaluation, a CI-only database attestation, and code-only deployment; no production invocation, scheduler, or official prediction activation."
+  "notes": "Single main branch. Published historical reference is read-only and displayed only in the SPF tab; no SQL migration or runtime activation."
 }

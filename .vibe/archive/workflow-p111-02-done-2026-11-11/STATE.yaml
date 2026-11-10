@@ -1,0 +1,19 @@
+{
+  "schema_version": 4,
+  "state": "DONE",
+  "workflow_id": "P111-02-P106-RUN-EVALUATION-INTEGRATION-20261110",
+  "previous_workflow": {
+    "task_id": "P111-01-SEASON-AWARE-DYNAMIC-TEAM-CORE",
+    "state": "DONE",
+    "archive": ".vibe/archive/workflow-p111-01-done-2026-11-10"
+  },
+  "blocked_reason": null,
+  "mode": "STRICT",
+  "environment": "Fixed samples and attested isolated loopback PostgreSQL only for P111 verification. User-authorized code deployment may run existing health checks and protected read-only HTTP smoke; the P111 adapter itself is never invoked on production and no provider, scheduler, committee, or active-model path changes.",
+  "last_transition": {
+    "from": "READY_TO_MERGE",
+    "to": "DONE",
+    "at": "2026-11-10T17:17:39.408446+08:00",
+    "reason": "Code-only release 996d63a was deployed to 100.121.47.26; health and protected-route read-only smoke passed, with no model activation or production writes."
+  }
+}

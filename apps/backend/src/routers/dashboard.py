@@ -328,6 +328,7 @@ def get_odds_movements(
     play_type: Literal["spf", "rqspf", "bf", "zjq", "bqc"] = Query("spf"),
     resolution: Literal["raw", "hour"] = Query("raw"),
     limit: int = Query(200, ge=1, le=200),
+    include_reference: bool = Query(False),
 ):
     """Return all date-scoped matches and their selected-play odds in one request."""
     if scope == "history" and not business_date:
@@ -345,6 +346,7 @@ def get_odds_movements(
         play_type=play_type,
         resolution=resolution,
         limit=limit,
+        include_reference=include_reference,
     )
 
 

@@ -1,0 +1,27 @@
+{
+  "schema_version": 4,
+  "task_id": "P111-02-P106-PREDICTION-EVALUATION-INTEGRATION",
+  "allowed_paths": [
+    ".github/workflows/ci.yml",
+    "scripts/dynamic_team_p106.py",
+    "tests/test_scripts/test_dynamic_team_p106.py",
+    "tests/test_computation/test_prediction_run_postgres.py",
+    "plans/model-modernization-20261016/integrated/P111/02-p106-run-evaluation/PLAN.md",
+    "plans/model-modernization-20261016/integrated/P111/02-p106-run-evaluation/ACCEPTANCE.md",
+    ".vibe/**"
+  ],
+  "protected_paths": [
+    "scripts/**",
+    "tests/**",
+    "sql/**",
+    "requirements*.txt",
+    "**/package*.json"
+  ],
+  "approved_protected_paths": [
+    ".github/workflows/ci.yml",
+    "scripts/dynamic_team_p106.py",
+    "tests/test_scripts/test_dynamic_team_p106.py",
+    "tests/test_computation/test_prediction_run_postgres.py"
+  ],
+  "notes": "Single main branch. P111-02 adds an inactive shadow adapter over existing P106 storage/evaluation, a CI-only database attestation, and code-only deployment; no production invocation, scheduler, or official prediction activation."
+}

@@ -1,0 +1,178 @@
+{
+  "schema_version": 4,
+  "current_task": "P111-02-P106-PREDICTION-EVALUATION-INTEGRATION",
+  "acceptance": {
+    "A-P111-LOCAL": {
+      "status": "PASS",
+      "command": "FQP_P106_TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55492/fqp_p106_test_provenance pytest -q P111 fixed-sample/storage suites plus match-review and P111 PostgreSQL integration; Ruff check/format, mypy, V4 scope/budget, git diff --check",
+      "exit_code": 0,
+      "summary": "26 local fixed-sample and isolated PostgreSQL regression tests passed; no production DB or provider calls.",
+      "timed_out": false,
+      "environment": "Fixed samples and attested isolated loopback PostgreSQL only during verification; user-authorized commit, push, and code shipment may deploy the inert adapter, but no production database invocation, provider calls, scheduler activation, or model activation.",
+      "revision": "996d63a94892e00934f83c8ba9c3624c2573218b",
+      "dirty_tree": true,
+      "tree_fingerprint": "be0c95f802be22a1daa5ecd6bfcd066912d1e78dc3a042240bb930a61a708d5a",
+      "verified_at": "2026-11-10T17:15:34+08:00"
+    },
+    "A-P111-PG": {
+      "status": "PASS",
+      "command": "FQP_P106_TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55492/fqp_p106_test_provenance pytest -q P111 fixed-sample/storage suites plus match-review and P111 PostgreSQL integration; Ruff check/format, mypy, V4 scope/budget, git diff --check",
+      "exit_code": 0,
+      "summary": "26 local fixed-sample and isolated PostgreSQL regression tests passed; no production DB or provider calls.",
+      "timed_out": false,
+      "environment": "Fixed samples and attested isolated loopback PostgreSQL only during verification; user-authorized commit, push, and code shipment may deploy the inert adapter, but no production database invocation, provider calls, scheduler activation, or model activation.",
+      "revision": "996d63a94892e00934f83c8ba9c3624c2573218b",
+      "dirty_tree": true,
+      "tree_fingerprint": "be0c95f802be22a1daa5ecd6bfcd066912d1e78dc3a042240bb930a61a708d5a",
+      "verified_at": "2026-11-10T17:15:34+08:00"
+    },
+    "A-P111-RUFF": {
+      "status": "PASS",
+      "command": ".venv/bin/ruff check scripts/dynamic_team_p106.py tests/test_scripts/test_dynamic_team_p106.py tests/test_computation/test_prediction_run_postgres.py",
+      "exit_code": 0,
+      "summary": "All checks passed!\n",
+      "timed_out": false,
+      "environment": "Fixed samples and attested isolated loopback PostgreSQL only during verification; user-authorized commit, push, and code shipment may deploy the inert adapter, but no production database invocation, provider calls, scheduler activation, or model activation.",
+      "revision": "996d63a94892e00934f83c8ba9c3624c2573218b",
+      "dirty_tree": true,
+      "tree_fingerprint": "be0c95f802be22a1daa5ecd6bfcd066912d1e78dc3a042240bb930a61a708d5a",
+      "verified_at": "2026-11-10T17:15:34+08:00"
+    },
+    "A-P111-FORMAT": {
+      "status": "PASS",
+      "command": ".venv/bin/ruff format --check scripts/dynamic_team_p106.py tests/test_scripts/test_dynamic_team_p106.py tests/test_computation/test_prediction_run_postgres.py",
+      "exit_code": 0,
+      "summary": "3 files already formatted\n",
+      "timed_out": false,
+      "environment": "Fixed samples and attested isolated loopback PostgreSQL only during verification; user-authorized commit, push, and code shipment may deploy the inert adapter, but no production database invocation, provider calls, scheduler activation, or model activation.",
+      "revision": "996d63a94892e00934f83c8ba9c3624c2573218b",
+      "dirty_tree": true,
+      "tree_fingerprint": "be0c95f802be22a1daa5ecd6bfcd066912d1e78dc3a042240bb930a61a708d5a",
+      "verified_at": "2026-11-10T17:15:34+08:00"
+    },
+    "A-P111-MYPY": {
+      "status": "PASS",
+      "command": ".venv/bin/mypy scripts/dynamic_team_p106.py --explicit-package-bases",
+      "exit_code": 0,
+      "summary": "apps/backend/src/db.py:105: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]\nSuccess: no issues found in 1 source file\n",
+      "timed_out": false,
+      "environment": "Fixed samples and attested isolated loopback PostgreSQL only during verification; user-authorized commit, push, and code shipment may deploy the inert adapter, but no production database invocation, provider calls, scheduler activation, or model activation.",
+      "revision": "996d63a94892e00934f83c8ba9c3624c2573218b",
+      "dirty_tree": true,
+      "tree_fingerprint": "be0c95f802be22a1daa5ecd6bfcd066912d1e78dc3a042240bb930a61a708d5a",
+      "verified_at": "2026-11-10T17:15:34+08:00"
+    },
+    "A-P111-SCOPE": {
+      "status": "PASS",
+      "command": "python3 -I -S -B /Users/estefan-macworkstation/.remote-vibe-coding/engine/vibe.py scope check",
+      "exit_code": 0,
+      "summary": "changed_files=6\nPASS: scope\n",
+      "timed_out": false,
+      "environment": "Fixed samples and attested isolated loopback PostgreSQL only during verification; user-authorized commit, push, and code shipment may deploy the inert adapter, but no production database invocation, provider calls, scheduler activation, or model activation.",
+      "revision": "996d63a94892e00934f83c8ba9c3624c2573218b",
+      "dirty_tree": true,
+      "tree_fingerprint": "be0c95f802be22a1daa5ecd6bfcd066912d1e78dc3a042240bb930a61a708d5a",
+      "verified_at": "2026-11-10T17:15:34+08:00"
+    },
+    "A-P111-BUDGET": {
+      "status": "PASS",
+      "command": "python3 -I -S -B /Users/estefan-macworkstation/.remote-vibe-coding/engine/vibe.py budget check",
+      "exit_code": 0,
+      "summary": "files_changed: 6/6\nnew_files: 4/4\nnew_dependencies_heuristic: 0/0\nschema_migration_files: 0/0\ndeclared_public_api_changes: 1/1\nPASS: change budget\n",
+      "timed_out": false,
+      "environment": "Fixed samples and attested isolated loopback PostgreSQL only during verification; user-authorized commit, push, and code shipment may deploy the inert adapter, but no production database invocation, provider calls, scheduler activation, or model activation.",
+      "revision": "996d63a94892e00934f83c8ba9c3624c2573218b",
+      "dirty_tree": true,
+      "tree_fingerprint": "be0c95f802be22a1daa5ecd6bfcd066912d1e78dc3a042240bb930a61a708d5a",
+      "verified_at": "2026-11-10T17:15:34+08:00"
+    },
+    "A-P111-DIFF": {
+      "status": "PASS",
+      "command": "git diff --check",
+      "exit_code": 0,
+      "summary": "",
+      "timed_out": false,
+      "environment": "Fixed samples and attested isolated loopback PostgreSQL only during verification; user-authorized commit, push, and code shipment may deploy the inert adapter, but no production database invocation, provider calls, scheduler activation, or model activation.",
+      "revision": "996d63a94892e00934f83c8ba9c3624c2573218b",
+      "dirty_tree": true,
+      "tree_fingerprint": "be0c95f802be22a1daa5ecd6bfcd066912d1e78dc3a042240bb930a61a708d5a",
+      "verified_at": "2026-11-10T17:15:34+08:00"
+    },
+    "A-P111-02": {
+      "status": "PASS",
+      "command": "FQP_P106_TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55492/fqp_p106_test_provenance pytest -q P111 fixed-sample/storage suites plus match-review and P111 PostgreSQL integration; Ruff check/format, mypy, V4 scope/budget, git diff --check; GitHub CI 42786096692; deploy.sh --apply and read-only post-deploy smoke",
+      "exit_code": 0,
+      "summary": "26 local regressions passed; Ruff, format, mypy, V4 scope/budget and independent review passed; exact-head GitHub CI succeeded; inert adapter code deployed to 100.121.47.26. No production DB access, provider calls, migrations or business writes; services healthy and protected routes returned 401.",
+      "timed_out": false,
+      "environment": "Local fixed fixtures and attested isolated loopback PostgreSQL only. Deployment shipped inert adapter code and ran existing health/read-only smoke only.",
+      "revision": "996d63a94892e00934f83c8ba9c3624c2573218b",
+      "dirty_tree": true,
+      "tree_fingerprint": "be0c95f802be22a1daa5ecd6bfcd066912d1e78dc3a042240bb930a61a708d5a",
+      "verified_at": "2026-11-10T17:15:34+08:00"
+    }
+  },
+  "reviews": {
+    "status": "PASS",
+    "application_code": {
+      "status": "PASS",
+      "summary": "Independent read-only review passed after fixes for test database attestation, coherent and fresh odds normalization, artifact identity, transaction ownership, backfill time leakage, read-transaction cleanup, and supported P106 group metadata. No unresolved high-severity findings."
+    },
+    "v4_migration": {
+      "status": "PASS",
+      "applicability": "NOT_APPLICABLE",
+      "summary": "No workflow or state-engine schema migration is planned."
+    }
+  },
+  "security": {
+    "status": "PASS",
+    "summary": "P111 run/evaluation refuses non-loopback or non-attested databases, hostaddr override/multi-host DSNs, active caller transactions, and production DB markers. Candidate remains inactive, invalid for publication, and has no production caller/scheduler/API route."
+  },
+  "migration": {
+    "status": "NOT_APPLICABLE",
+    "target_migrations": [],
+    "production_applied": false
+  },
+  "external_ci": {
+    "status": "passed",
+    "checks": {
+      "test": "passed",
+      "lint-and-typecheck": "passed"
+    },
+    "run_id": 42786096692,
+    "head_sha": "996d63a94892e00934f83c8ba9c3624c2573218b",
+    "workflow": "CI",
+    "url": "https://github.com/fanxUP/fqp-football-quant/actions/runs/42786096692",
+    "completed_at": "2026-11-10T09:04:20Z",
+    "summary": "Exact main push CI passed: test and lint-and-typecheck jobs succeeded."
+  },
+  "production": {
+    "status": "PASS",
+    "production_database_access": false,
+    "provider_calls": false,
+    "business_data_writes": 0,
+    "deployment": true,
+    "deployed_sha": "996d63a94892e00934f83c8ba9c3624c2573218b",
+    "release_marker": "996d63a94892e00934f83c8ba9c3624c2573218b-20261110T090807Z-b8afd3db-d25a-4b16-8ea7-6cf5438a4c16-d",
+    "migrations_pending": 0,
+    "database_backup": "not applicable; no pending migration",
+    "services": {
+      "fqp-backend": "active",
+      "fqp-scheduler": "active",
+      "fqp-worker": "active",
+      "nginx": "active",
+      "postgresql": "active"
+    },
+    "http": {
+      "readiness": 200,
+      "frontend": 200,
+      "protected_routes": 401
+    },
+    "temporary_sudo_rule_removed": true,
+    "summary": "Code-only release deployed to 100.121.47.26. The P111 adapter remains inactive and has no production caller; no production DB access, provider calls, migrations or business writes. Health/readiness and protected-route smoke passed; temporary one-shot sudoers rule was removed and visudo validation passed."
+  },
+  "quality_gate": {
+    "status": "READY_TO_MERGE",
+    "checked_at": "2026-11-10T17:17:27.656429+08:00",
+    "failures": []
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "schema_version": 4,
+  "current_task": "P111-02-P106-PREDICTION-EVALUATION-INTEGRATION",
+  "tasks": {
+    "P111-02-P106-PREDICTION-EVALUATION-INTEGRATION": {
+      "title": "Connect the season-aware dynamic team challenger to P106 prediction runs and replay evaluation",
+      "acceptance_id": "A-P111-02",
+      "depends_on": [],
+      "kind": "research_shadow_integration",
+      "status": "DONE",
+      "definition_of_done": [
+        "Derive an auditable one-season P106 training manifest from the exact parent P106 manifest and explicit point-in-time season evidence; account for every parent included sample.",
+        "Create an inactive dynamic_team_poisson_shadow artifact and exact P106 prediction run/group manifests with candidate, parent manifest, derived manifest and source/runtime identities.",
+        "Create complete SPF 3/1/0 shadow groups paired to coherent fresh market snapshots captured and stored by prediction_as_of, preserving the score matrix and point-in-time input fence data.",
+        "Use the existing P106 prediction replay evaluator and research-evaluation storage for settled fixtures; leave pending fixtures unevaluated without treating that as a failure.",
+        "Pass fixed-sample, attested isolated loopback PostgreSQL, lint, format, type and scope/budget checks; pass independent review and exact-head CI; code-only deployment leaves production DB, providers, migrations, scheduler, and model activation untouched."
+      ]
+    }
+  }
+}

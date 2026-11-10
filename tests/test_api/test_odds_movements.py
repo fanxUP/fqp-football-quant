@@ -2,6 +2,61 @@ from datetime import date, datetime
 from decimal import Decimal
 from unittest.mock import MagicMock, patch
 
+from apps.backend.src.services.odds_market_reference import read_market_reference
+
+
+def test_market_reference_binds_company_ids_as_text_and_maps_all_requested_brands():
+    with patch("apps.backend.src.services.odds_market_reference.get_db") as get_db:
+        cursor = (
+            get_db.return_value.__enter__.return_value.cursor.return_value.__enter__.return_value
+        )
+        source_quotes = [
+            (2, "1x2d"),
+            (545, "1x2d"),
+            (12, "vip"),
+            (80, "1x2d"),
+            (82, "1x2d"),
+            (115, "1x2d"),
+            (177, "1x2d"),
+            (281, "1x2d"),
+        ]
+        cursor.fetchall.return_value = [
+            (
+                101,
+                {
+                    "company_id": company_id,
+                    "source": source,
+                    "initial_home": 2.1,
+                    "initial_line": 3.2,
+                    "initial_away": 3.4,
+                    "live_home": 2.0,
+                    "live_line": 3.3,
+                    "live_away": 3.6,
+                },
+            )
+            for company_id, source in source_quotes
+        ]
+
+        references = read_market_reference([101])
+
+    params = cursor.execute.call_args_list[1].args[1]
+    assert params[0] == [101]
+    assert params[1]
+    assert all(isinstance(company_id, str) for company_id in params[1])
+    assert set(params[1]) >= {str(company_id) for company_id, _ in source_quotes}
+    assert references == {
+        101: {
+            "betfair": {"opening": [2.1, 3.2, 3.4], "latest": [2.0, 3.3, 3.6]},
+            "crown": {"opening": [2.1, 3.2, 3.4], "latest": [2.0, 3.3, 3.6]},
+            "ysb": {"opening": [2.1, 3.2, 3.4], "latest": [2.0, 3.3, 3.6]},
+            "macau": {"opening": [2.1, 3.2, 3.4], "latest": [2.0, 3.3, 3.6]},
+            "ladbrokes": {"opening": [2.1, 3.2, 3.4], "latest": [2.0, 3.3, 3.6]},
+            "william_hill": {"opening": [2.1, 3.2, 3.4], "latest": [2.0, 3.3, 3.6]},
+            "pinnacle": {"opening": [2.1, 3.2, 3.4], "latest": [2.0, 3.3, 3.6]},
+            "bet365": {"opening": [2.1, 3.2, 3.4], "latest": [2.0, 3.3, 3.6]},
+        }
+    }
+
 
 def test_current_odds_movements_return_saved_quotes_during_official_rest_time(client):
     closed_window = MagicMock(is_open=False)

@@ -1,5 +1,5 @@
 import { useMemo, type CSSProperties } from 'react';
-import type { OddsMovementPoint } from '../../core/types';
+import type { OddsMarketReference, OddsMovementPoint } from '../../core/types';
 import { arrangeScoreOdds } from '../../features/betting-terminal/scoreOddsLayout';
 import { formatTimestamp } from '../../shared/utils';
 import './OddsSnapshotHeatmap.css';
@@ -14,7 +14,15 @@ const spFormat = new Intl.NumberFormat('zh-CN', { useGrouping: false, minimumFra
 
 type Snapshot = { point: OddsMovementPoint; time: number };
 type Range = { first: Snapshot; last: Snapshot };
-type OddsSource = { id: string; label: string; snapshots: readonly OddsMovementPoint[] };
+type OddsSource = {
+  id: string;
+  label: string;
+  snapshots?: readonly OddsMovementPoint[];
+  reference?: OddsMarketReference;
+};
+const SPF_COLUMNS = [
+  { code: 'h', label: '主胜' }, { code: 'd', label: '平局' }, { code: 'a', label: '客胜' },
+];
 
 function buildOptionRanges(data: readonly OddsMovementPoint[], playType: string) {
   const options = new Map<string, { latest: Range; lines: Map<number | null, Range> }>();
@@ -40,13 +48,15 @@ function buildOptionRanges(data: readonly OddsMovementPoint[], playType: string)
 function buildComparison(sources: readonly OddsSource[], playType: string) {
   const options = new Map<string, OddsMovementPoint>();
   const rows = sources.map(source => {
-    const ranges = buildOptionRanges(source.snapshots, playType);
+    const ranges = buildOptionRanges(source.snapshots ?? [], playType);
     for (const [code, { last }] of ranges) {
       if (!options.has(code)) options.set(code, last.point);
     }
-    return { id: source.id, label: source.label, ranges };
+    return { ...source, ranges, reference: playType === 'spf' ? source.reference : undefined };
   });
-  const columns = playType === 'bf'
+  const columns = playType === 'spf'
+    ? SPF_COLUMNS
+    : playType === 'bf'
     ? arrangeScoreOdds([...options.values()]).map(({ option, label }) => ({ code: option.option_code, label }))
     : [...new Set([...(OPTION_ORDER[playType] ?? []), ...options.keys()])].flatMap(code => {
       const option = options.get(code);
@@ -60,11 +70,10 @@ function isLater(candidate: Snapshot, reference: Snapshot) {
     || (candidate.time === reference.time && candidate.point.snapshot_id > reference.point.snapshot_id);
 }
 
-function change(first: Snapshot, last: Snapshot, comparable: boolean) {
-  if (first.time === last.time || !comparable) return { direction: 'flat', strength: 0, label: comparable ? '仅一笔' : '盘口未知' };
+function change(first: number, last: number) {
   // SP is stored to four decimal places; compare integer units at the tier boundaries.
-  const opening = Math.round(first.point.sp_value * 10_000);
-  const delta = Math.round(last.point.sp_value * 10_000) - opening;
+  const opening = Math.round(first * 10_000);
+  const delta = Math.round(last * 10_000) - opening;
   if (!delta) return { direction: 'flat', strength: 0, label: '持平' };
   const scaledDelta = Math.abs(delta) * 100;
   const magnitude = scaledDelta / opening;
@@ -85,34 +94,44 @@ export function OddsHeatmapLegend({ historical }: { historical: boolean }) {
         <span className="odds-heat-cell" data-direction="up" data-strength="2">↑ 上调</span>
       </div>
       <p>每个选项内：初始赔率 → {historical ? '最终赔率' : '最新赔率'}。颜色越深，变动越大：&lt;5%、5% 至不足 15%、≥15%。{historical
-        ? '历史按小时采样，初始与最终取可用记录的首末。最终不代表已核实停售赔率。'
-        : '初始与最新取已采集记录的首末。'}让球赔率只比较同一盘口。</p>
+        ? '体彩历史按小时采样，初始与最终取可用记录的首末。最终不代表已核实停售赔率。'
+        : '体彩初始与最新取已采集记录的首末。'}让球赔率只比较同一盘口。</p>
     </div>
   );
 }
 
-function OddsOptionCell({ range: { first, last }, showHandicap, latestLabel }: {
-  range: Range;
+function OddsOptionCell({ opening, latest, openingTime, latestTime, handicap, showHandicap, latestLabel }: {
+  opening: number | null;
+  latest: number | null;
+  openingTime?: string;
+  latestTime?: string;
+  handicap?: number | null;
   showHandicap: boolean;
   latestLabel: string;
 }) {
-  const { handicap } = last.point;
   const hasLine = typeof handicap === 'number' && Number.isFinite(handicap);
-  const movement = change(first, last, !showHandicap || hasLine);
+  const unavailable = opening == null ? '缺初始值'
+    : latest == null ? '缺末次值'
+    : showHandicap && !hasLine ? '盘口未知'
+    : openingTime && latestTime && Date.parse(openingTime) === Date.parse(latestTime) ? '仅一笔'
+    : null;
+  const movement = opening != null && latest != null && !unavailable
+    ? change(opening, latest)
+    : { direction: 'flat', strength: 0, label: unavailable };
   return (
     <td>
       {showHandicap && hasLine && <small className="odds-heat-line">{handicap > 0 ? '+' : ''}{handicap} 球</small>}
       <div className="odds-heat-pair">
-        <span className="odds-heat-opening" title={`初始快照：${formatTimestamp(first.point.snapshot_time)}`}>
-          <span className="odds-heat-sr-only">初始赔率：</span>{spFormat.format(first.point.sp_value)}
+        <span className="odds-heat-opening" title={openingTime && `初始快照：${formatTimestamp(openingTime)}`}>
+          <span className="odds-heat-sr-only">初始赔率：</span>{opening == null ? '—' : spFormat.format(opening)}
         </span>
         <span className="odds-heat-arrow" aria-hidden="true">→</span>
-        <div className="odds-heat-cell" data-direction={movement.direction} data-strength={movement.strength}
-          title={`末次快照：${formatTimestamp(last.point.snapshot_time)}`}>
+        {latest == null ? <span className="odds-heat-missing"><span className="odds-heat-sr-only">缺末次赔率</span>—</span> : <div className="odds-heat-cell" data-direction={movement.direction} data-strength={movement.strength}
+          title={latestTime && `末次快照：${formatTimestamp(latestTime)}`}>
           <span className="odds-heat-sr-only">{latestLabel}：</span>
-          <strong>{spFormat.format(last.point.sp_value)}</strong>
+          <strong>{spFormat.format(latest)}</strong>
           <span>{movement.label}</span>
-        </div>
+        </div>}
       </div>
     </td>
   );
@@ -125,19 +144,25 @@ export default function OddsSnapshotHeatmap({ sources, playType, historical }: {
 }) {
   const { columns, rows } = useMemo(() => buildComparison(sources, playType), [sources, playType]);
   const latestLabel = historical ? '最终赔率' : '最新赔率';
+  const columnCount = Math.max(1, columns.length);
 
   return (
     <div className="odds-heat-scroll" role="region" aria-label="各来源赔率对照，可横向滚动" tabIndex={0}>
-      <table className="odds-heat-table" aria-label="赔率快照对照" style={{ '--odds-option-count': columns.length } as CSSProperties}>
-        <colgroup><col className="odds-heat-source-col" />{columns.map(({ code }) => <col key={code} />)}</colgroup>
-        <thead><tr><th scope="col">赔率来源</th>{columns.map(({ code, label }) => <th key={code} scope="col">{label}</th>)}</tr></thead>
-        <tbody>{rows.map(({ id, label, ranges }) => (
+      <table className="odds-heat-table" aria-label="赔率快照对照" style={{ '--odds-option-count': columnCount } as CSSProperties}>
+        <colgroup><col className="odds-heat-source-col" />{columns.length ? columns.map(({ code }) => <col key={code} />) : <col />}</colgroup>
+        <thead><tr><th scope="col">赔率来源</th>{columns.length ? columns.map(({ code, label }) => <th key={code} scope="col">{label}</th>) : <th scope="col">赔率</th>}</tr></thead>
+        <tbody>{rows.map(({ id, label, ranges, reference }) => (
           <tr key={id}>
             <th scope="row">{label}</th>
-            {columns.map(({ code }) => {
+            {!ranges.size && !reference ? <td colSpan={columnCount} className="odds-heat-missing">暂无快照</td> : columns.map(({ code }, index) => {
               const range = ranges.get(code);
-              return range
-                ? <OddsOptionCell key={code} range={range} showHandicap={playType === 'rqspf'} latestLabel={latestLabel} />
+              if (range) return <OddsOptionCell key={code} opening={range.first.point.sp_value} latest={range.last.point.sp_value}
+                openingTime={range.first.point.snapshot_time} latestTime={range.last.point.snapshot_time}
+                handicap={range.last.point.handicap} showHandicap={playType === 'rqspf'} latestLabel={latestLabel} />;
+              const opening = reference?.opening?.[index] ?? null;
+              const latest = reference?.latest?.[index] ?? null;
+              return opening != null || latest != null
+                ? <OddsOptionCell key={code} opening={opening} latest={latest} showHandicap={false} latestLabel="末次赔率" />
                 : <td key={code} className="odds-heat-missing"><span aria-hidden="true">—</span><span className="odds-heat-sr-only">暂无快照</span></td>;
             })}
           </tr>

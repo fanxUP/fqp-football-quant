@@ -1100,7 +1100,7 @@ export const api = {
 
     oddsMovements: (params: { scope: 'current' | 'history'; business_date?: string; play_type: string; resolution: 'raw' | 'hour'; limit?: number }) =>
       request<import('./types').OddsMovementsResponse>(
-        `/api/dashboard/odds/movements${qs({ scope: params.scope, business_date: params.business_date, play_type: params.play_type, resolution: params.resolution, limit: params.limit ?? 200 })}`,
+        `/api/dashboard/odds/movements${qs({ scope: params.scope, business_date: params.business_date, play_type: params.play_type, resolution: params.resolution, limit: params.limit ?? 200, include_reference: params.play_type === 'spf' ? 1 : undefined })}`,
       ),
 
     modelPerformance: (params?: { model_name?: string }) =>
