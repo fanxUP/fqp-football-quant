@@ -19,7 +19,7 @@
     "status": "PASS",
     "application_code": {
       "status": "PASS",
-      "summary": "Independent read-only review PASS. The review findings were resolved: exact cutoff-visible fixture-season mapping, source planned season dates, SQL-side registration row bound, and post-cutoff mapping withholding. No remaining blocker."
+      "summary": "Independent read-only review passed. The review findings were resolved: cutoff-visible fixture-season mapping, source planned season dates, SQL-side registration row bound, and post-cutoff mapping withholding."
     },
     "v4_migration": {
       "status": "PASS",
@@ -38,9 +38,7 @@
   },
   "quality_gate": {
     "status": "PENDING",
-    "failures": [
-      "evidence_followup_exact_head_ci_pending"
-    ]
+    "failures": []
   },
   "external_ci": {
     "status": "passed",
