@@ -1,6 +1,6 @@
 {
   "schema_version": 4,
-  "state": "READY_TO_MERGE",
+  "state": "DONE",
   "workflow_id": "P108-04-ACTUAL-APPEARANCES-20261110",
   "previous_workflow": {
     "task_id": "P108-03-LINEUPS-AVAILABILITY-20261110",
@@ -12,9 +12,9 @@
   "mode": "STRICT",
   "environment": "Local fixed responses and the explicitly marked loopback PostgreSQL 16 test database only; no production database, provider calls, import, or deployment.",
   "last_transition": {
-    "from": "REVIEWING",
-    "to": "READY_TO_MERGE",
-    "at": "2026-11-10T09:36:55.789735+08:00",
-    "reason": "Local tests, static analysis, scope/budget checks, security review and independent review pass."
+    "from": "READY_TO_MERGE",
+    "to": "DONE",
+    "at": "2026-11-10T09:49:00.291454+08:00",
+    "reason": "Exact-head GitHub CI run 42737091008 succeeded for 56ba6c4874d093f60337227bb5ee57e58f73ba74; both required jobs passed."
   }
 }

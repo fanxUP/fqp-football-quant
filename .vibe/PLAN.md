@@ -1,5 +1,7 @@
 # P108-04: 实际出场与分钟事实
 
+**状态：完成并已推送 GitHub `main`。** 产品提交 `56ba6c4874d093f60337227bb5ee57e58f73ba74`；本地固定响应与隔离 PostgreSQL 回归 123 项通过，独立审查和 V4 门禁通过；exact-head CI run `42737091008` 的 `lint-and-typecheck`、`test` 均成功。未部署生产。
+
 ## 目标
 
 将 API-Football 对已完赛比赛的逐场球员分钟，按已核实比赛、球队和球员身份写入 P104 append-only observation ledger。旧 Titan007 推算分钟不得作为实际分钟。

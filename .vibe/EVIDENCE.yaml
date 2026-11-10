@@ -51,8 +51,20 @@
     "failures": []
   },
   "external_ci": {
-    "status": "pending",
-    "checks": {}
+    "status": "PASS",
+    "checks": {
+      "CI": {
+        "run_id": 42737091008,
+        "head_sha": "56ba6c4874d093f60337227bb5ee57e58f73ba74",
+        "status": "completed",
+        "conclusion": "success",
+        "jobs": {
+          "lint-and-typecheck": "success",
+          "test": "success"
+        },
+        "url": "https://github.com/fanxUP/fqp-football-quant/actions/runs/42737091008"
+      }
+    }
   },
   "production": {
     "status": "NOT_IN_SCOPE",

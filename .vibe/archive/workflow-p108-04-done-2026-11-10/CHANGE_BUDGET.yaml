@@ -1,0 +1,16 @@
+{
+  "schema_version": 4,
+  "task_id": "P108-04-ACTUAL-APPEARANCES",
+  "max_files_changed": 6,
+  "max_new_files": 2,
+  "max_new_dependencies": 0,
+  "max_schema_migrations": 0,
+  "max_public_api_changes": 0,
+  "declared_public_api_changes": 0,
+  "regression_budget": {
+    "new_test_failures": 0,
+    "new_lint_errors": 0,
+    "new_type_errors": 0
+  },
+  "budget_basis": "Six product paths: one deterministic appearance-fact adapter, explicit API client method, append-only observation writer, focused fixed-response/client tests, and the existing isolated P104 PostgreSQL player-observation regression. Two new files maximum. Reuse migration 107; no migration, dependencies, scheduler, model behavior, or public HTTP API."
+}

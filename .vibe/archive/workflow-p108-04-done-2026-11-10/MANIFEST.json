@@ -1,0 +1,69 @@
+{
+  "archive_format": 1,
+  "archived_at": "2026-11-10",
+  "reason": "Preserve completed P108-04 implementation, evidence, independent review, and exact-head CI before starting P108-05.",
+  "prior_workflow": "P108-04-ACTUAL-APPEARANCES-20261110",
+  "prior_state": "DONE",
+  "files": [
+    {
+      "path": "ACCEPTANCE.md",
+      "sha256": "fb56f1db6331ffbd039429a42a71e8170cb9de328a920d7124291de6d57add56"
+    },
+    {
+      "path": "BASELINE.yaml",
+      "sha256": "3ceb4c2d5cb014322160eb431cdc9b318c62a4ed2f55cfc708443453f100e363"
+    },
+    {
+      "path": "CHANGE_BUDGET.yaml",
+      "sha256": "af15411082be6e253ddd74af5c4f92c7346afe709061bee75102cf83eddb157c"
+    },
+    {
+      "path": "DESIGN.md",
+      "sha256": "77ade5532b85e75926a5309fe21c2c05a1f4a8304d768a8a5b33c83462b57ea8"
+    },
+    {
+      "path": "EVIDENCE.yaml",
+      "sha256": "6be0e34e58bd2ea7fab2ab13ee3fd269ca3aee051f28cf4ed581531ecb6fe844"
+    },
+    {
+      "path": "PLAN.md",
+      "sha256": "f40fb6422b16794e2fefa483cd9b2d46026c03cbcd29f4695298b7e25ffe7d0b"
+    },
+    {
+      "path": "QUALITY_GATE.md",
+      "sha256": "f92dc9542c49d0356d390ed879a41f9a802c40bb59eb192b9a895880c6d3d160"
+    },
+    {
+      "path": "SCOPE_LOCK.yaml",
+      "sha256": "f68ede87c1a31cae1ec6fcd0b5aac52ef34fcd19c4f9a0c8d0ee10aedb071f93"
+    },
+    {
+      "path": "STATE.yaml",
+      "sha256": "c3a12f41439258f0e31abe1b0f649206da920ccb350db88668714c51fb87510d"
+    },
+    {
+      "path": "TASK_DAG.yaml",
+      "sha256": "6c32c01429a0bbeedd599dbbddbfd33b43a573741f149e23aeb1a99f6ff083a3"
+    },
+    {
+      "path": "config.yaml",
+      "sha256": "88701019104b5de93f7c8c2363b1ebe86959550b48602ddac81623226ae3d0ed"
+    },
+    {
+      "path": "engine-lock.json",
+      "sha256": "d6248de04ddb2e172a226a3b3b4f29e4826bca7c7f1a9e44fbbcb8f98eedf42e"
+    },
+    {
+      "path": "quality_gate.py",
+      "sha256": "33667a89aad2f3a7dc08fb32ac0dbe7d32513fea7df118526193b292c07cb191"
+    },
+    {
+      "path": "verify_migration.py",
+      "sha256": "d14b14b400d20c1b5f437c788c1da65e59df1c82f33370a80a5483498d77c772"
+    },
+    {
+      "path": "P108-04-INDEPENDENT-REVIEW.md",
+      "sha256": "1a81f4509893e92aa2b0b08e39d4aa6994175c266ae999c302fea3bbae602005"
+    }
+  ]
+}

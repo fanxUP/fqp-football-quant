@@ -1,0 +1,40 @@
+{
+  "schema_version": 4,
+  "execution": {
+    "command_timeout_seconds": 1800
+  },
+  "commands": {
+    "test": "FQP_OBSERVATION_TEST_POSTGRES_DSN='host=127.0.0.1 port=60492 user=fqp_observation_test dbname=fqp_observation_test password=fqp_test_password' .venv/bin/python -m pytest -q tests/test_scripts/test_player_appearance_facts.py tests/test_computation/test_player_observations_postgres.py",
+    "lint": ".venv/bin/ruff check scripts/api_football_client.py scripts/player_appearance_facts.py scripts/player_observations.py scripts/player_identity_bridge.py tests/test_scripts/test_player_appearance_facts.py tests/test_computation/test_player_observations_postgres.py && .venv/bin/ruff format --check scripts/api_football_client.py scripts/player_appearance_facts.py scripts/player_observations.py scripts/player_identity_bridge.py tests/test_scripts/test_player_appearance_facts.py tests/test_computation/test_player_observations_postgres.py && git diff --check",
+    "typecheck": ".venv/bin/mypy scripts/api_football_client.py scripts/player_appearance_facts.py scripts/player_observations.py scripts/player_identity_bridge.py --explicit-package-bases"
+  },
+  "paths": {
+    "dependency_files": [
+      "requirements.txt",
+      "requirements-dev.txt",
+      "pyproject.toml",
+      "apps/backend/requirements.txt",
+      "apps/backend/pyproject.toml",
+      "apps/frontend/package.json",
+      "apps/frontend/package-lock.json"
+    ],
+    "migrations": [
+      "**/migrations/**",
+      "**/*.sql"
+    ],
+    "ignore_untracked": [
+      "uv.lock"
+    ]
+  },
+  "quality_gate": {
+    "engine_path": "/Users/estefan-macworkstation/.remote-vibe-coding/engine/vibe.py",
+    "repository": "fanxUP/fqp-football-quant",
+    "required_branch": "main",
+    "required_workflow": "CI",
+    "required_checks": [
+      "test",
+      "lint-and-typecheck"
+    ],
+    "preflight": "python3 -I -S -B .vibe/quality_gate.py --repo ."
+  }
+}

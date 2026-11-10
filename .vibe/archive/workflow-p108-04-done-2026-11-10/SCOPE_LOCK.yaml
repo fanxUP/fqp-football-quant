@@ -1,0 +1,30 @@
+{
+  "schema_version": 4,
+  "task_id": "P108-04-ACTUAL-APPEARANCES",
+  "objective": "Accept only source-reported fixture player minutes tied to a verified identity, finished and team-matched fixture, recording immutable provenance in the P104 ledger while rejecting inferred Titan minutes.",
+  "allowed_paths": [
+    "scripts/api_football_client.py",
+    "scripts/player_appearance_facts.py",
+    "scripts/player_observations.py",
+    "tests/test_scripts/test_player_appearance_facts.py",
+    "tests/test_computation/test_player_observations_postgres.py",
+    "scripts/player_identity_bridge.py"
+  ],
+  "protected_paths": [
+    "configs/**",
+    "sql/**",
+    "scripts/**",
+    "tests/**",
+    "requirements*.txt",
+    "**/package*.json"
+  ],
+  "approved_protected_paths": [
+    "scripts/api_football_client.py",
+    "scripts/player_appearance_facts.py",
+    "scripts/player_observations.py",
+    "tests/test_scripts/test_player_appearance_facts.py",
+    "tests/test_computation/test_player_observations_postgres.py",
+    "scripts/player_identity_bridge.py"
+  ],
+  "notes": "One main branch. Six product paths maximum and two new files maximum. Reuse P104 append-only observations; do not add a table, migration, dependency, scheduler, provider call, production data write, or model behavior. CI already requires the touched PostgreSQL player-observation module without skip."
+}
