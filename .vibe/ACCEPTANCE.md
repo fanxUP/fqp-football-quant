@@ -10,5 +10,5 @@
 - [x] shadow 集成前后固定样本概率一致，投影不产生 probability、分值或主观权重。
 - [x] 时间泄漏、同名、冲突、完整/不完整 coverage、本地 PostgreSQL 只读行为回归全部通过（104 项通过）。
 - [x] Ruff、format、mypy、scope/budget、V4 本地门禁、独立审查和 security review 通过。
-- [ ] 推送后的 GitHub main exact-head CI 通过（发布门禁，待执行）。
+- [x] P108-05 实现提交 `186202b6db9ceac00aae6d76297a5cd7b966cf01` 的 GitHub main exact-head CI 已通过（run `42751914384`；`test`、`lint-and-typecheck` 成功）。证据提交自身仍由 V4 发布门禁核验其 exact-head CI。
 - [x] 无迁移、外部 API、生产访问/写入、数据导入、调度改动或服务器部署。

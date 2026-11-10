@@ -37,13 +37,23 @@
     "production_applied": false
   },
   "quality_gate": {
-    "status": "BLOCKED",
-    "checked_at": "2026-11-10T11:44:45.625836+08:00",
-    "failures": ["exact_head_github_ci_pending"]
+    "status": "PENDING",
+    "failures": [
+      "evidence_followup_exact_head_ci_pending"
+    ]
   },
   "external_ci": {
-    "status": "PENDING",
-    "checks": {}
+    "status": "passed",
+    "checks": {
+      "test": "passed",
+      "lint-and-typecheck": "passed"
+    },
+    "run_id": 42751914384,
+    "head_sha": "186202b6db9ceac00aae6d76297a5cd7b966cf01",
+    "workflow": "CI",
+    "url": "https://github.com/fanxUP/fqp-football-quant/actions/runs/42751914384",
+    "completed_at": "2026-11-10T04:02:42Z",
+    "summary": "Exact-head main CI passed for the P108-05 implementation commit; the evidence-only follow-up commit is independently checked by the live quality gate before release."
   },
   "production": {
     "status": "NOT_IN_SCOPE",
