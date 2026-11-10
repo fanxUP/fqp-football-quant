@@ -1,6 +1,6 @@
 {
   "schema_version": 4,
-  "state": "READY_TO_MERGE",
+  "state": "DONE",
   "workflow_id": "P108-03-LINEUPS-AVAILABILITY-20261110",
   "previous_workflow": {
     "task_id": "P108-02-EFFECTIVE-AFFILIATION-ELIGIBILITY-20261110",
@@ -12,9 +12,9 @@
   "mode": "STRICT",
   "environment": "Local main checkout; fixed responses and isolated PostgreSQL 16 only; no production DB/provider API access or data import.",
   "last_transition": {
-    "from": "REVIEWING",
-    "to": "READY_TO_MERGE",
-    "at": "2026-11-10T07:47:22.919780+08:00",
-    "reason": "P108-03 acceptance, independent application-code and no-migration reviews, security, scope, budget and regressions all pass."
+    "from": "READY_TO_MERGE",
+    "to": "DONE",
+    "at": "2026-11-10T08:27:16.957100+08:00",
+    "reason": "P108-03 exact-head CI, isolated PostgreSQL regression, independent reviews, security, scope, budget and V4 quality gate passed; no production deployment or data import."
   }
 }

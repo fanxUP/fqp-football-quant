@@ -1,0 +1,68 @@
+{
+  "schema_version": 4,
+  "current_task": "P108-03-LINEUPS-AVAILABILITY",
+  "acceptance": {
+    "A-P108-03": {
+      "status": "PASS",
+      "command": "/bin/sh -c '.venv/bin/python -m pytest -q tests/test_scripts/test_data_contracts.py tests/test_jobs/test_collect_injury_data.py tests/test_computation/test_player_observations_postgres.py tests/test_computation/test_observation_postgres.py'",
+      "exit_code": 0,
+      "summary": "============================= test session starts ==============================\nplatform darwin -- Python 3.14.6, pytest-9.1.1, pluggy-1.7.0\nrootdir: /Volumes/Nas/FQP/code\nconfigfile: pyproject.toml\nplugins: mock-3.15.1, cov-7.1.0, asyncio-1.4.0, anyio-4.15.1, platformdirs-4.13.5\nasyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function\ncollected 136 items\n\ntests/test_scripts/test_data_contracts.py ..................             [ 13%]\ntests/test_jobs/test_collect_injury_data.py ............................ [ 33%]\n                                                                         [ 33%]\ntests/test_computation/test_player_observations_postgres.py ............ [ 42%]\n..............................                                           [ 64%]\ntests/test_computation/test_observation_postgres.py .................... [ 79%]\n............................                                             [100%]\n\n============================= 136 passed in 5.03s ==============================\n",
+      "timed_out": false,
+      "environment": "Local main checkout; fixed responses and isolated PostgreSQL 16 only; no production DB/provider API access or data import.",
+      "revision": "7c15256100ad39e9d572b40ad1514222c3b77195",
+      "dirty_tree": true,
+      "tree_fingerprint": "4b0de6155f42902d0de91a444a18afefd769f3ba473b703f96cc2153a950e6a5",
+      "verified_at": "2026-11-10T07:43:35.449905+08:00"
+    }
+  },
+  "reviews": {
+    "status": "PASS",
+    "application_code": {
+      "status": "PASS",
+      "reviewer": "p108_03_readonly_review",
+      "reviewed_at": "2026-11-10T07:46:06+08:00",
+      "notes": "确认 Missing Fixture 必须由明确 reason 分类，未知缺席原因保持 unknown；DSN 拒绝 hostaddr/service 路由及环境路由覆盖；按主客队验证重复伤停 revision 与追加回执；其余状态、时间、CI 和范围契约通过。"
+    },
+    "v4_migration": {
+      "status": "PASS",
+      "reviewer": "p108_03_readonly_review",
+      "reviewed_at": "2026-11-10T07:46:06+08:00",
+      "notes": "不新增数据库表或迁移，复用 P104 ledger；迁移审查不适用。"
+    }
+  },
+  "security": {
+    "status": "PASS",
+    "provider_calls": false,
+    "production_access": false,
+    "notes": "只使用固定响应；不访问生产数据库、供应商 API 或个人密钥。"
+  },
+  "migration": {
+    "status": "NOT_APPLICABLE",
+    "target_migrations": [],
+    "production_applied": false,
+    "notes": "复用 migration 107 的 append-only ledger JSON 与现有 legacy 表，不新增迁移。"
+  },
+  "quality_gate": {
+    "status": "READY_TO_MERGE",
+    "checked_at": "2026-11-10T08:26:56.052116+08:00",
+    "failures": []
+  },
+  "external_ci": {
+    "status": "passed",
+    "checks": {
+      "test": "passed",
+      "lint-and-typecheck": "passed"
+    },
+    "run_id": 42723345356,
+    "head_sha": "120ef536210f5ad89155584bcf40b563cbbd6bf4",
+    "url": "https://github.com/fanxUP/fqp-football-quant/actions/runs/42723345356",
+    "completed_at": "2026-11-10T07:59:43+08:00",
+    "note": "Exact-head GitHub CI passed for P108-03; production database access, provider calls, data import, and deployment remain outside this slice."
+  },
+  "production": {
+    "status": "NOT_IN_SCOPE",
+    "production_database_access": false,
+    "provider_calls": false,
+    "business_data_writes": 0
+  }
+}

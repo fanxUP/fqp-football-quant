@@ -1,0 +1,22 @@
+{
+  "schema_version": 4,
+  "current_task": "P108-03-LINEUPS-AVAILABILITY",
+  "tasks": {
+    "P108-03-LINEUPS-AVAILABILITY": {
+      "title": "Preserve confirmed lineup and player availability facts with source-safe time semantics",
+      "acceptance_id": "A-P108-03",
+      "depends_on": [],
+      "kind": "application_data_contract",
+      "status": "DONE",
+      "definition_of_done": [
+        "Typed availability status distinguishes doubtful, injured, suspended, returned and unknown without defaulting unknown to injured.",
+        "Confirmed lineup facts explicitly say confirmed; predicted payloads cannot enter confirmed legacy projection.",
+        "Per-player effective_at, published_at and expected_return_date are persisted only from explicit source fields; timestamps are timezone-aware; updated_at/acquisition/kickoff are never substituted.",
+        "Empty injury responses remain unknown unless explicit complete coverage proves absence; no player healthy/returned facts are fabricated.",
+        "P104 append-only revisions/cutoffs, idempotence, failure rollback and transaction grouping remain correct in isolated PostgreSQL.",
+        "Exact CI requires the PostgreSQL player observations module and passes it without skip.",
+        "No schema migration, production access, provider calls, model behavior or probability changes."
+      ]
+    }
+  }
+}
