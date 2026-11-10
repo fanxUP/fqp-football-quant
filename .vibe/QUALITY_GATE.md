@@ -1,3 +1,1 @@
-# P108-04 quality gate
-
-Run the focused P108-04 fixed-response and player-observation tests against the explicit loopback PostgreSQL 16 fixture; require all tests to execute without skip. Run Ruff check/format, mypy, scope/budget, independent code and migration review, security review, then exact-head GitHub CI. There is no migration; the migration review must confirm reuse of migration 107 is safe. No provider, production DB, data import, scheduler, model change, or deployment is in scope.
+"# P108-05 quality gate\n\nRun focused unit and fixed PostgreSQL tests on the dedicated marked loopback fixture. Require all selected tests to execute without skip. Run Ruff, format, mypy, scope/budget, V4 quality gate, independent read-only code review and security review, then exact-head GitHub CI. No migration is expected. No provider calls, production DB access, imports, scheduler edits, model training or deployment are in scope for this implementation slice.\n"

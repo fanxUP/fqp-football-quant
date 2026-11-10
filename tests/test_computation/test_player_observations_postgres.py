@@ -4,10 +4,11 @@ from contextlib import closing
 from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 
 import pytest
 
-from scripts.data_contracts import AcquisitionStatus
+from scripts.data_contracts import AcquisitionStatus, FactStatus
 from scripts.feature_storage import (
     get_injuries_for_match,
     get_injury_observation_for_match,
@@ -15,7 +16,11 @@ from scripts.feature_storage import (
 )
 from scripts.jobs.collect_injury_data import _process_fixture_injuries
 from scripts.jobs.collect_lineup_data import _process_lineup
-from scripts.observation_storage import capture_observation_cutoff, load_observation_as_of
+from scripts.observation_storage import (
+    append_observation,
+    capture_observation_cutoff,
+    load_observation_as_of,
+)
 from scripts.player_appearance_facts import build_actual_appearance_facts
 from scripts.player_identity_bridge import (
     resolve_player_identity,
@@ -29,6 +34,7 @@ from scripts.player_observations import (
     store_lineup_observation,
     team_stream,
 )
+from scripts.player_registration_facts import record_registration_fact
 from tests.test_computation import test_observation_postgres as obs
 
 connect = obs.connect
@@ -826,3 +832,666 @@ def test_two_team_appearance_write_requires_caller_rollback_after_partial_failur
 
     assert _appearance_read(pg, match, cutoff) is None
     assert _appearance_read(pg, match, cutoff, away=True) is None
+
+
+def _insert_official_pool_season_link(pg, match, *, kickoff_local, valid_from, valid_to):
+    with pg.cursor() as cur:
+        cur.execute("INSERT INTO football_fixtures DEFAULT VALUES RETURNING id")
+        fixture_id = cur.fetchone()[0]
+        source_name = "p10805_fixture_" + uuid4().hex[:12]
+        source_match_id = "match_" + uuid4().hex[:12]
+        cur.execute(
+            "INSERT INTO football_fixture_source_links "
+            "(source_name,id_system,source_match_id,fixture_id,evidence) "
+            "VALUES (%s,'fixed_fixture',%s,%s,'{\"fixed\":true}'::jsonb)",
+            (source_name, source_match_id, fixture_id),
+        )
+        cur.execute(
+            """INSERT INTO football_competition_season_sources (
+                   competition_season_id,source_name,id_system,source_competition_id,
+                   source_season_id,planned_start_date,planned_end_date,source_timezone,evidence
+               ) VALUES (%s,%s,'fixed_fixture','fixed_comp','fixed_season',%s,%s,
+                         'Asia/Shanghai','{\"fixed\":true}'::jsonb) RETURNING id""",
+            (match["competition_season_id"], source_name, valid_from, valid_to),
+        )
+        season_source_id = cur.fetchone()[0]
+        cur.execute(
+            "INSERT INTO football_fixture_seasons "
+            "(fixture_id,season_source_id,source_name,match_id_system,source_match_id,evidence) "
+            "VALUES (%s,%s,%s,'fixed_fixture',%s,'{\"fixed\":true}'::jsonb)",
+            (fixture_id, season_source_id, source_name, source_match_id),
+        )
+        cur.execute(
+            "INSERT INTO football_pool_issues(issue_no,game_type) VALUES (%s,'sf14') RETURNING id",
+            ("p10805:" + uuid4().hex,),
+        )
+        issue_id = cur.fetchone()[0]
+        cur.execute(
+            """INSERT INTO football_pool_issue_matches (
+                   issue_id,match_order,match_id,league_name,home_team_name,away_team_name,
+                   kickoff_time,kickoff_date,kickoff_time_precision,kickoff_evidence,
+                   fixture_id,identity_status,identity_evidence
+               ) VALUES (%s,1,%s,'固定联赛','固定主','固定客',%s,%s,'minute',
+                         '{\"fixed\":true}'::jsonb,%s,'linked','{\"fixed\":true}'::jsonb)""",
+            (issue_id, match["id"], kickoff_local, kickoff_local.date(), fixture_id),
+        )
+
+
+def _player_projection_fixture(
+    pg,
+    match,
+    *,
+    include_registration=True,
+    include_official_season_link=True,
+    duplicate_competition_name=False,
+    complete_injuries=True,
+    mismatched_identity=False,
+    conflict_registration=False,
+    future_registration_review=False,
+    future_authority_review=False,
+    injured_home_starter=False,
+    conflicting_injury_status=False,
+):
+    now = datetime.now(UTC)
+    kickoff_local = (
+        (now + timedelta(days=2)).astimezone(ZoneInfo("Asia/Shanghai")).replace(tzinfo=None)
+    )
+    kickoff_at = kickoff_local.replace(tzinfo=ZoneInfo("Asia/Shanghai")).astimezone(UTC)
+    valid_from = kickoff_local.date() - timedelta(days=100)
+    valid_to = kickoff_local.date() + timedelta(days=100)
+    shared_season_start = kickoff_local.date() - timedelta(days=500)
+    shared_season_end = kickoff_local.date() - timedelta(days=300)
+    registry_source = "testreg_" + uuid4().hex[:12]
+    conflict_source = "testconflict_" + uuid4().hex[:12]
+    from scripts.player_observations import team_stream
+
+    with pg.cursor() as cur:
+        cur.execute(
+            "UPDATE official_matches SET league_name='固定联赛',home_team_name='固定主',"
+            "away_team_name='固定客',kickoff_time=%s WHERE id=%s",
+            (kickoff_local, match["id"]),
+        )
+        cur.execute(
+            "UPDATE competitions SET competition_name_cn='固定联赛' WHERE id=("
+            "SELECT competition_id FROM competition_seasons WHERE id=%s)",
+            (match["competition_season_id"],),
+        )
+        cur.execute(
+            "UPDATE seasons SET start_date=%s,end_date=%s WHERE id=("
+            "SELECT season_id FROM competition_seasons WHERE id=%s)",
+            (shared_season_start, shared_season_end, match["competition_season_id"]),
+        )
+        if duplicate_competition_name:
+            cur.execute(
+                "INSERT INTO competitions(competition_code,competition_name_cn,competition_type) "
+                "SELECT %s,competition_name_cn,'league' FROM competitions WHERE id=("
+                "SELECT competition_id FROM competition_seasons WHERE id=%s) RETURNING id",
+                ("p10805_duplicate:" + uuid4().hex, match["competition_season_id"]),
+            )
+            duplicate_competition_id = cur.fetchone()[0]
+            cur.execute(
+                "INSERT INTO seasons(season_code,season_name,start_date,end_date) "
+                "VALUES (%s,'same-name overlapping season',%s,%s) RETURNING id",
+                ("p10805d" + uuid4().hex[:8], valid_from, valid_to),
+            )
+            duplicate_season_id = cur.fetchone()[0]
+            cur.execute(
+                "INSERT INTO competition_seasons(competition_id,season_id) VALUES (%s,%s)",
+                (duplicate_competition_id, duplicate_season_id),
+            )
+        if include_registration:
+            cur.execute(
+                "INSERT INTO player_registration_authority_sources "
+                "(source_name,revision,authority,status,source_reference,content_sha256,"
+                "reviewed_by,reviewed_at) VALUES (%s,1,'competition_registry','approved',"
+                "'fixed://authority',%s,'fixed-reviewer',%s)",
+                (
+                    registry_source,
+                    "e" * 64,
+                    now + timedelta(hours=1)
+                    if future_authority_review
+                    else now - timedelta(minutes=2),
+                ),
+            )
+            if conflict_registration:
+                cur.execute(
+                    "INSERT INTO player_registration_authority_sources "
+                    "(source_name,revision,authority,status,source_reference,content_sha256,"
+                    "reviewed_by,reviewed_at) VALUES (%s,1,'competition_registry','approved',"
+                    "'fixed://conflict-authority',%s,'fixed-reviewer',%s)",
+                    (conflict_source, "a" * 64, now - timedelta(minutes=2)),
+                )
+
+    if include_official_season_link:
+        _insert_official_pool_season_link(
+            pg,
+            match,
+            kickoff_local=kickoff_local,
+            valid_from=valid_from,
+            valid_to=valid_to,
+        )
+
+    for side, team_id in (("home", match["home_team_id"]), ("away", match["away_team_id"])):
+        players = []
+        for index in range(11):
+            source_player_id = (
+                900_000 + (match["id"] % 100_000) * 100 + (0 if side == "home" else 20) + index
+            )
+            with pg.cursor() as cur:
+                cur.execute(
+                    "INSERT INTO players(player_code) VALUES (%s) RETURNING id",
+                    (f"p10805:{uuid4().hex}",),
+                )
+                player_id = cur.fetchone()[0]
+                identity_player_id = player_id
+                if mismatched_identity and side == "home" and index == 0:
+                    cur.execute(
+                        "INSERT INTO players(player_code) VALUES (%s) RETURNING id",
+                        (f"p10805:mismatch:{uuid4().hex}",),
+                    )
+                    identity_player_id = cur.fetchone()[0]
+            upsert_player_identity_link(
+                pg,
+                source_name="apifootball",
+                external_player_id=str(source_player_id),
+                player_id=identity_player_id,
+                status="verified",
+                evidence_refs=[f"fixed://identity/{source_player_id}"],
+                matching_method="fixed_projection_fixture",
+                confidence=1,
+                reviewed_by="fixed-reviewer",
+                reviewed_at=now - timedelta(minutes=1),
+            )
+            players.append(
+                {
+                    "player_id": player_id,
+                    "source_player_id": source_player_id,
+                    "is_starting": True,
+                    "is_substitute": False,
+                    "position": "D",
+                    "name": "Shared Name",
+                }
+            )
+            if include_registration:
+                registry_id = f"reg-{source_player_id}"
+                upsert_player_identity_link(
+                    pg,
+                    source_name=registry_source,
+                    external_player_id=registry_id,
+                    player_id=player_id,
+                    status="verified",
+                    evidence_refs=[f"fixed://registry-identity/{source_player_id}"],
+                    matching_method="fixed_projection_fixture",
+                    confidence=1,
+                    reviewed_by="fixed-reviewer",
+                    reviewed_at=now - timedelta(minutes=1),
+                )
+                record_registration_fact(
+                    pg,
+                    {
+                        "source_name": registry_source,
+                        "external_player_id": registry_id,
+                        "source_competition_id": "fixed-comp",
+                        "source_season": "fixed-season",
+                        "competition_season_id": match["competition_season_id"],
+                        "source_record_key": f"fixed-registration/{source_player_id}",
+                        "source_revision": "v1",
+                        "content_sha256": "f" * 64,
+                        "status": "confirmed",
+                        "eligible": True,
+                        "source_authority": "competition_registry",
+                        "valid_from": valid_from,
+                        "valid_to": valid_to,
+                        "acquired_at": now - timedelta(minutes=2),
+                        "evidence_refs": [f"fixed://registration/{source_player_id}"],
+                        "reviewed_by": "fixed-reviewer",
+                        "reviewed_at": (
+                            now + timedelta(hours=1)
+                            if future_registration_review and side == "home" and index == 0
+                            else now - timedelta(minutes=1)
+                        ),
+                    },
+                    commit=False,
+                )
+                if conflict_registration and side == "home" and index == 0:
+                    conflict_id = f"conflict-{source_player_id}"
+                    upsert_player_identity_link(
+                        pg,
+                        source_name=conflict_source,
+                        external_player_id=conflict_id,
+                        player_id=player_id,
+                        status="verified",
+                        evidence_refs=[f"fixed://conflict-identity/{source_player_id}"],
+                        matching_method="fixed_projection_conflict_fixture",
+                        confidence=1,
+                        reviewed_by="fixed-reviewer",
+                        reviewed_at=now - timedelta(minutes=1),
+                    )
+                    record_registration_fact(
+                        pg,
+                        {
+                            "source_name": conflict_source,
+                            "external_player_id": conflict_id,
+                            "source_competition_id": "fixed-comp",
+                            "source_season": "fixed-season",
+                            "competition_season_id": match["competition_season_id"],
+                            "source_record_key": f"fixed-conflict/{source_player_id}",
+                            "source_revision": "v1",
+                            "content_sha256": "b" * 64,
+                            "status": "confirmed",
+                            "eligible": False,
+                            "source_authority": "competition_registry",
+                            "valid_from": valid_from,
+                            "valid_to": valid_to,
+                            "acquired_at": now - timedelta(minutes=2),
+                            "evidence_refs": [f"fixed://conflict-registration/{source_player_id}"],
+                            "reviewed_by": "fixed-reviewer",
+                            "reviewed_at": now - timedelta(minutes=1),
+                        },
+                        commit=False,
+                    )
+        append_observation(
+            pg,
+            **team_stream(match["id"], team_id, "lineup"),
+            fact_status=FactStatus.VALUE,
+            value={
+                "lineup_status": "confirmed",
+                "team_id": team_id,
+                "api_fixture_id": 9900 + team_id,
+                "players": players,
+            },
+            acquired_at=now - timedelta(minutes=2),
+            verified_at=now - timedelta(minutes=2),
+            valid_until=now + timedelta(minutes=30),
+            evidence={
+                "adapter_version": "api-football-players/v1",
+                "api_fixture_id": 9900 + team_id,
+                "coverage_complete": True,
+                "coverage_evidence": "reported-eleven-unique-starters/v1",
+            },
+        )
+        if injured_home_starter and side == "home":
+            injury_status = FactStatus.VALUE
+            injury_value = {
+                "team_id": team_id,
+                "api_fixture_id": 9900 + team_id,
+                "players": [
+                    {
+                        "player_id": players[0]["player_id"],
+                        "source_player_id": players[0]["source_player_id"],
+                        "availability_status": "injured",
+                        "reported_type": "fixed test injury",
+                        "reported_reason": "fixed test reason",
+                    },
+                    *(
+                        [
+                            {
+                                "player_id": players[0]["player_id"],
+                                "source_player_id": players[0]["source_player_id"],
+                                "availability_status": "returned",
+                                "reported_type": "fixed conflicting report",
+                                "reported_reason": "fixed test reason",
+                            }
+                        ]
+                        if conflicting_injury_status
+                        else []
+                    ),
+                ],
+            }
+            injury_evidence = {
+                "adapter_version": "api-football-players/v1",
+                "api_fixture_id": 9900 + team_id,
+                "coverage_complete": True,
+                "coverage_evidence": "fixed-complete-injury-report/v1",
+                "source_reported_count": 2 if conflicting_injury_status else 1,
+            }
+        elif complete_injuries:
+            injury_status = FactStatus.CONFIRMED_ABSENT
+            injury_value = None
+            injury_evidence = {
+                "adapter_version": "api-football-players/v1",
+                "api_fixture_id": 9900 + team_id,
+                "coverage_complete": True,
+                "coverage_evidence": "fixed-complete-injury-report/v1",
+                "source_reported_count": 0,
+            }
+        else:
+            injury_status = FactStatus.UNKNOWN
+            injury_value = None
+            injury_evidence = {
+                "adapter_version": "api-football-players/v1",
+                "api_fixture_id": 9900 + team_id,
+                "coverage_complete": False,
+            }
+        append_observation(
+            pg,
+            **team_stream(match["id"], team_id, "injuries"),
+            fact_status=injury_status,
+            value=injury_value,
+            acquired_at=now - timedelta(minutes=2),
+            verified_at=now - timedelta(minutes=2),
+            valid_until=now + timedelta(minutes=30),
+            evidence=injury_evidence,
+        )
+
+    append_observation(
+        pg,
+        match_id=match["id"],
+        source_id="open_meteo",
+        domain="weather",
+        subject_key="forecast",
+        fact_status=FactStatus.VALUE,
+        value={"temperature_2m": 12.0},
+        acquired_at=now - timedelta(minutes=2),
+        verified_at=now - timedelta(minutes=2),
+        effective_at=kickoff_at,
+        valid_until=now + timedelta(hours=6),
+        evidence={"fixed_response": True},
+    )
+    pg.commit()
+    cutoff = capture_observation_cutoff(
+        pg,
+        streams=[
+            dict(
+                match_id=match["id"],
+                source_id="open_meteo",
+                domain="weather",
+                subject_key="forecast",
+            )
+        ]
+        + [
+            team_stream(match["id"], team_id, domain)
+            for domain in ("lineup", "injuries")
+            for team_id in (match["home_team_id"], match["away_team_id"])
+        ],
+    )
+    pg.commit()
+    from scripts.feature_batch_storage import load_feature_batch
+    from scripts.observed_feature_pipeline import build_observed_feature_batch
+
+    batch_id = build_observed_feature_batch(
+        pg,
+        match_id=match["id"],
+        cutoff=cutoff,
+        context={
+            "home_team_id": match["home_team_id"],
+            "away_team_id": match["away_team_id"],
+            "kickoff_at": kickoff_at,
+        },
+    )
+    pg.commit()
+    batch = load_feature_batch(pg, batch_id)
+    assert batch is not None
+    return batch
+
+
+def test_player_feature_projection_is_versioned_and_requires_complete_evidence(pg, match):
+    from scripts.player_feature_projection import load_player_feature_projection
+
+    batch = _player_projection_fixture(pg, match, duplicate_competition_name=True)
+    pg.rollback()
+    with pg.cursor() as cur:
+        cur.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
+        cur.execute(
+            "SELECT (SELECT count(*) FROM observation_revisions),"
+            "(SELECT count(*) FROM player_identity_links),"
+            "(SELECT count(*) FROM player_registration_facts)"
+        )
+        before = cur.fetchone()
+    projection = load_player_feature_projection(pg, batch=batch, as_of=batch["cutoff"].as_of)
+    with pg.cursor() as cur:
+        cur.execute(
+            "SELECT (SELECT count(*) FROM observation_revisions),"
+            "(SELECT count(*) FROM player_identity_links),"
+            "(SELECT count(*) FROM player_registration_facts)"
+        )
+        after = cur.fetchone()
+
+    assert after == before
+    assert projection["schema_version"] == "player-feature-projection/v1"
+    assert projection["status"] == "candidate_inputs_ready"
+    assert projection["competition_season_id"] == match["competition_season_id"]
+    assert projection["feature_values"] == {
+        "home_registered_starters": 11,
+        "away_registered_starters": 11,
+        "home_reported_unavailable_starters": 0,
+        "away_reported_unavailable_starters": 0,
+        "home_doubtful_starters": 0,
+        "away_doubtful_starters": 0,
+    }
+    assert projection["identity_map_revision"]["entry_count"] == 44
+    assert projection["coverage"]["home"]["registration_known"] == 11
+    assert projection["coverage"]["away"]["availability_report_complete"] is True
+    assert projection["probabilities"] is None
+    pg.rollback()
+
+
+def test_player_feature_projection_withholds_missing_registration_and_incomplete_reports(pg, match):
+    from scripts.player_feature_projection import load_player_feature_projection
+
+    batch = _player_projection_fixture(
+        pg, match, include_registration=False, complete_injuries=False
+    )
+    projection = load_player_feature_projection(pg, batch=batch, as_of=batch["cutoff"].as_of)
+
+    assert projection["status"] == "withheld"
+    assert projection["feature_values"] == {}
+    assert "registration_unknown" in projection["missingness"]
+    assert "availability_coverage_incomplete" in projection["missingness"]
+
+
+def test_player_feature_projection_requires_explicit_official_season_link(pg, match):
+    from scripts.player_feature_projection import load_player_feature_projection
+
+    batch = _player_projection_fixture(pg, match, include_official_season_link=False)
+
+    projection = load_player_feature_projection(pg, batch=batch, as_of=batch["cutoff"].as_of)
+
+    assert projection["status"] == "withheld"
+    assert projection["competition_season_id"] is None
+    assert "competition_season_unknown" in projection["missingness"]
+
+
+def test_player_feature_projection_ignores_post_cutoff_season_mapping(pg, match):
+    from scripts.player_feature_projection import load_player_feature_projection
+
+    batch = _player_projection_fixture(pg, match, include_official_season_link=False)
+    context = batch["features"]["temperature_2m"]["derivation"]["context"]
+    kickoff_local = datetime.fromisoformat(context["kickoff_at"]).astimezone(
+        ZoneInfo("Asia/Shanghai")
+    )
+    kickoff_local = kickoff_local.replace(tzinfo=None)
+    _insert_official_pool_season_link(
+        pg,
+        match,
+        kickoff_local=kickoff_local,
+        valid_from=kickoff_local.date() - timedelta(days=100),
+        valid_to=kickoff_local.date() + timedelta(days=100),
+    )
+    pg.commit()
+
+    projection = load_player_feature_projection(pg, batch=batch, as_of=batch["cutoff"].as_of)
+
+    assert projection["status"] == "withheld"
+    assert projection["competition_season_id"] is None
+    assert "competition_season_unknown" in projection["missingness"]
+
+
+def test_player_feature_projection_bounds_registration_rows_in_sql(pg, match, monkeypatch):
+    from scripts import player_feature_projection as projection_module
+
+    batch = _player_projection_fixture(pg, match)
+    monkeypatch.setattr(projection_module, "_MAX_REGISTRATION_ROWS", 0)
+
+    with pytest.raises(ValueError, match="registration evidence exceeds the projection bound"):
+        projection_module.load_player_feature_projection(
+            pg, batch=batch, as_of=batch["cutoff"].as_of
+        )
+
+
+def test_player_feature_projection_does_not_use_cutoff_after_kickoff(pg, match):
+    from scripts.player_feature_projection import load_player_feature_projection
+
+    batch = _player_projection_fixture(pg, match)
+    kickoff_at = datetime.fromisoformat(
+        batch["features"]["temperature_2m"]["derivation"]["context"]["kickoff_at"]
+    )
+    projection = load_player_feature_projection(pg, batch=batch, as_of=kickoff_at)
+
+    assert projection["status"] == "withheld"
+    assert "decision_after_kickoff" in projection["missingness"]
+
+
+def test_player_feature_projection_ignores_identity_changes_after_cutoff(pg, match):
+    from scripts.player_feature_projection import load_player_feature_projection
+
+    batch = _player_projection_fixture(pg, match)
+    from scripts.observation_storage import load_observation_as_of
+
+    lineup_fact = load_observation_as_of(
+        pg,
+        **team_stream(match["id"], match["home_team_id"], "lineup"),
+        cutoff=batch["cutoff"],
+    )
+    player = lineup_fact["value"]["players"][0]
+    upsert_player_identity_link(
+        pg,
+        source_name="apifootball",
+        external_player_id=str(player["source_player_id"]),
+        player_id=None,
+        status="unresolved",
+        evidence_refs=["fixed://mapping-revoked-after-cutoff"],
+        matching_method="fixed_projection_temporal_test",
+        confidence=1,
+    )
+
+    projection = load_player_feature_projection(pg, batch=batch, as_of=batch["cutoff"].as_of)
+
+    assert projection["status"] == "withheld"
+    assert "identity_mapping_incomplete" in projection["missingness"]
+
+
+def test_player_feature_projection_withholds_conflicting_registration_sources(pg, match):
+    from scripts.player_feature_projection import load_player_feature_projection
+
+    batch = _player_projection_fixture(pg, match, conflict_registration=True)
+
+    projection = load_player_feature_projection(pg, batch=batch, as_of=batch["cutoff"].as_of)
+
+    assert projection["status"] == "withheld"
+    assert "registration_conflict" in projection["missingness"]
+
+
+def test_player_feature_projection_rejects_verified_source_id_for_another_player(pg, match):
+    from scripts.player_feature_projection import load_player_feature_projection
+
+    batch = _player_projection_fixture(pg, match, mismatched_identity=True)
+
+    projection = load_player_feature_projection(pg, batch=batch, as_of=batch["cutoff"].as_of)
+
+    assert projection["status"] == "withheld"
+    assert "identity_mapping_incomplete" in projection["missingness"]
+
+
+@pytest.mark.parametrize("future_field", ["registration", "authority"])
+def test_player_feature_projection_hides_future_reviewed_eligibility(pg, match, future_field):
+    from scripts.player_feature_projection import load_player_feature_projection
+
+    batch = _player_projection_fixture(
+        pg,
+        match,
+        future_registration_review=future_field == "registration",
+        future_authority_review=future_field == "authority",
+    )
+
+    projection = load_player_feature_projection(pg, batch=batch, as_of=batch["cutoff"].as_of)
+
+    assert projection["status"] == "withheld"
+    assert "registration_unknown" in projection["missingness"]
+
+
+def test_player_feature_projection_preserves_reported_unavailable_starter_count(pg, match):
+    from scripts.player_feature_projection import load_player_feature_projection
+
+    batch = _player_projection_fixture(pg, match, injured_home_starter=True)
+
+    projection = load_player_feature_projection(pg, batch=batch, as_of=batch["cutoff"].as_of)
+
+    assert projection["status"] == "candidate_inputs_ready"
+    assert projection["feature_values"]["home_reported_unavailable_starters"] == 1
+
+
+def test_player_feature_projection_withholds_conflicting_availability_for_one_starter(pg, match):
+    from scripts.player_feature_projection import load_player_feature_projection
+
+    batch = _player_projection_fixture(
+        pg, match, injured_home_starter=True, conflicting_injury_status=True
+    )
+
+    projection = load_player_feature_projection(pg, batch=batch, as_of=batch["cutoff"].as_of)
+
+    assert projection["status"] == "withheld"
+    assert "availability_status_conflict" in projection["missingness"]
+
+
+def test_player_projection_does_not_change_existing_maher_shadow_probability():
+    from scripts.observed_maher_shadow import build_observed_maher_shadow
+
+    cutoff_id = str(uuid4())
+    batch = {
+        "id": 1,
+        "match_id": 123,
+        "cutoff_id": cutoff_id,
+        "builder_version": "observed-cutoff-pilot/v1",
+        "features": {"temperature_2m": {"derivation": {"context": {}}}},
+    }
+    feature_input = {
+        "status": "ready",
+        "match_id": 123,
+        "batch_id": 1,
+        "cutoff_id": cutoff_id,
+        "feature_columns": [
+            "temperature_2m",
+            "home_lineup_confirmed",
+            "away_lineup_confirmed",
+            "home_key_absence_count",
+            "away_key_absence_count",
+        ],
+        "snapshot": {
+            "feature_version": "observed-cutoff-pilot/v1",
+            "feature_batch_id": 1,
+            "observation_cutoff_id": cutoff_id,
+            "home_team_id": 10,
+            "away_team_id": 20,
+            "temperature_2m": 12,
+        },
+        "field_statuses": {"temperature_2m": "value"},
+    }
+    params = {
+        "maher_poisson": {
+            "converged": True,
+            "attack": {"10": 0.0, "20": 0.0},
+            "defense": {"10": 0.0, "20": 0.0},
+            "team_match_counts": {"10": 5, "20": 5},
+            "n_matches": 10,
+        }
+    }
+    common = dict(
+        model_version_id=5,
+        model_parameters=params,
+        feature_input=feature_input,
+        batch=batch,
+        input_version=2,
+        as_of=datetime.now(UTC),
+    )
+    without_projection = build_observed_maher_shadow(**common)
+    projection = {
+        "schema_version": "player-feature-projection/v1",
+        "status": "withheld",
+        "feature_values": {},
+        "probabilities": None,
+    }
+    with_projection = build_observed_maher_shadow(**common, player_projection=projection)
+
+    assert with_projection["probabilities"] == without_projection["probabilities"]
+    assert with_projection["player_projection"] == projection

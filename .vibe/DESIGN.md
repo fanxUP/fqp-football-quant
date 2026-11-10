@@ -1,9 +1,1 @@
-# P108-04 技术设计
-
-- 新解析器接收已确认绑定的官方比赛映射、API fixture 摘要、固定 `fixtures/players` 响应、verified identity resolver、获取时间和可选的来源换人事件。
-- 解析器只读取 `statistics[].games.minutes`。整数 0 有“来源报告未出场”的含义；`null` 或缺失只计覆盖缺口，不生成分钟事实；布尔、字符串、负数和超过完赛时长的数值拒绝。
-- fixture 必须匹配指定 API fixture ID、支持的完赛状态以及两队主客身份。球员只能由 source ID 查到唯一 verified canonical ID；名字字段不参与连接。
-- 换人事件只作为矛盾检查，不推导出场分钟。直接分钟与明确换人时间不兼容时拒收该整场样本。
-- 来源响应以规范 JSON 编码后做 SHA-256。每队一个 `appearance` stream，值保留源球员 ID、规范 ID、直接分钟、未解析数和缺失分钟数；证据标明 `source_reported=true`、`derivation=direct_source_field`、fixture/team IDs、摘要和获取时间。
-- 主客队先全部校验，再在调用方同一事务中 append 两个队伍流；不设置历史短 TTL。没有 commit、自动请求或调度副作用。
-- API 客户端只提供显式 `get_fixture_players(fixture_id)` 方法并校验响应形状；不增加任何调用点。
+"# P108-05 技术设计\n\n投影加载器从已持久化的 complete feature batch 读取精确 cutoff 选择。它从两个 lineup 字段及两个 injury 字段的派生引用中定位原始选中 observation，不查询“最新”阵容或伤停。只接受确认 lineup；伤停只有在 P104 标记完整覆盖且未过期时才可参与。\n\n以 observation 中的 API-Football source player ID 查询 P108-01 的 verified identity link。mapping status、review 时间、updated 时间均须不晚于 cutoff，canonical player ID 必须与 observation 一致；每条映射的 revision 被规范排序后计算 SHA-256。\n\n赛事赛季不按联赛名称或共享日历日期猜测；只接受 cutoff 前已记录的 linked fixture-season 修订，并沿 football_fixture_season_catalog 读取赛事专属 planned season date。身份、队名、联赛、开球时间或赛季归属不唯一时 withheld。\n\n注册资格按该 canonical competition season 读取 P108-02 append-only facts。仅接受 cutoff 前已获取、入库、审核且有效日覆盖 kickoff 的事实；source authority 在 cutoff 前的最后审查版本必须为 approved，且权威类型与事实一致。相互冲突的资格结果归为 conflict。注册事实 SQL 读取上限为 1,025 行；超过 1,024 时 withheld。\n\n输出 schema `player-feature-projection/v1` 保存 4 类元素：身份、注册资格、当前首发/可用性直接计数和其覆盖/来源 refs。没有完整覆盖时将 numeric feature 留空并列出 missing reason。该投影只是 candidate input contract，既不训练模型，也不生成概率。\n\n将投影作为 `player_projection` 子对象加入已有 `observed_maher_shadow` JSON；当前天气 Maher shadow 算法完全不读该对象。生产事实未导入时预计 projection withheld，这是正确的 fail-closed 结果。\n"

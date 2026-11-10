@@ -64,6 +64,7 @@ def build_observed_maher_shadow(
     batch: dict,
     input_version: int,
     as_of: Any,
+    player_projection: dict | None = None,
 ) -> dict:
     """Compute a non-publishable SPF shadow result or an explicit unavailable ref."""
     match_id = batch.get("match_id")
@@ -88,8 +89,17 @@ def build_observed_maher_shadow(
             name: feature_input.get("snapshot", {}).get(name) for name in _AUDIT_FIELDS
         },
         "source_revision_ids": _revision_ids(batch, _AUDIT_FIELDS),
+        "player_projection": player_projection,
         "not_applied_features": [
-            {"feature": name, "reason": "player_contribution_mapping_unavailable"}
+            {
+                "feature": name,
+                "reason": (
+                    "candidate_inputs_not_used_before_p114"
+                    if isinstance(player_projection, dict)
+                    and player_projection.get("status") == "candidate_inputs_ready"
+                    else "player_candidate_withheld_or_unvalidated"
+                ),
+            }
             for name in (
                 "home_lineup_confirmed",
                 "away_lineup_confirmed",

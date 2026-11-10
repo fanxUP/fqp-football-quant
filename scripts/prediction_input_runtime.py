@@ -16,6 +16,10 @@ from scripts.feature_batch_storage import load_feature_batch
 from scripts.observation_storage import capture_observation_cutoff
 from scripts.observed_feature_pipeline import build_observed_feature_batch
 from scripts.observed_maher_shadow import build_observed_maher_shadow
+from scripts.player_feature_projection import (
+    load_player_feature_projection,
+    unavailable_player_feature_projection,
+)
 from scripts.prediction_input_revisions import (
     MAHER_SHADOW_CONSUMER,
     _blocked_outcome,
@@ -136,6 +140,18 @@ def _maher_shadow_ref(conn: Any, *, batch_id: int, match_id: int, input_version:
         feature_columns=_SHADOW_FIELDS,
         required_fields=(),
     )
+    with conn.cursor() as cur:
+        cur.execute("SAVEPOINT optional_player_projection")
+    try:
+        player_projection = load_player_feature_projection(conn, batch=batch, as_of=as_of)
+    except Exception:
+        with conn.cursor() as cur:
+            cur.execute("ROLLBACK TO SAVEPOINT optional_player_projection")
+            cur.execute("RELEASE SAVEPOINT optional_player_projection")
+        player_projection = unavailable_player_feature_projection(batch, as_of=as_of)
+    else:
+        with conn.cursor() as cur:
+            cur.execute("RELEASE SAVEPOINT optional_player_projection")
     version_id, parameters, model_reason = _active_maher_model(conn)
     result = build_observed_maher_shadow(
         model_version_id=version_id,
@@ -144,6 +160,7 @@ def _maher_shadow_ref(conn: Any, *, batch_id: int, match_id: int, input_version:
         batch=batch,
         input_version=input_version,
         as_of=as_of,
+        player_projection=player_projection,
     )
     if model_reason is not None:
         result.update(status="model_unavailable", reason=model_reason)

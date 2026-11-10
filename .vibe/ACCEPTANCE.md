@@ -1,11 +1,14 @@
-# P108-04 验收
+# P108-05 验收
 
-- [x] 完赛 FT/AET/PEN 可解析；未完赛、错误 fixture、重复 fixture 或主客队不匹配均拒收。
-- [x] 只从 `statistics[].games.minutes` 取非布尔整数；0 保留，null/缺失不制造事实，字符串/布尔/负数/越界分钟拒收。
-- [x] 经 verified ID bridge 解析 canonical player ID；unresolved/rejected 只计覆盖缺口；同名不同 source ID 不串人。
-- [x] 直接分钟与明确替换出入场事件冲突时拒收；事件不用于反推分钟。换人已知区间使用 ±2 分钟容差并验证边界。
-- [x] Titan `legacy-name-substitution/default90-v1` 不能进入适配器。
-- [x] 每队事实有来源响应摘要、source/official fixture/team/player IDs、direct-source derivation 与获取时间；历史事实没有 TTL。
-- [x] 两队 observation 写入同一 caller-owned transaction；固定 PostgreSQL 测试验证幂等、cutoff replay 与 rollback。
-- [x] 固定响应及隔离 PostgreSQL 16 回归 123 项通过（0 skip）；Ruff、format、mypy、scope/budget、V4 quality gate、独立审查和 exact-head GitHub CI 通过。
-- [x] 零真实 API 调用、零生产数据库访问、零数据导入、零迁移、零部署、零模型概率变化。
+- [x] 当前比赛的完整 P104 batch 经 hash/cutoff 校验；无 latest-row 替换或重建 cutoff。
+- [x] 主客队必须分别有恰好 11 名确认首发，球员 source ID 与 verified canonical ID 一一对应。
+- [x] 当前伤停/可用性必须来自该 batch 的完整覆盖报告；未覆盖、过期、未映射或未知状态不被当成健康。
+- [x] 赛事赛季只从 cutoff 前已记录的 linked fixture-season 修订中解析，并使用该来源的计划赛季区间；无唯一映射时 withheld。
+- [x] 注册资格仅认可在 batch cutoff 前可见、权威源获批、且有效区间覆盖开球日的审查事实。
+- [x] 生成版本、match/batch/cutoff/as-of、身份 revision digest、注册/伤停来源证据、coverage 与 missingness。
+- [x] 任意必需信号不完整或冲突时，玩家候选为 withheld；基础影子预测仍按旧规则工作。
+- [x] shadow 集成前后固定样本概率一致，投影不产生 probability、分值或主观权重。
+- [x] 时间泄漏、同名、冲突、完整/不完整 coverage、本地 PostgreSQL 只读行为回归全部通过（104 项通过）。
+- [x] Ruff、format、mypy、scope/budget、V4 本地门禁、独立审查和 security review 通过。
+- [ ] 推送后的 GitHub main exact-head CI 通过（发布门禁，待执行）。
+- [x] 无迁移、外部 API、生产访问/写入、数据导入、调度改动或服务器部署。

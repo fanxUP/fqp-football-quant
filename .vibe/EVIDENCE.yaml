@@ -1,70 +1,49 @@
 {
   "schema_version": 4,
-  "current_task": "P108-04-ACTUAL-APPEARANCES",
+  "current_task": "P108-05-PLAYER-FEATURE-PROJECTION",
   "acceptance": {
-    "A-P108-04": {
+    "A-P108-05": {
       "status": "PASS",
-      "command": "bash -lc 'FQP_OBSERVATION_TEST_POSTGRES_DSN='\"'\"'host=127.0.0.1 port=60492 user=fqp_observation_test dbname=fqp_observation_test password=fqp_test_password'\"'\"' .venv/bin/python -m pytest -q tests/test_scripts/test_player_appearance_facts.py tests/test_scripts/test_api_football_client.py tests/test_scripts/test_player_identity_bridge.py tests/test_computation/test_player_observations_postgres.py && .venv/bin/ruff check scripts/api_football_client.py scripts/player_identity_bridge.py scripts/player_observations.py scripts/player_appearance_facts.py tests/test_scripts/test_player_appearance_facts.py tests/test_computation/test_player_observations_postgres.py && .venv/bin/ruff format --check scripts/api_football_client.py scripts/player_identity_bridge.py scripts/player_observations.py scripts/player_appearance_facts.py tests/test_scripts/test_player_appearance_facts.py tests/test_computation/test_player_observations_postgres.py && .venv/bin/mypy scripts/api_football_client.py scripts/player_identity_bridge.py scripts/player_observations.py scripts/player_appearance_facts.py && python3 -I -S -B /Users/estefan-macworkstation/.remote-vibe-coding/engine/vibe.py --repo . scope check && python3 -I -S -B /Users/estefan-macworkstation/.remote-vibe-coding/engine/vibe.py --repo . budget check && git diff --check'",
+      "command": "/bin/zsh -lc 'FQP_OBSERVATION_TEST_POSTGRES_DSN='\"'\"'host=127.0.0.1 port=60492 user=fqp_observation_test dbname=fqp_observation_test password=fqp_test_password'\"'\"' .venv/bin/python -m pytest -q tests/test_computation/test_player_observations_postgres.py tests/test_computation/test_prediction_input_runtime_postgres.py && .venv/bin/ruff check scripts/player_feature_projection.py scripts/prediction_input_runtime.py scripts/observed_maher_shadow.py tests/test_computation/test_player_observations_postgres.py && .venv/bin/ruff format --check scripts/player_feature_projection.py scripts/prediction_input_runtime.py scripts/observed_maher_shadow.py tests/test_computation/test_player_observations_postgres.py && .venv/bin/mypy scripts/player_feature_projection.py scripts/prediction_input_runtime.py scripts/observed_maher_shadow.py --explicit-package-bases && git diff --check'",
       "exit_code": 0,
-      "summary": "============================= test session starts ==============================\nplatform darwin -- Python 3.14.6, pytest-9.1.1, pluggy-1.7.0\nrootdir: /Volumes/Nas/FQP/code\nconfigfile: pyproject.toml\nplugins: mock-3.15.1, cov-7.1.0, asyncio-1.4.0, anyio-4.15.1, platformdirs-4.13.5\nasyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function\ncollected 123 items\n\ntests/test_scripts/test_player_appearance_facts.py ..................... [ 17%]\n.............................                                            [ 40%]\ntests/test_scripts/test_api_football_client.py ..............            [ 52%]\ntests/test_scripts/test_player_identity_bridge.py ............           [ 61%]\ntests/test_computation/test_player_observations_postgres.py ............ [ 71%]\n...................................                                      [100%]\n\n============================= 123 passed in 3.70s ==============================\nAll checks passed!\n6 files already formatted\nSuccess: no issues found in 4 source files\nchanged_files=6\nPASS: scope\nfiles_changed: 6/6\nnew_files: 2/2\nnew_dependencies_heuristic: 0/0\nschema_migration_files: 0/0\ndeclared_public_api_changes: 0/0\nPASS: change budget\n",
+      "summary": "============================= test session starts ==============================\nplatform darwin -- Python 3.14.6, pytest-9.1.1, pluggy-1.7.0\nrootdir: /Volumes/Nas/FQP/code\nconfigfile: pyproject.toml\nplugins: mock-3.15.1, cov-7.1.0, asyncio-1.4.0, anyio-4.15.1, platformdirs-4.13.5\nasyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function\ncollected 104 items\n\ntests/test_computation/test_player_observations_postgres.py ............ [ 11%]\n.................................................                        [ 58%]\ntests/test_computation/test_prediction_input_runtime_postgres.py ....... [ 65%]\n....................................                                     [100%]\n\n============================= 104 passed in 28.14s =============================\nAll checks passed!\n4 files already formatted\nSuccess: no issues found in 3 source files\n",
       "timed_out": false,
-      "environment": "Local fixed responses and the explicitly marked loopback PostgreSQL 16 test database only; no production database, provider calls, import, or deployment.",
-      "revision": "ee82c2ba8e5a588b46b75aeb53ea2050f3b3663d",
+      "environment": "Fixed local samples and the dedicated loopback PostgreSQL 16 fixture only; read-only projection; no provider calls, production access, import, probability change, or deployment.",
+      "revision": "fc92c5ae3fafae6117aa9ce45d2cf2082efab80e",
       "dirty_tree": true,
-      "tree_fingerprint": "49abe868c8e9b4c6aa95b601a6401233421c197901ed4988aa1ec082db972d2c",
-      "verified_at": "2026-11-10T09:34:34.433541+08:00"
+      "tree_fingerprint": "9db042bddfcc44576827b5c003ad978f887efe7cea5b827d751fa97c3404d23d",
+      "verified_at": "2026-11-10T11:44:45.625836+08:00"
     }
   },
   "reviews": {
     "status": "PASS",
     "application_code": {
       "status": "PASS",
-      "reviewer": "independent-read-only",
-      "summary": "Closed findings for symmetric substitution interval validation, paging completeness, and fixture-wide canonical player identity uniqueness; verified P104 provenance, append-only semantics, and caller-owned transaction behavior."
+      "summary": "Independent read-only review PASS. The review findings were resolved: exact cutoff-visible fixture-season mapping, source planned season dates, SQL-side registration row bound, and post-cutoff mapping withholding. No remaining blocker."
     },
     "v4_migration": {
       "status": "PASS",
-      "reviewer": "independent-read-only",
-      "summary": "No schema change is required; reuse of migration 107 observation ledger is compatible with the new appearance domain."
+      "applicability": "NOT_APPLICABLE",
+      "summary": "No database migration or schema change is in scope."
     }
   },
   "security": {
     "status": "PASS",
-    "provider_calls": false,
-    "production_access": false,
-    "checks": {
-      "secrets": "No credentials or tokens added; test key is a fixed dummy value.",
-      "provider_client": "Explicit fixture-only method delegates to the existing quota-controlled request path; no automatic call site or scheduler was added.",
-      "database": "Only the marked loopback PostgreSQL 16 fixture was accessed; writes are parameterized and caller-transaction scoped.",
-      "scope": "No SQL migration, dependency, public HTTP endpoint, production access, import, or deployment."
-    }
+    "summary": "Read-only parameterized SQL only; no secrets, provider calls, shell execution, dynamic SQL identifiers, production access, schema changes, or new dependencies. Optional runtime errors roll back to a savepoint and yield a withheld projection."
   },
   "migration": {
     "status": "NOT_APPLICABLE",
     "target_migrations": [],
-    "production_applied": false,
-    "notes": "Reuse the P104 observation ledger; no schema change."
+    "production_applied": false
   },
   "quality_gate": {
-    "status": "READY_TO_MERGE",
-    "checked_at": "2026-11-10T09:36:13.678015+08:00",
-    "failures": []
+    "status": "BLOCKED",
+    "checked_at": "2026-11-10T11:44:45.625836+08:00",
+    "failures": ["exact_head_github_ci_pending"]
   },
   "external_ci": {
-    "status": "PASS",
-    "checks": {
-      "CI": {
-        "run_id": 42737091008,
-        "head_sha": "56ba6c4874d093f60337227bb5ee57e58f73ba74",
-        "status": "completed",
-        "conclusion": "success",
-        "jobs": {
-          "lint-and-typecheck": "success",
-          "test": "success"
-        },
-        "url": "https://github.com/fanxUP/fqp-football-quant/actions/runs/42737091008"
-      }
-    }
+    "status": "PENDING",
+    "checks": {}
   },
   "production": {
     "status": "NOT_IN_SCOPE",
