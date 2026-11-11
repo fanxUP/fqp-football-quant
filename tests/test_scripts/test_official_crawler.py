@@ -3,6 +3,7 @@ from unittest.mock import ANY, MagicMock, patch
 
 import pytest
 
+import scripts.official_crawler as official_crawler
 from scripts.official_crawler import (
     crawl_official_odds_snapshot,
     crawl_official_results,
@@ -680,3 +681,52 @@ def test_empty_official_results_refresh_is_visible_in_collection_history():
         records_found=0,
         raw_json={"begin_date": "2026-07-10", "end_date": "2026-07-11"},
     )
+
+
+def test_official_result_crawler_passes_capture_time_to_append_only_storage():
+    client = MagicMock()
+    client.get_uniform_match_results.return_value = {
+        "value": {
+            "matchResult": [
+                {
+                    "matchId": 2040511,
+                    "matchNumStr": "周二201",
+                    "matchDate": "2026-07-15",
+                    "sectionsNo1": "1:1",
+                    "sectionsNo999": "2:2",
+                    "goalLine": "-1",
+                    "matchResultStatus": "2",
+                    "poolStatus": "Payout",
+                    "publishTime": "2026-07-16 09:00:00",
+                }
+            ]
+        }
+    }
+    connection = MagicMock()
+    connection.cursor.return_value.__enter__.return_value.fetchone.return_value = (7,)
+    received = {}
+
+    def store(conn, rows, *, source_acquired_at):
+        received.update(conn=conn, rows=rows, source_acquired_at=source_acquired_at)
+        return {"inserted": 1, "updated": 0, "errors": []}
+
+    with (
+        patch("scripts.official_crawler.SportteryClient", return_value=client),
+        patch("scripts.official_crawler.get_db") as get_db,
+        patch("scripts.official_crawler.store_results", side_effect=store),
+        patch("scripts.official_crawler.log_crawl"),
+        patch("scripts.official_crawler.record_official_collection_status"),
+        patch("scripts.official_crawler.update_health"),
+    ):
+        get_db.return_value.__enter__.return_value = connection
+        started = datetime.now(UTC)
+        result = official_crawler._crawl_official_results_once("2026-07-15", "2026-07-15")
+        finished = datetime.now(UTC)
+
+    assert result["status"] == "ok"
+    assert received["conn"] is connection
+    assert len(received["rows"]) == 1
+    assert received["rows"][0]["match_id"] == 7
+    acquired = received["source_acquired_at"]
+    assert acquired.tzinfo is not None and acquired.utcoffset() is not None
+    assert started <= acquired <= finished

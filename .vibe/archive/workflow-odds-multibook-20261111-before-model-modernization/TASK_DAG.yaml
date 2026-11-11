@@ -1,0 +1,19 @@
+{
+  "schema_version": 4,
+  "current_task": "ODDS-MULTIBOOK-REFERENCE-20261111",
+  "tasks": {
+    "ODDS-MULTIBOOK-REFERENCE-20261111": {
+      "title": "Show the eight archived bookmaker brands below China Sports Lottery in odds movement",
+      "acceptance_id": "A-ODDS-MULTIBOOK",
+      "depends_on": [],
+      "kind": "code_release",
+      "status": "DONE",
+      "definition_of_done": [
+        "Read published archived 1X2 quotes only for uniquely linked official matches, with bounded parameterized SQL and no writes.",
+        "Show China Sports Lottery first, followed by the eight requested brands in the fixed order; preserve missing-data placeholders.",
+        "Keep third-party 1X2 references isolated to the SPF play tab.",
+        "Pass scoped frontend/backend regressions and static/build checks, independent review, exact-head GitHub CI, and server release smoke."
+      ]
+    }
+  }
+}

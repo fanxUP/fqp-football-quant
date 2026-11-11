@@ -1,5 +1,7 @@
 """Existing-task consumer, real isolated PG and synthetic evidence only."""
 
+import hashlib
+import json
 from datetime import timedelta
 from unittest.mock import patch
 
@@ -15,6 +17,7 @@ from scripts.features.build_weather_features import (
 )
 from scripts.observed_feature_pipeline import BUILDER_VERSION
 from scripts.observed_maher_shadow import _AUDIT_FIELDS, build_observed_maher_shadow
+from scripts.player_candidate_shadow import build_player_candidate_shadow
 from scripts.prediction_input_updates import InputUpdateSuperseded
 from tests.test_computation import test_prediction_input_revisions_postgres as prior
 
@@ -294,6 +297,10 @@ def test_runtime_retains_maher_shadow_from_exact_batch_without_official_predicti
     shadow = refs["maher_shadow"]
     assert shadow["status"] == "computed_shadow", shadow
     assert shadow["model_version_id"] == 901
+    assert shadow["player_candidate"]["schema_version"] == "p108-player-candidate-shadow/v1"
+    assert shadow["player_candidate"]["input_status"] == "withheld"
+    assert shadow["player_candidate"]["candidate_status"] == "withheld"
+    assert shadow["player_candidate"]["probabilities"] is None
     assert type(shadow["feature_batch_id"]) is int and shadow["feature_batch_id"] > 0
     assert shadow["applied_features"] == ["temperature_2m"]
     assert shadow["adjustment"]["observed_celsius"] == 40.0
@@ -428,6 +435,101 @@ def test_shadow_consumer_cannot_promote_even_a_live_input_profile(pg, match, rea
     assert revision["decision"]["model_independent"]
     assert revision["research_only"] and not revision["recommendation_eligible"]
     assert "shadow_only" in revision["invalidation_reasons"]
+
+
+def test_complete_player_shadow_receipt_fits_bounded_persisted_reference(pg, match, ready):
+    identity_revisions = [
+        {
+            "source_name": "api-football",
+            "external_player_id": f"external-player-{index:04d}",
+            "player_id": index,
+            "revision": 100 + index,
+            "updated_at": "2026-11-10T00:00:00+00:00",
+        }
+        for index in range(1, 45)
+    ]
+    identity_payload = json.dumps(
+        identity_revisions, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+    )
+    projection = {
+        "schema_version": "player-feature-projection/v1",
+        "candidate": "player_dependent_shadow",
+        "status": "candidate_inputs_ready",
+        "match_id": match["id"],
+        "feature_batch_id": ready["batch_id"],
+        "observation_cutoff_id": str(ready["cutoff"].id),
+        "cutoff_as_of": ready["cutoff"].as_of.isoformat(),
+        "projected_at": ready["cutoff"].as_of.isoformat(),
+        "kickoff_at": ready["kickoff"].isoformat(),
+        "competition_season_id": 7,
+        "identity_map_revision": {
+            "entry_count": len(identity_revisions),
+            "sha256": hashlib.sha256(identity_payload.encode("utf-8")).hexdigest(),
+        },
+        "coverage": {
+            side: {
+                "confirmed_lineup_players": 11,
+                "identity_verified_players": 11,
+                "registration_known": 11,
+                "availability_report_complete": True,
+            }
+            for side in ("home", "away")
+        },
+        "feature_values": {
+            "home_registered_starters": 11,
+            "away_registered_starters": 11,
+            "home_reported_unavailable_starters": 1,
+            "away_reported_unavailable_starters": 0,
+            "home_doubtful_starters": 0,
+            "away_doubtful_starters": 1,
+        },
+        "missingness": [],
+        "source_refs": {
+            "lineup_revisions": {
+                "home": {"revision_id": 101, "content_hash": "b" * 64},
+                "away": {"revision_id": 102, "content_hash": "c" * 64},
+            },
+            "availability_revisions": {
+                "home": {"revision_id": 201, "content_hash": "d" * 64},
+                "away": {"revision_id": 202, "content_hash": "e" * 64},
+            },
+            "registration_fact_ids": list(range(301, 345)),
+            "identity_mapping_revisions": identity_revisions,
+        },
+        "probabilities": None,
+    }
+    player_candidate = build_player_candidate_shadow(projection)
+    shadow = {
+        "match_id": match["id"],
+        "input_version": 1,
+        "feature_batch_id": ready["batch_id"],
+        "observation_cutoff_id": str(ready["cutoff"].id),
+        "play_type": "spf",
+        "status": "computed_shadow",
+        "player_projection": projection,
+        "player_candidate": player_candidate,
+    }
+    encoded_size = len(json.dumps(shadow, separators=(",", ":"), ensure_ascii=False).encode())
+    assert 8192 < encoded_size < 16384
+
+    pg.commit()
+    claim = revisions.claim_prediction_input_revisions(
+        pg, consumer_key=runtime.MAHER_SHADOW_CONSUMER, match_id=match["id"]
+    )[0]
+    pg.commit()
+    shadow["input_version"] = claim.input_version
+    revisions.complete_prediction_input_revision(
+        pg,
+        claim,
+        batch_id=ready["batch_id"],
+        play_type="spf",
+        profiles=ready["profiles"],
+        extra_result_refs={"maher_shadow": shadow},
+    )
+    pg.commit()
+
+    stored = shadow_receipt(pg, match)
+    assert stored["maher_shadow"] == shadow
 
 
 def test_unknown_cutoff_does_not_turn_missing_weather_into_fabricated_shadow_probabilities(

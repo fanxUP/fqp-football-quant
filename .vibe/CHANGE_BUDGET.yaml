@@ -1,16 +1,16 @@
 {
   "schema_version": 4,
-  "task_id": "ODDS-MULTIBOOK-REFERENCE-20261111",
-  "max_files_changed": 10,
-  "max_new_files": 1,
+  "task_id": "P108-05A-P114-POINT-IN-TIME-LABELS-20261111",
+  "max_files_changed": 23,
+  "max_new_files": 2,
   "max_new_dependencies": 0,
   "max_schema_migrations": 0,
-  "max_public_api_changes": 1,
-  "declared_public_api_changes": 1,
+  "max_public_api_changes": 0,
+  "declared_public_api_changes": 0,
   "regression_budget": {
     "new_test_failures": 0,
     "new_lint_errors": 0,
     "new_type_errors": 0
   },
-  "budget_basis": "Bounded odds comparison feature across ten implementation and regression paths; one read-only optional response field, no dependency, schema, migration, or background task."
+  "budget_basis": "Finish the bounded P108-05A observation receipt, capture forward official-result publication/acquisition evidence through existing P104 append-only storage, and make training/backtest label selection point-in-time by that evidence. The added paths are required to carry, hash, validate, and test label availability through P106/P111/P114. Historical rows without capture evidence remain excluded from strict cutoffs. No probability change, dependency, schema, migration, background task, or public API."
 }

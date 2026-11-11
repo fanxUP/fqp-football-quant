@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -10,9 +11,14 @@ from scripts.dynamic_team_p106 import (
     project_p106_manifest_to_season,
 )
 from scripts.model_artifact_identity import training_manifest_sha256
-from scripts.training_manifest import CandidateMatch, build_training_dataset
+from scripts.training_manifest import (
+    CandidateMatch,
+    ResultLabelObservation,
+    build_training_dataset,
+)
 
 FIT_CUTOFF = datetime(2026, 3, 1, 0, 0)
+SHANGHAI = ZoneInfo("Asia/Shanghai")
 MEMBERSHIP_SHA = "a" * 64
 VENUE_SHA = "b" * 64
 
@@ -22,6 +28,8 @@ def _parent_dataset():
     candidates = []
     for index, (home, away) in enumerate(pairs, start=1):
         kickoff = datetime(2026, 1, 1, 18) + timedelta(days=index)
+        published = kickoff + timedelta(hours=3)
+        published_aware = published.replace(tzinfo=SHANGHAI).astimezone(UTC)
         candidates.append(
             CandidateMatch(
                 match_id=100 + index,
@@ -32,10 +40,24 @@ def _parent_dataset():
                 home_goals=index % 4,
                 away_goals=(index + 1) % 3,
                 match_status="settled",
-                official_publish_time=kickoff + timedelta(hours=3),
+                official_publish_time=published,
+                label_observations=(
+                    ResultLabelObservation(
+                        revision_id=300 + index,
+                        result_id=200 + index,
+                        fact_status="value",
+                        home_goals=index % 4,
+                        away_goals=(index + 1) % 3,
+                        published_at=published_aware,
+                        first_acquired_at=published_aware + timedelta(minutes=5),
+                        available_at=published_aware + timedelta(minutes=10),
+                    ),
+                ),
             )
         )
     excluded_kickoff = datetime(2026, 2, 1, 18)
+    excluded_published = excluded_kickoff + timedelta(hours=3)
+    excluded_published_aware = excluded_published.replace(tzinfo=SHANGHAI).astimezone(UTC)
     candidates.append(
         CandidateMatch(
             match_id=999,
@@ -46,7 +68,19 @@ def _parent_dataset():
             home_goals=1,
             away_goals=0,
             match_status="settled",
-            official_publish_time=excluded_kickoff + timedelta(hours=3),
+            official_publish_time=excluded_published,
+            label_observations=(
+                ResultLabelObservation(
+                    revision_id=399,
+                    result_id=299,
+                    fact_status="value",
+                    home_goals=1,
+                    away_goals=0,
+                    published_at=excluded_published_aware,
+                    first_acquired_at=excluded_published_aware + timedelta(minutes=5),
+                    available_at=excluded_published_aware + timedelta(minutes=10),
+                ),
+            ),
         )
     )
     return build_training_dataset(candidates, min_matches=1, cutoff_at=FIT_CUTOFF)

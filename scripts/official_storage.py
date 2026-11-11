@@ -16,14 +16,18 @@ import json
 import re
 from datetime import UTC, date, datetime
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from psycopg2.extras import Json
 
+from scripts.data_contracts import FactStatus, to_utc
 from scripts.football_fixture_identity import IDENTITY_LOCK, resolve_pool_fixture
+from scripts.observation_storage import append_observation, capture_observation_cutoff
 from scripts.official_season_retention import allows_business_date, load_retained_season_windows
 from scripts.pool_issue_state import pool_time
 
 OFFICIAL_MATCH_CODE_RE = re.compile(r"^周[一二三四五六日]\d{3}$")
+OFFICIAL_TIMEZONE = ZoneInfo("Asia/Shanghai")
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -344,13 +348,60 @@ def store_odds_snapshots(
 # ---------------------------------------------------------------------------
 
 
-def store_results(conn: Any, results: list[dict]) -> dict[str, Any]:
+def _official_result_published_at(value: Any) -> tuple[datetime | None, str]:
+    """Normalize a Sporttery publication timestamp without guessing invalid values."""
+    if value is None or (isinstance(value, str) and not value.strip()):
+        return None, "missing"
+    try:
+        parsed = (
+            datetime.fromisoformat(value.replace("Z", "+00:00"))
+            if isinstance(value, str)
+            else value
+        )
+        if not isinstance(parsed, datetime):
+            return None, "invalid"
+        if parsed.tzinfo is None or parsed.utcoffset() is None:
+            parsed = parsed.replace(tzinfo=OFFICIAL_TIMEZONE)
+        return to_utc(parsed), "known"
+    except TypeError, ValueError, OverflowError:
+        return None, "invalid"
+
+
+def _result_observation(result: dict) -> tuple[FactStatus, dict | None]:
+    status = str(result.get("result_status") or "pending").strip().lower()
+    home, away = result.get("full_home_goals"), result.get("full_away_goals")
+    if status == "void":
+        return FactStatus.NOT_APPLICABLE, None
+    if (
+        status == "confirmed"
+        and type(home) is int
+        and home >= 0
+        and type(away) is int
+        and away >= 0
+    ):
+        return FactStatus.VALUE, {
+            "away_goals": away,
+            "home_goals": home,
+            "result_status": "confirmed",
+        }
+    return FactStatus.UNKNOWN, None
+
+
+def store_results(
+    conn: Any, results: list[dict], *, source_acquired_at: datetime | None = None
+) -> dict[str, Any]:
     """Insert or update match results.
 
     Each result dict must have: match_id
     Unique key: (match_id)
+
+    Live official crawls pass a capture timestamp to atomically append the score
+    to P104's point-in-time evidence store. Historical file imports omit it and
+    therefore never masquerade as a live observation.
     """
+    acquired = to_utc(source_acquired_at) if source_acquired_at is not None else None
     inserted, updated, errors = 0, 0, []
+    stored_match_ids: set[int] = set()
     sql = """
         INSERT INTO official_results (
             match_id, half_home_goals, half_away_goals,
@@ -376,13 +427,17 @@ def store_results(conn: Any, results: list[dict]) -> dict[str, Any]:
             score_result = EXCLUDED.score_result,
             half_full_result = EXCLUDED.half_full_result,
             result_status = EXCLUDED.result_status,
-            official_publish_time = EXCLUDED.official_publish_time,
+            official_publish_time = COALESCE(
+                EXCLUDED.official_publish_time, official_results.official_publish_time
+            ),
             raw_json = EXCLUDED.raw_json,
             updated_at = now()
         RETURNING id, (xmax = 0) AS is_inserted
     """
     with conn.cursor() as cur:
-        for r in results:
+        for index, r in enumerate(results):
+            savepoint = f"official_result_{index}"
+            cur.execute(f"SAVEPOINT {savepoint}")
             try:
                 raw = r.get("raw_json", {})
                 cur.execute(
@@ -404,16 +459,58 @@ def store_results(conn: Any, results: list[dict]) -> dict[str, Any]:
                     },
                 )
                 row = cur.fetchone()
+                if row is None:
+                    raise RuntimeError("official result upsert returned no row")
+                if row and acquired is not None:
+                    fact_status, value = _result_observation(r)
+                    published_at, publish_status = _official_result_published_at(
+                        r.get("official_publish_time")
+                    )
+                    raw_digest = hashlib.sha256(
+                        json.dumps(
+                            raw,
+                            sort_keys=True,
+                            ensure_ascii=False,
+                            separators=(",", ":"),
+                        ).encode("utf-8")
+                    ).hexdigest()
+                    append_observation(
+                        conn,
+                        match_id=int(r["match_id"]),
+                        source_id="sporttery",
+                        domain="results",
+                        subject_key="full_time_score",
+                        fact_status=fact_status,
+                        value=value,
+                        acquired_at=acquired,
+                        verified_at=acquired,
+                        published_at=published_at,
+                        evidence={
+                            "adapter_version": "sporttery-results-observation/v1",
+                            "official_result_id": int(row[0]),
+                            "publication_time_status": publish_status,
+                            "raw_sha256": raw_digest,
+                            "result_status": str(r.get("result_status") or "pending"),
+                            "source_match_id": str(raw.get("matchId") or ""),
+                        },
+                    )
                 if row and row[1]:
                     inserted += 1
                 else:
                     updated += 1
+                stored_match_ids.add(int(r["match_id"]))
+                cur.execute(f"RELEASE SAVEPOINT {savepoint}")
             except Exception as e:
+                cur.execute(f"ROLLBACK TO SAVEPOINT {savepoint}")
+                cur.execute(f"RELEASE SAVEPOINT {savepoint}")
                 errors.append({"match_id": r.get("match_id"), "error": str(e)})
     # ── Update match_status for matches with confirmed results ────────
     settled_ids = [
-        r["match_id"]
+        int(r["match_id"])
         for r in results
+        if r.get("match_id") is not None
+        and str(r["match_id"]).isdecimal()
+        and int(r["match_id"]) in stored_match_ids
         if r.get("result_status") == "confirmed"
         and r.get("full_home_goals") is not None
         and r.get("full_away_goals") is not None
@@ -430,6 +527,25 @@ def store_results(conn: Any, results: list[dict]) -> dict[str, Any]:
                 (settled_ids,),
             )
     conn.commit()
+    if acquired is not None and stored_match_ids:
+        streams = [
+            {
+                "match_id": match_id,
+                "source_id": "sporttery",
+                "domain": "results",
+                "subject_key": "full_time_score",
+            }
+            for match_id in sorted(stored_match_ids)
+        ]
+        try:
+            for offset in range(0, len(streams), 128):
+                capture_observation_cutoff(conn, streams=streams[offset : offset + 128])
+                conn.commit()
+        except Exception as exc:
+            conn.rollback()
+            raise RuntimeError(
+                "official result committed but its visibility receipt could not be persisted"
+            ) from exc
     return {
         "inserted": inserted,
         "updated": updated,

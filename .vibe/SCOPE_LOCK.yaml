@@ -1,17 +1,30 @@
 {
   "schema_version": 4,
-  "task_id": "ODDS-MULTIBOOK-REFERENCE-20261111",
+  "task_id": "P108-05A-P114-POINT-IN-TIME-LABELS-20261111",
   "allowed_paths": [
-    "apps/backend/src/routers/dashboard.py",
-    "apps/backend/src/services/odds_movement.py",
-    "apps/backend/src/services/odds_market_reference.py",
-    "apps/frontend/src/core/apiClient.ts",
-    "apps/frontend/src/core/types.ts",
-    "apps/frontend/src/pages/OddsMovementPage.tsx",
-    "apps/frontend/src/pages/OddsMovementPage.test.tsx",
-    "apps/frontend/src/pages/odds/OddsMatchCard.tsx",
-    "apps/frontend/src/pages/odds/OddsSnapshotHeatmap.tsx",
-    "tests/test_api/test_odds_movements.py"
+    "scripts/player_candidate_shadow.py",
+    "scripts/observed_maher_shadow.py",
+    "scripts/prediction_input_revisions.py",
+    "tests/test_computation/test_player_candidate_shadow.py",
+    "tests/test_computation/test_prediction_input_runtime_postgres.py",
+    "scripts/official_storage.py",
+    "scripts/official_crawler.py",
+    "tests/test_scripts/test_official_crawler.py",
+    "tests/test_computation/test_observation_postgres.py",
+    "tests/test_scripts/test_official_storage.py",
+    "scripts/training_manifest.py",
+    "scripts/mle_trainer.py",
+    "scripts/backtest_engine.py",
+    "scripts/dynamic_team_p106.py",
+    "scripts/dynamic_team_challenger.py",
+    "tests/test_scripts/test_training_manifest.py",
+    "tests/test_scripts/test_mle_trainer.py",
+    "tests/test_scripts/test_backtest_engine.py",
+    "tests/test_scripts/test_dynamic_team_p106.py",
+    "tests/test_scripts/test_dynamic_team_challenger.py",
+    "tests/test_computation/test_prediction_run_postgres.py",
+    ".vibe/CHANGE_BUDGET.yaml",
+    ".vibe/SCOPE_LOCK.yaml"
   ],
   "protected_paths": [
     "apps/**",
@@ -22,16 +35,18 @@
     "**/package*.json"
   ],
   "approved_protected_paths": [
-    "apps/backend/src/routers/dashboard.py",
-    "apps/backend/src/services/odds_movement.py",
-    "apps/backend/src/services/odds_market_reference.py",
-    "apps/frontend/src/core/apiClient.ts",
-    "apps/frontend/src/core/types.ts",
-    "apps/frontend/src/pages/OddsMovementPage.tsx",
-    "apps/frontend/src/pages/OddsMovementPage.test.tsx",
-    "apps/frontend/src/pages/odds/OddsMatchCard.tsx",
-    "apps/frontend/src/pages/odds/OddsSnapshotHeatmap.tsx",
-    "tests/test_api/test_odds_movements.py"
+    "tests/test_computation/test_player_candidate_shadow.py",
+    "tests/test_computation/test_prediction_input_runtime_postgres.py",
+    "tests/test_computation/test_observation_postgres.py",
+    "tests/test_scripts/test_official_storage.py",
+    "tests/test_scripts/test_training_manifest.py",
+    "tests/test_scripts/test_mle_trainer.py",
+    "tests/test_scripts/test_official_crawler.py",
+    "tests/test_scripts/test_backtest_engine.py",
+    "tests/test_scripts/test_dynamic_team_p106.py",
+    "tests/test_scripts/test_dynamic_team_challenger.py",
+    "tests/test_computation/test_prediction_run_postgres.py",
+    "scripts/prediction_input_revisions.py"
   ],
-  "notes": "Single main branch. Published historical reference is read-only and displayed only in the SPF tab; no SQL migration or runtime activation."
+  "notes": "Single main branch. Finish the bounded P108-05A observation-only player receipt and capture official score publication/acquisition evidence prospectively through existing P104 append-only storage; then bind as-of training labels and P114 backtest folds to those source observations. Historical imports without capture timestamps do not create source-observation facts and must be excluded from strict historical cutoffs. No player effects, official probability changes, new dependency, migration, background task, or public API."
 }

@@ -1,6 +1,7 @@
 from dataclasses import replace
-from datetime import date, datetime, time, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from unittest.mock import MagicMock, patch
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -10,11 +11,12 @@ from scripts.backtest_engine import (
     BetRecord,
     ResearchEvaluationConfig,
     ResearchMatch,
+    _research_source_snapshot,
     build_research_time_splits,
     evaluate_research_reconstruction,
     run_backtest_from_config,
 )
-from scripts.training_manifest import CandidateMatch
+from scripts.training_manifest import CandidateMatch, ResultLabelObservation
 
 
 @pytest.mark.parametrize(
@@ -319,6 +321,42 @@ def _research_rows() -> list[ResearchMatch]:
                     if day_index == 14 and fixture_index == 0
                     else kickoff + timedelta(hours=3)
                 ),
+                label_observations=(
+                    ResultLabelObservation(
+                        revision_id=match_id + 5000,
+                        result_id=match_id + 1000,
+                        fact_status="value",
+                        home_goals=(day_index + fixture_index) % 3,
+                        away_goals=(day_index * 2 + fixture_index) % 2,
+                        published_at=(
+                            datetime.combine(date(2025, 1, 16), time.min)
+                            if day_index == 14 and fixture_index == 0
+                            else kickoff + timedelta(hours=3)
+                        )
+                        .replace(tzinfo=ZoneInfo("Asia/Shanghai"))
+                        .astimezone(UTC),
+                        first_acquired_at=(
+                            (
+                                datetime.combine(date(2025, 1, 16), time.min)
+                                if day_index == 14 and fixture_index == 0
+                                else kickoff + timedelta(hours=3)
+                            )
+                            .replace(tzinfo=ZoneInfo("Asia/Shanghai"))
+                            .astimezone(UTC)
+                            + timedelta(minutes=5)
+                        ),
+                        available_at=(
+                            (
+                                datetime.combine(date(2025, 1, 16), time.min)
+                                if day_index == 14 and fixture_index == 0
+                                else kickoff + timedelta(hours=3)
+                            )
+                            .replace(tzinfo=ZoneInfo("Asia/Shanghai"))
+                            .astimezone(UTC)
+                            + timedelta(minutes=10)
+                        ),
+                    ),
+                ),
             )
             snapshot_at = prediction_as_of - timedelta(minutes=10)
             odds = {"3": 2.1, "1": 3.2, "0": 3.7}
@@ -363,6 +401,43 @@ def test_research_splits_keep_business_dates_whole_and_reserve_latest_holdout() 
     assert folds[0].test_end < folds[1].test_start < holdout.test_start
 
 
+def test_research_splits_ignore_unsettled_later_dates_for_holdout_boundary() -> None:
+    rows = _research_rows()
+    config = ResearchEvaluationConfig(fold_count=2, test_window_days=5, holdout_days=5)
+    expected = build_research_time_splits(rows, config)
+    last = rows[-1]
+    later_unsettled = replace(
+        last,
+        candidate=replace(
+            last.candidate,
+            match_id=9999,
+            kickoff_at=datetime(2025, 2, 28, 20, 0),
+            label_observations=(),
+        ),
+        business_date=date(2025, 2, 28),
+        result_status="pending",
+    )
+
+    actual = build_research_time_splits([*rows, later_unsettled], config)
+
+    assert actual == expected
+
+
+def test_research_source_snapshot_binds_label_revision_and_availability_times() -> None:
+    row = _research_rows()[0]
+    observation = row.candidate.label_observations[0]
+    changed_observation = replace(
+        observation,
+        available_at=observation.available_at + timedelta(seconds=1),
+    )
+    changed = replace(
+        row,
+        candidate=replace(row.candidate, label_observations=(changed_observation,)),
+    )
+
+    assert _research_source_snapshot([row]) != _research_source_snapshot([changed])
+
+
 def test_research_reconstruction_refits_each_fold_and_pairs_same_asof_market() -> None:
     rows = _research_rows()
 
@@ -391,8 +466,29 @@ def test_research_reconstruction_refits_each_fold_and_pairs_same_asof_market() -
 
     assert report["final_holdout"]["test_start"] == "2025-01-26"
     assert report["folds"][-1]["test_end"] < report["final_holdout"]["test_start"]
-    assert report["folds"][0]["training_excluded_by_reason"]["label_published_after_cutoff"] == 1
-    assert report["folds"][0]["training_excluded_by_reason"]["official_result_not_final"] == 1
+    assert report["folds"][0]["training_excluded_by_reason"]["result_observation_missing"] == 1
+    assert report["folds"][0]["training_match_count"] == 44
+    assert "official_result_not_final" not in report["folds"][0]["training_excluded_by_reason"]
+
+
+def test_research_reconstruction_reports_missing_result_history_as_not_evaluable():
+    rows = [
+        replace(row, candidate=replace(row.candidate, label_observations=()))
+        for row in _research_rows()
+    ]
+
+    report = evaluate_research_reconstruction(
+        rows,
+        ResearchEvaluationConfig(fold_count=2, test_window_days=5, holdout_days=5),
+    )
+
+    assert report["status"] == "not_evaluable"
+    assert report["not_evaluable_reason"] == "no_source_observed_training_labels_before_cutoff"
+    assert report["final_holdout"]["evaluation_count"] == 0
+    assert report["final_holdout"]["sample_count"] == 0
+    assert report["final_holdout"]["metrics"]["model"]["brier_score"] is None
+    assert report["folds"][0]["training_excluded_by_reason"]["result_observation_missing"] > 0
+    assert report["claims_model_beats_market"] is False
 
 
 def test_research_report_exposes_ambiguous_team_identity() -> None:

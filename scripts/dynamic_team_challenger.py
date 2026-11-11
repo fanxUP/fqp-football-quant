@@ -14,10 +14,11 @@ import re
 import sys
 from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from importlib.metadata import version
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import numpy as np
 
@@ -28,6 +29,7 @@ from scripts.training_manifest import MANIFEST_VERSION, SELECTION_VERSION
 MODEL_VERSION = "fqp.dynamic-team-poisson/v1"
 SEASON_CONTEXT_VERSION = "fqp.dynamic-team-season-context/v1"
 SEASON_RESET_POLICY = "neutral_reset_by_competition_season_id/v1"
+_OFFICIAL_TIMEZONE = ZoneInfo("Asia/Shanghai")
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 _MANIFEST_HASH_FIELDS = (
     "version",
@@ -250,6 +252,20 @@ def _naive_datetime(value: Any, field_name: str) -> datetime:
     return parsed
 
 
+def _aware_datetime(value: Any, field_name: str) -> datetime:
+    try:
+        parsed = (
+            datetime.fromisoformat(value.replace("Z", "+00:00"))
+            if isinstance(value, str)
+            else value
+        )
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{field_name} must be an aware ISO timestamp") from exc
+    if not isinstance(parsed, datetime) or parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise ValueError(f"{field_name} must include a timezone")
+    return parsed.astimezone(UTC)
+
+
 def _evidence_digest(value: Any, field_name: str) -> str:
     if not isinstance(value, str) or _SHA256_RE.fullmatch(value) is None:
         raise ValueError(f"{field_name} must be a lowercase SHA-256 digest")
@@ -346,7 +362,7 @@ def _manifest_rows(
         _positive_int(item.get("result_id"), "manifest result_id")
         if item.get("ordinal") != ordinal or type(item.get("ordinal")) is not int:
             raise ValueError("training manifest ordinals must preserve the included sample order")
-        if item.get("label_source") != "official_results.full_home_goals/full_away_goals":
+        if item.get("label_source") != "source_observation:sporttery/results/full_time_score":
             raise ValueError(f"match {match_id} does not use the approved P106 result label")
         if match_id in seen_ids:
             raise ValueError("training manifest contains duplicate match IDs")
@@ -360,12 +376,34 @@ def _manifest_rows(
             raise ValueError(f"match {match_id} has invalid official scores")
         kickoff = _naive_datetime(item.get("kickoff_time"), "kickoff_time")
         published = _naive_datetime(item.get("official_publish_time"), "official_publish_time")
+        result_published_at = _aware_datetime(
+            item.get("result_published_at"), "result_published_at"
+        )
+        first_acquired_at = _aware_datetime(
+            item.get("result_first_acquired_at"), "result_first_acquired_at"
+        )
+        available_at = _aware_datetime(item.get("result_available_at"), "result_available_at")
+        cutoff_utc = cutoff.replace(tzinfo=_OFFICIAL_TIMEZONE).astimezone(UTC)
         if kickoff >= cutoff:
             raise ValueError(f"match {match_id} kicked off at or after the fit cutoff")
         if published < kickoff:
             raise ValueError(f"match {match_id} result was published before kickoff")
-        if published > cutoff:
+        if published >= cutoff:
             raise ValueError(f"match {match_id} result was published after the fit cutoff")
+        if result_published_at >= cutoff_utc:
+            raise ValueError(
+                f"match {match_id} source label was published at or after the fit cutoff"
+            )
+        if first_acquired_at >= cutoff_utc:
+            raise ValueError(
+                f"match {match_id} source label was first acquired at or after the fit cutoff"
+            )
+        if available_at >= cutoff_utc:
+            raise ValueError(
+                f"match {match_id} source label was available at or after the fit cutoff"
+            )
+        if available_at < first_acquired_at or available_at < result_published_at:
+            raise ValueError(f"match {match_id} has inconsistent label availability evidence")
         rows.append(
             {
                 "match_id": match_id,

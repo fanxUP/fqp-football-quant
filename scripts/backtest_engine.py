@@ -35,7 +35,7 @@ from scripts.market_metric_validation import (
     finite_number,
     probability_value,
 )
-from scripts.training_manifest import CandidateMatch
+from scripts.training_manifest import RESULT_REVISION_VISIBILITY_CTE, CandidateMatch
 
 _LOG = logging.getLogger(__name__)
 
@@ -1195,7 +1195,11 @@ def build_research_time_splits(
     _validate_research_config(config)
     if not matches:
         raise ValueError("research evaluation requires materialized matches")
-    dates = sorted({row.business_date for row in matches})
+    dates = sorted(
+        {row.business_date for row in matches if row.result_status in {"final", "confirmed"}}
+    )
+    if not dates:
+        raise ValueError("research evaluation requires finalized target results")
     latest_date = dates[-1]
     holdout_start = latest_date - timedelta(days=config.holdout_days - 1)
     splits: list[ResearchTimeSplit] = []
@@ -1264,6 +1268,25 @@ def _research_source_snapshot(matches: Sequence[ResearchMatch]) -> str:
                 "away_goals": candidate.away_goals,
                 "match_status": candidate.match_status,
                 "result_status": row.result_status,
+                "result_observations": [
+                    {
+                        "revision_id": observation.revision_id,
+                        "result_id": observation.result_id,
+                        "fact_status": observation.fact_status,
+                        "home_goals": observation.home_goals,
+                        "away_goals": observation.away_goals,
+                        "published_at": (
+                            observation.published_at.isoformat(timespec="microseconds")
+                            if observation.published_at is not None
+                            else None
+                        ),
+                        "first_acquired_at": observation.first_acquired_at.isoformat(
+                            timespec="microseconds"
+                        ),
+                        "available_at": observation.available_at.isoformat(timespec="microseconds"),
+                    }
+                    for observation in candidate.label_observations
+                ],
                 "prediction_as_of": _research_datetime(row.prediction_as_of).isoformat(),
                 "odds_by_option": dict(sorted(row.odds_by_option.items())),
                 "odds_snapshot_times": {
@@ -1376,36 +1399,49 @@ def _evaluate_research_window(
     from scripts.training_manifest import build_training_dataset
 
     cutoff_at = datetime.combine(split.test_start, time.min) - timedelta(microseconds=1)
-    unconfirmed_training = [
-        row
-        for row in matches
-        if row.result_status not in {"final", "confirmed"}
-        and _research_datetime(row.candidate.kickoff_at) < cutoff_at
-    ]
     dataset = build_training_dataset(
-        (row.candidate for row in matches if row.result_status in {"final", "confirmed"}),
+        (row.candidate for row in matches),
         min_matches=config.min_team_matches,
         cutoff_at=cutoff_at,
     )
-    fitted = fit_maher_poisson_dataset(dataset)
-    if "error" in fitted:
-        raise ValueError(
-            f"fold {split.index if split.index is not None else 'holdout'} cannot fit: {fitted['error']}"
-        )
-    if fitted.get("converged") is not True:
-        raise ValueError("Maher-SPF fold fit did not converge")
     manifest = dataset.manifest.to_dict()
-    artifact_parameters = {
-        key: value
-        for key, value in fitted.items()
-        if key not in {"training_manifest", "training_start_date", "training_end_date"}
-    }
-    artifact = attach_artifact_identity(artifact_parameters, manifest)
-    artifact_identity = artifact["_artifact_identity"]
     fit_match_ids = [sample.match_id for sample in dataset.samples]
     manifest_match_ids = [sample.match_id for sample in dataset.manifest.included]
     if fit_match_ids != manifest_match_ids:
         raise ValueError("training manifest and Maher fit inputs differ")
+
+    training_excluded: list[dict[str, Any]] = [
+        {"match_id": sample.match_id, "reason": sample.reason}
+        for sample in dataset.manifest.excluded
+    ]
+    training_excluded.sort(key=lambda sample: (sample["match_id"], sample["reason"]))
+    training_excluded_counts: dict[str, int] = {}
+    for sample in training_excluded:
+        training_excluded_counts[sample["reason"]] = (
+            training_excluded_counts.get(sample["reason"], 0) + 1
+        )
+
+    fitted: dict[str, Any] | None = None
+    fit_failure: str | None = None
+    if not dataset.samples:
+        fit_failure = "no_source_observed_training_labels_before_cutoff"
+    else:
+        fit_result = fit_maher_poisson_dataset(dataset)
+        if "error" in fit_result:
+            fit_failure = str(fit_result["error"])
+        elif fit_result.get("converged") is not True:
+            fit_failure = "Maher-SPF fold fit did not converge"
+        else:
+            fitted = fit_result
+    artifact_identity: Mapping[str, Any] | None = None
+    if fitted is not None:
+        artifact_parameters = {
+            key: value
+            for key, value in fitted.items()
+            if key not in {"training_manifest", "training_start_date", "training_end_date"}
+        }
+        artifact = attach_artifact_identity(artifact_parameters, manifest)
+        artifact_identity = artifact["_artifact_identity"]
 
     model_metrics: list[dict[str, Any]] = []
     market_metrics: list[dict[str, Any]] = []
@@ -1414,9 +1450,6 @@ def _evaluate_research_window(
     scoped_matches = [
         row for row in matches if split.test_start <= row.business_date <= split.test_end
     ]
-    if not scoped_matches:
-        raise ValueError("test window contains no materialized matches")
-
     for row in sorted(scoped_matches, key=lambda item: item.candidate.match_id):
         candidate = row.candidate
         actual = _research_actual(candidate)
@@ -1453,13 +1486,16 @@ def _evaluate_research_window(
             if reason is None and market is None:
                 reason = "incomplete_market_vector"
         if reason is None:
-            assert candidate.home_team_id is not None
-            assert candidate.away_team_id is not None
-            model = _research_prediction_probabilities(
-                fitted, candidate.home_team_id, candidate.away_team_id
-            )
-            if model is None:
-                reason = "team_history_or_model_rate_unavailable"
+            if fitted is None:
+                reason = "training_model_not_evaluable"
+            else:
+                assert candidate.home_team_id is not None
+                assert candidate.away_team_id is not None
+                model = _research_prediction_probabilities(
+                    fitted, candidate.home_team_id, candidate.away_team_id
+                )
+                if model is None:
+                    reason = "team_history_or_model_rate_unavailable"
         if reason is not None:
             exclusion = {"match_id": candidate.match_id, "reason": reason}
             if row.team_identity:
@@ -1496,8 +1532,6 @@ def _evaluate_research_window(
             }
         )
 
-    if not predictions:
-        raise ValueError("test window has no paired model/market observations")
     model_ids = [row["match_id"] for row in predictions]
     market_ids = [row["match_id"] for row in predictions]
     if model_ids != market_ids:
@@ -1506,22 +1540,13 @@ def _evaluate_research_window(
     for excluded_row in excluded:
         reason = str(excluded_row["reason"])
         excluded_counts[reason] = excluded_counts.get(reason, 0) + 1
-    training_excluded: list[dict[str, Any]] = [
-        {"match_id": sample.match_id, "reason": sample.reason}
-        for sample in dataset.manifest.excluded
-    ]
-    training_excluded.extend(
-        {"match_id": training_row.candidate.match_id, "reason": "official_result_not_final"}
-        for training_row in unconfirmed_training
-    )
-    training_excluded.sort(key=lambda sample: (sample["match_id"], sample["reason"]))
-    training_excluded_counts: dict[str, int] = {}
-    for sample in training_excluded:
-        training_excluded_counts[sample["reason"]] = (
-            training_excluded_counts.get(sample["reason"], 0) + 1
-        )
-
     return {
+        "status": "evaluated" if predictions else "not_evaluable",
+        "not_evaluable_reason": (
+            None
+            if predictions
+            else fit_failure or "test_window_has_no_paired_model_market_observations"
+        ),
         "window_index": split.index,
         "final_holdout": split.final_holdout,
         "test_start": split.test_start.isoformat(),
@@ -1533,8 +1558,12 @@ def _evaluate_research_window(
         "training_manifest_sha256": manifest["sha256"],
         "training_excluded_by_reason": training_excluded_counts,
         "training_excluded": training_excluded,
-        "artifact_identity_sha256": artifact_identity["identity_sha256"],
-        "artifact_parameters_sha256": artifact_identity["sha256"],
+        "artifact_identity_sha256": (
+            artifact_identity["identity_sha256"] if artifact_identity is not None else None
+        ),
+        "artifact_parameters_sha256": (
+            artifact_identity["sha256"] if artifact_identity is not None else None
+        ),
         "fit_input_manifest_sha256": manifest["sha256"],
         "candidate_count": len(scoped_matches),
         "sample_count": len(predictions),
@@ -1581,15 +1610,31 @@ def evaluate_research_reconstruction(
     final_report = _evaluate_research_window(
         normalized_matches, splits[-1], config, code_fingerprint
     )
-    final_report["evaluation_count"] = 1
+    final_report["evaluation_count"] = int(final_report["status"] == "evaluated")
+    all_windows = [*fold_reports, final_report]
+    report_status = (
+        "evaluated"
+        if all(window["status"] == "evaluated" for window in all_windows)
+        else "not_evaluable"
+    )
+    report_reason = next(
+        (
+            window["not_evaluable_reason"]
+            for window in all_windows
+            if window["status"] != "evaluated"
+        ),
+        None,
+    )
     exclusion_counts: dict[str, int] = {}
     for window in [*fold_reports, final_report]:
         for reason, count in window["excluded_by_reason"].items():
             exclusion_counts[reason] = exclusion_counts.get(reason, 0) + count
 
     report = {
-        "schema_version": "fqp.model-time-split-evaluation/v1",
+        "schema_version": "fqp.model-time-split-evaluation/v2",
         "evaluation_mode": "research_reconstruction",
+        "status": report_status,
+        "not_evaluable_reason": report_reason,
         "play_type": "spf",
         "model_name": "maher_poisson",
         "baseline": {
@@ -1669,8 +1714,9 @@ def load_research_matches(
         raise ValueError("max_matches must be between 1 and 5000")
     if not 1 <= prediction_lead_minutes <= 10080:
         raise ValueError("prediction_lead_minutes must be between 1 and 10080")
-    sql = """
-        WITH selected_matches AS (
+    sql = f"""
+        WITH {RESULT_REVISION_VISIBILITY_CTE},
+        selected_matches AS (
             SELECT m.id AS match_id,
                    m.business_date,
                    m.kickoff_time,
@@ -1687,9 +1733,10 @@ def load_research_matches(
                    home_team.candidate_team_ids AS home_team_candidate_team_ids,
                    away_team.id AS away_team_id,
                    away_team.name_match_count AS away_team_name_match_count,
-                   away_team.candidate_team_ids AS away_team_candidate_team_ids
+                   away_team.candidate_team_ids AS away_team_candidate_team_ids,
+                   result_observations.label_observations
             FROM official_matches m
-            JOIN official_results r ON r.match_id=m.id
+            LEFT JOIN official_results r ON r.match_id=m.id
             LEFT JOIN LATERAL (
                 SELECT CASE WHEN COUNT(*) = 1 THEN MIN(t.id) END AS id,
                        COUNT(*)::integer AS name_match_count,
@@ -1710,9 +1757,52 @@ def load_research_matches(
                 FROM teams t
                 WHERE t.team_name_cn=m.away_team_name
             ) away_team ON true
-            WHERE r.result_status IN ('final','confirmed')
-              AND m.business_date IS NOT NULL
+            LEFT JOIN LATERAL (
+                SELECT COALESCE(
+                    jsonb_agg(jsonb_build_object(
+                        'revision_id', revisions.id,
+                        'result_id', CASE
+                            WHEN revisions.evidence_json->>'official_result_id' ~ '^[1-9][0-9]*$'
+                            THEN (revisions.evidence_json->>'official_result_id')::bigint
+                            ELSE NULL END,
+                        'fact_status', revisions.fact_status,
+                        'home_goals', CASE
+                            WHEN revisions.value_json->>'home_goals' ~ '^(0|[1-9][0-9]*)$'
+                            THEN (revisions.value_json->>'home_goals')::integer
+                            ELSE NULL END,
+                        'away_goals', CASE
+                            WHEN revisions.value_json->>'away_goals' ~ '^(0|[1-9][0-9]*)$'
+                            THEN (revisions.value_json->>'away_goals')::integer
+                            ELSE NULL END,
+                        'published_at', revisions.published_at,
+                        'first_acquired_at', revisions.first_acquired_at,
+                        'available_at', revisions.available_at
+                    ) ORDER BY revisions.available_at, revisions.revision),
+                    '[]'::jsonb
+                ) AS label_observations
+                FROM (
+                    SELECT revision.id, revision.revision, revision.fact_status,
+                           revision.value_json, revision.evidence_json,
+                           revision.published_at, revision.first_acquired_at,
+                           visibility.committed_available_at AS available_at
+                    FROM observation_streams stream
+                    JOIN observation_revisions revision ON revision.stream_id=stream.id
+                    JOIN result_revision_visibility visibility ON visibility.revision_id=revision.id
+                    WHERE stream.match_id=m.id
+                      AND stream.source_id='sporttery'
+                      AND stream.domain='results'
+                      AND stream.subject_key='full_time_score'
+                      AND revision.evidence_kind='source_observation'
+                    ORDER BY visibility.committed_available_at, revision.revision
+                    LIMIT 65
+                ) revisions
+            ) result_observations ON true
+            WHERE m.business_date IS NOT NULL
               AND m.kickoff_time IS NOT NULL
+              AND (
+                  r.result_status IN ('final','confirmed')
+                  OR result_observations.label_observations <> '[]'::jsonb
+              )
             ORDER BY m.business_date DESC, m.id DESC
             LIMIT %s
         )
@@ -1757,7 +1847,7 @@ def load_research_matches(
             kickoff = _research_datetime(row["kickoff_time"])
             candidate = CandidateMatch(
                 match_id=match_id,
-                result_id=int(row["result_id"]),
+                result_id=(int(row["result_id"]) if row["result_id"] is not None else None),
                 kickoff_at=kickoff,
                 home_team_id=(
                     int(row["home_team_id"]) if row["home_team_id"] is not None else None
@@ -1769,6 +1859,7 @@ def load_research_matches(
                 away_goals=(int(row["away_goals"]) if row["away_goals"] is not None else None),
                 match_status=row["match_status"],
                 official_publish_time=row["official_publish_time"],
+                label_observations=tuple(row["label_observations"] or ()),
             )
             matches[match_id] = ResearchMatch(
                 candidate=candidate,

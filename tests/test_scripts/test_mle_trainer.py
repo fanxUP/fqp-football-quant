@@ -17,6 +17,7 @@ from scripts.model_artifact_identity import (
     canonical_json_bytes,
     verify_artifact_identity,
 )
+from scripts.training_manifest import MANIFEST_VERSION, SELECTION_VERSION
 
 
 def _artifact_source_tree(tmp_path):
@@ -37,10 +38,10 @@ def test_unsupported_league_is_rejected_before_loading_all_training_rows(league_
 
 
 def _sample_training_manifest(
-    selection_version="settled-official-score-team-history/v1",
+    selection_version=SELECTION_VERSION,
 ):
     manifest = {
-        "version": "fqp.maher-spf-training-manifest/v1",
+        "version": MANIFEST_VERSION,
         "selection_version": selection_version,
         "minimum_team_matches": 3,
         "cutoff_at": None,
@@ -244,9 +245,9 @@ def test_training_data_excludes_unmapped_teams_and_applies_minimum_history() -> 
     conn = MagicMock()
     cur = conn.cursor.return_value
     cur.fetchall.return_value = [
-        (1, 101, datetime(2026, 1, 1), None, 10, [10], 20, [20], 2, 1, "settled"),
-        (2, 102, datetime(2026, 1, 2), None, 20, [20], 10, [10], 0, 0, "settled"),
-        (3, 103, datetime(2026, 1, 3), None, None, [10, 11], 20, [20], 1, 0, "settled"),
+        (1, 101, datetime(2026, 1, 1), None, 10, [10], 20, [20], 2, 1, "settled", None),
+        (2, 102, datetime(2026, 1, 2), None, 20, [20], 10, [10], 0, 0, "settled", None),
+        (3, 103, datetime(2026, 1, 3), None, None, [10, 11], 20, [20], 1, 0, "settled", None),
     ]
 
     team_ids, _, home_idx, away_idx, home_goals, away_goals = _load_match_data(
@@ -288,6 +289,7 @@ def test_ambiguous_training_team_mapping_is_excluded_with_candidate_ids() -> Non
             1,
             0,
             "settled",
+            None,
         ),
         (
             2,
@@ -301,6 +303,7 @@ def test_ambiguous_training_team_mapping_is_excluded_with_candidate_ids() -> Non
             2,
             1,
             "settled",
+            None,
         ),
     ]
 

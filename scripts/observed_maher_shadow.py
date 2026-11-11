@@ -11,6 +11,7 @@ from scripts.features.build_weather_features import (
 )
 from scripts.maher_goal_rate_runtime import load_trained_goal_rates
 from scripts.observed_feature_pipeline import BUILDER_VERSION
+from scripts.player_candidate_shadow import build_player_candidate_shadow
 from scripts.poisson_model import derive_1x2, score_matrix
 
 CALCULATION_VERSION = "observed_maher_spf_shadow/v1"
@@ -90,6 +91,7 @@ def build_observed_maher_shadow(
         },
         "source_revision_ids": _revision_ids(batch, _AUDIT_FIELDS),
         "player_projection": player_projection,
+        "player_candidate": build_player_candidate_shadow(player_projection),
         "not_applied_features": [
             {
                 "feature": name,

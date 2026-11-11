@@ -3889,6 +3889,7 @@ def isolated_database(request):
 
     with connection.cursor() as cursor:
         migrations_dir = Path(__file__).resolve().parents[2] / "sql"
+        cursor.execute((migrations_dir / "107_source_observations.sql").read_text(encoding="utf-8"))
         cursor.execute(
             (migrations_dir / "111_prediction_run_identity.sql").read_text(encoding="utf-8")
         )
@@ -5918,7 +5919,8 @@ def test_research_evaluation_reads_one_bounded_snapshot_and_stores_outside_predi
         )
         stored_mode, stored_holdout = cursor.fetchone()
         assert stored_mode == "research_reconstruction"
-        assert stored_holdout["evaluation_count"] == 1
+        assert stored_holdout["status"] == "not_evaluable"
+        assert stored_holdout["evaluation_count"] == 0
         cursor.execute("SELECT COUNT(*) FROM model_predictions")
         assert cursor.fetchone()[0] == predictions_before
     conn.commit()
@@ -6733,7 +6735,7 @@ def test_feature_importance_reads_latest_pre_kickoff_snapshots_for_bounded_recen
 
 def test_p111_shadow_uses_p106_run_group_replay_and_research_storage(isolated_database):
     import math
-    from datetime import datetime, timedelta
+    from datetime import UTC, datetime, timedelta, timezone
 
     from psycopg2.extensions import TRANSACTION_STATUS_IDLE, TRANSACTION_STATUS_INTRANS
 
@@ -6745,7 +6747,11 @@ def test_p111_shadow_uses_p106_run_group_replay_and_research_storage(isolated_da
         run_dynamic_team_p106_shadow,
     )
     from scripts.model_training_manifest_storage import load_training_manifest
-    from scripts.training_manifest import CandidateMatch, build_training_dataset
+    from scripts.training_manifest import (
+        CandidateMatch,
+        ResultLabelObservation,
+        build_training_dataset,
+    )
 
     conn, _schema_name = isolated_database
     fit_cutoff = datetime(2026, 3, 1, 0, 0)
@@ -6754,6 +6760,12 @@ def test_p111_shadow_uses_p106_run_group_replay_and_research_storage(isolated_da
     for index in range(18):
         kickoff = datetime(2026, 1, 1, 18) + timedelta(days=index * 2)
         home_team, away_team = pairs[index % len(pairs)]
+        home_goals = 2 if home_team == 1 else index % 3
+        away_goals = 0 if away_team == 2 else (index + 1) % 2
+        published_at = kickoff.replace(tzinfo=timezone(timedelta(hours=8))).astimezone(UTC) + (
+            timedelta(hours=3)
+        )
+        acquired_at = published_at + timedelta(minutes=5)
         candidates.append(
             CandidateMatch(
                 match_id=1000 + index,
@@ -6761,10 +6773,22 @@ def test_p111_shadow_uses_p106_run_group_replay_and_research_storage(isolated_da
                 kickoff_at=kickoff,
                 home_team_id=home_team,
                 away_team_id=away_team,
-                home_goals=2 if home_team == 1 else index % 3,
-                away_goals=0 if away_team == 2 else (index + 1) % 2,
+                home_goals=home_goals,
+                away_goals=away_goals,
                 match_status="settled",
                 official_publish_time=kickoff + timedelta(hours=3),
+                label_observations=(
+                    ResultLabelObservation(
+                        revision_id=3000 + index,
+                        result_id=2000 + index,
+                        fact_status="value",
+                        home_goals=home_goals,
+                        away_goals=away_goals,
+                        published_at=published_at,
+                        first_acquired_at=acquired_at,
+                        available_at=acquired_at,
+                    ),
+                ),
             )
         )
     dataset = build_training_dataset(candidates, min_matches=1, cutoff_at=fit_cutoff)

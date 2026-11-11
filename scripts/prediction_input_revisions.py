@@ -30,6 +30,9 @@ from scripts.prediction_input_updates import (
 )
 
 MAHER_SHADOW_CONSUMER = "observed-maher-shadow/spf/v2"
+# Complete player projections retain cutoff-bound identity and availability refs.
+# Keep the persisted receipt bounded while allowing realistic matchday evidence.
+_MAX_MAHER_SHADOW_RESULT_REF_BYTES = 16 * 1024
 
 
 def _current(conn: Any, match_id: int, play_type: str) -> tuple[datetime, dict, int, datetime]:
@@ -176,7 +179,7 @@ def complete_prediction_input_revision(
     if extra_result_refs is not None:
         if not isinstance(extra_result_refs, dict) or set(extra_result_refs) - {"maher_shadow"}:
             raise ValueError("only the bounded Maher shadow result reference is supported")
-        _canonical(extra_result_refs, 8192)
+        _canonical(extra_result_refs, _MAX_MAHER_SHADOW_RESULT_REF_BYTES)
     _read_transaction(conn)
 
     def publish(conn: Any, current_claim: InputUpdateClaim) -> dict:

@@ -42,6 +42,7 @@ from scripts.model_artifact_identity import (  # noqa: E402
 )
 from scripts.poisson_model import poisson_pmf  # noqa: E402
 from scripts.training_manifest import (  # noqa: E402
+    RESULT_REVISION_VISIBILITY_CTE,
     CandidateMatch,
     TrainingDataset,
     build_training_dataset,
@@ -231,9 +232,58 @@ def _load_training_dataset(
         raise ValueError("cutoff_at must be timezone-naive to match TIMESTAMP columns")
     cutoff_clause = "WHERE m.kickoff_time < %s" if cutoff_at is not None else ""
     params = (cutoff_at,) if cutoff_at is not None else ()
+    visibility_cte = f"WITH {RESULT_REVISION_VISIBILITY_CTE}" if cutoff_at is not None else ""
+    if cutoff_at is None:
+        observation_projection = "NULL::jsonb"
+        observation_join = ""
+    else:
+        observation_projection = "result_observations.label_observations"
+        observation_join = """
+        LEFT JOIN LATERAL (
+            SELECT COALESCE(
+                jsonb_agg(jsonb_build_object(
+                    'revision_id', revisions.id,
+                    'result_id', CASE
+                        WHEN revisions.evidence_json->>'official_result_id' ~ '^[1-9][0-9]*$'
+                        THEN (revisions.evidence_json->>'official_result_id')::bigint
+                        ELSE NULL END,
+                    'fact_status', revisions.fact_status,
+                    'home_goals', CASE
+                        WHEN revisions.value_json->>'home_goals' ~ '^(0|[1-9][0-9]*)$'
+                        THEN (revisions.value_json->>'home_goals')::integer
+                        ELSE NULL END,
+                    'away_goals', CASE
+                        WHEN revisions.value_json->>'away_goals' ~ '^(0|[1-9][0-9]*)$'
+                        THEN (revisions.value_json->>'away_goals')::integer
+                        ELSE NULL END,
+                    'published_at', revisions.published_at,
+                    'first_acquired_at', revisions.first_acquired_at,
+                    'available_at', revisions.available_at
+                ) ORDER BY revisions.available_at, revisions.revision),
+                '[]'::jsonb
+            ) AS label_observations
+            FROM (
+                SELECT revision.id, revision.revision, revision.fact_status,
+                       revision.value_json, revision.evidence_json,
+                           revision.published_at, revision.first_acquired_at,
+                           visibility.committed_available_at AS available_at
+                FROM observation_streams stream
+                JOIN observation_revisions revision ON revision.stream_id=stream.id
+                JOIN result_revision_visibility visibility ON visibility.revision_id=revision.id
+                WHERE stream.match_id=m.id
+                  AND stream.source_id='sporttery'
+                  AND stream.domain='results'
+                  AND stream.subject_key='full_time_score'
+                  AND revision.evidence_kind='source_observation'
+                ORDER BY visibility.committed_available_at, revision.revision
+                LIMIT 65
+            ) revisions
+        ) result_observations ON true
+        """
     cur = conn.cursor()
     cur.execute(
         f"""
+        {visibility_cte}
         SELECT m.id AS match_id,
                r.id AS result_id,
                m.kickoff_time,
@@ -244,7 +294,8 @@ def _load_training_dataset(
                t2.candidate_ids AS away_team_candidate_ids,
                r.full_home_goals,
                r.full_away_goals,
-               m.match_status
+               m.match_status,
+               {observation_projection} AS label_observations
         FROM official_matches m
         LEFT JOIN official_results r ON r.match_id = m.id
         LEFT JOIN LATERAL (
@@ -259,6 +310,7 @@ def _load_training_dataset(
             FROM teams candidate
             WHERE candidate.team_name_cn = m.away_team_name
         ) t2 ON true
+        {observation_join}
         {cutoff_clause}
         ORDER BY m.kickoff_time ASC, m.id ASC, r.id ASC
         """,
@@ -277,6 +329,7 @@ def _load_training_dataset(
             home_goals=row[8],
             away_goals=row[9],
             match_status=row[10],
+            label_observations=tuple(row[11] or ()),
         )
         for row in cur.fetchall()
     ]

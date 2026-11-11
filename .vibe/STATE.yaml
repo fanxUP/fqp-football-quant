@@ -1,19 +1,19 @@
 {
   "schema_version": 4,
-  "state": "READY_TO_MERGE",
-  "workflow_id": "ODDS-MULTIBOOK-REFERENCE-20261111",
+  "state": "REVIEWING",
+  "workflow_id": "P108-05A-P114-POINT-IN-TIME-LABELS-20261111",
   "previous_workflow": {
-    "workflow_id": "P111-02-P106-RUN-EVALUATION-INTEGRATION-20261110",
-    "state": "DONE",
-    "archive": ".vibe/archive/workflow-p111-02-done-2026-11-11"
+    "workflow_id": "ODDS-MULTIBOOK-REFERENCE-20261111",
+    "state": "READY_TO_MERGE",
+    "archive": ".vibe/archive/workflow-odds-multibook-20261111-before-model-modernization"
   },
   "blocked_reason": null,
   "mode": "STRICT",
-  "environment": "Local fixed-response regression and GitHub CI; production deployment to 100.121.47.26 after exact-main validation. Reference lookup is read-only and adds no migration, provider call, or business write.",
+  "environment": "Local fixed-sample and isolated loopback PostgreSQL 16 verification; GitHub exact-head CI and guarded server release remain pending. No schema migration or production data access in this task.",
   "last_transition": {
-    "from": "REVIEWING",
-    "to": "READY_TO_MERGE",
-    "at": "2026-11-11T01:41:42.022620+08:00",
-    "reason": "V4 gate reports READY_TO_MERGE; scoped regression, safety, independent review, and release policy checks pass."
+    "from": "VERIFYING",
+    "to": "REVIEWING",
+    "at": "2026-11-11T09:09:25.313460+08:00",
+    "reason": "Scoped local regressions and the independent read-only review passed; exact-head CI and release checks remain pending."
   }
 }

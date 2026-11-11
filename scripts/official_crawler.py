@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import re
 import time
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from apps.backend.src.db import get_db
@@ -847,6 +847,9 @@ def _crawl_official_results_once(begin_date: str, end_date: str) -> dict[str, An
     try:
         t0 = time.monotonic()
         raw = client.get_uniform_match_results(begin_date, end_date)
+        # A conservative batch receipt: every row in this completed response had
+        # arrived by this instant, so historical point-in-time reads cannot see it earlier.
+        source_acquired_at = datetime.now(UTC)
         latency_ms = int((time.monotonic() - t0) * 1000)
 
         results = parse_results_from_response(raw)
@@ -926,7 +929,9 @@ def _crawl_official_results_once(begin_date: str, end_date: str) -> dict[str, An
 
             valid_results = [r for r in results if "match_id" in r]
             if valid_results:
-                store_result = store_results(conn, valid_results)
+                store_result = store_results(
+                    conn, valid_results, source_acquired_at=source_acquired_at
+                )
             else:
                 store_result = {"inserted": 0, "updated": 0, "errors": []}
 

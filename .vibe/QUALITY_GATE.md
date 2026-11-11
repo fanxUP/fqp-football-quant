@@ -1,7 +1,9 @@
-# 发布质量门禁：赔率走势第三方品牌对照
+# 质量门禁：P108-05A / P111 / P114 点时输入切片
 
-- 单分支 `main`；不创建功能分支。
-- 固定样本后端/前端回归、Ruff、mypy、TypeScript 和生产构建通过。
-- 独立只读审查通过；无迁移、供应商调用或业务数据写入。
-- GitHub Actions `CI` 在 `main` 的精确发布提交上通过 `test`、`lint-and-typecheck`。
-- 正式发布使用 `ops/server/deploy.sh`；保留回滚提交，确认无待迁移项，执行健康和保护路由只读 smoke。
+- 单分支 `main`；当前基线 `b175cd2e09db12d7d6feed506d9479550adae7ec`。
+- 本地固定样本与隔离 PostgreSQL 验证通过；Ruff、格式、mypy、compileall、diff、scope/budget 通过。
+- P108 球员回执保持 withheld，不改变正式预测；P114 历史标签只认提交可见的来源观测回执。
+- 没有迁移、依赖或公共 API 变化；未访问生产数据库或正在回填的 SQLite。
+- 独立复核对 P114 提交可见性修复未发现 BLOCKER/MAJOR；应用代码之后未再修改。
+- **尚未达到 READY_TO_MERGE/READY_TO_DEPLOY**：当前批次未提交；GitHub exact-head CI、服务器当前状态、受保护路由 smoke 和正式发布证据仍待完成。
+- 即使该工程切片发布，A108/A111/A114/A115 仍须分别依赖真实数据与观测完成，不可合并成一个本地测试结论。

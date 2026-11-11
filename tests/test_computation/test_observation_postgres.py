@@ -16,14 +16,18 @@ import psycopg2
 import pytest
 from psycopg2.extensions import parse_dsn
 
+from scripts.backtest_engine import load_research_matches
 from scripts.data_contracts import AcquisitionStatus, FactStatus, to_utc
 from scripts.feature_storage import get_weather_for_match, store_match_weather_snapshot
+from scripts.mle_trainer import _load_training_dataset
 from scripts.observation_storage import (
     append_observation,
     capture_observation_cutoff,
     load_observation_as_of,
     record_acquisition_failure,
 )
+from scripts.official_storage import store_results
+from scripts.training_manifest import build_training_dataset
 
 ROOT = Path(__file__).resolve().parents[2]
 _OBSERVATION_DSN_KEYS = {"host", "port", "user", "dbname", "password"}
@@ -260,6 +264,161 @@ def test_nonobserved_evidence_is_never_silently_replayable(pg, match_id, kind):
     )
 
 
+def test_official_result_capture_preserves_publication_time_and_records_each_seen_revision(
+    pg, match_id
+):
+    home_name = f"结果时间窗主{match_id}"
+    away_name = f"结果时间窗客{match_id}"
+    with pg.cursor() as cur:
+        cur.execute("INSERT INTO teams(team_name_cn) VALUES (%s),(%s)", (home_name, away_name))
+        cur.execute(
+            "UPDATE official_matches SET home_team_name=%s,away_team_name=%s WHERE id=%s",
+            (home_name, away_name, match_id),
+        )
+    pg.commit()
+    stream = dict(
+        match_id=match_id,
+        source_id="sporttery",
+        domain="results",
+        subject_key="full_time_score",
+    )
+    before = capture_observation_cutoff(pg, streams=[stream])
+    pg.commit()
+    published = datetime(2026, 11, 10, 20, 30, tzinfo=ZoneInfo("Asia/Shanghai"))
+    first_acquired = datetime.now(UTC) - timedelta(minutes=2)
+
+    first = store_results(
+        pg,
+        [
+            {
+                "match_id": match_id,
+                "result_status": "confirmed",
+                "full_home_goals": 1,
+                "full_away_goals": 0,
+                "official_publish_time": published.replace(tzinfo=None),
+                "raw_json": {"matchId": "sporttery-1", "result": "first"},
+            }
+        ],
+        source_acquired_at=first_acquired,
+    )
+    assert first["errors"] == []
+    after_first = capture_observation_cutoff(pg, streams=[stream])
+    pg.commit()
+    first_observation = load_observation_as_of(pg, **stream, cutoff=after_first)
+    assert first_observation["fact_status"] == FactStatus.VALUE.value
+    assert first_observation["value"] == {
+        "away_goals": 0,
+        "home_goals": 1,
+        "result_status": "confirmed",
+    }
+    assert first_observation["published_at"] == published.astimezone(UTC)
+    assert first_observation["first_acquired_at"] == first_acquired
+    assert first_observation["available_at"] >= first_observation["ingested_at"] > before.as_of
+    assert load_observation_as_of(pg, **stream, cutoff=before) is None
+    with pg.cursor() as cur:
+        cur.execute(
+            """
+            SELECT min(cutoff.as_of)
+            FROM observation_cutoffs cutoff
+            CROSS JOIN LATERAL jsonb_array_elements(cutoff.selections) selected(item)
+            WHERE selected.item->>'match_id'=%s
+              AND selected.item->>'source_id'='sporttery'
+              AND selected.item->>'domain'='results'
+              AND selected.item->>'subject_key'='full_time_score'
+              AND selected.item->>'revision_id'=%s
+            """,
+            (str(match_id), str(first_observation["revision_id"])),
+        )
+        committed_visibility = cur.fetchone()[0]
+    assert before.as_of < committed_visibility <= after_first.as_of
+    assert committed_visibility > first_observation["available_at"]
+
+    second_acquired = datetime.now(UTC)
+    second = store_results(
+        pg,
+        [
+            {
+                "match_id": match_id,
+                "result_status": "confirmed",
+                "full_home_goals": 2,
+                "full_away_goals": 0,
+                "official_publish_time": None,
+                "raw_json": {"matchId": "sporttery-1", "result": "amended"},
+            }
+        ],
+        source_acquired_at=second_acquired,
+    )
+    assert second["errors"] == []
+    with pg.cursor() as cur:
+        cur.execute(
+            "SELECT official_publish_time,full_home_goals,full_away_goals "
+            "FROM official_results WHERE match_id=%s",
+            (match_id,),
+        )
+        assert cur.fetchone() == (published.replace(tzinfo=None), 2, 0)
+    after_second = capture_observation_cutoff(pg, streams=[stream])
+    pg.commit()
+    second_observation = load_observation_as_of(pg, **stream, cutoff=after_second)
+    assert second_observation["revision"] == first_observation["revision"] + 1
+    assert second_observation["value"]["home_goals"] == 2
+    assert second_observation["published_at"] is None
+    assert second_observation["first_acquired_at"] == second_acquired
+    assert second_observation["available_at"] >= second_observation["ingested_at"]
+
+    third = store_results(
+        pg,
+        [
+            {
+                "match_id": match_id,
+                "result_status": "pending",
+                "full_home_goals": None,
+                "full_away_goals": None,
+                "official_publish_time": None,
+                "raw_json": {"matchId": "sporttery-1", "result": "temporarily-pending"},
+            }
+        ],
+        source_acquired_at=datetime.now(UTC),
+    )
+    assert third["errors"] == []
+
+    pg.rollback()
+    research_match = next(
+        row for row in load_research_matches(pg) if row.candidate.match_id == match_id
+    )
+    assert len(research_match.candidate.label_observations) == 3
+    cutoff_utc = (
+        first_observation["available_at"]
+        + (second_observation["available_at"] - first_observation["available_at"]) / 2
+    )
+    cutoff_local = cutoff_utc.astimezone(ZoneInfo("Asia/Shanghai")).replace(tzinfo=None)
+    dataset = build_training_dataset(
+        [research_match.candidate], min_matches=1, cutoff_at=cutoff_local
+    )
+    assert [(sample.home_goals, sample.away_goals) for sample in dataset.samples] == [(1, 0)]
+    assert dataset.samples[0].result_observation_id == first_observation["revision_id"]
+
+    trainer_dataset = _load_training_dataset(pg, min_matches=1, cutoff_at=cutoff_local)
+    trainer_target_samples = [
+        sample for sample in trainer_dataset.samples if sample.match_id == match_id
+    ]
+    assert [(sample.home_goals, sample.away_goals) for sample in trainer_target_samples] == [(1, 0)]
+    assert trainer_target_samples[0].result_observation_id == first_observation["revision_id"]
+
+    before_first_local = before.as_of.astimezone(ZoneInfo("Asia/Shanghai")).replace(tzinfo=None)
+    before_any_result = build_training_dataset(
+        [research_match.candidate], min_matches=1, cutoff_at=before_first_local
+    )
+    without_result_history = build_training_dataset(
+        [replace(research_match.candidate, label_observations=())],
+        min_matches=1,
+        cutoff_at=before_first_local,
+    )
+    assert before_any_result.manifest.sha256 == without_result_history.manifest.sha256
+    assert before_any_result.manifest.excluded[0].reason == "result_observation_missing"
+    assert before_any_result.manifest.excluded[0].result_observation_id is None
+    assert before_any_result.manifest.excluded[0].result_available_at is None
+
+
 @pytest.mark.parametrize("status", [s for s in AcquisitionStatus if s != AcquisitionStatus.SUCCESS])
 def test_failed_acquisition_preserves_fact_and_has_explicit_status(pg, match_id, status):
     ref = write(pg, match_id)
@@ -327,6 +486,98 @@ def test_transaction_committing_after_cutoff_never_appears_in_that_replay(pg, co
         writer.commit()
     assert read(pg, match_id)["value"] == "delayed commit"
     assert read(pg, match_id, cutoff)["value"] == "original"
+
+
+def test_training_and_backtest_exclude_result_transaction_committed_after_cutoff(
+    pg, connect, match_id
+):
+    """Insert time is not proof the result was visible before the transaction committed."""
+    home_name = f"延迟提交主{match_id}"
+    away_name = f"延迟提交客{match_id}"
+    with pg.cursor() as cur:
+        cur.execute("INSERT INTO teams(team_name_cn) VALUES (%s),(%s)", (home_name, away_name))
+        cur.execute(
+            "UPDATE official_matches SET home_team_name=%s,away_team_name=%s WHERE id=%s",
+            (home_name, away_name, match_id),
+        )
+    pg.commit()
+
+    with closing(connect()) as writer:
+        observed_at = datetime.now(UTC) - timedelta(seconds=1)
+        stored = append_observation(
+            writer,
+            match_id=match_id,
+            source_id="sporttery",
+            domain="results",
+            subject_key="full_time_score",
+            fact_status=FactStatus.VALUE,
+            value={"home_goals": 2, "away_goals": 1, "result_status": "confirmed"},
+            acquired_at=observed_at,
+            verified_at=observed_at,
+            published_at=observed_at,
+            evidence={"official_result_id": 998877, "result_status": "confirmed"},
+        )
+        with pg.cursor() as cur:
+            cur.execute("SELECT clock_timestamp()")
+            cutoff_utc = cur.fetchone()[0]
+        assert stored["available_at"] < cutoff_utc
+        pg.commit()
+        writer.commit()
+
+    # The revision timestamp is written before commit. A separately captured
+    # immutable cutoff after the result transaction is the commit-visibility
+    # witness that strict historical readers must use instead.
+    with closing(connect()) as observer:
+        committed_visibility = capture_observation_cutoff(
+            observer,
+            streams=[
+                dict(
+                    match_id=match_id,
+                    source_id="sporttery",
+                    domain="results",
+                    subject_key="full_time_score",
+                )
+            ],
+        )
+        observer.commit()
+    assert committed_visibility.as_of > cutoff_utc
+
+    cutoff_local = cutoff_utc.astimezone(ZoneInfo("Asia/Shanghai")).replace(tzinfo=None)
+    candidate = next(
+        row.candidate for row in load_research_matches(pg) if row.candidate.match_id == match_id
+    )
+    backtest_dataset = build_training_dataset([candidate], min_matches=1, cutoff_at=cutoff_local)
+    trainer_dataset = _load_training_dataset(pg, min_matches=1, cutoff_at=cutoff_local)
+
+    assert backtest_dataset.samples == ()
+    assert not any(sample.match_id == match_id for sample in trainer_dataset.samples)
+    assert backtest_dataset.manifest.excluded[0].reason == "result_observation_missing"
+    target_exclusion = next(
+        item for item in trainer_dataset.manifest.excluded if item.match_id == match_id
+    )
+    assert target_exclusion.reason == "result_observation_missing"
+
+    after_visibility_local = (
+        (committed_visibility.as_of + timedelta(seconds=1))
+        .astimezone(ZoneInfo("Asia/Shanghai"))
+        .replace(tzinfo=None)
+    )
+    backtest_after_visibility = build_training_dataset(
+        [candidate], min_matches=1, cutoff_at=after_visibility_local
+    )
+    trainer_after_visibility = _load_training_dataset(
+        pg, min_matches=1, cutoff_at=after_visibility_local
+    )
+    assert [
+        (sample.home_goals, sample.away_goals) for sample in backtest_after_visibility.samples
+    ] == [(2, 1)]
+    trainer_target_samples = [
+        sample for sample in trainer_after_visibility.samples if sample.match_id == match_id
+    ]
+    assert [(sample.home_goals, sample.away_goals) for sample in trainer_target_samples] == [(2, 1)]
+    assert backtest_after_visibility.samples[
+        0
+    ].result_available_at == committed_visibility.as_of.isoformat(timespec="microseconds")
 
 
 def test_late_failure_commit_does_not_change_prior_acquisition_status(pg, connect, match_id):

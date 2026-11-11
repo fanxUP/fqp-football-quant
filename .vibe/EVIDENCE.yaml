@@ -1,35 +1,32 @@
 {
   "schema_version": 4,
-  "current_task": "ODDS-MULTIBOOK-REFERENCE-20261111",
+  "current_task": "P108-05A-P114-POINT-IN-TIME-LABELS-20261111",
   "acceptance": {
-    "A-ODDS-MULTIBOOK": {
+    "A-P10805A-P114-LOCAL": {
       "status": "PASS",
-      "command": "zsh -c '.venv/bin/python -m pytest -q tests/test_api/test_odds_movements.py && npm --prefix apps/frontend test -- src/pages/OddsMovementPage.test.tsx && .venv/bin/ruff check apps/backend/src/routers/dashboard.py apps/backend/src/services/odds_movement.py apps/backend/src/services/odds_market_reference.py tests/test_api/test_odds_movements.py && .venv/bin/ruff format --check apps/backend/src/routers/dashboard.py apps/backend/src/services/odds_movement.py apps/backend/src/services/odds_market_reference.py tests/test_api/test_odds_movements.py && .venv/bin/mypy apps/backend/src/services/odds_market_reference.py --explicit-package-bases && npm --prefix apps/frontend run typecheck && npm --prefix apps/frontend run build && git diff --check'",
+      "command": "pytest 11 scoped modules with fixed samples; then pytest observation_postgres.py, prediction_input_runtime_postgres.py, prediction_run_postgres.py against dedicated loopback PostgreSQL 16 fixtures; Ruff check/format, mypy 10 source modules, compileall, git diff --check, vibe scope check, vibe budget check",
       "exit_code": 0,
-      "summary": "        3.65 kB │ gzip:   1.78 kB\ndist/assets/RecommendationDetailPage-C78t38_G.js    3.85 kB │ gzip:   1.64 kB\ndist/assets/helper-UvENM29A.js                      4.15 kB │ gzip:   1.77 kB\ndist/assets/constants-GCdYie87.js                   4.37 kB │ gzip:   2.15 kB\ndist/assets/SettingsPage-BwJD7VfN.js                4.56 kB │ gzip:   1.65 kB\ndist/assets/MatchEvidence-BPU_RfAg.js               4.86 kB │ gzip:   2.11 kB\ndist/assets/radar-gHSAJbDR.js                       5.29 kB │ gzip:   2.31 kB\ndist/assets/ModulesPage-BNF2VMjx.js                 5.44 kB │ gzip:   1.88 kB\ndist/assets/axisAlignTicks-Cq4bKvYc.js              5.67 kB │ gzip:   2.50 kB\ndist/assets/scatter-GX9F4nE6.js                     6.39 kB │ gzip:   2.45 kB\ndist/assets/install-CWJREfL_.js                     6.55 kB │ gzip:   2.67 kB\ndist/assets/heatmap-C6hVjCpv.js                     6.57 kB │ gzip:   2.79 kB\ndist/assets/points-Bk4o0kJr.js                      7.52 kB │ gzip:   2.96 kB\ndist/assets/jsx-runtime-CIxEorsV.js                 7.89 kB │ gzip:   2.98 kB\ndist/assets/MatchesPage-BFkcdrtX.js                 9.64 kB │ gzip:   3.86 kB\ndist/assets/ExecutionCenter-DIfTfC9k.js            11.50 kB │ gzip:   4.22 kB\ndist/assets/AgentPanel-BSQyermA.js                 11.55 kB │ gzip:   3.61 kB\ndist/assets/DataHealthPage-D7K2BhZI.js             11.71 kB │ gzip:   4.33 kB\ndist/assets/UpsetsPage-Cydo8Zhh.js                 11.74 kB │ gzip:   3.79 kB\ndist/assets/visualization-CBP49EgE.js              12.19 kB │ gzip:   4.08 kB\ndist/assets/RosterEvidencePanel-DnbszyxC.js        13.40 kB │ gzip:   4.98 kB\ndist/assets/pie-CrbRJEEF.js                        15.15 kB │ gzip:   6.36 kB\ndist/assets/MatchDetailPage-BLcgCt-Z.js            15.24 kB │ gzip:   5.58 kB\ndist/assets/axisHelper-DEUVdXih.js                 15.42 kB │ gzip:   5.61 kB\ndist/assets/OddsMovementPage-BQLBb8H9.js           15.85 kB │ gzip:   6.14 kB\ndist/assets/DashboardPage-Lc0KE1a4.js              18.57 kB │ gzip:   6.25 kB\ndist/assets/NewsIntelligencePage-CCqmnOp7.js       18.79 kB │ gzip:   5.93 kB\ndist/assets/AgentWorkspacePage-SD94I6RB.js         19.40 kB │ gzip:   6.46 kB\ndist/assets/BacktestPage-CZpblXKZ.js               19.78 kB │ gzip:   7.23 kB\ndist/assets/line-DgZ4oTdw.js                       20.02 kB │ gzip:   8.17 kB\ndist/assets/scaleRawExtentInfo-DpJKVGD1.js         20.21 kB │ gzip:   8.13 kB\ndist/assets/bar-CfizbZkM.js                        22.01 kB │ gzip:   8.44 kB\ndist/assets/installSimple-D1zSL3pa.js              22.31 kB │ gzip:   8.01 kB\ndist/assets/PoolPage-fmXQVPpT.js                   23.46 kB │ gzip:   7.94 kB\ndist/assets/ModelProvidersPage-Bn_x3rv1.js         26.82 kB │ gzip:   8.73 kB\ndist/assets/ReviewsPage-BE-eV-J7.js                27.32 kB │ gzip:   8.85 kB\ndist/assets/EventsPage-CoCTXpf-.js                 28.66 kB │ gzip:   9.09 kB\ndist/assets/MatchDetailDrawer-BHixK9Wj.js          30.25 kB │ gzip:   7.86 kB\ndist/assets/ModelsPage-siIJHzi-.js                 53.27 kB │ gzip:  16.06 kB\ndist/assets/AnalysisPage-B4pDEr0-.js               59.79 kB │ gzip:  16.82 kB\ndist/assets/BettingCenterPage-BTgBYMiH.js          60.62 kB │ gzip:  17.12 kB\ndist/assets/TeamLogo-vNhV2TGg.js                   63.04 kB │ gzip:  12.92 kB\ndist/assets/chartRuntime-DojTVEnx.js              164.83 kB │ gzip:  53.72 kB\ndist/assets/LightweightLineChart-Bkr84qxI.js      166.38 kB │ gzip:  54.51 kB\ndist/assets/index-Cj9IwYGk.js                     259.81 kB │ gzip:  84.39 kB\ndist/assets/SeriesData-B6NLPcGc.js                345.26 kB │ gzip: 116.97 kB\ndist/assets/PitchScene-CqO1VUSw.js                943.55 kB │ gzip: 250.06 kB\n\n✓ built in 1.09s\n[plugin builtin:vite-reporter] \n(!) Some chunks are larger than 500 kB after minification. Consider:\n- Using dynamic import() to code-split the application\n- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting\n- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.\n",
-      "timed_out": false,
-      "environment": "Local fixed-response regression and GitHub CI; production deployment to 100.121.47.26 after exact-main validation. Reference lookup is read-only and adds no migration, provider call, or business write.",
-      "revision": "79321f2aebc467677ca2a5f5d24938013a2cbe43",
+      "summary": "Fixed-sample run: 214 passed, 0 failed, 159 opt-in PostgreSQL cases skipped before DSNs were configured. Follow-up on the dedicated observation and P106 loopback databases: 169 passed, 0 failed, 0 skipped in 436.91s. Ruff and format each checked 21 paths; mypy succeeded on 10 source modules; compileall, diff, scope and budget checks passed. Scope: 21/23 business paths, 2/2 new files, no out-of-scope path, dependency, migration, or public API change.",
+      "revision": "b175cd2e09db12d7d6feed506d9479550adae7ec",
       "dirty_tree": true,
-      "tree_fingerprint": "60c6fde23cf9532b6c2031b7eb0dca367046cca0b77539f214aa388c61ad2789",
-      "verified_at": "2026-11-11T01:35:43.340920+08:00"
+      "verified_at": "2026-11-11T09:01:00+08:00"
     }
   },
   "reviews": {
     "status": "PASS",
     "application_code": {
       "status": "PASS",
-      "summary": "Independent read-only review confirmed text[] company ID binding resolves the PostgreSQL operator type issue; lookup is limited to up to 200 uniquely resolved official fixtures and the latest published source batch with a 2s query timeout. Third-party 1X2 brands render only in SPF and do not map onto other play types. Missing quotes remain explicit, timeouts/schema absence fail softly, and no unresolved finding remains."
+      "summary": "Independent read-only review of the current P108/P111/P114 diff found no BLOCKER or MAJOR; point-in-time label leakage is closed and the P108 candidate remains isolated from official probabilities. Residual risk: the visibility CTE scans matching observation_cutoffs JSON and was not production-EXPLAINed; concurrent same-stream updates may conservatively omit an intermediate revision, reducing coverage without leaking future data. No application code changed after the review."
     },
     "v4_migration": {
       "status": "PASS",
       "applicability": "NOT_APPLICABLE",
-      "summary": "No SQL migrations or V4 engine/schema changes are part of this feature."
+      "summary": "No SQL migration or V4 engine/schema change is in this batch."
     }
   },
   "security": {
     "status": "PASS",
-    "summary": "Parameterized read-only query against published archive records; no secret handling, write path, provider call, or extra network fetch."
+    "summary": "No new dependency, API, secret, or provider call. Database regression targets are isolated loopback PostgreSQL fixtures. Official result observations are additive and source-time bounded; no production database was accessed."
   },
   "migration": {
     "status": "NOT_APPLICABLE",
@@ -37,18 +34,9 @@
     "note": "No SQL/schema files change."
   },
   "external_ci": {
-    "status": "passed",
-    "checks": {
-      "test": "passed",
-      "lint-and-typecheck": "passed"
-    },
-    "workflow": "CI",
-    "event": "push",
-    "branch": "main",
-    "head_sha": "79321f2aebc467677ca2a5f5d24938013a2cbe43",
-    "run_id": 42789571680,
-    "url": "https://github.com/fanxUP/fqp-football-quant/actions/runs/42789571680",
-    "summary": "Baseline current main CI run passed. The quality preflight will separately require and verify CI success on the exact release SHA before deployment."
+    "status": "pending",
+    "checks": {},
+    "note": "GitHub baseline CI passed on b175cd2; exact-head CI for this code batch has not run."
   },
   "production": {
     "status": "NOT_ACCESSED",
@@ -56,8 +44,11 @@
     "business_data_writes": 0
   },
   "quality_gate": {
-    "status": "READY_TO_MERGE",
-    "checked_at": "2026-11-11T01:41:23.709947+08:00",
-    "failures": []
+    "status": "PENDING",
+    "checked_at": "2026-11-11T09:01:00+08:00",
+    "failures": [
+      "Exact-head GitHub CI is pending.",
+      "No fresh release or protected-route server smoke has been recorded for this target."
+    ]
   }
 }

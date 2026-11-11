@@ -3,7 +3,8 @@ from __future__ import annotations
 import hashlib
 import math
 from dataclasses import replace
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -19,9 +20,14 @@ from scripts.dynamic_team_challenger import (
     predict_dynamic_team_challenger,
 )
 from scripts.model_artifact_identity import canonical_json_bytes
-from scripts.training_manifest import CandidateMatch, build_training_dataset
+from scripts.training_manifest import (
+    CandidateMatch,
+    ResultLabelObservation,
+    build_training_dataset,
+)
 
 FIT_CUTOFF = datetime(2026, 3, 1, 0, 0)
+SHANGHAI = ZoneInfo("Asia/Shanghai")
 MEMBERSHIP_SHA = "a" * 64
 VENUE_SHA = "b" * 64
 
@@ -31,6 +37,8 @@ def _dataset(*, season_id: int = 20262027, cutoff: datetime = FIT_CUTOFF):
     fixtures = ((1, 2), (3, 4), (1, 3), (2, 4), (1, 4), (2, 3))
     for index in range(18):
         kickoff = datetime(2026, 1, 1, 18) + timedelta(days=index * 2)
+        published = kickoff + timedelta(hours=3)
+        published_aware = published.replace(tzinfo=SHANGHAI).astimezone(UTC)
         home_team, away_team = fixtures[index % len(fixtures)]
         rows.append(
             CandidateMatch(
@@ -42,7 +50,19 @@ def _dataset(*, season_id: int = 20262027, cutoff: datetime = FIT_CUTOFF):
                 home_goals=2 if home_team == 1 else index % 3,
                 away_goals=0 if away_team == 2 else (index + 1) % 2,
                 match_status="settled",
-                official_publish_time=kickoff + timedelta(hours=3),
+                official_publish_time=published,
+                label_observations=(
+                    ResultLabelObservation(
+                        revision_id=3000 + index,
+                        result_id=2000 + index,
+                        fact_status="value",
+                        home_goals=2 if home_team == 1 else index % 3,
+                        away_goals=0 if away_team == 2 else (index + 1) % 2,
+                        published_at=published_aware,
+                        first_acquired_at=published_aware + timedelta(minutes=5),
+                        available_at=published_aware + timedelta(minutes=10),
+                    ),
+                ),
             )
         )
     dataset = build_training_dataset(rows, min_matches=1, cutoff_at=cutoff)
@@ -118,6 +138,19 @@ def test_fit_rejects_a_manifest_whose_labels_were_not_available_at_its_cutoff():
     manifest = _resign_manifest(manifest)
 
     with pytest.raises(ValueError, match="published after the fit cutoff"):
+        fit_dynamic_team_challenger(manifest, contexts)
+
+
+def test_fit_rejects_system_acquisition_after_cutoff_even_when_publication_precedes_it():
+    dataset, contexts = _dataset()
+    manifest = dataset.manifest.to_dict()
+    first = dict(manifest["included"][0])
+    first["result_first_acquired_at"] = "2026-03-01T00:00:00.000000+00:00"
+    first["result_available_at"] = "2026-03-01T00:01:00.000000+00:00"
+    manifest["included"] = [first, *manifest["included"][1:]]
+    manifest = _resign_manifest(manifest)
+
+    with pytest.raises(ValueError, match="first acquired at or after the fit cutoff"):
         fit_dynamic_team_challenger(manifest, contexts)
 
 

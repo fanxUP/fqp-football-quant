@@ -1,10 +1,17 @@
-from datetime import datetime
+from dataclasses import replace
+from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock, patch
+from zoneinfo import ZoneInfo
 
 import numpy as np
 
 from scripts.mle_trainer import _load_training_dataset, fit_maher_poisson
-from scripts.training_manifest import CandidateMatch, build_training_dataset
+from scripts.training_manifest import (
+    CURRENT_SELECTION_VERSION,
+    CandidateMatch,
+    ResultLabelObservation,
+    build_training_dataset,
+)
 
 
 def _candidate(
@@ -34,6 +41,35 @@ def _candidate(
     )
 
 
+def _result_observation(
+    revision_id: int,
+    result_id: int,
+    *,
+    published_local: str,
+    available_local: str | None = None,
+    fact_status: str = "value",
+    home_goals: int | None = 1,
+    away_goals: int | None = 0,
+) -> ResultLabelObservation:
+    published = datetime.fromisoformat(published_local).replace(tzinfo=ZoneInfo("Asia/Shanghai"))
+    acquired = published + timedelta(minutes=5)
+    available = (
+        datetime.fromisoformat(available_local).replace(tzinfo=ZoneInfo("Asia/Shanghai"))
+        if available_local
+        else acquired + timedelta(minutes=5)
+    )
+    return ResultLabelObservation(
+        revision_id=revision_id,
+        result_id=result_id,
+        fact_status=fact_status,
+        home_goals=home_goals,
+        away_goals=away_goals,
+        published_at=published,
+        first_acquired_at=acquired,
+        available_at=available,
+    )
+
+
 def test_manifest_rows_match_the_exact_maher_fit_input_and_hash_is_stable() -> None:
     candidates = [
         _candidate(2, kickoff="2026-01-02T20:00:00", home_goals=2, away_goals=1),
@@ -58,18 +94,35 @@ def test_manifest_rows_match_the_exact_maher_fit_input_and_hash_is_stable() -> N
     )
 
 
+def test_current_projection_fit_manifest_does_not_claim_source_observation_selection() -> None:
+    dataset = build_training_dataset([_candidate(1, kickoff="2026-01-01T20:00:00")], min_matches=1)
+
+    assert dataset.manifest.selection_version == CURRENT_SELECTION_VERSION
+    assert dataset.manifest.selection_version == "settled-official-score-team-history/v1"
+    assert dataset.manifest.included[0].label_source == (
+        "official_results.full_home_goals/full_away_goals"
+    )
+    assert dataset.manifest.included[0].result_observation_id is None
+
+
 def test_cutoff_excludes_unavailable_labels_and_future_matches_without_hash_drift() -> None:
     cutoff = datetime.fromisoformat("2026-01-05T00:00:00")
     candidates = [
-        _candidate(
-            1,
-            kickoff="2026-01-01T20:00:00",
-            published="2026-01-02T00:00:00",
+        replace(
+            _candidate(
+                1,
+                kickoff="2026-01-01T20:00:00",
+                published="2026-01-02T00:00:00",
+            ),
+            label_observations=(
+                _result_observation(91, 1001, published_local="2026-01-02T00:00:00"),
+            ),
         ),
-        _candidate(
-            2,
-            kickoff="2026-01-02T20:00:00",
-            published="2026-01-06T00:00:00",
+        replace(
+            _candidate(2, kickoff="2026-01-02T20:00:00"),
+            label_observations=(
+                _result_observation(92, 1002, published_local="2026-01-06T00:00:00"),
+            ),
         ),
         _candidate(3, kickoff="2026-01-06T20:00:00"),
     ]
@@ -79,9 +132,133 @@ def test_cutoff_excludes_unavailable_labels_and_future_matches_without_hash_drif
 
     assert [sample.match_id for sample in with_future_row.samples] == [1]
     assert [entry.reason for entry in with_future_row.manifest.excluded] == [
-        "label_published_after_cutoff"
+        "result_observation_missing"
     ]
     assert before_future_row.manifest.sha256 == with_future_row.manifest.sha256
+
+
+def test_cutoff_uses_source_observation_label_and_records_all_availability_times() -> None:
+    cutoff = datetime.fromisoformat("2026-01-05T00:00:00")
+    observation = ResultLabelObservation(
+        revision_id=81,
+        result_id=1081,
+        fact_status="value",
+        home_goals=1,
+        away_goals=0,
+        published_at=datetime(2026, 1, 2, 12, tzinfo=UTC),
+        first_acquired_at=datetime(2026, 1, 2, 12, 5, tzinfo=UTC),
+        available_at=datetime(2026, 1, 2, 12, 10, tzinfo=UTC),
+    )
+    candidate = CandidateMatch(
+        **{
+            **_candidate(
+                1,
+                kickoff="2026-01-01T20:00:00",
+                home_goals=9,
+                away_goals=9,
+            ).__dict__,
+            "label_observations": (observation,),
+        }
+    )
+
+    dataset = build_training_dataset([candidate], min_matches=1, cutoff_at=cutoff)
+
+    assert len(dataset.samples) == 1
+    sample = dataset.samples[0]
+    assert (sample.home_goals, sample.away_goals) == (1, 0)
+    assert sample.result_observation_id == 81
+    assert sample.result_published_at == "2026-01-02T12:00:00.000000+00:00"
+    assert sample.result_first_acquired_at == "2026-01-02T12:05:00.000000+00:00"
+    assert sample.result_available_at == "2026-01-02T12:10:00.000000+00:00"
+    assert sample.label_source == "source_observation:sporttery/results/full_time_score"
+
+
+def test_cutoff_excludes_missing_or_not_yet_available_result_observations() -> None:
+    cutoff = datetime.fromisoformat("2026-01-05T00:00:00")
+    no_observation = _candidate(1, kickoff="2026-01-01T20:00:00")
+    at_cutoff = CandidateMatch(
+        **{
+            **_candidate(2, kickoff="2026-01-02T20:00:00").__dict__,
+            "label_observations": (
+                ResultLabelObservation(
+                    revision_id=82,
+                    result_id=1082,
+                    fact_status="value",
+                    home_goals=2,
+                    away_goals=0,
+                    published_at=datetime(2026, 1, 3, 12, tzinfo=UTC),
+                    first_acquired_at=datetime(2026, 1, 4, 16, tzinfo=UTC),
+                    available_at=datetime(2026, 1, 4, 16, tzinfo=UTC),
+                ),
+            ),
+        }
+    )
+    unconfirmed = CandidateMatch(
+        **{
+            **_candidate(3, kickoff="2026-01-03T20:00:00").__dict__,
+            "label_observations": (
+                ResultLabelObservation(
+                    revision_id=83,
+                    result_id=1083,
+                    fact_status="unknown",
+                    home_goals=None,
+                    away_goals=None,
+                    published_at=datetime(2026, 1, 4, 12, tzinfo=UTC),
+                    first_acquired_at=datetime(2026, 1, 4, 12, 5, tzinfo=UTC),
+                    available_at=datetime(2026, 1, 4, 12, 10, tzinfo=UTC),
+                ),
+            ),
+        }
+    )
+
+    dataset = build_training_dataset(
+        [no_observation, at_cutoff, unconfirmed], min_matches=1, cutoff_at=cutoff
+    )
+
+    assert dataset.samples == ()
+    assert [(row.match_id, row.reason) for row in dataset.manifest.excluded] == [
+        (1, "result_observation_missing"),
+        (2, "result_observation_missing"),
+        (3, "result_observation_not_value"),
+    ]
+
+
+def test_future_result_revision_does_not_change_an_as_of_training_manifest() -> None:
+    cutoff = datetime.fromisoformat("2026-01-05T00:00:00")
+    candidate_without_observation = _candidate(
+        1,
+        kickoff="2026-01-01T20:00:00",
+        home_goals=9,
+        away_goals=9,
+        match_status="scheduled",
+    )
+    candidate_with_future_observation = replace(
+        candidate_without_observation,
+        match_status="settled",
+        label_observations=(
+            _result_observation(
+                91,
+                1091,
+                published_local="2026-01-06T00:00:00",
+                home_goals=1,
+                away_goals=0,
+            ),
+        ),
+    )
+
+    without_future = build_training_dataset(
+        [candidate_without_observation], min_matches=1, cutoff_at=cutoff
+    )
+    with_future = build_training_dataset(
+        [candidate_with_future_observation], min_matches=1, cutoff_at=cutoff
+    )
+
+    assert without_future.manifest.sha256 == with_future.manifest.sha256
+    assert with_future.manifest.excluded[0].reason == "result_observation_missing"
+    assert with_future.manifest.excluded[0].result_observation_id is None
+    assert with_future.manifest.excluded[0].result_published_at is None
+    assert with_future.manifest.excluded[0].result_first_acquired_at is None
+    assert with_future.manifest.excluded[0].result_available_at is None
 
 
 def test_database_loader_applies_cutoff_before_materializing_rows() -> None:
@@ -101,6 +278,18 @@ def test_database_loader_applies_cutoff_before_materializing_rows() -> None:
             1,
             0,
             "settled",
+            [
+                {
+                    "revision_id": 81,
+                    "result_id": 1001,
+                    "fact_status": "value",
+                    "home_goals": 1,
+                    "away_goals": 0,
+                    "published_at": datetime(2026, 1, 2, 12, tzinfo=UTC),
+                    "first_acquired_at": datetime(2026, 1, 2, 12, 5, tzinfo=UTC),
+                    "available_at": datetime(2026, 1, 2, 12, 10, tzinfo=UTC),
+                }
+            ],
         )
     ]
 
@@ -108,6 +297,7 @@ def test_database_loader_applies_cutoff_before_materializing_rows() -> None:
 
     query, params = cur.execute.call_args.args
     assert "WHERE m.kickoff_time < %s" in " ".join(query.split())
+    assert "observation_streams" in query
     assert params == (cutoff,)
     assert dataset.manifest.cutoff_at == "2026-01-05T00:00:00.000000"
     assert [sample.match_id for sample in dataset.samples] == [1]

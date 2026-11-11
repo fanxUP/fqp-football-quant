@@ -1,18 +1,19 @@
 {
   "schema_version": 4,
-  "current_task": "ODDS-MULTIBOOK-REFERENCE-20261111",
+  "current_task": "P108-05A-P114-POINT-IN-TIME-LABELS-20261111",
   "tasks": {
-    "ODDS-MULTIBOOK-REFERENCE-20261111": {
-      "title": "Show the eight archived bookmaker brands below China Sports Lottery in odds movement",
-      "acceptance_id": "A-ODDS-MULTIBOOK",
+    "P108-05A-P114-POINT-IN-TIME-LABELS-20261111": {
+      "title": "Persist player shadow receipts and point-in-time official result labels",
+      "acceptance_id": "A-P10805A-P114-LOCAL",
       "depends_on": [],
       "kind": "code_release",
-      "status": "DONE",
+      "status": "IN_PROGRESS",
       "definition_of_done": [
-        "Read published archived 1X2 quotes only for uniquely linked official matches, with bounded parameterized SQL and no writes.",
-        "Show China Sports Lottery first, followed by the eight requested brands in the fixed order; preserve missing-data placeholders.",
-        "Keep third-party 1X2 references isolated to the SPF play tab.",
-        "Pass scoped frontend/backend regressions and static/build checks, independent review, exact-head GitHub CI, and server release smoke."
+        "Player candidate receipts remain withheld and cannot change official probabilities.",
+        "Strict training and backtest labels require source observations and commit-visible cutoff receipts; historical timestamps are not fabricated.",
+        "Scoped fixed-sample and isolated PostgreSQL tests, static checks, independent review, and exact-head GitHub CI pass.",
+        "Release follows ops/server/deploy.sh and verifies server health and protected read-only smoke.",
+        "Real P108/A108, P111/A111, P114/A114, and P115/A115 outcomes remain explicitly separate from local engineering acceptance."
       ]
     }
   }

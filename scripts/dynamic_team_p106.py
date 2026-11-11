@@ -173,6 +173,21 @@ def _naive_datetime(value: Any, field: str) -> datetime:
     return parsed
 
 
+def _aware_datetime(value: Any, field: str) -> datetime:
+    if isinstance(value, str):
+        try:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise ValueError(f"{field} must be an ISO timestamp") from exc
+    elif isinstance(value, datetime):
+        parsed = value
+    else:
+        raise ValueError(f"{field} must be an aware ISO timestamp")
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise ValueError(f"{field} must include a timezone")
+    return parsed.astimezone(UTC)
+
+
 def _datetime_text(value: datetime) -> str:
     return value.isoformat(timespec="microseconds")
 
@@ -217,7 +232,7 @@ def _validate_parent_manifest(
         if row.get("ordinal") != ordinal or type(row.get("ordinal")) is not int:
             raise ValueError("parent manifest ordinals must be contiguous and ordered")
         _positive_int(row.get("result_id"), "parent result_id")
-        if row.get("label_source") != "official_results.full_home_goals/full_away_goals":
+        if row.get("label_source") != "source_observation:sporttery/results/full_time_score":
             raise ValueError(f"parent match {match_id} uses an unsupported result label")
         home_id = _positive_int(row.get("home_team_id"), "parent home_team_id")
         away_id = _positive_int(row.get("away_team_id"), "parent away_team_id")
@@ -231,7 +246,24 @@ def _validate_parent_manifest(
         published = _naive_datetime(
             row.get("official_publish_time"), "parent official_publish_time"
         )
-        if kickoff >= cutoff or published < kickoff or published > cutoff:
+        result_published_at = _aware_datetime(
+            row.get("result_published_at"), "parent result_published_at"
+        )
+        first_acquired_at = _aware_datetime(
+            row.get("result_first_acquired_at"), "parent result_first_acquired_at"
+        )
+        available_at = _aware_datetime(row.get("result_available_at"), "parent result_available_at")
+        cutoff_utc = cutoff.replace(tzinfo=_OFFICIAL_TIMEZONE).astimezone(UTC)
+        if (
+            kickoff >= cutoff
+            or published < kickoff
+            or published >= cutoff
+            or result_published_at >= cutoff_utc
+            or first_acquired_at >= cutoff_utc
+            or available_at >= cutoff_utc
+            or available_at < first_acquired_at
+            or available_at < result_published_at
+        ):
             raise ValueError(f"parent match {match_id} violates the P106 cutoff")
         checked_included.append(row)
     ordered = sorted(
@@ -401,6 +433,11 @@ def project_p106_manifest_to_season(
                     "away_team_id": row["away_team_id"],
                     "home_goals": row["home_goals"],
                     "away_goals": row["away_goals"],
+                    "result_observation_id": row["result_observation_id"],
+                    "result_fact_status": "value",
+                    "result_published_at": row["result_published_at"],
+                    "result_first_acquired_at": row["result_first_acquired_at"],
+                    "result_available_at": row["result_available_at"],
                     "match_status": "settled",
                     "reason": reason,
                 }
