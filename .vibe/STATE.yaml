@@ -9,7 +9,7 @@
   },
   "blocked_reason": null,
   "mode": "STRICT",
-  "environment": "Local fixed-sample and isolated loopback PostgreSQL 16 verification; migration 139 was applied and rolled back only in a one-time isolated test database. No production database or NAS SQLite access. Current main worktree is dirty at HEAD a09a702b7928cfa336f63fdfd55fdcadfdbeb298 with the CI format-only correction pending commit; exact-head GitHub CI and guarded server release remain pending.",
+  "environment": "Local fixed-sample and isolated loopback PostgreSQL 16 verification; migration 139 was applied and rolled back only in a one-time isolated test database. No production database or NAS SQLite access. Current main worktree is dirty at HEAD 8b425c45307fe57f663ea610fe2f4ab128c9d4c6 with a one-assertion regression-test correction and scope metadata pending commit. Exact-head CI on this revision failed one stale expectation; the focused correction passes locally and replacement CI is pending. Guarded server release remains pending.",
   "last_transition": {
     "from": "VERIFYING",
     "to": "REVIEWING",

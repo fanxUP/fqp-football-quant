@@ -4,7 +4,7 @@
 - 当前格式修正树指纹：`cc4db7df396ae2fa1a3ffc2c7e1840d5eae0854184454a3a218a5a327230625f`。
 - 当前树回归 380 passed：P105 PostgreSQL 93、P106/P111/P114 固定样本 183、P111 PostgreSQL 集成 1、P104/P114 observation PostgreSQL 50、本地运行时 53。
 - 全仓库 Ruff check/format 检查通过；training manifest、动态球队、回测四模块 mypy，定向编译和 diff 检查通过。CI 指出的 73 个未格式化文件已修正。
-- V4 范围与变更预算通过：当前检查为 27/96 文件、4/4 新文件、0 新依赖、2/2 SQL 迁移文件。
+- V4 范围与变更预算通过：当前检查为 28/96 文件、4/4 新文件、0 新依赖、2/2 SQL 迁移文件。
 - 迁移 139 仅在一次性 PostgreSQL 16 隔离库演练；生产数据库没有访问，服务器没有执行迁移。
 - 当前精确工作树的独立只读代码审查通过：JSONB 回执映射已正规化，固定窗口结果/来源回执缺失时失败关闭；未发现 blocker、major 或 minor。
 - `a09a702` 的 exact-head CI 已运行但在 Ruff format check 失败，后续检查未启动；格式修正后的 exact-head CI 尚待提交触发。当前工作区仍有格式修正未提交，不能宣称发布就绪。

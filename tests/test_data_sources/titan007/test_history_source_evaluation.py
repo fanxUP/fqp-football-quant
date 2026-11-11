@@ -240,7 +240,9 @@ def test_real_fits_have_disjoint_chronological_training_and_paired_baselines():
             assert row["evidence_status"] == "source_only"
             assert row["source_published_at"] is None
             assert sum(row["model_probabilities"].values()) == pytest.approx(1)
-    assert result["final_holdout"]["final_holdout"] is True
+    # The rolling latest-week block is diagnostic; only an explicitly
+    # predeclared absolute window is a formal final holdout.
+    assert result["final_holdout"]["final_holdout"] is False
     assert result["usage"]["point_in_time_replay_verified"] is False
     assert result["usage"]["production_ready"] is False
     assert result["market_comparison"]["status"] == "not_evaluated"

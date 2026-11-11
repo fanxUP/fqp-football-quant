@@ -10,15 +10,16 @@
         "FQP_P106_TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55492/fqp_p106_test_provenance pytest -q tests/test_computation/test_prediction_run_postgres.py::test_p111_shadow_uses_p106_run_group_replay_and_research_storage (isolated loopback PostgreSQL 16; 1 passed)",
         "pytest -q tests/test_computation/test_observation_postgres.py (dedicated loopback PostgreSQL 16 fixture; 50 passed)",
         "pytest -q tests/test_local/test_native_database_runtime.py tests/test_local/test_all_local_runtime.py (53 passed)",
-        "ruff check .; ruff format --check . (704 files already formatted); mypy scripts/training_manifest.py scripts/dynamic_team_p106.py scripts/dynamic_team_challenger.py scripts/backtest_engine.py; targeted compileall; V4 scope/budget; git diff --check"
+        "ruff check .; ruff format --check . (704 files already formatted); mypy scripts/training_manifest.py scripts/dynamic_team_p106.py scripts/dynamic_team_challenger.py scripts/backtest_engine.py; targeted compileall; V4 scope/budget; git diff --check",
+        ".venv/bin/pytest -q tests/test_data_sources/titan007/test_history_source_evaluation.py::test_real_fits_have_disjoint_chronological_training_and_paired_baselines (1 passed after correcting the rolling-window assertion)"
       ],
       "exit_code": 0,
-      "summary": "Current-tree rerun: P105 recovery/forecast PostgreSQL 93 passed; P106/P111/P114 fixed-sample 183 passed; P111 isolated PostgreSQL integration 1 passed; P104/P114 observation PostgreSQL 50 passed; local runtime 53 passed. Total 380 passed, 0 failed, 0 skipped. This includes JSONB mapping + ISO timestamp through load_research_matches and predeclared final-window evaluation.",
+      "summary": "The scoped implementation regressions recorded 380 passed, 0 failed, 0 skipped; after the behavior-neutral formatter commit, the CI-discovered stale rolling-window assertion was reproduced and corrected, and its focused test passed 1/1. No implementation logic changed in that correction. The exact-head CI that found it ran 4,061 passed, 1 failed, 32 skipped; replacement CI is pending.",
       "environment": "Local fixed samples and dedicated loopback PostgreSQL 16 test fixtures. No production database, paid API, or NAS Titan SQLite was accessed.",
-      "revision": "a09a702b7928cfa336f63fdfd55fdcadfdbeb298",
+      "revision": "8b425c45307fe57f663ea610fe2f4ab128c9d4c6",
       "dirty_tree": true,
-      "tree_fingerprint": "cc4db7df396ae2fa1a3ffc2c7e1840d5eae0854184454a3a218a5a327230625f",
-      "verified_at": "2026-11-11T19:39:03+08:00"
+      "tree_fingerprint": "4cf8dd8358fbdae4d00c8a0fec87b6b56e41355f43a81112afb58eed90072813",
+      "verified_at": "2026-11-11T20:10:54+08:00"
     },
     "A-P105-MIGRATION-139": {
       "status": "PASS_ISOLATED",
@@ -43,12 +44,25 @@
         "V4 scope check; V4 budget check"
       ],
       "exit_code": 0,
-      "summary": "Whole-repository Ruff lint and format checks passed; mypy passed for training manifest, dynamic-team candidate, and backtest modules; targeted compileall and git diff --check passed. Latest V4 scope check reported 27 changed business files within the 96-file budget; budget passed with 4/4 new files, 0/0 dependencies, and 2/2 migration files.",
+      "summary": "Whole-repository Ruff lint and format checks passed; targeted Ruff check/format for the corrected test passed; mypy and targeted compile checks passed. Latest V4 scope check reported 28 changed business files within the 96-file budget; budget passed with 4/4 new files, 0/0 dependencies, and 2/2 migration files.",
       "environment": "Local checkout on main; V4 baseline is b175cd2e09db12d7d6feed506d9479550adae7ec.",
-      "revision": "a09a702b7928cfa336f63fdfd55fdcadfdbeb298",
+      "revision": "8b425c45307fe57f663ea610fe2f4ab128c9d4c6",
       "dirty_tree": true,
-      "tree_fingerprint": "cc4db7df396ae2fa1a3ffc2c7e1840d5eae0854184454a3a218a5a327230625f",
-      "verified_at": "2026-11-11T19:39:03+08:00"
+      "tree_fingerprint": "4cf8dd8358fbdae4d00c8a0fec87b6b56e41355f43a81112afb58eed90072813",
+      "verified_at": "2026-11-11T20:10:54+08:00"
+    },
+    "A-CI-ROLLING-WINDOW-ASSERTION": {
+      "status": "PASS",
+      "command": [
+        ".venv/bin/pytest -q tests/test_data_sources/titan007/test_history_source_evaluation.py::test_real_fits_have_disjoint_chronological_training_and_paired_baselines"
+      ],
+      "exit_code": 0,
+      "summary": "Reproduced the CI failure before the patch. The evaluator sets final_holdout only when an absolute final window is explicitly predeclared; the old test expected True for the implicit rolling latest-week diagnostic. Updated the assertion to expect False and documented the policy. Focused rerun passed 1 test.",
+      "environment": "Local Python 3.14.6, fixed sample only; no database or provider access.",
+      "revision": "8b425c45307fe57f663ea610fe2f4ab128c9d4c6",
+      "dirty_tree": true,
+      "tree_fingerprint": "4cf8dd8358fbdae4d00c8a0fec87b6b56e41355f43a81112afb58eed90072813",
+      "verified_at": "2026-11-11T20:10:54+08:00"
     }
   },
   "reviews": {
@@ -81,11 +95,11 @@
     "status": "pending",
     "last_known_run": {
       "status": "failed",
-      "run_id": 43012194226,
-      "head_sha": "a09a702b7928cfa336f63fdfd55fdcadfdbeb298",
-      "url": "https://github.com/fanxUP/fqp-football-quant/actions/runs/43012194226"
+      "run_id": 43015307448,
+      "head_sha": "8b425c45307fe57f663ea610fe2f4ab128c9d4c6",
+      "url": "https://github.com/fanxUP/fqp-football-quant/actions/runs/43015307448"
     },
-    "note": "Exact-head CI on a09a702 failed only at Ruff format check (73 changed Python files); lint passed and the test job did not start. Those files are now formatted and all 380 scoped local regressions plus whole-repository Ruff checks pass. The follow-up commit exact-head CI is pending."
+    "note": "The 8b425c4 exact-head run passed lint, format, type checking, model-bridge and frontend gates; test reported 4061 passed, 1 failed, 32 skipped. The only failure was a stale assertion that expected an implicit rolling latest-week window to be a formal final holdout. The test assertion was corrected and passed locally; a new exact-head CI run is pending the correction commit."
   },
   "production": {
     "status": "NOT_ACCESSED",
@@ -95,9 +109,9 @@
   },
   "quality_gate": {
     "status": "PENDING",
-    "checked_at": "2026-11-11T19:39:03+08:00",
+    "checked_at": "2026-11-11T20:10:54+08:00",
     "failures": [
-      "Follow-up format-fix commit has no exact-head GitHub CI result yet.",
+      "The correction to the stale rolling-window assertion has not yet received exact-head GitHub CI.",
       "Server release and post-release read-only smoke remain pending."
     ]
   }
