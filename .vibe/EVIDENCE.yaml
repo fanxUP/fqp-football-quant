@@ -10,16 +10,15 @@
         "FQP_P106_TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55492/fqp_p106_test_provenance pytest -q tests/test_computation/test_prediction_run_postgres.py::test_p111_shadow_uses_p106_run_group_replay_and_research_storage (isolated loopback PostgreSQL 16; 1 passed)",
         "pytest -q tests/test_computation/test_observation_postgres.py (dedicated loopback PostgreSQL 16 fixture; 50 passed)",
         "pytest -q tests/test_local/test_native_database_runtime.py tests/test_local/test_all_local_runtime.py (53 passed)",
-        "ruff check .; ruff format --check . (704 files already formatted); mypy scripts/training_manifest.py scripts/dynamic_team_p106.py scripts/dynamic_team_challenger.py scripts/backtest_engine.py; targeted compileall; V4 scope/budget; git diff --check",
-        ".venv/bin/pytest -q tests/test_data_sources/titan007/test_history_source_evaluation.py::test_real_fits_have_disjoint_chronological_training_and_paired_baselines (1 passed after correcting the rolling-window assertion)"
+        "ruff check .; ruff format --check . (704 files already formatted); mypy scripts/training_manifest.py scripts/dynamic_team_p106.py scripts/dynamic_team_challenger.py scripts/backtest_engine.py; targeted compileall; V4 scope/budget; git diff --check"
       ],
       "exit_code": 0,
-      "summary": "The scoped implementation regressions recorded 380 passed, 0 failed, 0 skipped; after the behavior-neutral formatter commit, the CI-discovered stale rolling-window assertion was reproduced and corrected, and its focused test passed 1/1. No implementation logic changed in that correction. The exact-head CI that found it ran 4,061 passed, 1 failed, 32 skipped; replacement CI is pending.",
+      "summary": "P105 recovery/forecast PostgreSQL 93 passed; P106/P111/P114 fixed-sample 183 passed; P111 isolated PostgreSQL integration 1 passed; P104/P114 observation PostgreSQL 50 passed; local runtime 53 passed. Total 380 passed, 0 failed, 0 skipped on the formatted implementation tree before the later one-line test expectation correction. The corrected case is recorded separately and the full 5798c06 GitHub CI passed.",
       "environment": "Local fixed samples and dedicated loopback PostgreSQL 16 test fixtures. No production database, paid API, or NAS Titan SQLite was accessed.",
-      "revision": "8b425c45307fe57f663ea610fe2f4ab128c9d4c6",
+      "revision": "a09a702b7928cfa336f63fdfd55fdcadfdbeb298",
       "dirty_tree": true,
-      "tree_fingerprint": "4cf8dd8358fbdae4d00c8a0fec87b6b56e41355f43a81112afb58eed90072813",
-      "verified_at": "2026-11-11T20:10:54+08:00"
+      "tree_fingerprint": "cc4db7df396ae2fa1a3ffc2c7e1840d5eae0854184454a3a218a5a327230625f",
+      "verified_at": "2026-11-11T19:39:03+08:00"
     },
     "A-P105-MIGRATION-139": {
       "status": "PASS_ISOLATED",
@@ -63,6 +62,19 @@
       "dirty_tree": true,
       "tree_fingerprint": "4cf8dd8358fbdae4d00c8a0fec87b6b56e41355f43a81112afb58eed90072813",
       "verified_at": "2026-11-11T20:10:54+08:00"
+    },
+    "A-P10805A-P114-CI": {
+      "status": "PASS",
+      "command": [
+        "GitHub Actions CI run 43018320775; verify exact head, both required jobs and test summary"
+      ],
+      "exit_code": 0,
+      "summary": "Exact code head 5798c06 passed lint-and-typecheck and test jobs. Full pytest: 4062 passed, 32 skipped, 43 warnings in 338.01s; coverage 70.73% above the 50% threshold. The fixed rolling-window semantics case is included.",
+      "environment": "GitHub Actions, Python 3.14, PostgreSQL 16 and Redis CI services.",
+      "revision": "5798c06c9cd931abdd73ca24190aebc3a5105c07",
+      "dirty_tree": false,
+      "tree_fingerprint": "4cf8dd8358fbdae4d00c8a0fec87b6b56e41355f43a81112afb58eed90072813",
+      "verified_at": "2026-11-11T20:22:07+08:00"
     }
   },
   "reviews": {
@@ -92,14 +104,14 @@
     "note": "Isolated runner apply, checksum, validity, read-only re-plan, and down-file checks passed. Production migration is not authorized or applied in this local verification."
   },
   "external_ci": {
-    "status": "pending",
+    "status": "passed",
     "last_known_run": {
-      "status": "failed",
-      "run_id": 43015307448,
-      "head_sha": "8b425c45307fe57f663ea610fe2f4ab128c9d4c6",
-      "url": "https://github.com/fanxUP/fqp-football-quant/actions/runs/43015307448"
+      "status": "success",
+      "run_id": 43018320775,
+      "head_sha": "5798c06c9cd931abdd73ca24190aebc3a5105c07",
+      "url": "https://github.com/fanxUP/fqp-football-quant/actions/runs/43018320775"
     },
-    "note": "The 8b425c4 exact-head run passed lint, format, type checking, model-bridge and frontend gates; test reported 4061 passed, 1 failed, 32 skipped. The only failure was a stale assertion that expected an implicit rolling latest-week window to be a formal final holdout. The test assertion was corrected and passed locally; a new exact-head CI run is pending the correction commit."
+    "note": "The exact code head 5798c06 passed both CI jobs. The prior run exposed one stale assertion about implicit rolling windows; the test was corrected to match the policy that only explicitly predeclared absolute windows are formal holdouts."
   },
   "production": {
     "status": "NOT_ACCESSED",
@@ -109,10 +121,10 @@
   },
   "quality_gate": {
     "status": "PENDING",
-    "checked_at": "2026-11-11T20:10:54+08:00",
+    "checked_at": "2026-11-11T20:26:41+08:00",
     "failures": [
-      "The correction to the stale rolling-window assertion has not yet received exact-head GitHub CI.",
-      "Server release and post-release read-only smoke remain pending."
+      "Production release and protected read-only smoke remain pending.",
+      "Migration 139 is not in the deploy script no-backup allowlist; the ordinary release path requires current verified backup evidence."
     ]
   }
 }
