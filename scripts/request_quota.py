@@ -313,7 +313,7 @@ class RedisQuotaLedger:
             result = json.loads(raw)
             if not isinstance(result, dict) or type(result.get("ok")) is not bool:
                 raise ValueError("invalid quota response")
-        except (RedisError, TypeError, ValueError):
+        except RedisError, TypeError, ValueError:
             # URL, credentials and raw provider/Redis errors never enter outward errors.
             raise QuotaUnavailable("quota_store_unavailable") from None
         if not result["ok"]:

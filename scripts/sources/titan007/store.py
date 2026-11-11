@@ -1280,7 +1280,7 @@ def save_league(
             continue
         try:
             team_id = int(str(row[0]).strip())
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             continue
         team_rows.append(
             (
@@ -1627,7 +1627,7 @@ def save_text_live(conn: sqlite3.Connection, match_id: int, data: dict[str, Any]
 def _to_float(value):
     try:
         return float(str(value).strip())
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return None
 
 

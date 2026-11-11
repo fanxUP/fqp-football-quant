@@ -21,7 +21,7 @@ def _add_from_analysis(conn, add) -> None:
     ):
         try:
             items = json.loads(row[0] or "[]")
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             continue
         if not isinstance(items, list):
             continue

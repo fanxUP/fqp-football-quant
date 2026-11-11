@@ -333,7 +333,7 @@ def compare_methods(odds: dict[str, float]) -> dict[str, dict[str, float]]:
         pass
     try:
         methods["shin"] = shin_method(odds)
-    except (ValueError, RuntimeError):
+    except ValueError, RuntimeError:
         pass
     try:
         methods["power_0.7"] = power_method(odds, power=0.7)

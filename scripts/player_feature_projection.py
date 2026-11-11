@@ -100,7 +100,7 @@ def unavailable_player_feature_projection(batch: dict, *, as_of: datetime) -> di
     cutoff = batch.get("cutoff") if isinstance(batch, dict) else None
     try:
         _, _, kickoff_at = _target_context(batch)
-    except (TypeError, ValueError, KeyError):
+    except TypeError, ValueError, KeyError:
         kickoff_at = None
     return _projection(
         batch=batch if isinstance(batch, dict) else {},
@@ -533,7 +533,7 @@ def load_player_feature_projection(conn: Any, *, batch: dict, as_of: datetime) -
         ):
             raise ValueError("player projection requires one exact complete runtime batch")
         home_team_id, away_team_id, kickoff_at = _target_context(batch)
-    except (TypeError, ValueError, KeyError):
+    except TypeError, ValueError, KeyError:
         return _projection(
             batch=batch if isinstance(batch, dict) else {},
             cutoff=cutoff if isinstance(cutoff, ObservationCutoff) else None,
@@ -560,7 +560,7 @@ def load_player_feature_projection(conn: Any, *, batch: dict, as_of: datetime) -
     match_id = batch["match_id"]
     try:
         league_name, _, kickoff_day = _target_match(conn, match_id, kickoff_at)
-    except (TypeError, ValueError, KeyError):
+    except TypeError, ValueError, KeyError:
         missingness.add("target_match_mismatch")
         result["missingness"] = sorted(missingness)
         return result

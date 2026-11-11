@@ -55,7 +55,7 @@ def _snapshot_time(entry: dict[str, Any]) -> str | None:
 def _positive_float(value: Any) -> float | None:
     try:
         parsed = float(value)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return None
     return parsed if parsed > 0 else None
 
@@ -65,7 +65,7 @@ def _handicap(value: Any) -> float | None:
         return None
     try:
         return float(value)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return None
 
 

@@ -177,7 +177,7 @@ def _candidate(
         expires = checked + timedelta(seconds=rule["max_age_seconds"])
         if obs["valid_until"] is not None:
             expires = min(expires, _aware(obs["valid_until"]))
-    except (ValueError, KeyError, OverflowError):
+    except ValueError, KeyError, OverflowError:
         result.update(reason="invalid_timing", fact_status="unknown")
         return result
     result.update(last_success_acquired_at=checked.isoformat(), expires_at=expires.isoformat())
@@ -202,7 +202,7 @@ def _candidate(
             if rule["domain"] == "weather":
                 result["effective_at"] = _aware(obs.get("effective_at")).isoformat()
             result["value"] = _extract(obs["value"], rule, subject)
-        except (ValueError, OverflowError):
+        except ValueError, OverflowError:
             result.update(reason="invalid_field_value", fact_status="unknown")
             return result
     result.update(reason="eligible", asserted=True)

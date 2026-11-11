@@ -82,7 +82,7 @@ def _validate_fields(
         raise IdentityLinkError("matching method must be non-empty and at most 64 characters")
     try:
         score = Decimal(str(confidence))
-    except (InvalidOperation, ValueError):
+    except InvalidOperation, ValueError:
         raise IdentityLinkError("confidence must be a finite number from 0 to 1") from None
     if not score.is_finite() or score < 0 or score > 1:
         raise IdentityLinkError("confidence must be a finite number from 0 to 1")

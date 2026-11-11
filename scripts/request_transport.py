@@ -88,7 +88,7 @@ def _configured_ledger(provider: str, api_key: str) -> tuple[RedisQuotaLedger, R
             retry_on_timeout=False,
         )
         return RedisQuotaLedger(redis, policy, environment=environment), redis
-    except (KeyError, TypeError, ValueError, AttributeError):
+    except KeyError, TypeError, ValueError, AttributeError:
         raise QuotaUnavailable("quota_configuration_unavailable") from None
 
 
@@ -117,7 +117,7 @@ def _configured_reuse(
             **{k: v for k, v in reuse.items() if k not in ("enabled", "retention_verified")}
         )
         return RedisRequestReuse(client, ledger, policy, credential=api_key)
-    except (KeyError, ValueError, TypeError, AttributeError):
+    except KeyError, ValueError, TypeError, AttributeError:
         raise QuotaUnavailable("reuse_configuration_unavailable") from None
 
 
@@ -132,7 +132,7 @@ def _retry_after(headers: httpx.Headers) -> int:
         if target.tzinfo is None or origin.tzinfo is None:
             return 0
         return min(max(0, math.ceil((target - origin).total_seconds() * 1000)), 604_800_000)
-    except (ValueError, TypeError, OverflowError):
+    except ValueError, TypeError, OverflowError:
         return 0
 
 
@@ -284,7 +284,7 @@ class GovernedJsonClient:
                     load=lambda: self._send(url, headers=headers, params=params, priority=priority),
                     meta=self.last_request_meta,
                 )
-            except (ReuseUnavailable, QuotaDenied, QuotaUnavailable):
+            except ReuseUnavailable, QuotaDenied, QuotaUnavailable:
                 self.last_request_meta.update(
                     reuse_status="unavailable",
                     outcome="failed" if self.last_request_meta["attempts_sent"] else "blocked",
@@ -311,13 +311,13 @@ class GovernedJsonClient:
                 token = self._ledger.reserve(priority=priority)
                 try:
                     receipt = self._ledger.mark_sent(token)
-                except (QuotaDenied, QuotaUnavailable):
+                except QuotaDenied, QuotaUnavailable:
                     try:
                         self._ledger.cancel(token)
-                    except (QuotaDenied, QuotaUnavailable):
+                    except QuotaDenied, QuotaUnavailable:
                         pass  # Unknown consumption remains charged; never retry the send.
                     raise
-            except (QuotaDenied, QuotaUnavailable):
+            except QuotaDenied, QuotaUnavailable:
                 self.last_request_meta["outcome"] = "blocked"
                 raise
             self.total_sends += 1
@@ -363,7 +363,7 @@ class GovernedJsonClient:
                     retry_after_ms=cooldown,
                     denied=reason if reason in ("authentication_denied", "plan_denied") else None,
                 )
-            except (QuotaDenied, QuotaUnavailable):
+            except QuotaDenied, QuotaUnavailable:
                 self.last_request_meta["reason"] = "feedback_unavailable"
                 raise
             self.last_request_meta.update(remaining=daily, minute_remaining=minute)

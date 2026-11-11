@@ -59,7 +59,7 @@ def _traditional_half_score_supplement_allowlist() -> dict[tuple, dict]:
         if hashlib.sha256(raw).hexdigest() != TRADITIONAL_HALF_SCORE_SUPPLEMENT_ALLOWLIST_SHA256:
             return {}
         document = json.loads(raw)
-    except (OSError, json.JSONDecodeError):
+    except OSError, json.JSONDecodeError:
         return {}
     if (
         not isinstance(document, dict)

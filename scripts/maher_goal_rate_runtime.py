@@ -62,7 +62,7 @@ def load_trained_goal_rates(
             + float(parameters.get("league_intercept", 0.0))
         )
         training_matches = int(parameters.get("n_matches") or 0)
-    except (TypeError, ValueError, OverflowError):
+    except TypeError, ValueError, OverflowError:
         return None
     if not all(
         math.isfinite(value) and 0.05 <= value <= 8.0 for value in (home_lambda, away_lambda)

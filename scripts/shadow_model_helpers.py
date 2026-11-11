@@ -76,7 +76,7 @@ def artifact_matches_features(classifier: Any, feature_columns: tuple[str, ...])
             return False
         names = getattr(classifier, "feature_names_in_", None)
         return names is None or tuple(names) == feature_columns
-    except (AttributeError, TypeError, ValueError):
+    except AttributeError, TypeError, ValueError:
         return False
 
 
@@ -129,5 +129,5 @@ def load_shadow_probabilities(
         if not artifact_matches_features(classifier, profile.feature_columns):
             return None
         return probabilities_from_classifier(classifier, profile, model_input)
-    except (ImportError, OSError, ValueError, TypeError, EOFError, pickle.UnpicklingError):
+    except ImportError, OSError, ValueError, TypeError, EOFError, pickle.UnpicklingError:
         return None

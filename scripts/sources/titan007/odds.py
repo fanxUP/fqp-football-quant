@@ -16,14 +16,14 @@ def _f(v: Any) -> float | None:
         if s == "" or s in ("-", "封"):
             return None
         return float(s)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return None
 
 
 def _i(v: Any) -> int | None:
     try:
         return int(float(str(v).strip()))
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return None
 
 
@@ -37,7 +37,7 @@ def parse_1x2d_time(value: str) -> str | None:
         month = int(parts[1].split("-")[0])
         day = int(parts[2])
         return f"{year:04d}-{month:02d}-{day:02d} {int(parts[3]):02d}:{int(parts[4]):02d}:{int(parts[5]):02d}"
-    except (ValueError, IndexError):
+    except ValueError, IndexError:
         return None
 
 

@@ -157,7 +157,7 @@ def _number(value: Any, *, allow_bool: bool = False) -> bool:
         return allow_bool
     try:
         return isinstance(value, (int, float, Decimal)) and math.isfinite(float(value))
-    except (OverflowError, ValueError):
+    except OverflowError, ValueError:
         return False
 
 
@@ -209,7 +209,7 @@ def _input_problem(data: Any, context: PredictionContext) -> str | None:
         return "invalid_input_contract"
     try:
         at = _utc(datetime.fromisoformat(data["as_of"]))
-    except (KeyError, TypeError, ValueError, OverflowError):
+    except KeyError, TypeError, ValueError, OverflowError:
         return "invalid_input_contract"
     if at != context.decision_at:
         return "input_time_mismatch"

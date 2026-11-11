@@ -40,7 +40,7 @@ class OfficialCaptureCandidate(CaptureCandidate):
 def _same_official_fixture(match: dict[str, Any], source_id: str, kickoff: datetime) -> bool:
     try:
         source_kickoff = datetime.fromisoformat(match["kickoff_time"])
-    except (KeyError, TypeError, ValueError):
+    except KeyError, TypeError, ValueError:
         return False
     return str(match["raw_json"].get("matchId")) == source_id and source_kickoff == kickoff
 

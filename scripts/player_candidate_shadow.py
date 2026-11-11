@@ -166,7 +166,7 @@ def _receipt(
     if projection is not None:
         try:
             receipt["feature_projection_sha256"] = _sha256(projection)
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             receipt["feature_projection_sha256"] = None
     return receipt
 
@@ -208,7 +208,7 @@ def build_player_candidate_shadow(projection: dict | None) -> dict[str, Any]:
                 ):
                     raise ValueError("invalid withheld team coverage")
             _sha256(projection)
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             return _receipt(
                 input_status="withheld",
                 reason="player_projection_invalid",
@@ -223,7 +223,7 @@ def build_player_candidate_shadow(projection: dict | None) -> dict[str, Any]:
 
     try:
         _valid_ready_projection(projection)
-    except (AttributeError, KeyError, TypeError, ValueError):
+    except AttributeError, KeyError, TypeError, ValueError:
         return _receipt(
             input_status="withheld",
             reason="player_projection_invalid",

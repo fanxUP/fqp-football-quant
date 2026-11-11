@@ -127,7 +127,7 @@ def read_state() -> dict[str, Any]:
         return _read_cached(str(path), (stat.st_mtime_ns, stat.st_size, stat.st_ino))
     except FileNotFoundError:
         return {"artifact": None, "error": "解释模型尚未就绪，等待后台训练任务生成结果"}
-    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+    except OSError, ValueError, KeyError, TypeError, AttributeError:
         return {"artifact": None, "error": "解释模型工件不可用，等待后台重新训练"}
 
 

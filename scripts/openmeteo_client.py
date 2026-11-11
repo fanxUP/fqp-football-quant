@@ -207,7 +207,7 @@ class OpenMeteoClient:
         # Determine the date range
         try:
             match_dt = datetime.fromisoformat(match_time.replace("Z", "+00:00"))
-        except (ValueError, AttributeError):
+        except ValueError, AttributeError:
             match_dt = datetime.now() + timedelta(days=1)
 
         start_date = (match_dt - timedelta(days=max(past_days, 1))).strftime("%Y-%m-%d")
@@ -269,7 +269,7 @@ class OpenMeteoClient:
         """
         try:
             match_dt = datetime.fromisoformat(match_time.replace("Z", "+00:00"))
-        except (ValueError, AttributeError):
+        except ValueError, AttributeError:
             match_dt = datetime.now() - timedelta(days=7)
 
         date_str = match_dt.strftime("%Y-%m-%d")

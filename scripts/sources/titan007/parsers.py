@@ -146,7 +146,7 @@ def _int(v: Any) -> int | None:
         if s == "" or s == "-":
             return None
         return int(float(s))
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return None
 
 
@@ -156,7 +156,7 @@ def _float(v: Any) -> float | None:
         if s == "" or s == "-":
             return None
         return float(s)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return None
 
 

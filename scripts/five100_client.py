@@ -296,7 +296,7 @@ def get_match_results(
             kickoff = None
             try:
                 kickoff = datetime.strptime(f"{match_date[:4]}-{match_datetime}", "%Y-%m-%d %H:%M")
-            except (TypeError, ValueError):
+            except TypeError, ValueError:
                 pass
 
             match_id = None

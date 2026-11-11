@@ -25,7 +25,7 @@ def pool_time(value: Any) -> datetime | None:
             if dt.tzinfo is None
             else dt.astimezone(business_timezone())
         )
-    except (ValueError, TypeError, OverflowError):
+    except ValueError, TypeError, OverflowError:
         return None
 
 

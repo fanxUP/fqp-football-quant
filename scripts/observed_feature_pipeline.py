@@ -39,7 +39,7 @@ def _time(value: Any) -> datetime:
         if not isinstance(at, datetime) or at.tzinfo is None or at.utcoffset() is None:
             raise ValueError("aware time required")
         return to_utc(at)
-    except (ValueError, TypeError, OverflowError):
+    except ValueError, TypeError, OverflowError:
         raise ValueError("explicit aware time required") from None
 
 
@@ -213,7 +213,7 @@ def load_observed_feature_input(
         replayed = _features(
             conn, match_id=match_id, cutoff=batch["cutoff"], context=context, policies=policies
         )
-    except (KeyError, TypeError):
+    except KeyError, TypeError:
         raise ValueError("missing pilot derivation context/policy") from None
     if _canonical(replayed, MAX_BATCH_BYTES) != _canonical(fields, MAX_BATCH_BYTES):
         raise ValueError("batch does not match named observation derivation")

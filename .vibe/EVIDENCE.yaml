@@ -10,15 +10,15 @@
         "FQP_P106_TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55492/fqp_p106_test_provenance pytest -q tests/test_computation/test_prediction_run_postgres.py::test_p111_shadow_uses_p106_run_group_replay_and_research_storage (isolated loopback PostgreSQL 16; 1 passed)",
         "pytest -q tests/test_computation/test_observation_postgres.py (dedicated loopback PostgreSQL 16 fixture; 50 passed)",
         "pytest -q tests/test_local/test_native_database_runtime.py tests/test_local/test_all_local_runtime.py (53 passed)",
-        "Ruff check on all 93 changed Python files; Ruff format check on 3 edited Python files; mypy on training_manifest.py and backtest_engine.py; targeted compileall; V4 scope/budget; git diff --check"
+        "ruff check .; ruff format --check . (704 files already formatted); mypy scripts/training_manifest.py scripts/dynamic_team_p106.py scripts/dynamic_team_challenger.py scripts/backtest_engine.py; targeted compileall; V4 scope/budget; git diff --check"
       ],
       "exit_code": 0,
       "summary": "Current-tree rerun: P105 recovery/forecast PostgreSQL 93 passed; P106/P111/P114 fixed-sample 183 passed; P111 isolated PostgreSQL integration 1 passed; P104/P114 observation PostgreSQL 50 passed; local runtime 53 passed. Total 380 passed, 0 failed, 0 skipped. This includes JSONB mapping + ISO timestamp through load_research_matches and predeclared final-window evaluation.",
       "environment": "Local fixed samples and dedicated loopback PostgreSQL 16 test fixtures. No production database, paid API, or NAS Titan SQLite was accessed.",
-      "revision": "037fdbf971924bfc57d9a16c327f4fd2bf2bead3",
+      "revision": "a09a702b7928cfa336f63fdfd55fdcadfdbeb298",
       "dirty_tree": true,
-      "tree_fingerprint": "e289410aedde3b14abfd25b0faf17b0b45b079f4bf321dfac4514e9d301473a6",
-      "verified_at": "2026-11-11T19:25:02+08:00"
+      "tree_fingerprint": "cc4db7df396ae2fa1a3ffc2c7e1840d5eae0854184454a3a218a5a327230625f",
+      "verified_at": "2026-11-11T19:39:03+08:00"
     },
     "A-P105-MIGRATION-139": {
       "status": "PASS_ISOLATED",
@@ -36,19 +36,19 @@
     "A-P10805A-P114-STATIC": {
       "status": "PASS",
       "command": [
-        "ruff check on all 93 changed Python files",
-        "ruff format --check scripts/backtest_engine.py scripts/training_manifest.py tests/test_scripts/test_backtest_engine.py",
-        "mypy scripts/training_manifest.py scripts/backtest_engine.py",
+        "ruff check .",
+        "ruff format --check .",
+        "mypy scripts/training_manifest.py scripts/dynamic_team_p106.py scripts/dynamic_team_challenger.py scripts/backtest_engine.py",
         "compileall on scripts/backtest_engine.py scripts/training_manifest.py tests/test_scripts/test_backtest_engine.py; git diff --check",
         "V4 scope check; V4 budget check"
       ],
       "exit_code": 0,
-      "summary": "Ruff passed across 93 changed Python files; the 3 files modified in this follow-up pass Ruff format --check; mypy passed for scripts/training_manifest.py and scripts/backtest_engine.py; targeted compileall and git diff --check passed. V4 scope passed at 96/96 changed files; corrected budget passed at 96/96 files, 4/4 new files, 0/0 dependency additions, and 2/2 SQL migration files.",
+      "summary": "Whole-repository Ruff lint and format checks passed; mypy passed for training manifest, dynamic-team candidate, and backtest modules; targeted compileall and git diff --check passed. Latest V4 scope check reported 27 changed business files within the 96-file budget; budget passed with 4/4 new files, 0/0 dependencies, and 2/2 migration files.",
       "environment": "Local checkout on main; V4 baseline is b175cd2e09db12d7d6feed506d9479550adae7ec.",
-      "revision": "037fdbf971924bfc57d9a16c327f4fd2bf2bead3",
+      "revision": "a09a702b7928cfa336f63fdfd55fdcadfdbeb298",
       "dirty_tree": true,
-      "tree_fingerprint": "e289410aedde3b14abfd25b0faf17b0b45b079f4bf321dfac4514e9d301473a6",
-      "verified_at": "2026-11-11T19:25:02+08:00"
+      "tree_fingerprint": "cc4db7df396ae2fa1a3ffc2c7e1840d5eae0854184454a3a218a5a327230625f",
+      "verified_at": "2026-11-11T19:39:03+08:00"
     }
   },
   "reviews": {
@@ -80,12 +80,12 @@
   "external_ci": {
     "status": "pending",
     "last_known_run": {
-      "status": "passed",
-      "run_id": 42949441719,
-      "head_sha": "7aeb1fe37bb3eb29a3d990b919833e4bb275cc4c",
-      "url": "https://github.com/fanxUP/fqp-football-quant/actions/runs/42949441719"
+      "status": "failed",
+      "run_id": 43012194226,
+      "head_sha": "a09a702b7928cfa336f63fdfd55fdcadfdbeb298",
+      "url": "https://github.com/fanxUP/fqp-football-quant/actions/runs/43012194226"
     },
-    "note": "The last successful CI run covers an older commit and does not validate the current dirty worktree. Exact-head CI is pending."
+    "note": "Exact-head CI on a09a702 failed only at Ruff format check (73 changed Python files); lint passed and the test job did not start. Those files are now formatted and all 380 scoped local regressions plus whole-repository Ruff checks pass. The follow-up commit exact-head CI is pending."
   },
   "production": {
     "status": "NOT_ACCESSED",
@@ -95,9 +95,9 @@
   },
   "quality_gate": {
     "status": "PENDING",
-    "checked_at": "2026-11-11T19:25:02+08:00",
+    "checked_at": "2026-11-11T19:39:03+08:00",
     "failures": [
-      "Current dirty worktree has no exact-head GitHub CI result.",
+      "Follow-up format-fix commit has no exact-head GitHub CI result yet.",
       "Server release and post-release read-only smoke remain pending."
     ]
   }

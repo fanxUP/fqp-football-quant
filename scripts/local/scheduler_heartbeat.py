@@ -37,7 +37,7 @@ def clear_scheduler_pid(expected_pid: int) -> bool:
     """Remove the PID file only when it still belongs to this scheduler."""
     try:
         current_pid = int(PID_PATH.read_text(encoding="utf-8").strip())
-    except (OSError, ValueError):
+    except OSError, ValueError:
         return False
     if current_pid != expected_pid:
         return False
@@ -71,7 +71,7 @@ def is_scheduler_alive(max_age_minutes: int = 5) -> bool:
         now = datetime.now(heartbeat.tzinfo) if heartbeat.tzinfo else datetime.now()
         age = now - heartbeat
         return timedelta(0) <= age <= timedelta(minutes=max_age_minutes)
-    except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError):
+    except OSError, KeyError, TypeError, ValueError, json.JSONDecodeError:
         return False
 
 
@@ -83,13 +83,13 @@ def get_scheduler_status(max_age_minutes: int = 5) -> dict[str, object | None]:
         try:
             payload = json.loads(HEARTBEAT_PATH.read_text(encoding="utf-8"))
             heartbeat_at = payload.get("heartbeat_at")
-        except (OSError, TypeError, json.JSONDecodeError):
+        except OSError, TypeError, json.JSONDecodeError:
             pass
     shared_heartbeat = _uses_shared_heartbeat()
     if PID_PATH.exists() and not shared_heartbeat:
         try:
             pid = int(PID_PATH.read_text(encoding="utf-8").strip())
-        except (OSError, TypeError, ValueError):
+        except OSError, TypeError, ValueError:
             pass
     pid_alive = False
     if pid is not None:

@@ -55,7 +55,7 @@ def _get_redis_client() -> Redis | None:
                     socket_connect_timeout=0.25,
                     socket_timeout=0.25,
                 )
-            except (RedisError, ValueError):
+            except RedisError, ValueError:
                 _logger.debug("Model history Redis configuration is unavailable", exc_info=True)
     return _redis_client
 
@@ -74,7 +74,7 @@ def _read_cached_payload(client: Redis, key: str) -> tuple[dict[str, Any], float
         if not isinstance(payload, dict):
             return None
         return payload, max(0.0, time.time() - cached_at)
-    except (RedisError, KeyError, TypeError, ValueError):
+    except RedisError, KeyError, TypeError, ValueError:
         _logger.debug("Model history cache read failed", exc_info=True)
         return None
 
@@ -111,7 +111,7 @@ def _write_cached_payload(client: Redis | None, key: str, payload: dict[str, Any
                 allow_nan=False,
             ),
         )
-    except (RedisError, TypeError, ValueError):
+    except RedisError, TypeError, ValueError:
         _logger.debug("Model history cache write failed", exc_info=True)
 
 

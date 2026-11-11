@@ -38,7 +38,7 @@ def parse_jc_bulletin(row: dict[str, Any]) -> tuple[datetime, dict] | None:
         return None
     try:
         published = datetime.fromisoformat(row["bulletinStarttime"]).replace(tzinfo=BEIJING)
-    except (KeyError, TypeError, ValueError):
+    except KeyError, TypeError, ValueError:
         return None
     title = str(row.get("bulletinSubject") or "")
     body = BeautifulSoup(str(row.get("bulletinContent") or ""), "html.parser").get_text(" ")

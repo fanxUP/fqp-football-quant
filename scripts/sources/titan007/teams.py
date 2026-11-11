@@ -10,7 +10,7 @@ from . import jsfmt
 def _int(v: Any) -> int | None:
     try:
         return int(float(str(v).strip()))
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return None
 
 

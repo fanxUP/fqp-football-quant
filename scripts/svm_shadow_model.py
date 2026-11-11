@@ -84,7 +84,7 @@ def profile_from_parameters(parameters: dict[str, Any] | None) -> SvmShadowProfi
             int(parameters["validation_matches"]),
             float(parameters["validation_log_loss"]),
         )
-    except (KeyError, TypeError, ValueError):
+    except KeyError, TypeError, ValueError:
         return None
     if not valid_shadow_profile(
         profile.artifact_path,
@@ -117,7 +117,7 @@ def probabilities_from_classifier(
     for column in profile.feature_columns:
         try:
             values.append(float(feature_snapshot[column]))
-        except (KeyError, TypeError, ValueError):
+        except KeyError, TypeError, ValueError:
             values.append(math.nan)
     probabilities, classes = (
         classifier.predict_proba([values]),

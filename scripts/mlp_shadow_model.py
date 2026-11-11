@@ -82,7 +82,7 @@ def profile_from_parameters(parameters: dict[str, Any] | None) -> MlpShadowProfi
             int(parameters["validation_matches"]),
             float(parameters["validation_log_loss"]),
         )
-    except (KeyError, TypeError, ValueError):
+    except KeyError, TypeError, ValueError:
         return None
     if not valid_shadow_profile(
         profile.artifact_path,

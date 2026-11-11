@@ -35,7 +35,7 @@ def numeric_feature_value(value: Any) -> float:
     """Preserve real zero/false; unavailable or unusable numeric inputs stay missing."""
     try:
         numeric = float(value) if value is not None else math.nan
-    except (TypeError, ValueError, OverflowError):
+    except TypeError, ValueError, OverflowError:
         return math.nan
     return numeric if math.isfinite(numeric) else math.nan
 

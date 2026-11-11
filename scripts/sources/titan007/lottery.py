@@ -18,14 +18,14 @@ REFERER = "https://www.lottery.gov.cn/jc/zqsgkj/"
 def _float(value) -> float | None:
     try:
         return float(str(value).strip())
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return None
 
 
 def _int(value) -> int | None:
     try:
         return int(str(value).strip())
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return None
 
 

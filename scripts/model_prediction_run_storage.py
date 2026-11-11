@@ -164,7 +164,7 @@ def build_prediction_group_payload(
             else:
                 try:
                     matches_group = int(prediction.get(key, -1)) == int(metadata[key])
-                except (TypeError, ValueError):
+                except TypeError, ValueError:
                     matches_group = False
             if not matches_group:
                 raise ValueError(f"prediction {key} differs from group metadata")

@@ -115,7 +115,7 @@ def compute_rest_days(
         current = datetime.fromisoformat(match_kickoff.replace("Z", "+00:00"))
         delta = (current - prev_kickoff).days
         return delta
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         return None
 
 
