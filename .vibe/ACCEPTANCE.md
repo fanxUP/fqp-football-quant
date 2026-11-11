@@ -7,7 +7,8 @@
 - [x] 固定样本及隔离 PostgreSQL 16 相关回归：204 passed、0 failed、0 skipped；包含重签名清单对开球前来源时间和双时间字段不一致的拒绝用例。
 - [x] Ruff、格式、3个源码模块 mypy、compileall、git diff --check、V4 scope/budget 通过。
 - [x] 独立复审最初发现的 1 项 P106/P111 来源时间校验 MAJOR 已修复；同一只读审查者复核通过。
-- [ ] GitHub exact-head CI、服务器发布与只读 smoke。
+- [x] GitHub exact-head CI：`7aeb1fe37bb3eb29a3d990b919833e4bb275cc4c`，run `42949441719`，test 与 lint/typecheck 均通过。
+- [ ] 服务器发布与发布后只读 smoke。
 - [ ] 真实球员事实/分钟链验收、真实 P111 训练、P114 样本外效果和 P115 前瞻窗口仍需各自的数据证据。
 
 不将缺失时间补造为历史事实，不把本地或合成回归描述为模型效果验收。

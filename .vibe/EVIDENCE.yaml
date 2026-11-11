@@ -4,15 +4,27 @@
   "acceptance": {
     "A-P10805A-P114-LOCAL": {
       "status": "PASS",
-      "command": "/bin/zsh -lc '.venv/bin/python -m pytest -q tests/test_scripts/test_training_manifest.py tests/test_scripts/test_dynamic_team_p106.py tests/test_scripts/test_dynamic_team_challenger.py tests/test_scripts/test_mle_trainer.py tests/test_scripts/test_backtest_engine.py tests/test_computation/test_observation_postgres.py && .venv/bin/ruff check scripts/training_manifest.py scripts/dynamic_team_p106.py scripts/dynamic_team_challenger.py tests/test_scripts/test_training_manifest.py tests/test_scripts/test_dynamic_team_p106.py tests/test_scripts/test_dynamic_team_challenger.py tests/test_computation/test_observation_postgres.py && .venv/bin/ruff format --check scripts/training_manifest.py scripts/dynamic_team_p106.py scripts/dynamic_team_challenger.py tests/test_scripts/test_training_manifest.py tests/test_scripts/test_dynamic_team_p106.py tests/test_scripts/test_dynamic_team_challenger.py tests/test_computation/test_observation_postgres.py && .venv/bin/mypy scripts/training_manifest.py scripts/dynamic_team_p106.py scripts/dynamic_team_challenger.py && .venv/bin/python -m compileall -q scripts/training_manifest.py scripts/dynamic_team_p106.py scripts/dynamic_team_challenger.py && git diff --check'",
+      "command": ".venv/bin/python -m pytest -q tests/test_scripts/test_training_manifest.py tests/test_scripts/test_dynamic_team_p106.py tests/test_scripts/test_dynamic_team_challenger.py tests/test_scripts/test_mle_trainer.py tests/test_scripts/test_backtest_engine.py tests/test_computation/test_observation_postgres.py",
       "exit_code": 0,
-      "summary": "============================= test session starts ==============================\nplatform darwin -- Python 3.14.6, pytest-9.1.1, pluggy-1.7.0\nrootdir: /Volumes/Nas/FQP/code\nconfigfile: pyproject.toml\nplugins: mock-3.15.1, cov-7.1.0, asyncio-1.4.0, anyio-4.15.1, platformdirs-4.13.5\nasyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function\ncollected 204 items\n\ntests/test_scripts/test_training_manifest.py ............                [  5%]\ntests/test_scripts/test_dynamic_team_p106.py ...........                 [ 11%]\ntests/test_scripts/test_dynamic_team_challenger.py .............         [ 17%]\ntests/test_scripts/test_mle_trainer.py ................                  [ 25%]\ntests/test_scripts/test_backtest_engine.py ............................. [ 39%]\n........................................................................ [ 75%]\n.                                                                        [ 75%]\ntests/test_computation/test_observation_postgres.py .................... [ 85%]\n..............................                                           [100%]\n\n============================= 204 passed in 12.23s =============================\nAll checks passed!\n7 files already formatted\napps/backend/src/db.py:105: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]\nSuccess: no issues found in 3 source files\n",
+      "summary": "============================= test session starts ==============================\nplatform darwin -- Python 3.14.6, pytest-9.1.1, pluggy-1.7.0\nrootdir: /Volumes/Nas/FQP/code\nconfigfile: pyproject.toml\nplugins: mock-3.15.1, cov-7.1.0, asyncio-1.4.0, anyio-4.15.1, platformdirs-4.13.5\nasyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function\ncollected 204 items\n\ntests/test_scripts/test_training_manifest.py ............                [  5%]\ntests/test_scripts/test_dynamic_team_p106.py ...........                 [ 11%]\ntests/test_scripts/test_dynamic_team_challenger.py .............         [ 17%]\ntests/test_scripts/test_mle_trainer.py ................                  [ 25%]\ntests/test_scripts/test_backtest_engine.py ............................. [ 39%]\n........................................................................ [ 75%]\n.                                                                        [ 75%]\ntests/test_computation/test_observation_postgres.py .................... [ 85%]\n..............................                                           [100%]\n\n============================= 204 passed in 12.67s =============================\n",
       "timed_out": false,
-      "environment": "Local fixed-sample and isolated loopback PostgreSQL 16 verification; GitHub exact-head CI and guarded server release remain pending. No schema migration or production data access in this task.",
-      "revision": "3ed1ba8490fc11a67ce31457644c113050ab02af",
+      "environment": "Local fixed-sample and isolated loopback PostgreSQL 16 verification; exact-head GitHub CI passed on 7aeb1fe37bb3eb29a3d990b919833e4bb275cc4c. No production database access, data writes, schema migration, or dependency change.",
+      "revision": "7aeb1fe37bb3eb29a3d990b919833e4bb275cc4c",
+      "dirty_tree": false,
+      "tree_fingerprint": "d64410ed9d9a5f99db74684fbad409f89fa9adabde5d39452d7be215f4cec2c1",
+      "verified_at": "2026-11-11T11:12:52.621360+08:00"
+    },
+    "A-P10805A-P114-STATIC": {
+      "status": "PASS",
+      "command": "/bin/zsh -lc '.venv/bin/ruff check scripts/training_manifest.py scripts/dynamic_team_p106.py scripts/dynamic_team_challenger.py tests/test_scripts/test_training_manifest.py tests/test_scripts/test_dynamic_team_p106.py tests/test_scripts/test_dynamic_team_challenger.py tests/test_computation/test_observation_postgres.py && .venv/bin/ruff format --check scripts/training_manifest.py scripts/dynamic_team_p106.py scripts/dynamic_team_challenger.py tests/test_scripts/test_training_manifest.py tests/test_scripts/test_dynamic_team_p106.py tests/test_scripts/test_dynamic_team_challenger.py tests/test_computation/test_observation_postgres.py && .venv/bin/mypy scripts/training_manifest.py scripts/dynamic_team_p106.py scripts/dynamic_team_challenger.py && .venv/bin/python -m compileall -q scripts/training_manifest.py scripts/dynamic_team_p106.py scripts/dynamic_team_challenger.py && git diff --check'",
+      "exit_code": 0,
+      "summary": "All checks passed!\n7 files already formatted\napps/backend/src/db.py:105: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]\nSuccess: no issues found in 3 source files\n",
+      "timed_out": false,
+      "environment": "Local fixed-sample and isolated loopback PostgreSQL 16 verification; exact-head GitHub CI passed on 7aeb1fe37bb3eb29a3d990b919833e4bb275cc4c. No production database access, data writes, schema migration, or dependency change.",
+      "revision": "7aeb1fe37bb3eb29a3d990b919833e4bb275cc4c",
       "dirty_tree": true,
       "tree_fingerprint": "d64410ed9d9a5f99db74684fbad409f89fa9adabde5d39452d7be215f4cec2c1",
-      "verified_at": "2026-11-11T10:53:15.560006+08:00"
+      "verified_at": "2026-11-11T11:22:57.058729+08:00"
     }
   },
   "reviews": {
@@ -37,9 +49,16 @@
     "note": "No SQL/schema files change."
   },
   "external_ci": {
-    "status": "pending",
-    "checks": {},
-    "note": "Exact-head GitHub CI for the revised local candidate has not run; current local tree is based on deployed 3ed1ba8 and contains uncommitted changes."
+    "status": "passed",
+    "checks": {
+      "test": "passed",
+      "lint-and-typecheck": "passed"
+    },
+    "run_id": 42949441719,
+    "head_sha": "7aeb1fe37bb3eb29a3d990b919833e4bb275cc4c",
+    "url": "https://github.com/fanxUP/fqp-football-quant/actions/runs/42949441719",
+    "completed_at": "2026-11-11T03:09:39Z",
+    "note": "Exact-head main push CI passed. FQP release preflight plan passed against server checkout 3ed1ba8490fc11a67ce31457644c113050ab02af; application not yet deployed."
   },
   "production": {
     "status": "NOT_ACCESSED",
@@ -48,10 +67,9 @@
   },
   "quality_gate": {
     "status": "PENDING",
-    "checked_at": "2026-11-11T10:45:50+08:00",
+    "checked_at": "2026-11-11T11:25:29+08:00",
     "failures": [
-      "Exact-head GitHub CI for this candidate is pending.",
-      "No release evidence exists for the revised candidate; no production deployment was performed."
+      "Server deployment and post-release verification remain pending."
     ]
   }
 }
