@@ -375,22 +375,42 @@ def _manifest_rows(
         if any(type(value) is not int or value < 0 for value in (home_goals, away_goals)):
             raise ValueError(f"match {match_id} has invalid official scores")
         kickoff = _naive_datetime(item.get("kickoff_time"), "kickoff_time")
-        published = _naive_datetime(item.get("official_publish_time"), "official_publish_time")
-        result_published_at = _aware_datetime(
-            item.get("result_published_at"), "result_published_at"
+        published = (
+            _naive_datetime(item.get("official_publish_time"), "official_publish_time")
+            if item.get("official_publish_time") is not None
+            else None
+        )
+        result_published_at = (
+            _aware_datetime(item.get("result_published_at"), "result_published_at")
+            if item.get("result_published_at") is not None
+            else None
         )
         first_acquired_at = _aware_datetime(
             item.get("result_first_acquired_at"), "result_first_acquired_at"
         )
         available_at = _aware_datetime(item.get("result_available_at"), "result_available_at")
         cutoff_utc = cutoff.replace(tzinfo=_OFFICIAL_TIMEZONE).astimezone(UTC)
+        kickoff_utc = kickoff.replace(tzinfo=_OFFICIAL_TIMEZONE).astimezone(UTC)
+        source_publication_local = (
+            result_published_at.astimezone(_OFFICIAL_TIMEZONE).replace(tzinfo=None)
+            if result_published_at is not None
+            else None
+        )
         if kickoff >= cutoff:
             raise ValueError(f"match {match_id} kicked off at or after the fit cutoff")
-        if published < kickoff:
+        if published is not None and published < kickoff:
             raise ValueError(f"match {match_id} result was published before kickoff")
-        if published >= cutoff:
+        if result_published_at is not None and result_published_at < kickoff_utc:
+            raise ValueError(f"match {match_id} source label was published before kickoff")
+        if (
+            published is not None
+            and source_publication_local is not None
+            and published != source_publication_local
+        ):
+            raise ValueError(f"match {match_id} publication timestamps disagree")
+        if published is not None and published >= cutoff:
             raise ValueError(f"match {match_id} result was published after the fit cutoff")
-        if result_published_at >= cutoff_utc:
+        if result_published_at is not None and result_published_at >= cutoff_utc:
             raise ValueError(
                 f"match {match_id} source label was published at or after the fit cutoff"
             )
@@ -402,7 +422,9 @@ def _manifest_rows(
             raise ValueError(
                 f"match {match_id} source label was available at or after the fit cutoff"
             )
-        if available_at < first_acquired_at or available_at < result_published_at:
+        if available_at < first_acquired_at or (
+            result_published_at is not None and available_at < result_published_at
+        ):
             raise ValueError(f"match {match_id} has inconsistent label availability evidence")
         rows.append(
             {

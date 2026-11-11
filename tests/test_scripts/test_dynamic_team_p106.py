@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -10,7 +11,7 @@ from scripts.dynamic_team_p106 import (
     _require_isolated_research_database,
     project_p106_manifest_to_season,
 )
-from scripts.model_artifact_identity import training_manifest_sha256
+from scripts.model_artifact_identity import canonical_json_bytes, training_manifest_sha256
 from scripts.training_manifest import (
     CandidateMatch,
     ResultLabelObservation,
@@ -157,6 +158,99 @@ def test_projection_hash_is_order_independent_and_parent_hash_is_verified():
     with pytest.raises(ValueError, match="SHA-256"):
         project_p106_manifest_to_season(
             tampered, contexts, competition_id=77, competition_season_id=20262027
+        )
+
+
+def test_projection_accepts_missing_source_publication_time_with_system_visibility_evidence():
+    parent = _parent_dataset().manifest.to_dict()
+    included_ids = [row["match_id"] for row in parent["included"]]
+    parent["included"][0]["official_publish_time"] = None
+    parent["included"][0]["result_published_at"] = None
+    fields = (
+        "version",
+        "selection_version",
+        "minimum_team_matches",
+        "cutoff_at",
+        "training_start",
+        "training_end",
+        "included",
+        "excluded",
+    )
+    parent["sha256"] = hashlib.sha256(
+        canonical_json_bytes({field: parent[field] for field in fields})
+    ).hexdigest()
+    contexts = {match_id: _context() for match_id in included_ids}
+
+    projection = project_p106_manifest_to_season(
+        parent,
+        contexts,
+        competition_id=77,
+        competition_season_id=20262027,
+    )
+
+    assert included_ids[0] in projection.included_match_ids
+
+
+def test_projection_rejects_source_publication_before_kickoff_when_legacy_publication_is_missing():
+    parent = _parent_dataset().manifest.to_dict()
+    ids = [row["match_id"] for row in parent["included"]]
+    row = dict(parent["included"][0])
+    kickoff = datetime.fromisoformat(row["kickoff_time"]).replace(tzinfo=SHANGHAI)
+    row["official_publish_time"] = None
+    row["result_published_at"] = (kickoff - timedelta(minutes=1)).astimezone(UTC).isoformat()
+    parent["included"] = [row, *parent["included"][1:]]
+    fields = (
+        "version",
+        "selection_version",
+        "minimum_team_matches",
+        "cutoff_at",
+        "training_start",
+        "training_end",
+        "included",
+        "excluded",
+    )
+    parent["sha256"] = hashlib.sha256(
+        canonical_json_bytes({field: parent[field] for field in fields})
+    ).hexdigest()
+    contexts = {match_id: _context() for match_id in ids}
+
+    with pytest.raises(ValueError, match="source label was published before kickoff"):
+        project_p106_manifest_to_season(
+            parent,
+            contexts,
+            competition_id=77,
+            competition_season_id=20262027,
+        )
+
+
+def test_projection_rejects_disagreeing_official_and_source_publication_times():
+    parent = _parent_dataset().manifest.to_dict()
+    ids = [row["match_id"] for row in parent["included"]]
+    row = dict(parent["included"][0])
+    source_published = datetime.fromisoformat(row["result_published_at"])
+    row["result_published_at"] = (source_published + timedelta(seconds=1)).isoformat()
+    parent["included"] = [row, *parent["included"][1:]]
+    fields = (
+        "version",
+        "selection_version",
+        "minimum_team_matches",
+        "cutoff_at",
+        "training_start",
+        "training_end",
+        "included",
+        "excluded",
+    )
+    parent["sha256"] = hashlib.sha256(
+        canonical_json_bytes({field: parent[field] for field in fields})
+    ).hexdigest()
+    contexts = {match_id: _context() for match_id in ids}
+
+    with pytest.raises(ValueError, match="publication timestamps disagree"):
+        project_p106_manifest_to_season(
+            parent,
+            contexts,
+            competition_id=77,
+            competition_season_id=20262027,
         )
 
 

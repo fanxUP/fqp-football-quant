@@ -243,26 +243,44 @@ def _validate_parent_manifest(
         ):
             raise ValueError(f"parent match {match_id} has an invalid official score")
         kickoff = _naive_datetime(row.get("kickoff_time"), "parent kickoff_time")
-        published = _naive_datetime(
-            row.get("official_publish_time"), "parent official_publish_time"
+        published = (
+            _naive_datetime(row.get("official_publish_time"), "parent official_publish_time")
+            if row.get("official_publish_time") is not None
+            else None
         )
-        result_published_at = _aware_datetime(
-            row.get("result_published_at"), "parent result_published_at"
+        result_published_at = (
+            _aware_datetime(row.get("result_published_at"), "parent result_published_at")
+            if row.get("result_published_at") is not None
+            else None
         )
         first_acquired_at = _aware_datetime(
             row.get("result_first_acquired_at"), "parent result_first_acquired_at"
         )
         available_at = _aware_datetime(row.get("result_available_at"), "parent result_available_at")
         cutoff_utc = cutoff.replace(tzinfo=_OFFICIAL_TIMEZONE).astimezone(UTC)
+        kickoff_utc = kickoff.replace(tzinfo=_OFFICIAL_TIMEZONE).astimezone(UTC)
+        source_publication_local = (
+            result_published_at.astimezone(_OFFICIAL_TIMEZONE).replace(tzinfo=None)
+            if result_published_at is not None
+            else None
+        )
+        if result_published_at is not None and result_published_at < kickoff_utc:
+            raise ValueError(f"parent match {match_id} source label was published before kickoff")
+        if (
+            published is not None
+            and source_publication_local is not None
+            and published != source_publication_local
+        ):
+            raise ValueError(f"parent match {match_id} publication timestamps disagree")
         if (
             kickoff >= cutoff
-            or published < kickoff
-            or published >= cutoff
-            or result_published_at >= cutoff_utc
+            or (published is not None and published < kickoff)
+            or (published is not None and published >= cutoff)
+            or (result_published_at is not None and result_published_at >= cutoff_utc)
             or first_acquired_at >= cutoff_utc
             or available_at >= cutoff_utc
             or available_at < first_acquired_at
-            or available_at < result_published_at
+            or (result_published_at is not None and available_at < result_published_at)
         ):
             raise ValueError(f"parent match {match_id} violates the P106 cutoff")
         checked_included.append(row)

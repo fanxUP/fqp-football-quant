@@ -131,6 +131,45 @@ def test_fit_binds_p106_manifest_season_context_and_decay_weights_deterministica
     assert first.config.season_transition_policy == "neutral_reset_by_competition_season_id/v1"
 
 
+def test_fit_accepts_missing_source_publication_time_when_acquisition_and_receipt_precede_cutoff():
+    dataset, contexts = _dataset()
+    manifest = dataset.manifest.to_dict()
+    manifest["included"][0]["official_publish_time"] = None
+    manifest["included"][0]["result_published_at"] = None
+    manifest = _resign_manifest(manifest)
+
+    candidate = fit_dynamic_team_challenger(manifest, contexts)
+
+    assert candidate.training_manifest_sha256 == manifest["sha256"]
+
+
+def test_fit_rejects_source_publication_before_kickoff_when_legacy_publication_is_missing():
+    dataset, contexts = _dataset()
+    manifest = dataset.manifest.to_dict()
+    row = dict(manifest["included"][0])
+    kickoff = datetime.fromisoformat(row["kickoff_time"]).replace(tzinfo=SHANGHAI)
+    row["official_publish_time"] = None
+    row["result_published_at"] = (kickoff - timedelta(minutes=1)).astimezone(UTC).isoformat()
+    manifest["included"] = [row, *manifest["included"][1:]]
+    manifest = _resign_manifest(manifest)
+
+    with pytest.raises(ValueError, match="source label was published before kickoff"):
+        fit_dynamic_team_challenger(manifest, contexts)
+
+
+def test_fit_rejects_disagreeing_official_and_source_publication_times():
+    dataset, contexts = _dataset()
+    manifest = dataset.manifest.to_dict()
+    row = dict(manifest["included"][0])
+    source_published = datetime.fromisoformat(row["result_published_at"])
+    row["result_published_at"] = (source_published + timedelta(seconds=1)).isoformat()
+    manifest["included"] = [row, *manifest["included"][1:]]
+    manifest = _resign_manifest(manifest)
+
+    with pytest.raises(ValueError, match="publication timestamps disagree"):
+        fit_dynamic_team_challenger(manifest, contexts)
+
+
 def test_fit_rejects_a_manifest_whose_labels_were_not_available_at_its_cutoff():
     dataset, contexts = _dataset()
     manifest = dataset.manifest.to_dict()

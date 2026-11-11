@@ -11,7 +11,7 @@ from typing import cast
 from zoneinfo import ZoneInfo
 
 MANIFEST_VERSION = "fqp.maher-spf-training-manifest/v2"
-SELECTION_VERSION = "settled-source-observation-score-team-history/v2"
+SELECTION_VERSION = "settled-source-observation-score-team-history/v3"
 CURRENT_SELECTION_VERSION = "settled-official-score-team-history/v1"
 OFFICIAL_TIMEZONE = ZoneInfo("Asia/Shanghai")
 
@@ -443,8 +443,6 @@ def build_training_dataset(
             reason = "result_observation_not_value"
         elif (candidate.match_status or "").lower() != "settled":
             reason = "match_not_settled"
-        elif cutoff is not None and candidate.result_published_at is None:
-            reason = "official_publish_time_unknown"
         elif (
             cutoff is not None
             and candidate.result_published_at is not None

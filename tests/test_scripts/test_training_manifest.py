@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, patch
 from zoneinfo import ZoneInfo
 
 import numpy as np
+import pytest
 
 from scripts.mle_trainer import _load_training_dataset, fit_maher_poisson
 from scripts.training_manifest import (
@@ -171,6 +172,80 @@ def test_cutoff_uses_source_observation_label_and_records_all_availability_times
     assert sample.result_first_acquired_at == "2026-01-02T12:05:00.000000+00:00"
     assert sample.result_available_at == "2026-01-02T12:10:00.000000+00:00"
     assert sample.label_source == "source_observation:sporttery/results/full_time_score"
+
+
+def test_cutoff_accepts_missing_source_publication_time_when_system_visibility_is_proven() -> None:
+    cutoff = datetime.fromisoformat("2026-01-05T00:00:00")
+    acquired = datetime(2026, 1, 2, 12, tzinfo=UTC)
+    observation = ResultLabelObservation(
+        revision_id=84,
+        result_id=1084,
+        fact_status="value",
+        home_goals=2,
+        away_goals=1,
+        published_at=None,
+        first_acquired_at=acquired,
+        available_at=acquired + timedelta(minutes=1),
+    )
+    candidate = replace(
+        _candidate(4, kickoff="2026-01-01T20:00:00", published=None),
+        label_observations=(observation,),
+    )
+    late_acquisition = cutoff.replace(tzinfo=ZoneInfo("Asia/Shanghai")).astimezone(UTC)
+    late_candidate = replace(
+        _candidate(5, kickoff="2026-01-02T20:00:00", published=None),
+        label_observations=(
+            ResultLabelObservation(
+                revision_id=85,
+                result_id=1085,
+                fact_status="value",
+                home_goals=0,
+                away_goals=1,
+                published_at=None,
+                first_acquired_at=late_acquisition,
+                available_at=late_acquisition,
+            ),
+        ),
+    )
+
+    dataset = build_training_dataset([candidate, late_candidate], min_matches=1, cutoff_at=cutoff)
+
+    assert len(dataset.samples) == 1
+    sample = dataset.samples[0]
+    assert (sample.home_goals, sample.away_goals) == (2, 1)
+    assert sample.official_publish_time is None
+    assert sample.result_published_at is None
+    assert sample.result_first_acquired_at == acquired.isoformat(timespec="microseconds")
+    assert sample.result_available_at == (acquired + timedelta(minutes=1)).isoformat(
+        timespec="microseconds"
+    )
+    assert [(row.match_id, row.reason) for row in dataset.manifest.excluded] == [
+        (5, "result_observation_missing")
+    ]
+    assert dataset.manifest.selection_version == "settled-source-observation-score-team-history/v3"
+
+
+def test_missing_acquisition_or_commit_time_is_not_repaired_from_publication_time() -> None:
+    candidate = replace(
+        _candidate(6, kickoff="2026-01-01T20:00:00", published=None),
+        label_observations=(
+            {
+                "revision_id": 86,
+                "result_id": 1086,
+                "fact_status": "value",
+                "home_goals": 1,
+                "away_goals": 0,
+                "published_at": datetime(2026, 1, 2, 12, tzinfo=UTC),
+                "first_acquired_at": None,
+                "available_at": None,
+            },
+        ),
+    )
+
+    with pytest.raises(ValueError, match="requires acquisition and availability timestamps"):
+        build_training_dataset(
+            [candidate], min_matches=1, cutoff_at=datetime.fromisoformat("2026-01-05T00:00:00")
+        )
 
 
 def test_cutoff_excludes_missing_or_not_yet_available_result_observations() -> None:

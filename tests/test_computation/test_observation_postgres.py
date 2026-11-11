@@ -418,6 +418,27 @@ def test_official_result_capture_preserves_publication_time_and_records_each_see
     assert before_any_result.manifest.excluded[0].result_observation_id is None
     assert before_any_result.manifest.excluded[0].result_available_at is None
 
+    after_second_visibility_local = (
+        (after_second.as_of + timedelta(microseconds=1))
+        .astimezone(ZoneInfo("Asia/Shanghai"))
+        .replace(tzinfo=None)
+    )
+    after_second_dataset = build_training_dataset(
+        [research_match.candidate], min_matches=1, cutoff_at=after_second_visibility_local
+    )
+    assert [(sample.home_goals, sample.away_goals) for sample in after_second_dataset.samples] == [
+        (2, 0)
+    ]
+    assert after_second_dataset.samples[0].result_published_at is None
+    after_second_trainer = _load_training_dataset(
+        pg, min_matches=1, cutoff_at=after_second_visibility_local
+    )
+    assert [
+        (sample.home_goals, sample.away_goals)
+        for sample in after_second_trainer.samples
+        if sample.match_id == match_id
+    ] == [(2, 0)]
+
 
 @pytest.mark.parametrize("status", [s for s in AcquisitionStatus if s != AcquisitionStatus.SUCCESS])
 def test_failed_acquisition_preserves_fact_and_has_explicit_status(pg, match_id, status):
