@@ -364,6 +364,23 @@ def test_official_result_capture_preserves_publication_time_and_records_each_see
     assert second_observation["published_at"] is None
     assert second_observation["first_acquired_at"] == second_acquired
     assert second_observation["available_at"] >= second_observation["ingested_at"]
+    with pg.cursor() as cur:
+        cur.execute(
+            """
+            SELECT min(cutoff.as_of)
+            FROM observation_cutoffs cutoff
+            CROSS JOIN LATERAL jsonb_array_elements(cutoff.selections) selected(item)
+            WHERE selected.item->>'match_id'=%s
+              AND selected.item->>'source_id'='sporttery'
+              AND selected.item->>'domain'='results'
+              AND selected.item->>'subject_key'='full_time_score'
+              AND selected.item->>'revision_id'=%s
+            """,
+            (str(match_id), str(second_observation["revision_id"])),
+        )
+        second_committed_visibility = cur.fetchone()[0]
+    assert second_committed_visibility > second_observation["available_at"]
+    assert committed_visibility < second_committed_visibility
 
     third = store_results(
         pg,
@@ -386,10 +403,7 @@ def test_official_result_capture_preserves_publication_time_and_records_each_see
         row for row in load_research_matches(pg) if row.candidate.match_id == match_id
     )
     assert len(research_match.candidate.label_observations) == 3
-    cutoff_utc = (
-        first_observation["available_at"]
-        + (second_observation["available_at"] - first_observation["available_at"]) / 2
-    )
+    cutoff_utc = committed_visibility + (second_committed_visibility - committed_visibility) / 2
     cutoff_local = cutoff_utc.astimezone(ZoneInfo("Asia/Shanghai")).replace(tzinfo=None)
     dataset = build_training_dataset(
         [research_match.candidate], min_matches=1, cutoff_at=cutoff_local
