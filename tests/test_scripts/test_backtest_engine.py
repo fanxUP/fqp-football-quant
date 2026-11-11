@@ -1,5 +1,6 @@
 from dataclasses import replace
 from datetime import UTC, date, datetime, time, timedelta
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 from zoneinfo import ZoneInfo
 
@@ -421,6 +422,20 @@ def test_research_splits_ignore_unsettled_later_dates_for_holdout_boundary() -> 
     actual = build_research_time_splits([*rows, later_unsettled], config)
 
     assert actual == expected
+
+
+def test_research_splits_accept_prevalidated_date_only_labels() -> None:
+    labels = [SimpleNamespace(business_date=date(2025, 1, day)) for day in (1, 2, 3)]
+
+    splits = build_research_time_splits(
+        labels,
+        ResearchEvaluationConfig(fold_count=1, test_window_days=1, holdout_days=1),
+    )
+
+    assert [(split.test_start, split.test_end) for split in splits] == [
+        (date(2025, 1, 2), date(2025, 1, 2)),
+        (date(2025, 1, 3), date(2025, 1, 3)),
+    ]
 
 
 def test_research_source_snapshot_binds_label_revision_and_availability_times() -> None:

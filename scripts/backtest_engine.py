@@ -28,7 +28,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol, cast
 
 from scripts.market_metric_validation import (
     PROBABILITY_SUM_TOLERANCE,
@@ -267,6 +267,18 @@ class ResearchTimeSplit:
     test_start: date
     test_end: date
     final_holdout: bool = False
+
+
+class _ResearchDatedItem(Protocol):
+    @property
+    def business_date(self) -> date: ...
+
+
+def _has_finalized_research_result(row: _ResearchDatedItem) -> bool:
+    """Date-only labels are prevalidated; match rows must carry a final status."""
+    if not hasattr(row, "result_status"):
+        return True
+    return cast(Any, row).result_status in {"final", "confirmed"}
 
 
 # —— 引擎核心 ——
@@ -1187,17 +1199,15 @@ def _validate_research_config(config: ResearchEvaluationConfig) -> None:
 
 
 def build_research_time_splits(
-    matches: Sequence[ResearchMatch],
+    matches: Sequence[_ResearchDatedItem],
     config: ResearchEvaluationConfig | None = None,
 ) -> list[ResearchTimeSplit]:
-    """Build non-overlapping calendar windows and reserve the newest block."""
+    """Build non-overlapping windows from final matches or prevalidated date-only labels."""
     config = config or ResearchEvaluationConfig()
     _validate_research_config(config)
     if not matches:
         raise ValueError("research evaluation requires materialized matches")
-    dates = sorted(
-        {row.business_date for row in matches if row.result_status in {"final", "confirmed"}}
-    )
+    dates = sorted({row.business_date for row in matches if _has_finalized_research_result(row)})
     if not dates:
         raise ValueError("research evaluation requires finalized target results")
     latest_date = dates[-1]
