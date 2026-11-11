@@ -852,7 +852,7 @@ def get_prediction_count_snapshot(conn: Any) -> dict[str, Any]:
         data_as_of, computed_at = data_as_of.astimezone(UTC), computed_at.astimezone(UTC)
         if data_as_of > computed_at or computed_at > now:
             raise ValueError("invalid count snapshot times")
-    except KeyError, TypeError, ValueError, AttributeError:
+    except (KeyError, TypeError, ValueError, AttributeError):
         return {**empty, "status": "unavailable"}
     status = "stale" if now - data_as_of > MAX_AGE else "ok"
     if attempt_status == "failed":
@@ -942,7 +942,7 @@ def get_prediction_summary_snapshot(conn: Any, *, now: datetime | None = None) -
         data_as_of, computed_at = data_as_of.astimezone(UTC), computed_at.astimezone(UTC)
         if data_as_of > computed_at or computed_at > current_time:
             raise ValueError("invalid summary timestamps")
-    except KeyError, TypeError, ValueError, AttributeError:
+    except (KeyError, TypeError, ValueError, AttributeError):
         return {
             "summary": None,
             "meta": {

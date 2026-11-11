@@ -4,72 +4,101 @@
   "acceptance": {
     "A-P10805A-P114-LOCAL": {
       "status": "PASS",
-      "command": ".venv/bin/python -m pytest -q tests/test_scripts/test_training_manifest.py tests/test_scripts/test_dynamic_team_p106.py tests/test_scripts/test_dynamic_team_challenger.py tests/test_scripts/test_mle_trainer.py tests/test_scripts/test_backtest_engine.py tests/test_computation/test_observation_postgres.py",
+      "command": [
+        "FQP_P106_TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55492/fqp_p106_test_provenance pytest -q tests/test_computation/test_prediction_job_execution_postgres.py tests/test_computation/test_prediction_run_postgres.py (isolated loopback PostgreSQL 16; 93 passed)",
+        "pytest -q tests/test_scripts/test_training_manifest.py tests/test_scripts/test_mle_trainer.py tests/test_scripts/test_dynamic_team_p106.py tests/test_scripts/test_dynamic_team_challenger.py tests/test_scripts/test_backtest_engine.py (183 passed)",
+        "FQP_P106_TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55492/fqp_p106_test_provenance pytest -q tests/test_computation/test_prediction_run_postgres.py::test_p111_shadow_uses_p106_run_group_replay_and_research_storage (isolated loopback PostgreSQL 16; 1 passed)",
+        "pytest -q tests/test_computation/test_observation_postgres.py (dedicated loopback PostgreSQL 16 fixture; 50 passed)",
+        "pytest -q tests/test_local/test_native_database_runtime.py tests/test_local/test_all_local_runtime.py (53 passed)",
+        "Ruff check on all 93 changed Python files; Ruff format check on 3 edited Python files; mypy on training_manifest.py and backtest_engine.py; targeted compileall; V4 scope/budget; git diff --check"
+      ],
       "exit_code": 0,
-      "summary": "============================= test session starts ==============================\nplatform darwin -- Python 3.14.6, pytest-9.1.1, pluggy-1.7.0\nrootdir: /Volumes/Nas/FQP/code\nconfigfile: pyproject.toml\nplugins: mock-3.15.1, cov-7.1.0, asyncio-1.4.0, anyio-4.15.1, platformdirs-4.13.5\nasyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function\ncollected 204 items\n\ntests/test_scripts/test_training_manifest.py ............                [  5%]\ntests/test_scripts/test_dynamic_team_p106.py ...........                 [ 11%]\ntests/test_scripts/test_dynamic_team_challenger.py .............         [ 17%]\ntests/test_scripts/test_mle_trainer.py ................                  [ 25%]\ntests/test_scripts/test_backtest_engine.py ............................. [ 39%]\n........................................................................ [ 75%]\n.                                                                        [ 75%]\ntests/test_computation/test_observation_postgres.py .................... [ 85%]\n..............................                                           [100%]\n\n============================= 204 passed in 12.67s =============================\n",
-      "timed_out": false,
-      "environment": "Local fixed-sample and isolated loopback PostgreSQL 16 verification; exact-head GitHub CI passed on 7aeb1fe37bb3eb29a3d990b919833e4bb275cc4c. No production database access, data writes, schema migration, or dependency change.",
-      "revision": "7aeb1fe37bb3eb29a3d990b919833e4bb275cc4c",
-      "dirty_tree": false,
-      "tree_fingerprint": "d64410ed9d9a5f99db74684fbad409f89fa9adabde5d39452d7be215f4cec2c1",
-      "verified_at": "2026-11-11T11:12:52.621360+08:00"
+      "summary": "Current-tree rerun: P105 recovery/forecast PostgreSQL 93 passed; P106/P111/P114 fixed-sample 183 passed; P111 isolated PostgreSQL integration 1 passed; P104/P114 observation PostgreSQL 50 passed; local runtime 53 passed. Total 380 passed, 0 failed, 0 skipped. This includes JSONB mapping + ISO timestamp through load_research_matches and predeclared final-window evaluation.",
+      "environment": "Local fixed samples and dedicated loopback PostgreSQL 16 test fixtures. No production database, paid API, or NAS Titan SQLite was accessed.",
+      "revision": "037fdbf971924bfc57d9a16c327f4fd2bf2bead3",
+      "dirty_tree": true,
+      "tree_fingerprint": "e289410aedde3b14abfd25b0faf17b0b45b079f4bf321dfac4514e9d301473a6",
+      "verified_at": "2026-11-11T19:25:02+08:00"
+    },
+    "A-P105-MIGRATION-139": {
+      "status": "PASS_ISOLATED",
+      "command": [
+        "DATABASE_URL=<isolated loopback PostgreSQL 16> python ops/server/migrate.py --apply",
+        "Verify idx_ai_job_runs_prediction_recovery indisvalid/indisready and migration checksum ledger",
+        "DATABASE_URL=<same isolated database> python ops/server/migrate.py (read-only plan)",
+        "Apply sql/down/139_prediction_recovery_index.down.sql to the disposable database and verify the index is absent"
+      ],
+      "exit_code": 0,
+      "summary": "The server migration runner applied migration 139 and recorded its checksum; the index was valid and ready; the subsequent read-only plan had no pending migrations; the down file removed the test index. The rehearsal used a minimal isolated table and 135 synthetic prior migration-ledger entries, not a complete production database copy.",
+      "environment": "One-time disposable loopback PostgreSQL 16 database only; no production migration applied.",
+      "verified_at": "2026-11-11T18:24:39+08:00"
     },
     "A-P10805A-P114-STATIC": {
       "status": "PASS",
-      "command": "/bin/zsh -lc '.venv/bin/ruff check scripts/training_manifest.py scripts/dynamic_team_p106.py scripts/dynamic_team_challenger.py tests/test_scripts/test_training_manifest.py tests/test_scripts/test_dynamic_team_p106.py tests/test_scripts/test_dynamic_team_challenger.py tests/test_computation/test_observation_postgres.py && .venv/bin/ruff format --check scripts/training_manifest.py scripts/dynamic_team_p106.py scripts/dynamic_team_challenger.py tests/test_scripts/test_training_manifest.py tests/test_scripts/test_dynamic_team_p106.py tests/test_scripts/test_dynamic_team_challenger.py tests/test_computation/test_observation_postgres.py && .venv/bin/mypy scripts/training_manifest.py scripts/dynamic_team_p106.py scripts/dynamic_team_challenger.py && .venv/bin/python -m compileall -q scripts/training_manifest.py scripts/dynamic_team_p106.py scripts/dynamic_team_challenger.py && git diff --check'",
+      "command": [
+        "ruff check on all 93 changed Python files",
+        "ruff format --check scripts/backtest_engine.py scripts/training_manifest.py tests/test_scripts/test_backtest_engine.py",
+        "mypy scripts/training_manifest.py scripts/backtest_engine.py",
+        "compileall on scripts/backtest_engine.py scripts/training_manifest.py tests/test_scripts/test_backtest_engine.py; git diff --check",
+        "V4 scope check; V4 budget check"
+      ],
       "exit_code": 0,
-      "summary": "All checks passed!\n7 files already formatted\napps/backend/src/db.py:105: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]\nSuccess: no issues found in 3 source files\n",
-      "timed_out": false,
-      "environment": "Local fixed-sample and isolated loopback PostgreSQL 16 verification; exact-head GitHub CI passed on 7aeb1fe37bb3eb29a3d990b919833e4bb275cc4c. No production database access, data writes, schema migration, or dependency change.",
-      "revision": "7aeb1fe37bb3eb29a3d990b919833e4bb275cc4c",
+      "summary": "Ruff passed across 93 changed Python files; the 3 files modified in this follow-up pass Ruff format --check; mypy passed for scripts/training_manifest.py and scripts/backtest_engine.py; targeted compileall and git diff --check passed. V4 scope passed at 96/96 changed files; corrected budget passed at 96/96 files, 4/4 new files, 0/0 dependency additions, and 2/2 SQL migration files.",
+      "environment": "Local checkout on main; V4 baseline is b175cd2e09db12d7d6feed506d9479550adae7ec.",
+      "revision": "037fdbf971924bfc57d9a16c327f4fd2bf2bead3",
       "dirty_tree": true,
-      "tree_fingerprint": "d64410ed9d9a5f99db74684fbad409f89fa9adabde5d39452d7be215f4cec2c1",
-      "verified_at": "2026-11-11T11:22:57.058729+08:00"
+      "tree_fingerprint": "e289410aedde3b14abfd25b0faf17b0b45b079f4bf321dfac4514e9d301473a6",
+      "verified_at": "2026-11-11T19:25:02+08:00"
     }
   },
   "reviews": {
     "status": "PASS",
     "application_code": {
       "status": "PASS",
-      "summary": "Initial independent review found one MAJOR: a re-signed manifest could omit legacy official_publish_time and claim a source result_published_at before kickoff, or let the two populated timestamps disagree. Both P106 projection and P111 fit validation now enforce the source kickoff lower bound and Beijing-normalized equality. Four focused tampered-manifest tests reproduced then passed; the original read-only reviewer confirmed the MAJOR is closed. Residual risks remain: cutoff JSON scan cost is not production-EXPLAINed; concurrent same-stream updates may conservatively omit an intermediate revision."
+      "summary": "Current-tree independent read-only review confirmed the JSONB result receipt normalization and fixed-window fail-closed path; the loader-to-fixed-window regression exercises mapping values and ISO timestamps. No blocker, major, or minor findings remain. Reviewer performed static review only; tests are separately recorded."
     },
     "v4_migration": {
       "status": "PASS",
-      "applicability": "NOT_APPLICABLE",
-      "summary": "No SQL migration or V4 engine/schema change is in this batch."
+      "applicability": "PASS_ISOLATED",
+      "summary": "Migration 139 runner and rollback were exercised only on an isolated minimal PostgreSQL 16 fixture."
     }
   },
   "security": {
     "status": "PASS",
-    "summary": "No new dependency, API, secret, or provider call. Database regression targets are isolated loopback PostgreSQL fixtures. Official result observations are additive and source-time bounded; no production database was accessed."
+    "summary": "No new dependency, public API, secret, provider call, production database access, or production data write. Model promotion and formal probability changes remain disabled."
   },
   "migration": {
-    "status": "NOT_APPLICABLE",
-    "target_migrations": [],
-    "note": "No SQL/schema files change."
+    "status": "ISOLATED_PASS_PRODUCTION_PENDING",
+    "target_migrations": [
+      "sql/139_prediction_recovery_index.sql",
+      "sql/down/139_prediction_recovery_index.down.sql"
+    ],
+    "logical_migrations": 1,
+    "production_applied": false,
+    "note": "Isolated runner apply, checksum, validity, read-only re-plan, and down-file checks passed. Production migration is not authorized or applied in this local verification."
   },
   "external_ci": {
-    "status": "passed",
-    "checks": {
-      "test": "passed",
-      "lint-and-typecheck": "passed"
+    "status": "pending",
+    "last_known_run": {
+      "status": "passed",
+      "run_id": 42949441719,
+      "head_sha": "7aeb1fe37bb3eb29a3d990b919833e4bb275cc4c",
+      "url": "https://github.com/fanxUP/fqp-football-quant/actions/runs/42949441719"
     },
-    "run_id": 42949441719,
-    "head_sha": "7aeb1fe37bb3eb29a3d990b919833e4bb275cc4c",
-    "url": "https://github.com/fanxUP/fqp-football-quant/actions/runs/42949441719",
-    "completed_at": "2026-11-11T03:09:39Z",
-    "note": "Exact-head main push CI passed. FQP release preflight plan passed against server checkout 3ed1ba8490fc11a67ce31457644c113050ab02af; application not yet deployed."
+    "note": "The last successful CI run covers an older commit and does not validate the current dirty worktree. Exact-head CI is pending."
   },
   "production": {
     "status": "NOT_ACCESSED",
     "production_database_access": false,
-    "business_data_writes": 0
+    "business_data_writes": 0,
+    "server_deployment": "NOT_EXECUTED"
   },
   "quality_gate": {
     "status": "PENDING",
-    "checked_at": "2026-11-11T11:25:29+08:00",
+    "checked_at": "2026-11-11T19:25:02+08:00",
     "failures": [
-      "Server deployment and post-release verification remain pending."
+      "Current dirty worktree has no exact-head GitHub CI result.",
+      "Server release and post-release read-only smoke remain pending."
     ]
   }
 }

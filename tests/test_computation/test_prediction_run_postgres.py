@@ -5767,6 +5767,64 @@ def test_research_loader_marks_ambiguous_team_name_without_choosing_id(isolated_
     ]
 
 
+def test_research_loader_preserves_unresolved_fixtures_for_fixed_window_gate(
+    isolated_database,
+):
+    from datetime import date, datetime
+
+    from scripts.backtest_engine import (
+        ResearchEvaluationConfig,
+        build_research_time_splits,
+        load_research_matches,
+    )
+
+    conn, _schema_name = isolated_database
+    fixture_dates = (
+        (date(2025, 1, 1), True),
+        (date(2025, 1, 2), True),
+        (date(2025, 1, 3), True),
+        (date(2025, 1, 3), False),
+    )
+    with conn.cursor() as cursor:
+        match_ids = []
+        for index, (business_date, has_result) in enumerate(fixture_dates):
+            kickoff = datetime.combine(business_date, datetime.min.time()).replace(hour=20)
+            cursor.execute(
+                """INSERT INTO official_matches (
+                       business_date, kickoff_time, home_team_name, away_team_name
+                   ) VALUES (%s, %s, %s, %s) RETURNING id""",
+                (business_date, kickoff, f"Home {index}", f"Away {index}"),
+            )
+            match_id = cursor.fetchone()[0]
+            match_ids.append(match_id)
+            if has_result:
+                cursor.execute(
+                    """INSERT INTO official_results (
+                           match_id, full_home_goals, full_away_goals, result_status
+                       ) VALUES (%s, 1, 0, 'final')""",
+                    (match_id,),
+                )
+    conn.commit()
+
+    matches = load_research_matches(conn, max_matches=10)
+
+    assert {row.candidate.match_id for row in matches} == set(match_ids)
+    unresolved = next(row for row in matches if row.candidate.match_id == match_ids[-1])
+    assert unresolved.result_status == ""
+    assert unresolved.candidate.home_goals is None
+    with pytest.raises(ValueError, match="predeclared final window contains unresolved results"):
+        build_research_time_splits(
+            matches,
+            ResearchEvaluationConfig(
+                fold_count=1,
+                test_window_days=1,
+                holdout_days=1,
+                predeclared_final_window_start=date(2025, 1, 3),
+                predeclared_final_window_end=date(2025, 1, 3),
+            ),
+        )
+
+
 def test_failed_group_rolls_back_prediction_and_option_rows(isolated_database):
     from scripts.model_prediction_run_storage import create_prediction_run, store_prediction_group
 
@@ -5960,6 +6018,7 @@ def test_prediction_replay_uses_only_complete_groups_from_the_requested_run(isol
 
     conn, _schema_name = isolated_database
     with conn.cursor() as cursor:
+        cursor.execute("ALTER TABLE model_versions ADD COLUMN is_active BOOLEAN DEFAULT false")
         cursor.execute("INSERT INTO ai_job_runs DEFAULT VALUES RETURNING id")
         first_job_id = cursor.fetchone()[0]
         cursor.execute(
@@ -6744,6 +6803,7 @@ def test_p111_shadow_uses_p106_run_group_replay_and_research_storage(isolated_da
     from scripts.dynamic_team_p106 import (
         MODEL_NAME,
         evaluate_dynamic_team_p106_shadow,
+        evaluate_dynamic_team_p106_shadow_vs_incumbent,
         run_dynamic_team_p106_shadow,
     )
     from scripts.model_training_manifest_storage import load_training_manifest
@@ -6754,6 +6814,24 @@ def test_p111_shadow_uses_p106_run_group_replay_and_research_storage(isolated_da
     )
 
     conn, _schema_name = isolated_database
+    with conn.cursor() as cursor:
+        cursor.execute("ALTER TABLE official_matches ADD COLUMN source_match_id TEXT")
+        cursor.execute(
+            """CREATE TABLE football_fixture_source_links (
+                   source_name TEXT NOT NULL,
+                   id_system TEXT NOT NULL,
+                   source_match_id TEXT NOT NULL,
+                   fixture_id BIGINT NOT NULL
+               )"""
+        )
+        cursor.execute(
+            """CREATE TABLE football_fixture_season_catalog (
+                   fixture_id BIGINT NOT NULL,
+                   competition_season_id BIGINT NOT NULL,
+                   season_source_name TEXT NOT NULL,
+                   season_id_system TEXT NOT NULL
+               )"""
+        )
     fit_cutoff = datetime(2026, 3, 1, 0, 0)
     pairs = ((1, 2), (3, 4), (1, 3), (2, 4), (1, 4), (2, 3))
     candidates = []
@@ -6874,9 +6952,10 @@ def test_p111_shadow_uses_p106_run_group_replay_and_research_storage(isolated_da
         )
         cursor.execute(
             """INSERT INTO official_matches (
-                   business_date, kickoff_time, match_status, home_team_name, away_team_name
-               ) VALUES (%s,%s,'scheduled','home-a','away-a'),
-                        (%s,%s,'scheduled','home-b','away-b')
+                   business_date, kickoff_time, match_status, home_team_name, away_team_name,
+                   source_match_id
+               ) VALUES (%s,%s,'scheduled','home-a','away-a','p111-test-a'),
+                        (%s,%s,'scheduled','home-b','away-b','p111-test-b')
                RETURNING id""",
             (
                 datetime(2026, 3, 11).date(),
@@ -6886,6 +6965,22 @@ def test_p111_shadow_uses_p106_run_group_replay_and_research_storage(isolated_da
             ),
         )
         match_ids = [int(row[0]) for row in cursor.fetchall()]
+        for match_id, source_match_id in zip(
+            match_ids, ("p111-test-a", "p111-test-b"), strict=True
+        ):
+            fixture_id = 10000 + match_id
+            cursor.execute(
+                """INSERT INTO football_fixture_source_links
+                   (source_name,id_system,source_match_id,fixture_id)
+                   VALUES ('sporttery','jc.matchId',%s,%s)""",
+                (source_match_id, fixture_id),
+            )
+            cursor.execute(
+                """INSERT INTO football_fixture_season_catalog
+                   (fixture_id,competition_season_id,season_source_name,season_id_system)
+                   VALUES (%s,20262027,'sporttery','uniform.leagueId+seasonId')""",
+                (fixture_id,),
+            )
         first_match_id = match_ids[0]
         for match_id, kickoff, home_team, away_team in zip(
             match_ids,
@@ -7181,3 +7276,33 @@ def test_p111_shadow_uses_p106_run_group_replay_and_research_storage(isolated_da
     replay = evaluate_prediction_replay(conn, result["run_id"])
     assert replay["model_match_ids"] == match_ids
     assert replay["market_match_ids"] == match_ids
+    incumbent_run_id = "00000000-0000-0000-0000-000000000900"
+    incumbent_replay = {
+        **replay,
+        "prediction_run_id": incumbent_run_id,
+        "predictions": [
+            {
+                **row,
+                "model_version_id": 9001,
+                "model_name": "maher_poisson",
+                "model_is_active": True,
+                "artifact_identity": {
+                    **row["artifact_identity"],
+                    "model_name": "maher_poisson",
+                },
+            }
+            for row in replay["predictions"]
+        ],
+    }
+    paired = evaluate_dynamic_team_p106_shadow_vs_incumbent(
+        conn,
+        prediction_run_id=result["run_id"],
+        incumbent_replay_report=incumbent_replay,
+        incumbent_model_version_id=9001,
+        name="P111 paired active-model replay test",
+    )
+    assert paired["status"] == "evaluated_descriptive_only"
+    assert paired["incumbent_prediction_run_id"] == incumbent_run_id
+    assert paired["sample_count"] == 2
+    assert paired["report"]["paired_match_ids"] == match_ids
+    assert paired["report"]["incumbent_active_status_attested_by_replay"] is True

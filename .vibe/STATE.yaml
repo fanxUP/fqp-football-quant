@@ -9,7 +9,7 @@
   },
   "blocked_reason": null,
   "mode": "STRICT",
-  "environment": "Local fixed-sample and isolated loopback PostgreSQL 16 verification; GitHub exact-head CI and guarded server release remain pending. No schema migration or production data access in this task.",
+  "environment": "Local fixed-sample and isolated loopback PostgreSQL 16 verification; migration 139 was applied and rolled back only in a one-time isolated test database. No production database or NAS SQLite access. Current main worktree is dirty at HEAD 037fdbf971924bfc57d9a16c327f4fd2bf2bead3; exact-head GitHub CI and guarded server release remain pending.",
   "last_transition": {
     "from": "VERIFYING",
     "to": "REVIEWING",

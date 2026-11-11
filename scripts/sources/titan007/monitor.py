@@ -103,7 +103,7 @@ class OddsMonitor:
             return True
         try:
             return abs(float(new) - float(old)) >= self.min_delta
-        except TypeError, ValueError:
+        except (TypeError, ValueError):
             return True
 
     def _alert(
@@ -312,7 +312,7 @@ def _num(value):
         if s == "":
             return None
         return float(s)
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         return None
 
 

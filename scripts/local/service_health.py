@@ -15,7 +15,7 @@ def is_http_service_alive(url: str | None = None, timeout_seconds: float = 1.0) 
     try:
         with urllib.request.urlopen(target, timeout=timeout_seconds) as response:
             return 200 <= int(response.status) < 300
-    except OSError, ValueError:
+    except (OSError, ValueError):
         return False
 
 

@@ -58,7 +58,7 @@ def _password_hash() -> str:
     except FileNotFoundError:
         # Existing installations and a new persistent volume bootstrap from env.
         return os.getenv("FQP_ADMIN_PASSWORD_HASH", "")
-    except OSError, UnicodeError:
+    except (OSError, UnicodeError):
         # Never resurrect a bootstrap password when persistent state is broken.
         return ""
 

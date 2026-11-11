@@ -185,7 +185,7 @@ def _load_trained_bivariate_shared_component(
     try:
         component = float(parameters["shared_goal_component"])
         limiting_rate = min(float(goal_rates.home_lambda), float(goal_rates.away_lambda))
-    except KeyError, TypeError, ValueError:
+    except (KeyError, TypeError, ValueError):
         return None
     if not math.isfinite(component) or component < 0 or component >= limiting_rate:
         return None
@@ -203,7 +203,7 @@ def _load_trained_negative_binomial_dispersion(
         return None
     try:
         dispersion = float(parameters["dispersion"])
-    except KeyError, TypeError, ValueError:
+    except (KeyError, TypeError, ValueError):
         return None
     if not math.isfinite(dispersion) or not 0.05 <= dispersion <= 100.0:
         return None
@@ -389,7 +389,7 @@ def _run_feature_inputs(
         predict_cutoff = to_utc(
             datetime.fromisoformat(predict_time), naive_timezone="Asia/Shanghai"
         )
-    except TypeError, ValueError, OverflowError:
+    except (TypeError, ValueError, OverflowError):
         batch_state: dict[str, Any] = {
             "batch": None,
             "newest_attempt_id": None,
@@ -826,7 +826,7 @@ def _run_impl(
                         },
                     )
                     run_feature_inputs = _run_feature_inputs(conn, int(mid), predict_time)
-                except InputUpdateSuperseded, LockNotAvailable:
+                except (InputUpdateSuperseded, LockNotAvailable):
                     conn.rollback()
                     input_updates_skipped += 1
                     continue
@@ -854,7 +854,7 @@ def _run_impl(
                             else {}
                         ),
                     )
-                except InputUpdateSuperseded, LockNotAvailable:
+                except (InputUpdateSuperseded, LockNotAvailable):
                     # Other matches remain available. Any already committed
                     # options from this calculation are invalidated on reads.
                     conn.rollback()
@@ -1234,7 +1234,7 @@ def _predict_match_play_type(
                     value = float(row[0])
                     if math.isfinite(value) and value.is_integer():
                         handicap = value
-                except TypeError, ValueError, OverflowError:
+                except (TypeError, ValueError, OverflowError):
                     pass
 
     record_expected_groups(handicap)
@@ -1320,7 +1320,7 @@ def _predict_match_play_type(
         else:
             raw_bivariate_probs = dict(market_probs)
             bivariate_probs = dict(market_probs)
-    except ArithmeticError, ValueError:
+    except (ArithmeticError, ValueError):
         bivariate_is_independent = False
         raw_bivariate_probs = dict(market_probs)
         bivariate_probs = dict(market_probs)
@@ -1350,7 +1350,7 @@ def _predict_match_play_type(
         else:
             raw_negative_binomial_probs = dict(market_probs)
             negative_binomial_probs = dict(market_probs)
-    except ArithmeticError, ValueError:
+    except (ArithmeticError, ValueError):
         negative_binomial_is_independent = False
         raw_negative_binomial_probs = dict(market_probs)
         negative_binomial_probs = dict(market_probs)

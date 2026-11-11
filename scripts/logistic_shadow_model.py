@@ -87,7 +87,7 @@ def profile_from_parameters(parameters: dict[str, Any] | None) -> LogisticShadow
         training_matches = int(parameters["training_matches"])
         validation_matches = int(parameters["validation_matches"])
         validation_log_loss = float(parameters["validation_log_loss"])
-    except KeyError, TypeError, ValueError:
+    except (KeyError, TypeError, ValueError):
         return None
     if not valid_shadow_profile(
         artifact_path,
@@ -132,7 +132,7 @@ def probabilities_from_classifier(
         value = feature_snapshot.get(column)
         try:
             numeric = float(value) if value is not None else math.nan
-        except TypeError, ValueError:
+        except (TypeError, ValueError):
             numeric = math.nan
         values.append(numeric)
 

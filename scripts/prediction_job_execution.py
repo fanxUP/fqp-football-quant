@@ -14,6 +14,25 @@ EXECUTION_PROTOCOL = "prediction-session/v1"
 _LOCK_KEY = (913201, 106)
 _INTERRUPTED = "prediction execution session ended before completion"
 
+_RUNNING_OWNER_QUERY = """SELECT j.id, j.status, j.error_message
+                           FROM ai_job_runs j
+                           WHERE j.job_code='model_prediction'
+                             AND j.status='running'
+                             AND j.input_snapshot_refs->>'execution_protocol'=%s
+                           ORDER BY j.id FOR UPDATE OF j"""
+_RUNNING_RUNS_QUERY = """SELECT r.ai_job_run_id, r.id, r.run_status
+                          FROM model_prediction_runs r
+                          WHERE r.ai_job_run_id = ANY(%s)
+                          ORDER BY r.ai_job_run_id, r.id FOR UPDATE OF r"""
+_FAILED_OWNER_QUERY = """SELECT j.id, j.status, j.error_message, r.id, r.run_status
+                          FROM model_prediction_runs r
+                          JOIN ai_job_runs j ON j.id=r.ai_job_run_id
+                          WHERE r.run_status='running'
+                            AND j.job_code='model_prediction'
+                            AND j.status='failed'
+                            AND j.input_snapshot_refs->>'execution_protocol'=%s
+                          ORDER BY r.id FOR UPDATE OF j, r"""
+
 
 def _recover_owned_runs(conn: Any) -> None:
     """Recover only versioned owners, atomically with their failed run manifests.
@@ -23,17 +42,25 @@ def _recover_owned_runs(conn: Any) -> None:
     """
     try:
         with conn.cursor() as cur:
-            cur.execute(
-                """SELECT j.id, j.status, j.error_message, r.id, r.run_status
-                   FROM ai_job_runs j
-                   LEFT JOIN model_prediction_runs r ON r.ai_job_run_id=j.id
-                   WHERE j.job_code='model_prediction'
-                     AND j.input_snapshot_refs->>'execution_protocol'=%s
-                     AND (j.status='running' OR (j.status='failed' AND r.run_status='running'))
-                   ORDER BY j.id FOR UPDATE OF j""",
-                (EXECUTION_PROTOCOL,),
-            )
-            rows = cur.fetchall()
+            cur.execute(_RUNNING_OWNER_QUERY, (EXECUTION_PROTOCOL,))
+            running_owners = cur.fetchall()
+            running_ids = [job_id for job_id, _, _ in running_owners]
+            running_by_owner: dict[int, list[tuple[Any, Any]]] = {
+                job_id: [] for job_id in running_ids
+            }
+            if running_ids:
+                cur.execute(_RUNNING_RUNS_QUERY, (running_ids,))
+                for job_id, run_id, run_status in cur.fetchall():
+                    running_by_owner[job_id].append((run_id, run_status))
+            cur.execute(_FAILED_OWNER_QUERY, (EXECUTION_PROTOCOL,))
+            failed_owners = cur.fetchall()
+
+        rows = [
+            (job_id, job_status, job_error, run_id, run_status)
+            for job_id, job_status, job_error in running_owners
+            for run_id, run_status in (running_by_owner[job_id] or [(None, None)])
+        ]
+        rows.extend(failed_owners)
         for job_id, job_status, job_error, run_id, run_status in rows:
             if run_status == "running":
                 reason = (

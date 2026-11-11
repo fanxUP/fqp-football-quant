@@ -62,7 +62,7 @@ def decode_body(content: bytes, content_type: str = "") -> str:
     for encoding in [*encodings, "utf-8-sig", "utf-8", "gb18030"]:
         try:
             return content.decode(encoding)
-        except UnicodeDecodeError, LookupError:
+        except (UnicodeDecodeError, LookupError):
             continue
     return content.decode("utf-8", "replace")
 

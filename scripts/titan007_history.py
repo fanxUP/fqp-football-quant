@@ -189,7 +189,7 @@ def normalize(domain, row, match, roster_complete=False):
     elif domain == "player_stats":
         try:
             r["metrics"] = json.loads(r.pop("data_json") or "{}")
-        except ValueError, TypeError:
+        except (ValueError, TypeError):
             raise ValueError("invalid_player_metrics") from None
     elif domain in ("odds", "odds_history"):
         origin = "market"

@@ -33,7 +33,7 @@ def derive_injuries(conn) -> int:
     ):
         try:
             items = json.loads(r["payload"] or "[]")
-        except TypeError, ValueError:
+        except (TypeError, ValueError):
             continue
         for i in items or []:
             rows.append(
@@ -141,7 +141,7 @@ def derive_context(conn) -> int:
                     d1 = datetime.strptime(r["match_date"], "%Y-%m-%d")
                     d0 = datetime.strptime(prev["match_date"], "%Y-%m-%d")
                     rest = (d1 - d0).days
-                except TypeError, ValueError:
+                except (TypeError, ValueError):
                     pass
                 if side == "away":
                     consecutive_away = 1

@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import subprocess
 import sys
 from contextlib import closing, contextmanager
+from pathlib import Path
 from uuid import uuid4
 
 import psycopg2
@@ -14,6 +16,7 @@ import pytest
 from psycopg2 import sql
 from psycopg2.extras import Json
 
+from ops.server.migrate import concurrent_index_migration
 from scripts import prediction_job_execution as ownership
 from scripts.model_prediction_run_storage import (
     create_prediction_run,
@@ -322,6 +325,72 @@ def test_lost_owner_session_fences_writes_before_new_owner_can_recover(database)
     with conn.cursor() as cur:
         cur.execute("SELECT count(*) FROM model_predictions")
         assert cur.fetchone() == (0,)
+
+
+def test_running_owner_recovery_probe_uses_a_partial_index_in_large_history(database):
+    conn, _, _, _ = database
+    with conn.cursor() as cur:
+        cur.execute(
+            """INSERT INTO ai_job_runs
+                   (job_code, job_name, owner_agent, input_snapshot_refs, status,
+                    started_at, created_at)
+               SELECT 'model_prediction', 'history', 'fixture', '{}'::jsonb, 'ok',
+                      now() - series * interval '1 second',
+                      now() - series * interval '1 second'
+               FROM generate_series(1, 25000) AS series"""
+        )
+    conn.commit()
+    seed(conn)
+    with conn.cursor() as cur:
+        cur.execute(
+            """CREATE INDEX idx_ai_job_runs_prediction_recovery
+               ON ai_job_runs ((input_snapshot_refs->>'execution_protocol'), id)
+               WHERE job_code='model_prediction' AND status='running'"""
+        )
+        cur.execute("ANALYZE ai_job_runs")
+    conn.commit()
+
+    with conn.cursor() as cur:
+        cur.execute(
+            "EXPLAIN (FORMAT JSON, COSTS FALSE) " + ownership._RUNNING_OWNER_QUERY,
+            (ownership.EXECUTION_PROTOCOL,),
+        )
+        plan = json.dumps(cur.fetchone()[0])
+
+    assert "idx_ai_job_runs_prediction_recovery" in plan
+
+
+def test_recovery_index_migration_uses_the_retryable_online_format():
+    migration = Path(__file__).resolve().parents[2] / "sql/139_prediction_recovery_index.sql"
+    parsed = concurrent_index_migration(migration.read_text(encoding="utf-8"))
+
+    assert parsed is not None
+    index_name, statement = parsed
+    assert index_name == "idx_ai_job_runs_prediction_recovery"
+    assert "CREATE INDEX CONCURRENTLY IF NOT EXISTS" in statement
+
+
+def test_migration_runner_rejects_a_transactional_or_mismatched_index_marker():
+    with pytest.raises(RuntimeError, match="concurrently"):
+        concurrent_index_migration(
+            "-- FQP: CONCURRENT_INDEX idx_ai_job_runs_prediction_recovery\n"
+            "CREATE INDEX IF NOT EXISTS idx_ai_job_runs_prediction_recovery "
+            "ON public.ai_job_runs (id);"
+        )
+
+
+def test_local_migration_runner_applies_online_indexes_in_one_locked_psql_session():
+    script = (
+        Path(__file__).resolve().parents[2] / "ops/local/apply_local_migrations.sh"
+    ).read_text(encoding="utf-8")
+
+    assert "FQP: CONCURRENT_INDEX" in script
+    assert "pg_advisory_lock(913201, 104)" in script
+    assert "fqp_migration_exists" in script
+    assert "fqp_migration_checksum_matches" in script
+    assert "RAISE EXCEPTION 'FQP migration checksum differs:" in script
+    assert "DROP INDEX CONCURRENTLY IF EXISTS" in script
+    assert "\\\\gexec" in script
 
 
 def test_real_process_exit_retains_outputs_and_releases_session_for_recovery(database):

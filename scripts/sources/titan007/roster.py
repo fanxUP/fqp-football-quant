@@ -52,7 +52,7 @@ def parse_coach(text: str) -> dict[str, Any]:
 def _int(value):
     try:
         return int(str(value).strip())
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         return None
 
 

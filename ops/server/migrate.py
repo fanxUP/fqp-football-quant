@@ -14,6 +14,7 @@ import shlex
 from pathlib import Path
 
 import psycopg2
+from psycopg2 import sql
 
 ROOT = Path(__file__).resolve().parents[2]
 TRANSACTION_CONTROL = re.compile(
@@ -22,6 +23,10 @@ TRANSACTION_CONTROL = re.compile(
     re.IGNORECASE,
 )
 TRANSACTION_WRAPPER = re.compile(r"^\s*(BEGIN|COMMIT)\s*$", re.IGNORECASE)
+CONCURRENT_INDEX_MARKER = re.compile(
+    r"^[ \t]*--[ \t]*FQP:[ \t]*CONCURRENT_INDEX[ \t]+([A-Za-z_][A-Za-z0-9_]*)[ \t]*$",
+    re.MULTILINE,
+)
 
 
 def _identifier_character(char: str) -> bool:
@@ -172,14 +177,14 @@ def _sql_statements(source: str) -> list[tuple[int, int, int, str]]:
     if mode in {"block_comment", "single_quote", "double_quote", "dollar_quote"}:
         raise RuntimeError("Migration SQL has an unterminated comment or quoted value")
     append_statement(len(source))
-    for start, end, _, cleaned in statements:
+    for start, end, _, cleaned_statement in statements:
         raw = source[start:end]
         changes_string_mode = (
             (
-                re.match(r"^\s*(SET|RESET)\b", cleaned, re.IGNORECASE)
+                re.match(r"^\s*(SET|RESET)\b", cleaned_statement, re.IGNORECASE)
                 and "standard_conforming_strings" in raw.lower()
             )
-            or re.match(r"^\s*RESET\s+ALL\b", cleaned, re.IGNORECASE)
+            or re.match(r"^\s*RESET\s+ALL\b", cleaned_statement, re.IGNORECASE)
             or (
                 re.search(r"\bset_config\s*\(", raw, re.IGNORECASE)
                 and "standard_conforming_strings" in raw.lower()
@@ -282,6 +287,122 @@ def migration_body(source: str) -> str:
     return "".join(body)
 
 
+def concurrent_index_migration(source: str) -> tuple[str, str] | None:
+    """Recognize the narrowly supported online-index migration format."""
+    markers = list(CONCURRENT_INDEX_MARKER.finditer(source))
+    if not markers:
+        if re.search(r"FQP:\s*CONCURRENT_INDEX", source, re.IGNORECASE):
+            raise RuntimeError("Malformed concurrent-index migration marker")
+        return None
+    if len(markers) != 1:
+        raise RuntimeError("Concurrent-index migration must declare exactly one index")
+
+    index_name = markers[0].group(1)
+    statements = _sql_statements(source)
+    if len(statements) != 1:
+        raise RuntimeError("Concurrent-index migration must contain exactly one SQL statement")
+    start, end, _, cleaned = statements[0]
+    expected = re.compile(
+        rf"^\s*CREATE\s+INDEX\s+CONCURRENTLY\s+IF\s+NOT\s+EXISTS\s+"
+        rf"{re.escape(index_name)}\s+ON\s+public\.ai_job_runs\b",
+        re.IGNORECASE,
+    )
+    if not expected.match(cleaned):
+        raise RuntimeError("Marked migration must create its declared index concurrently")
+    return index_name, source[start:end].strip()
+
+
+def _concurrent_index_state(cur, index_name: str):
+    cur.execute(
+        """SELECT idx.indisvalid, idx.indisready, table_ns.nspname, table_rel.relname,
+                  idx.indnatts, idx.indnkeyatts, am.amname,
+                  pg_get_indexdef(index_rel.oid, 1, true),
+                  pg_get_indexdef(index_rel.oid, 2, true),
+                  pg_get_expr(idx.indpred, idx.indrelid)
+           FROM pg_class index_rel
+           JOIN pg_namespace index_ns ON index_ns.oid=index_rel.relnamespace
+           JOIN pg_index idx ON idx.indexrelid=index_rel.oid
+           JOIN pg_class table_rel ON table_rel.oid=idx.indrelid
+           JOIN pg_namespace table_ns ON table_ns.oid=table_rel.relnamespace
+           JOIN pg_am am ON am.oid=index_rel.relam
+           WHERE index_ns.nspname='public' AND index_rel.relname=%s""",
+        (index_name,),
+    )
+    return cur.fetchone()
+
+
+def _validate_prediction_recovery_index(state, index_name: str) -> None:
+    if state is None:
+        raise RuntimeError(f"Concurrent index was not created: {index_name}")
+    (
+        valid,
+        ready,
+        schema,
+        table,
+        attributes,
+        key_attributes,
+        access_method,
+        first_key,
+        second_key,
+        predicate,
+    ) = state
+
+    def normalize(value: str | None) -> str:
+        return re.sub(r"[\s()\"]+", "", value or "").lower()
+
+    expected_first_key = "input_snapshot_refs->>'execution_protocol'::text"
+    expected_predicate_parts = ("job_code='model_prediction'", "status='running'")
+    normalized_predicate = normalize(predicate)
+    if (
+        not valid
+        or not ready
+        or schema != "public"
+        or table != "ai_job_runs"
+        or attributes != 2
+        or key_attributes != 2
+        or access_method != "btree"
+        or normalize(first_key) != expected_first_key
+        or normalize(second_key) != "id"
+        or not all(part in normalized_predicate for part in expected_predicate_parts)
+    ):
+        raise RuntimeError(f"Concurrent index definition or validity is unexpected: {index_name}")
+
+
+def _apply_concurrent_index_migration(
+    conn, *, filename: str, checksum: str, index_name: str, statement: str
+) -> None:
+    """Build one marked index outside a transaction and record it only when valid."""
+    with conn.cursor() as cur:
+        cur.execute("SHOW lock_timeout")
+        previous_lock_timeout = cur.fetchone()[0]
+        cur.execute("SHOW statement_timeout")
+        previous_statement_timeout = cur.fetchone()[0]
+        cur.execute("SET lock_timeout = '5s'")
+        # A concurrent build can scan a large history table; it remains online
+        # while keeping the deployment bounded and retryable after timeout.
+        cur.execute("SET statement_timeout = '900s'")
+        state = _concurrent_index_state(cur, index_name)
+        if state is not None and (not state[0] or not state[1]):
+            cur.execute(
+                sql.SQL("DROP INDEX CONCURRENTLY IF EXISTS public.{} ").format(
+                    sql.Identifier(index_name)
+                )
+            )
+            state = None
+        if state is None:
+            cur.execute(statement)
+            state = _concurrent_index_state(cur, index_name)
+        _validate_prediction_recovery_index(state, index_name)
+        cur.execute(
+            "INSERT INTO local_schema_migrations(filename, checksum_sha256) VALUES (%s, %s)",
+            (filename, checksum),
+        )
+        cur.execute("SELECT set_config('lock_timeout', %s, false)", (previous_lock_timeout,))
+        cur.execute(
+            "SELECT set_config('statement_timeout', %s, false)", (previous_statement_timeout,)
+        )
+
+
 def require_migration_authority(
     *, role: str, database_owner: str, superuser: bool, has_pending: bool, apply: bool
 ) -> None:
@@ -296,14 +417,16 @@ def run(apply: bool) -> None:
         (path for path in (ROOT / "sql").glob("*.sql") if re.match(r"^\d+_", path.name)),
         key=lambda path: (int(path.name.split("_", 1)[0]), path.name),
     )
-    with psycopg2.connect(database_url(), connect_timeout=5) as conn:
+    conn = psycopg2.connect(database_url(), connect_timeout=5)
+    try:
         with conn.cursor() as cur:
             cur.execute("SET LOCAL lock_timeout = '5s'")
             cur.execute("SET LOCAL statement_timeout = '120s'")
             cur.execute("SET LOCAL standard_conforming_strings = on")
             cur.execute("SET LOCAL timezone = 'UTC'")
-            # Serialize planning and apply against other instances of this runner.
-            cur.execute("SELECT pg_advisory_xact_lock(%s, %s)", (913201, 104))
+            # A session lock remains held while a marked index build temporarily
+            # leaves transaction mode for CREATE INDEX CONCURRENTLY.
+            cur.execute("SELECT pg_advisory_lock(%s, %s)", (913201, 104))
             cur.execute(
                 """SELECT current_user, datdba::regrole::text,
                           (SELECT rolsuper FROM pg_roles WHERE rolname=current_user)
@@ -312,8 +435,9 @@ def run(apply: bool) -> None:
             role, owner, superuser = cur.fetchone()
             cur.execute("SELECT filename, checksum_sha256 FROM local_schema_migrations")
             applied = dict(cur.fetchall())
+            known_migrations = {path.name for path in migrations}
             for filename in applied:
-                if filename not in {path.name for path in migrations}:
+                if filename not in known_migrations:
                     raise RuntimeError(f"Applied migration is missing from checkout: {filename}")
             pending = []
             for path in migrations:
@@ -327,17 +451,19 @@ def run(apply: bool) -> None:
                         raise RuntimeError(f"Applied migration checksum changed: {path.name}")
                 else:
                     pending.append((path, checksum))
-            require_migration_authority(
-                role=role,
-                database_owner=owner,
-                superuser=superuser,
-                has_pending=bool(pending),
-                apply=apply,
-            )
-            if apply:
-                if pending and not superuser:
-                    # Migration 93 deliberately grants only SELECT/INSERT on
-                    # its append-only audit table; that remains an exception.
+
+        require_migration_authority(
+            role=role,
+            database_owner=owner,
+            superuser=superuser,
+            has_pending=bool(pending),
+            apply=apply,
+        )
+        if apply:
+            if pending and not superuser:
+                # Migration 93 deliberately grants only SELECT/INSERT on its
+                # append-only audit table; that remains an exception.
+                with conn.cursor() as cur:
                     cur.execute("""
                         SELECT c.relname FROM pg_class c
                         JOIN pg_namespace n ON n.oid = c.relnamespace
@@ -349,29 +475,52 @@ def run(apply: bool) -> None:
                     """)
                     if cur.fetchall():
                         raise RuntimeError("Application role is missing table permissions")
-                for path, checksum in pending:
-                    print(f"Applying {path.name}", flush=True)
-                    # A prior migration could change session settings through
-                    # set_config(); restore the parser's SQL string mode first.
-                    cur.execute("SET LOCAL standard_conforming_strings = on")
-                    cur.execute(migration_body(path.read_text()))
-                    cur.execute(
-                        "INSERT INTO local_schema_migrations(filename, checksum_sha256) VALUES (%s, %s)",
-                        (path.name, checksum),
-                    )
-            else:
-                print(f"Role: {role}; pending migrations: {[path.name for path, _ in pending]}")
-            if apply and pending and not superuser:
-                cur.execute("""
-                    SELECT relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-                    WHERE n.nspname = 'public' AND c.relkind = 'S'
-                      AND NOT has_sequence_privilege(current_user, c.oid, 'USAGE')
-                """)
-                if cur.fetchall():
-                    raise RuntimeError("Application role is missing sequence permissions")
-        if not apply:
+            for path, checksum in pending:
+                print(f"Applying {path.name}", flush=True)
+                source = path.read_text()
+                concurrent_index = concurrent_index_migration(source)
+                if concurrent_index is not None:
+                    index_name, statement = concurrent_index
+                    conn.commit()
+                    conn.autocommit = True
+                    try:
+                        _apply_concurrent_index_migration(
+                            conn,
+                            filename=path.name,
+                            checksum=checksum,
+                            index_name=index_name,
+                            statement=statement,
+                        )
+                    finally:
+                        conn.autocommit = False
+                    with conn.cursor() as cur:
+                        cur.execute("SELECT pg_advisory_xact_lock(%s, %s)", (913201, 104))
+                else:
+                    with conn.cursor() as cur:
+                        # Restore parser-sensitive settings after prior migrations.
+                        cur.execute("SET LOCAL standard_conforming_strings = on")
+                        cur.execute(migration_body(source))
+                        cur.execute(
+                            "INSERT INTO local_schema_migrations(filename, checksum_sha256) VALUES (%s, %s)",
+                            (path.name, checksum),
+                        )
+            if pending and not superuser:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        SELECT relname FROM pg_class c
+                        JOIN pg_namespace n ON n.oid = c.relnamespace
+                        WHERE n.nspname = 'public' AND c.relkind = 'S'
+                          AND NOT has_sequence_privilege(current_user, c.oid, 'USAGE')
+                    """)
+                    if cur.fetchall():
+                        raise RuntimeError("Application role is missing sequence permissions")
+            conn.commit()
+        else:
+            print(f"Role: {role}; pending migrations: {[path.name for path, _ in pending]}")
             conn.rollback()
-    print("Migration apply complete" if apply else "Read-only migration plan complete")
+        print("Migration apply complete" if apply else "Read-only migration plan complete")
+    finally:
+        conn.close()
 
 
 if __name__ == "__main__":

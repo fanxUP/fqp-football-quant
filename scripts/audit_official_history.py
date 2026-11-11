@@ -134,7 +134,7 @@ def select_in_scope_official_match_ids(
         match_id = row.get("match_id", "")
         try:
             business_date = date.fromisoformat(row["business_date"])
-        except KeyError, ValueError:
+        except (KeyError, ValueError):
             if match_id:
                 excluded_ids.add(match_id)
             continue

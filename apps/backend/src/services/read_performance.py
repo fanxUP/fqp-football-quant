@@ -166,7 +166,7 @@ class ReadPerformanceMiddleware:
         try:
             try:
                 await self.app(scope, receive, timed_send)
-            except ReadBudgetExceeded, QueryCanceled, PoolError:
+            except (ReadBudgetExceeded, QueryCanceled, PoolError):
                 if sent or not bounded:
                     raise
                 response = JSONResponse(

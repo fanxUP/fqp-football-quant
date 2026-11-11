@@ -16,7 +16,7 @@ def finite_number(value: Any) -> float | None:
         return None
     try:
         number = float(value)
-    except TypeError, ValueError, OverflowError:
+    except (TypeError, ValueError, OverflowError):
         return None
     return number if isfinite(number) else None
 

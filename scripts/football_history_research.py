@@ -61,7 +61,7 @@ def _label_reason(sample, row, as_of):
         kickoff = _official_time(row.get("kickoff_at")).replace(tzinfo=OFFICIAL_TIMEZONE)
         if kickoff.astimezone(UTC) != _time(sample["kickoff_at"]):
             return "official_identity_mismatch"
-    except ValueError, TypeError:
+    except (ValueError, TypeError):
         return "official_identity_mismatch"
     if str(row.get("match_status", "")).lower() != "settled":
         return "official_not_settled"

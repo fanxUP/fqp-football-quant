@@ -143,15 +143,47 @@ SQL
     (( version <= BASELINE_VERSION )) && continue
 
     echo "[fqp-db] applying $filename"
-    {
-        printf 'BEGIN;\n'
-        sed -n '1,$p' "$migration"
-        printf "\nINSERT INTO local_schema_migrations (filename, checksum_sha256) VALUES ('%s', '%s');\n" "$filename" "$checksum"
-        printf 'COMMIT;\n'
-    } | if [[ "$filename" =~ ^(109|110)_ ]]; then
-        psql_admin -d fqp -q
+    if grep -q 'FQP: CONCURRENT_INDEX' "$migration"; then
+        index_name="$(sed -nE 's/^[[:space:]]*--[[:space:]]*FQP:[[:space:]]*CONCURRENT_INDEX[[:space:]]+([A-Za-z_][A-Za-z0-9_]*)[[:space:]]*$/\1/p' "$migration")"
+        [[ "$index_name" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] \
+            || { echo "[fqp-db] malformed concurrent-index marker: $filename" >&2; exit 1; }
+        [[ "$(grep -c 'FQP: CONCURRENT_INDEX' "$migration")" == "1" ]] \
+            || { echo "[fqp-db] expected one concurrent-index marker: $filename" >&2; exit 1; }
+        grep -Eq "CREATE[[:space:]]+INDEX[[:space:]]+CONCURRENTLY[[:space:]]+IF[[:space:]]+NOT[[:space:]]+EXISTS[[:space:]]+$index_name[[:space:]]+ON[[:space:]]+public\\.ai_job_runs" "$migration" \
+            || { echo "[fqp-db] marked file does not create its declared index: $filename" >&2; exit 1; }
+        {
+            printf 'SELECT pg_advisory_lock(913201, 104);\n'
+            printf "SELECT EXISTS (SELECT 1 FROM local_schema_migrations WHERE filename='%s') AS fqp_migration_exists, COALESCE((SELECT checksum_sha256='%s' FROM local_schema_migrations WHERE filename='%s'), FALSE) AS fqp_migration_checksum_matches\n" "$filename" "$checksum" "$filename"
+            printf '\\gset\n'
+            printf '\\if :fqp_migration_exists\n'
+            printf '  \\if :fqp_migration_checksum_matches\n'
+            printf '    \\echo [fqp-db] migration completed by another runner; skipping\n'
+            printf '  \\else\n'
+            printf '    \\echo [fqp-db] applied migration checksum differs: %s\n' "$filename"
+            printf '%s\n' "    DO \$\$ BEGIN RAISE EXCEPTION 'FQP migration checksum differs: $filename'; END \$\$;"
+            printf '  \\endif\n'
+            printf '\\else\n'
+            printf "SELECT format('DROP INDEX CONCURRENTLY IF EXISTS %%I.%%I', n.nspname, c.relname)\n"
+            printf "FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace\n"
+            printf "JOIN pg_index i ON i.indexrelid=c.oid\n"
+            printf "WHERE n.nspname='public' AND c.relname='%s'\n" "$index_name"
+            printf "AND (NOT i.indisvalid OR NOT i.indisready)\n\\gexec\n"
+            sed -n '1,$p' "$migration"
+            printf "\nINSERT INTO local_schema_migrations (filename, checksum_sha256) VALUES ('%s', '%s');\n" "$filename" "$checksum"
+            printf '\\endif\n'
+            printf 'SELECT pg_advisory_unlock(913201, 104);\n'
+        } | psql_exec -q
     else
-        psql_exec -q
+        {
+            printf 'BEGIN;\n'
+            sed -n '1,$p' "$migration"
+            printf "\nINSERT INTO local_schema_migrations (filename, checksum_sha256) VALUES ('%s', '%s');\n" "$filename" "$checksum"
+            printf 'COMMIT;\n'
+        } | if [[ "$filename" =~ ^(109|110)_ ]]; then
+            psql_admin -d fqp -q
+        else
+            psql_exec -q
+        fi
     fi
 done < <(ordered_migrations)
 

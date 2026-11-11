@@ -74,7 +74,7 @@ def js_literal(text: str | None) -> Any:
         return None
     try:
         return ast.literal_eval(_sanitize_js(text))
-    except ValueError, SyntaxError:
+    except (ValueError, SyntaxError):
         return None
 
 

@@ -595,7 +595,7 @@ def build_model_artifact_identity(
 
             try:
                 verify_artifact_identity(parameters)
-            except TypeError, ValueError:
+            except (TypeError, ValueError):
                 status = "incomplete"
                 reason = "training_manifest_identity_invalid"
             else:
@@ -607,7 +607,7 @@ def build_model_artifact_identity(
                 else:
                     try:
                         stored_manifest_sha256 = compute_training_manifest_sha256(training_manifest)
-                    except TypeError, ValueError:
+                    except (TypeError, ValueError):
                         status = "incomplete"
                         reason = "training_manifest_record_invalid"
                     else:

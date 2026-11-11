@@ -68,7 +68,7 @@ def extract_team_logos(teams: Iterable[Any]) -> dict[int, tuple[str | None, str 
             continue
         try:
             team_id = int(str(row[0]).strip())
-        except TypeError, ValueError:
+        except (TypeError, ValueError):
             continue
         logo = row[5] if len(row) > 5 else None
         out[team_id] = (row[1] if len(row) > 1 else None, logo or None)

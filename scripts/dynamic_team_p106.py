@@ -29,7 +29,10 @@ from scripts.dynamic_team_challenger import (
     fit_dynamic_team_challenger,
     predict_dynamic_team_challenger,
 )
-from scripts.model_artifact_identity import canonical_json_bytes, training_manifest_sha256
+from scripts.model_artifact_identity import (
+    canonical_json_bytes,
+    training_manifest_sha256,
+)
 from scripts.model_prediction_run_identity import (
     build_model_artifact_identity,
     content_sha256,
@@ -286,7 +289,10 @@ def _validate_parent_manifest(
         checked_included.append(row)
     ordered = sorted(
         checked_included,
-        key=lambda row: (_naive_datetime(row["kickoff_time"], "kickoff_time"), row["match_id"]),
+        key=lambda row: (
+            _naive_datetime(row["kickoff_time"], "kickoff_time"),
+            row["match_id"],
+        ),
     )
     if checked_included != ordered:
         raise ValueError("parent included samples are not in P106 chronological order")
@@ -421,7 +427,8 @@ def project_p106_manifest_to_season(
             reason = "p111_context_missing"
         elif (
             _naive_datetime(
-                match_context.season_membership_available_at, "season membership available_at"
+                match_context.season_membership_available_at,
+                "season membership available_at",
             )
             > cutoff
             or _naive_datetime(match_context.venue_evidence_available_at, "venue available_at")
@@ -707,7 +714,8 @@ def _load_market_snapshots(
     )
     with conn.cursor() as cursor:
         cursor.execute(
-            "SELECT id, kickoff_time FROM official_matches WHERE id = ANY(%s)", (match_ids,)
+            "SELECT id, kickoff_time FROM official_matches WHERE id = ANY(%s)",
+            (match_ids,),
         )
         stored_matches = {int(row[0]): row[1] for row in cursor.fetchall()}
         cursor.execute(
@@ -1155,7 +1163,10 @@ def evaluate_dynamic_team_p106_shadow(
     ):
         raise ValueError("P111 model version is not an inactive shadow candidate")
 
-    from scripts.backtest_engine import evaluate_prediction_replay, store_research_evaluation_run
+    from scripts.backtest_engine import (
+        evaluate_prediction_replay,
+        store_research_evaluation_run,
+    )
 
     report = evaluate_prediction_replay(conn, normalized_run_id)
     if report.get("official_prediction_writes") != 0 or not report.get("predictions"):
@@ -1169,6 +1180,123 @@ def evaluate_dynamic_team_p106_shadow(
     return {
         "status": "evaluated",
         "prediction_run_id": normalized_run_id,
+        "evaluation_run_id": evaluation_run_id,
+        "sample_count": report["sample_count"],
+        "report": report,
+    }
+
+
+def evaluate_dynamic_team_p106_shadow_vs_incumbent(
+    conn: Any,
+    *,
+    prediction_run_id: uuid.UUID | str,
+    incumbent_replay_report: Mapping[str, Any],
+    incumbent_model_version_id: int,
+    name: str,
+    predeclared_window: bool = False,
+) -> dict[str, Any]:
+    """Pair an isolated P111 replay with an exported active-model replay report.
+
+    The incumbent report is produced by a separate read-only replay against its
+    source database. This function only reads the isolated P111 database and
+    never needs a connection to the incumbent's database.
+    """
+    if getattr(conn, "autocommit", False) is True:
+        raise ValueError("P111 comparison requires autocommit=False")
+    if not callable(getattr(conn, "get_transaction_status", None)):
+        raise TypeError("P111 comparison requires a psycopg2 connection")
+    if conn.get_transaction_status() != TRANSACTION_STATUS_IDLE:
+        raise ValueError("P111 comparison requires an idle connection")
+    _require_isolated_research_database(conn)
+    candidate_run_id = str(uuid.UUID(str(prediction_run_id)))
+    if not isinstance(incumbent_replay_report, Mapping):
+        raise TypeError("incumbent_replay_report must be a replay report mapping")
+    incumbent_run_id = str(uuid.UUID(str(incumbent_replay_report.get("prediction_run_id", ""))))
+    if candidate_run_id == incumbent_run_id:
+        raise ValueError("candidate and incumbent must use different prediction runs")
+    if type(incumbent_model_version_id) is not int or incumbent_model_version_id <= 0:
+        raise ValueError("incumbent_model_version_id must be a positive integer")
+    if type(predeclared_window) is not bool:
+        raise ValueError("predeclared_window must be a boolean attestation")
+
+    with conn.cursor() as cursor:
+        cursor.execute(
+            "SELECT run_status, model_manifest FROM model_prediction_runs WHERE id=%s",
+            (candidate_run_id,),
+        )
+        candidate_run = cursor.fetchone()
+    conn.commit()
+    if candidate_run is None:
+        raise ValueError("candidate prediction run was not found")
+    candidate_status, candidate_manifest = candidate_run
+    if candidate_status not in {"completed", "partial"}:
+        raise ValueError("P111 candidate run is not terminal")
+    if (
+        not isinstance(candidate_manifest, list)
+        or len(candidate_manifest) != 1
+        or not isinstance(candidate_manifest[0], Mapping)
+        or candidate_manifest[0].get("model_name") != MODEL_NAME
+    ):
+        raise ValueError("candidate prediction run is not a P111 shadow run")
+    candidate_model_id = candidate_manifest[0].get("model_version_id")
+    if type(candidate_model_id) is not int or candidate_model_id <= 0:
+        raise ValueError("P111 candidate run has an invalid model version ID")
+
+    with conn.cursor() as cursor:
+        cursor.execute(
+            "SELECT model_name, is_active, parameters_json FROM model_versions WHERE id=%s",
+            (candidate_model_id,),
+        )
+        candidate_version = cursor.fetchone()
+    conn.commit()
+    if candidate_version is None:
+        raise ValueError("candidate model version was not found")
+    candidate_name, candidate_active, candidate_parameters = candidate_version
+    if (
+        candidate_name != MODEL_NAME
+        or candidate_active is not False
+        or not isinstance(candidate_parameters, Mapping)
+        or candidate_parameters.get("rollout_mode") != "shadow"
+        or candidate_parameters.get("publishable") is not False
+    ):
+        raise ValueError("P111 model version is not an inactive shadow candidate")
+
+    from scripts.backtest_engine import (
+        compare_prediction_replay_reports,
+        evaluate_prediction_replay,
+        store_research_evaluation_run,
+    )
+
+    candidate_report = evaluate_prediction_replay(conn, candidate_run_id)
+    candidate_replay_rows = candidate_report.get("predictions")
+    if (
+        candidate_report.get("official_prediction_writes") != 0
+        or not isinstance(candidate_replay_rows, list)
+        or not candidate_replay_rows
+        or any(
+            not isinstance(row, Mapping)
+            or row.get("model_name") != MODEL_NAME
+            or row.get("model_is_active") is not False
+            for row in candidate_replay_rows
+        )
+    ):
+        raise ValueError("P111 model is not an inactive shadow candidate at replay")
+    report = compare_prediction_replay_reports(
+        candidate_report,
+        incumbent_replay_report,
+        challenger_model_version_id=candidate_model_id,
+        incumbent_model_version_id=incumbent_model_version_id,
+        require_active_incumbent=True,
+        predeclared_window=predeclared_window,
+    )
+    if report.get("incumbent_model_name") == MODEL_NAME:
+        raise ValueError("incumbent must be a non-P111 formal model")
+    report["incumbent_active_status_attested_by_replay"] = True
+    evaluation_run_id = store_research_evaluation_run(conn, report, name=name)
+    return {
+        "status": report["status"],
+        "prediction_run_id": candidate_run_id,
+        "incumbent_prediction_run_id": incumbent_run_id,
         "evaluation_run_id": evaluation_run_id,
         "sample_count": report["sample_count"],
         "report": report,

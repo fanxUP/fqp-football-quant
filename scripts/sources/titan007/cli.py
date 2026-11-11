@@ -276,7 +276,7 @@ def _num(value):
         if s == "":
             return None
         return float(s)
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         return None
 
 

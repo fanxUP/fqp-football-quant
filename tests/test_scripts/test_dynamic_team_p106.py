@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 from datetime import UTC, datetime, timedelta
+from unittest.mock import MagicMock
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -11,7 +12,10 @@ from scripts.dynamic_team_p106 import (
     _require_isolated_research_database,
     project_p106_manifest_to_season,
 )
-from scripts.model_artifact_identity import canonical_json_bytes, training_manifest_sha256
+from scripts.model_artifact_identity import (
+    canonical_json_bytes,
+    training_manifest_sha256,
+)
 from scripts.training_manifest import (
     CandidateMatch,
     ResultLabelObservation,
@@ -87,7 +91,11 @@ def _parent_dataset():
     return build_training_dataset(candidates, min_matches=1, cutoff_at=FIT_CUTOFF)
 
 
-def _context(season_id: int = 20262027, *, available_at: datetime = FIT_CUTOFF - timedelta(days=1)):
+def _context(
+    season_id: int = 20262027,
+    *,
+    available_at: datetime = FIT_CUTOFF - timedelta(days=1),
+):
     return SeasonMatchContext(
         competition_id=77,
         competition_season_id=season_id,
@@ -361,3 +369,113 @@ def test_p106_shadow_writer_requires_server_side_database_attestation():
     with pytest.raises(ValueError, match="database attestation"):
         _require_isolated_research_database(connection)
     assert connection.rolled_back is True
+
+
+def test_p111_shadow_comparison_requires_the_explicit_active_incumbent(monkeypatch):
+    from scripts import backtest_engine
+    from scripts.dynamic_team_p106 import (
+        MODEL_NAME,
+        evaluate_dynamic_team_p106_shadow_vs_incumbent,
+    )
+
+    candidate_run_id = "00000000-0000-0000-0000-000000000501"
+    candidate_report = {
+        "evaluation_mode": "prediction_replay",
+        "official_prediction_writes": 0,
+        "predictions": [{"model_name": MODEL_NAME, "model_is_active": False}],
+    }
+    incumbent_report = {
+        "evaluation_mode": "prediction_replay",
+        "prediction_run_id": "00000000-0000-0000-0000-000000000010",
+        "predictions": [],
+    }
+    paired_report = {
+        "evaluation_mode": "paired_prediction_replay",
+        "status": "evaluated_descriptive_only",
+        "sample_count": 4,
+    }
+    conn = MagicMock()
+    conn.autocommit = False
+    conn.get_transaction_status.return_value = 0
+    cursor = conn.cursor.return_value.__enter__.return_value
+    cursor.fetchone.side_effect = [
+        ("completed", [{"model_name": MODEL_NAME, "model_version_id": 501}]),
+        (MODEL_NAME, False, {"rollout_mode": "shadow", "publishable": False}),
+    ]
+    monkeypatch.setattr(
+        "scripts.dynamic_team_p106._require_isolated_research_database", lambda _: None
+    )
+    monkeypatch.setattr(
+        backtest_engine,
+        "evaluate_prediction_replay",
+        MagicMock(return_value=candidate_report),
+    )
+    compare = MagicMock(return_value=paired_report)
+    store = MagicMock(return_value=42)
+    monkeypatch.setattr(backtest_engine, "compare_prediction_replay_reports", compare)
+    monkeypatch.setattr(backtest_engine, "store_research_evaluation_run", store)
+
+    result = evaluate_dynamic_team_p106_shadow_vs_incumbent(
+        conn,
+        prediction_run_id=candidate_run_id,
+        incumbent_replay_report=incumbent_report,
+        incumbent_model_version_id=10,
+        name="p111-vs-active-model",
+        predeclared_window=True,
+    )
+
+    assert result["status"] == "evaluated_descriptive_only"
+    assert result["sample_count"] == 4
+    assert result["evaluation_run_id"] == 42
+    compare.assert_called_once_with(
+        candidate_report,
+        incumbent_report,
+        challenger_model_version_id=501,
+        incumbent_model_version_id=10,
+        require_active_incumbent=True,
+        predeclared_window=True,
+    )
+    store.assert_called_once_with(conn, paired_report, name="p111-vs-active-model")
+
+
+def test_p111_shadow_comparison_rejects_candidate_activated_before_replay(monkeypatch):
+    from scripts import backtest_engine
+    from scripts.dynamic_team_p106 import (
+        MODEL_NAME,
+        evaluate_dynamic_team_p106_shadow_vs_incumbent,
+    )
+
+    conn = MagicMock()
+    conn.autocommit = False
+    conn.get_transaction_status.return_value = 0
+    cursor = conn.cursor.return_value.__enter__.return_value
+    cursor.fetchone.side_effect = [
+        ("completed", [{"model_name": MODEL_NAME, "model_version_id": 501}]),
+        (MODEL_NAME, False, {"rollout_mode": "shadow", "publishable": False}),
+    ]
+    monkeypatch.setattr(
+        "scripts.dynamic_team_p106._require_isolated_research_database", lambda _: None
+    )
+    monkeypatch.setattr(
+        backtest_engine,
+        "evaluate_prediction_replay",
+        MagicMock(
+            return_value={
+                "official_prediction_writes": 0,
+                "predictions": [{"model_name": MODEL_NAME, "model_is_active": True}],
+            }
+        ),
+    )
+    compare = MagicMock()
+    monkeypatch.setattr(backtest_engine, "compare_prediction_replay_reports", compare)
+
+    with pytest.raises(ValueError, match="not an inactive shadow candidate at replay"):
+        evaluate_dynamic_team_p106_shadow_vs_incumbent(
+            conn,
+            prediction_run_id="00000000-0000-0000-0000-000000000501",
+            incumbent_replay_report={"prediction_run_id": "00000000-0000-0000-0000-000000000010"},
+            incumbent_model_version_id=10,
+            name="p111-vs-active-model",
+        )
+
+    compare.assert_not_called()

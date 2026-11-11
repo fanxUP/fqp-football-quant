@@ -197,7 +197,7 @@ class RedisRequestReuse:
                 ensure_ascii=False,
                 allow_nan=False,
             )
-        except ValueError, TypeError, httpx.InvalidURL:
+        except (ValueError, TypeError, httpx.InvalidURL):
             raise ReuseUnavailable("request_identity_invalid") from None
         return "fqp:request-reuse:v1:{" + hashlib.sha256(raw.encode()).hexdigest() + "}"
 
@@ -222,7 +222,7 @@ class RedisRequestReuse:
             if not isinstance(result, dict) or not isinstance(result.get("kind"), str):
                 raise ValueError
             return result
-        except RedisError, TypeError, ValueError:
+        except (RedisError, TypeError, ValueError):
             raise ReuseUnavailable("reuse_store_unavailable") from None
 
     def _permission(self) -> None:
@@ -251,7 +251,7 @@ class RedisRequestReuse:
             return None
         try:
             body = json.dumps(payload, separators=(",", ":"), ensure_ascii=False, allow_nan=False)
-        except ValueError, TypeError:
+        except (ValueError, TypeError):
             return None
         secrets = (
             self._credential,
@@ -290,7 +290,7 @@ class RedisRequestReuse:
                     payload = json.loads(entry["body"])
                     if not isinstance(payload, dict) or self._cacheable(payload) is None:
                         raise ValueError
-                except ValueError, TypeError, KeyError:
+                except (ValueError, TypeError, KeyError):
                     raise ReuseUnavailable("reuse_state_invalid") from None
                 self._permission()
                 meta.update(

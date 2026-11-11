@@ -115,7 +115,7 @@ def build_observed_maher_shadow(
     }
     try:
         valid_cutoff_id = isinstance(cutoff_id, str) and str(UUID(cutoff_id)) == cutoff_id
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         valid_cutoff_id = False
     if (
         type(match_id) is not int

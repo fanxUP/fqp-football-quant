@@ -363,7 +363,7 @@ def _official_result_published_at(value: Any) -> tuple[datetime | None, str]:
         if parsed.tzinfo is None or parsed.utcoffset() is None:
             parsed = parsed.replace(tzinfo=OFFICIAL_TIMEZONE)
         return to_utc(parsed), "known"
-    except TypeError, ValueError, OverflowError:
+    except (TypeError, ValueError, OverflowError):
         return None, "invalid"
 
 

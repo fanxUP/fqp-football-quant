@@ -1,10 +1,10 @@
 {
   "schema_version": 4,
   "task_id": "P108-05A-P114-POINT-IN-TIME-LABELS-20261111",
-  "max_files_changed": 23,
-  "max_new_files": 2,
+  "max_files_changed": 96,
+  "max_new_files": 4,
   "max_new_dependencies": 0,
-  "max_schema_migrations": 0,
+  "max_schema_migrations": 2,
   "max_public_api_changes": 0,
   "declared_public_api_changes": 0,
   "regression_budget": {
@@ -12,5 +12,5 @@
     "new_lint_errors": 0,
     "new_type_errors": 0
   },
-  "budget_basis": "Finish the bounded P108-05A observation receipt, capture forward official-result publication/acquisition evidence through existing P104 append-only storage, and make training/backtest label selection point-in-time by that evidence. The added paths are required to carry, hash, validate, and test label availability through P106/P111/P114. Historical rows without capture evidence remain excluded from strict cutoffs. No probability change, dependency, schema, migration, background task, or public API."
+  "budget_basis": "The initial 86-file/2-new-file estimate counted only uncommitted worktree changes and omitted changes already committed after the task baseline. The V4 engine measures the full baseline delta: 96 changed source/test files and 4 added files (the player-shadow module and test, plus migration 139 and its rollback). This correction records the measured scope; it adds no implementation scope. Restore Python 3 parseability across the 74 baseline files containing 136 legacy unparenthesized exception clauses, then add the scoped P111/P114 descriptive paired-replay and verified-season scope. The current full-repository AST check covers 732 Python files. Season IDs come only from immutable Sporttery JC fixture links plus the verified season catalog; explicit single-season evaluation filters other or unknown memberships, and mixed/missing seasons fail closed. Paired replay requires the same verified season, match/date, prediction_as_of, immutable result identity, and odds-snapshot identity; it cannot authorize model promotion. Add a predeclared-final-window-only Azuma-Hoeffding bound for paired Brier, grouped by Beijing match date, with no stationarity or cross-season pooling assumption. The bound is available only for an explicitly configured inclusive absolute start/end date pair whose duration matches holdout_days; rolling latest-N-day windows are diagnostics and never formal holdouts. The bounded P114 loader must retain dated fixtures without final results so a fixed window can fail closed on unresolved matches instead of silently dropping them. Retain all automatic promotion gates closed. Preserve existing point-in-time rules and storage contracts. No new dependency, background task, or external HTTP API is added. One logical schema migration is allowed: migration 139 creates the P105 recovery partial expression index concurrently, with its matching concurrent rollback file; it does not rewrite business rows. P105 recovery must preserve complete owner-recovery semantics while avoiding a full historical JSON scan. The migration runner and local incremental migration script support retry-safe non-transactional index application. No production migration is applied in this scope."
 }

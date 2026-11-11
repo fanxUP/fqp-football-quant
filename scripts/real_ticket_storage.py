@@ -115,7 +115,7 @@ def _validate_ticket_purchase(ticket: dict, items: list[dict]) -> None:
     def nonnegative(value: Any, field: str) -> None:
         try:
             number = Decimal(str(value))
-        except InvalidOperation, ValueError:
+        except (InvalidOperation, ValueError):
             raise TicketInputError(f"{field} 必须是有效非负数") from None
         if not number.is_finite() or number < 0:
             raise TicketInputError(f"{field} 必须是有效非负数")

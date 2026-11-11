@@ -176,7 +176,7 @@ def _official_sale_stop_time(
                 deadline = datetime.fromisoformat(f"{day}T{clock}")
                 if deadline > datetime.fromisoformat(kickoff):
                     return None, present
-            except TypeError, ValueError:
+            except (TypeError, ValueError):
                 return None, present
             deadlines.add(deadline.isoformat(timespec="seconds"))
     return (deadlines.pop() if len(deadlines) == 1 else None), present
@@ -251,7 +251,7 @@ def parse_matches_from_response(
                 if handicap is not None and handicap != "":
                     try:
                         handicap_val = float(handicap)
-                    except ValueError, TypeError:
+                    except (ValueError, TypeError):
                         handicap_val = None
                 else:
                     handicap_val = None
@@ -332,7 +332,7 @@ def parse_odds_snapshots_from_match(
                 stop_dt = datetime.fromisoformat(sale_stop.replace("Z", "+00:00"))
                 now_dt = datetime.fromisoformat(snap_time.replace("Z", "+00:00"))
                 minutes_before_stop = int((stop_dt - now_dt).total_seconds() / 60)
-        except ValueError, TypeError:
+        except (ValueError, TypeError):
             pass
 
     odds_by_pool = _odds_by_pool(match_raw)
@@ -352,7 +352,7 @@ def parse_odds_snapshots_from_match(
             try:
                 quote_at = datetime.fromisoformat(f"{odds['updateDate']}T{odds['updateTime']}")
                 age = (datetime.fromisoformat(snap_time) - quote_at).total_seconds()
-            except KeyError, TypeError, ValueError:
+            except (KeyError, TypeError, ValueError):
                 continue
             if not 0 <= age <= 45 * 60:
                 continue
@@ -362,7 +362,7 @@ def parse_odds_snapshots_from_match(
         if handicap is not None and handicap != "":
             try:
                 handicap_val = float(handicap)
-            except ValueError, TypeError:
+            except (ValueError, TypeError):
                 handicap_val = None
         else:
             handicap_val = None
@@ -402,7 +402,7 @@ def parse_odds_snapshots_from_match(
         for option_code, option_name, sp_value in option_rows:
             try:
                 sp_val = float(sp_value)
-            except ValueError, TypeError:
+            except (ValueError, TypeError):
                 continue
             if sp_val <= 0:
                 continue  # rule: SP must be positive
@@ -438,7 +438,7 @@ def _derive_official_handicap_result(
         return None
     try:
         adjusted_home = home_goals + float(handicap)
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         return None
     if adjusted_home > away_goals:
         return "3"
@@ -507,7 +507,7 @@ def parse_results_from_response(
                 return None
             try:
                 return int(v)
-            except ValueError, TypeError:
+            except (ValueError, TypeError):
                 return None
 
         # Build win/draw/loss result codes from scores

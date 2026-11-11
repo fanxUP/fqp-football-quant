@@ -54,7 +54,7 @@ def _birth_date(value: Any) -> str:
 def _player_id(value: Any) -> tuple[int, str]:
     try:
         result = int(str(value).strip())
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         raise ValueError(f"invalid canonical player ID: {value!r}") from None
     if result <= 0:
         raise ValueError(f"invalid canonical player ID: {value!r}")

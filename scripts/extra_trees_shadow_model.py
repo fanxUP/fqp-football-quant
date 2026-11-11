@@ -89,7 +89,7 @@ def profile_from_parameters(parameters: dict[str, Any] | None) -> ExtraTreesShad
             validation_matches=int(parameters["validation_matches"]),
             validation_log_loss=float(parameters["validation_log_loss"]),
         )
-    except KeyError, TypeError, ValueError:
+    except (KeyError, TypeError, ValueError):
         return None
     if not valid_shadow_profile(
         profile.artifact_path,
@@ -127,7 +127,7 @@ def probabilities_from_classifier(
     for column in profile.feature_columns:
         try:
             values.append(float(feature_snapshot[column]))
-        except KeyError, TypeError, ValueError:
+        except (KeyError, TypeError, ValueError):
             values.append(math.nan)
     probabilities = classifier.predict_proba([values])
     classes = getattr(classifier, "classes_", None)

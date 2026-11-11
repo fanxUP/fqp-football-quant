@@ -149,7 +149,7 @@ def inspect_redis(client: Redis, *, max_pages: int = 20, max_keys: int = 200) ->
                         and type(started) is int
                         and 0 < started < 10**15
                     )
-                except ValueError, TypeError, KeyError:
+                except (ValueError, TypeError, KeyError):
                     valid = False
                 if not valid:
                     owners["invalid"] += 1
@@ -177,7 +177,7 @@ def inspect_redis(client: Redis, *, max_pages: int = 20, max_keys: int = 200) ->
         )
     except TimeoutError:
         report.update(status="unavailable", issues=["read_deadline"])
-    except RedisError, ValueError, TypeError, KeyError, OverflowError:
+    except (RedisError, ValueError, TypeError, KeyError, OverflowError):
         report.update(status="unavailable", issues=["redis_read_unavailable"])
     return report
 
@@ -214,7 +214,7 @@ def main() -> int:
                 max_connections=1,
             )
             report = inspect_redis(client)
-    except RedisError, ValueError:
+    except (RedisError, ValueError):
         report = {
             "status": "unavailable",
             "issues": ["runtime_check_unavailable"],

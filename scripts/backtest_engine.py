@@ -35,7 +35,11 @@ from scripts.market_metric_validation import (
     finite_number,
     probability_value,
 )
-from scripts.training_manifest import RESULT_REVISION_VISIBILITY_CTE, CandidateMatch
+from scripts.training_manifest import (
+    RESULT_REVISION_VISIBILITY_CTE,
+    CandidateMatch,
+    _normalize_result_observation,
+)
 
 _LOG = logging.getLogger(__name__)
 
@@ -154,7 +158,10 @@ class BacktestConfig:
                 or (number < lower if inclusive else number <= lower)
             ):
                 raise ValueError(f"{key} 必须是合法范围内的有限数值")
-        for lower_field, upper_field in (("odds_min", "odds_max"), ("ev_min", "ev_max")):
+        for lower_field, upper_field in (
+            ("odds_min", "odds_max"),
+            ("ev_min", "ev_max"),
+        ):
             if getattr(self, lower_field) is not None and getattr(self, upper_field) is not None:
                 if getattr(self, lower_field) > getattr(self, upper_field):
                     raise ValueError(f"{lower_field} 不能大于 {upper_field}")
@@ -246,6 +253,7 @@ class ResearchMatch:
     odds_snapshot_ids: Mapping[str, int] = field(default_factory=dict)
     result_status: str = "final"
     team_identity: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
+    competition_season_id: int | None = None
 
 
 @dataclass(frozen=True)
@@ -255,8 +263,11 @@ class ResearchEvaluationConfig:
     fold_count: int = 3
     test_window_days: int = 30
     holdout_days: int = 30
+    predeclared_final_window_start: date | None = None
+    predeclared_final_window_end: date | None = None
     min_team_matches: int = 5
     prediction_lead_minutes: int = 60
+    competition_season_id: int | None = None
     max_matches: int = 5000
     max_report_bytes: int = 5_000_000
 
@@ -275,10 +286,61 @@ class _ResearchDatedItem(Protocol):
 
 
 def _has_finalized_research_result(row: _ResearchDatedItem) -> bool:
-    """Date-only labels are prevalidated; match rows must carry a final status."""
+    """Require a final result identity and score for materialized match rows."""
     if not hasattr(row, "result_status"):
         return True
-    return cast(Any, row).result_status in {"final", "confirmed"}
+    if cast(Any, row).result_status not in {"final", "confirmed"}:
+        return False
+
+    candidate = getattr(row, "candidate", None)
+    if candidate is None:
+        return False
+    result_id = getattr(candidate, "result_id", None)
+    home_goals = getattr(candidate, "home_goals", None)
+    away_goals = getattr(candidate, "away_goals", None)
+    if (
+        type(result_id) is not int
+        or result_id <= 0
+        or type(home_goals) is not int
+        or home_goals < 0
+        or type(away_goals) is not int
+        or away_goals < 0
+    ):
+        return False
+    return True
+
+
+def _has_complete_research_label_receipt(row: _ResearchDatedItem) -> bool:
+    """Verify the exact terminal score has a source-observation receipt.
+
+    Date-only rows without a match status are upstream-prevalidated. Materialized
+    research matches must carry the matching P104 value revision and its
+    first-acquired/available timestamps.
+    """
+    if not hasattr(row, "result_status"):
+        return True
+    candidate = getattr(row, "candidate", None)
+    if candidate is None:
+        return False
+    result_id = getattr(candidate, "result_id", None)
+    home_goals = getattr(candidate, "home_goals", None)
+    away_goals = getattr(candidate, "away_goals", None)
+    observations = getattr(candidate, "label_observations", ())
+    if not isinstance(observations, Sequence) or isinstance(observations, str | bytes):
+        return False
+    for observation in observations:
+        try:
+            normalized = _normalize_result_observation(observation)
+        except TypeError, ValueError:
+            continue
+        if (
+            normalized.result_id == result_id
+            and normalized.fact_status == "value"
+            and normalized.home_goals == home_goals
+            and normalized.away_goals == away_goals
+        ):
+            return True
+    return False
 
 
 # —— 引擎核心 ——
@@ -1188,10 +1250,25 @@ def _validate_research_config(config: ResearchEvaluationConfig) -> None:
         raise ValueError("test_window_days must be between 1 and 90")
     if not 1 <= config.holdout_days <= 90:
         raise ValueError("holdout_days must be between 1 and 90")
+    window_start = config.predeclared_final_window_start
+    window_end = config.predeclared_final_window_end
+    if (window_start is None) != (window_end is None):
+        raise ValueError("predeclared final window requires both start and end dates")
+    if window_start is not None and window_end is not None:
+        if type(window_start) is not date or type(window_end) is not date:
+            raise ValueError("predeclared final window boundaries must be dates")
+        if window_end < window_start:
+            raise ValueError("predeclared final window end must not precede start")
+        if (window_end - window_start).days + 1 != config.holdout_days:
+            raise ValueError("predeclared final window length must equal holdout_days")
     if config.min_team_matches < 1:
         raise ValueError("min_team_matches must be positive")
     if not 1 <= config.prediction_lead_minutes <= 10080:
         raise ValueError("prediction_lead_minutes must be between 1 and 10080")
+    if config.competition_season_id is not None and (
+        type(config.competition_season_id) is not int or config.competition_season_id <= 0
+    ):
+        raise ValueError("competition_season_id must be a positive integer")
     if not 1 <= config.max_matches <= 5000:
         raise ValueError("max_matches must be between 1 and 5000")
     if not 1024 <= config.max_report_bytes <= 5_000_000:
@@ -1211,7 +1288,26 @@ def build_research_time_splits(
     if not dates:
         raise ValueError("research evaluation requires finalized target results")
     latest_date = dates[-1]
-    holdout_start = latest_date - timedelta(days=config.holdout_days - 1)
+    predeclared_start = config.predeclared_final_window_start
+    predeclared_end = config.predeclared_final_window_end
+    if predeclared_start is not None and predeclared_end is not None:
+        has_predeclared_final_window = True
+        holdout_start = predeclared_start
+        holdout_end = predeclared_end
+        window_items = [row for row in matches if holdout_start <= row.business_date <= holdout_end]
+        if not window_items:
+            raise ValueError("predeclared final window contains no target matches")
+        if any(
+            not _has_finalized_research_result(row) or not _has_complete_research_label_receipt(row)
+            for row in window_items
+        ):
+            raise ValueError("predeclared final window contains unresolved results")
+        if not any(row.business_date == holdout_end for row in window_items):
+            raise ValueError("predeclared final window end must be a match date")
+    else:
+        has_predeclared_final_window = False
+        holdout_end = latest_date
+        holdout_start = latest_date - timedelta(days=config.holdout_days - 1)
     splits: list[ResearchTimeSplit] = []
     first_test_start: date | None = None
 
@@ -1234,8 +1330,8 @@ def build_research_time_splits(
         ResearchTimeSplit(
             index=None,
             test_start=holdout_start,
-            test_end=latest_date,
-            final_holdout=True,
+            test_end=holdout_end,
+            final_holdout=has_predeclared_final_window,
         )
     )
     if any(
@@ -1265,6 +1361,7 @@ def _research_source_snapshot(matches: Sequence[ResearchMatch]) -> str:
                 "match_id": candidate.match_id,
                 "result_id": candidate.result_id,
                 "business_date": row.business_date.isoformat(),
+                "competition_season_id": row.competition_season_id,
                 "kickoff_at": _research_datetime(candidate.kickoff_at).isoformat(),
                 "official_publish_time": (
                     _research_datetime(candidate.official_publish_time).isoformat()
@@ -1295,7 +1392,9 @@ def _research_source_snapshot(matches: Sequence[ResearchMatch]) -> str:
                         ),
                         "available_at": observation.available_at.isoformat(timespec="microseconds"),
                     }
-                    for observation in candidate.label_observations
+                    for observation in (
+                        _normalize_result_observation(item) for item in candidate.label_observations
+                    )
                 ],
                 "prediction_as_of": _research_datetime(row.prediction_as_of).isoformat(),
                 "odds_by_option": dict(sorted(row.odds_by_option.items())),
@@ -1396,6 +1495,215 @@ def _research_metric_summary(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any
     return metrics
 
 
+def _research_paired_metric_comparison(
+    predictions: Sequence[Mapping[str, Any]],
+    *,
+    left_name: str = "model",
+    right_name: str = "market_baseline",
+    predeclared_window: bool = False,
+) -> dict[str, Any]:
+    """Return paired point estimates and an optional fixed-window research bound.
+
+    No bootstrap percentile interval is emitted because cross-date serial
+    dependence is not modeled. The optional Azuma-Hoeffding result is restricted
+    to a predeclared single window, targets the date-conditional expected Brier
+    delta, and is never decision or promotion evidence.
+    """
+    if type(predeclared_window) is not bool:
+        raise ValueError("predeclared_window must be a boolean attestation")
+    metric_names = ("brier_score", "log_loss", "rps")
+    rows: list[tuple[str, str, dict[str, float]]] = []
+    seen_match_ids: set[str] = set()
+    for prediction in predictions:
+        match_id = prediction.get("match_id")
+        match_key = str(match_id) if match_id is not None else ""
+        if not match_key or match_key in seen_match_ids:
+            raise ValueError("paired research predictions require unique match IDs")
+        seen_match_ids.add(match_key)
+
+        raw_date = prediction.get("business_date")
+        try:
+            if isinstance(raw_date, datetime):
+                raise ValueError
+            elif isinstance(raw_date, date):
+                business_date = raw_date.isoformat()
+            elif isinstance(raw_date, str):
+                business_date = date.fromisoformat(raw_date).isoformat()
+            else:
+                raise ValueError
+        except ValueError as exc:
+            raise ValueError("paired research predictions require an ISO business date") from exc
+
+        metrics = prediction.get("metrics")
+        left = metrics.get(left_name) if isinstance(metrics, Mapping) else None
+        right = metrics.get(right_name) if isinstance(metrics, Mapping) else None
+        if not isinstance(left, Mapping) or not isinstance(right, Mapping):
+            raise ValueError("paired research prediction is missing one side of the comparison")
+        deltas: dict[str, float] = {}
+        for name in metric_names:
+            left_value = left.get(name)
+            right_value = right.get(name)
+            if (
+                isinstance(left_value, bool)
+                or isinstance(right_value, bool)
+                or not isinstance(left_value, int | float)
+                or not isinstance(right_value, int | float)
+                or not math.isfinite(float(left_value))
+                or not math.isfinite(float(right_value))
+            ):
+                raise ValueError(f"paired research metric {name} is missing or non-finite")
+            deltas[name] = float(left_value) - float(right_value)
+        rows.append((business_date, match_key, deltas))
+
+    ordered_rows = sorted(rows, key=lambda row: (row[0], row[1]))
+    block_dates = sorted({business_date for business_date, _, _ in ordered_rows})
+    sample_count = len(rows)
+    block_count = len(block_dates)
+    if not sample_count:
+        status = "no_paired_observations"
+    elif block_count < 2:
+        status = "insufficient_date_clusters"
+    else:
+        status = "descriptive_only"
+
+    result: dict[str, Any] = {
+        "status": status,
+        "comparison": f"{left_name}_minus_{right_name}",
+        "method": "paired_mean_by_business_date/v1",
+        "interval_status": "not_computed_serial_dependence_not_modeled",
+        "interval_semantics": "paired_point_estimates_only",
+        "target_estimate": "match_weighted_mean_paired_metric_delta",
+        "sample_count": sample_count,
+        "business_date_cluster_count": block_count,
+        "serial_dependence_accounted_for": False,
+        "decision_eligible": False,
+        "promotion_eligible": False,
+        "fixed_horizon_brier_bound": (
+            _research_fixed_window_brier_bound(
+                [(business_date, deltas["brier_score"]) for business_date, _, deltas in rows]
+            )
+            if predeclared_window
+            else {
+                "status": "not_computed_window_not_predeclared",
+                "method": "date_cluster_azuma_hoeffding/v1",
+                "confidence_level": 0.95,
+                "sample_count": sample_count,
+                "decision_eligible": False,
+                "promotion_eligible": False,
+            }
+        ),
+        "metrics": {},
+    }
+    means = {
+        name: math.fsum(deltas[name] for _, _, deltas in ordered_rows) / sample_count
+        if sample_count
+        else None
+        for name in metric_names
+    }
+    result["metrics"] = {}
+    for name in metric_names:
+        mean_delta = means[name]
+        result["metrics"][name] = {
+            "mean_delta": round(mean_delta, 8) if mean_delta is not None else None,
+        }
+    return result
+
+
+def _research_fixed_window_brier_bound(
+    dated_deltas: Sequence[tuple[date | str, float]], *, alpha: float = 0.05
+) -> dict[str, Any]:
+    """Bound one predeclared window's mean conditional Brier effect.
+
+    The multiclass Brier score used here is in [0, 2], so a paired difference
+    lies in [-2, 2]. Each business date is treated as one martingale increment;
+    all matches on that date may depend arbitrarily on one another. Across
+    dates the conditional means may change arbitrarily. The Azuma-Hoeffding
+    radius therefore uses each date's full range, not an iid or stationarity
+    estimate. Its target is the match-weighted conditional expected mean loss
+    difference in one fixed evaluation window: each date's conditional expected
+    loss sum is divided by the total match count, not averaged equally by date.
+    """
+    if isinstance(alpha, bool) or not isinstance(alpha, int | float):
+        raise ValueError("alpha must be a finite number in (0, 1)")
+    alpha = float(alpha)
+    if not math.isfinite(alpha) or not 0 < alpha < 1:
+        raise ValueError("alpha must be a finite number in (0, 1)")
+
+    grouped: dict[str, list[float]] = defaultdict(list)
+    for raw_date, raw_delta in dated_deltas:
+        try:
+            if isinstance(raw_date, datetime):
+                raise ValueError
+            if isinstance(raw_date, date):
+                business_date = raw_date.isoformat()
+            elif isinstance(raw_date, str):
+                business_date = date.fromisoformat(raw_date).isoformat()
+            else:
+                raise ValueError
+        except ValueError as exc:
+            raise ValueError("Brier bound requires ISO business dates") from exc
+        if (
+            isinstance(raw_delta, bool)
+            or not isinstance(raw_delta, int | float)
+            or not math.isfinite(float(raw_delta))
+            or not -2 <= float(raw_delta) <= 2
+        ):
+            raise ValueError("paired Brier differences must be finite and in [-2, 2]")
+        grouped[business_date].append(float(raw_delta))
+
+    sample_count = sum(len(values) for values in grouped.values())
+    date_count = len(grouped)
+    if sample_count == 0:
+        return {
+            "status": "no_paired_observations",
+            "method": "date_cluster_azuma_hoeffding/v1",
+            "interpretation": "conditional_expected_mean_brier_delta_research_only",
+            "predeclared_window_attestation": "caller_supplied",
+            "pair_eligibility_verified_by_function": False,
+            "confidence_level": round(1 - alpha, 8),
+            "sample_count": 0,
+            "date_cluster_count": 0,
+            "effective_date_cluster_count": 0.0,
+            "mean_delta": None,
+            "radius": None,
+            "lower": None,
+            "upper": None,
+            "decision_eligible": False,
+            "promotion_eligible": False,
+        }
+
+    cluster_sizes = [len(grouped[business_date]) for business_date in sorted(grouped)]
+    squared_cluster_size_sum = sum(size * size for size in cluster_sizes)
+    mean_delta = (
+        math.fsum(math.fsum(grouped[business_date]) for business_date in sorted(grouped))
+        / sample_count
+    )
+    sum_squared_ranges = 16 * squared_cluster_size_sum
+    radius = math.sqrt(math.log(2 / alpha) * sum_squared_ranges / (2 * sample_count * sample_count))
+    return {
+        "status": "computed_fixed_horizon",
+        "method": "date_cluster_azuma_hoeffding/v1",
+        "interpretation": "conditional_expected_mean_brier_delta_research_only",
+        "predeclared_window_attestation": "caller_supplied",
+        "pair_eligibility_verified_by_function": False,
+        "confidence_level": round(1 - alpha, 8),
+        "target": "match_weighted_mean_date_conditional_expected_brier_delta_in_fixed_window",
+        "window_assumption": "predeclared_single_final_look_and_pre_outcome_pair_eligibility",
+        "dependence_assumption": "arbitrary_within_and_between_dates_via_martingale_differences",
+        "sample_count": sample_count,
+        "date_cluster_count": date_count,
+        "effective_date_cluster_count": round(
+            sample_count * sample_count / squared_cluster_size_sum, 8
+        ),
+        "mean_delta": round(mean_delta, 8),
+        "radius": round(radius, 8),
+        "lower": round(max(-2.0, mean_delta - radius), 8),
+        "upper": round(min(2.0, mean_delta + radius), 8),
+        "decision_eligible": False,
+        "promotion_eligible": False,
+    }
+
+
 def _evaluate_research_window(
     matches: Sequence[ResearchMatch],
     split: ResearchTimeSplit,
@@ -1460,6 +1768,11 @@ def _evaluate_research_window(
     scoped_matches = [
         row for row in matches if split.test_start <= row.business_date <= split.test_end
     ]
+    if split.final_holdout and any(
+        not _has_finalized_research_result(row) or not _has_complete_research_label_receipt(row)
+        for row in scoped_matches
+    ):
+        raise ValueError("predeclared final window contains unresolved results")
     for row in sorted(scoped_matches, key=lambda item: item.candidate.match_id):
         candidate = row.candidate
         actual = _research_actual(candidate)
@@ -1527,6 +1840,7 @@ def _evaluate_research_window(
             {
                 "match_id": candidate.match_id,
                 "business_date": row.business_date.isoformat(),
+                "competition_season_id": row.competition_season_id,
                 "play_type": "spf",
                 "prediction_as_of": _research_datetime(row.prediction_as_of).isoformat(),
                 "actual_result": actual,
@@ -1559,6 +1873,13 @@ def _evaluate_research_window(
         ),
         "window_index": split.index,
         "final_holdout": split.final_holdout,
+        "window_role": (
+            "predeclared_final_holdout"
+            if split.final_holdout
+            else "rolling_latest_diagnostic"
+            if split.index is None
+            else "exploratory_fold"
+        ),
         "test_start": split.test_start.isoformat(),
         "test_end": split.test_end.isoformat(),
         "train_cutoff": manifest["cutoff_at"],
@@ -1585,6 +1906,9 @@ def _evaluate_research_window(
         "metrics": {
             "model": _research_metric_summary(model_metrics),
             "market_baseline": _research_metric_summary(market_metrics),
+            "paired_model_market": _research_paired_metric_comparison(
+                predictions, predeclared_window=split.final_holdout
+            ),
         },
         "predictions": predictions,
     }
@@ -1606,8 +1930,111 @@ def evaluate_research_reconstruction(
         _research_datetime(row.candidate.kickoff_at).date() != row.business_date for row in matches
     ):
         raise ValueError("business_date must match the Beijing-local kickoff date")
+    requested_season_id = config.competition_season_id
+    if requested_season_id is not None:
+        normalized_matches = [
+            row for row in matches if row.competition_season_id == requested_season_id
+        ]
+        season_scope_excluded_count = len(matches) - len(normalized_matches)
+        season_scope_status = "verified_requested_season"
+    else:
+        verified_season_ids = {
+            row.competition_season_id
+            for row in matches
+            if type(row.competition_season_id) is int and row.competition_season_id > 0
+        }
+        if len(verified_season_ids) > 1:
+            reason = "multiple_verified_seasons_require_separate_evaluations"
+            return {
+                "schema_version": "fqp.model-time-split-evaluation/v3",
+                "evaluation_mode": "research_reconstruction",
+                "status": "not_evaluable",
+                "not_evaluable_reason": reason,
+                "competition_season_id": None,
+                "season_scope_status": "multiple_verified_seasons",
+                "season_scope_excluded_match_count": 0,
+                "source_snapshot_sha256": _research_source_snapshot(matches),
+                "folds": [],
+                "final_holdout": {
+                    "status": "not_evaluable",
+                    "not_evaluable_reason": reason,
+                    "evaluation_count": 0,
+                    "candidate_count": len(matches),
+                    "sample_count": 0,
+                    "excluded": [],
+                    "metrics": {},
+                },
+                "excluded_by_reason": {reason: len(matches)},
+                "official_prediction_writes": 0,
+                "claims_model_beats_market": False,
+            }
+        normalized_matches = list(matches)
+        season_scope_excluded_count = 0
+        season_scope_status = (
+            "single_verified_season"
+            if matches
+            and all(
+                type(row.competition_season_id) is int and row.competition_season_id > 0
+                for row in matches
+            )
+            else "season_identity_incomplete"
+        )
+    if season_scope_status == "season_identity_incomplete":
+        reason = "verified_season_identity_required"
+        missing_match_count = sum(
+            type(row.competition_season_id) is not int or row.competition_season_id <= 0
+            for row in matches
+        )
+        return {
+            "schema_version": "fqp.model-time-split-evaluation/v3",
+            "evaluation_mode": "research_reconstruction",
+            "status": "not_evaluable",
+            "not_evaluable_reason": reason,
+            "competition_season_id": None,
+            "season_scope_status": season_scope_status,
+            "season_scope_excluded_match_count": missing_match_count,
+            "source_snapshot_sha256": _research_source_snapshot(matches),
+            "folds": [],
+            "final_holdout": {
+                "status": "not_evaluable",
+                "not_evaluable_reason": reason,
+                "evaluation_count": 0,
+                "candidate_count": len(matches),
+                "sample_count": 0,
+                "excluded": [],
+                "metrics": {},
+            },
+            "excluded_by_reason": {reason: missing_match_count},
+            "official_prediction_writes": 0,
+            "claims_model_beats_market": False,
+        }
+    if not normalized_matches:
+        reason = "no_matches_with_requested_verified_competition_season"
+        return {
+            "schema_version": "fqp.model-time-split-evaluation/v3",
+            "evaluation_mode": "research_reconstruction",
+            "status": "not_evaluable",
+            "not_evaluable_reason": reason,
+            "competition_season_id": requested_season_id,
+            "season_scope_status": season_scope_status,
+            "season_scope_excluded_match_count": season_scope_excluded_count,
+            "source_snapshot_sha256": _research_source_snapshot([]),
+            "folds": [],
+            "final_holdout": {
+                "status": "not_evaluable",
+                "not_evaluable_reason": reason,
+                "evaluation_count": 0,
+                "candidate_count": 0,
+                "sample_count": 0,
+                "excluded": [],
+                "metrics": {},
+            },
+            "excluded_by_reason": {reason: season_scope_excluded_count},
+            "official_prediction_writes": 0,
+            "claims_model_beats_market": False,
+        }
     normalized_matches = sorted(
-        matches, key=lambda row: (row.business_date, row.candidate.match_id)
+        normalized_matches, key=lambda row: (row.business_date, row.candidate.match_id)
     )
     splits = build_research_time_splits(normalized_matches, config)
     code_fingerprint = _research_code_fingerprint()
@@ -1641,12 +2068,20 @@ def evaluate_research_reconstruction(
             exclusion_counts[reason] = exclusion_counts.get(reason, 0) + count
 
     report = {
-        "schema_version": "fqp.model-time-split-evaluation/v2",
+        "schema_version": "fqp.model-time-split-evaluation/v3",
         "evaluation_mode": "research_reconstruction",
         "status": report_status,
         "not_evaluable_reason": report_reason,
         "play_type": "spf",
         "model_name": "maher_poisson",
+        "competition_season_id": requested_season_id
+        or (
+            normalized_matches[0].competition_season_id
+            if season_scope_status == "single_verified_season"
+            else None
+        ),
+        "season_scope_status": season_scope_status,
+        "season_scope_excluded_match_count": season_scope_excluded_count,
         "baseline": {
             "name": "proportional_de-vig_market",
             "source": "complete official SPF odds vector available by each match prediction_as_of",
@@ -1672,8 +2107,19 @@ def evaluate_research_reconstruction(
             "fold_count": config.fold_count,
             "test_window_days": config.test_window_days,
             "holdout_days": config.holdout_days,
+            "predeclared_final_window_start": (
+                config.predeclared_final_window_start.isoformat()
+                if config.predeclared_final_window_start is not None
+                else None
+            ),
+            "predeclared_final_window_end": (
+                config.predeclared_final_window_end.isoformat()
+                if config.predeclared_final_window_end is not None
+                else None
+            ),
             "min_team_matches": config.min_team_matches,
             "prediction_lead_minutes": config.prediction_lead_minutes,
+            "competition_season_id": config.competition_season_id,
             "max_matches": config.max_matches,
         },
         "folds": fold_reports,
@@ -1711,6 +2157,52 @@ def _execute_read_only_snapshot(conn: Any, sql: str, params: Sequence[Any]) -> l
             conn.rollback()
         finally:
             cursor.close()
+
+
+def _load_verified_competition_season_ids(conn: Any, match_ids: Sequence[int]) -> dict[int, int]:
+    """Map official matches only through immutable verified JC season links."""
+    unique_match_ids = sorted(
+        {match_id for match_id in match_ids if type(match_id) is int and match_id > 0}
+    )
+    if not unique_match_ids:
+        return {}
+    availability = _execute_read_only_snapshot(
+        conn,
+        """SELECT to_regclass('football_fixture_source_links') IS NOT NULL AS has_links,
+                  to_regclass('football_fixture_season_catalog') IS NOT NULL AS has_catalog,
+                  EXISTS (
+                      SELECT 1 FROM information_schema.columns
+                      WHERE table_schema=current_schema()
+                        AND table_name='official_matches'
+                        AND column_name='source_match_id'
+                  ) AS has_official_source_id""",
+        (),
+    )
+    if not availability or not all(availability[0].values()):
+        return {}
+    rows = _execute_read_only_snapshot(
+        conn,
+        """SELECT official.id AS match_id,
+                  COUNT(DISTINCT season.competition_season_id)::integer AS season_count,
+                  MIN(season.competition_season_id)::bigint AS competition_season_id
+           FROM official_matches official
+           JOIN football_fixture_source_links link
+             ON link.source_name='sporttery'
+            AND link.id_system='jc.matchId'
+            AND link.source_match_id=official.source_match_id
+           JOIN football_fixture_season_catalog season
+             ON season.fixture_id=link.fixture_id
+            AND season.season_source_name='sporttery'
+            AND season.season_id_system='uniform.leagueId+seasonId'
+           WHERE official.id=ANY(%s)
+           GROUP BY official.id""",
+        (unique_match_ids,),
+    )
+    return {
+        int(row["match_id"]): int(row["competition_season_id"])
+        for row in rows
+        if row["season_count"] == 1 and row["competition_season_id"] is not None
+    }
 
 
 def load_research_matches(
@@ -1809,10 +2301,6 @@ def load_research_matches(
             ) result_observations ON true
             WHERE m.business_date IS NOT NULL
               AND m.kickoff_time IS NOT NULL
-              AND (
-                  r.result_status IN ('final','confirmed')
-                  OR result_observations.label_observations <> '[]'::jsonb
-              )
             ORDER BY m.business_date DESC, m.id DESC
             LIMIT %s
         )
@@ -1850,6 +2338,9 @@ def load_research_matches(
                  odds.option_code
     """
     rows = _execute_read_only_snapshot(conn, sql, (max_matches + 1, prediction_lead_minutes))
+    competition_season_ids = _load_verified_competition_season_ids(
+        conn, [int(row["match_id"]) for row in rows]
+    )
     matches: dict[int, ResearchMatch] = {}
     for row in rows:
         match_id = int(row["match_id"])
@@ -1869,7 +2360,10 @@ def load_research_matches(
                 away_goals=(int(row["away_goals"]) if row["away_goals"] is not None else None),
                 match_status=row["match_status"],
                 official_publish_time=row["official_publish_time"],
-                label_observations=tuple(row["label_observations"] or ()),
+                label_observations=tuple(
+                    _normalize_result_observation(observation)
+                    for observation in (row["label_observations"] or ())
+                ),
             )
             matches[match_id] = ResearchMatch(
                 candidate=candidate,
@@ -1901,6 +2395,7 @@ def load_research_matches(
                         ],
                     },
                 },
+                competition_season_id=competition_season_ids.get(match_id),
             )
         current = matches[match_id]
         if row["option_code"] is not None:
@@ -1920,6 +2415,7 @@ def load_research_matches(
                 odds_snapshot_ids=ids,
                 result_status=current.result_status,
                 team_identity=current.team_identity,
+                competition_season_id=current.competition_season_id,
             )
     if len(matches) > max_matches:
         raise ValueError("materialized match count exceeds max_matches")
@@ -1952,15 +2448,17 @@ def evaluate_prediction_replay(conn: Any, prediction_run_id: str) -> dict[str, A
                r.output_summary, r.output_manifest_sha256,
                r.output_manifest AS run_output_manifest,
                r.output_manifest_canonical AS run_output_manifest_canonical,
-               g.market_variant, mv.model_name,
+               g.market_variant, mv.model_name, mv.is_active AS model_is_active,
+               transaction_timestamp() AS replay_observed_at,
                m.kickoff_time,
                result.result_status, result.spf_result,
+               result.result_id,
                outputs.market_vector, outputs.output_snapshot_ids, outputs.option_count
         FROM model_prediction_groups g
         JOIN model_prediction_runs r ON r.id=g.run_id
         JOIN official_matches m ON m.id=g.match_id
         LEFT JOIN LATERAL (
-            SELECT result_status, spf_result
+            SELECT id AS result_id, result_status, spf_result
             FROM official_results
             WHERE match_id=g.match_id
             ORDER BY official_publish_time DESC NULLS LAST, id DESC
@@ -1981,6 +2479,9 @@ def evaluate_prediction_replay(conn: Any, prediction_run_id: str) -> dict[str, A
     rows = _execute_read_only_snapshot(conn, sql, (prediction_run_id,))
     if not rows:
         raise ValueError("prediction run has no stored output groups")
+    competition_season_ids = _load_verified_competition_season_ids(
+        conn, [int(row["match_id"]) for row in rows]
+    )
 
     evaluated = []
     excluded: list[dict[str, Any]] = []
@@ -2051,7 +2552,7 @@ def evaluate_prediction_replay(conn: Any, prediction_run_id: str) -> dict[str, A
                     row["artifact_identity"],
                     model_version_id=int(row["model_version_id"]),
                 )
-            except TypeError, ValueError:
+            except (TypeError, ValueError) as _exc:
                 reason = "prediction_group_integrity_invalid"
         if reason is None:
             if row["play_type"] != "spf":
@@ -2093,9 +2594,12 @@ def evaluate_prediction_replay(conn: Any, prediction_run_id: str) -> dict[str, A
         try:
             model_probs = {option: float(model[option]) for option in ("3", "1", "0")}
             market_probs = {option: float(market[option]) for option in ("3", "1", "0")}
-        except TypeError, ValueError:
+        except (TypeError, ValueError) as _exc:
             excluded.append(
-                {"match_id": int(row["match_id"]), "reason": "invalid_probability_vector"}
+                {
+                    "match_id": int(row["match_id"]),
+                    "reason": "invalid_probability_vector",
+                }
             )
             continue
         if any(
@@ -2103,14 +2607,20 @@ def evaluate_prediction_replay(conn: Any, prediction_run_id: str) -> dict[str, A
             for value in (*model_probs.values(), *market_probs.values())
         ):
             excluded.append(
-                {"match_id": int(row["match_id"]), "reason": "invalid_probability_vector"}
+                {
+                    "match_id": int(row["match_id"]),
+                    "reason": "invalid_probability_vector",
+                }
             )
             continue
         if not math.isclose(math.fsum(model_probs.values()), 1.0, abs_tol=1e-5) or not math.isclose(
             math.fsum(market_probs.values()), 1.0, abs_tol=1e-5
         ):
             excluded.append(
-                {"match_id": int(row["match_id"]), "reason": "unnormalized_probability_vector"}
+                {
+                    "match_id": int(row["match_id"]),
+                    "reason": "unnormalized_probability_vector",
+                }
             )
             continue
         model_metric = compute_match_metrics(
@@ -2125,7 +2635,12 @@ def evaluate_prediction_replay(conn: Any, prediction_run_id: str) -> dict[str, A
                 "match_id": int(row["match_id"]),
                 "model_version_id": int(row["model_version_id"]),
                 "play_type": "spf",
+                "business_date": row["kickoff_time"].date().isoformat(),
+                "competition_season_id": competition_season_ids.get(int(row["match_id"])),
                 "predict_time": row["predict_time"].isoformat(),
+                "result_id": int(row["result_id"]),
+                "model_name": row["model_name"],
+                "model_is_active": row["model_is_active"] is True,
                 "output_sha256": row["output_sha256"],
                 "artifact_identity": row["artifact_identity"],
                 "input_fence": row["input_fence"],
@@ -2155,6 +2670,7 @@ def evaluate_prediction_replay(conn: Any, prediction_run_id: str) -> dict[str, A
         "prediction_run_manifest_sha256": run_manifest_sha256,
         "model_manifest_sha256": rows[0]["model_manifest_sha256"],
         "input_manifest_sha256": rows[0]["input_manifest_sha256"],
+        "replay_observed_at": rows[0]["replay_observed_at"].isoformat(),
         "play_type": "spf",
         "sample_count": len(evaluated),
         "model_match_ids": model_ids,
@@ -2172,6 +2688,274 @@ def evaluate_prediction_replay(conn: Any, prediction_run_id: str) -> dict[str, A
     }
 
 
+def compare_prediction_replay_reports(
+    challenger_report: Mapping[str, Any],
+    incumbent_report: Mapping[str, Any],
+    *,
+    challenger_model_version_id: int | None = None,
+    incumbent_model_version_id: int | None = None,
+    require_active_incumbent: bool = False,
+    predeclared_window: bool = False,
+) -> dict[str, Any]:
+    """Compare replayed models only on the same fixture, time, result and market.
+
+    Reports are materialized independently, so every shared observation is
+    re-paired by immutable result ID and odds snapshot identity. This report is
+    descriptive only; it cannot authorize promotion.
+    """
+
+    def selected_rows(
+        report: Mapping[str, Any], side: str, requested_model_id: int | None
+    ) -> tuple[str, int, list[dict[str, Any]]]:
+        if (
+            not isinstance(report, Mapping)
+            or report.get("schema_version") != "fqp.model-time-split-evaluation/v1"
+            or report.get("evaluation_mode") != "prediction_replay"
+        ):
+            raise ValueError(f"{side} report must be a prediction_replay report")
+        run_id = report.get("prediction_run_id")
+        rows = report.get("predictions")
+        if not isinstance(run_id, str) or not run_id.strip() or not isinstance(rows, list):
+            raise ValueError(f"{side} replay report identity is incomplete")
+        for field_name in (
+            "prediction_run_manifest_sha256",
+            "model_manifest_sha256",
+            "input_manifest_sha256",
+        ):
+            digest = report.get(field_name)
+            if (
+                not isinstance(digest, str)
+                or len(digest) != 64
+                or any(character not in "0123456789abcdef" for character in digest)
+            ):
+                raise ValueError(f"{side} replay report has an invalid {field_name}")
+        observed_at = report.get("replay_observed_at")
+        try:
+            parsed_observed_at = (
+                datetime.fromisoformat(observed_at) if isinstance(observed_at, str) else None
+            )
+        except ValueError:
+            parsed_observed_at = None
+        if (
+            parsed_observed_at is None
+            or parsed_observed_at.tzinfo is None
+            or parsed_observed_at.utcoffset() is None
+        ):
+            raise ValueError(f"{side} replay report has an invalid replay_observed_at")
+        if report.get("official_prediction_writes") != 0:
+            raise ValueError(f"{side} replay report must be read-only")
+        version_ids = {
+            row.get("model_version_id")
+            for row in rows
+            if isinstance(row, Mapping) and type(row.get("model_version_id")) is int
+        }
+        if requested_model_id is None:
+            if len(version_ids) != 1:
+                raise ValueError(f"{side}_model_version_id must be explicit for a multi-model run")
+            model_id = next(iter(version_ids))
+        else:
+            if type(requested_model_id) is not int or requested_model_id <= 0:
+                raise ValueError(f"{side}_model_version_id must be a positive integer")
+            model_id = requested_model_id
+        if type(model_id) is not int or model_id <= 0:
+            raise ValueError(f"{side}_model_version_id must be a positive integer")
+        selected = [
+            dict(row)
+            for row in rows
+            if isinstance(row, Mapping) and row.get("model_version_id") == model_id
+        ]
+        if not selected:
+            raise ValueError(f"{side}_model_version_id is absent from its replay report")
+        if (
+            side == "incumbent"
+            and require_active_incumbent
+            and any(row.get("model_is_active") is not True for row in selected)
+        ):
+            raise ValueError("incumbent replay report does not attest an active model version")
+        by_match: dict[int, dict[str, Any]] = {}
+        for row in selected:
+            match_id = row.get("match_id")
+            if type(match_id) is not int or match_id <= 0:
+                raise ValueError(f"{side} replay contains an invalid match ID")
+            if match_id in by_match:
+                raise ValueError(f"{side} replay contains duplicate match IDs")
+            output_digest = row.get("output_sha256")
+            if (
+                not isinstance(output_digest, str)
+                or len(output_digest) != 64
+                or any(character not in "0123456789abcdef" for character in output_digest)
+            ):
+                raise ValueError(f"{side} replay contains an invalid output digest")
+            by_match[match_id] = row
+        return run_id, model_id, list(by_match.values())
+
+    challenger_run_id, challenger_model_id, challenger_rows = selected_rows(
+        challenger_report, "challenger", challenger_model_version_id
+    )
+    incumbent_run_id, incumbent_model_id, incumbent_rows = selected_rows(
+        incumbent_report, "incumbent", incumbent_model_version_id
+    )
+    if challenger_run_id == incumbent_run_id:
+        raise ValueError("challenger and incumbent must use different prediction runs")
+    if challenger_model_id == incumbent_model_id:
+        raise ValueError("challenger and incumbent must use different model versions")
+    challenger_names = {row.get("model_name") for row in challenger_rows}
+    incumbent_names = {
+        row.get("model_name")
+        for row in incumbent_rows
+        if row.get("model_version_id") == incumbent_model_id
+    }
+    if len(challenger_names) != 1 or None in challenger_names:
+        raise ValueError("challenger replay must identify exactly one model name")
+    if len(incumbent_names) != 1 or None in incumbent_names:
+        raise ValueError("incumbent replay must identify exactly one model name")
+
+    challenger_by_match = {row["match_id"]: row for row in challenger_rows}
+    incumbent_by_match = {row["match_id"]: row for row in incumbent_rows}
+    paired: list[dict[str, Any]] = []
+    excluded: list[dict[str, Any]] = []
+    source_exclusions = [
+        {"side": side, **dict(item)}
+        for side, report in (
+            ("challenger", challenger_report),
+            ("incumbent", incumbent_report),
+        )
+        for item in report.get("excluded", [])
+        if isinstance(item, Mapping)
+    ]
+    for match_id in sorted(challenger_by_match.keys() | incumbent_by_match.keys()):
+        challenger = challenger_by_match.get(match_id)
+        incumbent = incumbent_by_match.get(match_id)
+        if challenger is None:
+            excluded.append({"match_id": match_id, "reason": "challenger_prediction_missing"})
+            continue
+        if incumbent is None:
+            excluded.append({"match_id": match_id, "reason": "incumbent_prediction_missing"})
+            continue
+        reason: str | None = None
+        if challenger.get("play_type") != "spf" or incumbent.get("play_type") != "spf":
+            reason = "unsupported_play_type"
+        elif challenger.get("business_date") != incumbent.get("business_date"):
+            reason = "business_date_mismatch"
+        elif (
+            type(challenger.get("competition_season_id")) is not int
+            or challenger["competition_season_id"] <= 0
+            or type(incumbent.get("competition_season_id")) is not int
+            or incumbent["competition_season_id"] <= 0
+        ):
+            reason = "season_identity_missing"
+        elif challenger.get("competition_season_id") != incumbent.get("competition_season_id"):
+            reason = "competition_season_mismatch"
+        elif not isinstance(challenger.get("predict_time"), datetime | str) or not isinstance(
+            incumbent.get("predict_time"), datetime | str
+        ):
+            reason = "prediction_as_of_missing"
+        elif _research_datetime(challenger["predict_time"]) != _research_datetime(
+            incumbent["predict_time"]
+        ):
+            reason = "prediction_as_of_mismatch"
+        elif (
+            type(challenger.get("result_id")) is not int
+            or challenger["result_id"] <= 0
+            or type(incumbent.get("result_id")) is not int
+            or incumbent["result_id"] <= 0
+        ):
+            reason = "result_identity_missing"
+        elif challenger.get("result_id") != incumbent.get("result_id") or challenger.get(
+            "actual_result"
+        ) != incumbent.get("actual_result"):
+            reason = "result_identity_mismatch"
+        elif (
+            challenger.get("odds_snapshot_ids") != incumbent.get("odds_snapshot_ids")
+            or challenger.get("odds_snapshot_times") != incumbent.get("odds_snapshot_times")
+            or challenger.get("market_probabilities") != incumbent.get("market_probabilities")
+        ):
+            reason = "market_snapshot_mismatch"
+        if reason is not None:
+            excluded.append({"match_id": match_id, "reason": reason})
+            continue
+        challenger_metrics = challenger.get("metrics")
+        incumbent_metrics = incumbent.get("metrics")
+        if (
+            not isinstance(challenger_metrics, Mapping)
+            or not isinstance(challenger_metrics.get("model"), Mapping)
+            or not isinstance(challenger_metrics.get("market_baseline"), Mapping)
+            or not isinstance(incumbent_metrics, Mapping)
+            or not isinstance(incumbent_metrics.get("model"), Mapping)
+            or not isinstance(incumbent_metrics.get("market_baseline"), Mapping)
+        ):
+            excluded.append({"match_id": match_id, "reason": "paired_metrics_missing"})
+            continue
+        paired.append(
+            {
+                "match_id": match_id,
+                "business_date": challenger["business_date"],
+                "competition_season_id": challenger["competition_season_id"],
+                "prediction_as_of": challenger["predict_time"],
+                "result_id": challenger["result_id"],
+                "actual_result": challenger["actual_result"],
+                "challenger_probabilities": challenger["model_probabilities"],
+                "incumbent_probabilities": incumbent["model_probabilities"],
+                "market_probabilities": challenger["market_probabilities"],
+                "challenger_artifact_identity": challenger["artifact_identity"],
+                "incumbent_artifact_identity": incumbent["artifact_identity"],
+                "odds_snapshot_ids": challenger["odds_snapshot_ids"],
+                "challenger_output_sha256": challenger["output_sha256"],
+                "incumbent_output_sha256": incumbent["output_sha256"],
+                "metrics": {
+                    "challenger": dict(challenger_metrics["model"]),
+                    "incumbent": dict(incumbent_metrics["model"]),
+                    "market_baseline": dict(challenger_metrics["market_baseline"]),
+                },
+            }
+        )
+
+    challenger_metrics = [row["metrics"]["challenger"] for row in paired]
+    incumbent_metrics = [row["metrics"]["incumbent"] for row in paired]
+    market_metrics = [row["metrics"]["market_baseline"] for row in paired]
+    return {
+        "schema_version": "fqp.paired-prediction-run-evaluation/v1",
+        "evaluation_mode": "paired_prediction_replay",
+        "status": "evaluated_descriptive_only" if paired else "not_evaluable",
+        "challenger_run_id": challenger_run_id,
+        "challenger_run_manifest_sha256": challenger_report.get("prediction_run_manifest_sha256"),
+        "challenger_model_manifest_sha256": challenger_report.get("model_manifest_sha256"),
+        "challenger_input_manifest_sha256": challenger_report.get("input_manifest_sha256"),
+        "challenger_replay_observed_at": challenger_report["replay_observed_at"],
+        "challenger_model_version_id": challenger_model_id,
+        "challenger_model_name": next(iter(challenger_names)),
+        "incumbent_run_id": incumbent_run_id,
+        "incumbent_run_manifest_sha256": incumbent_report.get("prediction_run_manifest_sha256"),
+        "incumbent_model_manifest_sha256": incumbent_report.get("model_manifest_sha256"),
+        "incumbent_input_manifest_sha256": incumbent_report.get("input_manifest_sha256"),
+        "incumbent_replay_observed_at": incumbent_report["replay_observed_at"],
+        "incumbent_model_version_id": incumbent_model_id,
+        "incumbent_model_name": next(iter(incumbent_names)),
+        "play_type": "spf",
+        "sample_count": len(paired),
+        "challenger_match_ids": sorted(challenger_by_match),
+        "incumbent_match_ids": sorted(incumbent_by_match),
+        "paired_match_ids": [row["match_id"] for row in paired],
+        "excluded": excluded,
+        "source_exclusions": source_exclusions,
+        "decision_eligible": False,
+        "promotion_eligible": False,
+        "official_prediction_writes": 0,
+        "metrics": {
+            "challenger": _research_metric_summary(challenger_metrics),
+            "incumbent": _research_metric_summary(incumbent_metrics),
+            "market_baseline": _research_metric_summary(market_metrics),
+            "paired_challenger_incumbent": _research_paired_metric_comparison(
+                paired,
+                left_name="challenger",
+                right_name="incumbent",
+                predeclared_window=predeclared_window,
+            ),
+        },
+        "predictions": paired,
+    }
+
+
 def store_research_evaluation_run(
     conn: Any,
     report: Mapping[str, Any],
@@ -2179,7 +2963,11 @@ def store_research_evaluation_run(
     name: str,
 ) -> int:
     """Atomically store a bounded, mode-tagged report in existing backtest JSONB."""
-    if report.get("evaluation_mode") not in {"research_reconstruction", "prediction_replay"}:
+    if report.get("evaluation_mode") not in {
+        "research_reconstruction",
+        "prediction_replay",
+        "paired_prediction_replay",
+    }:
         raise ValueError("evaluation_mode must distinguish research from stored prediction replay")
     if not isinstance(name, str) or not name.strip() or len(name) > 255:
         raise ValueError("research evaluation name must contain 1 to 255 characters")
@@ -2234,19 +3022,74 @@ if __name__ == "__main__":
     print("1. 指标计算测试")
     fake_bets = [
         BetRecord(
-            1, "2025-01-01", "maher_poisson", "3", 0.45, 0.42, 2.20, 1.0, "3", 1.20, 0.10, 0.65
+            1,
+            "2025-01-01",
+            "maher_poisson",
+            "3",
+            0.45,
+            0.42,
+            2.20,
+            1.0,
+            "3",
+            1.20,
+            0.10,
+            0.65,
         ),
         BetRecord(
-            2, "2025-01-02", "maher_poisson", "1", 0.30, 0.28, 3.50, 1.0, "1", 2.50, 0.05, 0.55
+            2,
+            "2025-01-02",
+            "maher_poisson",
+            "1",
+            0.30,
+            0.28,
+            3.50,
+            1.0,
+            "1",
+            2.50,
+            0.05,
+            0.55,
         ),
         BetRecord(
-            3, "2025-01-03", "maher_poisson", "0", 0.35, 0.33, 2.80, 1.0, "3", -1.00, 0.08, 0.60
+            3,
+            "2025-01-03",
+            "maher_poisson",
+            "0",
+            0.35,
+            0.33,
+            2.80,
+            1.0,
+            "3",
+            -1.00,
+            0.08,
+            0.60,
         ),
         BetRecord(
-            4, "2025-01-04", "maher_poisson", "3", 0.50, 0.48, 1.90, 1.0, "3", 0.90, 0.12, 0.70
+            4,
+            "2025-01-04",
+            "maher_poisson",
+            "3",
+            0.50,
+            0.48,
+            1.90,
+            1.0,
+            "3",
+            0.90,
+            0.12,
+            0.70,
         ),
         BetRecord(
-            5, "2025-01-05", "maher_poisson", "1", 0.28, 0.26, 3.80, 1.0, "0", -1.00, 0.02, 0.45
+            5,
+            "2025-01-05",
+            "maher_poisson",
+            "1",
+            0.28,
+            0.26,
+            3.80,
+            1.0,
+            "0",
+            -1.00,
+            0.02,
+            0.45,
         ),
     ]
 

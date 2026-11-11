@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import asdict, dataclass, replace
 from datetime import UTC, date, datetime
 from typing import cast
@@ -196,17 +196,19 @@ def _evidence_iso(value: datetime | None, field_name: str) -> str | None:
     return normalized.isoformat(timespec="microseconds") if normalized is not None else None
 
 
-def _normalize_result_observation(value: ResultLabelObservation | dict) -> ResultLabelObservation:
+def _normalize_result_observation(
+    value: ResultLabelObservation | Mapping[str, object],
+) -> ResultLabelObservation:
     if isinstance(value, ResultLabelObservation):
         row = value
-    elif isinstance(value, dict):
+    elif isinstance(value, Mapping):
         row = ResultLabelObservation(
             revision_id=cast(int, value.get("revision_id")),
             result_id=cast(int, value.get("result_id")),
             fact_status=cast(str, value.get("fact_status")),
-            home_goals=value.get("home_goals"),
-            away_goals=value.get("away_goals"),
-            published_at=value.get("published_at"),
+            home_goals=cast(int | None, value.get("home_goals")),
+            away_goals=cast(int | None, value.get("away_goals")),
+            published_at=cast(datetime | None, value.get("published_at")),
             first_acquired_at=cast(datetime, value.get("first_acquired_at")),
             available_at=cast(datetime, value.get("available_at")),
         )

@@ -35,7 +35,7 @@ def previous_season(season: str) -> str | None:
 def _season_start(season: str) -> int:
     try:
         return int(str(season).split("-")[0])
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         return 0
 
 
