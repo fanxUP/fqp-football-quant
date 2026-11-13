@@ -1,6 +1,6 @@
 {
   "schema_version": 4,
-  "state": "VERIFYING",
+  "state": "REVIEWING",
   "workflow_id": "P108-05A-P114-POINT-IN-TIME-LABELS-20261111",
   "previous_workflow": {
     "workflow_id": "ODDS-MULTIBOOK-REFERENCE-20261111",
@@ -11,9 +11,9 @@
   "mode": "STRICT",
   "environment": "Main code head 1ee8f2a exact-head CI passed (4062 passed, 32 skipped). Local P105 migration 139 no-backup policy now requires a signed report bound to the exact bytes and migration-specific production-host Ed25519 namespace; 143 release-policy/migration-format tests passed, and independent follow-up review passed with no findings. Configured P106/P114 regression passed 233 tests against dedicated loopback PostgreSQL 16; V4 regression, scope, budget, Ruff, format, Bash syntax and diff checks pass. P108 source-export audit is static CSV-only. Changes remain local and uncommitted; no production DB/server was accessed, no deployment occurred, and no backup was created. Exact-head CI and production release evidence remain pending.",
   "last_transition": {
-    "from": "IMPLEMENTING",
-    "to": "VERIFYING",
-    "at": "2026-11-11T22:29:30+08:00",
-    "reason": "Closed the prior P105 evidence-provenance MINOR by requiring exact-byte SSH host signatures with migration-specific namespaces and cross-namespace rejection. The updated policy passed 143 tests and independent follow-up review; local exact-head CI and production release evidence remain pending."
+    "from": "VERIFYING",
+    "to": "REVIEWING",
+    "at": "2026-11-13T13:00:51.815454+08:00",
+    "reason": "Implementation and local verification complete; the read-only predicate normalization follow-up review passed."
   }
 }

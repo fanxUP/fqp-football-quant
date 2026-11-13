@@ -35,3 +35,11 @@
 - P106/P111/P114 的代码、点时校验和评价框架已通过主线 CI；真实效果仍取决于具备时间证据、已验证赛季身份、同一预测时点赔率的样本。
 - P108 静态导出覆盖复核已补充；来源导出仍只有短窗口及少量球员事实，只能用于解析/映射候选，不能导入为已验证事实。详见[静态覆盖审计](/Volumes/Nas/FQP/plans/model-modernization-20261016/integrated/P108/07-source-export-sample-audit-20261111/REPORT.md)。回填中的 Titan SQLite 未打开。
 - P105 139 免备份门禁与迁移格式回归 **143 passed**。门禁要求精确上下迁移摘要、非事务演练、原始 EXPLAIN JSON 绑定恢复查询 SHA、`ai_job_runs` 扫描与执行协议条件、服务器主机 Ed25519 签名及跨命名空间拒绝、目录状态、业务行不变及 DOWN/重建验证。独立复核通过；本地修改尚未提交/推送，exact-head CI 尚待完成，也未部署。
+
+
+## 2026-11-13 production release attempt
+
+- The exact `ef1831b64ea5177ab776d0a00a088eaa5d36f116` candidate passed GitHub CI, and the signed migration-139 evidence gate passed before apply. Server preflight found clean `main`, healthy prior services, `/health/ready` with database and Redis OK, and 44% root-disk use. No backup was created.
+- The release runner stopped all application services and Nginx, checked out the candidate, installed frontend packages with zero reported vulnerabilities, and built the frontend. Migration 139 then stopped at catalog validation: production `pg_get_expr` renders the `varchar` predicates as `job_code::text` and `status::text`; the validator accepted only the uncast form. The code was restored to server revision `3ed1ba8490fc11a67ce31457644c113050ab02af`; the release fail-safe left all four services inactive.
+- Read-only verification found no migration-139 ledger row and found `idx_ai_job_runs_prediction_recovery` valid and ready. Its predicate matches the migration semantically, but its state before the attempt was not captured, so whether the index was pre-existing or created during the failed attempt is unknown. No business-row writes were made.
+- The fix now strips implicit `::text` casts only outside quoted values and compares the complete pinned predicate. Regression cases accept the production catalog form and reject altered literals, status values, and extra filters. The release-policy suite passed 149 tests; the configured P106/P114 isolated PostgreSQL suite passed 233 tests; V4 test/lint/typecheck regression is 0/0. Independent review passed. Exact-head CI, a new report signed for the target SHA, deployment retry, post-deploy smoke, and removal of the temporary scoped sudoers rule remain pending.

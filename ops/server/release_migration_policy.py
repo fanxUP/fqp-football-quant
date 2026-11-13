@@ -225,12 +225,64 @@ def _recovery_index_state_matches(state: Any) -> bool:
     def normalize(value: Any) -> str:
         return re.sub(r'[\s()"]+', "", value).lower() if isinstance(value, str) else ""
 
+    def normalize_predicate(value: Any) -> str:
+        if not isinstance(value, str):
+            return ""
+        normalized: list[str] = []
+        index = 0
+        in_string = False
+        in_identifier = False
+        while index < len(value):
+            char = value[index]
+            if in_string:
+                normalized.append(char)
+                if char == "'":
+                    if index + 1 < len(value) and value[index + 1] == "'":
+                        normalized.append("'")
+                        index += 2
+                        continue
+                    in_string = False
+                index += 1
+                continue
+            if in_identifier:
+                normalized.append(char)
+                if char == '"':
+                    if index + 1 < len(value) and value[index + 1] == '"':
+                        normalized.append('"')
+                        index += 2
+                        continue
+                    in_identifier = False
+                index += 1
+                continue
+            if char == "'":
+                in_string = True
+                normalized.append(char)
+                index += 1
+                continue
+            if char == '"':
+                in_identifier = True
+                normalized.append(char)
+                index += 1
+                continue
+            if char.isspace() or char in "()":
+                index += 1
+                continue
+            cast_end = index + len("::text")
+            if value[index:cast_end].lower() == "::text" and (
+                cast_end == len(value) or not (value[cast_end].isalnum() or value[cast_end] in "_$")
+            ):
+                index = cast_end
+                continue
+            normalized.append(char.lower())
+            index += 1
+        return "".join(normalized)
+
     if normalize(state.get("first_key")) != "input_snapshot_refs->>'execution_protocol'::text":
         return False
     if normalize(state.get("second_key")) != "id":
         return False
-    predicate = normalize(state.get("predicate"))
-    return all(item in predicate for item in ("job_code='model_prediction'", "status='running'"))
+    predicate = normalize_predicate(state.get("predicate"))
+    return predicate == "job_code='model_prediction'andstatus='running'"
 
 
 def _recovery_plan_uses_index(plan: Any) -> bool:

@@ -104,6 +104,15 @@
       "dirty_tree": true,
       "tree_fingerprint": "7b6b1bd2647ad8040b209d331741eeba4b49427b235aae8c7a62ec4f48619034",
       "verified_at": "2026-11-11T22:42:33.744815+08:00"
+    },
+    "A-P105-139-VARCHAR-CATALOG-REGRESSION": {
+      "status": "PASS",
+      "command": ".venv/bin/python -m pytest -q tests/test_local/test_release_migration_policy.py tests/test_computation/test_prediction_job_execution_postgres.py::test_recovery_index_migration_uses_the_retryable_online_format",
+      "exit_code": 0,
+      "summary": "149 passed. Accepts the exact PostgreSQL varchar catalog predicate after removing implicit ::text casts only outside quoted values; rejects a changed literal, a different status predicate, and extra filters. Ruff check and format check passed.",
+      "revision": "ef1831b64ea5177ab776d0a00a088eaa5d36f116 with local uncommitted validator fix",
+      "dirty_tree": true,
+      "verified_at": "2026-11-13T12:44:23+08:00"
     }
   },
   "reviews": {
@@ -120,6 +129,10 @@
     "p105_no_backup_policy": {
       "status": "PASS",
       "summary": "Independent read-only follow-up confirmed the P105 migration 139 report is signed over the exact hashed report bytes with the fixed production-host identity and migration-specific fqp-p105-migration-139 namespace. The 131 namespace remains unchanged. Positive, unsigned, tampered-signature, and both cross-namespace rejection cases use real OpenSSH signing/verification; no blocker, major, or minor remains."
+    },
+    "production_varchar_catalog_fix": {
+      "status": "PENDING",
+      "summary": "PASS. Read-only follow-up confirmed casts are removed only outside quoted literals, the complete normalized predicate must match the pinned expression, production's catalog output is accepted, and literal/extra-filter cases are rejected. No remaining false positive or false negative for the supplied PostgreSQL catalog output."
     }
   },
   "security": {
@@ -134,30 +147,59 @@
     ],
     "logical_migrations": 1,
     "production_applied": false,
-    "note": "Isolated runner apply, checksum, validity, read-only re-plan, and down-file checks passed. Production migration is not authorized or applied in this local verification."
+    "note": "The isolated migration-139 rehearsal passed on a disposable synthetic PostgreSQL 16 fixture. The 2026-11-13 production attempt stopped before ledger recording because PostgreSQL rendered varchar predicate casts that the validator did not accept. The recovery index is currently valid/ready; the pre-attempt index state is unknown. No business rows were written, no backup was created, and the release fail-safe restored code to 3ed1ba8490fc11a67ce31457644c113050ab02af while keeping services inactive. A narrowly scoped validator fix and regression are local; exact-head CI and signed evidence for the new target are required before retry.",
+    "production_attempt": {
+      "target_sha": "ef1831b64ea5177ab776d0a00a088eaa5d36f116",
+      "result": "stopped_by_release_fail_safe",
+      "ledger_139_recorded": false,
+      "physical_index_after_attempt": {
+        "name": "idx_ai_job_runs_prediction_recovery",
+        "valid": true,
+        "ready": true,
+        "catalog_predicate_has_implicit_text_casts": true,
+        "pre_attempt_state_captured": false
+      },
+      "business_data_writes": 0,
+      "code_restored_to": "3ed1ba8490fc11a67ce31457644c113050ab02af",
+      "services": "inactive_by_fail_safe",
+      "backup_created": false,
+      "note": "The production runner rejected a catalog predicate that is semantically identical but rendered with ::text casts for varchar columns. Since the index state was not captured before the attempt, its prior existence cannot be established."
+    }
   },
   "external_ci": {
     "status": "passed",
     "last_known_run": {
       "status": "success",
-      "run_id": 43024264275,
-      "head_sha": "1ee8f2a71f3ed3b0e345aca7532476151342e39a",
-      "url": "https://github.com/fanxUP/fqp-football-quant/actions/runs/43024264275"
+      "run_id": 43359281512,
+      "head_sha": "ef1831b64ea5177ab776d0a00a088eaa5d36f116",
+      "url": "https://github.com/fanxUP/fqp-football-quant/actions/runs/43359281512"
     },
-    "note": "The exact code head 1ee8f2a passed both CI jobs (4062 passed, 32 skipped). The current local no-backup release-policy changes are uncommitted and not covered by this CI run."
+    "note": "The exact ef1831b commit passed both GitHub CI jobs. The follow-up varchar-catalog normalization fix is local and requires its own review and exact-head CI before deployment retry."
   },
   "production": {
-    "status": "NOT_ACCESSED",
-    "production_database_access": false,
+    "status": "RELEASE_STOPPED_FAIL_SAFE",
+    "production_database_access": true,
     "business_data_writes": 0,
-    "server_deployment": "NOT_EXECUTED"
+    "server_deployment": "STOPPED_BY_FAIL_SAFE",
+    "attempted_target_sha": "ef1831b64ea5177ab776d0a00a088eaa5d36f116",
+    "current_server_revision": "3ed1ba8490fc11a67ce31457644c113050ab02af",
+    "services": {
+      "fqp-backend": "inactive",
+      "fqp-scheduler": "inactive",
+      "fqp-worker": "inactive",
+      "nginx": "inactive"
+    },
+    "migration_139_ledger": "pending",
+    "recovery_index": "valid_ready; pre-attempt state unknown",
+    "backup_created": false,
+    "temporary_scoped_sudoers_rule": "present_for_retry_and_must_be_removed_after_release"
   },
   "quality_gate": {
     "status": "PENDING",
-    "checked_at": "2026-11-11T22:06:34+08:00",
+    "checked_at": "2026-11-13T12:44:23+08:00",
     "failures": [
-      "The local migration 139 no-backup policy changes still require exact-head GitHub CI.",
-      "No fresh release evidence or production deployment/protected read-only smoke has been performed.",
+      "The production varchar-catalog validator fix passed independent review and local regression; exact-head GitHub CI and a new target-bound signed report are required before retry.",
+      "The previous production attempt stopped safely: migration 139 is not recorded in the ledger, services are inactive, and a new target-bound signed report is required before retry.",
       "P105 natural-run receipt verification and data-dependent P108/P111/P114/P115 outcomes remain pending."
     ]
   }

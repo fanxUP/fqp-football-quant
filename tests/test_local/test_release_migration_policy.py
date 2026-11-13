@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+from ops.server import migrate as migration_runner
 from ops.server import release_migration_policy as policy
 from scripts.prediction_job_execution import _RUNNING_OWNER_QUERY
 
@@ -373,6 +374,112 @@ def test_reviewed_recovery_query_hash_matches_runtime_owner_query():
     assert hashlib.sha256(normalized.encode()).hexdigest() == (
         policy.REVIEWED_RECOVERY_QUERY_SHA256
     )
+
+
+def test_recovery_index_migration_accepts_postgres_varchar_predicate_casts():
+    state = (
+        True,
+        True,
+        "public",
+        "ai_job_runs",
+        2,
+        2,
+        "btree",
+        "(input_snapshot_refs ->> 'execution_protocol'::text)",
+        "id",
+        "(((job_code)::text = 'model_prediction'::text) AND ((status)::text = 'running'::text))",
+    )
+
+    migration_runner._validate_prediction_recovery_index(
+        state, "idx_ai_job_runs_prediction_recovery"
+    )
+
+
+def test_recovery_index_migration_still_rejects_a_different_status_predicate():
+    state = (
+        True,
+        True,
+        "public",
+        "ai_job_runs",
+        2,
+        2,
+        "btree",
+        "(input_snapshot_refs ->> 'execution_protocol'::text)",
+        "id",
+        "(((job_code)::text = 'model_prediction'::text) AND ((status)::text = 'failed'::text))",
+    )
+
+    with pytest.raises(RuntimeError, match="definition or validity is unexpected"):
+        migration_runner._validate_prediction_recovery_index(
+            state, "idx_ai_job_runs_prediction_recovery"
+        )
+
+
+@pytest.mark.parametrize(
+    "predicate",
+    [
+        "(((job_code)::text = 'model_prediction::text'::text) AND "
+        "((status)::text = 'running'::text))",
+        "(((job_code)::text = 'model_prediction'::text) AND "
+        "((status)::text = 'running'::text) AND ((owner_agent)::text = 'fixture'::text))",
+    ],
+)
+def test_recovery_index_migration_rejects_literal_cast_text_and_extra_filters(predicate):
+    state = (
+        True,
+        True,
+        "public",
+        "ai_job_runs",
+        2,
+        2,
+        "btree",
+        "(input_snapshot_refs ->> 'execution_protocol'::text)",
+        "id",
+        predicate,
+    )
+
+    with pytest.raises(RuntimeError, match="definition or validity is unexpected"):
+        migration_runner._validate_prediction_recovery_index(
+            state, "idx_ai_job_runs_prediction_recovery"
+        )
+
+
+@pytest.mark.parametrize(
+    ("predicate", "expected"),
+    [
+        (
+            "(((job_code)::text = 'model_prediction'::text) AND "
+            "((status)::text = 'running'::text))",
+            True,
+        ),
+        (
+            "(((job_code)::text = 'model_prediction::text'::text) AND "
+            "((status)::text = 'running'::text))",
+            False,
+        ),
+        (
+            "(((job_code)::text = 'model_prediction'::text) AND "
+            "((status)::text = 'running'::text) AND ((owner_agent)::text = 'fixture'::text))",
+            False,
+        ),
+    ],
+)
+def test_release_policy_matches_the_entire_recovery_index_predicate(predicate, expected):
+    state = {
+        "index_name": "idx_ai_job_runs_prediction_recovery",
+        "schema": "public",
+        "table": "ai_job_runs",
+        "method": "btree",
+        "valid": True,
+        "ready": True,
+        "attributes": 2,
+        "key_attributes": 2,
+        "first_key": "(input_snapshot_refs ->> 'execution_protocol'::text)",
+        "second_key": "id",
+        "predicate": predicate,
+    }
+
+    assert policy._recovery_index_state_matches(state) is expected
 
 
 @pytest.mark.parametrize(

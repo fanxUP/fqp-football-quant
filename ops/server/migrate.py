@@ -350,9 +350,63 @@ def _validate_prediction_recovery_index(state, index_name: str) -> None:
     def normalize(value: str | None) -> str:
         return re.sub(r"[\s()\"]+", "", value or "").lower()
 
+    def normalize_predicate(value: str | None) -> str:
+        expression = value or ""
+        normalized: list[str] = []
+        index = 0
+        in_string = False
+        in_identifier = False
+        while index < len(expression):
+            char = expression[index]
+            if in_string:
+                normalized.append(char)
+                if char == "'":
+                    if index + 1 < len(expression) and expression[index + 1] == "'":
+                        normalized.append("'")
+                        index += 2
+                        continue
+                    in_string = False
+                index += 1
+                continue
+            if in_identifier:
+                normalized.append(char)
+                if char == '"':
+                    if index + 1 < len(expression) and expression[index + 1] == '"':
+                        normalized.append('"')
+                        index += 2
+                        continue
+                    in_identifier = False
+                index += 1
+                continue
+            if char == "'":
+                in_string = True
+                normalized.append(char)
+                index += 1
+                continue
+            if char == '"':
+                in_identifier = True
+                normalized.append(char)
+                index += 1
+                continue
+            if char.isspace() or char in "()":
+                index += 1
+                continue
+            cast_end = index + len("::text")
+            if expression[index:cast_end].lower() == "::text" and (
+                cast_end == len(expression)
+                or not (expression[cast_end].isalnum() or expression[cast_end] in "_$")
+            ):
+                index = cast_end
+                continue
+            normalized.append(char.lower())
+            index += 1
+        return "".join(normalized)
+
     expected_first_key = "input_snapshot_refs->>'execution_protocol'::text"
-    expected_predicate_parts = ("job_code='model_prediction'", "status='running'")
-    normalized_predicate = normalize(predicate)
+    expected_predicate = "job_code='model_prediction'andstatus='running'"
+    # PostgreSQL exposes implicit varchar-to-text casts in pg_get_expr. Remove
+    # them only outside literals, then compare the complete pinned predicate.
+    normalized_predicate = normalize_predicate(predicate)
     if (
         not valid
         or not ready
@@ -363,7 +417,7 @@ def _validate_prediction_recovery_index(state, index_name: str) -> None:
         or access_method != "btree"
         or normalize(first_key) != expected_first_key
         or normalize(second_key) != "id"
-        or not all(part in normalized_predicate for part in expected_predicate_parts)
+        or normalized_predicate != expected_predicate
     ):
         raise RuntimeError(f"Concurrent index definition or validity is unexpected: {index_name}")
 
