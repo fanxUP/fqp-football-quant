@@ -3,7 +3,7 @@ import { matchCenterHash, readMatchCenterState } from './useMatchCenterState';
 
 describe('match center URL state', () => {
   it('round-trips Chinese filters, reserved characters and explicit selection', () => {
-    const state = { query: '北京 & 上海?#', league: '中超', status: 'awaiting_result', sort: 'desc' as const, page: 2, selectedId: 51, warning: null };
+    const state = { ...readMatchCenterState(), query: '北京 & 上海?#', league: '中超', status: 'awaiting_result', sort: 'desc' as const, page: 2, selectedId: 51, warning: null };
     expect(readMatchCenterState(matchCenterHash(state))).toEqual(state);
   });
 
@@ -31,3 +31,10 @@ describe('match center URL state', () => {
     expect(state.league).toBe('unknown'); expect(matchCenterHash(state)).toBe('#/matches?league=unknown');
   });
 });
+
+ it('preserves historical business dates and rejects invalid calendar dates', () => {
+   const state = readMatchCenterState('#/matches?scope=history&date=2026-10-31&page=3');
+   expect(state.scope).toBe('history'); expect(state.historyDate).toBe('2026-10-31');
+   expect(readMatchCenterState(matchCenterHash(state))).toEqual(state);
+   expect(readMatchCenterState('#/matches?scope=history&date=2026-02-31').warning).toContain('链接参数无效');
+ });

@@ -72,6 +72,38 @@ export interface TodayMatch {
   match_num_str: string;
   completeness: number | null;
   odds_count: number;
+  business_date?: string;
+  result_status?: string;
+  status_note?: string | null;
+}
+
+export interface MatchCatalogQuery {
+  limit?: number;
+  offset?: number;
+  scope?: 'current' | 'history';
+  date_from?: string;
+  date_to?: string;
+  q?: string;
+  league?: string;
+  status?: string;
+  sort?: 'asc' | 'desc';
+  selected_id?: number;
+  upcoming_only?: boolean;
+}
+
+export interface MatchCatalogPage {
+  matches: TodayMatch[];
+  total: number;
+  offset: number;
+  limit: number;
+  scope: 'current' | 'history';
+  leagues: string[];
+  statuses: string[];
+  selected_in_scope: boolean;
+  selected_in_filter: boolean;
+  started_total: number;
+  as_of: string;
+  current_since: string;
 }
 
 export interface EventSummary {

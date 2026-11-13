@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from datetime import date
 from typing import Any, Literal
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query
 
 from apps.backend.src.db import get_db
+from apps.backend.src.services.match_catalog import read_match_catalog
 from scripts.prediction_statistics import canonical_prediction_rows_ctes
 
 router = APIRouter(tags=["teams"])
@@ -140,53 +142,44 @@ def list_today_matches():
 
 
 @router.get("/api/matches/active")
-def list_active_matches(limit: int = Query(500, ge=1, le=5000)):
-    """List the official event-catalog matches that have not finished yet.
+def list_active_matches(
+    limit: int = Query(500, ge=1, le=5000),
+    offset: int = Query(0, ge=0),
+    scope: Literal["current", "history"] = "current",
+    date_from: date | None = None,
+    date_to: date | None = None,
+    q: str = Query("", max_length=200),
+    league: str = Query("", max_length=128),
+    status: str = Query("", max_length=32),
+    sort: Literal["asc", "desc"] = "asc",
+    selected_id: int | None = Query(None, ge=1),
+    upcoming_only: bool = False,
+):
+    """Read the current catalog or an explicitly dated historical archive.
 
-    This is deliberately broader than the betting terminal: a match remains in
-    the match center after Sporttery stops selling it, until the official match
-    status is final.
+    Sale closure does not remove a fixture. Current covers future kickoffs and
+    non-final fixtures in the last 48 hours; missing results remain separate
+    evidence. Sorting, filtering, selection and paging share one SQL snapshot.
     """
-    completed_statuses = ("finished", "settled", "completed", "cancelled", "canceled", "stopped")
+    if scope == "history" and (date_from is None or date_to is None or date_from > date_to):
+        raise HTTPException(status_code=422, detail="历史查询须指定有效的业务日开始和结束日期")
+    if scope == "current" and (date_from is not None or date_to is not None):
+        raise HTTPException(status_code=422, detail="业务日范围只适用于历史查询")
     with get_db() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT m.id, m.league_name, m.home_team_name, m.away_team_name,
-                       m.kickoff_time,
-                       CASE
-                           WHEN m.kickoff_time <= timezone('Asia/Shanghai', NOW())
-                               THEN 'awaiting_result'
-                           ELSE COALESCE(m.match_status, 'scheduled')
-                       END AS effective_match_status,
-                       COALESCE(m.raw_json->>'matchNumStr', m.official_match_code::text) AS match_num_str
-                FROM official_matches m
-                WHERE LOWER(COALESCE(m.match_status, 'scheduled')) NOT IN %s
-                  AND m.official_match_code ~ '^周[一二三四五六日][0-9]{3}$'
-                ORDER BY
-                    CASE WHEN m.kickoff_time > timezone('Asia/Shanghai', NOW()) THEN 0 ELSE 1 END,
-                    CASE WHEN m.kickoff_time > timezone('Asia/Shanghai', NOW()) THEN m.kickoff_time END ASC,
-                    CASE WHEN m.kickoff_time <= timezone('Asia/Shanghai', NOW()) THEN m.kickoff_time END DESC
-                LIMIT %s
-                """,
-                (completed_statuses, limit),
-            )
-            rows = cur.fetchall()
-    return {
-        "matches": [
-            {
-                "match_id": row[0],
-                "league_name": row[1],
-                "home_team_name": row[2],
-                "away_team_name": row[3],
-                "kickoff_time": row[4].isoformat() if hasattr(row[4], "isoformat") else str(row[4]),
-                "match_status": row[5],
-                "match_num_str": row[6],
-            }
-            for row in rows
-        ],
-        "total": len(rows),
-    }
+        return read_match_catalog(
+            conn,
+            scope=scope,
+            date_from=date_from,
+            date_to=date_to,
+            q=q,
+            league=league,
+            status=status,
+            sort=sort,
+            limit=limit,
+            offset=offset,
+            selected_id=selected_id,
+            upcoming_only=upcoming_only,
+        )
 
 
 @router.get("/api/features/snapshots")

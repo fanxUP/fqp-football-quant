@@ -31,67 +31,45 @@ def test_events_summarize_only_canonical_official_matches(client):
     assert "source_match_code IS NOT NULL" in sql
 
 
-def test_active_matches_exclude_finished_official_history(client):
+def test_match_page_returns_true_total_and_evidence_without_relabeling(client):
+    from datetime import datetime
+
     with patch("apps.backend.src.routers.teams.get_db") as get_db:
-        connection = get_db.return_value.__enter__.return_value
-        cursor = connection.cursor.return_value.__enter__.return_value
-        cursor.fetchall.return_value = [
-            (1, "中超", "上海海港", "北京国安", "2026-07-12T19:35:00", "scheduled", "周日001")
-        ]
-
-        response = client.get("/api/matches/active")
-
+        cursor = (
+            get_db.return_value.__enter__.return_value.cursor.return_value.__enter__.return_value
+        )
+        cursor.fetchone.return_value = (
+            [{"match_id": 1, "match_status": "Playing", "result_status": "missing"}],
+            601,
+            50,
+            ["中超"],
+            ["Playing"],
+            False,
+            False,
+            1,
+        )
+        with patch(
+            "apps.backend.src.services.match_catalog.business_now",
+            return_value=datetime(2026, 11, 13, 12),
+        ):
+            response = client.get("/api/matches/active?limit=1&offset=50")
     assert response.status_code == 200
-    assert response.json()["total"] == 1
-    sql = cursor.execute.call_args.args[0]
-    completed_statuses = cursor.execute.call_args.args[1][0]
-    assert "official_matches" in sql
-    assert "NOT IN %s" in sql
-    assert "finished" in completed_statuses
-    assert "settled" in completed_statuses
+    body = response.json()
+    assert body["total"] == 601
+    assert body["offset"] == 50
+    assert body["matches"][0]["match_status"] == "Playing"
+    assert body["matches"][0]["result_status"] == "missing"
 
 
-def test_active_matches_require_canonical_official_match_codes(client):
+def test_match_catalog_rejects_invalid_parameters_without_reading_database(client):
     with patch("apps.backend.src.routers.teams.get_db") as get_db:
-        connection = get_db.return_value.__enter__.return_value
-        cursor = connection.cursor.return_value.__enter__.return_value
-        cursor.fetchall.return_value = []
-
-        response = client.get("/api/matches/active")
-
-    assert response.status_code == 200
-    sql = cursor.execute.call_args.args[0]
-    assert "m.official_match_code ~ '^周[一二三四五六日][0-9]{3}$'" in sql
-
-
-def test_active_matches_mark_started_unsettled_matches_as_awaiting_result(client):
-    with patch("apps.backend.src.routers.teams.get_db") as get_db:
-        connection = get_db.return_value.__enter__.return_value
-        cursor = connection.cursor.return_value.__enter__.return_value
-        cursor.fetchall.return_value = [
-            (1, "中超", "上海海港", "北京国安", "2026-07-12T19:35:00", "awaiting_result", "周日001")
-        ]
-
-        response = client.get("/api/matches/active")
-
-    assert response.status_code == 200
-    assert response.json()["matches"][0]["match_status"] == "awaiting_result"
-    sql = cursor.execute.call_args.args[0]
-    assert "m.kickoff_time <= timezone('Asia/Shanghai', NOW())" in sql
-    assert "awaiting_result" in sql
-
-
-def test_active_matches_prioritize_upcoming_over_unsettled_history(client):
-    with patch("apps.backend.src.routers.teams.get_db") as get_db:
-        connection = get_db.return_value.__enter__.return_value
-        cursor = connection.cursor.return_value.__enter__.return_value
-        cursor.fetchall.return_value = []
-
-        response = client.get("/api/matches/active")
-
-    assert response.status_code == 200
-    sql = " ".join(cursor.execute.call_args.args[0].split())
-    assert (
-        "ORDER BY CASE WHEN m.kickoff_time > timezone('Asia/Shanghai', NOW()) THEN 0 ELSE 1 END"
-        in sql
-    )
+        for suffix in [
+            "scope=history",
+            "limit=0",
+            "offset=-1",
+            "sort=unsafe",
+            "scope=current&date_from=2026-10-31",
+            "scope=history&date_from=2026-10-31&date_to=2026-10-01",
+        ]:
+            assert client.get("/api/matches/active?" + suffix).status_code == 422
+        get_db.assert_not_called()

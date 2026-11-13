@@ -220,5 +220,58 @@
       "The prior attempt stopped safely: migration 139 is not recorded, all services are inactive, and a new target-bound signed release report is required before retry.",
       "P105 natural-run receipt verification and data-dependent P108/P111/P114/P115 outcomes remain pending."
     ]
+  },
+  "match_catalog_maintenance_20261113": {
+    "status": "LOCAL_VERIFIED_NOT_COMMITTED_OR_DEPLOYED",
+    "scope": "Current/history match-center query, original match status plus result completeness, server filtering/sorting/counting/pagination and query-isolated frontend responses.",
+    "backend": {
+      "tests": 11,
+      "result": "passed",
+      "command": "FQP_MATCH_CATALOG_TEST_DATABASE_URL=<dedicated loopback test DB> .venv/bin/python -m pytest tests/test_api/test_events.py tests/test_api/test_match_catalog_postgres.py -q",
+      "database": "Owned temporary PostgreSQL 16 at 127.0.0.1:55439, dedicated fqp_match_catalog_test_local; no production connection.",
+      "cases": [
+        "601 historical rows leave current response identical",
+        "48-hour boundary and cross-midnight business dates",
+        "recorded live status preserved",
+        "missing result distinct from actual status",
+        "confirmed/cancelled records archived",
+        "server filtering before paging, stable order and target location",
+        "invalid queries rejected before database access"
+      ]
+    },
+    "frontend": {
+      "tests": 154,
+      "result": "passed across final relevant source: 140 cases in 15 files plus 14 final MatchesPage cases",
+      "commands": [
+        "npm test -- --run src/features/command-center src/pages/MatchesPage.test.tsx src/pages/useMatchCenterState.test.ts src/pages/RecommendationsPage.test.tsx src/pages/ReviewsPage.test.tsx src/pages/BacktestPage.test.tsx src/pages/OddsMovementPage.test.tsx src/pages/useManualEvidence.test.tsx",
+        "npm test -- --run src/pages/MatchesPage.test.tsx"
+      ],
+      "note": "Expanded run passed 153/154; the remaining test held a DOM node from the intermediate response while the server-clamped URL reloaded. Final test awaits the normalized-offset request and passed 14/14. No frontend product changes followed the expanded run except EOF whitespace. StrictMode single initial read and stale-response isolation pass."
+    },
+    "static": {
+      "typecheck": "passed",
+      "build": "passed; existing >500 kB scene chunk warning",
+      "ruff": "passed",
+      "diff_check": "passed",
+      "scope_budget": {
+        "result": "passed",
+        "changed_paths": 20,
+        "new_files": 3,
+        "violations": []
+      }
+    },
+    "verification_notes": [
+      "Two focused old-hook tests failed before the keyed response fix and pass afterward.",
+      "Initial backend RED attempt was not valid isolated evidence: the old endpoint reached the default local read path and failed on a missing raw_json column. It performed no write. Subsequent invalid-input tests explicitly block any DB access; all SQL behavior tests use the owned dedicated database.",
+      "Temporary test database initialization initially used SQL_ASCII; recreated dedicated database with UTF8 before functional SQL verification."
+    ],
+    "production_writes": 0,
+    "source_database_writes": 0,
+    "schema_migrations": 0,
+    "dependencies_added": 0,
+    "committed": false,
+    "pushed": false,
+    "deployed": false,
+    "report": "docs/match-center-consolidation.md#12-2026-11-13-比赛目录范围与分页修正"
   }
 }

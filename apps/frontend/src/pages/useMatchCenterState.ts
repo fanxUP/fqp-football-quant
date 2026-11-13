@@ -8,6 +8,8 @@ export interface MatchCenterState {
   page: number;
   selectedId: number | null;
   warning: string | null;
+  scope: 'current' | 'history';
+  historyDate: string;
 }
 
 export function readMatchCenterState(hash = window.location.hash): MatchCenterState {
@@ -29,10 +31,17 @@ export function readMatchCenterState(hash = window.location.hash): MatchCenterSt
   const selectedId = positiveInteger('match_id', null);
   const page = positiveInteger('page', 1)!;
   const sort = singleValue('sort') ?? 'asc';
+  const scope = singleValue('scope') ?? 'current';
+  if (scope !== 'current' && scope !== 'history') invalid = true;
+  const today = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Shanghai' }).format(new Date());
+  const rawDate = singleValue('date') ?? today;
+  const dateValid = /^\d{4}-\d{2}-\d{2}$/.test(rawDate) && Number.isFinite(Date.parse(rawDate)) && new Date(rawDate).toISOString().slice(0, 10) === rawDate;
+  if (!dateValid) invalid = true;
   if (sort !== 'asc' && sort !== 'desc') invalid = true;
   return {
     query: singleValue('q') ?? '', league: singleValue('league') ?? '', status: singleValue('status') ?? '',
     sort: sort === 'desc' ? 'desc' : 'asc', page, selectedId,
+    scope: scope === 'history' ? 'history' : 'current', historyDate: dateValid ? rawDate : today,
     warning: invalid ? '链接参数无效，已使用安全默认值；请核对筛选和比赛编号。' : null,
   };
 }
@@ -45,6 +54,7 @@ export function matchCenterHash(state: MatchCenterState) {
   if (state.sort !== 'asc') params.set('sort', state.sort);
   if (state.page !== 1) params.set('page', String(state.page));
   if (state.selectedId !== null) params.set('match_id', String(state.selectedId));
+  if (state.scope === 'history') { params.set('scope', 'history'); params.set('date', state.historyDate); }
   const query = params.toString();
   return `#/matches${query ? `?${query}` : ''}`;
 }

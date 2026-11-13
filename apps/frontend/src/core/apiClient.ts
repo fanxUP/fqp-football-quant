@@ -658,9 +658,9 @@ export const api = {
   matches: {
     today: () =>
       request<{ matches: import('./types').TodayMatch[]; total: number }>('/api/matches/today'),
-    active: (params?: { limit?: number }) =>
-      request<{ matches: import('./types').TodayMatch[]; total: number }>(
-        `/api/matches/active${qs({ limit: params?.limit ?? 500 })}`,
+    active: (params?: import('./types').MatchCatalogQuery) =>
+      request<import('./types').MatchCatalogPage>(
+        `/api/matches/active${qs({ ...params, upcoming_only: params?.upcoming_only === undefined ? undefined : String(params.upcoming_only), limit: params?.limit ?? 500 })}`,
       ),
     detail: (matchId: number) =>
       request<import('./types').MatchDetail>(`/api/matches/${matchId}/detail`),
