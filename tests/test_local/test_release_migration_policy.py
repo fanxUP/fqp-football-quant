@@ -291,6 +291,30 @@ def test_deploy_script_plan_output_remains_valid_bash():
     )
 
 
+def test_deploy_runner_has_a_guarded_retry_path_for_a_fail_safe_stopped_release():
+    deploy = Path("ops/server/deploy.sh").read_text(encoding="utf-8")
+
+    assert "--apply-no-backup-recovery" in deploy
+    assert (
+        '[[ "$RECOVERY_MARKER_VALUE" =~ ^${ROLLBACK_SHA}-[0-9]{8}T[0-9]{6}Z-'
+        "[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}-r$ ]]"
+    ) in deploy
+    assert '[[ "$active_state" == inactive ]] || {' in deploy
+    assert 'git merge-base --is-ancestor "$ROLLBACK_SHA" "$RELEASE_SHA"' in deploy
+    assert 'for service in "${SERVICES[@]}" nginx;' in deploy
+    assert 'if [[ "$RECOVERY_FROM_FAILSAFE" == true ]]; then' in deploy
+    assert "MIGRATION_RELEASE_MODE='apply-no-backup'" in deploy
+    assert (
+        '"$RELEASE_EVIDENCE" "$MIGRATION_RELEASE_MODE" "$PENDING_MIGRATIONS" "$RELEASE_SHA"'
+        in deploy
+    )
+    assert "Fail-safe recovery attempt failed; the prior release remains stopped." in deploy
+    assert (
+        'if [[ "$RECOVERY_FROM_FAILSAFE" == true ]]; then\n    sudo -n systemctl start nginx'
+    ) in deploy
+    assert "has_symlink_component" in deploy
+
+
 def test_no_backup_allows_only_the_pinned_124_125_pair_with_full_rehearsal(tmp_path):
     validate(
         rehearsal_record(tmp_path),

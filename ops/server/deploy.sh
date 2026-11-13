@@ -20,8 +20,13 @@ write_release_marker() {
 RELEASE_SHA="${1:-}"
 RELEASE_MODE="${2:---plan}"
 RELEASE_EVIDENCE="${3:-}"
+RECOVERY_FROM_FAILSAFE=false
+MIGRATION_RELEASE_MODE="${RELEASE_MODE#--}"
+if [[ "$RELEASE_MODE" == '--apply-no-backup-recovery' ]]; then
+    MIGRATION_RELEASE_MODE='apply-no-backup'
+fi
 [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo 'Pass the full target commit SHA' >&2; exit 2; }
-[[ "$RELEASE_MODE" == '--plan' || "$RELEASE_MODE" == '--apply' || "$RELEASE_MODE" == '--apply-no-backup' ]] || exit 2
+[[ "$RELEASE_MODE" == '--plan' || "$RELEASE_MODE" == '--apply' || "$RELEASE_MODE" == '--apply-no-backup' || "$RELEASE_MODE" == '--apply-no-backup-recovery' ]] || exit 2
 [[ -z "$(git status --porcelain)" ]] || { echo 'Checkout must be clean' >&2; exit 1; }
 [[ "$(git branch --show-current)" == 'main' ]] || { echo 'Checkout must be on main' >&2; exit 1; }
 [[ -x .venv/bin/python ]] || { echo 'Missing application virtualenv' >&2; exit 1; }
@@ -33,6 +38,7 @@ MIGRATION_APPLY_ATTEMPTED=false
 FRONTEND_DEV_DEPENDENCIES_CHANGED=false
 FRONTEND_PUBLISH_ATTEMPTED=false
 WEB_ROOT=/var/www/fqp
+SERVICES=(fqp-backend fqp-scheduler fqp-worker)
 has_symlink_component() {
     local path="$1" component="/" part
     local -a parts
@@ -87,9 +93,33 @@ sudo -n -u postgres -- test -r "$PROJECT_ROOT/ops/server/migrate.py" || {
     echo 'PostgreSQL operating-system user cannot read the migration runner' >&2
     exit 1
 }
-SERVICES=(fqp-backend fqp-scheduler fqp-worker)
-for service in "${SERVICES[@]}"; do sudo -n systemctl is-active --quiet "$service"; done
-sudo -n systemctl is-active --quiet nginx
+if [[ "$RELEASE_MODE" == '--apply-no-backup-recovery' ]]; then
+    RECOVERY_MARKER="$PROJECT_ROOT/.runtime/release-id"
+    [[ -f "$RECOVERY_MARKER" && ! -L "$RECOVERY_MARKER" ]] || {
+        echo 'Fail-safe recovery requires the regular rollback release marker' >&2
+        exit 1
+    }
+    RECOVERY_MARKER_VALUE="$(<"$RECOVERY_MARKER")"
+    [[ "$RECOVERY_MARKER_VALUE" =~ ^${ROLLBACK_SHA}-[0-9]{8}T[0-9]{6}Z-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}-r$ ]] || {
+        echo 'Fail-safe rollback marker does not match the current checkout' >&2
+        exit 1
+    }
+    git merge-base --is-ancestor "$ROLLBACK_SHA" "$RELEASE_SHA" || {
+        echo 'Fail-safe recovery target must descend from the restored checkout' >&2
+        exit 1
+    }
+    for service in "${SERVICES[@]}" nginx; do
+        active_state="$(sudo -n systemctl show --property=ActiveState --value "$service")"
+        [[ "$active_state" == inactive ]] || {
+            echo "Fail-safe recovery requires every prior service stopped: $service is $active_state" >&2
+            exit 1
+        }
+    done
+    RECOVERY_FROM_FAILSAFE=true
+else
+    for service in "${SERVICES[@]}"; do sudo -n systemctl is-active --quiet "$service"; done
+    sudo -n systemctl is-active --quiet nginx
+fi
 sudo -n nginx -t
 .venv/bin/python "$SCRIPT_DIR/configure_nginx.py" --plan
 if [[ ! -d "$WEB_ROOT" || ! -w "$WEB_ROOT" ]] || has_symlink_component "$WEB_ROOT"; then
@@ -163,6 +193,10 @@ rollback() {
         echo 'P105 migration apply was attempted; prior release needs operator validation.' >&2
         echo 'Do not restart the legacy release until stale recommendations are gated or a compatible release is deployed.' >&2
         rollback_required 'migration apply was attempted; prior release requires operator validation'
+    fi
+    if [[ "$RECOVERY_FROM_FAILSAFE" == true ]]; then
+        echo 'Fail-safe recovery attempt failed; the prior release remains stopped.' >&2
+        rollback_required 'recovery attempt failed before the target became healthy'
     fi
     sudo -n systemctl start "${SERVICES[@]}"
     local restored=false attempt
@@ -238,7 +272,7 @@ print(json.dumps(pending))
 PENDING_MIGRATION_COUNT="$(.venv/bin/python -c 'import json,sys; print(len(json.loads(sys.argv[1])))' "$PENDING_MIGRATIONS")"
 if (( PENDING_MIGRATION_COUNT > 0 )); then
     .venv/bin/python "$SCRIPT_DIR/release_migration_policy.py" \
-        "$RELEASE_EVIDENCE" "${RELEASE_MODE#--}" "$PENDING_MIGRATIONS" "$RELEASE_SHA"
+        "$RELEASE_EVIDENCE" "$MIGRATION_RELEASE_MODE" "$PENDING_MIGRATIONS" "$RELEASE_SHA"
     MIGRATION_APPLY_ATTEMPTED=true
     run_migration --apply
 else
@@ -276,6 +310,9 @@ publish_frontend
 # The installer validates and restores the previous files on test/reload failure.
 # Install last: the existing proxy/TLS/security rules remain in the selected site.
 NGINX_CONFIG_STATUS=0
+if [[ "$RECOVERY_FROM_FAILSAFE" == true ]]; then
+    sudo -n systemctl start nginx
+fi
 sudo -n -- "$PROJECT_ROOT/.venv/bin/python" "$SCRIPT_DIR/configure_nginx.py" --apply || NGINX_CONFIG_STATUS=$?
 if (( NGINX_CONFIG_STATUS == 3 )); then
     trap - ERR
@@ -283,6 +320,7 @@ if (( NGINX_CONFIG_STATUS == 3 )); then
 elif (( NGINX_CONFIG_STATUS != 0 )); then
     false # invoke the existing application rollback after verified config restore
 fi
+sudo -n systemctl is-active --quiet nginx
 trap - ERR
 printf 'Deployed: %s\n' "$RELEASE_SHA"
 

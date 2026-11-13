@@ -110,9 +110,18 @@
       "command": ".venv/bin/python -m pytest -q tests/test_local/test_release_migration_policy.py tests/test_computation/test_prediction_job_execution_postgres.py::test_recovery_index_migration_uses_the_retryable_online_format",
       "exit_code": 0,
       "summary": "149 passed. Accepts the exact PostgreSQL varchar catalog predicate after removing implicit ::text casts only outside quoted values; rejects a changed literal, a different status predicate, and extra filters. Ruff check and format check passed.",
-      "revision": "ef1831b64ea5177ab776d0a00a088eaa5d36f116 with local uncommitted validator fix",
+      "revision": "005bc0373b4a21d8345bc4ad11cb67b291f15a7a (validated source content committed and CI passed)",
       "dirty_tree": true,
       "verified_at": "2026-11-13T12:44:23+08:00"
+    },
+    "A-RELEASE-FAILSAFE-RECOVERY-GUARD": {
+      "status": "PASS",
+      "command": ".venv/bin/python -m pytest -q tests/test_local/test_release_migration_policy.py; bash -n ops/server/deploy.sh; Ruff check/format; git diff --check",
+      "exit_code": 0,
+      "summary": "The release-policy suite including the recovery guard test passed 150 tests. Recovery mode requires a regular rollback marker matching the current SHA and full timestamp/UUID format, a target descendant, and inactive backend, scheduler, worker, and Nginx. Migration policy receives apply-no-backup; recovery failures keep the legacy release stopped; successful Nginx startup follows the target backend health check and frontend publish. Bash syntax, Ruff, formatting and diff checks pass.",
+      "revision": "005bc0373b4a21d8345bc4ad11cb67b291f15a7a with local uncommitted recovery runner change",
+      "dirty_tree": true,
+      "verified_at": "2026-11-13T13:16:24+08:00"
     }
   },
   "reviews": {
@@ -131,13 +140,17 @@
       "summary": "Independent read-only follow-up confirmed the P105 migration 139 report is signed over the exact hashed report bytes with the fixed production-host identity and migration-specific fqp-p105-migration-139 namespace. The 131 namespace remains unchanged. Positive, unsigned, tampered-signature, and both cross-namespace rejection cases use real OpenSSH signing/verification; no blocker, major, or minor remains."
     },
     "production_varchar_catalog_fix": {
-      "status": "PENDING",
+      "status": "PASS",
       "summary": "PASS. Read-only follow-up confirmed casts are removed only outside quoted literals, the complete normalized predicate must match the pinned expression, production's catalog output is accepted, and literal/extra-filter cases are rejected. No remaining false positive or false negative for the supplied PostgreSQL catalog output."
+    },
+    "fail_safe_retry_release_runner": {
+      "status": "PASS",
+      "summary": "Read-only review confirmed the recovery mode is gated by the current rollback SHA marker, a descendant target, and all four services inactive; failure preserves stopped services, successful startup waits for target backend health and frontend publish before Nginx, and the recovery mode maps to apply-no-backup. The full marker regex, service list, and migration-policy arguments are asserted by the regression test."
     }
   },
   "security": {
     "status": "PASS",
-    "summary": "No new dependency, public API, secret, provider call, production database access, or production data write. Model promotion and formal probability changes remain disabled."
+    "summary": "No new dependency, public API, secret, provider call, production business-data write, or model probability change. Production was accessed read-only for the release plan, migration ledger and index catalog; no backup was created."
   },
   "migration": {
     "status": "ISOLATED_PASS_PRODUCTION_PENDING",
@@ -147,7 +160,7 @@
     ],
     "logical_migrations": 1,
     "production_applied": false,
-    "note": "The isolated migration-139 rehearsal passed on a disposable synthetic PostgreSQL 16 fixture. The 2026-11-13 production attempt stopped before ledger recording because PostgreSQL rendered varchar predicate casts that the validator did not accept. The recovery index is currently valid/ready; the pre-attempt index state is unknown. No business rows were written, no backup was created, and the release fail-safe restored code to 3ed1ba8490fc11a67ce31457644c113050ab02af while keeping services inactive. A narrowly scoped validator fix and regression are local; exact-head CI and signed evidence for the new target are required before retry.",
+    "note": "The isolated migration-139 rehearsal passed on a disposable synthetic PostgreSQL 16 fixture. The 2026-11-13 production attempt stopped before ledger recording because PostgreSQL rendered varchar predicate casts that the validator did not accept. The validator fix is in commit 005bc0373b4a21d8345bc4ad11cb67b291f15a7a; its exact-head GitHub CI passed. The recovery index is currently valid/ready; the pre-attempt index state is unknown. No business rows were written, no backup was created, and the release fail-safe restored code to 3ed1ba8490fc11a67ce31457644c113050ab02af while keeping services inactive. A recovery-only runner change is local, independently reviewed, and awaits its own exact-head CI and target-bound release evidence before retry.",
     "production_attempt": {
       "target_sha": "ef1831b64ea5177ab776d0a00a088eaa5d36f116",
       "result": "stopped_by_release_fail_safe",
@@ -170,11 +183,15 @@
     "status": "passed",
     "last_known_run": {
       "status": "success",
-      "run_id": 43359281512,
-      "head_sha": "ef1831b64ea5177ab776d0a00a088eaa5d36f116",
-      "url": "https://github.com/fanxUP/fqp-football-quant/actions/runs/43359281512"
+      "run_id": 43369310512,
+      "head_sha": "005bc0373b4a21d8345bc4ad11cb67b291f15a7a",
+      "url": "https://github.com/fanxUP/fqp-football-quant/actions/runs/43369310512"
     },
-    "note": "The exact ef1831b commit passed both GitHub CI jobs. The follow-up varchar-catalog normalization fix is local and requires its own review and exact-head CI before deployment retry."
+    "checks": {
+      "test": "passed",
+      "lint-and-typecheck": "passed"
+    },
+    "note": "The exact 005bc03 validator-fix commit passed both GitHub CI jobs. The subsequently reviewed fail-safe recovery runner change is local and requires its own exact-head CI before deployment retry."
   },
   "production": {
     "status": "RELEASE_STOPPED_FAIL_SAFE",
@@ -192,14 +209,15 @@
     "migration_139_ledger": "pending",
     "recovery_index": "valid_ready; pre-attempt state unknown",
     "backup_created": false,
-    "temporary_scoped_sudoers_rule": "present_for_retry_and_must_be_removed_after_release"
+    "temporary_scoped_sudoers_rule": "present_for_retry; add only systemctl start nginx for the recovery mode, then remove and verify after release",
+    "rollback_marker": "3ed1ba8490fc11a67ce31457644c113050ab02af-...-r"
   },
   "quality_gate": {
     "status": "PENDING",
-    "checked_at": "2026-11-13T12:44:23+08:00",
+    "checked_at": "2026-11-13T13:16:24+08:00",
     "failures": [
-      "The production varchar-catalog validator fix passed independent review and local regression; exact-head GitHub CI and a new target-bound signed report are required before retry.",
-      "The previous production attempt stopped safely: migration 139 is not recorded in the ledger, services are inactive, and a new target-bound signed report is required before retry.",
+      "The validator fix passed exact-head CI. The recovery-only deploy runner is local and requires its own exact-head CI before retry.",
+      "The prior attempt stopped safely: migration 139 is not recorded, all services are inactive, and a new target-bound signed release report is required before retry.",
       "P105 natural-run receipt verification and data-dependent P108/P111/P114/P115 outcomes remain pending."
     ]
   }

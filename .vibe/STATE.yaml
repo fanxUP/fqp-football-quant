@@ -13,7 +13,7 @@
   "last_transition": {
     "from": "VERIFYING",
     "to": "REVIEWING",
-    "at": "2026-11-13T13:00:51.815454+08:00",
-    "reason": "Implementation and local verification complete; the read-only predicate normalization follow-up review passed."
+    "at": "2026-11-13T13:20:58.847778+08:00",
+    "reason": "The recovery path now has complete marker, target ancestry, inactive-service, policy mapping, and failure-state test assertions; independent follow-up review passed."
   }
 }
