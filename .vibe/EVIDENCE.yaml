@@ -4,21 +4,15 @@
   "acceptance": {
     "A-P10805A-P114-LOCAL": {
       "status": "PASS",
-      "command": [
-        "FQP_P106_TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55492/fqp_p106_test_provenance pytest -q tests/test_computation/test_prediction_job_execution_postgres.py tests/test_computation/test_prediction_run_postgres.py (isolated loopback PostgreSQL 16; 93 passed)",
-        "pytest -q tests/test_scripts/test_training_manifest.py tests/test_scripts/test_mle_trainer.py tests/test_scripts/test_dynamic_team_p106.py tests/test_scripts/test_dynamic_team_challenger.py tests/test_scripts/test_backtest_engine.py (183 passed)",
-        "FQP_P106_TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55492/fqp_p106_test_provenance pytest -q tests/test_computation/test_prediction_run_postgres.py::test_p111_shadow_uses_p106_run_group_replay_and_research_storage (isolated loopback PostgreSQL 16; 1 passed)",
-        "pytest -q tests/test_computation/test_observation_postgres.py (dedicated loopback PostgreSQL 16 fixture; 50 passed)",
-        "pytest -q tests/test_local/test_native_database_runtime.py tests/test_local/test_all_local_runtime.py (53 passed)",
-        "ruff check .; ruff format --check . (704 files already formatted); mypy scripts/training_manifest.py scripts/dynamic_team_p106.py scripts/dynamic_team_challenger.py scripts/backtest_engine.py; targeted compileall; V4 scope/budget; git diff --check"
-      ],
+      "command": "/bin/bash -c 'set -euo pipefail\n.venv/bin/python -m pytest -q tests/test_computation/test_prediction_job_execution_postgres.py tests/test_computation/test_prediction_run_postgres.py\n.venv/bin/python -m pytest -q tests/test_scripts/test_training_manifest.py tests/test_scripts/test_mle_trainer.py tests/test_scripts/test_dynamic_team_p106.py tests/test_scripts/test_dynamic_team_challenger.py tests/test_scripts/test_backtest_engine.py\n.venv/bin/python -m pytest -q tests/test_computation/test_prediction_run_postgres.py::test_p111_shadow_uses_p106_run_group_replay_and_research_storage\n.venv/bin/python -m pytest -q tests/test_computation/test_observation_postgres.py\n.venv/bin/python -m pytest -q tests/test_local/test_native_database_runtime.py tests/test_local/test_all_local_runtime.py\n.venv/bin/ruff check .\n.venv/bin/ruff format --check .\n.venv/bin/mypy scripts/training_manifest.py scripts/dynamic_team_p106.py scripts/dynamic_team_challenger.py scripts/backtest_engine.py\n.venv/bin/python -m compileall -q scripts/backtest_engine.py scripts/training_manifest.py tests/test_scripts/test_backtest_engine.py\ngit diff --check\n'",
       "exit_code": 0,
-      "summary": "P105 recovery/forecast PostgreSQL 93 passed; P106/P111/P114 fixed-sample 183 passed; P111 isolated PostgreSQL integration 1 passed; P104/P114 observation PostgreSQL 50 passed; local runtime 53 passed. Total 380 passed, 0 failed, 0 skipped on the formatted implementation tree before the later one-line test expectation correction. The corrected case is recorded separately and the full 5798c06 GitHub CI passed.",
-      "environment": "Local fixed samples and dedicated loopback PostgreSQL 16 test fixtures. No production database, paid API, or NAS Titan SQLite was accessed.",
-      "revision": "a09a702b7928cfa336f63fdfd55fdcadfdbeb298",
+      "summary": "gy-1.7.0\nrootdir: /Volumes/Nas/FQP/code\nconfigfile: pyproject.toml\nplugins: mock-3.15.1, cov-7.1.0, asyncio-1.4.0, anyio-4.15.1, platformdirs-4.13.5\nasyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function\ncollected 93 items\n\ntests/test_computation/test_prediction_job_execution_postgres.py ....... [  7%]\n..........                                                               [ 18%]\ntests/test_computation/test_prediction_run_postgres.py ................. [ 36%]\n...........................................................              [100%]\n\n======================== 93 passed in 548.72s (0:09:08) ========================\n============================= test session starts ==============================\nplatform darwin -- Python 3.14.6, pytest-9.1.1, pluggy-1.7.0\nrootdir: /Volumes/Nas/FQP/code\nconfigfile: pyproject.toml\nplugins: mock-3.15.1, cov-7.1.0, asyncio-1.4.0, anyio-4.15.1, platformdirs-4.13.5\nasyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function\ncollected 183 items\n\ntests/test_scripts/test_training_manifest.py ............                [  6%]\ntests/test_scripts/test_mle_trainer.py ................                  [ 15%]\ntests/test_scripts/test_dynamic_team_p106.py .............               [ 22%]\ntests/test_scripts/test_dynamic_team_challenger.py .............         [ 29%]\ntests/test_scripts/test_backtest_engine.py ............................. [ 45%]\n........................................................................ [ 84%]\n............................                                             [100%]\n\n============================= 183 passed in 2.49s ==============================\n============================= test session starts ==============================\nplatform darwin -- Python 3.14.6, pytest-9.1.1, pluggy-1.7.0\nrootdir: /Volumes/Nas/FQP/code\nconfigfile: pyproject.toml\nplugins: mock-3.15.1, cov-7.1.0, asyncio-1.4.0, anyio-4.15.1, platformdirs-4.13.5\nasyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function\ncollected 1 item\n\ntests/test_computation/test_prediction_run_postgres.py .                 [100%]\n\n============================== 1 passed in 1.80s ===============================\n============================= test session starts ==============================\nplatform darwin -- Python 3.14.6, pytest-9.1.1, pluggy-1.7.0\nrootdir: /Volumes/Nas/FQP/code\nconfigfile: pyproject.toml\nplugins: mock-3.15.1, cov-7.1.0, asyncio-1.4.0, anyio-4.15.1, platformdirs-4.13.5\nasyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function\ncollected 50 items\n\ntests/test_computation/test_observation_postgres.py .................... [ 40%]\n..............................                                           [100%]\n\n============================= 50 passed in 25.02s ==============================\n============================= test session starts ==============================\nplatform darwin -- Python 3.14.6, pytest-9.1.1, pluggy-1.7.0\nrootdir: /Volumes/Nas/FQP/code\nconfigfile: pyproject.toml\nplugins: mock-3.15.1, cov-7.1.0, asyncio-1.4.0, anyio-4.15.1, platformdirs-4.13.5\nasyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function\ncollected 53 items\n\ntests/test_local/test_native_database_runtime.py ....................... [ 43%]\n..........................                                               [ 92%]\ntests/test_local/test_all_local_runtime.py ....                          [100%]\n\n============================== 53 passed in 0.35s ==============================\nAll checks passed!\n704 files already formatted\napps/backend/src/db.py:105: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]\nSuccess: no issues found in 4 source files\n",
+      "timed_out": false,
+      "environment": "Main code head 1ee8f2a exact-head CI passed (4062 passed, 32 skipped). Local P105 migration 139 no-backup policy now requires a signed report bound to the exact bytes and migration-specific production-host Ed25519 namespace; 143 release-policy/migration-format tests passed, and independent follow-up review passed with no findings. Configured P106/P114 regression passed 233 tests against dedicated loopback PostgreSQL 16; V4 regression, scope, budget, Ruff, format, Bash syntax and diff checks pass. P108 source-export audit is static CSV-only. Changes remain local and uncommitted; no production DB/server was accessed, no deployment occurred, and no backup was created. Exact-head CI and production release evidence remain pending.",
+      "revision": "1ee8f2a71f3ed3b0e345aca7532476151342e39a",
       "dirty_tree": true,
-      "tree_fingerprint": "cc4db7df396ae2fa1a3ffc2c7e1840d5eae0854184454a3a218a5a327230625f",
-      "verified_at": "2026-11-11T19:39:03+08:00"
+      "tree_fingerprint": "7b6b1bd2647ad8040b209d331741eeba4b49427b235aae8c7a62ec4f48619034",
+      "verified_at": "2026-11-11T22:41:39.846805+08:00"
     },
     "A-P105-MIGRATION-139": {
       "status": "PASS_ISOLATED",
@@ -66,15 +60,50 @@
     "A-P10805A-P114-CI": {
       "status": "PASS",
       "command": [
-        "GitHub Actions CI run 43018320775; verify exact head, both required jobs and test summary"
+        "GitHub Actions exact-head CI run 43024264275; verify both required jobs and full test summary"
       ],
       "exit_code": 0,
-      "summary": "Exact code head 5798c06 passed lint-and-typecheck and test jobs. Full pytest: 4062 passed, 32 skipped, 43 warnings in 338.01s; coverage 70.73% above the 50% threshold. The fixed rolling-window semantics case is included.",
+      "summary": "Exact code head 1ee8f2a passed lint-and-typecheck and test jobs. Full pytest: 4062 passed, 32 skipped, 43 warnings in 526.36s; coverage 70.73%.",
       "environment": "GitHub Actions, Python 3.14, PostgreSQL 16 and Redis CI services.",
-      "revision": "5798c06c9cd931abdd73ca24190aebc3a5105c07",
+      "revision": "1ee8f2a71f3ed3b0e345aca7532476151342e39a",
       "dirty_tree": false,
-      "tree_fingerprint": "4cf8dd8358fbdae4d00c8a0fec87b6b56e41355f43a81112afb58eed90072813",
-      "verified_at": "2026-11-11T20:22:07+08:00"
+      "url": "https://github.com/fanxUP/fqp-football-quant/actions/runs/43024264275"
+    },
+    "A-P105-NO-BACKUP-POLICY-139": {
+      "status": "PASS",
+      "command": ".venv/bin/python -m pytest tests/test_local/test_release_migration_policy.py tests/test_computation/test_prediction_job_execution_postgres.py::test_recovery_index_migration_uses_the_retryable_online_format -q",
+      "exit_code": 0,
+      "summary": "============================= test session starts ==============================\nplatform darwin -- Python 3.14.6, pytest-9.1.1, pluggy-1.7.0\nrootdir: /Volumes/Nas/FQP/code\nconfigfile: pyproject.toml\nplugins: mock-3.15.1, cov-7.1.0, asyncio-1.4.0, anyio-4.15.1, platformdirs-4.13.5\nasyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function\ncollected 143 items\n\ntests/test_local/test_release_migration_policy.py ...................... [ 15%]\n........................................................................ [ 65%]\n................................................                         [ 99%]\ntests/test_computation/test_prediction_job_execution_postgres.py .       [100%]\n\n============================= 143 passed in 13.15s =============================\n",
+      "timed_out": false,
+      "environment": "Local Python 3.14.6; 143 tests passed. Real OpenSSH Ed25519 signing and verification use temporary test keys; the production host key is not accessed. Ruff/format, bash -n, diff, scope and budget checks pass. Independent read-only follow-up review passed. No production database/server access, migration, deployment, or backup.",
+      "revision": "1ee8f2a71f3ed3b0e345aca7532476151342e39a",
+      "dirty_tree": true,
+      "tree_fingerprint": "7b6b1bd2647ad8040b209d331741eeba4b49427b235aae8c7a62ec4f48619034",
+      "verified_at": "2026-11-11T22:28:26.093821+08:00"
+    },
+    "A-P106-P114-LOCAL-REGRESSION": {
+      "status": "PASS",
+      "command": ".venv/bin/python -m pytest -q tests/test_scripts/test_training_manifest.py tests/test_scripts/test_dynamic_team_p106.py tests/test_scripts/test_dynamic_team_challenger.py tests/test_scripts/test_mle_trainer.py tests/test_scripts/test_backtest_engine.py tests/test_computation/test_observation_postgres.py",
+      "exit_code": 0,
+      "summary": "============================= test session starts ==============================\nplatform darwin -- Python 3.14.6, pytest-9.1.1, pluggy-1.7.0\nrootdir: /Volumes/Nas/FQP/code\nconfigfile: pyproject.toml\nplugins: mock-3.15.1, cov-7.1.0, asyncio-1.4.0, anyio-4.15.1, platformdirs-4.13.5\nasyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function\ncollected 233 items\n\ntests/test_scripts/test_training_manifest.py ............                [  5%]\ntests/test_scripts/test_dynamic_team_p106.py .............               [ 10%]\ntests/test_scripts/test_dynamic_team_challenger.py .............         [ 16%]\ntests/test_scripts/test_mle_trainer.py ................                  [ 23%]\ntests/test_scripts/test_backtest_engine.py ............................. [ 35%]\n........................................................................ [ 66%]\n............................                                             [ 78%]\ntests/test_computation/test_observation_postgres.py .................... [ 87%]\n..............................                                           [100%]\n\n============================= 233 passed in 19.20s =============================\n",
+      "timed_out": false,
+      "environment": "Main code head 1ee8f2a exact-head CI passed (4062 passed, 32 skipped); local P105 recovery no-backup policy and migration-format regressions passed 139 tests, with Ruff/format/bash syntax/diff and scope/budget checks passing. Independent read-only review passed the structural contract with one residual MINOR: the hashed PostgreSQL evidence report is not signed or generated by a controlled collector. Static CSV coverage was refreshed without opening active NAS SQLite. No production DB/server was accessed, no deployment occurred, and no backup was created. Exact-head CI for local policy edits and fresh production release evidence remain pending.",
+      "revision": "1ee8f2a71f3ed3b0e345aca7532476151342e39a",
+      "dirty_tree": true,
+      "tree_fingerprint": "f632baa4550b2122a2b2290e43d3304317a88efbe62fc308933e2f6149a2149f",
+      "verified_at": "2026-11-11T22:04:49.882386+08:00"
+    },
+    "A-V4-LOCAL-REGRESSION": {
+      "status": "PASS",
+      "command": "python3 -I -S -B /Users/estefan-macworkstation/.remote-vibe-coding/engine/vibe.py regression check",
+      "exit_code": 0,
+      "summary": "test: regression=0/0\nlint: regression=0/0\ntypecheck: regression=0/0\nPASS: regression budget\n",
+      "timed_out": false,
+      "environment": "Main code head 1ee8f2a exact-head CI passed (4062 passed, 32 skipped). Local P105 migration 139 no-backup policy now requires a signed report bound to the exact bytes and migration-specific production-host Ed25519 namespace; 143 release-policy/migration-format tests passed, and independent follow-up review passed with no findings. Configured P106/P114 regression passed 233 tests against dedicated loopback PostgreSQL 16; V4 regression, scope, budget, Ruff, format, Bash syntax and diff checks pass. P108 source-export audit is static CSV-only. Changes remain local and uncommitted; no production DB/server was accessed, no deployment occurred, and no backup was created. Exact-head CI and production release evidence remain pending.",
+      "revision": "1ee8f2a71f3ed3b0e345aca7532476151342e39a",
+      "dirty_tree": true,
+      "tree_fingerprint": "7b6b1bd2647ad8040b209d331741eeba4b49427b235aae8c7a62ec4f48619034",
+      "verified_at": "2026-11-11T22:42:33.744815+08:00"
     }
   },
   "reviews": {
@@ -87,6 +116,10 @@
       "status": "PASS",
       "applicability": "PASS_ISOLATED",
       "summary": "Migration 139 runner and rollback were exercised only on an isolated minimal PostgreSQL 16 fixture."
+    },
+    "p105_no_backup_policy": {
+      "status": "PASS",
+      "summary": "Independent read-only follow-up confirmed the P105 migration 139 report is signed over the exact hashed report bytes with the fixed production-host identity and migration-specific fqp-p105-migration-139 namespace. The 131 namespace remains unchanged. Positive, unsigned, tampered-signature, and both cross-namespace rejection cases use real OpenSSH signing/verification; no blocker, major, or minor remains."
     }
   },
   "security": {
@@ -107,11 +140,11 @@
     "status": "passed",
     "last_known_run": {
       "status": "success",
-      "run_id": 43018320775,
-      "head_sha": "5798c06c9cd931abdd73ca24190aebc3a5105c07",
-      "url": "https://github.com/fanxUP/fqp-football-quant/actions/runs/43018320775"
+      "run_id": 43024264275,
+      "head_sha": "1ee8f2a71f3ed3b0e345aca7532476151342e39a",
+      "url": "https://github.com/fanxUP/fqp-football-quant/actions/runs/43024264275"
     },
-    "note": "The exact code head 5798c06 passed both CI jobs. The prior run exposed one stale assertion about implicit rolling windows; the test was corrected to match the policy that only explicitly predeclared absolute windows are formal holdouts."
+    "note": "The exact code head 1ee8f2a passed both CI jobs (4062 passed, 32 skipped). The current local no-backup release-policy changes are uncommitted and not covered by this CI run."
   },
   "production": {
     "status": "NOT_ACCESSED",
@@ -121,10 +154,11 @@
   },
   "quality_gate": {
     "status": "PENDING",
-    "checked_at": "2026-11-11T20:26:41+08:00",
+    "checked_at": "2026-11-11T22:06:34+08:00",
     "failures": [
-      "Production release and protected read-only smoke remain pending.",
-      "Migration 139 is not in the deploy script no-backup allowlist; the ordinary release path requires current verified backup evidence."
+      "The local migration 139 no-backup policy changes still require exact-head GitHub CI.",
+      "No fresh release evidence or production deployment/protected read-only smoke has been performed.",
+      "P105 natural-run receipt verification and data-dependent P108/P111/P114/P115 outcomes remain pending."
     ]
   }
 }

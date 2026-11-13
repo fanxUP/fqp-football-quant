@@ -1,6 +1,6 @@
 {
   "schema_version": 4,
-  "state": "REVIEWING",
+  "state": "VERIFYING",
   "workflow_id": "P108-05A-P114-POINT-IN-TIME-LABELS-20261111",
   "previous_workflow": {
     "workflow_id": "ODDS-MULTIBOOK-REFERENCE-20261111",
@@ -9,11 +9,11 @@
   },
   "blocked_reason": null,
   "mode": "STRICT",
-  "environment": "Local fixed-sample and isolated loopback PostgreSQL 16 verification is complete; migration 139 was exercised only in a disposable test database. Main code head 5798c06 is pushed and its exact-head GitHub CI passed (4062 passed, 32 skipped). No production DB or server deployment has been accessed. Production release remains pending; deploy.sh does not allow migration 139 on the no-backup path.",
+  "environment": "Main code head 1ee8f2a exact-head CI passed (4062 passed, 32 skipped). Local P105 migration 139 no-backup policy now requires a signed report bound to the exact bytes and migration-specific production-host Ed25519 namespace; 143 release-policy/migration-format tests passed, and independent follow-up review passed with no findings. Configured P106/P114 regression passed 233 tests against dedicated loopback PostgreSQL 16; V4 regression, scope, budget, Ruff, format, Bash syntax and diff checks pass. P108 source-export audit is static CSV-only. Changes remain local and uncommitted; no production DB/server was accessed, no deployment occurred, and no backup was created. Exact-head CI and production release evidence remain pending.",
   "last_transition": {
-    "from": "VERIFYING",
-    "to": "REVIEWING",
-    "at": "2026-11-11T09:09:25.313460+08:00",
-    "reason": "Scoped local regressions and the independent read-only review passed; exact-head CI and release checks remain pending."
+    "from": "IMPLEMENTING",
+    "to": "VERIFYING",
+    "at": "2026-11-11T22:29:30+08:00",
+    "reason": "Closed the prior P105 evidence-provenance MINOR by requiring exact-byte SSH host signatures with migration-specific namespaces and cross-namespace rejection. The updated policy passed 143 tests and independent follow-up review; local exact-head CI and production release evidence remain pending."
   }
 }

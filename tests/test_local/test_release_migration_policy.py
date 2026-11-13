@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 
 from ops.server import release_migration_policy as policy
+from scripts.prediction_job_execution import _RUNNING_OWNER_QUERY
 
 ROOT = Path(__file__).resolve().parents[2]
 TARGET_SHA = "5386ecf75e3d0fd2dda0f6537773e3d01731fd17"
@@ -27,6 +28,9 @@ MIGRATION_132_133 = [
     "132_prematch_prediction_schedule.sql",
     "133_traditional_market_reference.sql",
 ]
+MIGRATION_139 = ["139_prediction_recovery_index.sql"]
+MIGRATION_139_SHA256 = "de9821bebebeee26a2f2ce114dce8eb563d2429873a28a199e82601d050bb62c"
+MIGRATION_139_DOWN_SHA256 = "3ad8b13fdaa84d7ff1aba2d92d7eb3d404c8438946064147e1ec9f44fa58ba41"
 
 
 @pytest.fixture(scope="session")
@@ -51,6 +55,16 @@ def trusted_migration_131_signer(monkeypatch, migration_131_test_signing_key):
     return migration_131_test_signing_key
 
 
+@pytest.fixture
+def trusted_migration_139_signer(monkeypatch, migration_131_test_signing_key):
+    monkeypatch.setattr(
+        policy,
+        "TRUSTED_NO_BACKUP_SIGNER_PUBLIC_KEY",
+        Path(f"{migration_131_test_signing_key}.pub"),
+    )
+    return migration_131_test_signing_key
+
+
 def _write_report(directory: Path, report: dict) -> str:
     name = (
         "prematch-migration-rehearsal.json"
@@ -62,7 +76,13 @@ def _write_report(directory: Path, report: dict) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def _write_signed_report(directory: Path, report: dict, signing_key: Path) -> str:
+def _write_signed_report(
+    directory: Path,
+    report: dict,
+    signing_key: Path,
+    *,
+    namespace: str = policy.NO_BACKUP_SIGNING_NAMESPACE,
+) -> str:
     digest = _write_report(directory, report)
     report_path = directory / "no-backup-migration-rehearsal.json"
     Path(f"{report_path}.sig").unlink(missing_ok=True)
@@ -74,7 +94,7 @@ def _write_signed_report(directory: Path, report: dict, signing_key: Path) -> st
             "-f",
             str(signing_key),
             "-n",
-            policy.NO_BACKUP_SIGNING_NAMESPACE,
+            namespace,
             str(report_path),
         ],
         check=True,
@@ -84,9 +104,25 @@ def _write_signed_report(directory: Path, report: dict, signing_key: Path) -> st
     return digest
 
 
-def rehearsal_record(directory: Path, pending=None) -> dict:
+def _update_signed_139_rehearsal(
+    directory: Path, record: dict, report: dict, signing_key: Path
+) -> dict:
+    record["no_backup_migration_rehearsal"]["evidence_sha256"] = _write_signed_report(
+        directory,
+        report,
+        signing_key,
+        namespace=policy.RECOVERY_SIGNING_NAMESPACE,
+    )
+    return record
+
+
+def rehearsal_record(directory: Path, pending=None, signing_key: Path | None = None) -> dict:
     pending = MIGRATIONS_124_125 if pending is None else pending
-    checksums = {name: policy.REVIEWED_NO_BACKUP_CHECKSUMS[name] for name in pending}
+    checksums = (
+        {MIGRATION_139[0]: MIGRATION_139_SHA256}
+        if pending == MIGRATION_139
+        else {name: policy.REVIEWED_NO_BACKUP_CHECKSUMS[name] for name in pending}
+    )
     report_name = (
         "prematch-migration-rehearsal.json"
         if pending == MIGRATION_132_133
@@ -105,9 +141,11 @@ def rehearsal_record(directory: Path, pending=None) -> dict:
             "production_data_copy": False,
         },
         "existing_rows_preserved": "passed",
-        "constraints_and_triggers_verified": "passed",
-        "transaction_rollback_verified": "passed",
-        "timeouts": {"lock_seconds": 2, "statement_seconds": 30},
+        "timeouts": (
+            {"lock_seconds": 5, "statement_seconds": 900}
+            if pending == MIGRATION_139
+            else {"lock_seconds": 2, "statement_seconds": 30}
+        ),
         "test_results": {"passed": 1, "failed": 0, "skipped": 0},
     }
     if pending == MIGRATION_126:
@@ -133,13 +171,89 @@ def rehearsal_record(directory: Path, pending=None) -> dict:
             published_reference_protection="passed",
             rollback_preserves_runtime_data="passed",
         )
-    evidence_sha256 = _write_report(directory, report)
+    if pending == MIGRATION_139:
+        index_state = {
+            "index_name": "idx_ai_job_runs_prediction_recovery",
+            "schema": "public",
+            "table": "ai_job_runs",
+            "method": "btree",
+            "valid": True,
+            "ready": True,
+            "attributes": 2,
+            "key_attributes": 2,
+            "first_key": "input_snapshot_refs ->> 'execution_protocol'::text",
+            "second_key": "id",
+            "predicate": ("job_code = 'model_prediction'::text AND status = 'running'::text"),
+        }
+        report.update(
+            migration_sha256={MIGRATION_139[0]: MIGRATION_139_SHA256},
+            down_migration_sha256={
+                "139_prediction_recovery_index.down.sql": MIGRATION_139_DOWN_SHA256
+            },
+            application_role={
+                "name": "fqp",
+                "superuser": False,
+                "owns_ai_job_runs": False,
+            },
+            application_role_acl="passed",
+            business_rows_unchanged="passed",
+            index_only_scope_verified="passed",
+            index_name="idx_ai_job_runs_prediction_recovery",
+            index_definition_verified="passed",
+            migration_up_seconds=32.4,
+            migration_down_seconds=1.2,
+            migration_max_lock_wait_ms=84,
+            recovery_owner_semantics="passed",
+            recovery_query_plan_role="fqp",
+            recovery_query_plan_uses_index="passed",
+            recovery_query_sha256=policy.REVIEWED_RECOVERY_QUERY_SHA256,
+            recovery_query_parameters={"execution_protocol": "prediction-session/v1"},
+            recovery_query_plan=[
+                {
+                    "Plan": {
+                        "Node Type": "Index Scan",
+                        "Index Name": "idx_ai_job_runs_prediction_recovery",
+                        "Relation Name": "ai_job_runs",
+                        "Index Cond": "(input_snapshot_refs ->> 'execution_protocol'::text) = 'prediction-session/v1'::text",
+                    }
+                }
+            ],
+            index_state=index_state,
+            index_valid_ready="passed",
+            rollback_removed_index="passed",
+            rollback_index_state={"exists": False},
+            reapply_valid_ready="passed",
+            reapply_index_state=index_state,
+        )
+    else:
+        report.update(
+            constraints_and_triggers_verified="passed",
+            transaction_rollback_verified="passed",
+        )
+    evidence_sha256 = (
+        _write_signed_report(
+            directory,
+            report,
+            signing_key,
+            namespace=policy.RECOVERY_SIGNING_NAMESPACE,
+        )
+        if pending == MIGRATION_139 and signing_key is not None
+        else _write_report(directory, report)
+    )
     return {
         "target_sha": TARGET_SHA,
         "migration_copy_dry_run": "passed",
-        "migration_transaction_dry_run": "passed",
+        **(
+            {"migration_nontransactional_dry_run": "passed"}
+            if pending == MIGRATION_139
+            else {"migration_transaction_dry_run": "passed"}
+        ),
         "no_backup_authorized": True,
-        "no_backup_reason": "Explicit operator preference; both additive migrations were rehearsed in isolation.",
+        "no_backup_reason": (
+            "Explicit operator preference; migration 139 was pinned and rehearsed in isolation."
+            if pending == MIGRATION_139
+            else "Explicit operator preference; additive migrations were rehearsed in isolation."
+        ),
         (
             policy.PREMATCH_REHEARSAL_FIELD
             if pending == MIGRATION_132_133
@@ -167,6 +281,15 @@ def validate(
     )
 
 
+def test_deploy_script_plan_output_remains_valid_bash():
+    subprocess.run(
+        ["bash", "-n", str(ROOT / "ops/server/deploy.sh")],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+
 def test_no_backup_allows_only_the_pinned_124_125_pair_with_full_rehearsal(tmp_path):
     validate(
         rehearsal_record(tmp_path),
@@ -191,6 +314,204 @@ def test_no_backup_allows_exact_132_133_prematch_pair_with_runtime_and_data_pres
         MIGRATION_132_133,
         evidence_directory=tmp_path,
     )
+
+
+def test_no_backup_allows_only_pinned_139_recovery_index_with_runtime_and_rollback_evidence(
+    tmp_path, trusted_migration_139_signer
+):
+    record = rehearsal_record(
+        tmp_path, pending=MIGRATION_139, signing_key=trusted_migration_139_signer
+    )
+    checksums = {MIGRATION_139[0]: MIGRATION_139_SHA256}
+    record["no_backup_migration_rehearsal"]["sha256"] = checksums
+    report_path = tmp_path / record["no_backup_migration_rehearsal"]["report_path"]
+    report = json.loads(report_path.read_text())
+    report["migration_sha256"] = checksums
+    record = _update_signed_139_rehearsal(tmp_path, record, report, trusted_migration_139_signer)
+    validate(record, MIGRATION_139, evidence_directory=tmp_path)
+
+
+def test_no_backup_139_rejects_unsigned_rehearsal_report(tmp_path, trusted_migration_139_signer):
+    record = rehearsal_record(
+        tmp_path, pending=MIGRATION_139, signing_key=trusted_migration_139_signer
+    )
+    Path(f"{tmp_path / 'no-backup-migration-rehearsal.json'}.sig").unlink()
+
+    with pytest.raises(SystemExit, match="requires a signed report"):
+        validate(record, MIGRATION_139, evidence_directory=tmp_path)
+
+
+def test_no_backup_139_rejects_tampered_rehearsal_signature(tmp_path, trusted_migration_139_signer):
+    record = rehearsal_record(
+        tmp_path, pending=MIGRATION_139, signing_key=trusted_migration_139_signer
+    )
+    Path(f"{tmp_path / 'no-backup-migration-rehearsal.json'}.sig").write_text("invalid")
+
+    with pytest.raises(SystemExit, match="signature is invalid"):
+        validate(record, MIGRATION_139, evidence_directory=tmp_path)
+
+
+def test_no_backup_139_rejects_report_signed_with_migration_131_namespace(
+    tmp_path, trusted_migration_139_signer
+):
+    record = rehearsal_record(tmp_path, pending=MIGRATION_139)
+    report_path = tmp_path / record["no_backup_migration_rehearsal"]["report_path"]
+    report = json.loads(report_path.read_text())
+    record["no_backup_migration_rehearsal"]["evidence_sha256"] = _write_signed_report(
+        tmp_path,
+        report,
+        trusted_migration_139_signer,
+        namespace=policy.NO_BACKUP_SIGNING_NAMESPACE,
+    )
+
+    with pytest.raises(SystemExit, match="signature is invalid"):
+        validate(record, MIGRATION_139, evidence_directory=tmp_path)
+
+
+def test_reviewed_recovery_query_hash_matches_runtime_owner_query():
+    normalized = " ".join(_RUNNING_OWNER_QUERY.split()).lower()
+    assert hashlib.sha256(normalized.encode()).hexdigest() == (
+        policy.REVIEWED_RECOVERY_QUERY_SHA256
+    )
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        (
+            "down_migration_sha256",
+            {"139_prediction_recovery_index.down.sql": "0" * 64},
+            "rollback checksum",
+        ),
+        (
+            "application_role",
+            {"name": "postgres", "superuser": True, "owns_ai_job_runs": True},
+            "restricted non-owner",
+        ),
+        ("recovery_query_plan_uses_index", "missing", "missing recovery_query_plan_uses_index"),
+        (
+            "recovery_query_plan",
+            [{"Plan": {"Node Type": "Seq Scan", "Relation Name": "ai_job_runs"}}],
+            "does not show an index scan",
+        ),
+        (
+            "recovery_query_plan",
+            [
+                {
+                    "Plan": {
+                        "Node Type": "Index Scan",
+                        "Index Name": "idx_ai_job_runs_prediction_recovery",
+                        "Relation Name": "other_table",
+                        "Index Cond": "(input_snapshot_refs ->> 'execution_protocol'::text) = 'prediction-session/v1'::text",
+                    }
+                }
+            ],
+            "does not show an index scan",
+        ),
+        (
+            "recovery_query_plan",
+            [
+                {
+                    "Plan": {
+                        "Node Type": "Index Scan",
+                        "Index Name": "idx_ai_job_runs_prediction_recovery",
+                        "Relation Name": "ai_job_runs",
+                        "Index Cond": "id > 0",
+                    }
+                }
+            ],
+            "does not show an index scan",
+        ),
+        (
+            "recovery_query_sha256",
+            "0" * 64,
+            "query SHA-256 does not match",
+        ),
+        (
+            "recovery_query_parameters",
+            {"execution_protocol": "wrong/v1"},
+            "reviewed execution protocol",
+        ),
+        (
+            "index_state",
+            {"index_name": "idx_ai_job_runs_prediction_recovery", "valid": False},
+            "catalog state does not match",
+        ),
+        (
+            "rollback_index_state",
+            {"exists": True},
+            "did not prove the index was removed",
+        ),
+        (
+            "reapply_index_state",
+            {"index_name": "idx_ai_job_runs_prediction_recovery", "ready": False},
+            "did not recreate the pinned valid index",
+        ),
+        ("index_definition_verified", "failed", "missing index_definition_verified"),
+        ("index_valid_ready", "failed", "missing index_valid_ready"),
+        ("rollback_removed_index", "missing", "missing rollback_removed_index"),
+        ("reapply_valid_ready", "failed", "missing reapply_valid_ready"),
+        ("timeouts", {"lock_seconds": 2, "statement_seconds": 30}, "5-second lock and 900-second"),
+        ("migration_up_seconds", 901, "exceeded the concurrent-index timeout"),
+        ("migration_up_seconds", 10**1000, "exceeded the concurrent-index timeout"),
+        ("migration_max_lock_wait_ms", 5001, "exceeded the concurrent-index timeout"),
+        ("index_name", "unexpected", "unexpected index name"),
+        ("recovery_query_plan_role", "postgres", "restricted fqp role"),
+        (
+            "business_rows_unchanged",
+            "failed",
+            "missing row-preservation or index-only scope proof",
+        ),
+        (
+            "index_only_scope_verified",
+            "failed",
+            "missing row-preservation or index-only scope proof",
+        ),
+    ],
+)
+def test_no_backup_rejects_139_without_exact_runtime_rollback_and_timeout_proof(
+    field, value, message, tmp_path, trusted_migration_139_signer
+):
+    record = rehearsal_record(
+        tmp_path, pending=MIGRATION_139, signing_key=trusted_migration_139_signer
+    )
+    manifest = record["no_backup_migration_rehearsal"]
+    report_path = tmp_path / manifest["report_path"]
+    report = json.loads(report_path.read_text())
+    report[field] = value
+    record = _update_signed_139_rehearsal(tmp_path, record, report, trusted_migration_139_signer)
+
+    with pytest.raises(SystemExit, match=message):
+        validate(record, MIGRATION_139, evidence_directory=tmp_path)
+
+
+@pytest.mark.parametrize(
+    "pending",
+    [
+        ["139_prediction_recovery_index.sql", "138_unreviewed.sql"],
+        ["138_unreviewed.sql", "139_prediction_recovery_index.sql"],
+    ],
+)
+def test_no_backup_rejects_partial_or_mixed_139_migration_sets(pending, tmp_path):
+    with pytest.raises(SystemExit, match="reviewed pinned migration sets"):
+        validate(
+            rehearsal_record(tmp_path, pending=MIGRATION_139),
+            pending,
+            evidence_directory=tmp_path,
+        )
+
+
+def test_no_backup_139_requires_a_nontransactional_rehearsal_not_a_fake_transaction(
+    tmp_path, trusted_migration_139_signer
+):
+    record = rehearsal_record(
+        tmp_path, pending=MIGRATION_139, signing_key=trusted_migration_139_signer
+    )
+    record.pop("migration_nontransactional_dry_run")
+    record["migration_transaction_dry_run"] = "passed"
+
+    with pytest.raises(SystemExit, match="non-transactional migration rehearsal"):
+        validate(record, MIGRATION_139, evidence_directory=tmp_path)
 
 
 def test_backup_release_for_132_133_also_requires_prematch_rehearsal(tmp_path, monkeypatch):
@@ -903,6 +1224,23 @@ def test_no_backup_131_rejects_unsigned_rehearsal_report(tmp_path, trusted_migra
 def test_no_backup_131_rejects_tampered_rehearsal_signature(tmp_path, trusted_migration_131_signer):
     record = prediction_statistics_rehearsal_record(tmp_path, trusted_migration_131_signer)
     Path(f"{tmp_path / 'no-backup-migration-rehearsal.json'}.sig").write_text("invalid")
+    with pytest.raises(SystemExit, match="signature is invalid"):
+        validate(record, MIGRATION_131, evidence_directory=tmp_path)
+
+
+def test_no_backup_131_rejects_report_signed_with_migration_139_namespace(
+    tmp_path, trusted_migration_131_signer
+):
+    record = prediction_statistics_rehearsal_record(tmp_path, trusted_migration_131_signer)
+    report_path = tmp_path / record["no_backup_migration_rehearsal"]["report_path"]
+    report = json.loads(report_path.read_text())
+    record["no_backup_migration_rehearsal"]["evidence_sha256"] = _write_signed_report(
+        tmp_path,
+        report,
+        trusted_migration_131_signer,
+        namespace=policy.RECOVERY_SIGNING_NAMESPACE,
+    )
+
     with pytest.raises(SystemExit, match="signature is invalid"):
         validate(record, MIGRATION_131, evidence_directory=tmp_path)
 

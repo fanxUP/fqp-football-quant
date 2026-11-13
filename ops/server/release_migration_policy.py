@@ -5,6 +5,8 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
+import re
 import subprocess
 import sys
 import tempfile
@@ -46,11 +48,14 @@ REVIEWED_NO_BACKUP_CHECKSUMS = {
     "133_traditional_market_reference.sql": (
         "bad49ba6686f18d9e7f6252feea3dc183dc27475e379722c6ee732c3c6f43fc7"
     ),
+    "139_prediction_recovery_index.sql": (
+        "de9821bebebeee26a2f2ce114dce8eb563d2429873a28a199e82601d050bb62c"
+    ),
 }
 REVIEWED_NO_BACKUP_ROLLBACK_CHECKSUMS = {
     "131_prediction_statistics_rollup.down.sql": (
         "2b99a556dccf22e7ae181cd9a8bb9232385338483f3bf91180839e6a0329e4c3"
-    )
+    ),
 }
 REVIEWED_NO_BACKUP_SEASONS = ["127_football_fixture_seasons.sql"]
 REVIEWED_NO_BACKUP_PAIR = [
@@ -66,6 +71,13 @@ REVIEWED_NO_BACKUP_PREMATCH = [
     "132_prematch_prediction_schedule.sql",
     "133_traditional_market_reference.sql",
 ]
+REVIEWED_NO_BACKUP_RECOVERY = ["139_prediction_recovery_index.sql"]
+REVIEWED_NO_BACKUP_RECOVERY_ROLLBACK_CHECKSUMS = {
+    "139_prediction_recovery_index.down.sql": (
+        "3ad8b13fdaa84d7ff1aba2d92d7eb3d404c8438946064147e1ec9f44fa58ba41"
+    )
+}
+REVIEWED_RECOVERY_QUERY_SHA256 = "2e06133c214593022a29bd22f5085853c92c48c42b3dbfa3a1260744edb48a5c"
 REVIEWED_NO_BACKUP_PREMATCH_ROLLBACK_CHECKSUMS = {
     "132_prematch_prediction_schedule.down.sql": (
         "edb7843304cd0e06456cabc1f84e00f049913f9821c81e1eaa22837d4bd83cd3"
@@ -82,6 +94,7 @@ TRUSTED_NO_BACKUP_SIGNER_PUBLIC_KEY = Path("/etc/ssh/ssh_host_ed25519_key.pub")
 TRUSTED_SSH_KEYGEN = Path("/usr/bin/ssh-keygen")
 NO_BACKUP_SIGNER_IDENTITY = "fqp-production-host"
 NO_BACKUP_SIGNING_NAMESPACE = "fqp-p107-migration-131"
+RECOVERY_SIGNING_NAMESPACE = "fqp-p105-migration-139"
 
 
 def utc_now() -> datetime:
@@ -122,7 +135,9 @@ def _verify_pinned_rollback_sql(
             )
 
 
-def _verify_signed_rehearsal(report_path: Path, report_bytes: bytes) -> None:
+def _verify_signed_rehearsal(
+    report_path: Path, report_bytes: bytes, *, namespace: str = NO_BACKUP_SIGNING_NAMESPACE
+) -> None:
     signature_path = Path(f"{report_path}.sig")
     public_key_path = TRUSTED_NO_BACKUP_SIGNER_PUBLIC_KEY
     if (
@@ -134,7 +149,7 @@ def _verify_signed_rehearsal(report_path: Path, report_bytes: bytes) -> None:
         or not TRUSTED_SSH_KEYGEN.is_file()
         or not TRUSTED_SSH_KEYGEN.stat().st_mode & 0o111
     ):
-        _refuse("Prediction statistics rehearsal requires a signed report from the production host")
+        _refuse("Migration rehearsal requires a signed report from the production host")
     try:
         public_key_parts = public_key_path.read_text().strip().split()
     except OSError as exc:
@@ -158,7 +173,7 @@ def _verify_signed_rehearsal(report_path: Path, report_bytes: bytes) -> None:
                     "-I",
                     NO_BACKUP_SIGNER_IDENTITY,
                     "-n",
-                    NO_BACKUP_SIGNING_NAMESPACE,
+                    namespace,
                     "-s",
                     str(signature_path),
                 ],
@@ -171,19 +186,84 @@ def _verify_signed_rehearsal(report_path: Path, report_bytes: bytes) -> None:
         except (OSError, subprocess.TimeoutExpired) as exc:
             raise SystemExit("Cannot verify the production-host rehearsal signature") from exc
     if result.returncode:
-        _refuse(
-            "Prediction statistics rehearsal signature is invalid or not from the production host"
-        )
+        _refuse("Migration rehearsal signature is invalid or not from the production host")
 
 
-def _verify_no_backup_authorization(record: dict[str, Any]) -> None:
+def _verify_no_backup_authorization(record: dict[str, Any], pending: list[str]) -> None:
     if (
         record.get("no_backup_authorized") is not True
         or not str(record.get("no_backup_reason", "")).strip()
     ):
         _refuse("No-backup release requires explicit recorded operator authorization")
-    if record.get("migration_transaction_dry_run") != "passed":
-        _refuse("No-backup release requires a passed isolated migration transaction rehearsal")
+    rehearsal_field = (
+        "migration_nontransactional_dry_run"
+        if pending == REVIEWED_NO_BACKUP_RECOVERY
+        else "migration_transaction_dry_run"
+    )
+    if record.get(rehearsal_field) != "passed":
+        _refuse(
+            "No-backup release requires a passed isolated "
+            f"{'non-transactional' if rehearsal_field == 'migration_nontransactional_dry_run' else 'transaction'} migration rehearsal"
+        )
+
+
+def _recovery_index_state_matches(state: Any) -> bool:
+    if not isinstance(state, dict):
+        return False
+    if (
+        state.get("index_name") != "idx_ai_job_runs_prediction_recovery"
+        or state.get("schema") != "public"
+        or state.get("table") != "ai_job_runs"
+        or state.get("method") != "btree"
+        or state.get("valid") is not True
+        or state.get("ready") is not True
+        or state.get("attributes") != 2
+        or state.get("key_attributes") != 2
+    ):
+        return False
+
+    def normalize(value: Any) -> str:
+        return re.sub(r'[\s()"]+', "", value).lower() if isinstance(value, str) else ""
+
+    if normalize(state.get("first_key")) != "input_snapshot_refs->>'execution_protocol'::text":
+        return False
+    if normalize(state.get("second_key")) != "id":
+        return False
+    predicate = normalize(state.get("predicate"))
+    return all(item in predicate for item in ("job_code='model_prediction'", "status='running'"))
+
+
+def _recovery_plan_uses_index(plan: Any) -> bool:
+    if not isinstance(plan, list) or len(plan) != 1 or not isinstance(plan[0], dict):
+        return False
+
+    def visit(node: Any, relation_context: str | None = None) -> bool:
+        if isinstance(node, dict):
+            relation = node.get("Relation Name", relation_context)
+            index_condition = node.get("Index Cond")
+            normalized_condition = (
+                re.sub(r'[\s()"]+', "", index_condition).lower()
+                if isinstance(index_condition, str)
+                else ""
+            )
+            protocol_key = "input_snapshot_refs->>'execution_protocol'::text"
+            if (
+                node.get("Index Name") == "idx_ai_job_runs_prediction_recovery"
+                and node.get("Node Type") in ("Index Scan", "Index Only Scan", "Bitmap Index Scan")
+                and relation == "ai_job_runs"
+                and protocol_key in normalized_condition
+                and (
+                    "'prediction-session/v1'" in normalized_condition
+                    or "$1" in normalized_condition
+                )
+            ):
+                return True
+            return any(visit(child, relation) for child in node.values())
+        elif isinstance(node, list):
+            return any(visit(child, relation_context) for child in node)
+        return False
+
+    return visit(plan[0])
 
 
 def _verify_no_backup_rehearsal(
@@ -215,8 +295,13 @@ def _verify_no_backup_rehearsal(
     report_bytes = report_path.read_bytes()
     if hashlib.sha256(report_bytes).hexdigest() != manifest.get("evidence_sha256"):
         _refuse("No-backup rehearsal detail report SHA-256 mismatch")
-    if pending == REVIEWED_NO_BACKUP_PREDICTION_STATS:
-        _verify_signed_rehearsal(report_path, report_bytes)
+    if pending in (REVIEWED_NO_BACKUP_PREDICTION_STATS, REVIEWED_NO_BACKUP_RECOVERY):
+        namespace = (
+            RECOVERY_SIGNING_NAMESPACE
+            if pending == REVIEWED_NO_BACKUP_RECOVERY
+            else NO_BACKUP_SIGNING_NAMESPACE
+        )
+        _verify_signed_rehearsal(report_path, report_bytes, namespace=namespace)
     try:
         report = json.loads(report_bytes)
     except json.JSONDecodeError as exc:
@@ -257,17 +342,37 @@ def _verify_no_backup_rehearsal(
     ):
         _refuse("No-backup rehearsal must disclose its required fixture and production-copy scope")
     required_passes = (
-        "existing_rows_preserved",
-        "constraints_and_triggers_verified",
-        "transaction_rollback_verified",
+        (
+            "existing_rows_preserved",
+            "business_rows_unchanged",
+            "index_only_scope_verified",
+        )
+        if pending == REVIEWED_NO_BACKUP_RECOVERY
+        else (
+            "existing_rows_preserved",
+            "constraints_and_triggers_verified",
+            "transaction_rollback_verified",
+        )
     )
     if any(report.get(field) != "passed" for field in required_passes):
+        if pending == REVIEWED_NO_BACKUP_RECOVERY:
+            _refuse(
+                "No-backup recovery-index rehearsal is missing row-preservation or index-only scope proof"
+            )
         _refuse("No-backup rehearsal is missing isolation, preservation, schema, or rollback proof")
     timeouts = report.get("timeouts")
-    if not isinstance(timeouts, dict) or timeouts.get("lock_seconds") != 2:
-        _refuse("No-backup rehearsal must confirm the migrations' 2-second lock timeout")
-    if timeouts.get("statement_seconds") != 30:
-        _refuse("No-backup rehearsal must confirm the migrations' 30-second statement timeout")
+    expected_timeouts = (
+        {"lock_seconds": 5, "statement_seconds": 900}
+        if pending == REVIEWED_NO_BACKUP_RECOVERY
+        else {"lock_seconds": 2, "statement_seconds": 30}
+    )
+    if not isinstance(timeouts, dict) or timeouts != expected_timeouts:
+        lock_seconds = expected_timeouts["lock_seconds"]
+        statement_seconds = expected_timeouts["statement_seconds"]
+        _refuse(
+            "No-backup rehearsal must confirm the migration runner's "
+            f"{lock_seconds}-second lock and {statement_seconds}-second statement timeouts"
+        )
     results = report.get("test_results")
     if not isinstance(results, dict) or not (
         type(results.get("passed")) is int
@@ -415,6 +520,65 @@ def _verify_no_backup_rehearsal(
         ):
             if report.get(field) != "passed":
                 _refuse(f"Prematch migration rehearsal is missing {field} evidence")
+
+    if pending == REVIEWED_NO_BACKUP_RECOVERY:
+        if report.get("down_migration_sha256") != REVIEWED_NO_BACKUP_RECOVERY_ROLLBACK_CHECKSUMS:
+            _refuse("P105 recovery index rehearsal rollback checksum does not match")
+        role = report.get("application_role")
+        if (
+            not isinstance(role, dict)
+            or role.get("name") != "fqp"
+            or role.get("superuser") is not False
+            or role.get("owns_ai_job_runs") is not False
+        ):
+            _refuse("P105 recovery index rehearsal requires the restricted non-owner fqp role")
+        for field in (
+            "application_role_acl",
+            "recovery_owner_semantics",
+            "recovery_query_plan_uses_index",
+            "index_definition_verified",
+            "index_valid_ready",
+            "rollback_removed_index",
+            "reapply_valid_ready",
+        ):
+            if report.get(field) != "passed":
+                _refuse(f"P105 recovery index rehearsal is missing {field} evidence")
+        if report.get("index_name") != "idx_ai_job_runs_prediction_recovery":
+            _refuse("P105 recovery index rehearsal used an unexpected index name")
+        if report.get("recovery_query_plan_role") != "fqp":
+            _refuse("P105 recovery query plan must be measured as the restricted fqp role")
+        if report.get("recovery_query_sha256") != REVIEWED_RECOVERY_QUERY_SHA256:
+            _refuse("P105 recovery query SHA-256 does not match the reviewed owner query")
+        if report.get("recovery_query_parameters") != {
+            "execution_protocol": "prediction-session/v1"
+        }:
+            _refuse("P105 recovery query plan must use the reviewed execution protocol")
+        if not _recovery_plan_uses_index(report.get("recovery_query_plan")):
+            _refuse("P105 recovery query plan does not show an index scan using the pinned index")
+        if not _recovery_index_state_matches(report.get("index_state")):
+            _refuse("P105 recovery index catalog state does not match the pinned valid index")
+        if report.get("rollback_index_state") != {"exists": False}:
+            _refuse("P105 recovery DOWN rehearsal did not prove the index was removed")
+        if not _recovery_index_state_matches(report.get("reapply_index_state")):
+            _refuse("P105 recovery reapply did not recreate the pinned valid index")
+        for field in (
+            "migration_up_seconds",
+            "migration_down_seconds",
+            "migration_max_lock_wait_ms",
+        ):
+            value = report.get(field)
+            if (
+                type(value) not in (int, float)
+                or (isinstance(value, float) and not math.isfinite(value))
+                or value < 0
+            ):
+                _refuse(f"P105 recovery index rehearsal requires a valid {field} measurement")
+        if (
+            report["migration_up_seconds"] > 900
+            or report["migration_down_seconds"] > 900
+            or report["migration_max_lock_wait_ms"] > 5000
+        ):
+            _refuse("P105 recovery index rehearsal exceeded the concurrent-index timeout")
 
 
 def _verify_prediction_statistics_rehearsal(report: dict[str, Any]) -> None:
@@ -567,8 +731,8 @@ def _validate_no_backup(
     project_root: Path,
     evidence_directory: Path | None,
 ) -> None:
-    _verify_no_backup_authorization(record)
     if pending == ["123_football_history_odds_invalid_timezone.sql"]:
+        _verify_no_backup_authorization(record, pending)
         _verify_pinned_sql(project_root, pending)
         return
     if pending in (
@@ -580,7 +744,9 @@ def _validate_no_backup(
         REVIEWED_NO_BACKUP_RESULT_FACTS,
         REVIEWED_NO_BACKUP_PREDICTION_STATS,
         REVIEWED_NO_BACKUP_PREMATCH,
+        REVIEWED_NO_BACKUP_RECOVERY,
     ):
+        _verify_no_backup_authorization(record, pending)
         _verify_pinned_sql(project_root, pending)
         if pending == REVIEWED_NO_BACKUP_PREDICTION_STATS:
             _verify_pinned_rollback_sql(
@@ -592,6 +758,12 @@ def _validate_no_backup(
                 project_root,
                 list(REVIEWED_NO_BACKUP_PREMATCH_ROLLBACK_CHECKSUMS),
                 checksums=REVIEWED_NO_BACKUP_PREMATCH_ROLLBACK_CHECKSUMS,
+            )
+        if pending == REVIEWED_NO_BACKUP_RECOVERY:
+            _verify_pinned_rollback_sql(
+                project_root,
+                list(REVIEWED_NO_BACKUP_RECOVERY_ROLLBACK_CHECKSUMS),
+                checksums=REVIEWED_NO_BACKUP_RECOVERY_ROLLBACK_CHECKSUMS,
             )
         _verify_no_backup_rehearsal(
             record,
@@ -606,7 +778,7 @@ def _validate_no_backup(
         )
         return
     _refuse(
-        "No-backup release is restricted to the reviewed migration sets 123, 124+125, 126, 127, 128, 129, 130, 131, or the exact 132+133 prematch scheduling pair"
+        "No-backup release is restricted to reviewed pinned migration sets 123, 124+125, 126, 127, 128, 129, 130, 131, the exact 132+133 prematch pair, or migration 139"
     )
 
 

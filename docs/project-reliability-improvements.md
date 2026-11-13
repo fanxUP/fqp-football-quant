@@ -34,8 +34,8 @@
 - `ops/server/deploy.sh <40位主分支SHA> --plan`：拉取远端引用，要求目标等于 `origin/main`，展示差异；不切换版本、不执行 SQL。
 - `ops/server/migrate.py`：只读列出当前检出的待执行迁移，检查已执行文件的 SHA256、应用数据库角色与表/序列权限。旧账本缺失校验值时拒绝自动猜测。
 - 预先对目标提交做 CI、重复账本和重复发奖检查、保护接口 HTTP 验证；仅有待执行迁移时才做数据库副本演练并准备新鲜手动备份。
-- `ops/server/deploy.sh <40位主分支SHA> --apply /绝对路径/release-evidence.json` 执行发布。记录文件含：`target_sha`、带时区的 `verified_at`（24小时内）、`quality`、`rollback_review`、`protected_http_smoke`（均为实际验证后的 `passed`）；只有迁移待执行时，才另需 `migration_copy_dry_run`、`backup_path` 和 `backup_sha256`。
-- 有待执行迁移时，普通迁移要求一小时内的备份并核对哈希和归档目录。`--apply-no-backup` 仅适用于发布脚本固定并校验 SHA 的 123、124+125、126、127 或 128；124+125、126、127、128需匹配目标提交并提供24小时内的隔离 PostgreSQL演练及事务回滚证据，128另需非超级用户`fqp`的目录读取和导入写入验证。123沿用原有独立校验。无待执行迁移时不要求备份。发布脚本仍要求三个服务处于 active；停止服务、切换代码、构建前端、按需事务迁移；启动后检查 `/health/ready`、彩票/模型曲线处理函数与服务状态。
+- `ops/server/deploy.sh <40位主分支SHA> --apply /绝对路径/release-evidence.json` 执行发布。记录文件含：`target_sha`、带时区的 `verified_at`（24小时内）、`quality`、`rollback_review`、`protected_http_smoke`（均为实际验证后的 `passed`）。有待执行迁移时必须附隔离 PostgreSQL 演练；普通 `--apply` 还必须提供 `backup_path` 和 `backup_sha256`，而 `--apply-no-backup` 必须显式记录无备份授权、原因及精确迁移集对应的演练报告/哈希。
+- 有待执行迁移时，普通迁移要求一小时内的备份并核对哈希和归档目录。`--apply-no-backup` 仅适用于发布脚本固定并校验 SHA 的既有白名单：123、124+125、126、127、128、129、130、131、132+133，以及单独的 P105 恢复索引迁移139。例外必须按迁移集提供目标 SHA 绑定的隔离 PostgreSQL 证据；139 是并发索引，要求上下迁移哈希固定、业务行保持不变、`fqp` 运行角色的原始 EXPLAIN JSON 绑定实际恢复查询摘要且扫描命中 `ai_job_runs` 的执行协议索引条件、演练报告由服务器主机 Ed25519 密钥在 `fqp-p105-migration-139` 命名空间签名、DOWN 后确认索引已删除且重做后仍有效，并记录迁移耗时和最大锁等待（5秒锁超时、900秒语句超时）。其他白名单迁移继续按各自策略验证角色、数据保全与回滚。无待执行迁移时不要求备份。发布脚本仍要求三个服务处于 active；停止服务、切换代码、构建前端、按需迁移；启动后检查 `/health/ready`、彩票/模型曲线处理函数与服务状态。
 - 失败时恢复先前提交、重新构建前端、恢复服务，并轮询 `/health`。104/105 是兼容旧代码的增量结构，自动回退保留这些结构。其他迁移需要单独评估兼容性，脚本不会自动执行 DOWN。
 - Python/Node 运行时、模型桥接及前端生产依赖变化仍由脚本拒绝，需另行准备对应环境的回退方式。仅 `vite` / `vitest` 直接版本更新及其锁文件开发依赖闭包内、全部标记 `dev: true` 的变更可以发布；无关开发依赖变化仍拒绝。回退时先按旧提交执行 `npm ci --ignore-scripts`，再构建旧版本，恢复或构建失败则停止 Nginx 并报告 `ROLLBACK_REQUIRED`。
 - 发布脚本本轮没有在服务器运行。处理函数检查不能替代带登录会话的 HTTP 验证。

@@ -96,11 +96,19 @@
     "scripts/prediction_job_execution.py",
     "tests/test_computation/test_prediction_job_execution_postgres.py",
     "ops/server/migrate.py",
+    "tests/test_local/test_release_migration_policy.py",
+    "docs/project-reliability-improvements.md",
+    "ops/server/README.md",
+    "ops/server/release_migration_policy.py",
+    "ops/server/deploy.sh",
     "ops/local/apply_local_migrations.sh",
     "sql/139_prediction_recovery_index.sql",
     "sql/down/139_prediction_recovery_index.down.sql",
     ".vibe/CHANGE_BUDGET.yaml",
-    ".vibe/SCOPE_LOCK.yaml"
+    ".vibe/SCOPE_LOCK.yaml",
+    ".vibe/ACCEPTANCE.md",
+    ".vibe/PLAN.md",
+    ".vibe/EVIDENCE.yaml"
   ],
   "protected_paths": [
     "apps/**",
@@ -125,6 +133,10 @@
     "tests/test_data_sources/titan007/test_history_source_evaluation.py",
     "tests/test_computation/test_prediction_job_execution_postgres.py",
     "ops/server/migrate.py",
+    "tests/test_local/test_release_migration_policy.py",
+    "ops/server/release_migration_policy.py",
+    "ops/server/deploy.sh",
+    "ops/server/README.md",
     "sql/139_prediction_recovery_index.sql",
     "sql/down/139_prediction_recovery_index.down.sql",
     "scripts/prediction_input_revisions.py",
@@ -134,5 +146,5 @@
     "apps/backend/src/services/report_performance.py",
     "apps/backend/src/services/report_snapshot.py"
   ],
-  "notes": "Single main branch. Preserve strict P104 source-observation and P106/P111/P114 point-in-time rules. This scope includes verified competition-season identity, P111/P114 descriptive paired replay, the CI-required Python 3.14 Ruff format correction across 73 Python files, and one stale source-evaluation test assertion aligned with explicit predeclared-window semantics. The formatter removes redundant parentheses around multiple exception types without behavior changes; the test change asserts that a rolling latest-week window is not a predeclared holdout. Season identity is read only through the immutable Sporttery JC link and verified season catalog. Evaluation must be one verified season; mixed or missing scope is not_evaluable. The paired helper accepts a separate read-only incumbent replay report so the P111 evaluator stays on its isolated research database; matching requires identical verified season, prediction time, result identity, and odds snapshot identity. Every paired result remains descriptive-only and non-promotable. The Brier bound uses an Azuma-Hoeffding date-cluster martingale interval only when an explicit inclusive absolute final-window start/end pair is configured and its length matches holdout_days. A rolling latest-N-day window is diagnostic only; exploratory folds and repeated progress looks cannot trigger decisions. The bounded research loader retains dated fixtures with unresolved results so predeclared final windows cannot silently omit them. No new dependency, background task, or external HTTP API. One logical schema migration is in scope: sql/139_prediction_recovery_index.sql creates the P105 partial expression index concurrently and sql/down/139_prediction_recovery_index.down.sql removes it concurrently; no business rows are rewritten and no production migration is applied here. This extension repairs the observed P105 run_due recovery timeout with split indexed ownership queries; no P105 candidate probability enters the formal prediction path."
+  "notes": "Single main branch. Preserve strict P104 source-observation and P106/P111/P114 point-in-time rules. This scope includes verified competition-season identity, P111/P114 descriptive paired replay, the CI-required Python 3.14 Ruff format correction across 73 Python files, and one stale source-evaluation test assertion aligned with explicit predeclared-window semantics. The formatter removes redundant parentheses around multiple exception types without behavior changes; the test change asserts that a rolling latest-week window is not a predeclared holdout. Season identity is read only through the immutable Sporttery JC link and verified season catalog. Evaluation must be one verified season; mixed or missing scope is not_evaluable. The paired helper accepts a separate read-only incumbent replay report so the P111 evaluator stays on its isolated research database; matching requires identical verified season, prediction time, result identity, and odds snapshot identity. Every paired result remains descriptive-only and non-promotable. The Brier bound uses an Azuma-Hoeffding date-cluster martingale interval only when an explicit inclusive absolute final-window start/end pair is configured and its length matches holdout_days. A rolling latest-N-day window is diagnostic only; exploratory folds and repeated progress looks cannot trigger decisions. The bounded research loader retains dated fixtures with unresolved results so predeclared final windows cannot silently omit them. No new dependency, background task, or external HTTP API. One logical schema migration is in scope: sql/139_prediction_recovery_index.sql creates the P105 partial expression index concurrently and sql/down/139_prediction_recovery_index.down.sql removes it concurrently; no business rows are rewritten and migration 139 may be released only through an exact-SHA-pinned no-backup policy with a fresh isolated PostgreSQL rehearsal, valid/ready index proof, indexed runtime-role query plan, and verified down/reapply behavior; no other production migration is authorized by this scope. This extension repairs the observed P105 run_due recovery timeout with split indexed ownership queries; no P105 candidate probability enters the formal prediction path. This follow-up updates the active acceptance/plan and records policy test evidence. The static P108 coverage report uses only CSV exports; no active NAS SQLite or production data is queried. The no-backup 139 release policy is local, reviewed, and CI-pending; production migration remains unapplied."
 }

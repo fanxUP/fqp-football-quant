@@ -25,3 +25,17 @@
 - 保持所有模型自动晋升与正式概率变更门关闭。
 - 完成当前树的独立审查和 exact-head GitHub CI 后，才进入服务器发布；发布还需要符合发布脚本的服务器状态、迁移和只读 smoke 门禁。
 - 本地工程验收、生产发布、数据完整性验收和模型效果验收是不同状态，分别记录。
+
+
+## 2026-11-11 follow-up status
+
+Static Titan exports were re-counted without opening the active `titan007.db`; the detailed coverage and limitations are recorded in the integrated P108 source-export audit. The existing P107 acceptance and P105/P106/P108/P111/P114 engineering paths remain usable before five-year backfill completes. Real P108 player facts, P114 effectiveness, and P115 prospective results still require new eligible observations.
+
+The local release policy was extended to allow migration 139 alone on the no-backup path after exact SQL pins and a fresh structured non-transactional PostgreSQL rehearsal. The evidence contract requires the runtime owner-query SHA/EXPLAIN JSON, the `ai_job_runs` execution-protocol index condition, valid/ready catalog state, unchanged rows, DOWN/reapply checks, and an Ed25519 host signature over the exact report bytes in a migration-specific namespace. This is a local release-policy change only; no production migration or deployment was performed. Exact-head CI and fresh release evidence remain pending.
+
+
+## 2026-11-11 local verification closeout
+
+- Dedicated loopback PostgreSQL 16 fixture identity was checked by database comment and non-superuser role; configured P106/P114 regression passed 233 tests. V4 regression test/lint/typecheck all reported 0/0; V4 scope and change budget passed.
+- P105 migration 139 release-policy and migration-format regression passed 143 tests; Bash syntax, Ruff/format and `git diff --check` passed. The report-signature provenance finding was closed with exact-byte Ed25519 verification, migration-specific namespaces and both cross-namespace rejection tests; independent follow-up review passed.
+- Static P108 CSV audit was recorded outside the code checkout. No NAS SQLite, production database, provider API, server, or deployment was accessed. Exact-head CI for these uncommitted changes and production release evidence remain pending.
